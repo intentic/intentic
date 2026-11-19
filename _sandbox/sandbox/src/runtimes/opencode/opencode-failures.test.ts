@@ -1,8 +1,10 @@
 import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { opt } from "../../opt.js";
+import { RETRY_HORIZON_S } from "../../usage/reset-sentences.js";
 import { type EventOf, sessionNotice } from "./opencode-frames.js";
 import { executionErrorFrame, OUTAGE_ATTEMPTS, RATE_LIMIT_PATIENCE_MS, retryFrame, retryHandover, type StructuredError } from "./opencode-failures.js";
 import { OPENCODE_XAI_PROVIDER } from "./xai-models.js";
+import { SPENT_WORDS, THROTTLE_WORDS } from "../../agent/run/frames/limits/limit-cause.testing.js";
 
 // How an OpenCode turn's failures are coded: OpenCode 2's own failure types first (the types its 2.0.26 build gives a
 // provider's answer), the sentence only where the type says nothing more.
@@ -13,16 +15,30 @@ const failure = (type: string, message: string, status?: number): StructuredErro
 
 describe("an execution's failure", () => {
     test.each([
-        ["provider.rate-limit", "Too many requests", undefined, "rate_limit"],
         ["provider.quota", "You have used up your allowance", undefined, "rate_limit"],
         ["provider.transport", "ConnectionRefused: Unable to connect.", undefined, "provider-outage"],
         ["provider.internal", "No capacity available for model gemini-pro-agent", 503, "provider-outage"],
         ["provider.timeout", "The request timed out", undefined, "provider-outage"],
-        // A 5xx is the provider's trouble whatever OpenCode called it, and a 429 is a limit.
+        // A 5xx is the provider's trouble whatever OpenCode called it.
         ["provider.invalid-output", "Bad gateway", 502, "provider-outage"],
-        ["unknown", "slow down", 429, "rate_limit"],
     ] as const)("typed %s is coded %#", (type, message, status, code) => {
         expect(executionErrorFrame(failure(type, message, status), GOOGLE)).toEqual({ kind: "error", code, message });
+    });
+
+    /* A rate limit OpenCode typed `provider.rate-limit`, or a 429 under no type of its own, is a spent allowance only
+       where its words or the body behind them show one (limit-cause.ts); otherwise the throttle it is, waited out on the
+       backoff with nothing filed. 2026-11-19: each was `rate_limit`, filed against Google's accounts and Grok's. */
+    test.each([
+        ["provider.rate-limit", THROTTLE_WORDS.google, undefined],
+        ["unknown", "slow down", 429],
+    ] as const)("typed %s with words that show nothing spent is a throttle", (type, message, status) => {
+        expect(executionErrorFrame(failure(type, message, status), GOOGLE)).toMatchObject({ kind: "error", code: "provider-outage", throttle: true });
+    });
+
+    test("a rate limit whose words, or the body behind them, show an allowance spent is one", () => {
+        expect(executionErrorFrame(failure("provider.rate-limit", SPENT_WORDS.google, 429), GOOGLE)).toEqual({ kind: "error", code: "rate_limit", message: SPENT_WORDS.google });
+        const body: StructuredError = { type: "provider.rate-limit", message: "429 Too Many Requests", status: 429, response: { body: `{"error":{"message":"${SPENT_WORDS.google}"}}` } };
+        expect(executionErrorFrame(body, GOOGLE)).toEqual({ kind: "error", code: "rate_limit", message: "429 Too Many Requests" });
     });
 
     test("a model OpenCode cannot route is off the picker on Google, and reloads xAI's catalog on Grok", () => {
@@ -54,7 +70,8 @@ describe("an execution's failure", () => {
     });
 
     test("a type that says nothing more falls back on the sentence, and a sentence that says nothing stays uncoded", () => {
-        expect(executionErrorFrame(failure("unknown", "Rate limit exceeded, retry later"), GOOGLE)).toMatchObject({ code: "rate_limit" });
+        expect(executionErrorFrame(failure("unknown", "Rate limit exceeded, retry later"), GOOGLE)).toMatchObject({ code: "provider-outage", throttle: true });
+        expect(executionErrorFrame(failure("unknown", SPENT_WORDS.google), GOOGLE)).toMatchObject({ code: "rate_limit" });
         expect(executionErrorFrame(failure("unknown", "Model not found: grok-9. Did you mean grok-4?"), GROK)).toMatchObject({ code: "grok-model-invalid" });
         expect(executionErrorFrame(failure("tool.execution", "The edit did not apply"), GOOGLE)).toEqual({ kind: "error", message: "The edit did not apply" });
     });
@@ -95,11 +112,21 @@ describe("a retry OpenCode scheduled", () => {
         });
     });
 
-    test("a rate limit whose wait outlasts the turn's patience is handed over with its reset", () => {
-        expect(retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, RATE_LIMIT_PATIENCE_MS + 1_000), CAP_LEFT, NOW)).toMatchObject({
+    // A wait the provider put further out than a retry is a pool reopening; one inside it, a throttle that outlasted
+    // patience, handed to the outage's backoff with no reset (2026-11-19: both were a spent allowance, filed).
+    test("a rate limit whose wait outlasts the turn's patience is handed over: spent past a retry's horizon, else a throttle", () => {
+        const past = RETRY_HORIZON_S * 1_000 + 60_000;
+        expect(retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, past), CAP_LEFT, NOW)).toMatchObject({
             code: "rate_limit",
-            resetsAt: Math.ceil((NOW + RATE_LIMIT_PATIENCE_MS + 1_000) / 1_000),
+            resetsAt: Math.ceil((NOW + past) / 1_000),
         });
+        const throttle = retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, RATE_LIMIT_PATIENCE_MS + 1_000), CAP_LEFT, NOW);
+        expect(throttle).toMatchObject({ code: "provider-outage", throttle: true });
+        expect(throttle?.resetsAt).toBeUndefined();
+    });
+
+    test("a rate limit whose words show an allowance spent is handed over at once, however short OpenCode's wait", () => {
+        expect(retryHandover(retry(failure("provider.rate-limit", SPENT_WORDS.google, 429), 2, 5_000), CAP_LEFT, NOW)).toMatchObject({ code: "rate_limit" });
     });
 
     test("an outage that keeps failing is handed to the daemon's backoff", () => {
@@ -113,7 +140,7 @@ describe("a retry OpenCode scheduled", () => {
     // The turn would end on its cap before the retry came: waiting for it only turns a resumable failure into a timeout.
     test("any retry falling past what is left of the turn's cap is handed over", () => {
         expect(retryHandover(retry(failure("provider.transport", "socket hang up"), 2, 60_000), 30_000, NOW)).toMatchObject({ code: "provider-outage" });
-        expect(retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, 60_000), 30_000, NOW)).toMatchObject({ code: "rate_limit" });
+        expect(retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, 60_000), 30_000, NOW)).toMatchObject({ code: "provider-outage", throttle: true });
     });
 
     test("is shown as a wait, a rate limit by its status", () => {

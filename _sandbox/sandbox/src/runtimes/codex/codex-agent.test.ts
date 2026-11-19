@@ -12,7 +12,8 @@ import { fakeCodexRunner } from "./codex-app-server.testing.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import type { CodexEvent, CodexFailureInfo, CodexItem, CodexRunner, CodexTurn } from "./codex-app-server.js";
 import { createCodexAgent, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
-import { LIMIT_WAIT_HANDED_OVER } from "./turn/limit-wait.js";
+import { LIMIT_WAIT_HANDED_OVER, LIMIT_WAIT_THROTTLED } from "./turn/limit-wait.js";
+import { SPENT_WORDS, THROTTLE_WORDS } from "../../agent/run/frames/limits/limit-cause.testing.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";
 import { createTurnRelay, type TurnRelay } from "../daemon-tools/turn-relay.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
@@ -1307,10 +1308,20 @@ describe("a typed failure is coded by its type", () => {
         expect(await codeOf({ kind: "serverOverloaded" })).toBe("provider-outage");
     });
 
-    test("a spent allowance or a 429 is a rate limit, a full window a context overflow", async () => {
+    test("a spent allowance is a rate limit, a full window a context overflow", async () => {
         expect(await codeOf({ kind: "usageLimitExceeded" })).toBe("rate_limit");
-        expect(await codeOf({ kind: "responseStreamConnectionFailed", httpStatus: 429 })).toBe("rate_limit");
         expect(await codeOf({ kind: "contextWindowExceeded" })).toBe("context-overflow");
+    });
+
+    /* 2026-11-19: Codex types a plan run out apart from a provider slowing requests down (CodexErrorInfo, 0.169.0), and
+       both were `rate_limit`, filed against the account. A 429 or `rateLimitExceeded` is a throttle, waited out on the
+       provider's backoff with nothing filed, unless its words show an allowance spent (limit-cause.ts). */
+    test("a 429 or a rate limit Codex typed as one is a throttle, unless its words show an allowance spent", async () => {
+        const frameOf = async (info: CodexFailureInfo, message: string) =>
+            (await collect(createTestAgent(fakeCodexRunner([{ type: "turn.failed", error: { message, info } }]).runner), request)).find(isKind("error"));
+        expect(await frameOf({ kind: "rateLimitExceeded" }, THROTTLE_WORDS.codex)).toMatchObject({ code: "provider-outage", throttle: true });
+        expect(await frameOf({ kind: "responseStreamConnectionFailed", httpStatus: 429 }, THROTTLE_WORDS.codex)).toMatchObject({ code: "provider-outage", throttle: true });
+        expect(await frameOf({ kind: "responseStreamConnectionFailed", httpStatus: 429 }, SPENT_WORDS.codex)).toMatchObject({ code: "rate_limit" });
     });
 
     // A 4xx behind a broken connection is the provider refusing, which a re-run would only repeat.
@@ -1765,7 +1776,9 @@ describe("a rate limit Codex waits out inside the turn", () => {
         return { runner, stopped: () => stopped };
     };
 
-    it("hands the wait to the daemon once patience runs out, as a rate limit the turn is held on", async () => {
+    // Patience alone shows nothing spent (2026-11-19: it used to end the turn as a spent allowance, and a two-minute
+    // throttle held the account spent until a reading answered it): the throttle it was, waited out on the backoff.
+    it("hands the wait to the daemon once patience runs out, as a throttle the turn is held on", async () => {
         const { runner, stopped } = sleepingRunner("interrupted");
         jest.useFakeTimers();
         try {
@@ -1776,8 +1789,8 @@ describe("a rate limit Codex waits out inside the turn", () => {
             expect(await events).toEqual([
                 { kind: "session", sessionId: "thr-limit" },
                 { kind: "provider_retry", attempt: 1, maxAttempts: 5, status: 429 },
-                // Coded, so classify-failure holds it for the reset; the interrupt it caused is not said as a second failure.
-                { kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true },
+                // Coded, so the outage's breaker holds it; the interrupt it caused is not said as a second failure.
+                { kind: "error", code: "provider-outage", throttle: true, message: LIMIT_WAIT_THROTTLED, own: true },
                 { kind: "done" },
             ]);
             expect(stopped()).toBe(true);
@@ -1817,7 +1830,7 @@ describe("a rate limit Codex waits out inside the turn", () => {
         try {
             const events = collect(createTestAgent(runner), request);
             await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS);
-            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true }]);
+            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "provider-outage", throttle: true, message: LIMIT_WAIT_THROTTLED, own: true }]);
         } finally {
             jest.useRealTimers();
         }

@@ -3,7 +3,7 @@ import type { ConversationActors } from "./actor/conversation-actors.js";
 import { liveRunOf } from "./actor/conversation-holdings.js";
 import { holdOf, type QueuedItem, waitingOf } from "./actor/conversation-queue.js";
 import { windowShut } from "./actor/conversation-state.js";
-import { sendableAt } from "./actor/limit-booking.js";
+import { heldReopen, sendableAt } from "./actor/limit-booking.js";
 
 // Why words wait in a conversation's queue rather than go, read off the conversation's own facts: what its admission
 // (agent/run/turn/turn-admission.ts) holds them by, and what a release or a peer's queued message
@@ -42,9 +42,10 @@ export const releaseHeldBy = (conversations: Actors, conversationId: string): st
         return undefined;
     }
     const held = conversations.state(conversationId)?.resume.held;
-    if (heldBehindLimit(conversations, conversationId, waiting.map((item) => item.voice)) && held?.reopensAt !== undefined) {
+    const reopensAt = heldReopen(held);
+    if (heldBehindLimit(conversations, conversationId, waiting.map((item) => item.voice)) && held !== undefined && reopensAt !== undefined) {
         const provider = withRuntimeDefaults(held.input).agent;
-        return `behind the ${provider} limit until ${new Date(sendableAt(held.reopensAt)).toISOString()}: words nobody at the composer typed wait for it to reopen`;
+        return `behind the ${provider} limit until ${new Date(sendableAt(reopensAt)).toISOString()}: words nobody at the composer typed wait for it to reopen`;
     }
     if (goesFirst(conversations, conversationId)) {
         return "a recovery or a rewind the sandbox runs by itself goes first";

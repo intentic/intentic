@@ -338,8 +338,23 @@ flowchart LR
   installed by hand. The chat's accounts read "older" off the routes the daemon advertises (`supportsRoute`,
   `accountsOutdated`): `agent.switchAccount` arrived in v1.313. On such a sandbox no held turn is offered another
   account, and the model picker, the continue card and Sandbox ▸ Models say it needs an update. An account's verdict is
-  never a field the daemon sends: the editor judges every row by the contract's rule over the rows and every refusal on
-  file (`models/providers/usageStatus.ts` `accountState`, `modelCapacity`), the very facts the daemon judges by. The editor sends a session id only for a conversation the daemon has no record of (a past session opened
+  never taken from the daemon as it stood: every surface asks one door (`models/providers/usageStatus.ts` `accountState`,
+  `modelCapacity`, `liveUsage`), which judges by the contract's rule at the sandbox's clock. Its facts are each
+  provider's capacity as the daemon judged it whole (`ProviderCapacity`, pushed on `/events` `capacity` and read on
+  `usage.capacity`, held in `providerAccounts.ts` `providerCapacities` by highest `seq`), or, against a daemon from
+  before capacity, the account lists, readings and refusals it assembles itself (`doorFacts.ts`); a development build
+  warns where the two disagree. A computed asking with no clock of its own is asked again at the capacity's `validUntil`
+  (`verdictClock.ts`). Where a turn naming no account runs is the daemon's answer (`usage.placement`, asked with the
+  chat's loop and narrowed by the daemon to the accounts this person may run on, cached under its `rpcKey` and staled by
+  each capacity frame, `daemonPlacement.ts`; the capacity's sandbox-wide `placement` until it lands); the window's own
+  `preferredAccount` prediction stands in only against a daemon without the route, where a daemon from before the
+  narrowing names an account this person's rows leave out, or provisionally until the answer lands, and is then never
+  named on a turn. 2026-11-19: each window used to assemble its own picture from four reads that
+  arrive apart, judge it on its own clock with its own account filter, and predict placement from verdicts that cannot
+  see what already runs on each account (the picker ticked one account while the daemon's load-aware Claude pick ran
+  the turn on another); rejected for the daemon's judged capacity read through one door. A provider the daemon reports
+  `degraded` (an outage or a throttle, and when it is tried again) is said in the model picker's provider lane and the
+  composer's status line (`degradedNote.ts`). The editor sends a session id only for a conversation the daemon has no record of (a past session opened
   from the history menu), and reads the account a failed turn ran on only off its error frame. Nothing else is guessed
   either: a card without `awaitingWake` is not waiting on a wake, a reading without `memoryRoom` warns of nothing, and a
   device row's card is its own `card`, never parsed out of its key.

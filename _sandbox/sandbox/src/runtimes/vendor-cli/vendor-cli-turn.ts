@@ -17,7 +17,8 @@ import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { turnRole } from "../../roles/roles.js";
-import { type ServiceabilityDeps, unnamedAccount } from "../../usage/serviceability/serviceability.js";
+import type { ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
+import { unnamedPlacement } from "../../agent/providers/accounts/placement.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { CLI_OWN_PICK } from "./vendor-cli-catalog.js";
@@ -82,9 +83,9 @@ export const planCliTurn = async (
     }
     // The pinned account while it can still serve; a pin naming none of this CLI's accounts names the provider's other
     // credential (the turn moved loops), so it is placed as a turn naming none is: by the sandbox's one rule over this
-    // CLI's own accounts (serviceability.ts unnamedAccount), never onto a spent first account with others free.
+    // CLI's own accounts (placement.ts unnamedPlacement), never onto a spent first account with others free.
     const accounts = await liveCliAccounts(parts.store);
-    const account = accounts.find((entry) => entry.id === input.account) ?? (await unnamedAccount(services, cli.provider, accounts, input.model));
+    const account = accounts.find((entry) => entry.id === input.account) ?? (await unnamedPlacement(services, cli.provider, accounts, input.model));
     if (account === undefined) {
         return { ok: false, message: `That ${cli.name} account is no longer connected. Pick another one, or sign in again in Sandbox ▸ Models.` };
     }

@@ -4523,6 +4523,14 @@
                 "percentLeft": "zostało {percent} limitu użycia"
             }
         },
+        "providerDegraded": {
+            "label": "Dostawca",
+            "outageShort": "Awaria",
+            "throttleShort": "Ograniczenia",
+            "outage": "{provider} nie odpowiada na żądania",
+            "throttle": "{provider} chwilowo odrzuca żądania",
+            "retry": "Sandbox spróbuje ponownie {wait}"
+        },
         "turnFailures": {
             "installNewerEngine": "Zainstaluj nowszy silnik w Sandbox ▸ Środowisko ▸ Silniki agentów.",
             "installNewerEngineFloor": "Zainstaluj nowszy silnik w Sandbox ▸ Środowisko ▸ Silniki agentów ({floor} lub nowszy).",

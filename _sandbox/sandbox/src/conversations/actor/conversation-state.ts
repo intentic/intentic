@@ -9,7 +9,7 @@ import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import type { FailedEnding } from "../registry/agents-store.js";
 import { holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
-import { sendableAt } from "./limit-booking.js";
+import { type HeldReading, heldReopen, sendableAt } from "./limit-booking.js";
 
 // One conversation's in-memory life as a value: which phase it is in, what its live turn has measured, and the
 // leases and records that outlive a turn. Only conversation-decide.ts writes it, one event at a time; everything else
@@ -102,18 +102,22 @@ export interface LandLease {
 }
 
 // A held turn with the resume pass's own bookkeeping: when it was held, whether its one dispatch went out, how many
-// rungs of the stop ladder it inherited, and the wall in front of where it would go (ms), where the pass last read that
-// account as spent with a reopen still ahead (limit-due.ts): a reading, so a restart re-reads it rather than keeping it.
-export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number; readonly walledUntil?: number };
+// rungs of the stop ladder it inherited, and, for a spent allowance's, what the records last said about where it can go
+// (limit-booking.ts HeldReading). The reading is the pass's alone to write (held-verdict.ts, `held-read`), kept here only
+// because the card and the admission read it synchronously; never stored, so a restart reads it again.
+export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number; readonly reading?: HeldReading };
 
 /**
  * Whether a spent allowance holds this conversation and its window is known to be shut at `now`: a turn started then
- * is refused before the model sees it. No published instant is never shut, as the card reads it (agentStatus.limitClosed).
- * Shut until the grace after the reopen is out (limit-booking.ts sendableAt), so the held turn's own re-run, booked
- * for that instant, still goes ahead of the words waiting on it.
+ * is refused before the model sees it. The window is the route the held turn would go on, as the pass last read it,
+ * else the refusal's own instant (limit-booking.ts heldReopen). No known instant is never shut, as the card reads it
+ * (agentStatus.limitClosed). Shut until the grace after the reopen is out (limit-booking.ts sendableAt), so the held
+ * turn's own re-run, booked for that instant, still goes ahead of the words waiting on it.
  */
-export const windowShut = (held: HeldRecord | undefined, now: number): boolean =>
-    held?.reason === "limit" && held.reopensAt !== undefined && sendableAt(held.reopensAt) > now;
+export const windowShut = (held: HeldRecord | undefined, now: number): boolean => {
+    const reopensAt = heldReopen(held);
+    return reopensAt !== undefined && sendableAt(reopensAt) > now;
+};
 
 // The turn a wall stranded, until a press or the resume pass (turn-resume.ts) fires it or a new turn supersedes it.
 export interface ResumeRecords {

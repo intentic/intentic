@@ -4523,6 +4523,14 @@
                 "percentLeft": "noch {percent} deines Nutzungslimits"
             }
         },
+        "providerDegraded": {
+            "label": "Anbieter",
+            "outageShort": "Gestört",
+            "throttleShort": "Gedrosselt",
+            "outage": "{provider} beantwortet gerade keine Anfragen",
+            "throttle": "{provider} weist Anfragen vorübergehend ab",
+            "retry": "Die Sandbox versucht es in {wait} erneut"
+        },
         "turnFailures": {
             "installNewerEngine": "Installieren Sie eine neuere Engine unter Sandbox ▸ Umgebung ▸ Agenten-Engines.",
             "installNewerEngineFloor": "Installieren Sie eine neuere Engine unter Sandbox ▸ Umgebung ▸ Agenten-Engines ({floor} oder neuer).",

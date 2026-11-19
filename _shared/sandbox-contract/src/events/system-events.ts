@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
 import { AccountUsageSchema, type ProviderRefusal, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
+import { ProviderCapacitySchema } from "../schemas/providers/capacity.js";
 import { MemberTierSchema, withLegacyTier } from "../schemas/shared.js";
 import { SwitchOffsSchema } from "../schemas/providers/refusals.js";
 import { WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
@@ -235,6 +236,15 @@ export const ProviderRefusalChangedSchema = z.object({
 });
 export type ProviderRefusalChanged = z.infer<typeof ProviderRefusalChangedSchema>;
 
+// One provider's capacity as the daemon just judged it (schemas/providers/capacity.ts), sent whole each time any fact under
+// it moves and again at its `validUntil`. Only to a connection that asked for it (`/events` `capacity`), so a window from
+// before it never meets a frame it cannot read.
+export const CapacityChangedSchema = z.object({
+    kind: z.literal("capacity"),
+    capacity: ProviderCapacitySchema,
+});
+export type CapacityChanged = z.infer<typeof CapacityChangedSchema>;
+
 // Every refusal a frame says stands, from a daemon that sends the whole list or one at the floor that sends its last.
 export const refusalsOf = (event: ProviderRefusalChanged): readonly ProviderRefusal[] =>
     event.refusals ?? (event.refusal === undefined ? [] : [event.refusal]);
@@ -263,5 +273,6 @@ export const SystemEventSchema = z.discriminatedUnion("kind", [
     AgentsChangedSchema,
     AccountUsageChangedSchema,
     ProviderRefusalChangedSchema,
+    CapacityChangedSchema,
 ]);
 export type SystemEvent = z.infer<typeof SystemEventSchema>;

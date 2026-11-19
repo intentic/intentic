@@ -3,8 +3,12 @@ import { implement, ORPCError } from "@orpc/server";
 import { claimAndSettle, readLimitReset } from "../runtimes/claude/claude-limit-reset.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { opt } from "../opt.js";
+import { accountReachAllows } from "../secrets/credential-reach.js";
+import { capacitySnapshot, placementOf } from "./serviceability/capacity-feed.js";
+import type { ServiceabilityDeps } from "./serviceability/serviceability.js";
 
-export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore" | "providerRefusals">;
+export type UsageRoutesDeps = Pick<Services, "accountReach" | "headroom" | "usage" | "claudeStore" | "providerRefusals"> & ServiceabilityDeps;
 
 // How long a forced re-measure waits for the sweep before returning the stale reading; bounded by the readers' own
 // timeouts.
@@ -37,6 +41,23 @@ export const createUsageRoutes = (services: UsageRoutesDeps) => {
                     resumesAt: Math.ceil(entry.until / 1000),
                 })),
             };
+        }),
+        // Judged now, by the same rule and the same ports the pushed capacity is (capacity-feed.ts).
+        capacity: i.capacity.handler(async () => capacitySnapshot(services)),
+        /* The turn the asker would send: on the loop they named, among the AI accounts they may run on (Access ▸ People,
+           read as a turn of theirs is held to it, account-reach.ts; the owner's own tools and a caller with no member
+           identity reach every account). 2026-11-19: its first form answered the sandbox-wide pick on the default loop,
+           and a window whose rows left that account out predicted its own pick instead, which the turn's could differ
+           from; a window narrowing the daemon's answer itself was rejected, since only the daemon counts the load. */
+        placement: i.placement.handler(async ({ input, context }) => {
+            const judgedAt = Date.now();
+            const asker = context.identity?.email;
+            const reach = await services.accountReach(undefined, asker === undefined ? [] : [asker]);
+            const account = await placementOf(input.provider, input.model === "" ? undefined : input.model, {
+                loop: input.loop,
+                allows: (id) => accountReachAllows(reach, input.provider, id),
+            });
+            return { judgedAt, ...opt("account", account), narrowed: true as const };
         }),
 /* A spent session window can continue through the Claude reset mechanism. */
         limitReset: i.limitReset.handler(async ({ input }) => {

@@ -31,6 +31,9 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { queryClient } from "../../../lib/queryPersistence";
+import type { ProviderCapacity } from "@intentic/sandbox-contract/schemas/providers/capacity";
+import { providerCapacities, setCapacitySnapshot } from "../../../models/providers/providerAccounts";
+import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
 import { applySystemEvent } from "./systemEvents";
 
 // A daemon restart resets the roster's revision counter; `setAgents` drops anything below this tab's mark, and the
@@ -118,4 +121,51 @@ it(`distrusts everything the cache holds when the stream reconnects`, () => {
     expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
     // Still held, so an active screen repaints from it while the refetch runs rather than blanking.
     expect(queryClient.getQueryData<{ from: string }>(key)).toEqual({ from: `before the gap` });
+});
+
+// Each provider's capacity rides the stream as the daemon judges it again, numbered from the daemon's start: a window keeps
+// the higher of two, and a reconnect, which may be to a daemon counting from one again, lets the next one in whatever it is.
+describe(`the capacity frames`, () => {
+    const capacity = (seq: number, placement: string): ProviderCapacity => ({ provider: `claude`, seq, judgedAt: 0, accounts: [], refusals: [], placement });
+    const frame = (seq: number, placement: string): void => applySystemEvent({ kind: `capacity`, capacity: capacity(seq, placement) }, SANDBOX);
+
+    afterEach(() => {
+        setDaemonRoutes(undefined);
+        setCapacitySnapshot({ providers: [] });
+        queryClient.removeQueries({ queryKey: [`usage.placement`] });
+    });
+
+    it(`hold the newest a provider was judged at, whatever order they land in`, () => {
+        frame(4, `newer`);
+        frame(2, `older`);
+
+        expect(providerCapacities.value[`claude`]?.placement).toBe(`newer`);
+    });
+
+    it(`take a restarted daemon's first one, numbered below the last the old process sent`, () => {
+        frame(500, `old process`);
+
+        hello();
+        frame(1, `new process`);
+
+        expect(providerCapacities.value[`claude`]?.placement).toBe(`new process`);
+    });
+
+    it(`are let go once the daemon a reconnect reaches no longer judges capacity`, () => {
+        frame(3, `judged`);
+
+        applySystemEvent({ kind: `hello`, workspaceId: `workspace`, build: `build-1`, routes: [`agents.list`] }, SANDBOX);
+
+        expect(providerCapacities.value).toEqual({});
+    });
+
+    it(`stale every placement the window asked of that provider, and of no other`, () => {
+        const asked = (provider: string) => [`usage.placement`, { provider, model: `opus` }, `unpersisted`, SANDBOX];
+        queryClient.setQueryData(asked(`claude`), { account: `a`, judgedAt: 0 });
+        queryClient.setQueryData(asked(`codex`), { account: `b`, judgedAt: 0 });
+
+        frame(7, `moved`);
+
+        expect([queryClient.getQueryState(asked(`claude`))?.isInvalidated, queryClient.getQueryState(asked(`codex`))?.isInvalidated]).toEqual([true, false]);
+    });
 });

@@ -174,6 +174,13 @@ export const systemContract = {
                 roster: RosterFramesSchema.optional().describe(
                     "How the fleet's agents arrive as running agents make progress: `changes` sends only the cards that moved since the previous roster frame, `snapshots` (the default) every card every time. A change someone made, and the first roster, always arrive whole.",
                 ),
+                // Opt-in for the same reason: a client from before it would not know the frame.
+                capacity: z
+                    .stringbool()
+                    .optional()
+                    .describe(
+                        "Send each provider's capacity (what its accounts can serve, judged whole) as a `capacity` frame whenever anything under it changes, and again when the clock alone would change it.",
+                    ),
             }),
         )
         .output(streamOf(SystemEventSchema)),

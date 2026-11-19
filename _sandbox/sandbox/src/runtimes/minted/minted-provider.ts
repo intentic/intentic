@@ -54,7 +54,7 @@ export interface MintedProviderSlice {
     // other, and every turn on such a row would be refused by a host that never had that model.
     readonly catalogOf: (variant: string) => MintedCatalog;
     // The provider-level catalog the picker and readiness sweep read: the estate of the first connected account. A turn
-    // naming no account is placed by the sandbox's rule (serviceability.ts unnamedAccount), and its route validates the
+    // naming no account is placed by the sandbox's one placement (placement.ts unnamedPlacement), and its route validates the
     // pick against the estate of the account it lands on (model-routes.ts resolveMintedRoute).
     readonly catalog: MintedCatalog;
 }

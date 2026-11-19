@@ -11,11 +11,11 @@ import type { TurnResumeScheduler } from "../turn-resume.js";
    (createTurnResumeScheduler), and its backstop catches anything an event missed. */
 
 // Whether an event applied to a conversation may have given the pass something to do there: a hold recorded or changed
-// (a new record; one the pass fired or dropped is not, so its own acts do not wake it again), words queued or re-timed
-// while the queue holds any, or a land let go, which a send booked after that conversation's work waits for.
+// (a new record; one the pass fired, dropped or read is not, so its own acts do not wake it again), words queued or
+// re-timed while the queue holds any, or a land let go, which a send booked after that conversation's work waits for.
 export const wakesResumePass = (event: ConversationEvent, before: ConversationState, after: ConversationState): boolean => {
     const held = after.resume.held;
-    if (held !== before.resume.held && held !== undefined && !held.fired) {
+    if (held !== before.resume.held && held !== undefined && !held.fired && event.kind !== "held-read") {
         return true;
     }
     if (after.queue !== before.queue && after.queue.items.length > 0) {
@@ -27,7 +27,7 @@ export const wakesResumePass = (event: ConversationEvent, before: ConversationSt
 /** Wires every event that may make a held turn due to a nudge of the pass; answers the unsubscribe of them all. */
 export const nudgeResumesOn = (
     services: Pick<Services, "conversations" | "events" | "sandboxSettings" | "headroom">,
-    scheduler: Pick<TurnResumeScheduler, "nudge" | "retime">,
+    scheduler: Pick<TurnResumeScheduler, "nudge">,
 ): (() => void) => {
     const nudge = (): void => scheduler.nudge();
     const unsubscribes = [
@@ -41,12 +41,13 @@ export const nudgeResumesOn = (
         services.events.subscribe("workspace", nudge),
         // A conversation's or the sandbox's answer to a wall decides whether its hold fires at all.
         services.sandboxSettings.onSet(nudge),
-        // An account back to ready is a reopen the holds on it wait for, and may serve a timed hold's model before the
-        // instant it was refused with (held-standing.ts, 2026-11-08).
-        onAccountReopened((reopened) => scheduler.retime(reopened.provider)),
+        // An account back to ready is a reopen the holds on it wait for, and may serve a held turn's model before the
+        // instant it was refused with, or take a booked move whose account is spent (held-verdict.ts, 2026-11-08).
+        onAccountReopened(nudge),
         // A new usage reading may name the reopen a hold refused with no instant was waiting to learn, or show room for a
-        // timed hold's model on the provider it read (held-standing.ts).
-        services.headroom.onChange((provider) => scheduler.retime(provider)),
+        // held turn's model on the provider it read. Each pass reads every hold's records afresh, so neither asks more of
+        // the pass than to run: until 2026-11-19 each also cleared the minute that paced its provider's holds' re-reads.
+        services.headroom.onChange(nudge),
     ];
     return () => {
         for (const unsubscribe of unsubscribes) {

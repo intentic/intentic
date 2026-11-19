@@ -7,6 +7,7 @@ import { selfAiAccounts } from "../../client/sandbox/useMembers";
 import { providerAccounts, translatorAccounts } from "./providerAccounts";
 import { isLocalModelProvider } from "./providerCatalog";
 import { modelCapacity } from "./usageStatus";
+import { verdictNow } from "./capacity/verdictClock";
 
 /* WHICH AI ACCOUNTS THE SIGNED-IN PERSON MAY RUN A TURN ON (Access ▸ People, a person's AI accounts), read the way the
    daemon decides a turn's account (sandbox agent/run/decide/account-reach.ts), so a surface offers only what will run
@@ -58,7 +59,7 @@ export const providerWithheld = (provider: AgentProvider): boolean => {
  */
 export const spentModels = (
     rows: readonly { readonly key: string; readonly provider: AgentProvider; readonly value: string; readonly label: string }[],
-    now: number = Date.now(),
+    now: number = verdictNow(),
 ): ReadonlyMap<string, FleetCapacity & { readonly kind: `spent` }> =>
     new Map(
         rows.flatMap((row) => {

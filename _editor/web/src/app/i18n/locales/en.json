@@ -4523,6 +4523,14 @@
                 "percentLeft": "{percent} of your usage limit left"
             }
         },
+        "providerDegraded": {
+            "label": "Provider",
+            "outageShort": "Down",
+            "throttleShort": "Throttling",
+            "outage": "{provider} is failing requests",
+            "throttle": "{provider} is turning requests away for now",
+            "retry": "The sandbox tries it again in {wait}"
+        },
         "turnFailures": {
             "installNewerEngine": "Install a newer engine under Sandbox ▸ Environment ▸ Agent engines.",
             "installNewerEngineFloor": "Install a newer engine under Sandbox ▸ Environment ▸ Agent engines ({floor} or newer).",

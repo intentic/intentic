@@ -2,8 +2,9 @@ import type { AccountFix } from "@intentic/sandbox-contract/schemas/providers/pl
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { PlanLimitsHeld } from "@intentic/sandbox-contract/contracts/usage.contract";
 import { t } from "@intentic/ui/i18n";
-import { providerAccounts, providerRefusals, translatorAccounts } from "../../../../models/providers/providerAccounts";
+import { providerAccounts, translatorAccounts } from "../../../../models/providers/providerAccounts";
 import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
+import { verdictNow } from "../../../../models/providers/capacity/verdictClock";
 import {
     accountFixLabel,
     attentionGroups,
@@ -16,7 +17,9 @@ import {
     nestPools,
     poolPeriod,
     poolScope,
+    refusalsAmong,
     remainingPercent,
+    servesTurn,
     unreadGroups,
 } from "../../../../models/providers/usageStatus";
 
@@ -154,8 +157,8 @@ const openPercent = (pools: readonly PlanLimitPool[]): number | undefined => {
 };
 
 // Whether the row can take the next task: the one serviceability verdict, where an unmeasured account is usable and a
-// spent, benched, refused or blocked one is not.
-const canServe = (row: PlanLimitRow): boolean => row.state.kind === `ready` || row.state.kind === `unknown`;
+// spent, benched, refused or blocked one is not (servesTurn, the door's own reading of it).
+const canServe = (row: PlanLimitRow): boolean => servesTurn(row.state);
 
 // Roomiest first; a row with no reading sorts after every measured row, never as headroom, and a reading whose re-read
 // keeps failing sorts after every one that can still move: its figure is a floor from before it stopped, so it would
@@ -300,9 +303,9 @@ const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
 // Roomiest offer ranks the provider; an unmeasured provider sorts last, never as a zero.
 const roomOf = (entry: CapacityProvider): number => entry.rows[0]?.percent ?? Number.POSITIVE_INFINITY;
 
-export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number = Date.now(), mine?: CapacityMine): ChatCapacity => {
+export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number = verdictNow(), mine?: CapacityMine): ChatCapacity => {
     const rows = planLimitRows(providerAccounts.value, translatorAccounts.value, now);
-    const groups = planLimitGroups(rows, providerRefusals.value, now);
+    const groups = planLimitGroups(rows, refusalsAmong(rows), now);
     const judged = groups.map((group) => ({ group, ready: group.rows.filter(canServe).toSorted(byRoom) }));
     // An account whose provider is holding reads off has an age nothing can move, so it must not date the fleet: one
     // stuck credential would otherwise print "11h ago" over thirty accounts read a minute ago. It is not dropped from
@@ -363,7 +366,7 @@ export interface CapacityHeld {
 // read yet) still counts: the count is what says a number could not move, and the label only says which. A park whose
 // instant has passed is dropped rather than restated: the next trigger reads that account, so the claim is over. A
 // blocked credential is dropped too: the rail names it by what it is missing and draws no figure a re-read could move.
-export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = Date.now()): CapacityHeld | undefined => {
+export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = verdictNow()): CapacityHeld | undefined => {
     const rows = planLimitRows(providerAccounts.value, translatorAccounts.value, now);
     const rowOf = (entry: PlanLimitsHeld): PlanLimitRow | undefined =>
         rows.find((candidate) => candidate.provider === entry.provider && candidate.account === entry.account);

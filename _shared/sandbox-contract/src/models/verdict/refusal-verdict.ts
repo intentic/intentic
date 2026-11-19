@@ -1,4 +1,5 @@
-import type { AccountUsage, ModelCooldown, ProviderRefusal } from "../../schemas/providers/plan-limits.js";
+import type { AccountUsage, ModelCooldown, ProviderRefusal, UsageWindow } from "../../schemas/providers/plan-limits.js";
+import { factsAt } from "./current-windows.js";
 import { bindingWindow, gatingWindows, SPENT_UTILIZATION } from "./pool-gates.js";
 import { windowPeriod } from "./window-period.js";
 
@@ -74,9 +75,39 @@ export const refusedPoolReset = (refusal: ProviderRefusal, accounts: readonly Se
 // from a countdown at the moment it was said.
 const SAME_RESET_SECONDS = 30 * 60;
 
+// A pool the instant rule can judge: its reset and its window's length both known.
+interface JudgedPool {
+    readonly window: UsageWindow;
+    readonly reset: number;
+    readonly period: number;
+}
+
+// The current pools the refused model spends, each with its reset and length; undefined where there are none, or where
+// one lacks either, since then the refusal's instant may be that pool's.
+const judgedPools = (refusal: ProviderRefusal, usage: AccountUsage): readonly JudgedPool[] | undefined => {
+    const current = gatingWindows(usage, refusal.model === undefined ? undefined : { id: refusal.model }).filter((window) => window.lapsedAt === undefined);
+    const judged = current.flatMap((window) => {
+        const period = windowPeriod(window)?.seconds;
+        return window.resetsAt === undefined || period === undefined ? [] : [{ window, reset: window.resetsAt, period }];
+    });
+    return current.length > 0 && judged.length === current.length ? judged : undefined;
+};
+
+// A pool whose window opened after the refusal was filed, with room: the provider renewed it early.
+const renewedAfter = (refusal: ProviderRefusal, { window, reset, period }: JudgedPool): boolean =>
+    reset - period > refusal.at / 1000 + SAME_RESET_SECONDS && window.utilization < SPENT_UTILIZATION;
+
+// Whether every pool that could have held the refusal renewed since: a pool held it only if its window is at least as
+// long as the wait the provider named.
+const holdersRenewed = (refusal: ProviderRefusal, pools: readonly JudgedPool[], resetsAt: number): boolean => {
+    const holders = pools.filter(({ period }) => period + SAME_RESET_SECONDS >= resetsAt - refusal.at / 1000);
+    return holders.length > 0 && holders.every((pool) => renewedAfter(refusal, pool));
+};
+
 /**
  * What a reading of the refused account taken since says about the instant a spent allowance named, judged on the pools
- * the refused model spends:
+ * the refused model spends. Only for a refusal the ledger could not resolve as it filed it (refusedPoolOf): one filed
+ * before 2026-11-19, a translator's bench, or one whose account's reading could not say then.
  * - `published`: one of them resets at that instant, so the refusal is that pool's, and the instant outranks the room
  *   the reading shows (verdictOn).
  * - `renewed`: none resets there, and every pool long enough to have held the refusal opened after it was filed, with
@@ -94,23 +125,85 @@ export const refusedInstant = (refusal: ProviderRefusal, usage: AccountUsage | u
     if (refusal.kind !== "limit" || resetsAt === undefined || usage === undefined || usage.measuredAt <= refusal.at) {
         return "unjudged";
     }
-    const pools = gatingWindows(usage, refusal.model === undefined ? undefined : { id: refusal.model }).flatMap((window) => {
-        const period = windowPeriod(window)?.seconds;
-        return window.lapsedAt === undefined ? [{ window, reset: window.resetsAt, period }] : [];
-    });
-    if (pools.length === 0 || pools.some(({ reset, period }) => reset === undefined || period === undefined)) {
+    const pools = judgedPools(refusal, usage);
+    if (pools === undefined) {
         return "unjudged";
     }
-    if (pools.some(({ reset }) => Math.abs((reset ?? 0) - resetsAt) <= SAME_RESET_SECONDS)) {
+    if (pools.some(({ reset }) => Math.abs(reset - resetsAt) <= SAME_RESET_SECONDS)) {
         return "published";
     }
-    // A pool held the refusal only if its window is at least as long as the wait the provider named.
-    const filedAt = refusal.at / 1000;
-    const holders = pools.filter(({ period }) => (period ?? 0) + SAME_RESET_SECONDS >= resetsAt - filedAt);
-    const renewed = holders.every(
-        ({ window, reset, period }) => (reset ?? 0) - (period ?? 0) > filedAt + SAME_RESET_SECONDS && window.utilization < SPENT_UTILIZATION,
-    );
-    return holders.length > 0 && renewed ? "renewed" : "unpublished";
+    return holdersRenewed(refusal, pools, resetsAt) ? "renewed" : "unpublished";
+};
+
+/* WHICH POOL A SPENT ALLOWANCE THAT NAMED ITS INSTANT WAS REFUSED IN, resolved once, as the daemon's ledger files it
+   (provider-refusals.ts), from the refused account's reading as it stood when the provider refused (factsAt): the pool
+   the refused model spends whose reset is that instant (the fullest, where several reset then), stamped `pool`; or, where
+   every such pool is current and publishes its reset and its length and none resets then, none of them
+   (`poolUnpublished`: a pool the reading does not name, such as one model's own cap). Until 2026-11-19 every judgement
+   worked this out again, in the daemon and in every open window, from whatever reading it held, and a reading taken once
+   the pool had moved said something else: a Codex refusal on GPT 6.1 Sol was pinned on the weekly pool, which gates
+   every model, for four days (2026-11-14). Re-inferring it on each judgement was rejected for that: the reading that can
+   say is the one beside the refusal, and only the ledger holds both at once.
+
+   Nothing is stamped where the reading cannot say, and the rule then still works it out as it judges (refusedInstant):
+   a refusal naming no instant (its pool is the one a reading since shows full, refusedPoolReset), one no reading
+   measures, a person's mark, one naming no account over several (each account's own pool may differ), an account with
+   no reading, and a reading in which a pool the model spends has closed since it was read or publishes no reset or no
+   length, since the instant may be that pool's. */
+export const refusedPoolOf = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[]): Pick<ProviderRefusal, "pool" | "poolUnpublished"> => {
+    const { resetsAt } = refusal;
+    if (refusal.kind !== "limit" || resetsAt === undefined || refusal.unmetered === true || refusal.byHand === true) {
+        return {};
+    }
+    const refused = refusal.account === undefined ? (accounts.length === 1 ? accounts[0] : undefined) : accounts.find((facts) => facts.account === refusal.account);
+    const usage = refused === undefined ? undefined : factsAt(refused, refusal.at).usage;
+    const model = refusal.model === undefined ? undefined : { id: refusal.model };
+    const pools = gatingWindows(usage, model);
+    if (usage === undefined || pools.some((window) => window.lapsedAt !== undefined)) {
+        return {};
+    }
+    const matched = pools
+        .filter((window) => window.resetsAt !== undefined && Math.abs(window.resetsAt - resetsAt) <= SAME_RESET_SECONDS)
+        .reduce<UsageWindow | undefined>((fullest, window) => (fullest === undefined || window.utilization > fullest.utilization ? window : fullest), undefined);
+    if (matched !== undefined) {
+        return { pool: matched.kind };
+    }
+    return judgedPools(refusal, usage) === undefined ? {} : { poolUnpublished: true };
+};
+
+/**
+ * A refusal as the daemon's ledger files it: a spent allowance stamped with what the accounts' readings say of it now and
+ * will not say once its pool has moved on, the reset of the pool it was refused in where it named no instant
+ * (refusedPoolReset) and the pool its instant is the reset of where it named one (refusedPoolOf). Anything else as it came.
+ */
+export const stampedRefusal = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[]): ProviderRefusal => {
+    const stamped: ProviderRefusal = { ...refusal, ...refusedPoolOf(refusal, accounts) };
+    const poolResetsAt = refusedPoolReset(refusal, accounts);
+    if (poolResetsAt !== undefined) {
+        stamped.poolResetsAt = poolResetsAt;
+    }
+    return stamped;
+};
+
+// Whether a reading since shows the allowance a refusal named its instant for renewed early, so it is over before then.
+// Resolved as it was filed: the very pool it was refused in opened since with room (a pool the reading no longer names,
+// or one with no reset or length, says nothing, and the instant stands). Resolved to no published pool, or filed before
+// refusals were resolved: every pool long enough to have held it did (refusedInstant `renewed`).
+const renewedSince = (refusal: ProviderRefusal, usage: AccountUsage | undefined): boolean => {
+    const { resetsAt } = refusal;
+    if (refusal.pool === undefined && refusal.poolUnpublished !== true) {
+        return refusedInstant(refusal, usage) === "renewed";
+    }
+    if (resetsAt === undefined || usage === undefined || usage.measuredAt <= refusal.at) {
+        return false;
+    }
+    if (refusal.poolUnpublished === true) {
+        const pools = judgedPools(refusal, usage);
+        return pools !== undefined && holdersRenewed(refusal, pools, resetsAt);
+    }
+    const window = usage.windows.find((entry) => entry.kind === refusal.pool && entry.lapsedAt === undefined);
+    const period = window === undefined ? undefined : windowPeriod(window)?.seconds;
+    return window?.resetsAt !== undefined && period !== undefined && renewedAfter(refusal, { window, reset: window.resetsAt, period });
 };
 
 /*
@@ -121,7 +214,7 @@ export const refusedInstant = (refusal: ProviderRefusal, usage: AccountUsage | u
  * refusedPoolReset, unless this account was read since and a reading outranks a stamp: 2026-10-21). Where it is known to
  * be this account's (it named it, or the provider has no other), the provider's own instant outranks a usage endpoint
  * that kept showing room while it refused, so it stands until then, unless a reading since shows that pool renewed
- * early (refusedInstant); else this account's reading of the refused pool
+ * early (renewedSince); else this account's reading of the refused pool
  * since it answers it. A nameless one is one account saying no and nothing saying which, so on each account it is only
  * that account's own reading that answers it, whatever kind of allowance or instant it named: held to its instant, one
  * team account's refusal held every Codex account spent for a day, the free ones reading 0% used (2026-10-19).
@@ -134,7 +227,7 @@ const verdictOn = (refusal: ProviderRefusal, facts: ServiceFacts, accounts: numb
     }
     const known = refusal.account !== undefined || accounts <= 1;
     if (refusal.kind === "limit" && refusal.resetsAt !== undefined && known) {
-        return refusedInstant(refusal, facts.usage) === "renewed" ? "answered" : "standing";
+        return renewedSince(refusal, facts.usage) ? "answered" : "standing";
     }
     return answers(refusal, facts, known ? undefined : true) ? "answered" : "standing";
 };
@@ -142,14 +235,11 @@ const verdictOn = (refusal: ProviderRefusal, facts: ServiceFacts, accounts: numb
 /**
  * How a refusal on file stands over a provider's accounts: `gone` once the account it named is disconnected, `standing`
  * while it stands over any account it covers (verdictOn), else `answered`. An empty list is one not loaded yet, so the
- * refusal stands. Judged by the daemon and every open window at the same instant from what the refusal carries.
+ * refusal stands. Judged by the daemon and every open window at the same instant (`now`, the sandbox's clock in epoch ms)
+ * from what the refusal carries and each account's reading as it stands then (factsAt).
  */
-export const refusalVerdict = (
-    refusal: ProviderRefusal,
-    accounts: readonly ServiceFacts[],
-    now: number = Date.now(),
-): "standing" | "answered" | "gone" => {
-    const covered = accounts.filter((facts) => (refusal.account ?? facts.account) === facts.account);
+export const refusalVerdict = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[], now: number): "standing" | "answered" | "gone" => {
+    const covered = accounts.map((facts) => factsAt(facts, now)).filter((facts) => (refusal.account ?? facts.account) === facts.account);
     if (accounts.length === 0) {
         return "standing";
     }
@@ -173,7 +263,7 @@ const unstampedPast = (refusal: ProviderRefusal, now: number): ProviderRefusal =
 // stands until the instant the provider named, and no reading answers it before then (verdictOn: named, with its
 // instant). Dated before anything on file, since the translator keeps no instant it began, so a refusal filed since
 // (a revoked sign-in) is the account's newer word. One past its instant is over.
-export const cooldownRefusals = (facts: ServiceFacts, now: number = Date.now()): ProviderRefusal[] =>
+export const cooldownRefusals = (facts: ServiceFacts, now: number): ProviderRefusal[] =>
     (facts.cooldowns ?? []).flatMap((cooldown) =>
         cooldown.until * 1000 > now
             ? [{ at: 0, kind: "limit", account: facts.account, model: cooldown.model, resetsAt: cooldown.until, message: `Out of allowance for ${cooldown.model} on this account.` }]
@@ -182,14 +272,15 @@ export const cooldownRefusals = (facts: ServiceFacts, now: number = Date.now()):
 
 /**
  * The refusals still standing over each of a provider's accounts (those naming it, those naming none, and the
- * translator's per-model benches of it), each judged on that account's own facts.
+ * translator's per-model benches of it), each judged on that account's own facts as they stand at `now` (factsAt).
  */
-export const standingOver = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile, now: number = Date.now()): ((account: string) => RefusalsOnFile) => {
-    const live = refusals.filter((refusal) => refusalVerdict(refusal, accounts, now) !== "gone");
+export const standingOver = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile, now: number): ((account: string) => RefusalsOnFile) => {
+    const current = accounts.map((facts) => factsAt(facts, now));
+    const live = refusals.filter((refusal) => refusalVerdict(refusal, current, now) !== "gone");
     return (account) => {
-        const facts = accounts.find((entry) => entry.account === account) ?? { account };
+        const facts = current.find((entry) => entry.account === account) ?? { account };
         const filed = live
-            .filter((refusal) => (refusal.account ?? account) === account && verdictOn(refusal, facts, accounts.length, now) === "standing")
+            .filter((refusal) => (refusal.account ?? account) === account && verdictOn(refusal, facts, current.length, now) === "standing")
             .map((refusal) => unstampedPast(refusal, now));
         return [...cooldownRefusals(facts, now), ...filed];
     };

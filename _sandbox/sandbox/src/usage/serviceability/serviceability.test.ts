@@ -10,8 +10,11 @@ import { allowanceWall, fleetCapacityOf, serviceabilities, serviceability, type 
 // The one "can this account serve a turn?" answer, fed from every store that holds a fact about it. The ranking cases
 // were accountWithHeadroom's, the unnamed pick this replaced; they hold for the rule every picker now shares.
 
+// The suite's clock: a minute before the real one the verdicts are judged at (Date.now()), so a reading taken at T + n is
+// still current and a refusal filed at T + n is still on file.
+const T = Date.now() - 60_000;
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: "five_hour", utilization: 42, gates: "all", ...over });
-const reading = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt: 2_000 });
+const reading = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt: T + 2_000 });
 const account = (id: string, extra: Partial<OauthAccount> = {}): OauthAccount => ({ id, label: id, connectedAt: 0, ...extra });
 
 const deps = (params: {
@@ -106,8 +109,8 @@ test("an account its organisation keeps switching off is marked on its row, and 
 
 test("a standing limit refusal reads its account as spent, until a reading with room lands after it", async () => {
     const accounts = [account("refused"), account("other")];
-    const refusals = { claude: [{ at: 1_000, kind: "limit" as const, message: "Limit reached.", account: "refused" }] };
-    const stale = { refused: { ...reading(window({ utilization: 10 })), measuredAt: 500 }, other: reading(window({ utilization: 90 })) };
+    const refusals = { claude: [{ at: T + 1_000, kind: "limit" as const, message: "Limit reached.", account: "refused" }] };
+    const stale = { refused: { ...reading(window({ utilization: 10 })), measuredAt: T + 500 }, other: reading(window({ utilization: 90 })) };
     expect(await pick(deps({ accounts, usage: stale, refusals }))).toBe("other");
     const since = { ...stale, refused: reading(window({ utilization: 10 })) };
     expect(await pick(deps({ accounts, usage: since, refusals }))).toBe("refused");
@@ -188,12 +191,12 @@ test("a routed credential whose plan does not include the model is outside that 
 
 test("a routed refusal naming no credential covers them all until one reads with room after it", async () => {
     const services = deps({
-        refusals: { codex: [{ at: 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },
-        routed: { codex: [{ name: "a", label: "a", usage: { ...reading(window({ utilization: 20 })), measuredAt: 500 } }] },
+        refusals: { codex: [{ at: T + 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },
+        routed: { codex: [{ name: "a", label: "a", usage: { ...reading(window({ utilization: 20 })), measuredAt: T + 500 } }] },
     });
     expect(await fleetCapacityOf(services, "codex", { id: "gpt-6.1-sol" })).toMatchObject({ kind: "spent", accounts: 1 });
     const since = deps({
-        refusals: { codex: [{ at: 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },
+        refusals: { codex: [{ at: T + 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },
         routed: { codex: [{ name: "a", label: "a", usage: reading(window({ utilization: 20 })) }] },
     });
     expect((await fleetCapacityOf(since, "codex", { id: "gpt-6.1-sol" })).kind).toBe("serving");

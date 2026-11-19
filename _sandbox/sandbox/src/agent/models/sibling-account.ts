@@ -1,73 +1,51 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
-import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../composition.js";
-import { accountFactsOf, serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
-import { pickAccount, type PlannerDeps } from "../run/spend/budget-planner.js";
+import { moveDestinationFor, type PlaceDeps } from "../providers/accounts/placement.js";
 import { breakPolicyFor } from "../run/turn/break-policy.js";
 import { ACCOUNTS_ALL, accountReachAllows } from "../../secrets/credential-reach.js";
 
 // Every provider whose accounts a turn can name (Claude, Cursor, Devin, the minted keys, a vendor CLI's sign-ins); a
-// routed provider balances its own credentials before refusing, so a refusal there already means nothing is left.
-// Picks by the one move rule (account-moves.ts moveDestination): a revoked, seatless, benched, refused or spent account
-// is never a move's destination, however idle its meter looks, and an unmeasured one only where the provider publishes
-// no allowance to measure (Devin's refused turns were held with two unrefused accounts beside them until 2026-10-29).
-// Among Claude's ready accounts, the one the fan-out planner places it on once this turn and what already runs there are
-// counted (budget.ts choose: the first to renew of those that carry it; ten children once moved together onto the account
-// reading most room and emptied it in thirty minutes, 2026-10-20); the best by its reading where the planner cannot say.
-// `allows` narrows the destinations to the accounts the people the conversation works for may use (account-reach.ts):
-// a move onto any other would only be refused when it fires.
-export const siblingWithRoom = async (
-    services: ServiceabilityDeps & Partial<PlannerDeps>,
+// routed provider's gateway tries every account before refusing, so a refusal there already means nothing is left.
+// Where the turn goes is the one move every subsystem makes (placement.ts moveDestinationFor): a revoked, seatless,
+// benched, refused or spent account is never a move's destination, however idle its meter looks, and an unmeasured one
+// only where the provider publishes no allowance to measure (Devin's refused turns were held with two unrefused accounts
+// beside them until 2026-10-29). Among Claude's ready accounts, the one the fan-out planner places it on once this turn
+// and what already runs there are counted (ten children once moved together onto the account reading most room and
+// emptied it in thirty minutes, 2026-10-20). `allows` narrows the destinations to the accounts the people the
+// conversation works for may use (account-reach.ts): a move onto any other would only be refused when it fires.
+export const siblingWithRoom = (
+    services: PlaceDeps,
     params: {
         readonly provider: AgentProvider;
         readonly model: string | undefined;
         readonly refused: string | undefined;
         readonly allows?: ((account: string) => boolean) | undefined;
     },
-): Promise<string | undefined> => {
-    if (KeyedProviderSchema.safeParse(params.provider).success) {
-        return undefined;
-    }
-    const model = params.model === undefined || params.model === "" ? undefined : { id: params.model };
-    const allows = params.allows ?? (() => true);
-    const accounts = (await serviceabilities(services, params.provider, model).catch(() => [])).filter(
-        (account) => account.id !== params.refused && allows(account.id),
-    );
-    const destination = moveDestination(accounts, reportsPlanLimits(params.provider))?.id;
-    // The planner projects Claude's children alone (budget-planner.ts).
-    const planned = model === undefined || params.provider !== "claude" ? undefined : await plannedClaudeAccount(services, model.id, { refused: params.refused });
-    return planned !== undefined && accounts.some((account) => account.id === planned) ? planned : destination;
-};
+): Promise<string | undefined> => moveDestinationFor(services, params.provider, params.model, { from: params.refused, allows: params.allows });
+
+/** What a limit move reads: the verdicts, the planner where given, and who the conversation works for. */
+export type LimitMoveDeps = PlaceDeps & Partial<Pick<Services, "accountReach">>;
 
 /**
- * The planner's pick among Claude's accounts (budget-planner.ts pickAccount), where `services` carry what it projects
- * from: never `refused`, and only among `among` where given. Undefined where it cannot say (no account ready with room,
- * an unreadable record), which leaves the caller's own rule to answer.
+ * Where a spent allowance's held turn moves off `refused` now: an account with room (siblingWithRoom) that every person
+ * the conversation works for may use; an unreadable roster allows none, so it holds. Asked at the failure, where it books
+ * the move, and by the resume pass once the account the move was booked onto is spent itself (held-verdict.ts).
  */
-export const plannedClaudeAccount = async (
-    services: ServiceabilityDeps & Partial<PlannerDeps>,
-    model: string,
-    narrow: { readonly refused?: string | undefined; readonly among?: readonly string[] | undefined },
+export const moveDestinationOf = async (
+    services: LimitMoveDeps,
+    params: { readonly conversationId: string; readonly provider: AgentProvider; readonly model: string | undefined; readonly refused: string | undefined },
 ): Promise<string | undefined> => {
-    const { burnRates, runOuts, sandboxSettings, providerRefusals } = services;
-    if (burnRates === undefined || runOuts === undefined || sandboxSettings === undefined) {
-        return undefined;
-    }
-    const { refused, among } = narrow;
-    return (
-        accountFactsOf(services, "claude")
-            .then((facts) => pickAccount({ burnRates, runOuts, sandboxSettings, providerRefusals }, { provider: "claude", model, readings: facts.filter((reading) => among?.includes(reading.account) ?? true), refused }))
-            // allow(silent-catch): the planner is advice for which ready account a turn goes on; the caller's rule still answers.
-            .catch(() => undefined)
-    );
+    const reach = (await services.accountReach?.(params.conversationId)) ?? ACCOUNTS_ALL;
+    return siblingWithRoom(services, { ...params, allows: (id) => accountReachAllows(reach, params.provider, id) });
 };
 
-// Where a held turn moves to, decided once at the failure; undefined means no policy applies or no account has room.
-// `carry` requires the turn to have run, a known context under the owner's line, and not already refused elsewhere.
+// Whether the owner's answer moves a held turn, onto which account first, and whether its session goes with it: the
+// move's intent, booked at the failure. Undefined means no policy applies or no account has room. `carry` requires the
+// turn to have run, a known context under the owner's line, and not already refused elsewhere. The account is only where
+// it goes first: once that one is spent, the resume pass picks another with room (held-verdict.ts) rather than waiting
+// behind it, as it did until 2026-11-19.
 export const bookLimitMove = async (
-    services: ServiceabilityDeps & Pick<Services, "agents" | "sandboxSettings"> & Partial<Pick<Services, "accountReach">>,
+    services: LimitMoveDeps & Pick<Services, "agents" | "sandboxSettings">,
     params: {
         readonly conversationId: string;
         readonly provider: AgentProvider;
@@ -83,9 +61,7 @@ export const bookLimitMove = async (
     if ((await breakPolicyFor(services, params.conversationId, "limit")) !== "move") {
         return undefined;
     }
-    // Only onto an account every person the conversation works for may use; an unreadable roster allows none, so it holds.
-    const reach = (await services.accountReach?.(params.conversationId)) ?? ACCOUNTS_ALL;
-    const account = await siblingWithRoom(services, { ...params, allows: (id) => accountReachAllows(reach, params.provider, id) });
+    const account = await moveDestinationOf(services, params);
     if (account === undefined) {
         return undefined;
     }

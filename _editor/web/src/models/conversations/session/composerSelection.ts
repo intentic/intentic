@@ -326,12 +326,15 @@ export class ComposerSelection {
        only a turn nothing went out before on this provider is placed here (`sentModel`, which a provider switch clears),
        on a chat with no record (nothing registered, no session held: a session from the history menu is resumed on its
        own account) or one moving off its session's provider. A press on words already sent (a held turn's resume) is
-       the daemon's to route, as before. */
+       the daemon's to route, as before. The account ticked is the daemon's own answer where it gives one
+       (daemonPlacement.ts); a tick this window only predicted while that answer is on its way (`provisional`) is not
+       named, and the daemon places the turn by the very pick the answer would have shown (2026-11-19). */
     private sentAccount(): string | undefined {
         const { account: held, sentModel } = this.state.value;
         const session = this.host.session.value;
         const unplaced = sentModel === undefined && (session === undefined ? !this.host.registered.value : session.provider !== this.provider.value);
-        return held ?? (unplaced ? this.servingAccount.value?.id : undefined);
+        const shown = this.servingAccount.value;
+        return held ?? (unplaced && shown?.provisional !== true ? shown?.id : undefined);
     }
 
     // What the reducer may read of the world, as it stands at this pick.

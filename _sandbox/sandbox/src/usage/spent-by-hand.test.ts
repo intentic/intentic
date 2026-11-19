@@ -27,6 +27,7 @@ const capacityOf = async (deps: ReturnType<typeof stand>, model: string) =>
         (await deps.providerAccounts("cursor")).map((row) => ({ account: row.id })),
         (await deps.providerRefusals.onFile())["cursor"] ?? [],
         { id: model },
+        Date.now(),
     );
 
 test("a hand-set mark lands on every connected account, and every surface then reads the model spent", async () => {

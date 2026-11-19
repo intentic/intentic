@@ -7,7 +7,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { Logger } from "pino";
 import { whenAborted } from "@intentic/base/async";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
-import { cursorRunErrorFrame, refusesAccount, SdkCodeSchema } from "./turn/cursor-failures.js";
+import { cursorLimitFrame, cursorRunErrorFrame, refusesAccount, SdkCodeSchema } from "./turn/cursor-failures.js";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../sessions/vocabulary/attachment-note.js";
@@ -141,8 +141,9 @@ const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorS
     if (sdk === undefined) {
         return { kind: "error", message };
     }
+    // An HTTP 429: a spent allowance only where its code or words show one, else a throttle (cursor-failures.ts).
     if (error instanceof sdk.RateLimitError) {
-        return { kind: "error", message, code: "rate_limit" };
+        return cursorLimitFrame(message, SdkCodeSchema.safeParse(error).data?.code);
     }
     if (error instanceof sdk.AuthenticationError) {
         // Not subscription-required: account is connected, the key stopped working; fix is re-signing the same row.

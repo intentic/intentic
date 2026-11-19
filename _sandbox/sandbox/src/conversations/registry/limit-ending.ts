@@ -1,6 +1,7 @@
 import type { AgentStatus, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { opt } from "../../opt.js";
 import type { ConversationState, HeldRecord } from "../actor/conversation-state.js";
+import { heldReopen } from "../actor/limit-booking.js";
 import { type Ending, type PersistedAgent, profileOn } from "./agents-store.js";
 
 // A spent allowance's ending as the card states it: its failure fields and the hold the actor keeps. Whether and when
@@ -16,7 +17,8 @@ export const limitHold = (state: ConversationState | undefined): HeldRecord | un
 
 // The failure fields, only while the card still reads as `error`; once the standing has moved on, they would describe a
 // turn the board no longer shows as the last word. A spent allowance's are the rate limit's, held only while the actor
-// still holds the turn (limitHold), and its reopen the hold's where the pass has timed or a pick has re-pointed it.
+// still holds the turn (limitHold), and its reopen the one in front of where the hold goes, as the resume pass last read
+// it (limit-booking.ts heldReopen), else the refusal's own.
 export const reportedFailure = (
     ending: Ending,
     status: AgentStatus,
@@ -38,7 +40,7 @@ export const reportedFailure = (
             return {
                 ...opt("failure", ending.failure),
                 failureCode: "rate_limit",
-                ...opt("limitResetsAt", hold?.reopensAt ?? ending.resetsAt),
+                ...opt("limitResetsAt", heldReopen(hold) ?? ending.resetsAt),
                 ...opt("limitHeld", ending.held && hold !== undefined ? true : undefined),
             };
         default:

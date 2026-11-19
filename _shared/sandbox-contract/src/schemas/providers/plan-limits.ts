@@ -25,6 +25,19 @@ export const UsageWindowSchema = z.object({
     label: z.string().optional(),
     utilization: z.number(), // 0-100
     resetsAt: z.number().optional(),
+    // Stated once, by the reader that parsed the provider's answer (a Codex window's `limit_window_seconds`, a Kimi
+    // throttle's duration, Claude's `five_hour`/`weekly_*` keys, a Google bucket's `window`), so the daemon and every
+    // open window read one fact instead of re-guessing it from `kind` and `label` on each judgement. A window filed
+    // without it (every reading before 2026-11-19, a pool nothing names the length of) is read off its words as before
+    // (models/verdict/window-period.ts windowPeriod).
+    periodSeconds: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+            "How long this pool's window runs, in seconds, where the provider's answer says: 18000 for a five-hour window, 604800 for a week. Absent where it says nothing, and then the length is read off the pool's name where that names one.",
+        ),
     gates: WindowGatesSchema,
     rounded: z
         .boolean()

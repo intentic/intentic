@@ -1,6 +1,6 @@
 import type { HeldOf } from "../../agent/run/turn/holds/held-turn.js";
 import type { HeldRecord } from "./conversation-state.js";
-import { limitBooking, heldReopensAt, RESET_GRACE_MS, sendableAt } from "./limit-booking.js";
+import { heldMoving, heldReopen, heldReopensAt, limitBooking, RESET_GRACE_MS, sendableAt } from "./limit-booking.js";
 
 // The one rule a stranded card's lane and the resume pass both read: what a spent allowance's hold does by itself.
 
@@ -8,7 +8,7 @@ const RECORDED = 1_800_000_000_000;
 const AHEAD = RECORDED / 1000 + 3_600;
 
 // A spent allowance's hold; a booked move may be set, a person's pick (`onto`) is another test's.
-const hold = (over: Partial<Omit<HeldOf<"limit">, "reason" | "onto">> & Partial<Pick<HeldRecord, "fired">> = {}): HeldRecord => ({
+const hold = (over: Partial<Omit<HeldOf<"limit">, "reason" | "onto">> & Partial<Pick<HeldRecord, "fired" | "reading">> = {}): HeldRecord => ({
     input: { conversationId: "c1", prompt: "p" },
     reason: "limit",
     ran: true,
@@ -65,5 +65,33 @@ describe("what a spent allowance's hold does by itself", () => {
         const stopped: HeldRecord = { input: { conversationId: "c1", prompt: "p" }, reason: "stopped", ran: true, recordedAt: RECORDED, fired: false, tries: 0 };
         expect(limitBooking(stopped, "resend")).toBeUndefined();
         expect(limitBooking(undefined, "resend")).toBeUndefined();
+    });
+});
+
+/* WHAT THE RESUME PASS READ OF THE RECORDS decides it once there is a reading (held-verdict.ts, `held-read`): the
+   refusal's own instant is only the word a hold is judged on before any pass has read it. */
+describe("a hold the pass has read", () => {
+    const LATER = AHEAD + 7_200;
+
+    test("goes at the instant its reading names, sooner or later than the refusal's, and not at all with none", () => {
+        expect(limitBooking(hold({ reading: { at: sendableAt(LATER), reopensAt: LATER } }), "resend")).toEqual({ at: sendableAt(LATER) });
+        expect(limitBooking(hold({ reading: { at: RECORDED + 5_000, reopensAt: RECORDED / 1000 - 55 } }), "resend")).toEqual({ at: RECORDED + 5_000 });
+        expect(limitBooking(hold({ reading: {} }), "resend")).toBeUndefined();
+    });
+
+    // 2026-11-19: a booked move judged its account once, at the failure, and waited behind it once it was spent.
+    test("moves onto the account the reading found with room, and waits on its own route where it found none", () => {
+        const booked = { move: { account: "acct-2", carry: true } } as const;
+        expect(limitBooking(hold({ ...booked, reading: { at: sendableAt(LATER), moveTo: "acct-3" } }), "move")).toEqual({ at: RECORDED, moving: "acct-3" });
+        expect(limitBooking(hold({ ...booked, reading: { at: sendableAt(LATER) } }), "move")).toEqual({ at: sendableAt(LATER) });
+        expect(heldMoving(hold({ ...booked, reading: { moveTo: "acct-3" } }))).toBe("acct-3");
+        expect(heldMoving(hold({ ...booked, reading: {} }))).toBeUndefined();
+        expect(heldMoving(hold(booked))).toBe("acct-2");
+    });
+
+    test("states the reopen its reading names, else the refusal's while unread", () => {
+        expect(heldReopen(hold({ reading: { reopensAt: LATER } }))).toBe(LATER);
+        expect(heldReopen(hold({ reading: {} }))).toBeUndefined();
+        expect(heldReopen(hold())).toBe(AHEAD);
     });
 });

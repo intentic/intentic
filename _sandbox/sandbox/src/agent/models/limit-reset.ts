@@ -4,7 +4,7 @@ import type { Services } from "../../composition.js";
 import { windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { accountLimitReset } from "../../usage/account-usage.js";
-import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
+import { fleetCapacityOf, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 
 // Tries the account's own snapshot first (native Claude, filed per account), then the per-model pool across a routed
 // provider's accounts, since a routed turn is bound to none: the daemon's gateway places each of its requests on one
@@ -19,7 +19,7 @@ const namedPoolReset = (windows: readonly UsageWindow[], period: number, nowSeco
         .filter((window) => windowPeriod(window)?.seconds === period && window.resetsAt !== undefined && window.resetsAt > nowSeconds)
         .reduce<number | undefined>((soonest, window) => (soonest === undefined || (window.resetsAt ?? soonest) < soonest ? window.resetsAt : soonest), undefined);
 
-const periodReset = async (params: { readonly services: Services; readonly provider: AgentProvider; readonly account: string | undefined; readonly period: number }) => {
+const periodReset = async (params: { readonly services: ServiceabilityDeps; readonly provider: AgentProvider; readonly account: string | undefined; readonly period: number }) => {
     const { services, provider, account, period } = params;
     const nowSeconds = Date.now() / 1000;
     const routed = KeyedProviderSchema.safeParse(provider);
@@ -41,7 +41,8 @@ const periodReset = async (params: { readonly services: Services; readonly provi
 };
 
 export const limitReopensAt = async (params: {
-    readonly services: Services;
+    // What the readings and the verdict are read from; the resume pass's reading of a held turn passes no more.
+    readonly services: ServiceabilityDeps;
     readonly provider: AgentProvider;
     readonly model: string | undefined;
     readonly account: string | undefined;

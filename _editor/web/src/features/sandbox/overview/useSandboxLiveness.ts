@@ -136,8 +136,12 @@ const stream = async (sandboxId: string, signal: AbortSignal): Promise<void> => 
         // entry.
         const clientId = uuid();
         // Progress as only the cards it moved, not every card on every tool call; a daemon from before the option ignores
-        // it and sends whole rosters, which this window reads just the same.
-        const frames = await sandboxRpc.system.events({ clientId, roster: `changes` }, { signal: cut });
+        // it and sends whole rosters, which this window reads just the same. Each provider's judged capacity too, which the
+        // verdict door reads in place of the account lists, readings and refusals it would otherwise assemble
+        // (providerAccounts.ts providerCapacities). Asked of every daemon rather than only one whose hello lists
+        // `usage.capacity`: that hello arrives on the stream this opens, the last one may be from before an update, and a
+        // daemon from before the option drops the key as it drops `roster`, sending nothing the door then waits on.
+        const frames = await sandboxRpc.system.events({ clientId, roster: `changes`, capacity: `true` }, { signal: cut });
         signalConnection({ kind: `opened` });
         armWatchdog();
         // The daemon just registered this connection's blank roster entry; announce this tab's current activity.

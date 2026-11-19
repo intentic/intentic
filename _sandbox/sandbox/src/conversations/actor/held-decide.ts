@@ -2,55 +2,51 @@ import { handoffAvailable } from "@intentic/sandbox-contract/schemas/providers/h
 import { opt } from "../../opt.js";
 import type { ConversationEvent, Decision } from "./conversation-decide.js";
 import type { ConversationState, HeldRecord } from "./conversation-state.js";
+import type { HeldReading } from "./limit-booking.js";
 import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
 
 // How a conversation's holds move by their own events. A held turn once it is held: a person's pick of an account
-// re-points it, the resume pass times one refused with no instant and reads the wall in front of it, and a person picks
-// how it continues. The hold on an idle conversation's prompt cache (cache-keepwarm.ts): armed, refreshed, ended.
+// re-points it, the resume pass reads where it can go, and a person picks how it continues. The hold on an idle
+// conversation's prompt cache (cache-keepwarm.ts): armed, refreshed, ended.
 
-// Only an unfired limit hold is re-timed: every other wall is not about which account pays. A pick undoes a booked move,
-// since the person has just said where it goes.
+// Only an unfired limit hold is re-pointed: every other wall is not about which account pays. A pick undoes a booked
+// move, since the person has just said where it goes. The reading taken for the old route says nothing of the new one:
+// the pick's own reading of the picked account goes on with it (switch-account.ts), else the next pass reads it.
+// The refusal's own instant stays on the hold as evidence; where the turn now goes waits on the picked account's wall.
 export const onHeldRepointed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "held-repointed" }>): Decision<boolean> => {
     const { held } = state.resume;
     if (held === undefined || held.fired || held.reason !== "limit") {
         return unchanged(state, false);
     }
-    const { reopensAt: _old, ...rest } = held;
+    const { reading: _old, ...rest } = held;
     const repointed: HeldRecord = {
         ...rest,
-        ...opt("reopensAt", event.reopensAt),
+        ...opt("reading", event.reading),
         onto: { account: event.account, carry: event.carry },
         move: undefined,
     };
     return unchanged(withResume(state, { held: repointed }), true);
 };
 
-// Only an unfired limit hold with no move takes it. One with no instant takes the instant the records learned: a pick or a
-// refusal that timed it meanwhile stands. One with an instant takes only an `early` one, sooner than its own and with
-// no person's pick on it, whose account's reopen it waits for instead (2026-11-08: a timed hold kept the instant it was
-// refused with, six days out, after an account that could serve its model was back). Told to every window, whose card
-// now says when it goes.
-export const onHeldRetimed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "held-retimed" }>): Decision<boolean> => {
+// What the resume pass read about where an unfired limit hold can go (held-verdict.ts), onto the very hold it read: one
+// re-pointed, replaced or fired since is judged again by the next pass. Told to every window only when the reading
+// moved, since the card's `next` and its reset are derived from it; an unchanged one leaves the record as it was, so the
+// pass's reads come to rest instead of waking it again.
+export const onHeldRead = (state: ConversationState, event: Extract<ConversationEvent, { kind: "held-read" }>): Decision<boolean> => {
     const { held } = state.resume;
-    if (held === undefined || held.fired || held.reason !== "limit" || held.move !== undefined) {
+    if (held === undefined || held !== event.judged || held.fired || held.reason !== "limit") {
         return unchanged(state, false);
     }
-    const takes = held.reopensAt === undefined || (event.early === true && held.onto === undefined && event.reopensAt < held.reopensAt);
-    return takes
-        ? { state: withResume(state, { held: { ...held, reopensAt: event.reopensAt } }), effects: BROADCAST, reply: true }
-        : unchanged(state, false);
+    if (sameReading(held.reading, event.reading)) {
+        return unchanged(state, true);
+    }
+    return { state: withResume(state, { held: { ...held, reading: event.reading } }), effects: BROADCAST, reply: true };
 };
 
-// The wall the pass read in front of where an unfired limit hold goes; told to every window only when it moved, since the
-// card's `next` waits behind it (limit-booking.ts).
-export const onHeldWalled = (state: ConversationState, until: number | undefined): Decision<undefined> => {
-    const { held } = state.resume;
-    if (held === undefined || held.fired || held.reason !== "limit" || held.walledUntil === until) {
-        return unchanged(state, undefined);
-    }
-    const { walledUntil: _was, ...rest } = held;
-    return { state: withResume(state, { held: { ...rest, ...opt("walledUntil", until) } }), effects: BROADCAST, reply: undefined };
-};
+const READING_KEYS = ["at", "reopensAt", "openSince", "moveTo"] as const satisfies readonly (keyof HeldReading)[];
+
+const sameReading = (was: HeldReading | undefined, is: HeldReading): boolean =>
+    was !== undefined && READING_KEYS.every((key) => was[key] === is[key]);
 
 // Only an unfired limit hold whose offer names that way on takes the pick; told to every window, whose card shows it.
 export const onHandoffChosen = (state: ConversationState, event: Extract<ConversationEvent, { kind: "handoff-chosen" }>): Decision<boolean> => {

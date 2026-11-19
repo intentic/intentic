@@ -17,7 +17,7 @@ import type { TurnInput } from "../../../seams/turn-starter.js";
 import { claudeLimitRefusal, claudeReading } from "../../providers/claude/claude-usage.testing.js";
 import { createTurnResumeScheduler } from "./turn-resume.js";
 import { handoffFor } from "./holds/handoff-way.js";
-import { sendableAt } from "../../../conversations/actor/limit-booking.js";
+import { reopenedBy, sendableAt } from "../../../conversations/actor/limit-booking.js";
 import type { HeldOf, HeldTurn } from "./holds/held-turn.js";
 
 // Which way a spent allowance's held turn continues: the press's word, then the person's pick on the card, then the
@@ -118,12 +118,18 @@ describe("the resume pass fires only the hold it judged", () => {
             releaseC0 = resolve;
         });
         const started: TurnInput[] = [];
+        // acct-b, which a person may pick for c1 while the pass is busy, refused another turn and reopens at 10 000 s.
+        const refusals = [claudeLimitRefusal({ account: "acct-b", resetsAt: 10_000, at: 150_000 })];
         const services = {
             agents,
             conversations,
             logger: pino({ level: "silent" }),
             sandboxSettings: { get: async () => ({ limitPolicy: "resend", outagePolicy: "wait", stopPolicy: "wait", memoryPolicy: "resend" }) },
             resources: { roomSince: async () => undefined },
+            claudeStore: { list: async () => [{ id: "acct-a", label: "a", connectedAt: 0 }, { id: "acct-b", label: "b", connectedAt: 0 }] },
+            claudeSeats: { read: async () => ({}) },
+            accountUsage: { read: async () => ({}) },
+            providerRefusals: { onFile: async () => ({ claude: refusals }) },
             turns: {
                 drain: async () => {},
                 start: async (input: TurnInput & { conversationId: string }) => {
@@ -167,12 +173,15 @@ describe("the resume pass fires only the hold it judged", () => {
         const pass = createTurnResumeScheduler(services).tick(200_000);
         await new Promise((resolve) => setTimeout(resolve, 20));
         // The person picks acct-b, spent too and back at 10 000 s (switch-account.ts, held-repointed).
-        expect(conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: false, reopensAt: 10_000 }).reply).toBe(true);
+        expect(conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: false }).reply).toBe(true);
         releaseC0();
         await pass;
         expect(runsOf("c1")).toEqual([]);
-        expect(conversations.state("c1")?.resume.held).toMatchObject({ onto: { account: "acct-b" }, fired: false, reopensAt: 10_000 });
+        expect(conversations.state("c1")?.resume.held).toMatchObject({ onto: { account: "acct-b" }, fired: false });
 
+        // The next pass reads acct-b's wall, and waits for it rather than for the refused account's reset.
+        await createTurnResumeScheduler(services).tick(300_000);
+        expect(runsOf("c1")).toEqual([]);
         await createTurnResumeScheduler(services).tick(sendableAt(10_000));
         expect(runsOf("c1").map((input) => input.account)).toEqual(["acct-b"]);
     });
@@ -405,7 +414,9 @@ describe("a stranded card's lane follows what the pass will do", () => {
         expect(at.lane()).toBe("attention");
 
         await createTurnResumeScheduler(at.services).tick(NOW);
-        expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reopensAt: REOPEN, fired: false });
+        // Read off the records, never written back as the refusal's: the hold keeps what the refusal said, which was none.
+        expect(at.conversations.state("c1")?.resume.held).toMatchObject({ fired: false, reading: { at: sendableAt(REOPEN), reopensAt: REOPEN } });
+        expect(at.conversations.state("c1")?.resume.held?.reopensAt).toBeUndefined();
         expect(at.agents.get("c1")).toMatchObject({ limitResetsAt: REOPEN, next: { kind: "rerun", at: sendableAt(REOPEN) } });
         expect(at.lane()).toBe("active");
     });
@@ -515,8 +526,10 @@ describe("the pass never sends a held turn into an allowance the records call sp
     it("holds a turn re-pointed for now onto an account a refusal proves spent, and its card says when it really goes", async () => {
         const at = await fleet();
         await refusedOnA(at);
-        // A pick that read acct-b as open stored "now" on the hold, as switch-account.ts did before 2026-10-19.
-        expect(at.conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: true, reopensAt: NOW / 1000 }).reply).toBe(true);
+        // A pick that read acct-b as open put "now" on the hold, as switch-account.ts did before 2026-10-19.
+        const open = { at: NOW, reopensAt: reopenedBy(NOW), openSince: NOW };
+        expect(at.conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: true, reading: open }).reply).toBe(true);
+        expect(at.agents.get("c1")).toMatchObject({ next: { kind: "rerun", at: NOW } });
 
         await createTurnResumeScheduler(at.services).tick(NOW);
         expect(at.started).toEqual([]);

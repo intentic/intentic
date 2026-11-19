@@ -559,12 +559,13 @@ describe(`Conversation`, () => {
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
         await conversation.turn.send(`first`, { ...settings, account: `acct-1` });
         // The per-model usage pools a Claude plan publishes, keyed by model, as the daemon pushes the account's reading.
+        // The Opus pool resets ahead of the clock: one past its reset reads lapsed (usageAt), at nothing spent.
         usageByAccount.value = {
             "claude:acct-1": {
                 measuredAt: Date.now(),
                 windows: [
                     { kind: `seven_day`, utilization: 20, gates: `all` },
-                    { kind: `model:Opus`, label: `Opus`, utilization: 61.4, resetsAt: 1_700_000, gates: { models: [`Opus`] } },
+                    { kind: `model:Opus`, label: `Opus`, utilization: 61.4, resetsAt: Math.floor(Date.now() / 1000) + 3 * 86_400, gates: { models: [`Opus`] } },
                 ],
             },
         };

@@ -1,7 +1,7 @@
 import type { AccountUsage, UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { wordsOf } from "@intentic/sandbox-contract/models/plan-pools";
+import { namedPeriod, wordsOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { z } from "zod";
-import { clampPercent, resetFromIso } from "../payload.js";
+import { clampPercent, resetFromIso, statedPeriod } from "../payload.js";
 
 // Which models a Google pool gates, and the pools Google's per-model view (`fetchAvailableModels`) reads as. The quota
 // summary itself is parsed in translator-usage.ts.
@@ -22,6 +22,12 @@ export const googleGates = (...names: (string | undefined)[]): WindowGates => {
 };
 
 export const sameGates = (left: WindowGates, right: WindowGates): boolean => JSON.stringify(left) === JSON.stringify(right);
+
+// How long a quota-summary bucket's window runs: its own `window` field where it sends one (`"weekly"`, 2026-10-19),
+// else the period its id and name spell (`pro-five-hour`, "Weekly Limit"). Words either way, since Google states no
+// figure: read here once, as the bucket is filed, rather than on every judgement (UsageWindow.periodSeconds).
+export const googleBucketPeriod = (stated: string | undefined, bucketId: string, bucketName: string | undefined): { readonly periodSeconds?: number } =>
+    statedPeriod((stated === undefined ? undefined : namedPeriod({ kind: stated }))?.seconds ?? namedPeriod({ kind: bucketId, label: bucketName })?.seconds);
 
 // The model families Google meters apart, as googleGates names them. A model naming neither (the editor's tab
 // completion, an internal chat model) is no pool a turn here spends.

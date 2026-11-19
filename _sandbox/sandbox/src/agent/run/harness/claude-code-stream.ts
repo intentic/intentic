@@ -14,7 +14,7 @@ import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract
 import { browserServerOfTool } from "../../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../../providers/agent-commands.js";
 import type { SteeringQueue } from "../../checkpoints/agent-steering.js";
-import { apiErrorMessage, contextOverflowFrame, errorFrame, keyMissingFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "../frames/error-frames.js";
+import { apiErrorMessage, contextOverflowFrame, errorFrame, keyMissingFrame, modelUnavailableFrame, retryLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "../frames/error-frames.js";
 import { isSafeguardRefusal, RefusalFork } from "../refusal-fork.js";
 import { InformationalLines } from "../informational.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../../providers/routed-refusal.js";
@@ -779,18 +779,20 @@ class TurnFold {
         yield this.calls.result({ id: toolUseId, content, failed });
     }
 
-    // Whether a retry is worth waiting out. Probes the routed endpoint once per turn to catch a refused model early;
-    // past MAX_IN_TURN_RETRIES, ends the turn for the resume scheduler to wait instead.
-    private async endRetrying(attempt: number, status: number | undefined): Promise<AgentEvent | undefined> {
+    // Whether a retry is worth waiting out. Probes the routed endpoint once per turn to catch a refused model early (a
+    // 5xx that is really the plan; a rate limit is never that, so it asks nothing); past MAX_IN_TURN_RETRIES, ends the
+    // turn for the resume scheduler to wait instead, as a throttle where the retry it ends on was a rate limit that
+    // showed nothing spent (retryLimitFrame had answered it).
+    private async endRetrying(attempt: number, status: number | undefined, rateLimited: boolean): Promise<AgentEvent | undefined> {
         const routed = this.args.routed;
-        if (routed !== undefined && !this.routedProbed) {
+        if (routed !== undefined && !rateLimited && !this.routedProbed) {
             this.routedProbed = true;
             const refusal = await probeRoutedEndpoint(routed);
             if (refusal !== undefined) {
                 return modelUnavailableFrame(routed.model, refusal);
             }
         }
-        return attempt >= MAX_IN_TURN_RETRIES ? retryStormFrame(attempt, status) : undefined;
+        return attempt >= MAX_IN_TURN_RETRIES ? retryStormFrame(attempt, status, rateLimited) : undefined;
     }
 
     // A retry the loop is waiting out: a terminal frame when it should not be waited out live (returns true, ending the
@@ -801,25 +803,21 @@ class TurnFold {
             yield trialRetryFrame(message.error);
             return true;
         }
-        // A spent allowance is not an outage to ride out live: the SDK's own retry delay is the window's
-        // remaining lifetime, so end the stream as a terminal rate_limit frame and free the conversation's run
-        // lock for the resume scheduler.
-        if (message.error === "rate_limit") {
-            // The reset instant is offered only on a native turn, whose retry delay IS the window's remaining
-            // lifetime; a routed turn's delay is just SDK backoff, and turning it into an instant invents a
-            // false reset.
-            const allowance = this.args.allowance;
-            yield await rateLimitFrame(
-                allowance,
-                allowance === undefined ? Math.ceil((Date.now() + message.retry_delay_ms) / 1000) : undefined,
-            );
+        // A spent allowance is not an outage to ride out live: end the stream as a terminal rate_limit frame and free the
+        // conversation's run lock for the resume scheduler. Only where something shows it spent (retryLimitFrame); a
+        // throttle is ridden out live like any other retry, since the CLI's own backoff is what lifts it (2026-11-19:
+        // every rate-limited retry used to end the turn as a spent allowance, and hold the account spent with it).
+        const rateLimited = message.error === "rate_limit";
+        const spent = rateLimited ? await retryLimitFrame(this.args.allowance, message.retry_delay_ms) : undefined;
+        if (spent !== undefined) {
+            yield spent;
             return true;
         }
         // The vendor's own word for it rides the turn's retry line (turn-pulse.ts): a status-less retry says nothing else.
         noteRetryCause(this.args.subagents?.conversationId, message.no_response === undefined ? message.error : `${message.error}: no response headers`);
         // The two ways a retry stops: an outright model refusal, or a storm long enough to hand off
         // (endRetrying).
-        const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined);
+        const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined, rateLimited);
         if (terminal !== undefined) {
             yield terminal;
             return true;

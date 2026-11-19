@@ -35,11 +35,11 @@ test("maps every ChatGPT limit window to utilized percentages and reset instants
     expect(usage).toEqual({
         measuredAt,
         windows: [
-            { kind: "five_hour", utilization: 23, resetsAt: 1_800_000_300, gates: "all" },
-            { kind: "seven_day", utilization: 82, resetsAt: 1_800_604_800, gates: "all" },
+            { kind: "five_hour", utilization: 23, resetsAt: 1_800_000_300, periodSeconds: 18_000, gates: "all" },
+            { kind: "seven_day", utilization: 82, resetsAt: 1_800_604_800, periodSeconds: 604_800, gates: "all" },
             // Named features no chat turn spends: shown, never binding.
-            { kind: "code-review:five_hour", label: "Code review · 5-hour", utilization: 7, gates: "none" },
-            { kind: "additional-1:seven_day", label: "GPT-5 Codex Spark · Weekly", utilization: 11, gates: "none" },
+            { kind: "code-review:five_hour", label: "Code review · 5-hour", utilization: 7, periodSeconds: 18_000, gates: "none" },
+            { kind: "additional-1:seven_day", label: "GPT-5 Codex Spark · Weekly", utilization: 11, periodSeconds: 604_800, gates: "none" },
         ],
     });
 });
@@ -62,7 +62,7 @@ test("reads a fully spent ChatGPT plan from its single live window", () => {
             },
             measuredAt,
         ),
-    ).toEqual({ measuredAt, windows: [{ kind: "seven_day", utilization: 100, resetsAt: 1_786_019_642, gates: "all" }] });
+    ).toEqual({ measuredAt, windows: [{ kind: "seven_day", utilization: 100, resetsAt: 1_786_019_642, periodSeconds: 604_800, gates: "all" }] });
 });
 
 // The whole reason a 2% ring sat over a refused turn: a plan pool is gated `all` and says nothing about entitlement.
@@ -89,8 +89,8 @@ test("files a model the plan will not serve as its own spent pool, gating that m
     expect(usage).toEqual({
         measuredAt,
         windows: [
-            { kind: "five_hour", utilization: 100, resetsAt: 1_789_916_642, gates: "all" },
-            { kind: "seven_day", utilization: 44, resetsAt: 1_790_419_137, gates: "all" },
+            { kind: "five_hour", utilization: 100, resetsAt: 1_789_916_642, periodSeconds: 18_000, gates: "all" },
+            { kind: "seven_day", utilization: 44, resetsAt: 1_790_419_137, periodSeconds: 604_800, gates: "all" },
             // Not `model:`: this is an entitlement, not a metered slice of the plan, and must not be labelled as one.
             {
                 kind: "entitlement:gpt-6-astra",
@@ -118,7 +118,7 @@ test("files nothing per model when the plan publishes no per-model availability"
         ),
     ).toEqual({
         measuredAt,
-        windows: [{ kind: "monthly", label: "Monthly · all models", utilization: 2, gates: "all" }],
+        windows: [{ kind: "monthly", label: "Monthly · all models", utilization: 2, periodSeconds: 2_592_000, gates: "all" }],
     });
 });
 
@@ -152,9 +152,10 @@ test("inverts Google's remaining fractions and preserves each named quota bucket
                 label: "Gemini Pro · 5-hour",
                 utilization: 88,
                 resetsAt: Date.parse("2027-01-15T08:00:00Z") / 1000,
+                periodSeconds: 18_000,
                 gates: { models: ["gemini"] },
             },
-            { kind: "google:pro-weekly", label: "Gemini Pro · Weekly", utilization: 25, gates: { models: ["gemini"] } },
+            { kind: "google:pro-weekly", label: "Gemini Pro · Weekly", utilization: 25, periodSeconds: 604_800, gates: { models: ["gemini"] } },
         ],
     });
 });
@@ -170,8 +171,8 @@ test("treats an exhausted Google bucket as fully utilized rather than unmeasured
         })?.windows,
     ).toEqual([
         // Each group gates its own family.
-        { kind: "google:gemini-weekly", label: "Gemini Models · Weekly Limit", utilization: 100, gates: { models: ["gemini"] } },
-        { kind: "google:3p-weekly", label: "Third Party · Weekly Limit", utilization: 100, gates: { models: ["claude", "gpt"] } },
+        { kind: "google:gemini-weekly", label: "Gemini Models · Weekly Limit", utilization: 100, periodSeconds: 604_800, gates: { models: ["gemini"] } },
+        { kind: "google:3p-weekly", label: "Third Party · Weekly Limit", utilization: 100, periodSeconds: 604_800, gates: { models: ["claude", "gpt"] } },
     ]);
 });
 
@@ -196,8 +197,8 @@ test("maps a Kimi Code reading to its plan pool and its throttle", () => {
     ).toEqual({
         measuredAt,
         windows: [
-            { kind: "seven_day", utilization: 40, resetsAt: Math.floor(Date.parse("2026-08-07T07:16:02.549855Z") / 1000), gates: "all" },
-            { kind: "five_hour", utilization: 100, resetsAt: Math.floor(Date.parse("2026-07-31T22:16:02.549855Z") / 1000), gates: "all" },
+            { kind: "seven_day", utilization: 40, resetsAt: Math.floor(Date.parse("2026-08-07T07:16:02.549855Z") / 1000), periodSeconds: 604_800, gates: "all" },
+            { kind: "five_hour", utilization: 100, resetsAt: Math.floor(Date.parse("2026-07-31T22:16:02.549855Z") / 1000), periodSeconds: 18_000, gates: "all" },
         ],
     });
 });
@@ -208,7 +209,7 @@ test("names a Kimi throttle this vocabulary has no shared kind for", () => {
         kimiUsageFromPayload({
             limits: [{ window: { duration: 12, timeUnit: "TIME_UNIT_HOUR" }, detail: { limit: "50", used: "10" } }],
         })?.windows,
-    ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20, gates: "all" }]);
+    ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20, periodSeconds: 43_200, gates: "all" }]);
 });
 
 // No usable window returns undefined, not zero; a Kimi pool with a zero limit is unmetered, not exhausted.
@@ -236,12 +237,59 @@ test("maps an app-server rate-limit snapshot onto the same windows as the pulled
     ).toEqual({
         measuredAt,
         windows: [
-            { kind: "five_hour", utilization: 37, resetsAt: 1_800_000_900, gates: "all" },
-            { kind: "seven_day", utilization: 91, resetsAt: 1_800_604_800, gates: "all" },
+            { kind: "five_hour", utilization: 37, resetsAt: 1_800_000_900, periodSeconds: 18_000, gates: "all" },
+            { kind: "seven_day", utilization: 91, resetsAt: 1_800_604_800, periodSeconds: 604_800, gates: "all" },
         ],
     });
     expect(codexUsageFromRateLimits({ primary: null, secondary: null })).toBeUndefined();
     expect(codexUsageFromRateLimits("not a snapshot")).toBeUndefined();
+});
+
+// 2026-11-19: each reader states a window's length where the provider's answer says it (UsageWindow.periodSeconds), so the
+// rule reads one fact instead of re-guessing it from the kind and label on every judgement. Where the answer says
+// nothing, nothing is stated, and the rule reads the words as it did before.
+test("a window's length is stated where the provider's answer says it, and nowhere else", () => {
+    const codex = codexUsageFromPayload({
+        rate_limit: {
+            // A length the shared kinds have no name for: the kind falls back to the position, the length is the provider's.
+            primary_window: { used_percent: 10, limit_window_seconds: 86_400 },
+            // No length at all: the position names the kind, and nothing is stated.
+            secondary_window: { used_percent: 20 },
+        },
+        model_usage: { "gpt-6-astra": { available: false } },
+    })?.windows;
+    expect(codex?.map((window) => [window.kind, window.periodSeconds])).toEqual([
+        ["five_hour", 86_400],
+        ["seven_day", undefined],
+        ["entitlement:gpt-6-astra", undefined],
+    ]);
+    // A fractional duration is stated in whole seconds; a zero or negative one is no length.
+    expect(codexUsageFromRateLimits({ primary: { usedPercent: 5, windowDurationMins: 0.5 }, secondary: { usedPercent: 5, windowDurationMins: 0 } })?.windows.map((window) => window.periodSeconds)).toEqual([
+        30,
+        undefined,
+    ]);
+
+    // Google's own `window` field outranks the bucket's names; a bucket naming no period states none.
+    const google = geminiUsageFromPayload({
+        groups: [
+            {
+                displayName: "Claude and GPT models",
+                buckets: [
+                    { bucketId: "3p-quota", displayName: "Limit Remaining", window: "weekly", remainingFraction: 0.5 },
+                    { bucketId: "3p-burst", displayName: "Limit Remaining", remainingFraction: 0.5 },
+                ],
+            },
+        ],
+    })?.windows;
+    expect(google?.map((window) => [window.kind, window.periodSeconds])).toEqual([
+        ["google:3p-quota", 604_800],
+        ["google:3p-burst", undefined],
+    ]);
+
+    // A Kimi throttle whose window is in no unit the platform's enum names is a throttle of unknown length.
+    expect(kimiUsageFromPayload({ limits: [{ window: { duration: 3, timeUnit: "TIME_UNIT_FORTNIGHT" }, detail: { limit: "10", used: "1" } }] })?.windows).toEqual([
+        { kind: "kimi:window", label: "Throttle", utilization: 10, gates: "all" },
+    ]);
 });
 
 // The proxy's own bench of a credential, off its /auth-files listing: the one fact fresher than any reading.

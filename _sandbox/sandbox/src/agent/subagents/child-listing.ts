@@ -40,7 +40,7 @@ const listingWithin = async (services: Services, what: string): Promise<readonly
 // brings it in as it stands. Telling the parent to re-spawn instead cost it twelve replacement prompts and seven
 // hand-copied patches when the work was a `send` away (2026-10-17). Only a spent allowance is worth the listing's round
 // trips for where else; a listing that cannot be read leaves that half out. Never raises.
-export const elsewhereFor = async (
+const elsewhereFor = async (
     services: Services,
     childId: string,
     spec: ChildSpawnSpec | undefined,

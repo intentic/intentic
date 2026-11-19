@@ -60,6 +60,8 @@ const REQUIRED_SINCE_FLOOR = {
     agentsChanged: [`agents`, `kind`, `rev`, `since`],
     accountUsage: [`account`, `kind`, `provider`],
     providerRefusal: [`kind`, `provider`],
+    // 2026-11-19, sent only to a connection that asks for it: a daemon at the floor never sends it at all.
+    capacity: [`capacity`, `kind`],
 } satisfies Record<SystemEvent[`kind`], readonly string[]>;
 
 // What a frame of this kind cannot go without: every field a frame carrying nothing but its kind is refused for.

@@ -2,6 +2,7 @@ import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { LimitResetClaimSchema, LimitResetStatusSchema } from "../schemas/providers/plan-limits.js";
 import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas/providers/usage.js";
+import { CapacitySnapshotSchema, PlacementQuerySchema, PlacementSchema } from "../schemas/providers/capacity.js";
 
 // `force` ignores the daemon's freshness window and measures now instead of reusing a recent reading.
 export const RefreshPlanLimitsSchema = z.object({
@@ -62,6 +63,26 @@ export const usageContract = {
         })
         .input(z.object({ account: z.string().min(1).describe("Which account.") }))
         .output(LimitResetStatusSchema),
+    // The judged picture every surface draws allowance from; `/events` pushes each provider's again as it moves.
+    capacity: procedure
+        .route({
+            method: "GET",
+            path: "/usage/capacity",
+            summary: "What every provider's accounts can serve now",
+            description:
+                "Every connected account of every provider, with each fact the sandbox judges it by (its plan-limit reading as it stands now, a revoked sign-in, a lost seat, a bench, the refusals on file) and its verdict: ready with how much room, spent until when, blocked and who has to act, or unmeasured. Also where a turn naming no account would run, whether the provider itself is failing, and the next moment the clock alone changes any of it.",
+        })
+        .output(CapacitySnapshotSchema),
+    placement: procedure
+        .route({
+            method: "GET",
+            path: "/usage/placement",
+            summary: "Which account a turn would run on",
+            description:
+                "The account this sandbox would run a turn naming no account on, for this provider and model, right now: the same choice the turn itself makes, with whatever already runs on each account counted.",
+        })
+        .input(PlacementQuerySchema)
+        .output(PlacementSchema),
     claimLimitReset: procedure
         .route({
             method: "POST",

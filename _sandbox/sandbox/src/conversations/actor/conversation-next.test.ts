@@ -16,7 +16,7 @@ const WAIT = { limit: "wait", memory: "wait", memoryKill: "wait" } as const sati
 const MEMORY: Ending = { kind: "failed", failure: "short of memory", code: "sandbox-memory-low" };
 const LIMITED: Ending = { kind: "limited", failure: "spent", resetsAt: RESET, held: true };
 
-const limitHold = (over: Partial<Omit<HeldOf<"limit">, "reason" | "onto">> & Partial<Pick<HeldRecord, "fired" | "walledUntil">> = {}): HeldRecord => ({
+const limitHold = (over: Partial<Omit<HeldOf<"limit">, "reason" | "onto">> & Partial<Pick<HeldRecord, "fired" | "reading">> = {}): HeldRecord => ({
     input: { conversationId: "c1", prompt: "p" },
     reason: "limit",
     ran: true,
@@ -54,10 +54,14 @@ describe("a spent allowance's held turn", () => {
         expect(nextOf(holding(NO_QUEUE, moving), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) });
     });
 
-    // The wall the pass read in front of where it goes: the card says the instant the pass will fire at.
-    test("waits behind the wall in front of where it goes, which never brings it earlier", () => {
-        expect(nextOf(holding(NO_QUEUE, limitHold({ walledUntil: sendableAt(RESET) + 60_000 })), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) + 60_000 });
-        expect(nextOf(holding(NO_QUEUE, limitHold({ walledUntil: RECORDED })), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) });
+    // What the pass read of the records (held-verdict.ts): the card says the instant and the account the pass goes at.
+    test("goes at the instant and onto the account the pass last read, whatever the refusal said", () => {
+        const walled = limitHold({ reading: { at: sendableAt(RESET + 60), reopensAt: RESET + 60 } });
+        expect(nextOf(holding(NO_QUEUE, walled), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET + 60) });
+        const open = limitHold({ reading: { at: RECORDED + 5_000, reopensAt: RECORDED / 1000 - 55, openSince: RECORDED + 5_000 } });
+        expect(nextOf(holding(NO_QUEUE, open), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: RECORDED + 5_000 });
+        const repicked = limitHold({ move: { account: "acct-2", carry: true }, reading: { at: sendableAt(RESET), moveTo: "acct-3" } });
+        expect(nextOf(holding(NO_QUEUE, repicked), { ending: LIMITED }, { ...SEND, limit: "move" })).toEqual({ kind: "rerun", at: RECORDED, onto: "acct-3" });
     });
 
     // A hold refused with no instant, one already fired, or dropped by a parent's cancel: nothing will send it.

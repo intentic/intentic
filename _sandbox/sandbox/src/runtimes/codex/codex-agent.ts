@@ -11,7 +11,8 @@ import { opt } from "../../opt.js";
 import { type EmulatedPlan, planMode } from "../decorators/plan-mode.js";
 import { POST_PLAN_MODE } from "../../agent/run/harness/claude-code-runner.js";
 import { codedFailure, type FailureRule } from "../../agent/run/frames/error-frames.js";
-import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
+import { limitFrame } from "../../agent/run/frames/limits/limit-cause.js";
+import { handedOverFrame, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
 import { isRateLimited } from "../../engines/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { resultContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
@@ -247,29 +248,28 @@ const OUTAGE_KINDS = new Set([
     "serverOverloaded",
     "internalServerError",
 ]);
-const RATE_LIMIT_KINDS = new Set(["usageLimitExceeded", "rateLimitExceeded"]);
-const HTTP_TOO_MANY_REQUESTS = 429;
+// A rate limit as app-server types it (CodexErrorInfo, checked against 0.169.0): a plan run out (`usageLimitExceeded`),
+// or the provider slowing requests down (`rateLimitExceeded`, or a 429 behind any other kind).
+const SPENT_KIND = "usageLimitExceeded";
+const rateLimitedInfo = (info: CodexFailureInfo | undefined): boolean =>
+    info !== undefined && (info.kind === SPENT_KIND || info.kind === "rateLimitExceeded" || info.httpStatus === 429);
 const HTTP_SERVER_ERROR = 500;
 
-// How Codex's typed failure is coded, ahead of any sentence: a spent allowance or a 429 first, so the client shows a
-// muted reset countdown and holds the turn; a thread past the window, which the daemon re-runs in a fresh one; then a
-// transport or capacity failure, an outage only when no status says otherwise (a 4xx from a broken connection is a
-// refusal, not the provider being down). Undefined leaves the sentence rules to speak.
+// How Codex's typed failure is coded, ahead of any sentence: a rate limit first (failureFrame), then a thread past the
+// window, which the daemon re-runs in a fresh one; then a transport or capacity failure, an outage only when no status
+// says otherwise (a 4xx from a broken connection is a refusal, not the provider being down). Undefined leaves the
+// sentence rules to speak.
 const codexFailureCode = (info: CodexFailureInfo | undefined): ErrorFrame["code"] => {
-    if (info === undefined) {
-        return undefined;
-    }
-    if (RATE_LIMIT_KINDS.has(info.kind) || info.httpStatus === HTTP_TOO_MANY_REQUESTS) {
-        return "rate_limit";
-    }
-    if (info.kind === "contextWindowExceeded") {
+    if (info?.kind === "contextWindowExceeded") {
         return "context-overflow";
     }
-    return OUTAGE_KINDS.has(info.kind) && (info.httpStatus === undefined || info.httpStatus >= HTTP_SERVER_ERROR) ? "provider-outage" : undefined;
+    return info !== undefined && OUTAGE_KINDS.has(info.kind) && (info.httpStatus === undefined || info.httpStatus >= HTTP_SERVER_ERROR) ? "provider-outage" : undefined;
 };
 
-// A failure as its frame, coded by type where Codex typed it.
-const failureFrame = (message: string, info: CodexFailureInfo | undefined): ErrorFrame => ({ kind: "error", message, ...opt("code", codexFailureCode(info)) });
+// A failure as its frame, coded by type where Codex typed it. A rate limit is a spent allowance, held for its reset, where
+// Codex typed it so or its words say so, else the throttle it is (limit-cause.ts), waited out with nothing filed.
+const failureFrame = (message: string, info: CodexFailureInfo | undefined): ErrorFrame =>
+    rateLimitedInfo(info) ? limitFrame({ kind: "error", message }, { spent: info?.kind === SPENT_KIND }) : { kind: "error", message, ...opt("code", codexFailureCode(info)) };
 
 // Codex retrying inside the turn: the counters its sentence carries where it carries them, else this turn's own count.
 const retryFrame = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }): AgentEvent => {
@@ -295,7 +295,7 @@ interface CodexErrorReading {
 }
 
 // Whether a retry Codex announced is it waiting out a rate limit: typed so, a 429 behind it, or said so.
-const limitRetry = (event: Extract<CodexEvent, { type: "error" }>): boolean => codexFailureCode(event.info) === "rate_limit" || isRateLimited(event.message);
+const limitRetry = (event: Extract<CodexEvent, { type: "error" }>): boolean => rateLimitedInfo(event.info) || isRateLimited(event.message);
 
 // `hosted`: another provider's model, whose fallback-metadata advisory is expected and says nothing (CodexStreamContext).
 const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }, hosted = false): CodexErrorReading => {
@@ -329,7 +329,7 @@ const UPSTREAM_ATTEMPTS = UPSTREAM_WAITS_MS.length + 1;
 // excludes the model, so the sentence alone would end a turn the next call would serve. A spent allowance is ruled out
 // first, since it belongs in a countdown the user waits out, not in a ladder that spends attempts on the same refusal.
 const upstreamWaitMs = (attempt: number, event: ErrorFrame): number | undefined =>
-    event.code !== "rate_limit" && !isRateLimited(event.message) && transientUpstream(event.message) ? UPSTREAM_WAITS_MS[attempt - 1] : undefined;
+    event.code !== "rate_limit" && event.throttle !== true && !isRateLimited(event.message) && transientUpstream(event.message) ? UPSTREAM_WAITS_MS[attempt - 1] : undefined;
 
 // Frames a turn emits before it does any work: its thread id, its skill list, its usage and limit snapshots. Anything
 // else means a re-run would repeat work the user has already seen.
@@ -839,8 +839,6 @@ const bypassed = (event: CodexEvent, context: CodexStreamContext): boolean => {
     return event.type === "item.started" && event.parent === undefined && HOOKED_ITEMS.has(event.item.type) && hooks.record(event.item.id) === undefined;
 };
 
-const handedOverFrame = (): ErrorFrame => ({ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true });
-
 // Codex events that mean the provider answered: what it streamed, or a turn that went on to finish.
 const ANSWERING: ReadonlySet<CodexEvent["type"]> = new Set(["item.started", "item.updated", "item.completed", "item.delta", "turn.completed"]);
 
@@ -865,12 +863,13 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
     // Once a handed-over wait has been said, the interrupt it caused must not be said again as a failure of its own.
     let handOverSaid = false;
     const handOver = (): AgentEvent[] => {
-        if (handOverSaid || context.limitWait?.handedOver() !== true) {
+        const wait = context.limitWait;
+        if (handOverSaid || wait?.handedOver() !== true) {
             return [];
         }
         handOverSaid = true;
         capture.errored = true;
-        return [handedOverFrame()];
+        return [handedOverFrame(wait)];
     };
     try {
         yield* streamEvents(events, context, capture, state, subagents, spent, handOver);

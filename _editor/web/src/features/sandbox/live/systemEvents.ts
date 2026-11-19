@@ -11,7 +11,9 @@ import { dropEditBuffers } from "../../../models/workspace/files/useEditBuffers"
 import { desyncAgents } from "../../../models/fleet/useAgents";
 import { agentReviewKeys, applyRosterChanges, auditRoster, refreshAgents, registry, setAgents } from "../../../models/fleet/useAgents-registry";
 import { parentOf } from "../../../models/agent-status/ownership";
-import { setAccountUsage, setProviderRefusals } from "../../../models/providers/providerAccounts";
+import { capacityReconnected, setAccountUsage, setProviderCapacity, setProviderRefusals } from "../../../models/providers/providerAccounts";
+import { placementsStale } from "../../../models/providers/capacity/daemonPlacement";
+import { refreshCapacity } from "../../../models/conversations/accounts/useChat-accounts";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { draftsMoved } from "../../../models/conversations/drafts/composerDrafts";
 import { agentReviewPrefixes, pushedKeys, rpcPrefix } from "../../../lib/queryKeys";
@@ -23,7 +25,7 @@ import { applyTreeChanged, markCheckoutChanged, markDerivedChanged, markWorkspac
 import { agentScope } from "../../../app/workspaceScope";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
-import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
+import { setDaemonRoutes, supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { setUploadEncodings } from "../../../client/sandbox/daemon/uploadEncodings";
 import { setVoiceCodecs } from "../../../client/sandbox/daemon/voiceCodecs";
 import { setRecordsSwitches } from "../../../client/sandbox/daemon/recordedSwitches";
@@ -106,6 +108,13 @@ const reconnectChannels = {
     presence: undefined,
     accountUsage: undefined,
     providerRefusal: undefined,
+    // A restarted daemon numbers its capacities from one again, so what is held is replaced by the next one heard whatever
+    // its number; the whole picture is read again too, which also drops a provider whose last account went meanwhile. A
+    // daemon that no longer judges capacity (a rollback) leaves the door on the account lists, readings and refusals.
+    capacity: () => {
+        capacityReconnected(supportsRoute(`usage.capacity`));
+        void refreshCapacity();
+    },
     agents: undefined,
     agentsChanged: undefined,
     runtimeChanged: undefined,
@@ -198,8 +207,36 @@ const applyWorkspaceChanged = (event: Extract<SystemEvent, { kind: `workspaceCha
     }
 };
 
+// What a provider's accounts can serve, as frames carry it: the stores the verdict door reads (usageStatus.ts).
+type ProviderFrame = Extract<SystemEvent, { kind: `accountUsage` | `providerRefusal` | `capacity` }>;
+const PROVIDER_FRAMES: ReadonlySet<SystemEvent["kind"]> = new Set([`accountUsage`, `providerRefusal`, `capacity`]);
+const isProviderFrame = (event: SystemEvent): event is ProviderFrame => PROVIDER_FRAMES.has(event.kind);
+
+const applyProviderFrame = (event: ProviderFrame): void => {
+    switch (event.kind) {
+        case `accountUsage`:
+            // Newest reading wins into the shared usage map every account UI reads (providerAccounts.usageByAccount).
+            setAccountUsage(event.provider, event.account, event.usage);
+            return;
+        case `providerRefusal`:
+            // Every refusal the provider still has on file, replacing what this window held for it.
+            setProviderRefusals(event.provider, refusalsOf(event), event.switchOffs);
+            return;
+        case `capacity`:
+            // The provider's capacity as the daemon just judged it, the verdict door's source while held; where the daemon
+            // would place an unnamed turn may have moved with it, so every placement asked of the provider is read again.
+            setProviderCapacity(event.capacity);
+            placementsStale(event.capacity.provider);
+            return;
+    }
+};
+
 /** Routes one typed `/events` frame to whatever it makes stale. */
 export const applySystemEvent = (event: SystemEvent, sandboxId: string): void => {
+    if (isProviderFrame(event)) {
+        applyProviderFrame(event);
+        return;
+    }
     switch (event.kind) {
         case `hello`:
             applyHello(event, sandboxId);
@@ -216,14 +253,6 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `presence`:
             setPresenceUsers(event.users);
-            return;
-        case `accountUsage`:
-            // Newest reading wins into the shared usage map every account UI reads (providerAccounts.usageByAccount).
-            setAccountUsage(event.provider, event.account, event.usage);
-            return;
-        case `providerRefusal`:
-            // Every refusal the provider still has on file, replacing what this window held for it.
-            setProviderRefusals(event.provider, refusalsOf(event), event.switchOffs);
             return;
         case `agents`:
             // Roster is versioned, not last-frame-wins: it races GET /agents and this browser's own optimistic

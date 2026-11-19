@@ -1,20 +1,11 @@
-import type { AccountState, AccountUsage, UsageWindow, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
-import {
-    bindingWindow,
-    fleetCapacity,
-    gatingWindows,
-    SPENT_UTILIZATION,
-    type ModelRef,
-    type RefusalsOnFile,
-    type ServiceFacts,
-    serviceStates,
-} from "@intentic/sandbox-contract/models/plan-pools";
+import { bindingWindow, gatingWindows, SPENT_UTILIZATION, type ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { Services } from "../../composition.js";
-import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
+import { type AccountsJudge, accountsJudge, type JudgedAccount } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { modelRunOut, poolName, type RunOut, type RunOuts } from "../../usage/run-outs.js";
 import { runningOn } from "../run/turn/turn-pulse.js";
@@ -22,9 +13,10 @@ import { childCostOf, forecastBudget } from "../run/spend/budget-planner.js";
 import { forecastWords } from "../run/spend/budget-words.js";
 
 // What a parent may spend on a child right now: connected providers, their models' headroom, and how much. Reads happen
-// once per provider, not per model, and every model is judged by the one rule the spawn gate, the role ladder and the
-// picker read (plan-pools.ts fleetCapacity): servable with room measured, servable unmeasured (marked unmetered), or
-// spent (left out, by name). The gate refuses a spawn the same rule calls spent (child-listing.ts, spentRung).
+// once per provider, not per model, and every model is judged on that reading by the one rule the spawn gate, the role
+// ladder and the picker read (serviceability.ts accountsJudge, over plan-pools.ts fleetOf): servable with room measured,
+// servable unmeasured (marked unmetered), or spent (left out, by name). The gate refuses a spawn the same rule calls
+// spent (child-listing.ts, spentRung).
 
 /** Remaining headroom in the pool gating this model, when the plan publishes one, and whose reading it is. */
 export interface ModelHeadroom {
@@ -89,13 +81,13 @@ export interface SpawnableProvider {
     readonly budget?: string;
 }
 
-// Every connected account of a provider as the serviceability rule reads it (usage/serviceability.ts accountFactsOf):
-// the same facts for every provider, Claude's seat marks, the translator's benches and a door's plain rows alike. An
-// unreadable list leaves the provider with nothing on file, read as unmetered rather than empty. The fan-out budget
-// reads the same (fan-out-budget.ts).
-export const factsOf = async (services: Services, provider: AgentProvider): Promise<readonly ServiceFacts[]> =>
+// A provider's accounts read once and judged on each model of its catalog by the serviceability rule (accountsJudge): the
+// same facts for every provider, Claude's seat marks, the translator's benches and a door's plain rows alike, with every
+// refusal on file. An unreadable list leaves the provider with nothing on file, read as unmetered rather than empty.
+const NOTHING_ON_FILE: AccountsJudge = { facts: [], accounts: () => [], capacity: () => ({ kind: "unknown" }) };
+const judgeOf = (services: Services, provider: AgentProvider): Promise<AccountsJudge> =>
     // allow(silent-catch): the listing is advice, and one provider's trouble must not silence the rest.
-    accountFactsOf(services, provider).catch(() => []);
+    accountsJudge(services, provider).catch(() => NOTHING_ON_FILE);
 
 // The pool a figure is about, by the name a person uses: always where the account has another pool the model spends,
 // else only one the plan scopes to some models (an undivided allowance is just "the allowance").
@@ -112,24 +104,20 @@ const otherPools = (usage: AccountUsage | undefined, model: ModelRef, binding: U
             return pool === undefined ? [] : [{ pool, percentLeft: Math.max(0, Math.round(SPENT_UTILIZATION - window.utilization)) }];
         });
 
-type Roomy = { readonly reading: ServiceFacts; readonly room: number };
+type Roomy = { readonly reading: JudgedAccount["facts"]; readonly room: number };
 const roomiest = (rows: readonly Roomy[]): Roomy | undefined =>
     rows.reduce<Roomy | undefined>((most, next) => (most === undefined || next.room > most.room ? next : most), undefined);
 
-// Most room any one account the rule calls ready has left for this model, judged with the provider's standing refusal;
-// undefined if none has proven room. A reading that can still be re-read wins over one that cannot, whatever it says:
-// a stale figure is quoted only when it is all there is, and then marked stale.
-const bestHeadroom = (readings: readonly ServiceFacts[], model: ModelRef, refusals: RefusalsOnFile): ModelHeadroom | undefined => {
-    const states = serviceStates(readings, refusals, model);
-    const ready = readings.flatMap((reading) => {
-        const state = states.get(reading.account);
-        return state?.kind === "ready" ? [{ reading, room: state.room }] : [];
-    });
+// Most room any one account the rule calls ready has left for this model, each judged for it with the provider's standing
+// refusals; undefined if none has proven room. A reading that can still be re-read wins over one that cannot, whatever it
+// says: a stale figure is quoted only when it is all there is, and then marked stale.
+const bestHeadroom = (accounts: readonly JudgedAccount[], model: ModelRef): ModelHeadroom | undefined => {
+    const ready = accounts.flatMap((account) => (account.state.kind === "ready" ? [{ reading: account.facts, room: account.state.room }] : []));
     const best = roomiest(ready.filter((row) => row.reading.usage?.unread === undefined)) ?? roomiest(ready);
     if (best === undefined) {
         return undefined;
     }
-    const fleet = standingOf(readings, states, ready.length);
+    const fleet = standingOf(accounts, ready.length);
     const pool = bindingWindow(best.reading.usage, model);
     const unread = best.reading.usage?.unread;
     const others = otherPools(best.reading.usage, model, pool);
@@ -145,16 +133,15 @@ const bestHeadroom = (readings: readonly ServiceFacts[], model: ModelRef, refusa
 };
 
 // The fleet's standing beside the best figure; undefined while every account can serve.
-const standingOf = (readings: readonly ServiceFacts[], states: ReadonlyMap<string, AccountState>, ready: number): AccountsStanding | undefined => {
-    if (ready === readings.length) {
+const standingOf = (accounts: readonly JudgedAccount[], ready: number): AccountsStanding | undefined => {
+    if (ready === accounts.length) {
         return undefined;
     }
-    const back = readings.flatMap((reading) => {
-        const state = states.get(reading.account);
-        const at = state?.kind === "blocked" ? state.until : state?.kind === "spent" ? state.reopensAt : undefined;
+    const back = accounts.flatMap(({ state }) => {
+        const at = state.kind === "blocked" ? state.until : state.kind === "spent" ? state.reopensAt : undefined;
         return at === undefined ? [] : [at];
     });
-    return { ready, total: readings.length, ...opt("backAt", back.length === 0 ? undefined : Math.min(...back)) };
+    return { ready, total: accounts.length, ...opt("backAt", back.length === 0 ? undefined : Math.min(...back)) };
 };
 
 
@@ -162,26 +149,25 @@ const standingOf = (readings: readonly ServiceFacts[], states: ReadonlyMap<strin
 const soonest = (instants: readonly (number | undefined)[]): number | undefined =>
     instants.reduce<number | undefined>((best, at) => (at !== undefined && (best === undefined || at < best) ? at : best), undefined);
 
-// `refusals` are the provider's refusals on file, read beside the readings: a plan that just said no ("usage limit, try
-// again at 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports, and a Cursor model it
+// The judge reads the provider's refusals on file beside the readings: a plan that just said no ("usage limit, try again
+// at 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports, and a Cursor model it
 // refused is spent though Cursor publishes no reading at all (2026-10-13: listed as "not metered" through seven refused
 // spawns, when only the role ladder read its refusals).
 const spendable = (
     provider: NativeProvider,
     catalog: { models: Model[] },
-    readings: readonly ServiceFacts[],
-    refusals: RefusalsOnFile,
+    judge: AccountsJudge,
     load: { readonly running?: Readonly<Record<string, number>> | undefined } = {},
 ): SpawnableProvider => {
     const judged = catalog.models.map((model) => {
         const ref: ModelRef = { id: model.id, label: model.label };
-        return { model, ref, capacity: fleetCapacity(readings, refusals, ref) };
+        return { model, ref, capacity: judge.capacity(ref) };
     });
     const out = judged.flatMap((row) => (row.capacity.kind === "spent" ? [{ ...row, capacity: row.capacity }] : []));
     const rows = judged
         .filter((row) => row.capacity.kind !== "spent")
         .map((row) => {
-            const headroom = bestHeadroom(readings, row.ref, refusals);
+            const headroom = bestHeadroom(judge.accounts(row.ref), row.ref);
             return { id: row.model.id, label: row.model.label, ...(headroom === undefined ? {} : { headroom }) };
         });
     const reopensAt = soonest(out.map((row) => row.capacity.reopensAt));
@@ -215,22 +201,16 @@ const runningByModel = (provider: string): Readonly<Record<string, number>> | un
 // What a child could be started on right now, connected providers only. Failure is per provider: a slow or dead
 // model-catalog read reports that provider with no models rather than dropping the whole listing.
 export const spawnableProviders = async (services: Services): Promise<readonly SpawnableProvider[]> => {
-    // An unreadable refusal file leaves the readings to speak alone, as they did before one was ever written.
-    const refusalsRead = async (): Promise<Record<string, readonly ProviderRefusal[]>> => services.providerRefusals.onFile();
     // allow(silent-catch): a run-out record that cannot be read only costs the listing its rate, never its levels.
     const runOutsRead = async (): Promise<RunOuts> => services.runOuts.read();
-    const [ready, refusals, runOuts] = await Promise.all([
-        services.providerReadiness(),
-        refusalsRead().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
-        runOutsRead().catch((): RunOuts => ({})),
-    ]);
+    const [ready, runOuts] = await Promise.all([services.providerReadiness(), runOutsRead().catch((): RunOuts => ({}))]);
     return Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
-            const [catalog, readings] = await Promise.all([services.providerCatalogs[provider].models().catch(() => ({ models: [] })), factsOf(services, provider)]);
-            const row = spendable(provider, catalog, readings, refusals[provider] ?? [], { running: runningByModel(provider) });
-            const model = readings.length === 0 ? undefined : budgetModel(services, row);
-            const lastRunOut = modelRunOut(runOuts, provider, readings.map((reading) => reading.usage), model);
-            const budget = model === undefined ? undefined : await budgetLine(services, row.id, model, readings);
+            const [catalog, judge] = await Promise.all([services.providerCatalogs[provider].models().catch(() => ({ models: [] })), judgeOf(services, provider)]);
+            const row = spendable(provider, catalog, judge, { running: runningByModel(provider) });
+            const model = judge.facts.length === 0 ? undefined : budgetModel(services, row);
+            const lastRunOut = modelRunOut(runOuts, provider, judge.facts.map((reading) => reading.usage), model);
+            const budget = model === undefined ? undefined : await budgetLine(services, row.id, model, judge.accounts({ id: model }));
             return { ...row, ...opt("lastRunOut", lastRunOut), ...opt("budget", budget) };
         }),
     );
@@ -250,9 +230,9 @@ const budgetModel = (services: Services, row: SpawnableProvider): string | undef
 };
 
 // The provider's budget line for children of `model`, where its accounts read a figure.
-const budgetLine = async (services: Services, provider: AgentProvider, model: string, readings: readonly ServiceFacts[]): Promise<string | undefined> => {
+const budgetLine = async (services: Services, provider: AgentProvider, model: string, accounts: readonly JudgedAccount[]): Promise<string | undefined> => {
     // allow(silent-catch): the budget line is advice beside the figures; a projection that cannot be read leaves them alone.
-    const forecast = await forecastBudget(services, { provider, model, readings }).catch(() => undefined);
+    const forecast = await forecastBudget(services, { provider, model, accounts }).catch(() => undefined);
     return forecast === undefined ? undefined : forecastWords(forecast, model);
 };
 

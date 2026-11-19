@@ -156,6 +156,8 @@ test("a custom endpoint with no resolved model pins nothing rather than an empty
 // none), picked by headroom — which an entitlement refusal alone can defeat: an untouched, refused account has the
 // best-looking meter and would win forever without this. Every later turn of a conversation arrives here already
 // naming its account (routingFor), and is moved off a refused one before this (providers/accounts/blocked-account.ts).
+// Both accounts were read at T, a minute before the real clock a credential is resolved at, so the readings are current.
+const T = Date.now() - 60_000;
 const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string, SeatRefusal> = {}): Services =>
     services({
         claudeStore: {
@@ -170,8 +172,8 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
         // The refused account looks untouched precisely BECAUSE it is refused: nothing it was handed ever ran.
         accountUsage: {
             read: async () => ({
-                refused: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 3, gates: "all" }] },
-                working: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 74, gates: "all" }] },
+                refused: { measuredAt: T, windows: [{ kind: "seven_day", utilization: 3, gates: "all" }] },
+                working: { measuredAt: T, windows: [{ kind: "seven_day", utilization: 74, gates: "all" }] },
             }),
             record: async () => {},
             markUnread: async () => undefined,
@@ -252,7 +254,7 @@ test("a spent allowance reads its account as spent until a reading with room lan
     // contradicts it, which is how a window that has since reopened gets its account back.
     const standing = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "refused" });
     expect(standing.ok && standing.credentials.account).toBe("working");
-    const answered = await resolved({ at: -1, kind: "limit", message: "usage limit reached", account: "refused" });
+    const answered = await resolved({ at: T - 1, kind: "limit", message: "usage limit reached", account: "refused" });
     expect(answered.ok && answered.credentials.account).toBe("refused");
 });
 

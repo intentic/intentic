@@ -345,18 +345,39 @@ flowchart LR
   over it. A runtime serves helpers by declaring `sealed` on its adapter (Claude Code, Cursor, OpenCode's Gemini).
   (2026-10-07) Before, each runtime had a one-shot path of its own beside its turn, and each had drifted: the privacy
   shield refused Cursor's for its runtime, a conversation's grant never reached it, and Cursor kept its own account loop.
+  The walk keeps a ten-minute memo in memory of a rung that just failed (a throttle, an outage, a refused sign-in), as
+  a health signal; a rung's spent allowance comes only from the ledger and the readings (`role-model-quota.ts`
+  `spentRung`). (2026-11-19) The memo also held a rung two hours for any refusal worded as a spent allowance, a second
+  copy of the ledger with a horizon of its own; timing that half off the ledger instead was rejected, since the ledger
+  already is the timing.
 - Whether an account, or a provider's accounts together, can serve a model now, and until when, is one rule over one
   set of facts (2026-10-20). The facts are the account rows (a revoked sign-in, a seat mark, a translator bench, the
   polled reading, the models the translator routes to the credential, `agent/providers/translator-models.ts`) and every
   refusal on file in one ledger (`usage/provider-refusals.ts`), each the latest of its kind for
-  the account and model it names. The rule is the contract's (`models/plan-pools.ts`: `serviceStates` per account,
-  `fleetCapacity` per model), which lays every standing refusal on the reading it covers (`judgedReading`). The daemon
-  reads it through `usage/serviceability/serviceability.ts` for placement, holds, the role ladder, the spawn listing and
-  gate, and Auto. The editor runs the same rule on the same rows and the whole ledger (`/agent/refusals`, then each
+  the account and model it names. Each usage reader states a window's length where the provider's answer says it
+  (`periodSeconds`: Codex's `limit_window_seconds` and the app-server's minutes in `usage/translator-usage.ts`, Kimi's
+  throttle windows, Claude's `session`, `five_hour`, `weekly_*` and `seven_day*` keys in
+  `agent/providers/claude/claude-usage.ts`, a Google bucket's `window` or the period its id and name spell in
+  `usage/google/model-pools.ts`), and the rule reads that before the pool's words (2026-11-19). The rule is the
+  contract's (`models/plan-pools.ts`: `serviceStates` per account, `fleetCapacity` per model), which lays every
+  standing refusal on the reading it covers (`judgedReading`). The daemon reads it through
+  `usage/serviceability/serviceability.ts` for placement, holds, the role ladder, the spawn listing and
+  gate, and Auto. Which account a turn then runs on is decided in one module, `agent/providers/accounts/placement.ts`:
+  a turn naming none, a move off an account that cannot serve, a cold conversation's re-placement and the gateway's pin
+  order, the fan-out planner's load counted where it carries the provider (Claude). `usage.placement` answers it for the
+  turn its asker would send, on their loop and among the AI accounts they may run on. 2026-11-19: each subsystem used to
+  pick for itself and the browser predicted the pick from its own rows; both were rejected, as one picker's fix never
+  reached the others. The editor runs the same rule on the same rows and the whole ledger (`/agent/refusals`, then each
   change pushed whole), for the rail, the picker's rows and accounts, the composer's offers, and the model a job's
   button names: the first rung of its ladder no account is spent on, as the run opens on it (the contract's
-  `openingRung`, read by `agent/models/run-role-model.ts` and the editor's `roleModel.ts`). Nothing publishes or
-  keeps a judged copy. Before, one refusal was filed three times (the provider's last refusal, a routed model's bench in
+  `openingRung`, read by `agent/models/run-role-model.ts` and the editor's `roleModel.ts`). Both judge at the
+  sandbox's clock, every reading taken as it stands then, so a window past its reset is lapsed on both sides alike
+  (2026-11-19). The daemon also publishes each provider's picture whole, judged (`usage/serviceability/capacity-feed.ts`:
+  every fact, each account's verdict, where an unnamed turn runs by `agent/providers/accounts/placement.ts`, whether the
+  provider is failing or throttling by `agent/providers/provider-health.ts`, and the next instant the clock alone changes it):
+  `capacity-watch.ts` judges a provider again on every reading, refusal or outage change and at that instant, re-reads
+  its accounts at a reopen, and sends the result to every window that asked (`/events` `capacity`). Before it a window
+  assembled the picture from four reads that arrived apart and could not see the daemon's load-aware pick. Before, one refusal was filed three times (the provider's last refusal, a routed model's bench in
   `model-cooldowns.json`, a Cursor account's run-out in `observed-limits.json`), each with its own horizon and settle
   rule, and every surface judged by a different subset. So the picker greyed a model the spawn listing offered, the rail
   showed an account the daemon called spent, and Sol children were spawned onto a Codex every account had refused.
@@ -377,9 +398,27 @@ flowchart LR
   that reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said "back at".
   That reset is the sandbox's guess, not the provider's word, so a reading taken after it still outranks it: a weekly
   pool read at a rounded 100 once the five-hour one reopened keeps the refusal standing until the weekly reset
-  (2026-10-21). A spent allowance in a
+  (2026-10-21). A refusal that names its instant is filed with the pool that instant is the reset of (`pool`), or, where
+  every pool its model spends is current and publishes its reset and length and none resets then, as a pool of its own
+  that holds that model alone (`poolUnpublished`), read off the refused account's reading as the ledger files it (the
+  contract's `refusedPoolOf`). The verdict pins exactly that pool, and answers the refusal early only once that pool has
+  renewed with room. (2026-11-19) Before, every judgement matched the instant again against whatever reading it held,
+  within half an hour, in the daemon and every open window, and a Codex refusal on one model was pinned on the weekly
+  pool for four days (2026-11-14); re-inferring it on each judgement was rejected, since the reading that can say is the
+  one beside the refusal. A refusal filed before, one naming no account over several, and one whose reading could not
+  say (no reading, a pool with no reset or length, a window closed since it was read) are still judged that way. A
+  spent allowance in a
   routed refusal envelope stays a spent allowance, not a model off the plan. An admin-granted credit ("send a request to
   your admin") is filed `unmetered`, so no usage reading answers it.
+- A rate limit is filed only where something shows an allowance spent (`agent/run/frames/limits/limit-cause.ts`, one decision
+  for every loop): the provider's words, a reset it names past a retry's horizon, a typed signal, the records reading
+  every account spent, or the translator gateway's verdict, which outranks all but the words. Anything else is a
+  throttle, coded `provider-outage` and marked `throttle`: nothing is filed, the turn waits on the provider's backoff,
+  and the backoff says it was a throttle that opened it, in memory like the breaker it rides (`provider-health.ts`,
+  published as the capacity's `degraded.cause`). `rate_limit` keeps meaning a spent allowance. (2026-11-19) Only routed
+  turns told the two apart, through the gateway; a native Claude account, a Codex or a Cursor one was held spent by a
+  throttle until a reading or a turn answered it. Recognising each throttle's wording was rejected: an unforeseen one
+  would be filed again.
 - What carries a conversation on with nobody pressing anything is one derived value on its card, `next`
   (`conversations/actor/conversation-next.ts`): a held turn's re-run or move, a memory hold's send once memory frees, or
   messages booked for a time or another conversation's land. The registry derives it every time it projects the card,
@@ -389,8 +428,24 @@ flowchart LR
   corner, the chat's bar and the phone read only `next`. (2026-10-20) Before, the booking was copied onto the stored
   ending and re-synced every beat, a memory hold's send was never on the card, and each surface rebuilt "does it go by
   itself" from its own subset of fields, so a card said "sends when memory frees" in its corner while waiting in
-  Attention. The pass still times a hold refused with no instant once the records know its reopen, and withdraws a
-  "resuming" whose answer is now to wait (`agent/run/turn/holds/held-standing.ts`).
+  Attention. The pass still withdraws a "resuming" whose answer is now to wait (`agent/run/turn/holds/held-standing.ts`).
+- When and where a spent allowance's held turn goes is derived, never kept (`agent/run/turn/holds/held-verdict.ts`
+  `heldVerdict`). The hold stores only its intent: the provider, model and account it was refused on, the owner's
+  booked move and whether it carries the session, a person's pick, and the refusal's own reopen as evidence. Every
+  pass reads the records against that intent: the allowance wall in front of the route it would take, whether the
+  provider's accounts can serve its model, and, for a booked move, an account with room. The one rule over that reading
+  (`conversations/actor/limit-booking.ts` `limitBooking`) is what the pass fires by and what the card's `next`, its
+  `limitResetsAt`, the admission's shut window and the sleep wake state, from the reading the pass leaves on the hold
+  (`held-read`, its only writer, memory only; a pick reads one through the same module as it re-points the hold). So a
+  hold whose account reopens before the instant it was refused with goes at the pass that reads it open, a booked move
+  whose account has been spent since goes onto another with room, and waits on its own account where none has, and a
+  pick waits on the picked account's wall as the records say it at each pass. The reset's grace, a child's 15-45 s
+  spread and its horizon, and the answer to the limit apply as before; a reading inside the grace after a reopen it
+  read keeps that instant once the records stop calling the account spent. (2026-11-19) The hold used to carry copies of
+  these answers that paced passes reconciled: a re-time once a minute for an untimed hold and for a timed one whose model
+  could be served again, the wall written onto it every beat, a pick's reopen frozen at the pick, and a move's account
+  judged once at the failure and then waited behind. Each reconciled after the fact, and the card said what the pass
+  would no longer do until the next one ran. Keeping the stored instants and adding one more reconciliation was rejected.
 - A person's unsent message is a draft the sandbox holds, one per person and conversation, in
   `/history/composer-drafts.json` (`conversations/drafts/composer-drafts.ts`). `agents.drafts` lists only the caller's
   own. A write names the revision it was edited from, and is answered with the newer draft instead of overwriting it
@@ -412,10 +467,10 @@ flowchart LR
   at the instant each was pressed, and drops them from the file. The route refuses a registered conversation. A
   discard is the client's to say (one `on: false` per mark): the daemon cannot tell it from a composer emptied by hand.
 - Nothing the resume pass sends goes into an allowance the records call spent. Before it fires any hold, it asks the
-  allowance wall in front of the account the turn would go on (`allowanceWall` in `usage/serviceability/`, the one
-  answer the allowance gate and an account pick read too). A spent allowance's booking is read with that wall on every
-  beat (`agent/run/turn/holds/limit-due.ts`), which puts the wall on the hold: it can only push the booking later, and
-  the card's `next` states the instant it actually goes. (2026-10-19) A pick between two spent Claude accounts read the second off its rounded
+  allowance wall in front of the account the turn would go on (`agent/run/turn/holds/allowance-gate.ts` `wallAhead`, over
+  `allowanceWall` in `usage/serviceability/`, the one reading the allowance gate and an account pick read too). A spent
+  allowance's hold is judged with that wall at every pass (`heldVerdict`, above), so the card's `next` states the
+  instant it actually goes. (2026-10-19) A pick between two spent Claude accounts read the second off its rounded
   reading, which never proves a Claude account spent, stored "now" on the hold, and the next beat sent two turns to be
   refused within seconds.
 - Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up

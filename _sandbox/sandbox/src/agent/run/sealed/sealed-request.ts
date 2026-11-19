@@ -7,12 +7,13 @@ import { opt } from "../../../opt.js";
 import type { ArmPlan, TurnArmPlan, TurnContext } from "../../providers/adapter.js";
 import { readableProviderText } from "../../../engines/provider-error-text.js";
 import { classifyFailure, type ErrorFrame, type FailureQueries } from "../frames/classify-failure.js";
-import { throttleAsOutage } from "../frames/routed-throttle.js";
+import { throttleAsOutage } from "../frames/limits/limit-cause.js";
 import { codedFailure } from "../frames/error-frames.js";
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
 import { type SealedDeadline, sealedDeadline } from "./sealed-deadline.js";
 import { endedAfterStop } from "../frames/stop-grace.js";
+import { SpentAllowanceError } from "./spent-allowance-error.js";
 import { admittedPlacement, assertAgentExecutionContext, type AgentExecutionContext } from "../../../workload/agent-execution.js";
 
 // A helper job (a title, a commit subject, a verdict, a route) as a request on the turn's own seam: planned by the
@@ -126,7 +127,7 @@ const failure = async (services: Services, raw: ErrorFrame, ran: SealedRun): Pro
     // No conversation here even when the job is for one: what a conversation's failure holds is that conversation's.
     const turn = { prompt: plan.request.spec.prompt, agent: ask.provider, harness: ask.harness, model: ask.model };
     const queries = sealedQueries(services, ran.askedAt);
-    // A throttle spends no allowance, so it is not the spent refusal another account is planned after (routed-throttle.ts).
+    // A throttle spends no allowance, so it is not the spent refusal another account is planned after (limit-cause.ts).
     const event = throttleAsOutage(raw, { provider: ask.provider, model: plan.request.spec.model, turn }, queries.gatewayRefused);
     try {
         const classified = await classifyFailure(
@@ -154,7 +155,9 @@ const failure = async (services: Services, raw: ErrorFrame, ran: SealedRun): Pro
     } catch (error) {
         services.logger.warn({ err: error, provider: ask.provider }, "sealed request: the failure could not be filed");
     }
-    return { refusal: new Error(readableProviderText(event.message)), spent: event.code === "rate_limit" };
+    const spent = event.code === "rate_limit";
+    const said = readableProviderText(event.message);
+    return { refusal: spent ? new SpentAllowanceError(said) : new Error(said), spent };
 };
 
 // Runs the planned request to its last frame and answers with its prose. A retry the provider defers past what a helper

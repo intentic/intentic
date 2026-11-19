@@ -7,7 +7,8 @@ import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../system/resources/perf.js";
-import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
+import { askRoleModel, OTHER_REFUSED_FOR_MS } from "./role-model.js";
+import { SPENT_WORDS, THROTTLE_WORDS } from "../run/frames/limits/limit-cause.testing.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { sentenceAnswer } from "../../engines/role-answer.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
@@ -133,9 +134,10 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
             list: async () => [{ id: `claude-one` }] as Awaited<ReturnType<Services[`claudeStore`][`list`]>>,
         }),
         claudeSeats: unstubbed<Services[`claudeSeats`]>(`claudeSeats`, { read: async () => ({}) }),
+        // Read at the test's own clock (jest.setSystemTime), as the routed accounts are, so the reading is current.
         accountUsage: unstubbed<Services[`accountUsage`]>(`accountUsage`, {
             read: async () => ({
-                "claude-one": { windows: [{ kind: `seven_day`, utilization: spent.includes(`claude`) ? 100 : 4, gates: `all` }], measuredAt: 0 },
+                "claude-one": { windows: [{ kind: `seven_day`, utilization: spent.includes(`claude`) ? 100 : 4, gates: `all` }], measuredAt: Date.now() },
             }),
         }),
         providerCatalogs: Object.fromEntries(
@@ -167,9 +169,12 @@ type Billed = { op: string; ms: number; fields: PerfFields; failed?: boolean | u
 const timed: Billed[] = [];
 
 // Refusal memo persists as module state; each test starts a memo-length past the last, so nothing bleeds over.
-const BETWEEN_TESTS_MS = REFUSED_FOR_MS + 60 * 60 * 1000;
+const BETWEEN_TESTS_MS = OTHER_REFUSED_FOR_MS + 60 * 60 * 1000;
 // Just past the memo window, for tests that check it expiring.
-const PAST_THE_MEMO_MS = REFUSED_FOR_MS + 60 * 1000;
+const PAST_THE_MEMO_MS = OTHER_REFUSED_FOR_MS + 60 * 1000;
+// What the memo is for: a rung that just failed for something no record holds. A provider throttling it, in Codex's
+// own words for a 429 (limit-cause.testing.ts), is the commonest; a spent allowance earns none (below).
+const THROTTLED = THROTTLE_WORDS.codex;
 let clock = 1_700_000_000_000;
 let lease: AgentExecutionLease;
 let execution: AgentExecutionContext;
@@ -347,7 +352,7 @@ test("says the job's accounts have gone rather than failing on a model call", as
 
 test("a model that just refused is stepped over without being asked again", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
-    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    oneShot.mockRejectedValueOnce(new Error(THROTTLED));
     await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
     expect(oneShot).toHaveBeenCalledTimes(2);
 
@@ -356,12 +361,36 @@ test("a model that just refused is stepped over without being asked again", asyn
 
     expect(oneShot).toHaveBeenCalledTimes(1);
     expect(oneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `claude-haiku-4-5` }));
-    expect(answer.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: expect.stringContaining(`usage limit`) }]);
+    expect(answer.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: expect.stringContaining(THROTTLED) }]);
 });
 
-test("asks it again once the memo has run out: an allowance resets and nothing announces it", async () => {
+/* 2026-11-19: a spent allowance held its rung two hours in a memo of the ladder's own, beside the refusal ledger the
+   sealed request had filed it on. The ledger and the readings are the record now (role-model-quota.ts spentRung): a rung
+   whose records show room is asked at once, and one whose records read it spent is stepped over in their words. */
+test("a spent allowance leaves no memo: the next ask reads the rung's records instead", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
-    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    oneShot.mockRejectedValueOnce(new Error(SPENT_WORDS.codex));
+    const refused = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
+    expect(refused.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: expect.stringContaining(`hit your usage limit`) }]);
+
+    // Records with room: asked again at once, with no bench of the ladder's own in the way.
+    oneShot.mockClear();
+    const again = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
+    expect(again.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
+    expect(again.skipped).toEqual([]);
+
+    // Records reading it spent: stepped over in the records' words, not the refusal's.
+    oneShot.mockRejectedValueOnce(new Error(SPENT_WORDS.codex));
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
+    oneShot.mockClear();
+    const held = await askRoleModel(fakeServices(pinned, [`codex`]), execution, ROLE, DRAFT, signal());
+    expect(held.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
+    expect(held.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: expect.stringContaining(`out of allowance`) }]);
+});
+
+test("asks it again once the memo has run out: a throttle lifts and nothing announces it", async () => {
+    const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
+    oneShot.mockRejectedValueOnce(new Error(THROTTLED));
     await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     jest.setSystemTime(new Date(clock + PAST_THE_MEMO_MS));
@@ -374,7 +403,7 @@ test("asks it again once the memo has run out: an allowance resets and nothing a
 
 test("an answer clears the memo, so a recovered model keeps its place at the top", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
-    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    oneShot.mockRejectedValueOnce(new Error(THROTTLED));
     await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     jest.setSystemTime(new Date(clock + PAST_THE_MEMO_MS));
@@ -388,7 +417,7 @@ test("an answer clears the memo, so a recovered model keeps its place at the top
 
 test("tries the whole chain anyway when every rung is cooling down", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
-    oneShot.mockRejectedValue(new Error(`usage limit reached`));
+    oneShot.mockRejectedValue(new Error(THROTTLED));
     await expect(askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal())).rejects.toThrow();
 
     oneShot.mockClear();
@@ -522,7 +551,7 @@ test("a cancel leaves no memo behind", async () => {
 
 // `skipped` lists only rungs the walk passed on its way to an answer, not ones behind it that were never reached.
 test("does not report a cooling rung that sits behind the model that answered", async () => {
-    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    oneShot.mockRejectedValueOnce(new Error(THROTTLED));
     await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     const answer = await askRoleModel(fakeServices([`claude:claude-haiku-4-5`, `codex:gpt-5.6`]), execution, ROLE, DRAFT, signal());
@@ -549,7 +578,7 @@ test("tells a listener every beat: asking, the refusal in its own words, and the
 
 test("a rung skipped on its memo is a beat too, with the remembered reason, and a listener's throw costs the walk nothing", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
-    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    oneShot.mockRejectedValueOnce(new Error(THROTTLED));
     await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     const beats: { model: string; status: string; reason?: string | undefined }[] = [];
@@ -562,7 +591,7 @@ test("a rung skipped on its memo is a beat too, with the remembered reason, and 
     });
 
     expect(answer.value).toBe(`fix: tree truncation`);
-    expect(beats[0]).toEqual({ model: `gpt-5.6`, status: `skipped`, reason: `usage limit reached` });
+    expect(beats[0]).toEqual({ model: `gpt-5.6`, status: `skipped`, reason: expect.stringContaining(THROTTLED) });
 });
 
 test("bills every model it asks, by name, answered or refused", async () => {

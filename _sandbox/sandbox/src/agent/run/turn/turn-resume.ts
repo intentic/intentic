@@ -33,7 +33,7 @@ import { type RunOptions, startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import { waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
-import { sendableAt } from "../../../conversations/actor/limit-booking.js";
+import { heldReopen, sendableAt } from "../../../conversations/actor/limit-booking.js";
 import { carryingOn } from "../../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../../opt.js";
 import { spentRung } from "../../models/role-model-quota.js";
@@ -46,10 +46,10 @@ import { releaseRoomHolds } from "./holds/room-holds.js";
 import { releaseAccountHolds } from "./holds/account-refusal-release.js";
 import { memoryRerunsOf, memoryTail } from "./holds/memory-kill.js";
 import { holdCutForMemory } from "./recovery/memory-restart.js";
-import { limitDue } from "./holds/limit-due.js";
+import { heldVerdict } from "./holds/held-verdict.js";
 import type { HeldReason, HeldTurn } from "./holds/held-turn.js";
 import { breakPolicyFor } from "./break-policy.js";
-import { clearPaces, keepStandingTrue, type RetimePaces } from "./holds/held-standing.js";
+import { keepStandingTrue } from "./holds/held-standing.js";
 import { releaseBooked } from "./booked-release.js";
 import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
 
@@ -282,12 +282,10 @@ export interface TurnResumeScheduler {
     readonly stop: () => void;
     // One pass; `start` arms the timers that run it. A call while a pass still runs joins that pass. Exposed for tests.
     readonly tick: (now?: number) => Promise<void>;
-    // Something a hold waits on may have changed (a hold recorded, a turn settled, a land, a setting, an account): a
-    // pass soon, merged with any other nudge before it runs (workload/nudged-pass.ts).
+    // Something a hold waits on may have changed (a hold recorded, a turn settled, a land, a setting, an account, a
+    // reading): a pass soon, merged with any other nudge before it runs (workload/nudged-pass.ts). A spent allowance's
+    // hold is read against the records at every pass (held-verdict.ts), so news of an account is a nudge like any other.
     readonly nudge: () => void;
-    // The records may now know when a pool reopens, or that a held model can be served (a reading, an account back): every
-    // spent allowance's hold on `provider` (on any, where none is named) asks again at a pass that runs now.
-    readonly retime: (provider?: string) => void;
 }
 
 // The attempt budget spends in under an hour; past this a resume is worse than staying dead.
@@ -481,8 +479,8 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
 
 /* NOTHING THE PASS SENDS GOES INTO AN ALLOWANCE THE RECORDS CALL SPENT. Every hold the pass fires is sent with nobody
    pressing anything, so each first asks the allowance wall in front of the account it would go on (allowance-gate.ts
-   spentUntil, by the one verdict in serviceability.ts), here at the one place the pass sends: a spent allowance's through
-   its booking (limit-due.ts), every other wall's through the gate below. Until this, only the instant stored on a hold
+   wallAhead, by the one verdict in serviceability.ts), here at the one place the pass sends: a spent allowance's through
+   its verdict (held-verdict.ts), every other wall's through the gate below. Until this, only the instant stored on a hold
    stood between it and the provider, judged once when the refusal or a pick made it: a pick that judged a spent account
    open stored "now", and the next beat sent two conversations' turns to be refused within seconds (2026-10-19). A
    person's press still always goes (fireHeldResume): they may know what the records do not. A refused credential's
@@ -500,20 +498,23 @@ const heldBehind = (services: Services, told: WeakSet<HeldRecord>, conversationI
     );
 };
 
-// A spent allowance's hold: fired once its booking, read with the wall in front of where it goes, is due (limit-due.ts).
+// A spent allowance's hold: read against the records, and fired where its verdict says it goes now (held-verdict.ts).
+// One whose refusal's own instant has come while the reading still holds it later says so once.
 const runLimitHold = async (services: Services, conversationId: string, held: HeldRecord, now: number, pass: PassNotes): Promise<void> => {
-    const due = held.fired ? undefined : await limitDue(services, conversationId, held, now);
-    if (due === undefined) {
+    const verdict = await heldVerdict(services, conversationId, held, now);
+    const booking = verdict?.booking;
+    if (verdict === undefined || booking === undefined) {
         return;
     }
-    if (due.walledUntil !== undefined) {
-        heldBehind(services, pass.told, conversationId, held, due.walledUntil);
-    }
-    if (due.booking.at <= now) {
-        await dispatch(false)(services, due.held, due.routing, now);
+    if (booking.at <= now) {
+        await dispatch(false)(services, verdict.held, verdict.routing, now);
         return;
     }
-    pass.due(due.booking.at);
+    const refused = held.reason === "limit" ? held.reopensAt : undefined;
+    if (refused !== undefined && sendableAt(refused) <= now) {
+        heldBehind(services, pass.told, conversationId, verdict.held, booking.at);
+    }
+    pass.due(booking.at);
 };
 
 // What one pass carries from hold to hold: the holds already said to wait behind a wall, and where it reports the
@@ -576,12 +577,14 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
 // Whether the sandbox's own words wait on a window that has now reopened: admission held them while it was shut
 // (turn-admission.ts), and nothing else would send them where the answer to the limit is to wait for a press.
 // Reports the reopen of a window still shut, where such words wait for it, so the pass is woken at that instant.
+// The window is the one the hold's verdict last read (limit-booking.ts heldReopen), so it opens when the hold could go.
 const wakesReopened = (services: Services, conversationId: string, held: HeldRecord, now: number, due: DueAt): boolean => {
-    if (held.reason !== "limit" || held.reopensAt === undefined || !waitingOf(services.conversations.queued(conversationId)).some((item) => item.voice !== "person")) {
+    const reopensAt = heldReopen(held);
+    if (reopensAt === undefined || !waitingOf(services.conversations.queued(conversationId)).some((item) => item.voice !== "person")) {
         return false;
     }
     if (windowShut(held, now)) {
-        due(sendableAt(held.reopensAt));
+        due(sendableAt(reopensAt));
         return false;
     }
     return true;
@@ -597,8 +600,6 @@ const RESUME_BACKSTOP_MS = 30_000;
 // walking the same records underneath it. A rung reads a policy before it stamps its record, and a second pass walking a
 // stale snapshot could fire the same hold twice; a send let go waits on a version commit, and must not be let go again.
 export const createTurnResumeScheduler = (services: Services, backstopMs = RESUME_BACKSTOP_MS): TurnResumeScheduler => {
-    // When each limit hold last asked the records for its reopen or its model's room (held-standing.ts).
-    const retimeAsked: RetimePaces = new Map();
     // The holds already said to be waiting behind a spent allowance (heldBehind), each said once.
     const toldBehind = new WeakSet<HeldRecord>();
 
@@ -609,10 +610,11 @@ export const createTurnResumeScheduler = (services: Services, backstopMs = RESUM
             try {
                 await runRung(services, conversationId, record, now, notes);
                 // After the rung, so a resend it just fired goes first and hears them as it runs.
-                if (wakesReopened(services, conversationId, record, now, due)) {
+                // The hold as the rung left it: its verdict may have read a later window onto it.
+                if (wakesReopened(services, conversationId, services.conversations.state(conversationId)?.resume.held ?? record, now, due)) {
                     await services.turns.drain(conversationId);
                 }
-                await keepStandingTrue(services, conversationId, now, retimeAsked);
+                await keepStandingTrue(services, conversationId, now);
             } catch (error) {
                 services.logger.error({ err: error, conversationId, reason: record.reason }, "resume pass: a held turn could not be resumed, the pass goes on to the next");
             }
@@ -637,10 +639,6 @@ export const createTurnResumeScheduler = (services: Services, backstopMs = RESUM
     return {
         tick: passes.run,
         nudge: passes.nudge,
-        retime: (provider) => {
-            clearPaces(retimeAsked, provider);
-            passes.nudge();
-        },
         start: passes.start,
         stop: passes.stop,
     };

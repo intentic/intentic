@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { writeJsonFile } from "../../../store/json-file.js";
 import { decryptAtRest } from "../../../store/encryption/at-rest.js";
 import { parseJsonOr } from "@intentic/base/json";
+import { nudgeAllCapacity } from "../../../usage/serviceability/capacity-watch.js";
 
 // A provider's own accounts as one `<id>.json` per account in its auth directory, each read through the provider's schema.
 export interface AccountFiles<T> {
@@ -38,9 +39,14 @@ export const accountFiles = <T extends { readonly id: string; readonly connected
             const stored = await Promise.all(names.filter((name) => name.endsWith(".json")).map((name) => read(name.slice(0, -".json".length))));
             return stored.filter((account): account is Awaited<T> => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
         },
-        write: (account) => writeJsonFile(path(account.id), account, 0o600, true, purpose(account.id)),
+        // An account connected, renewed or removed changes what its provider can serve: every window's capacity is told.
+        write: async (account) => {
+            await writeJsonFile(path(account.id), account, 0o600, true, purpose(account.id));
+            nudgeAllCapacity();
+        },
         remove: async (id) => {
             await rm(path(id), { force: true });
+            nudgeAllCapacity();
         },
     };
 };

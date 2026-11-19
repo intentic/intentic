@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseJsonOr } from "@intentic/base/json";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { GoogleModelsSchema, googleModelsUsage } from "../google/model-pools.js";
 import { codexUsageFromPayload, geminiUsageFromPayload, kimiUsageFromPayload } from "../translator-usage.js";
 import { answerPaths } from "./answer-vocabulary.js";
@@ -41,6 +42,28 @@ test("Kimi Code on 2026-10-19 reads its spent week and the 5-hour throttle insid
     expect(kimiUsageFromPayload(answer("kimi.usages.2026-10-19.json"))?.windows.map((window) => [window.kind, window.utilization])).toEqual([
         ["seven_day", 100],
         ["five_hour", 34],
+    ]);
+});
+
+// 2026-11-19: each reader states a window's length where the answer says it (UsageWindow.periodSeconds), which the rule
+// then reads instead of the pool's words: ChatGPT's `limit_window_seconds`, Kimi's throttle window, Google's `window`.
+test("each answer on 2026-10-19 states the length of every window it names one for, and none it does not", () => {
+    const period = (usage: AccountUsage | undefined) => usage?.windows.map((window) => [window.kind, window.periodSeconds]);
+    expect(period(codexUsageFromPayload(answer("codex.wham.usage.2026-10-19.json")))).toEqual([
+        ["five_hour", 18_000],
+        ["seven_day", 604_800],
+        ["entitlement:gpt-6-astra", undefined],
+    ]);
+    expect(period(kimiUsageFromPayload(answer("kimi.usages.2026-10-19.json")))).toEqual([
+        ["seven_day", 604_800],
+        ["five_hour", 18_000],
+    ]);
+    expect(period(geminiUsageFromPayload(answer("gemini.retrieveUserQuotaSummary.2026-10-19.json")))).toEqual([["google:3p-weekly", 604_800]]);
+    // The per-model view names no window at all.
+    const parsed = GoogleModelsSchema.safeParse(answer("gemini.fetchAvailableModels.2026-10-19.json"));
+    expect(period(parsed.success ? googleModelsUsage(parsed.data) : undefined)).toEqual([
+        ["google:models:gemini", undefined],
+        ["google:models:3p", undefined],
     ]);
 });
 

@@ -1,5 +1,7 @@
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import type { CodexCredential } from "../../../agent/providers/agent-request.js";
+import { limitCause } from "../../../agent/run/frames/limits/limit-cause.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../../decorators/vendor-errors.js";
 
 /* A RATE LIMIT CODEX WAITS OUT INSIDE THE TURN IS GIVEN ONLY SO LONG. Codex honours the translator's Retry-After, which
@@ -16,6 +18,9 @@ export interface LimitWait {
     readonly answered: () => void;
     // Whether patience ran out and the phase was stopped for it.
     readonly handedOver: () => boolean;
+    // The reopening on file that handed the wait over before patience ran out (epoch seconds): the records calling the
+    // allowance spent. Undefined where patience alone ran out, which shows nothing spent (handedOverFrame).
+    readonly reopensAt: () => number | undefined;
     readonly dispose: () => void;
 }
 
@@ -47,6 +52,7 @@ export const limitWait = (stop: () => void, options: LimitWaitOptions = {}): Lim
     const now = options.now ?? Date.now;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let handed = false;
+    let reopening: number | undefined;
     const clear = (): void => {
         if (timer !== undefined) {
             clearTimeout(timer);
@@ -62,6 +68,7 @@ export const limitWait = (stop: () => void, options: LimitWaitOptions = {}): Lim
     const lookAhead = async (wait: ReturnType<typeof setTimeout>, read: () => Promise<number | undefined>): Promise<void> => {
         const reopensAt = await reopeningOf(read);
         if (timer === wait && reopensAt !== undefined && reopensAt * 1000 - now() > patienceMs) {
+            reopening = reopensAt;
             handOver();
         }
     };
@@ -78,6 +85,7 @@ export const limitWait = (stop: () => void, options: LimitWaitOptions = {}): Lim
         },
         answered: clear,
         handedOver: () => handed,
+        reopensAt: () => reopening,
         dispose: clear,
     };
 };
@@ -99,3 +107,16 @@ export const limitWaitOptions = (credential: CodexCredential): LimitWaitOptions 
 // What the turn ends on when its wait is handed over: coded, so it is held and booked rather than offered as a Continue.
 export const LIMIT_WAIT_HANDED_OVER =
     "The provider refused this Codex turn with a rate limit (HTTP 429), and Codex was waiting inside the turn for it to lift; a spent allowance lifts only at its reset, which can be hours away. The wait is handed to the sandbox, which holds the turn for the reset instead of keeping it open.";
+
+// The same hand-over where nothing showed an allowance spent: a throttle that outlasted patience.
+export const LIMIT_WAIT_THROTTLED =
+    "The provider rate-limited this Codex turn (HTTP 429) for longer than a turn waits inside itself, and nothing it said or the records hold shows an allowance spent. The wait is handed to the sandbox, which tries again on the provider's backoff and holds nothing against the account.";
+
+/* The frame a handed-over wait ends the turn on, by the evidence (limit-cause.ts): a reopening on file past patience is
+   the records calling the allowance spent, held for its reset; patience alone is a throttle that outlasted it, waited out
+   as an outage with nothing filed. Until 2026-11-19 both were a spent allowance, and a two-minute throttle on Codex held
+   the account spent until a reading answered it. */
+export const handedOverFrame = (wait: Pick<LimitWait, "reopensAt">): Extract<AgentEvent, { kind: "error" }> =>
+    limitCause({ spent: wait.reopensAt() !== undefined }) === "spent"
+        ? { kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true }
+        : { kind: "error", code: "provider-outage", throttle: true, message: LIMIT_WAIT_THROTTLED, own: true };

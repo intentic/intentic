@@ -21,6 +21,8 @@ import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../../../seams/workload-stamp.js";
+import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
+import { THROTTLE_WORDS } from "../frames/limits/limit-cause.testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
 jest.mock("../../prompt/preset-prompt.js", () => ({
@@ -1034,8 +1036,11 @@ test("any other non-success result is the harness failing, and says so", async (
     ]);
 });
 
+// The CLI's category says only that a request was rate-limited (limit-cause.ts): its words say whether a plan ran out.
 test("a rate_limit assistant error is tagged with a code and a human message, not a bare crash line", async () => {
-    const events = await collect(request, fakeQuery({ type: "assistant", session_id: "s", error: "rate_limit", message: { content: [] } }));
+    // The CLI's own sentence for a spent window, as the title namer's suite has it (title-namer.test.ts).
+    const spent = "You've hit your session limit · resets 11:50pm (UTC)";
+    const events = await collect(request, fakeQuery({ type: "assistant", session_id: "s", error: "rate_limit", message: { content: [{ type: "text", text: spent }] } }));
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         {
@@ -1045,6 +1050,11 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
             own: true,
         },
         { kind: "done" },
+    ]);
+    // With no words at all, nothing shows an allowance spent: a throttle, said in the sandbox's own words.
+    const bare = await collect(request, fakeQuery({ type: "assistant", session_id: "s", error: "rate_limit", message: { content: [] } }));
+    expect(bare.filter((event) => event.kind === "error")).toEqual([
+        { kind: "error", code: "provider-outage", throttle: true, message: expect.stringMatching(/^The provider is rate-limiting this model for now/u), own: true },
     ]);
 });
 
@@ -1246,7 +1256,8 @@ test("a retry storm past the in-turn bound ends the turn as an outage rather tha
 });
 
 // The CLI is still sleeping out its backoff when the stream ends on a spent allowance; left alone, the SDK's close waits
-// its 2 s stdin grace before killing it, and the chat's loader sits under the refusal that whole time.
+// its 2 s stdin grace before killing it, and the chat's loader sits under the refusal that whole time. A native turn's
+// delay is the provider's own word for when to ask again, here the rest of a window hours out.
 test("a spent allowance ending the stream interrupts the CLI's backoff rather than waiting out its close", async () => {
     withoutTmux();
     const interrupts: string[] = [];
@@ -1254,7 +1265,7 @@ test("a spent allowance ending the stream interrupts the CLI's backoff rather th
         Object.assign(
             (async function* () {
                 // SAFETY: the fields the fold reads off an api_retry, as the CLI sends them.
-                yield { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 10, retry_delay_ms: 500, error_status: 429, error: "rate_limit" } as SDKMessage;
+                yield { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 10, retry_delay_ms: 3 * 3_600_000, error_status: 429, error: "rate_limit" } as SDKMessage;
             })(),
             {
                 interrupt: async () => {
@@ -1266,6 +1277,24 @@ test("a spent allowance ending the stream interrupts the CLI's backoff rather th
     const events = await collect(request, queryFn);
     expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit" }));
     expect(interrupts).toEqual(["interrupt"]);
+});
+
+/* 2026-11-19: every rate-limited retry ended the turn as a spent allowance, and the classifier filed it so, holding a
+   native Claude account spent for an API 429 that lifted in seconds. A native turn's wait no longer than a retry's
+   horizon is the provider slowing requests down: ridden out live, as any retry is, and past the in-turn bound an outage
+   marked as the throttle it was, never a spent allowance. */
+test("a rate-limited retry with a short wait is ridden out live, not ended as a spent allowance", async () => {
+    const throttled = { type: "system", subtype: "api_retry", session_id: "s", max_retries: 10, retry_delay_ms: 2_000, error_status: 429, error: "rate_limit" } as const;
+    const events = await collect(request, fakeQuery({ ...throttled, attempt: 1 }));
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "provider_retry", attempt: 1, maxAttempts: 8, nextAttemptAt: expect.any(Number), status: 429 },
+        { kind: "done" },
+    ]);
+    const storm = await collect(request, fakeQuery({ ...throttled, attempt: 8 }));
+    expect(storm.filter((event) => event.kind === "error")).toEqual([
+        { kind: "error", code: "provider-outage", throttle: true, message: expect.stringMatching(/rate-limited 8 requests.*HTTP 429.*nothing it said shows an allowance spent/u), own: true },
+    ]);
 });
 
 test("a retry storm short of the bound is still absorbed in place: the turn keeps its session and says so", async () => {
@@ -1475,49 +1504,24 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
     }
 });
 
-// A refusal while an account may still serve the model is not a spent pool: CLIProxyAPI balances across credentials,
-// so one refused account isn't exhaustion, and the frame names no reset to wait for.
-test("a routed refusal with an account still able to serve says so, not a spent allowance", async () => {
-    const vendor = "Google";
+// A refusal while an account may still serve the model is not a spent pool: the gateway places each request on an
+// account of its own, so one refused account isn't exhaustion. Nor is one with no reading on file. Neither ends the turn
+// as a spent allowance: the loop rides it out, its retries going to the accounts that serve, and no reset is invented
+// from the SDK's backoff (2026-11-19: each used to end the turn coded `rate_limit`, filed against the provider).
+test.each([
+    ["an account still able to serve", { kind: "serving", serving: 1, accounts: 31 }],
+    ["no quota reading on file", { kind: "unknown" }],
+] as const)("a routed rate-limited retry with %s is ridden out, not ended as a spent allowance", async (_case, capacity) => {
     const events = await collect(
         {
             ...request,
-            credential: {
-                kind: "routed",
-                baseUrl: "http://127.0.0.1:8788",
-                authToken: "local",
-                allowance: { vendor, capacity: async () => ({ kind: "serving", serving: 1, accounts: 31 }) },
-            },
-        },
-        fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
-    );
-    const failure = events.find((event) => event.kind === "error") as { message: string; code: string; resetsAt?: number } | undefined;
-    expect(failure?.code).toBe("rate_limit");
-    expect(failure?.message).toContain(vendor);
-    expect(failure?.message).toContain("1/31");
-    expect(failure?.message).toMatch(/may still serve/i);
-    expect(failure?.resetsAt).toBeUndefined();
-    expect(events.at(-1)).toEqual({ kind: "done" });
-});
-
-// With no quota reading on file, no reset time is invented; `now + backoff` would read as already-reset and invite a
-// retry into a still-closed window.
-test("a routed usage-limit retry with no quota reading on file carries no reset at all", async () => {
-    const events = await collect(
-        {
-            ...request,
-            credential: {
-                kind: "routed",
-                baseUrl: "http://127.0.0.1:8788",
-                authToken: "local",
-                allowance: { vendor: "Google", capacity: async () => ({ kind: "unknown" }) },
-            },
+            credential: { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "local", allowance: { vendor: "Google", capacity: async () => capacity } },
         },
         fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", code: "rate_limit", message: expect.stringMatching(/Google.*usage limit/i), own: true },
+        { kind: "provider_retry", attempt: 1, maxAttempts: 8, nextAttemptAt: expect.any(Number), status: 429 },
         { kind: "done" },
     ]);
 });
@@ -1570,6 +1574,39 @@ test("a routed refusal takes the translator's own reset_seconds over the recorde
     } finally {
         jest.useRealTimers();
     }
+});
+
+/* The CLI files every 429 under its `rate_limit` category, a plan run out and an API slowing requests down alike
+   (limit-cause.ts). 2026-11-19: each was a spent allowance, filed against the account until something answered it. */
+describe("a rate_limit assistant error is a spent allowance only on evidence", () => {
+    const refusedWith = (text: string) =>
+        fakeQuery({ type: "assistant", session_id: "s", parent_tool_use_id: null, error: "rate_limit", message: { content: [{ type: "text", text }] } });
+    const routedOn = (capacity: FleetCapacity) => ({
+        ...request,
+        credential: { kind: "routed" as const, baseUrl: "http://127.0.0.1:8788", authToken: "local", allowance: { vendor: "Google", capacity: async () => capacity } },
+    });
+    const errors = (events: readonly AgentEvent[]) => events.filter((event) => event.kind === "error");
+
+    test("an API 429 on a native turn is a throttle, its words kept", async () => {
+        const [failure] = errors(await collect(request, refusedWith(THROTTLE_WORDS.anthropic)));
+        expect(failure).toMatchObject({ code: "provider-outage", throttle: true, message: expect.stringContaining("rate_limit_error") });
+    });
+
+    test("a routed one is a throttle while an account may serve, and spent once the records read every account spent", async () => {
+        expect(errors(await collect(routedOn({ kind: "serving", serving: 2, accounts: 31 }), refusedWith(THROTTLE_WORDS.google)))).toEqual([
+            expect.objectContaining({ code: "provider-outage", throttle: true }),
+        ]);
+        expect(errors(await collect(routedOn({ kind: "spent", accounts: 31 }), refusedWith(THROTTLE_WORDS.google)))).toEqual([
+            expect.objectContaining({ code: "rate_limit", own: true }),
+        ]);
+    });
+
+    test("the translator's own reset is spent past a retry's horizon, and a throttle short of it", async () => {
+        const cooldown = (seconds: number) => `API Error: 429 {"error":{"code":"model_cooldown","message":"${THROTTLE_WORDS.translator}","reset_seconds":${seconds}}}`;
+        const serving = routedOn({ kind: "serving", serving: 2, accounts: 31 });
+        expect(errors(await collect(serving, refusedWith(cooldown(1_800))))).toEqual([expect.objectContaining({ code: "rate_limit" })]);
+        expect(errors(await collect(serving, refusedWith(cooldown(20))))).toEqual([expect.objectContaining({ code: "provider-outage", throttle: true })]);
+    });
 });
 
 // A mid-session limit can arrive under a non-rate_limit category with only its sentence saying so; coded rate_limit but

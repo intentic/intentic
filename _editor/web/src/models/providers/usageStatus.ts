@@ -22,14 +22,28 @@ import {
     serviceStates,
     SPENT_UTILIZATION,
     standingOver,
+    usageAt,
     windowPeriod,
     type WindowPeriod,
 } from "@intentic/sandbox-contract/models/plan-pools";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import { formatWhen, timeAgo } from "@intentic/ui/format";
+import { sandboxNow } from "../agent-status/sandboxClock";
 import { t } from "@intentic/ui/i18n";
-import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
+import { type AccountFacts, accountFacts, factsOf, freshest, providerFacts, refusalsOf, routedAccountFacts, withRow } from "./capacity/doorFacts";
+import { verdictNow } from "./capacity/verdictClock";
+
+// Where the door's facts come from (a held capacity, else the stores), served from here too, so a surface reads one door.
+export { type AccountFacts, accountFacts, routedAccountFacts };
+export { capacityOf, degradedOf, flappingOf, refusalsOf } from "./capacity/doorFacts";
+
+/** Every refusal on file for each provider among `rows`, as the door holds them: what a group's refusal note is read from. */
+export const refusalsAmong = (rows: readonly { readonly provider: AgentProvider }[]): Readonly<Record<string, readonly ProviderRefusal[]>> =>
+    Object.fromEntries([...new Set(rows.map((row) => row.provider))].map((provider) => [provider, refusalsOf(provider)]));
+
+/** Whether a verdict lets a turn go to the account: room, or nothing measured or refused. */
+export const servesTurn = (state: AccountState | undefined): boolean => state?.kind === `ready` || state?.kind === `unknown`;
 
 // Re-exported so callers get the contract's binding-pool rule from this module too.
 export { bindingWindow };
@@ -83,27 +97,17 @@ export const usageTone = (percent: number): string =>
 // Past this a pool is drawn as tight; never a verdict, which is the contract's alone.
 const TIGHT_PERCENT = 75;
 
-// Reading for an account: the shared map (providerAccounts.usageByAccount) if present, else the attached
-// row a caller holds (used by planLimitRows). The map always wins: turns and daemon pushes keep it current.
-const freshest = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
-    lookupUsage(provider, account) ?? attached;
-
-// Every refusal on file for a provider, as the daemon holds them (agent.refusals, then each change pushed whole).
-const refusalsOf = (provider: AgentProvider): readonly ProviderRefusal[] => providerRefusals.value[provider] ?? [];
-
 // An account's reading as any surface should draw it: freshest data, with every refusal still standing over it laid on
 // (judgedReading), the contract's one rule, which the daemon's verdict reads too: a standing refusal reads its pool full
 // until the provider's own "try again at", and never a different allowance than the one that actually refused. `model`
-// picks which pool a refusal naming none pins.
-export const liveUsage = (provider: AgentProvider, account: string, attached?: AccountUsage, model?: ModelRef, now: number = Date.now()): AccountUsage | undefined => {
-    const usage = freshest(provider, account, attached);
-    const standing = standingOver(withRow(providerFacts(provider), account, { usage }), refusalsOf(provider), now);
+// picks which pool a refusal naming none pins. The reading is taken as it stands now (usageAt), as the rule takes it: a
+// window past its reset draws lapsed, never at the figure it was last read at.
+export const liveUsage = (provider: AgentProvider, account: string, attached?: AccountUsage, model?: ModelRef, now: number = verdictNow()): AccountUsage | undefined => {
+    const at = sandboxNow(now);
+    const usage = usageAt(freshest(provider, account, attached), at);
+    const standing = standingOver(withRow(providerFacts(provider), account, { usage }), refusalsOf(provider), at);
     return judgedReading(usage, standing(account), model);
 };
-
-// Translator subscriptions for a provider, or none if it holds no auth files for it.
-const routedAccounts = (provider: AgentProvider): TranslatorAccounts[keyof TranslatorAccounts] =>
-    translatorAccounts.value[provider as keyof TranslatorAccounts] ?? [];
 
 // Same as liveUsage, for a caller holding only an account id (composer chip, picker rows, a refused-turn
 // sentence) rather than a row.
@@ -458,54 +462,19 @@ export interface PlanLimitRow {
     readonly facts: ServiceFacts;
 }
 
-// An account row as the daemon sends it, whichever list it came in: the facts the serviceability rule reads.
-export type AccountFacts = ServiceFacts;
-
-/** A provider's own account row, as the serviceability rule reads it. */
-export const accountFacts = (account: OauthAccount): AccountFacts => ({
-    account: account.id,
-    needsReauth: account.needsReauth,
-    detail: account.detail,
-    seatRefusal: account.seatRefusal,
-    usage: account.usage,
-    label: account.label,
-});
-
-/** A routed credential, as the serviceability rule reads it. */
-export const routedAccountFacts = (account: TranslatorAccounts[keyof TranslatorAccounts][number]): AccountFacts => ({
-    account: account.name,
-    usage: account.usage,
-    cooling: account.cooling,
-    cooldowns: account.cooldowns,
-    label: account.label,
-    models: account.models,
-});
-
-// Every connection a provider holds (native and routed are one list to the reader, as they are to the daemon's
-// accountFactsOf), each with its freshest raw reading: never one the refusals were laid on, since judging a refusal on
-// such a reading would let a pinned 100% feed itself forever.
-const providerFacts = (provider: AgentProvider): readonly AccountFacts[] =>
-    [...(providerAccounts.value[provider] ?? []).map(accountFacts), ...routedAccounts(provider).map(routedAccountFacts)].map((facts) => ({
-        ...facts,
-        usage: freshest(provider, facts.account, facts.usage),
-    }));
-
-// The provider's facts with one account's row patched by what a caller holds (a fresher reading, the row it was handed),
-// or added where the lists do not hold it yet.
-const withRow = (facts: readonly AccountFacts[], account: string, patch: Partial<AccountFacts>): readonly AccountFacts[] =>
-    facts.some((entry) => entry.account === account)
-        ? facts.map((entry) => (entry.account === account ? { ...entry, ...patch } : entry))
-        : [...facts, { ...patch, account }];
-
 /**
  * Whether an account can serve a turn, by the contract's one rule (serviceStates) over everything the daemon judges by:
- * the provider's account rows, their freshest readings and every refusal on file. Nothing here keeps or trusts a verdict
- * the daemon computed earlier: the same facts and the same rule give the same answer, and a reading or a refusal that
- * streams in between lists moves it here and there alike. A question about one model asks about the pools it spends.
+ * the provider's accounts, their readings and every refusal on file, as its held capacity carries them, else as the
+ * stores hold them (doorFacts.ts). Where the capacity lists the account, its facts win over the row the caller hands in;
+ * the row speaks only for an account no capacity has judged yet. Nothing here keeps or trusts a verdict the daemon
+ * computed earlier: the same facts and the same rule give the same answer at the instant asked. A question about one
+ * model asks about the pools it spends. `now` is this browser's clock, by default the verdict clock (verdictClock.ts), so
+ * a computed asking here is asked again when the clock alone would move the answer; the rule is asked at the sandbox's
+ * reading of it (sandboxNow), since every instant it weighs (a reset, a refusal, a bench) is the sandbox's.
  */
-export const accountState = (provider: AgentProvider, facts: AccountFacts, model?: ModelRef, now: number = Date.now()): AccountState => {
-    const judged = withRow(providerFacts(provider), facts.account, { ...facts, usage: freshest(provider, facts.account, facts.usage) });
-    return serviceStates(judged, refusalsOf(provider), model, now).get(facts.account) ?? { kind: `unknown` };
+export const accountState = (provider: AgentProvider, facts: AccountFacts, model?: ModelRef, now: number = verdictNow()): AccountState => {
+    const judged = withRow(providerFacts(provider), facts.account, factsOf(provider, facts));
+    return serviceStates(judged, refusalsOf(provider), model, sandboxNow(now)).get(facts.account) ?? { kind: `unknown` };
 };
 
 /**
@@ -515,8 +484,8 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
  */
 // `usable` narrows the accounts asked to the ones a turn may run on (aiReach.ts), as the daemon narrows a person's turn,
 // after judging them all: which plans include the model is read across the whole provider (plan-pools.ts serviceStates).
-export const modelCapacity = (provider: AgentProvider, model: ModelRef | undefined, now = Date.now(), usable = (_account: string) => true): FleetCapacity =>
-    fleetOf(providerFacts(provider).filter((facts) => usable(facts.account)), serviceStates(providerFacts(provider), refusalsOf(provider), model, now));
+export const modelCapacity = (provider: AgentProvider, model: ModelRef | undefined, now = verdictNow(), usable = (_account: string) => true): FleetCapacity =>
+    fleetOf(providerFacts(provider).filter((facts) => usable(facts.account)), serviceStates(providerFacts(provider), refusalsOf(provider), model, sandboxNow(now)));
 
 // Common shape a row is built from: the daemon's facts, its label/identity. Named fields, not positionals — label and
 // identity are both strings and easy to swap by accident.
@@ -529,7 +498,8 @@ interface PlanLimitSource {
 
 const planLimitRow = (provider: AgentProvider, source: PlanLimitSource, now: number): PlanLimitRow => {
     const { account } = source.facts;
-    const usage = liveUsage(provider, account, source.facts.usage);
+    // The pools are drawn at the instant the row's verdict is judged at, never one a moment apart.
+    const usage = liveUsage(provider, account, source.facts.usage, undefined, now);
     const pools = usage === undefined ? [] : usagePools(usage);
     const binding = usage === undefined ? undefined : bindingPool(usage, pools, undefined);
     return {
@@ -547,13 +517,13 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource, now: num
         readable: reportsPlanLimits(provider),
         routed: source.routed,
         state: accountState(provider, source.facts, undefined, now),
-        facts: { ...source.facts, usage: freshest(provider, account, source.facts.usage) },
+        facts: factsOf(provider, source.facts),
     };
 };
 
 // Measured rows first, tightest on top — the account about to gate a turn should be visible without scrolling.
 // Unmeasured rows sink; unknown isn't headroom.
-export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts, now: number = Date.now()): PlanLimitRow[] =>
+export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts, now: number = verdictNow()): PlanLimitRow[] =>
     [
         ...Object.entries(native).flatMap(([provider, accounts]) =>
             accounts.map((account) =>
@@ -716,11 +686,11 @@ export interface RefusalNote {
 }
 
 // Whether the refusal is over is the contract's call (refusalVerdict, the one the daemon judges by); this only says it.
-export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: readonly ServiceFacts[], now: number = Date.now()): RefusalNote | undefined => {
+export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: readonly ServiceFacts[], now: number = verdictNow()): RefusalNote | undefined => {
     if (refusal === undefined) {
         return undefined;
     }
-    const verdict = refusalVerdict(refusal, accounts);
+    const verdict = refusalVerdict(refusal, accounts, sandboxNow(now));
     const answer = verdict === `gone` ? t(`chat.usageStatus.accountGone`) : verdict === `answered` ? REFUSAL_ANSWERED[refusal.kind]() : undefined;
     const opening = `${REFUSAL_CONDITION[refusal.kind]()} ${formatAge(refusal.at, now)}`;
     return {
@@ -733,7 +703,7 @@ export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: read
 
 // The provider's newest refusal read against everything since, for a caller holding only the provider: what the
 // composer footer and Agent tab print. Whether it still stands is the same verdict liveUsage pins a pool by.
-export const refusalFor = (provider: AgentProvider, now: number = Date.now()): RefusalNote | undefined =>
+export const refusalFor = (provider: AgentProvider, now: number = verdictNow()): RefusalNote | undefined =>
     refusalNote(newestRefusal(refusalsOf(provider)), providerFacts(provider), now);
 
 /** The newest refusal a provider has on file: the one a surface with room for a single line about it names. */

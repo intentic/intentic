@@ -41,11 +41,11 @@ test("reads every pool the limits list names, including the per-model slice the 
     // Resets land in whole seconds (the SDK's rate_limit-frame unit), converted from ISO-8601 with sub-second precision
     // and an offset.
     expect(claudeUsageWindows(LIVE_PAYLOAD)).toEqual([
-        { kind: "five_hour", utilization: 100, resetsAt: 1_785_691_800, gates: "all", rounded: true },
-        { kind: "seven_day", utilization: 10, resetsAt: 1_786_244_400, gates: "all", rounded: true },
+        { kind: "five_hour", utilization: 100, resetsAt: 1_785_691_800, periodSeconds: 18_000, gates: "all", rounded: true },
+        { kind: "seven_day", utilization: 10, resetsAt: 1_786_244_400, periodSeconds: 604_800, gates: "all", rounded: true },
         // Gated to the tier the plan named it by, so it binds a Fable turn and leaves a Haiku call alone. Whole percents, so
-        // the 100 above is at the line, not proven spent.
-        { kind: "model:Fable", label: "Fable", utilization: 82, resetsAt: 1_786_244_400, gates: { models: ["Fable"] }, rounded: true },
+        // the 100 above is at the line, not proven spent. A week long, as its key says, though its name says only "Fable".
+        { kind: "model:Fable", label: "Fable", utilization: 82, resetsAt: 1_786_244_400, periodSeconds: 604_800, gates: { models: ["Fable"] }, rounded: true },
     ]);
 });
 
@@ -68,10 +68,10 @@ test("names a surface-scoped pool by its surface, and an unrecognised one by its
         }),
     ).toEqual([
         // A surface alone is another product's allowance on this plan: shown, never binding a turn here.
-        { kind: "surface:Cowork", label: "Cowork", utilization: 40, gates: "none", rounded: true },
-        { kind: "model:Opus", label: "Opus · Cowork", utilization: 5, gates: { models: ["Opus"] }, rounded: true },
+        { kind: "surface:Cowork", label: "Cowork", utilization: 40, periodSeconds: 604_800, gates: "none", rounded: true },
+        { kind: "model:Opus", label: "Opus · Cowork", utilization: 5, periodSeconds: 604_800, gates: { models: ["Opus"] }, rounded: true },
         // Unscoped, so the plan's own, and it gates everything.
-        { kind: "claude:monthly_all", utilization: 12, gates: "all", rounded: true },
+        { kind: "claude:monthly_all", utilization: 12, periodSeconds: 2_592_000, gates: "all", rounded: true },
     ]);
 });
 
@@ -86,17 +86,39 @@ test("falls back to the flat pool keys when the payload carries no list", () => 
             limits: [],
         }),
     ).toEqual([
-        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all", rounded: true },
-        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all", rounded: true },
+        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, periodSeconds: 18_000, gates: "all", rounded: true },
+        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, periodSeconds: 604_800, gates: "all", rounded: true },
         // A flat key this sandbox's turns don't spend: shown, never binding.
-        { kind: "seven_day_cowork", utilization: 3, gates: "none", rounded: true },
+        { kind: "seven_day_cowork", utilization: 3, periodSeconds: 604_800, gates: "none", rounded: true },
+    ]);
+});
+
+// 2026-11-19: the length is stated where the endpoint's own key names it, once, so the rule never has to read it off a
+// name: a model's weekly slice is named only by its model ("Fable"), and read nothing at all off its words.
+test("states each pool's length by the period its key or group names, and none where neither names one", () => {
+    expect(
+        claudeUsageWindows({
+            limits: [
+                { kind: "five_hour", percent: 3, resets_at: null, scope: null },
+                { kind: "tangelo_scoped", group: "weekly", percent: 4, resets_at: null, scope: { model: { display_name: "Haiku" } } },
+                { kind: "tangelo", percent: 5, resets_at: null, scope: null },
+            ],
+        }).map((window) => [window.kind, window.periodSeconds]),
+    ).toEqual([
+        ["claude:five_hour", 18_000],
+        ["model:Haiku", 604_800],
+        ["claude:tangelo", undefined],
+    ]);
+    expect(claudeUsageWindows({ seven_day_oauth_apps: { utilization: 1 }, tangelo: { utilization: 2 } }).map((window) => [window.kind, window.periodSeconds])).toEqual([
+        ["seven_day_oauth_apps", 604_800],
+        ["tangelo", undefined],
     ]);
 });
 
 test("never counts purchased credits as a plan pool", () => {
     // extra_usage is credits bought beyond the plan; treating it as a pool would let spent credits skew headroom.
     expect(claudeUsageWindows({ extra_usage: { is_enabled: true, utilization: 96 }, five_hour: { utilization: 4, resets_at: null } })).toEqual([
-        { kind: "five_hour", utilization: 4, gates: "all", rounded: true },
+        { kind: "five_hour", utilization: 4, periodSeconds: 18_000, gates: "all", rounded: true },
     ]);
 });
 
@@ -197,8 +219,8 @@ test("a read refused in the organisation's words hands the account to the seat c
 // reader files one, every pool rounded, so a full pool reads at the line and only a refusal on file proves it spent.
 test("a test's Claude reading is filed as the reader files one: at the line until a refusal proves it spent", () => {
     const reading = claudeReading({ five_hour: { utilization: 100, resetsAt: 2_000_000_000 } }, 1_000);
-    expect(reading.windows).toEqual([{ kind: "five_hour", utilization: 100, resetsAt: 2_000_000_000, gates: "all", rounded: true }]);
-    expect(serviceState({ account: "a", usage: reading }, undefined, undefined, 1_000)).toEqual({ kind: "ready", room: 0, renewsAt: 2_000_000_000 });
+    expect(reading.windows).toEqual([{ kind: "five_hour", utilization: 100, resetsAt: 2_000_000_000, periodSeconds: 18_000, gates: "all", rounded: true }]);
+    expect(serviceState({ account: "a", usage: reading }, [], undefined, 1_000)).toEqual({ kind: "ready", room: 0, renewsAt: 2_000_000_000 });
     const refused = claudeLimitRefusal({ account: "a", resetsAt: 2_000_000_000, at: 500 });
     expect(serviceState({ account: "a", usage: reading }, [refused], undefined, 1_000)).toEqual({ kind: "spent", reopensAt: 2_000_000_000 });
 });

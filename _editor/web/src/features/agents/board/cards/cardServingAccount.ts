@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { ServingAccount } from "../../../../models/agent-status/agentStatus-chips";
-import { accountFacts, accountState } from "../../../../models/providers/usageStatus";
+import { accountFacts, accountState, servesTurn } from "../../../../models/providers/usageStatus";
 
 /**
  * The account a card runs on now, judged by the same verdict the picker reads (accountState): ready or unmeasured
@@ -13,6 +13,5 @@ export const cardServingAccount = (provider: AgentProvider, account: string | un
     if (row === undefined) {
         return undefined;
     }
-    const kind = accountState(provider, accountFacts(row)).kind;
-    return { label: row.label, serves: kind === `ready` || kind === `unknown` };
+    return { label: row.label, serves: servesTurn(accountState(provider, accountFacts(row))) };
 };

@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Logger } from "pino";
-import { answerCovers, preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { answerCovers } from "@intentic/sandbox-contract/models/plan-pools";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { join } from "node:path";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
@@ -9,15 +9,16 @@ import { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
 import type { CompositionCore } from "../../composition.js";
 import { tokenEquals } from "../../auth/token-equals.js";
-import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { readableProviderText } from "../../engines/provider-error-text.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import { TRANSLATOR_GATEWAY_PATH } from "../../http/translator-gateway-url.js";
 import { defineSlice } from "../../seams/slice.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
-import { namedReset, RETRY_HORIZON_S } from "../../usage/reset-sentences.js";
-import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
+import { namedReset } from "../../usage/reset-sentences.js";
+import type { ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
+import { saysSpent } from "../run/frames/limits/limit-cause.js";
+import { pinOrder } from "./accounts/placement.js";
 import { usageKey } from "./translator.js";
 import { logPins, PINNED_MODEL_ID } from "./translator-prefixes.js";
 import { type TranslatorGatewaySessions, translatorGatewaySessions } from "./translator-gateway-session.js";
@@ -34,12 +35,12 @@ import { type TranslatorGatewaySessions, translatorGatewaySessions } from "./tra
    the translator's own bearer, and the request goes on to the translator with its headers as they came. The session is
    an address signed for one provider under the gateway's own key (translator-gateway-session.ts): this door sits on the
    daemon's HTTP server, which the sandbox's public address reaches, and the bearer is a constant every image bakes in,
-   so an unsigned address is answered as no address at all, before the bearer is even read. One whose JSON
-   body names a model is placed by the sandbox's one rule (serviceability.ts, plan-pools.ts preferredAccount): the
-   provider's accounts that can serve that model, best first, then a spent one or two (SPENT_PROBES), each asked for by
-   its own prefix (`<prefix>/<model>`, translator-prefixes.ts), which the translator serves on that credential alone. A
-   spent allowance comes back from a known account: it is filed under that account with the provider's own words and
-   reset, the account is re-read, and the next one is tried, each at most once per request. An answer streams through untouched and, once it has come
+   so an unsigned address is answered as no address at all, before the bearer is even read. One whose JSON body names a
+   model is placed by the sandbox's one placement (accounts/placement.ts pinOrder): the provider's accounts that can
+   serve that model, best first, then a spent one or two as probes, each asked for by its own prefix (`<prefix>/<model>`,
+   translator-prefixes.ts), which the translator serves on that credential alone. A spent allowance comes back from a
+   known account: it is filed under that account with the provider's own words and reset, the account is re-read, and
+   the next one is tried, each at most once per request. An answer streams through untouched and, once it has come
    whole, settles what that account had refused of the model before the request went out. When every account refused,
    the loop gets the last refusal as it came. A request naming no model, or one with no account to pin, goes through
    unpinned, as it always did. */
@@ -96,46 +97,16 @@ export interface TranslatorGatewayDeps {
     readonly now?: () => number;
 }
 
-/* A SPENT ACCOUNT IS STILL ASKED, AFTER EVERY ONE WITH ROOM. A refusal this gateway filed names its account, and only
-   an answer pinned to that account settles it (settleOn): the turn's own answer names the subscription, not the account
-   the request landed on (frame-effects.ts readingAccount), and a refusal that named its reset outranks every reading of
-   the account until then (refusal-verdict.ts verdictOn). Left out of the ranking, a spent account was never asked again,
-   so once every account read spent each request went unpinned, was answered, and settled nothing: a ChatGPT allowance
-   OpenAI reset early read empty in every window while the person's forced Codex sends went through, and the composer
-   kept booking them for the old reset (2026-11-13). So after every account with room, the spent ones that refused
-   longest ago are asked too, at most SPENT_PROBES of them: one still spent refuses again at the cost of a round trip, and
-   the one that answers is settled the moment its answer comes whole. A bench, a revoked sign-in or a lost seat is never
-   asked: no window reopening lifts those. */
-const SPENT_PROBES = 2;
-
 /**
- * The accounts of a routed provider a request for `model` may be pinned to: those the verdict says can serve it (ready,
- * or nothing known against them), best first by the one rule every pick follows, then at most SPENT_PROBES the verdict
- * calls spent, the one refused longest ago first; only those the translator knows by their prefix.
+ * The accounts of a routed provider a request for `model` may be pinned to, in the order they are asked (placement.ts
+ * pinOrder: those that can serve it best first, then a spent one or two as probes), each with the prefix the translator
+ * knows it by; one it knows by none is left out.
  */
-export const pinnedCandidates = async (deps: ServiceabilityDeps, provider: KeyedProvider, model: string): Promise<readonly PinCandidate[]> => {
-    const [rows, onFile] = await Promise.all([serviceabilities(deps, provider, { id: model }), deps.providerRefusals.onFile()]);
-    const left = rows.filter((row) => row.state.kind === "ready" || row.state.kind === "unknown");
-    const ranked: PinCandidate[] = [];
-    for (let best = preferredAccount(left); best !== undefined; best = preferredAccount(left)) {
-        left.splice(left.indexOf(best), 1);
-        const prefix = deps.cliProxy.accountPrefix(best.id);
-        if (prefix !== undefined) {
-            ranked.push({ account: best.id, prefix });
-        }
-    }
-    // When each account was last refused, so a probe goes round them rather than asking the same one every time.
-    const refusedAt = (account: string): number =>
-        Math.max(0, ...(onFile[provider] ?? []).flatMap((refusal) => (refusal.account === account ? [refusal.at] : [])));
-    const probes = rows
-        .filter((row) => row.state.kind === "spent")
-        .toSorted((one, other) => refusedAt(one.id) - refusedAt(other.id))
-        .flatMap((row) => {
-            const prefix = deps.cliProxy.accountPrefix(row.id);
-            return prefix === undefined ? [] : [{ account: row.id, prefix }];
-        });
-    return [...ranked, ...probes.slice(0, SPENT_PROBES)];
-};
+export const pinnedCandidates = async (deps: ServiceabilityDeps, provider: KeyedProvider, model: string): Promise<readonly PinCandidate[]> =>
+    (await pinOrder(deps, provider, model, (account) => deps.cliProxy.accountPrefix(account) !== undefined)).flatMap((account) => {
+        const prefix = deps.cliProxy.accountPrefix(account);
+        return prefix === undefined ? [] : [{ account, prefix }];
+    });
 
 // The token a request presents, in any of the places the translator itself reads one from.
 const presented = (headers: Headers): string => {
@@ -215,7 +186,7 @@ const handedOn = (refusal: ReadRefusal): Response =>
    - `throttled`: any other 429, or RESOURCE_EXHAUSTED under another status. No allowance is in question, so nothing is
      filed and nothing re-read; another account may not be throttled, so a few are asked (THROTTLED_ASKS), and then the
      loop gets the throttle as it came, to retry on its own backoff. A turn that ends on it is an outage, not a spent
-     allowance (routed-throttle.ts throttleAsOutage, which reads throttledAt). */
+     allowance (limit-cause.ts throttleAsOutage, which reads throttledAt). */
 type RefusalCause = "spent" | "benched" | "throttled";
 
 // How many accounts a throttled request is tried on before the loop gets the throttle back. Model capacity throttles every
@@ -232,8 +203,8 @@ const causeOf = (refusal: ReadRefusal, now: number): RefusalCause | undefined =>
     if (refusal.status === 429 && TRANSLATOR_BENCH.test(refusal.text)) {
         return "benched";
     }
-    const reset = namedReset(readableProviderText(refusal.text), now) ?? namedReset(refusal.text, now);
-    if (mentionsSpentAllowance(refusal.text) || (reset !== undefined && reset - now / 1000 > RETRY_HORIZON_S)) {
+    // The words every runtime's rate limit is read by (limit-cause.ts): an allowance's, or a reset past a retry's.
+    if (saysSpent(refusal.text, now)) {
         return "spent";
     }
     return refusal.status === 429 || /RESOURCE_EXHAUSTED/u.test(refusal.text) ? "throttled" : undefined;

@@ -1,12 +1,13 @@
 import { accountServesLoop } from "@intentic/sandbox-contract/models/agent-catalog";
-import { flappingAccounts, offPlanVerdict, preferredAccount, reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
-import { type AgentHarness, AgentHarnessSchema, type AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { offPlanVerdict, preferredAccount, reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
+import { type AgentHarness, AgentHarnessSchema, type AgentLoop, type AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { subscriptionProviderOn } from "../../providers/access";
 import { offeredLoops, selectedLoop } from "../../providers/offeredLoops";
 import { mayRunOn } from "../../providers/aiReach";
-import { providerAccounts, providerSwitchOffs, translatorAccounts } from "../../providers/providerAccounts";
-import { accountFacts, accountState, routedAccountFacts } from "../../providers/usageStatus";
+import { providerAccounts, translatorAccounts } from "../../providers/providerAccounts";
+import { accountFacts, accountState, flappingOf, routedAccountFacts } from "../../providers/usageStatus";
+import { daemonPlacement } from "../../providers/capacity/daemonPlacement";
 import { type ServingAccount, servingAccount } from "./servingAccount";
 
 /* WHERE A TURN ON ONE PICK RUNS, AND WHAT THAT ACCOUNT'S ALLOWANCE SAYS: the one reading behind the composer's Send and
@@ -37,22 +38,24 @@ export interface RunServing {
 
 /* THE ONE PLACE A WINDOW WORKS OUT WHERE A TURN RUNS. The picker's tick, the composer's Send, a run button's allowance and
    the account a chat's first turn names (composerSelection.ts turnSettings) all read runServing, over the rows below,
-   which carry every fact the daemon's own pick reads (serviceability.ts unnamedAccount, account-reach.ts): each account's
+   which carry every fact the daemon's own pick reads (placement.ts unnamedPlacement, account-reach.ts): each account's
    verdict for the model, whether its organisation keeps switching it off (the switch-offs the refusals feed carries), and
    only the accounts the person may run on. Before 2026-11-15 the picker and the composer each built their own rows, and
    neither carried the flapping mark the daemon ranks by: the picker ticked an account as "Auto" that the daemon ranked
-   behind another, so a chat sent without a click ran on an account nobody had been shown. */
+   behind another, so a chat sent without a click ran on an account nobody had been shown. Since 2026-11-19 a turn naming
+   no account shows where the daemon itself says it would run it (usage.placement, asked with the chat's loop and
+   narrowed by the daemon to the accounts this person may run on), which also counts the load on each account; the rows'
+   own ranking only stands in against a daemon without that answer, or until it lands. */
 
 // The provider's accounts that could carry the turn, each judged for its model, in the provider's own order (the order
 // the daemon breaks ties by): a subscription's credentials, or the native accounts that serve the chosen loop and that
 // the person may run on (aiReach.ts, as the daemon narrows a person's turn), each marked where it flaps.
-const accountRows = (target: RunTarget, subscription: ReturnType<typeof subscriptionProviderOn>) => {
+const accountRows = (target: RunTarget, subscription: ReturnType<typeof subscriptionProviderOn>, loop: AgentLoop) => {
     const model = target.model === `` ? undefined : { id: target.model };
     if (subscription !== undefined) {
         return translatorAccounts.value[subscription].map((entry) => ({ id: entry.name, state: accountState(target.provider, routedAccountFacts(entry), model) }));
     }
-    const loop = selectedLoop(offeredLoops(target.provider), target.harness);
-    const flapping = flappingAccounts(providerSwitchOffs.value[target.provider], Date.now());
+    const flapping = flappingOf(target.provider);
     return (providerAccounts.value[target.provider] ?? [])
         .filter((entry) => accountServesLoop(target.provider, loop, entry) && mayRunOn(target.provider, entry.id))
         .map((entry) => ({ id: entry.id, state: accountState(target.provider, accountFacts(entry), model), flapping: flapping.has(entry.id) }));
@@ -75,14 +78,20 @@ const poolState = (all: readonly { readonly state: AccountState }[]): AccountSta
     }, preferred);
 };
 
-/** Where a turn on `target` runs and that account's verdict, by the daemon's own placement rules (servingAccount). */
-export const runServing = (target: RunTarget): RunServing => {
+/**
+ * Where a turn on `target` runs and that account's verdict, by the daemon's own placement rules (servingAccount): for a
+ * turn naming no account, where the daemon says it would place it (`placement`, daemonPlacement.ts by default).
+ */
+export const runServing = (target: RunTarget, placement: typeof daemonPlacement = daemonPlacement): RunServing => {
     const subscription = subscriptionProviderOn(target.provider, target.harness);
-    const rows = accountRows(target, subscription);
+    const loop = selectedLoop(offeredLoops(target.provider), target.harness);
+    const rows = accountRows(target, subscription, loop);
     if (subscription !== undefined) {
         return { account: undefined, state: poolState(rows) };
     }
-    const account = servingAccount(target.provider, rows, { account: target.account, named: target.named === true });
+    // Asked only for a turn that leaves the account to the daemon: one naming an account, or held to a record, runs there.
+    const placed = target.account === undefined ? placement(target.provider, target.model, loop) : undefined;
+    const account = servingAccount(target.provider, rows, { account: target.account, named: target.named === true, placed });
     return { account, state: rows.find((row) => row.id === account?.id)?.state };
 };
 

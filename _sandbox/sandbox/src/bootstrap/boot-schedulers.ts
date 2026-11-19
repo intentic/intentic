@@ -8,7 +8,10 @@ import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, owedReports, reportChildTurn } from "../agent/subagents/child-report.js";
 import { reportPeerMessageOutcome } from "../conversations/recall/fleet-message-outcome.js";
 import { onAccountReopened } from "../usage/serviceability/state-log.js";
-import { watchCapacity } from "../usage/serviceability/capacity-watch.js";
+import { watchCapacity,nudgeCapacity } from "../usage/serviceability/capacity-watch.js";
+import { provideCapacityPorts } from "../usage/serviceability/capacity-feed.js";
+import { LOAD_AWARE_PLACEMENT, placementFor } from "../agent/providers/accounts/placement.js";
+import { providerDegraded } from "../agent/providers/provider-health.js";
 import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents/children.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { followProjectArrival } from "../git/remote/project-arrival.js";
@@ -277,7 +280,17 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         ),
     );
     // Which is judged at the reopen a judgement saw ahead and on each new reading, not only when somebody asks.
+    // The two halves of a provider's capacity this layer knows (capacity-feed.ts ports): where an unnamed turn would run,
+    // by the one placement every turn takes (narrowed to one asker's loop and accounts for usage.placement), and whether
+    // the provider itself is failing turns.
+    shutdown.push(
+        provideCapacityPorts({ placementOf: (provider, model, narrow) => placementFor(services, provider, model, narrow), degradedOf: providerDegraded }),
+    );
     shutdown.push(inBackground("capacity-watch", () => watchCapacity(services)));
+    // A turn starting or ending moves a load-aware placement: where the next unnamed turn would run is said again.
+    const placementMoved = (): void => LOAD_AWARE_PLACEMENT.forEach(nudgeCapacity);
+    shutdown.push(services.events.subscribe("run.started", placementMoved));
+    shutdown.push(services.events.subscribe("run.settled", placementMoved));
     // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));

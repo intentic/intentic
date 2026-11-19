@@ -41,8 +41,9 @@ describe("a settled turn's allowance re-read", () => {
                 account: "acct",
                 usage: {
                     windows: [
-                        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all", rounded: true },
-                        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all", rounded: true },
+                        // Each with the length the reader states for its key (claude-usage.ts), read once here.
+                        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all", rounded: true, periodSeconds: 18_000 },
+                        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all", rounded: true, periodSeconds: 604_800 },
                     ],
                     measuredAt: expect.any(Number),
                 },

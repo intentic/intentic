@@ -8,8 +8,10 @@ import { limitBooking } from "./limit-booking.js";
 
 /* WHAT CARRIES A CONVERSATION ON NEXT WITH NOBODY PRESSING ANYTHING, DERIVED, NEVER KEPT (AgentSummary.next). Read off
    the very facts the movers act on, through the very rules they act by: the resume pass fires a spent allowance's held
-   turn by limitBooking, the room release lets a memory hold go by the conversation's answer to the memory wall
-   (room-holds.ts), and the booked release sends each message at its own booking (booked-release.ts). The card used to
+   turn by limitBooking, over the reading of the records it put on the hold itself (held-verdict.ts), so the instant and
+   the account the card names are the ones the pass goes at; the room release lets a memory hold go by the
+   conversation's answer to the memory wall (room-holds.ts), and the booked release sends each message at its own
+   booking (booked-release.ts). The card used to
    carry a copy of the first, written onto the stored ending at the failure and re-synced every beat, and nothing at all
    of the second, so the lane, the corner and the chat each guessed differently (2026-10-07 to 10-19). Now the registry
    asks this every time it projects the card, and a changed answer, a pick, a fire or a drop moves the card with it. */

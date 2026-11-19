@@ -1,8 +1,8 @@
 import type { AccountUsage, ModelCooldown, UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { GOOGLE_FAMILIES, GoogleModelsSchema, googleGates, googleModelsUsage, sameGates } from "./google/model-pools.js";
-import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
+import { GOOGLE_FAMILIES, GoogleModelsSchema, googleBucketPeriod, googleGates, googleModelsUsage, sameGates } from "./google/model-pools.js";
+import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso, statedPeriod } from "./payload.js";
 import { type JsonValue, parseJsonOr } from "@intentic/base/json";
 import type { AnswerWatch } from "./drift/answer-vocabulary.js";
 import { RETRY_HORIZON_S } from "./reset-sentences.js";
@@ -189,6 +189,7 @@ const appendCodexLimit = (
             ...(label === undefined ? {} : { label }),
             utilization: clampPercent(used),
             ...(resetsAt === undefined ? {} : { resetsAt }),
+            ...statedPeriod(duration),
             gates,
         });
     }
@@ -267,7 +268,7 @@ export const codexUsageFromRateLimits = (payload: unknown, measuredAt: number = 
         const minutes = asNumber(reading[`windowDurationMins`] ?? reading[`window_duration_mins`] ?? reading[`windowMinutes`]);
         const kind = codexWindowKind(minutes === undefined ? undefined : minutes * 60, position);
         const resetsAt = resetSeconds(reading[`resetsAt`] ?? reading[`resets_at`], undefined, measuredAt);
-        windows.push({ kind, utilization: clampPercent(used), ...(resetsAt === undefined ? {} : { resetsAt }), gates: "all" });
+        windows.push({ kind, utilization: clampPercent(used), ...(resetsAt === undefined ? {} : { resetsAt }), ...statedPeriod(minutes, 60), gates: "all" });
     }
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
@@ -306,6 +307,7 @@ export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Da
                 label: bucketName === undefined || bucketName === groupName ? groupName : `${groupName} · ${bucketName}`,
                 utilization: clampPercent((1 - remaining) * 100),
                 ...(resetsAt === undefined ? {} : { resetsAt }),
+                ...googleBucketPeriod(asString(bucket[`window`]), bucketId, bucketName),
                 gates: googleGates(groupName, bucketName, bucketId),
             });
         }
@@ -367,6 +369,7 @@ const appendKimiPool = (windows: UsageWindow[], value: unknown, seconds: number 
         ...(label === undefined ? {} : { label }),
         utilization: clampPercent((used / limit) * 100),
         ...(resetsAt === undefined ? {} : { resetsAt }),
+        ...statedPeriod(seconds),
         gates: "all",
     });
 };

@@ -33,6 +33,19 @@ describe("wakesResumePass", () => {
         expect(woke).toEqual(["turn-held"]);
     });
 
+    // The pass puts what it read of the records on the hold it read (held-verdict.ts): its own act, which wakes nothing.
+    it("wakes on a pick of where a spent allowance's hold goes, and not on the pass's own reading of it", () => {
+        const { conversations, woke } = watched();
+        conversations.send("c1", { kind: "turn-held", held: { input: { conversationId: "c1", prompt: "go on" }, reason: "limit", ran: true, reopensAt: 100 } });
+        const held = conversations.state("c1")?.resume.held;
+        if (held === undefined) {
+            throw new Error("expected a hold");
+        }
+        expect(conversations.send("c1", { kind: "held-read", judged: held, reading: { at: 160_000, reopensAt: 100 } }).reply).toBe(true);
+        conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: true });
+        expect(woke).toEqual(["turn-held", "held-repointed"]);
+    });
+
     it("wakes on words booked or queued, and on a land let go", () => {
         const { conversations, woke } = watched();
         conversations.send("c1", { kind: "queue-scheduled", item: { id: "m1", voice: "person", queuedAt: 1, turn }, booking: { until: 10 } });

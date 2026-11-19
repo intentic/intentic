@@ -31,6 +31,7 @@ import { MAX_BACKLOG_FRAMES } from "../seams/frame-backlog.js";
 import { connectedCount } from "./presence.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { version } from "../version.js";
+import { memoryProviderRefusalStore } from "../usage/provider-refusals.js";
 
 // System routes, driven over the daemon's HTTP surface as the browser does. Fakes and the client are shared
 // (route-services.testing.ts and siblings); what lives here is what these routes do.
@@ -890,4 +891,42 @@ test("system.metrics is not a guest's to read, and refusing one costs no reading
     );
     expect((await app.request("/system/metrics")).status).toBe(403);
     expect(readings).toBe(0);
+});
+
+// A window from before the capacity frame would refuse a frame it cannot read, so only a connection that asks for each
+// provider's capacity is sent it: as it stands when the connection opens, then again as it moves (2026-11-19).
+test("events: a connection asking for capacity is sent each provider's judged capacity; one that does not ask never is", async () => {
+    const refused = { at: Date.now() - 1_000, kind: "limit" as const, message: "Out of allowance", resetsAt: Math.floor(Date.now() / 1000) + 3_600 };
+    const client = clientFor(createApp(services({ providerRefusals: memoryProviderRefusalStore({ cursor: [refused] }) })));
+    const controller = new AbortController();
+    try {
+        // Reads frames until `stop` says so, answering the kinds seen; a heartbeat bounds how long a connection that was
+        // never sent one waited.
+        const kindsUntil = async (capacity: boolean, stop: (frame: SystemEvent) => boolean): Promise<SystemEvent[]> => {
+            const seen: SystemEvent[] = [];
+            const frames = (await client.system.events(capacity ? { capacity: "true" } : {}, { signal: controller.signal }))[Symbol.asyncIterator]();
+            for (;;) {
+                const { value, done } = await frames.next();
+                if (done === true) {
+                    return seen;
+                }
+                seen.push(value);
+                if (stop(value)) {
+                    return seen;
+                }
+            }
+        };
+        // Every provider with an account or a refusal comes, each in its own frame: the harness's own Claude account too.
+        const asked = await kindsUntil(true, (frame) => frame.kind === "capacity" && frame.capacity.provider === "cursor");
+        const capacity = asked.at(-1);
+        expect(capacity?.kind === "capacity" ? { provider: capacity.capacity.provider, refusals: capacity.capacity.refusals, accounts: capacity.capacity.accounts } : capacity).toEqual({
+            provider: "cursor",
+            refusals: [refused],
+            accounts: [],
+        });
+        const unasked = await kindsUntil(false, (frame) => frame.kind === "heartbeat");
+        expect(unasked.filter((frame) => frame.kind === "capacity")).toEqual([]);
+    } finally {
+        controller.abort();
+    }
 });

@@ -17,6 +17,7 @@ import {
 } from "../../../engines/failure-sentences.js";
 import { opt } from "../../../opt.js";
 import type { RefusalPoint } from "../refusal-fork.js";
+import { limitCause, limitFrame, throttled } from "./limits/limit-cause.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 
@@ -43,10 +44,12 @@ export const trialRetryFrame = (error: string): ErrorEvent => (error === "rate_l
 // `oauth_org_not_allowed`, `billing_error`, `invalid_request` for most 400s, `unknown` for the API errors the CLI does
 // not sort); the sentence is in the assistant message's text block, when present. Exported for the stream's repeat check
 // (harness/sdk-failure-stream.ts): the SDK repeats this sentence on exit, not the frame a case may have reworded.
-export const apiErrorMessage = (message: SDKAssistantMessage): string => {
+export const apiErrorMessage = (message: SDKAssistantMessage): string => explainedBy(message) ?? `agent error: ${message.error}`;
+
+// The assistant message's own sentence for its error, where it carries one.
+const explainedBy = (message: SDKAssistantMessage): string | undefined => {
     const content = message.message.content as ReadonlyArray<{ type: string; text?: string }>;
-    const explained = content.find((block) => block.type === "text" && block.text !== undefined && block.text.trim() !== "")?.text;
-    return explained ?? `agent error: ${message.error}`;
+    return content.find((block) => block.type === "text" && block.text !== undefined && block.text.trim() !== "")?.text;
 };
 
 // Reads `reset_seconds` from CLIProxyAPI's `model_cooldown` JSON body (epoch seconds added to now); requires both
@@ -70,11 +73,23 @@ const limitSentence = (vendor: string, capacity: FleetCapacity | undefined): str
     return `${vendor} usage limit reached: ${allowance} spent on ${accounts}. Send again once it resets.`;
 };
 
+// The turn's allowance as its records stand: absent for a provider with no quota surface (a keyed one, a native Claude
+// turn, which reports for itself), and for a read that failed, which only costs the sentence its figures.
+const capacityOf = async (allowance: TurnAllowance | undefined): Promise<FleetCapacity | undefined> => {
+    try {
+        return await allowance?.capacity?.();
+    } catch {
+        // allow(silent-catch): an unreadable allowance names no figures, and the failure is still said and decided.
+        return undefined;
+    }
+};
+
 // One frame for both paths a spent subscription allowance takes: a terminal assistant refusal, and an api_retry frame
-// with a long delay. `named` is what the failure itself said about the reset.
-export const rateLimitFrame = async (allowance: TurnAllowance | undefined, named: number | undefined): Promise<ErrorEvent> => {
+// with a long delay. `named` is what the failure itself said about the reset; `read` is the allowance already read by a
+// caller that decided on it (limit-cause.ts).
+const rateLimitFrame = async (allowance: TurnAllowance | undefined, named: number | undefined, read?: FleetCapacity): Promise<ErrorEvent> => {
     // Absent for a provider with no quota surface (a keyed one); falls back to the no-allowance sentence.
-    const capacity = await allowance?.capacity?.();
+    const capacity = read ?? (await capacityOf(allowance));
     return {
         kind: "error",
         code: "rate_limit",
@@ -84,15 +99,56 @@ export const rateLimitFrame = async (allowance: TurnAllowance | undefined, named
     };
 };
 
-// Reports the provider outage as `provider-outage`; claude-code-stream.ts's api_retry handles the wait from here.
-export const retryStormFrame = (attempts: number, status: number | undefined): ErrorEvent => ({
-    kind: "error",
-    code: "provider-outage",
-    message:
-        `Provider refused ${attempts} requests${status === undefined ? `` : ` (HTTP ${status})`}. ` +
-        `Work so far is kept; send again to resume. If it keeps failing, check the model and endpoint.`,
-    own: true,
-});
+/* The Claude CLI's `rate_limit` category, read for what it is. The CLI files every 429 under it, a plan run out and a
+   provider slowing requests down alike, so the category alone shows nothing spent (limit-cause.ts): the words show it
+   (the CLI's usage-limit prefixes, a reset past a retry, the translator's `reset_seconds`), or the records do, every
+   account of the turn's allowance read spent. Anything else is a throttle, an outage the breaker waits out with nothing
+   filed. Before 2026-11-19 every one was a spent allowance, so a native Claude account was held spent by an API 429. */
+const rateLimitedFrame = async (explained: string | undefined, allowance: TurnAllowance | undefined): Promise<ErrorEvent> => {
+    const named = explained === undefined ? undefined : proxyCooldownReset(explained);
+    const capacity = await capacityOf(allowance);
+    const cause = limitCause({ said: explained, retryAt: named, spent: capacity?.kind === "spent" });
+    // With no words of the provider's, the throttle is said in the sandbox's own.
+    const frame: ErrorEvent = explained === undefined ? { kind: "error", message: "", own: true } : { kind: "error", message: explained };
+    return cause === "spent" ? rateLimitFrame(allowance, named, capacity) : throttled(frame);
+};
+
+/* A rate limit the Claude CLI means to wait out (its api_retry), read for what it is (limit-cause.ts). On a native turn the
+   CLI's delay is the provider's own word for when to ask again, the rest of a spent window when it is further out than a
+   retry. On a routed turn it is only the SDK's backoff, and turned into an instant it invents a false reset, so the
+   records decide: every account of the turn's allowance read spent, the gateway having filed each refusal under its
+   account as it came. A spent allowance is the terminal frame the resume scheduler books for its reset; undefined is a
+   throttle, which the loop rides out as it does any retry. */
+export const retryLimitFrame = async (allowance: TurnAllowance | undefined, delayMs: number, now: number = Date.now()): Promise<ErrorEvent | undefined> => {
+    if (allowance === undefined) {
+        const retryAt = Math.ceil((now + delayMs) / 1000);
+        return limitCause({ retryAt, now }) === "spent" ? rateLimitFrame(undefined, retryAt) : undefined;
+    }
+    const capacity = await capacityOf(allowance);
+    return limitCause({ spent: capacity?.kind === "spent", now }) === "spent" ? rateLimitFrame(allowance, undefined, capacity) : undefined;
+};
+
+// Reports the provider outage as `provider-outage`; claude-code-stream.ts's api_retry handles the wait from here. A storm
+// of rate limits (`throttle`) is the provider slowing requests down, with nothing that said an allowance is spent.
+export const retryStormFrame = (attempts: number, status: number | undefined, throttle = false): ErrorEvent =>
+    throttle
+        ? {
+              kind: "error",
+              code: "provider-outage",
+              throttle: true,
+              message:
+                  `The provider rate-limited ${attempts} requests in a row${status === undefined ? `` : ` (HTTP ${status})`}, and nothing it said shows an allowance spent. ` +
+                  `Work so far is kept, and nothing is held against the account; it is tried again on the provider's backoff.`,
+              own: true,
+          }
+        : {
+              kind: "error",
+              code: "provider-outage",
+              message:
+                  `Provider refused ${attempts} requests${status === undefined ? `` : ` (HTTP ${status})`}. ` +
+                  `Work so far is kept; send again to resume. If it keeps failing, check the model and endpoint.`,
+              own: true,
+          };
 
 // A routed 5xx that is really the model not being on this plan (routed-refusal.ts); coded `model-unavailable` so the
 // picker drops it instead of retrying as an outage. A spent allowance arrives in the same envelope ("Failed to
@@ -187,9 +243,9 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
     if (trial) {
         return trialFrame(message);
     }
-    // Tagged as a usage cap, not a workspace fault; the only path that can read the translator's own reset.
+    // A spent allowance or a throttle, by the evidence; the only path that can read the translator's own reset.
     if (message.error === "rate_limit") {
-        return rateLimitFrame(allowance, proxyCooldownReset(apiErrorMessage(message)));
+        return rateLimitedFrame(explainedBy(message), allowance);
     }
     if (message.error === "server_error" || message.error === "overloaded") {
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
@@ -243,17 +299,15 @@ const sentenceFrame = (explained: string, category: SDKAssistantMessage["error"]
 // One way a runtime recognises a failure only its own loop words (a model id its server refuses), and the code it carries.
 export type FailureRule = readonly [recognizes: (message: string) => boolean, code: AgentErrorCode];
 
-// What every runtime's words are read for, after its own rules: a spent allowance or a rate limit, then a session past
-// its window. A provider's wording does not depend on the loop in front of it, so neither does this list.
-const SHARED_RULES: readonly FailureRule[] = [
-    [isRateLimited, "rate_limit"],
-    [isContextOverflowText, "context-overflow"],
-];
+// What every runtime's words are read for, after its own rules and a rate limit (below): a session past its window. A
+// provider's wording does not depend on the loop in front of it, so neither does this list.
+const SHARED_RULES: readonly FailureRule[] = [[isContextOverflowText, "context-overflow"]];
 
 /**
  * A provider's or a harness's failure coded by its words where nothing typed it: a parameter this sandbox never sent
  * first (`400 ... not supported on this model` would otherwise read as a bad model pick), then the runtime's own rules in
- * its order, then the rules every runtime shares. A coded frame, or one the sandbox worded itself (whose author coded it,
+ * its order, then a rate limit, a spent allowance or a throttle by its words (limit-cause.ts), then the rules every
+ * runtime shares. A coded frame, or one the sandbox worded itself (whose author coded it,
  * or left it uncoded on purpose), comes back as it is. Every runtime's frames pass through this at the one door they all
  * go out by (stream-agent's run loop), so a sentence read on one loop is read on all of them. What is read is what the
  * failure said, never the stderr its process printed behind it (withStderrTail): a crash is not a provider's limit. A
@@ -273,7 +327,15 @@ export const codedFailure = (frame: ErrorEvent, rules: readonly FailureRule[] = 
     if (isOutOfCreditText(said)) {
         return keyOutOfCreditFrame(sentenceOf(said, frame.message));
     }
-    const rule = [...rules, ...SHARED_RULES].find(([recognizes]) => recognizes(said));
+    const own = rules.find(([recognizes]) => recognizes(said));
+    if (own !== undefined) {
+        return { ...frame, code: own[1], message: sentenceOf(said, frame.message) };
+    }
+    // A rate limit in any vendor's words: a spent allowance where the words show one, else the throttle it is (limit-cause.ts).
+    if (isRateLimited(said)) {
+        return limitFrame({ ...frame, message: sentenceOf(said, frame.message) });
+    }
+    const rule = SHARED_RULES.find(([recognizes]) => recognizes(said));
     return rule === undefined ? frame : { ...frame, code: rule[1], message: sentenceOf(said, frame.message) };
 };
 

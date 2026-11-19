@@ -3,6 +3,7 @@ import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
+import { pino } from "pino";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
@@ -184,6 +185,15 @@ const fleet = (ledger: Record<string, readonly string[]>): Partial<Services> => 
         }),
         flapping: async () => new Set<string>(),
     }),
+    // The verdicts read Cursor's accounts off its door (serviceability.ts accountFactsOf), the store's own rows.
+    providerAccounts: async (provider) =>
+        provider === "cursor"
+            ? [
+                  { id: "one", label: "one", connectedAt: 0 },
+                  { id: "two", label: "two", connectedAt: 1 },
+              ]
+            : [],
+    logger: pino({ level: "silent" }),
 });
 
 const placed = async (overrides: Partial<Services>, input: Partial<AgentTurn> = {}) => {

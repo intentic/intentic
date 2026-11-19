@@ -1,9 +1,10 @@
 import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { refusedPoolReset, type ServiceFacts, type SwitchOffs } from "@intentic/sandbox-contract/models/plan-pools";
+import { type ServiceFacts, stampedRefusal, type SwitchOffs } from "@intentic/sandbox-contract/models/plan-pools";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
+import { opt } from "../opt.js";
 import { type EntitlementHistory, memoryEntitlementHistory } from "./entitlement-history.js";
 
 /* EVERY TIME A PROVIDER SAID NO, IN ONE LEDGER, at <historyRoot>/provider-refusals.json, outside the agent's reach.
@@ -74,9 +75,9 @@ const WEEK_MS = 7 * 24 * HOUR_MS;
 // A day, so one forgotten never grounds a provider for good; a turn answered on the account settles it sooner.
 const ENTITLEMENT_FOR_MS = 24 * HOUR_MS;
 // A spent allowance nothing can read back: no instant named, and no reading measures it (a plan that publishes none,
-// Cursor's or Devin's, or an admin's credit). Only a turn settles it, so it is believed as long as the role ladder
-// benches a refused rung (role-model.ts REFUSED_FOR_MS): one held a week stood against the spawn gate for an allowance
-// back in three and a half hours (2026-10-15).
+// Cursor's or Devin's, or an admin's credit). Only a turn settles it, so it is believed two hours, as long as the role
+// ladder once benched a refused rung (since 2026-11-19 the ladder reads this ledger instead, role-model.ts): one held a
+// week stood against the spawn gate for an allowance back in three and a half hours (2026-10-15).
 const OBSERVED_FOR_MS = 2 * HOUR_MS;
 
 // How long a refusal is believed when nothing settles or answers it first. Forgotten on read, not pruned on write.
@@ -131,9 +132,10 @@ const settledBy = (refusal: ProviderRefusal, answer: RefusalAnswer): boolean =>
 // and settled. A settle that finds nothing, the case on nearly every answered turn, writes nothing.
 export interface ProviderRefusalStoreOptions {
     readonly log?: (fields: Record<string, unknown>, message: string) => void;
-    // A provider's accounts as the verdict reads them, for stamping a spent allowance that named no instant with the
-    // reset of the pool it was refused in (refusedPoolReset). Without it nothing is stamped, and such a refusal stands
-    // until a reading answers it.
+    // A provider's accounts as the verdict reads them, for stamping a spent allowance with what their readings say of it
+    // as it is filed (stampedRefusal): the reset of the pool it was refused in where it named no instant, the pool its
+    // instant belongs to where it named one. Without it nothing is stamped: the first stands until a reading answers it,
+    // and the second's pool is worked out on every judgement, as before 2026-11-19.
     readonly accountsOf?: (provider: string) => Promise<readonly ServiceFacts[]>;
     // Where each account's switch-offs are kept; in memory where none is given.
     readonly history?: EntitlementHistory;
@@ -146,6 +148,8 @@ const described = (refusal: ProviderRefusal): Record<string, unknown> => ({
     ...(refusal.model === undefined ? {} : { model: refusal.model }),
     ...(refusal.resetsAt === undefined ? {} : { resetsAt: new Date(refusal.resetsAt * 1000).toISOString() }),
     ...(refusal.poolResetsAt === undefined ? {} : { poolResetsAt: new Date(refusal.poolResetsAt * 1000).toISOString() }),
+    ...opt("pool", refusal.pool),
+    ...opt("poolUnpublished", refusal.poolUnpublished),
     ...(refusal.byHand === true ? { byHand: true } : {}),
 });
 
@@ -178,17 +182,19 @@ export const memoryProviderRefusalStore = (
     );
 };
 
-// A spent allowance naming no instant, filed with the reset of the pool it was refused in, read now while the readings
+// A spent allowance filed with what the readings say of it now and will not say once its pool has moved on
+// (plan-pools.ts stampedRefusal). Naming no instant, the reset of the pool it was refused in, read while the readings
 // still show that pool open: past its reset a reading lapses it and another binds, so the instant is never read back
-// later. The verdict ends the refusal there (plan-pools.ts refusalVerdict), in the daemon and every open window at once,
-// rather than when the next reading lands.
+// later; the verdict ends the refusal there (refusalVerdict), in the daemon and every open window at once, rather than
+// when the next reading lands. Naming its instant, the pool that instant is the reset of (`pool`), or none the reading
+// published (`poolUnpublished`), resolved here once instead of on every judgement from whatever reading each held
+// (2026-11-19; a Codex refusal on one model held every model for four days, 2026-11-14).
 const stamped = async (accountsOf: ProviderRefusalStoreOptions["accountsOf"], provider: string, refusal: ProviderRefusal): Promise<ProviderRefusal> => {
-    if (accountsOf === undefined || refusal.kind !== "limit" || refusal.resetsAt !== undefined) {
+    if (accountsOf === undefined || refusal.kind !== "limit") {
         return refusal;
     }
-    // allow(silent-catch): accounts that cannot be read file the refusal unstamped, standing until a reading answers it
-    const poolResetsAt = refusedPoolReset(refusal, await accountsOf(provider).catch((): readonly ServiceFacts[] => []));
-    return poolResetsAt === undefined ? refusal : { ...refusal, poolResetsAt };
+    // allow(silent-catch): accounts that cannot be read file the refusal unstamped, judged on the readings as it stands
+    return stampedRefusal(refusal, await accountsOf(provider).catch((): readonly ServiceFacts[] => []));
 };
 
 // A settle heard while a refusal was being stamped, and when.
@@ -199,7 +205,7 @@ interface HeardSettle {
 }
 
 // The ledger with a refusal filed in its scope, or undefined where it is not to be: a newer one of the scope is on file
-// already (one stating its instant is filed without the wait a stamp takes, so it can land first), or a turn answered
+// already (each stamp waits on its own read of the accounts, so a later refusal can land first), or a turn answered
 // while it was being stamped proves it over, as that settle found nothing on file to settle yet (2026-10-21).
 const filedIn = (scopes: Map<string, ProviderRefusal>, provider: string, refusal: ProviderRefusal, heard: readonly HeardSettle[]): Stored | undefined => {
     const scope = scopeOf(provider, refusal);

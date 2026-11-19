@@ -1,23 +1,22 @@
 import type { AgentErrorCode } from "@intentic/sandbox-contract/events/agent-events";
 import { isRateLimited, withStderrTail } from "../../../engines/failure-sentences.js";
-import { codedFailure, type FailureRule } from "./error-frames.js";
+import { codedFailure, type FailureRule, retryLimitFrame } from "./error-frames.js";
+import { THROTTLE_WORDS } from "./limits/limit-cause.testing.js";
 
 /* ONE READING OF A FAILURE'S WORDS, FOR EVERY RUNTIME. Each loop used to read its vendor's sentences with its own list,
    and several read none (a thrown frame, Cursor, Muse's, a decorator's), so the same provider sentence was a held spent
    allowance on one loop and a dead turn re-run into the same wall on another. The door every runtime's frames go out by
    reads them all with this. The words below are real ones, taken from this sandbox's transcripts (2026-10-20). */
 
-// What the door codes, whichever loop said it.
+// What the door codes, whichever loop said it. A rate limit is a spent allowance only where the words show one
+// (limit-cause.ts); the rest are throttles, below.
 const CODED: readonly (readonly [string, AgentErrorCode])[] = [
-    ["Resource has been exhausted (e.g. check quota).", "rate_limit"],
-    ["exceeded retry limit, last status: 429 Too Many Requests", "rate_limit"],
     ["Increase limits for faster responses You're out of usage. Switch to Auto or Composer 2.5, or ask your admin to increase your limit to continue.", "rate_limit"],
     ["You’ve hit your usage limit. To get more access now, send a request to your admin or try again at 4:11 PM.", "rate_limit"],
     ["Your team has reached its usage limit Click Continue to enable on-demand usage", "rate_limit"],
     ["Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 65h4m34s.", "rate_limit"],
     ["You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends.", "rate_limit"],
     ["Failed to authenticate. API Error: 403 You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends.", "rate_limit"],
-    ["All credentials for model claude-opus-4-6-thinking are cooling down via provider antigravity", "rate_limit"],
     ["prompt is too long: maximum context length is 200000 tokens", "context-overflow"],
     ["400 invalid_request_error: Unsupported parameter: prompt_cache_retention is not found for this model", "provider-outage"],
     // A key's prepaid credit spent (2026-11-07, two Anthropic keys): the key's wall, which another model gets past.
@@ -25,6 +24,11 @@ const CODED: readonly (readonly [string, AgentErrorCode])[] = [
     ["Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.", "model-unavailable"],
     ["402 Insufficient Balance", "model-unavailable"],
 ];
+
+/* A rate limit whose words show nothing spent: a throttle, an outage marked `throttle` with nothing to file (2026-11-19:
+   each was `rate_limit` and filed as a spent allowance, holding a healthy account spent until something answered it).
+   Where each was met is said beside it (limit-cause.testing.ts). */
+const THROTTLED: readonly string[] = Object.values(THROTTLE_WORDS);
 
 // What the door leaves unnamed: the harness or the sandbox itself breaking, or a provider's words only its own loop can
 // read by type (a Claude 401, Cursor's role_forbidden, a 500 the CLI categorised). Unnamed is a kind of its own: the chat
@@ -45,6 +49,17 @@ const UNNAMED: readonly string[] = [
 
 test("every runtime's words for a spent allowance, a window outgrown or an unsent parameter are coded at the door", () => {
     expect(CODED.map(([message]) => `${message} → ${codedFailure({ kind: "error", message }).code}`)).toEqual(CODED.map(([message, code]) => `${message} → ${code}`));
+});
+
+test("a rate limit whose words show nothing spent is a throttle: an outage marked so, its words kept and said why", () => {
+    for (const message of THROTTLED) {
+        const frame = codedFailure({ kind: "error", message });
+        expect(frame, message).toMatchObject({ code: "provider-outage", throttle: true });
+        expect(frame.message, message).toContain("The provider is rate-limiting this model for now, not refusing an allowance");
+        expect(frame.resetsAt).toBeUndefined();
+    }
+    // A vendor's JSON body is read down to its message, before the sandbox's clause is said behind it.
+    expect(codedFailure({ kind: "error", message: THROTTLE_WORDS.anthropic }).message).toMatch(/^API Error: 429 This request would exceed the rate limit .* \(rate_limit_error\)\. The provider/u);
 });
 
 test("words nothing names stay unnamed, rather than guessed into a code they are not", () => {
@@ -80,8 +95,8 @@ test("a crash's stderr is never read as a provider's limit, by a number or a wor
         `Claude Code process exited with code 1. stderr: ${stack}`,
     ];
     expect(crashes.map((message) => codedFailure({ kind: "error", message }).code)).toEqual(crashes.map(() => undefined));
-    // The failure's own words, ahead of what the process printed, are still read.
-    expect(codedFailure({ kind: "error", message: `Pi rejected the prompt: 429 Too Many Requests. stderr: ${debug}` }).code).toBe("rate_limit");
+    // The failure's own words, ahead of what the process printed, are still read: a 429 that says nothing spent, a throttle.
+    expect(codedFailure({ kind: "error", message: `Pi rejected the prompt: 429 Too Many Requests. stderr: ${debug}` })).toMatchObject({ code: "provider-outage", throttle: true });
     // A 429 is a limit where it is the status, never where it is a line number.
     for (const sentence of ["API Error: 429", "unexpected status 429", 'upstream said {"code": 429}', "Request failed with status code 429", "HTTP/1.1 429"]) {
         expect(isRateLimited(sentence), sentence).toBe(true);
@@ -106,11 +121,30 @@ test("a frame its words coded goes out without the stderr behind them; one nothi
 test("a runtime's own rules are read before the shared ones, and an unsent parameter before both", () => {
     const own: readonly FailureRule[] = [[(message) => message.includes("not found"), "grok-model-invalid"]];
     expect(codedFailure({ kind: "error", message: "model not found (429)" }, own).code).toBe("grok-model-invalid");
-    expect(codedFailure({ kind: "error", message: "model not found (429)" }).code).toBe("rate_limit");
+    expect(codedFailure({ kind: "error", message: "model not found (429)" })).toMatchObject({ code: "provider-outage", throttle: true });
     const refused = "400 invalid_request_error: Unsupported parameter: prompt_cache_retention is not found for this model";
     expect(codedFailure({ kind: "error", message: refused }, own)).toEqual({
         kind: "error",
         code: "provider-outage",
         message: `${refused} This parameter was not sent by intentic. Usually clears on retry; work so far is kept.`,
+    });
+});
+
+/* The CLI's api_retry on a rate limit: on a native turn its delay is the provider's own word for when to ask again; on a
+   routed one it is only backoff, so the records decide. Undefined is a throttle the loop rides out. */
+describe("a rate-limited retry the Claude CLI means to wait out", () => {
+    const NOW = 1_800_000_000_000;
+    test("on a native turn is a spent allowance only where the wait runs past a retry's horizon, to that instant", async () => {
+        expect(await retryLimitFrame(undefined, 4 * 3_600_000, NOW)).toMatchObject({ code: "rate_limit", resetsAt: NOW / 1000 + 4 * 3_600 });
+        expect(await retryLimitFrame(undefined, 30_000, NOW)).toBeUndefined();
+    });
+
+    test("on a routed turn ignores the backoff and reads the records", async () => {
+        const spent = { vendor: "Gemini", capacity: async () => ({ kind: "spent" as const, accounts: 3 }) };
+        const serving = { vendor: "Gemini", capacity: async () => ({ kind: "serving" as const, serving: 2, accounts: 3 }) };
+        expect(await retryLimitFrame(spent, 1_000, NOW)).toMatchObject({ code: "rate_limit", own: true });
+        expect(await retryLimitFrame(serving, 4 * 3_600_000, NOW)).toBeUndefined();
+        // A records read that fails names nothing spent.
+        expect(await retryLimitFrame({ vendor: "Gemini", capacity: () => Promise.reject(new Error("translator unreachable")) }, 1_000, NOW)).toBeUndefined();
     });
 });

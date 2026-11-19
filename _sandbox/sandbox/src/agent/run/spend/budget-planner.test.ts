@@ -1,8 +1,9 @@
-import type { ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
+import { type ServiceFacts, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { opt } from "../../../opt.js";
 import type { RunOut, RunOuts } from "../../../usage/run-outs.js";
 import { beginPulse, endPulse } from "../turn/turn-pulse.js";
-import { claimBudget, dropClaim, forecastBudget, pickAccount, type PlannerDeps, resetBudgetPlanner } from "./budget-planner.js";
+import { claimBudget, dropClaim, forecastBudget, pickAccount, type PlanAccount, type PlannerDeps, resetBudgetPlanner } from "./budget-planner.js";
 
 /* 2026-10-20, 15:45: ten Opus children spawned in four minutes onto two Claude accounts that both read five-hour 84%
    left. Two agents ran on radarsu, the parent on artur. With what the sandbox had learned of a point's cost, the plan
@@ -25,6 +26,19 @@ const claude = (account: string, fiveHourUsed: number, fiveHourResetH: number, w
 });
 
 const READINGS = [claude("radarsu", 16, 2.7, 55), claude("artur", 16, 3.3, 71)];
+const OPUS = "claude-opus-5-5";
+
+// The accounts as the serviceability rule judges them for the plan's model, every one together and with nothing on file
+// against them: what serviceability.ts judgedAccounts hands the planner, from facts the test states.
+const judged = (readings: readonly ServiceFacts[], model: string = OPUS, at: number = NOW, flapping: readonly string[] = []): PlanAccount[] => {
+    const states = serviceStates(readings, [], { id: model }, at);
+    return readings.map((facts) => ({
+        id: facts.account,
+        state: states.get(facts.account) ?? { kind: "unknown" },
+        facts,
+        ...opt("flapping", flapping.includes(facts.account) ? (true as const) : undefined),
+    }));
+};
 
 const deps = (settings: Record<string, unknown> = {}): PlannerDeps => ({
     burnRates: {
@@ -34,7 +48,6 @@ const deps = (settings: Record<string, unknown> = {}): PlannerDeps => ({
         reading: async () => {},
         turnEnded: async () => {},
     },
-    providerRefusals: { onFile: async () => ({}), record: async () => {}, settle: async () => {}, drop: async () => false, flapping: async () => new Set(), switchOffs: async () => ({}), everySwitchOff: async () => ({}), onChange: () => () => {} },
     runOuts: { read: async () => ({}), record: async () => {} },
     sandboxSettings: { get: async () => SandboxSettingsSchema.parse(settings) },
 });
@@ -59,7 +72,7 @@ describe("the fan-out planner", () => {
     it("spreads ten children claimed at once across both accounts and holds the one they cannot carry", async () => {
         const claims = await Promise.all(
             Array.from({ length: 10 }, (_, index) =>
-                claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: READINGS, childId: `sub-${index}`, childrenRunning: index }, () => NOW),
+                claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(READINGS), childId: `sub-${index}`, childrenRunning: index }, () => NOW),
             ),
         );
         const placed = claims.flatMap((claim) => (claim.go ? [claim.account] : []));
@@ -73,34 +86,35 @@ describe("the fan-out planner", () => {
 
     it("frees a claim's place when its start fails", async () => {
         for (let index = 0; index < 9; index += 1) {
-            await claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: READINGS, childId: `sub-${index}`, childrenRunning: index }, () => NOW);
+            await claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(READINGS), childId: `sub-${index}`, childrenRunning: index }, () => NOW);
         }
         dropClaim("sub-0");
-        expect((await claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: READINGS, childId: "sub-9", childrenRunning: 8 }, () => NOW)).go).toBe(true);
+        expect((await claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(READINGS), childId: "sub-9", childrenRunning: 8 }, () => NOW)).go).toBe(true);
     });
 
     it("lets the first child go even where no account carries it, on the one that holds out longest", async () => {
         const full = [claude("radarsu", 90, 4, 55), claude("artur", 80, 4, 71)];
-        expect(await claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: full, childId: "sub-a", childrenRunning: 0 }, () => NOW)).toMatchObject({ go: true, account: "artur", short: true });
-        expect((await claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: full, childId: "sub-b", childrenRunning: 1 }, () => NOW)).go).toBe(false);
+        expect(await claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(full), childId: "sub-a", childrenRunning: 0 }, () => NOW)).toMatchObject({ go: true, account: "artur", short: true });
+        expect((await claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(full), childId: "sub-b", childrenRunning: 1 }, () => NOW)).go).toBe(false);
     });
 
     it("never holds a child with the budget switched off, but still places it", async () => {
         const full = [claude("radarsu", 90, 4, 55), claude("artur", 80, 4, 71)];
-        expect(await claimBudget(deps({ subagentBudget: false }), { provider: "claude", model: "claude-opus-5-5", readings: full, childId: "sub-a", childrenRunning: 5 }, () => NOW)).toMatchObject({ go: true, account: "artur" });
+        expect(await claimBudget(deps({ subagentBudget: false }), { provider: "claude", model: OPUS, accounts: judged(full), childId: "sub-a", childrenRunning: 5 }, () => NOW)).toMatchObject({ go: true, account: "artur" });
     });
 
     it("judges a routed provider's ready accounts as one pool, placing nothing", async () => {
         const codex = [claude("codex-a.json", 50, 2, 10), claude("codex-b.json", 100, 2, 10)];
-        const claim = await claimBudget(deps(), { provider: "codex", model: "gpt-6.1-sol", readings: codex, childId: "sub-c", childrenRunning: 0 }, () => NOW);
+        const claim = await claimBudget(deps(), { provider: "codex", model: "gpt-6.1-sol", accounts: judged(codex, "gpt-6.1-sol"), childId: "sub-c", childrenRunning: 0 }, () => NOW);
         expect(claim).toMatchObject({ go: true });
         expect(claim.go ? claim.account : "held").toBeUndefined();
     });
 
     it("forecasts how many more children fit and picks where a moved turn lands", async () => {
-        const forecast = await forecastBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: READINGS }, NOW);
+        const forecast = await forecastBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(READINGS) }, NOW);
         expect(forecast?.more).toBe(9);
-        expect(await pickAccount(deps(), { provider: "claude", model: "claude-opus-5-5", readings: READINGS, refused: "artur" })).toBe("radarsu");
+        // A moved turn is asked among the accounts it may land on: the one it leaves is not among them.
+        expect(await pickAccount(deps(), { provider: "claude", model: OPUS, accounts: judged(READINGS).filter((account) => account.id !== "artur") })).toBe("radarsu");
     });
 
     // 2026-11-17: Claude's Ultra plan meters only weekly windows. One account had 70 points left renewing in six days,
@@ -111,12 +125,12 @@ describe("the fan-out planner", () => {
             usage: { windows: [{ kind: "seven_day", utilization: used, resetsAt: Math.floor(at / 1000) + resetH * 3_600, gates: "all", rounded: true }], measuredAt: at },
         });
         const ultra = (at: number) => [weekly("later", 30, 144, at), weekly("sooner", 60, 10, at)];
-        const claim = await claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: ultra(NOW), childId: "sub-u", childrenRunning: 0 }, () => NOW);
+        const claim = await claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(ultra(NOW)), childId: "sub-u", childrenRunning: 0 }, () => NOW);
         expect(claim).toMatchObject({ go: true, account: "sooner" });
         // pickAccount reads the clock itself.
-        expect(await pickAccount(deps(), { provider: "claude", model: "claude-opus-5-5", readings: ultra(Date.now()), refused: undefined })).toBe("sooner");
-        const flapping: PlannerDeps = { ...deps(), providerRefusals: { ...deps().providerRefusals, flapping: async () => new Set(["sooner"]) } };
-        expect(await pickAccount(flapping, { provider: "claude", model: "claude-opus-5-5", readings: ultra(Date.now()), refused: undefined })).toBe("later");
+        const at = Date.now();
+        expect(await pickAccount(deps(), { provider: "claude", model: OPUS, accounts: judged(ultra(at), OPUS, at) })).toBe("sooner");
+        expect(await pickAccount(deps(), { provider: "claude", model: OPUS, accounts: judged(ultra(at), OPUS, at, ["sooner"]) })).toBe("later");
     });
 
     // 2026-11-08: Google meters Claude and GPT apart from Gemini, and each pool ran out under its own load. A Gemini child
@@ -136,7 +150,7 @@ describe("the fan-out planner", () => {
         const claudePool: RunOut = { at: NOW - 3_600_000, openedAt: NOW - 2 * 3_600_000, pool: "Claude and GPT models", kind: "google:models:claude", models: { "claude-opus-5-5": 10 } };
         const geminiPool: RunOut = { at: NOW - 60_000, openedAt: NOW - 60_000 - 100 * 3_600_000, pool: "Gemini models", kind: "google:models:gemini", models: { "gemini-3-flash": 2 } };
         const priced = async (runOuts: RunOuts) => {
-            const forecast = await forecastBudget({ ...deps(), runOuts: { read: async () => runOuts, record: async () => {} } }, { provider: "gemini", model: "gemini-3-flash", readings: [pools("g1.json")] }, NOW);
+            const forecast = await forecastBudget({ ...deps(), runOuts: { read: async () => runOuts, record: async () => {} } }, { provider: "gemini", model: "gemini-3-flash", accounts: judged([pools("g1.json")], "gemini-3-flash") }, NOW);
             return forecast?.plan.accounts[0]?.windows.map((window) => [window.kind, window.tokensPerPoint]);
         };
         // A window with no length named prices a point at one per agent hour; the Gemini pool's run-out says half that.

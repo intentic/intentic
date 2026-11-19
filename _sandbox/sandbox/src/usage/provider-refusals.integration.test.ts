@@ -227,12 +227,44 @@ test("files a spent allowance that named no instant with the reset of the pool i
     const spent = refusal({ model: "gpt-6.1-sol" });
     await store.record("codex", spent);
     expect((await fileProviderRefusalStore(path).onFile())[`codex`]).toEqual([{ ...spent, poolResetsAt: inAnHour }]);
-    // The provider's own instant needs no stamp, and a refused sign-in has no pool: neither reads the accounts.
+    // The provider's own instant is stamped with the pool it is the reset of instead (refusedPoolOf, next test), and a
+    // refused sign-in has no pool: it never reads the accounts.
     const stated = refusal({ model: "gpt-6-luna", resetsAt: inAnHour + 60 });
     await store.record("codex", stated);
     await store.record("codex", refusal({ kind: "auth", account: "team.json" }));
-    expect(asked).toEqual(["codex"]);
-    expect((await store.onFile())[`codex`]).toEqual(expect.arrayContaining([stated]));
+    expect(asked).toEqual(["codex", "codex"]);
+    expect((await store.onFile())[`codex`]).toEqual(expect.arrayContaining([{ ...stated, pool: "five_hour" }]));
+});
+
+// 2026-11-19: which pool a refusal's instant belongs to was worked out again on every judgement, from whatever reading
+// each held, and a Codex refusal on one model was pinned on the weekly pool every model spends for four days
+// (2026-11-14). The ledger resolves it once, from the refused account's reading as it files the refusal.
+test("files a spent allowance that named its instant with the pool that instant is the reset of, or none the reading published", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "provider-refusals-")), "provider-refusals.json");
+    const now = Math.floor(Date.now() / 1000);
+    const reading = {
+        measuredAt: Date.now() - 60_000,
+        windows: [
+            { kind: "five_hour", utilization: 36, gates: "all" as const, resetsAt: now + 3_600, periodSeconds: 18_000 },
+            { kind: "seven_day", utilization: 30, gates: "all" as const, resetsAt: now + 4 * 86_400, periodSeconds: 604_800 },
+        ],
+    };
+    const store = fileProviderRefusalStore(path, { accountsOf: async () => [{ account: "team.json", usage: reading }, { account: "free.json" }] });
+    const weekly = refusal({ account: "team.json", model: "gpt-6.1-sol", resetsAt: now + 4 * 86_400 + 120 });
+    const ownCap = refusal({ account: "team.json", model: "gpt-6.2-sol", resetsAt: now + 2 * 86_400 });
+    // Naming no account over two: whose pool it was is unknown, so it is judged on each account's reading as it stands.
+    const nameless = refusal({ model: "gpt-6-luna", resetsAt: now + 3_600 });
+    // The account it names has no reading to say with.
+    const unread = refusal({ account: "free.json", model: "gpt-6-luna", resetsAt: now + 3_600 });
+    for (const filed of [weekly, ownCap, nameless, unread]) {
+        await store.record("codex", filed);
+    }
+    expect((await fileProviderRefusalStore(path).onFile())[`codex`]).toEqual([
+        { ...weekly, pool: "seven_day" },
+        { ...ownCap, poolUnpublished: true },
+        nameless,
+        unread,
+    ]);
 });
 
 test("files a refusal unstamped when the accounts cannot be read, to stand until a reading answers it", async () => {
@@ -243,22 +275,25 @@ test("files a refusal unstamped when the accounts cannot be read, to stand until
     expect((await store.onFile())[`codex`]).toEqual([spent]);
 });
 
-// 2026-10-21: filing a spent allowance that named no instant waits on the accounts (to stamp its pool's reset), and the
-// write then replaced the slot whatever it held. Refused twice in one scope, the later refusal (its instant stated, so
-// filed at once) was overwritten by the earlier one landing after it, and a turn answered meanwhile found nothing to settle.
+// 2026-10-21: filing a spent allowance waits on the accounts (to stamp its pool), and the write then replaced the slot
+// whatever it held. Refused twice in one scope, the later refusal (its instant stated, so filed at once then; since
+// 2026-11-19 it is stamped too, and the accounts can still answer it sooner) was overwritten by the earlier one landing
+// after it, and a turn answered meanwhile found nothing to settle.
 test("a refusal filed late never replaces a newer one of its scope, and yields to a turn answered while it was filed", async () => {
     const reading = { measuredAt: Date.now() - 60_000, windows: [{ kind: "five_hour", utilization: 97, gates: "all" as const, resetsAt: Math.floor(Date.now() / 1000) + 3_600 }] };
-    const slowAccounts = async (): Promise<readonly ServiceFacts[]> => {
-        await new Promise((resolve) => setTimeout(resolve, 50));
+    // Each read of the accounts takes the next of these delays (ms): the first slow, so the refusal stamped first lands last.
+    const slowAccounts = (delays: number[]) => async (): Promise<readonly ServiceFacts[]> => {
+        await new Promise((resolve) => setTimeout(resolve, delays.shift() ?? 0));
         return [{ account: "a", usage: reading }];
     };
-    const store = memoryProviderRefusalStore({}, { accountsOf: slowAccounts });
+    const store = memoryProviderRefusalStore({}, { accountsOf: slowAccounts([50, 0]) });
     const older = refusal({ at: Date.now() - 2_000, account: "a", model: "claude-opus-5-5", message: "rate limit" });
     const newer = refusal({ at: Date.now() - 1_000, account: "a", model: "claude-opus-5-5", message: "try again at 1:53 PM", resetsAt: Math.floor(Date.now() / 1000) + 7_200 });
     await Promise.all([store.record("claude", older), store.record("claude", newer)]);
-    expect((await store.onFile())[`claude`]).toEqual([newer]);
+    // Its instant two hours out is the reset of no pool the five-hour reading publishes: a pool of its own.
+    expect((await store.onFile())[`claude`]).toEqual([{ ...newer, poolUnpublished: true }]);
 
-    const answered = memoryProviderRefusalStore({}, { accountsOf: slowAccounts });
+    const answered = memoryProviderRefusalStore({}, { accountsOf: slowAccounts([50]) });
     const spent = refusal({ at: Date.now() - 1_000, account: "a", model: "claude-opus-5-5" });
     await Promise.all([answered.record("claude", spent), answered.settle("claude", { account: "a", model: "claude-opus-5-5", askedAt: Date.now() })]);
     expect(await answered.onFile()).toEqual({});

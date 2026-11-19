@@ -2,6 +2,7 @@ import {
     OUTAGE_MAX_ATTEMPTS,
     outageRetryDue,
     outageRetryFired,
+    providerDegraded,
     providerOutage,
     recordProviderFailure,
     recordProviderSuccess,
@@ -77,4 +78,29 @@ test("providers are independent: one vendor's outage never gates another's", () 
     recordProviderFailure("ph-a", NOW);
     expect(outageRetryDue("ph-a", NOW)).toBe(false);
     expect(outageRetryDue("ph-b", NOW)).toBe(true);
+});
+
+/* A throttle opens the same backoff as an outage and its capacity says which it is (ProviderDegraded.cause), named by the
+   failure that opened the wait (2026-11-19: a provider throttling every request read as down). */
+test("the wait says what opened it: a throttle or an outage, kept through its episode and named again by the next", () => {
+    expect(providerDegraded("ph-cause")).toBeUndefined();
+    const opened = recordProviderFailure("ph-cause", NOW, "throttle");
+    expect(providerDegraded("ph-cause")).toEqual({ cause: "throttle", retryAt: opened.retryAt, attempt: 0 });
+    // A failure of the other kind inside the running wait is the same episode.
+    recordProviderFailure("ph-cause", NOW + 1_000, "outage");
+    expect(providerDegraded("ph-cause")?.cause).toBe("throttle");
+    // A resume going out keeps it.
+    outageRetryFired("ph-cause", opened.retryAt);
+    const resumed = providerDegraded("ph-cause");
+    expect(resumed).toMatchObject({ cause: "throttle", attempt: 1 });
+    // The next wait the provider earns is named by the failure that opens it.
+    recordProviderFailure("ph-cause", resumed?.retryAt ?? NOW, "outage");
+    expect(providerDegraded("ph-cause")).toMatchObject({ cause: "outage", attempt: 1 });
+    recordProviderSuccess("ph-cause");
+    expect(providerDegraded("ph-cause")).toBeUndefined();
+});
+
+test("a failure that names no cause is an outage", () => {
+    recordProviderFailure("ph-default", NOW);
+    expect(providerDegraded("ph-default")?.cause).toBe("outage");
 });

@@ -22,7 +22,8 @@ import { endpointModelId } from "../../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
 import { opt } from "../../opt.js";
 import { turnRole } from "../../roles/roles.js";
-import { type ServiceabilityDeps, unnamedAccount } from "../../usage/serviceability/serviceability.js";
+import type { ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
+import { unnamedPlacement } from "../../agent/providers/accounts/placement.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
 import { daemonServersFor, type DaemonServersDeps } from "../daemon-tools/daemon-servers.js";
 import { createMuseAgent } from "./muse-agent.js";
@@ -49,12 +50,12 @@ type MuseCredentialPlan = { readonly ok: true; readonly credential: MuseCredenti
 const META_REQUIRED = "Connect your Muse Code subscription in Sandbox ▸ Agent to run Muse Code.";
 
 // Meta's key, as its sign-in minted it: the account the conversation runs on, else the one the sandbox's rule picks
-// (serviceability.ts unnamedAccount). A named account that is gone refuses: running on another one instead is a switch
+// (placement.ts unnamedPlacement). A named account that is gone refuses: running on another one instead is a switch
 // nobody chose.
 const metaCredential = async (services: Pick<Services, "minted"> & ServiceabilityDeps, input: RoutedAgentTurn): Promise<MuseCredentialPlan> => {
     const accounts = await services.minted.meta.store.credentials();
     const picked =
-        input.account === undefined ? await unnamedAccount(services, "meta", accounts, input.model) : accounts.find((account) => account.id === input.account);
+        input.account === undefined ? await unnamedPlacement(services, "meta", accounts, input.model) : accounts.find((account) => account.id === input.account);
     if (picked === undefined) {
         return input.account === undefined
             ? { ok: false, code: "subscription-required", message: META_REQUIRED }

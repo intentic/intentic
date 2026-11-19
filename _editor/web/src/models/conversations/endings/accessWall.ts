@@ -3,7 +3,7 @@ import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/
 import { computed, type ComputedRef } from "vue";
 import { usePaneView } from "../panel/useChat-view";
 import { anotherProviderReady } from "../../providers/access";
-import { accountFacts, accountState } from "../../providers/usageStatus";
+import { accountFacts, accountState, servesTurn } from "../../providers/usageStatus";
 
 /* WHEN A PERSON IS TRULY NEEDED. A provider refused the conversation's account outright (its organization or plan turned
    access off), and no other account of that provider can serve it. Where another one can, the sandbox moves the
@@ -35,8 +35,6 @@ export interface WallFacts {
     readonly elsewhere: boolean;
 }
 
-// An account a turn may go to: one with room, or one nothing has measured or refused.
-const serves = (state: AccountState | undefined): boolean => state?.kind === `ready` || state?.kind === `unknown`;
 
 /**
  * The wall, where it stands: the last turn was refused for access, the account the next one would run on cannot serve
@@ -44,10 +42,10 @@ const serves = (state: AccountState | undefined): boolean => state?.kind === `re
  * the provider can.
  */
 export const accessWallOf = (facts: WallFacts): AccessWall | undefined => {
-    if (facts.failureCode === undefined || !ACCESS_REFUSALS.has(facts.failureCode) || serves(facts.serving.state)) {
+    if (facts.failureCode === undefined || !ACCESS_REFUSALS.has(facts.failureCode) || servesTurn(facts.serving.state)) {
         return undefined;
     }
-    if (facts.accounts.some((account) => account.id !== facts.serving.id && serves(account.state))) {
+    if (facts.accounts.some((account) => account.id !== facts.serving.id && servesTurn(account.state))) {
         return undefined;
     }
     return { provider: facts.provider, account: facts.accounts.find((account) => account.id === facts.serving.id)?.label, elsewhere: facts.elsewhere };

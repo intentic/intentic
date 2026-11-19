@@ -140,11 +140,11 @@ const runOutsOf = (runOuts: RunOuts, provider: string): RunOut[] =>
 export const newestRunOut = (runOuts: RunOuts, provider: string): RunOut | undefined => runOutsOf(runOuts, provider)[0];
 
 // Whether a record is of this window: by its key, or by its name for a record written before the key was kept.
-const ranOutIn = (runOut: RunOut, window: Pick<UsageWindow, "kind" | "label">): boolean =>
+const ranOutIn = (runOut: RunOut, window: Pick<UsageWindow, "kind" | "label" | "periodSeconds">): boolean =>
     runOut.kind === undefined ? runOut.pool !== undefined && runOut.pool === poolName(window) : runOut.kind === window.kind;
 
 /** The last run-out of one of the provider's pools, where it ran out within the week. */
-export const poolRunOut = (runOuts: RunOuts, provider: string, window: Pick<UsageWindow, "kind" | "label">): RunOut | undefined =>
+export const poolRunOut = (runOuts: RunOuts, provider: string, window: Pick<UsageWindow, "kind" | "label" | "periodSeconds">): RunOut | undefined =>
     runOutsOf(runOuts, provider).find((runOut) => ranOutIn(runOut, window));
 
 /**
@@ -175,7 +175,7 @@ const PERIOD_NAMES = new Map([
     ["24h", "daily"],
 ]);
 
-export const poolName = (window: Pick<UsageWindow, "kind" | "label">): string | undefined => {
+export const poolName = (window: Pick<UsageWindow, "kind" | "label" | "periodSeconds">): string | undefined => {
     if (window.label !== undefined) {
         return window.label;
     }

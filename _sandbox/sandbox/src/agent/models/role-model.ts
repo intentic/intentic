@@ -7,12 +7,12 @@ import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contrac
 import { ladderIsEmpty, ladderPins, roleLadder, type SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
 import type { Services } from "../../composition.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
-import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { type DeclaredWindow, declaredWindow, helperOverflow, helperPromptRoom } from "../prompt/window/context-budget.js";
 import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "../../engines/role-answer.js";
-import { rungCapacity, spentRung } from "./role-model-quota.js";
+import { spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { runSealedRequest } from "../run/sealed/sealed-request.js";
+import { SpentAllowanceError } from "../run/sealed/spent-allowance-error.js";
 import { SealedDeadlineError } from "../run/sealed/sealed-deadline.js";
 import { opt } from "../../opt.js";
 import { AgentDomainRefusedError, assertAgentExecutionContext, type AgentExecutionContext } from "../../workload/agent-execution.js";
@@ -111,9 +111,17 @@ export type RoleModelProgress = (attempts: readonly RoleModelAttempt[]) => void;
 // "[object Object]" in the report.
 const refusalText = (error: unknown): string => errorMessage(error);
 
-// In-memory memo: a spent allowance lasts REFUSED_FOR_MS; any other refusal lasts OTHER_REFUSED_FOR_MS, except a
-// BAD_SAMPLE, which earns none.
-export const REFUSED_FOR_MS = 2 * 60 * 60 * 1000;
+/* A SHORT MEMO OF A RUNG'S LAST REFUSAL, FOR ITS HEALTH, NEVER ITS ALLOWANCE. In memory: a refusal lasts
+   OTHER_REFUSED_FOR_MS, so a rung that just failed (a throttle, an outage, a refused sign-in, a model off the plan) is
+   stepped over for the next asks rather than asked into the same wall each time; an answer clears it, and so does the
+   clock, since none of those announces its end. A bad sample earns none (BAD_SAMPLES, below).
+   Nor does a spent allowance. The sealed request filed it on the refusal ledger before it threw (sealed-request.ts
+   SpentAllowanceError), and the next walk reads the rung spent off the ledger and the fleet's capacity
+   (role-model-quota.ts spentRung), the record the spawn gate, the picker and placement read too, which stands until the
+   provider's reset, a reading with room or an answer. (2026-11-19) The memo used to hold a rung two hours for any
+   refusal whose words said "usage limit", beside the ledger: a second copy with a horizon of its own, which kept a rung
+   off the ladder after its allowance had reopened. Keeping that half and timing it off the ledger instead was rejected:
+   the ledger already is the timing. */
 export const OTHER_REFUSED_FOR_MS = 10 * 60 * 1000;
 
 // An unusable reply or a missed deadline: one bad sample, not a lasting condition, so the next ask asks the rung again.
@@ -121,18 +129,18 @@ export const OTHER_REFUSED_FOR_MS = 10 * 60 * 1000;
 // after one slow commit subject, with its accounts free (2026-11-06).
 const BAD_SAMPLES = [UnusableAnswerError, SealedDeadlineError] as const;
 
+// What earns no memo: a bad sample, and a spent allowance, which the ledger holds (above).
+const UNMEMOED = [...BAD_SAMPLES, SpentAllowanceError] as const;
+
 interface Memo {
-    readonly at: number;
     readonly until: number;
     readonly reason: string;
-    readonly kind: "limit" | "other";
 }
 
 const refusals = new Map<string, Memo>();
 
 const remember = (key: string, reason: string, now: number): void => {
-    const kind = mentionsSpentAllowance(reason) ? "limit" : "other";
-    refusals.set(key, { at: now, until: now + (kind === "limit" ? REFUSED_FOR_MS : OTHER_REFUSED_FOR_MS), reason, kind });
+    refusals.set(key, { until: now + OTHER_REFUSED_FOR_MS, reason });
 };
 
 // What this rung last refused with, while the memo still stands; undefined means ask it (expired, or never refused).
@@ -264,23 +272,10 @@ export const askRoleModel = async <T>(
     };
     const now = Date.now();
     const skipped: RoleModelRefusal[] = [];
-    // Reason not to ask this rung: the memo from its last refusal, or (if unheld) the account reading. A reading with
-    // room measured after a `limit` memo's timestamp overrides it; other refusal kinds are unaffected.
-    const stepOverReason = async (choice: ModelChoice): Promise<string | undefined> => {
-        const held = cooling(choice, now);
-        if (held?.kind === `other`) {
-            return held.reason;
-        }
-        if (held === undefined) {
-            return (await spentRung(services, choice, now))?.reason;
-        }
-        const capacity = await rungCapacity(services, choice);
-        if (capacity?.kind === `serving` && (capacity.roomMeasuredAt ?? 0) > held.at) {
-            refusals.delete(modelPinKey(choice));
-            return undefined;
-        }
-        return held.reason;
-    };
+    // Reason not to ask this rung: the memo from its last refusal, else its allowance as the ledger and the readings
+    // judge it (spentRung).
+    const stepOverReason = async (choice: ModelChoice): Promise<string | undefined> =>
+        cooling(choice, now)?.reason ?? (await spentRung(services, choice, now))?.reason;
     // One pass over the chain; `honourSkips` picks between the two calls below. `asked` tells the caller whether
     // anything was attempted, since a chain skipped entirely and one refused entirely both end with no answer.
     const walk = async (honourSkips: boolean): Promise<{ answer?: RoleModelAnswer<T>; asked: boolean }> => {
@@ -342,7 +337,7 @@ export const askRoleModel = async <T>(
                     throw error;
                 }
                 services.perf.record("role.model", spent(), { role, provider: choice.provider, model: choice.model }, true);
-                if (!BAD_SAMPLES.some((kind) => error instanceof kind)) {
+                if (!UNMEMOED.some((kind) => error instanceof kind)) {
                     remember(key, refusalText(error), Date.now());
                 }
                 services.logger.debug({ err: error, role, model: choice.model }, "role model: refused, trying the next in the chain");

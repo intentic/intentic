@@ -532,12 +532,18 @@ describe("translator subscription usage", () => {
                   })
                 : Response.json({ status_code: 500 })) as typeof fetch;
 
+    // The readings' clock: a minute before the real one capacityOf judges at (Date.now()), so a reading taken at T is still
+    // current, and a reset TS + n seconds (TS is T in epoch seconds, as a window's resetsAt is) is still ahead.
+    const T = Date.now() - 60_000;
+    const TS = Math.floor(T / 1000);
+
     // What a provider's credentials, as the translator lists them, can serve of a model by the one rule (fleetCapacity).
     const capacityOf = async (client: CliProxyClient, provider: keyof TranslatorAccounts, model: string): Promise<FleetCapacity> =>
         fleetCapacity(
             (await client.accounts())[provider].map((row) => ({ account: row.name, label: row.label, usage: row.usage, cooling: row.cooling })),
             [],
             { id: model },
+            Date.now(),
         );
 
     const clientOver = (store: ReturnType<typeof memoryStore>["store"], provider: string, names: readonly string[]) =>
@@ -553,18 +559,18 @@ describe("translator subscription usage", () => {
     test("reports the earliest reset among a provider's exhausted accounts", async () => {
         const { store } = memoryStore();
         const windows = {
-            "spent-late.json": { utilization: 100, resetsAt: 3_000 },
-            "spent-early.json": { utilization: 100, resetsAt: 2_000 },
+            "spent-late.json": { utilization: 100, resetsAt: TS + 3_000 },
+            "spent-early.json": { utilization: 100, resetsAt: TS + 2_000 },
         };
         for (const [name, window] of Object.entries(windows)) {
-            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, ...window }], measuredAt: 0 });
+            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, ...window }], measuredAt: T });
         }
         const client = clientOver(store, "antigravity", Object.keys(windows));
 
         await expect(capacityOf(client, "gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
             kind: "spent",
             accounts: 2,
-            reopensAt: 2_000,
+            reopensAt: TS + 2_000,
             pool: "Claude and GPT models",
         });
         // Another provider's accounts are not this provider's headroom, however spent they are.
@@ -577,17 +583,17 @@ describe("translator subscription usage", () => {
         const { store } = memoryStore();
         await store.record("gemini:spent-for-gemini.json", {
             windows: [
-                { kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 2_000 },
-                { kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: 9_000 },
+                { kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: TS + 2_000 },
+                { kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: TS + 9_000 },
             ],
-            measuredAt: 0,
+            measuredAt: T,
         });
         const client = clientOver(store, "antigravity", ["spent-for-gemini.json"]);
 
         await expect(capacityOf(client, "gemini", "gemini-3-pro")).resolves.toEqual({
             kind: "spent",
             accounts: 1,
-            reopensAt: 2_000,
+            reopensAt: TS + 2_000,
             pool: "Gemini models",
         });
         // Nothing is out, so there is no pool to name; the reading with room says when it was taken.
@@ -595,7 +601,7 @@ describe("translator subscription usage", () => {
             kind: "serving",
             serving: 1,
             accounts: 1,
-            roomMeasuredAt: 0,
+            roomMeasuredAt: T,
         });
     });
 
@@ -604,13 +610,13 @@ describe("translator subscription usage", () => {
         const { store } = memoryStore();
         for (const name of ["spent-1.json", "spent-2.json"]) {
             await store.record(`gemini:${name}`, {
-                windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 100, resetsAt: 2_000 }],
-                measuredAt: 0,
+                windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 100, resetsAt: TS + 2_000 }],
+                measuredAt: T,
             });
         }
         await store.record("gemini:has-room.json", {
-            windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: 9_000 }],
-            measuredAt: 0,
+            windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: TS + 9_000 }],
+            measuredAt: T,
         });
         const client = clientOver(store, "antigravity", ["spent-1.json", "spent-2.json", "has-room.json"]);
 
@@ -618,7 +624,7 @@ describe("translator subscription usage", () => {
             kind: "serving",
             serving: 1,
             accounts: 3,
-            roomMeasuredAt: 0,
+            roomMeasuredAt: T,
         });
     });
 
@@ -626,8 +632,8 @@ describe("translator subscription usage", () => {
     test("keeps a model servable on accounts with no reading for its pool", async () => {
         const { store } = memoryStore();
         await store.record("gemini:unread.json", {
-            windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 1_000 }],
-            measuredAt: 0,
+            windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: TS + 1_000 }],
+            measuredAt: T,
         });
         const client = clientOver(store, "antigravity", ["unread.json", "never-polled.json"]);
 
@@ -643,14 +649,14 @@ describe("translator subscription usage", () => {
         const { store } = memoryStore();
         await store.record("codex:one.json", {
             windows: [
-                { kind: "five_hour", utilization: 100, resetsAt: 1_000, gates: "all" },
-                { kind: "seven_day", utilization: 12, resetsAt: 8_000, gates: "all" },
+                { kind: "five_hour", utilization: 100, resetsAt: TS + 1_000, gates: "all" },
+                { kind: "seven_day", utilization: 12, resetsAt: TS + 8_000, gates: "all" },
             ],
-            measuredAt: 0,
+            measuredAt: T,
         });
         const client = clientOver(store, "codex", ["one.json"]);
 
-        await expect(capacityOf(client, "codex", "gpt-5")).resolves.toEqual({ kind: "spent", accounts: 1, reopensAt: 1_000, pool: undefined });
+        await expect(capacityOf(client, "codex", "gpt-5")).resolves.toEqual({ kind: "spent", accounts: 1, reopensAt: TS + 1_000, pool: undefined });
     });
 
     // Runs at boot for the sandboxes that collected one before the sign-in guard existed: without it the user keeps

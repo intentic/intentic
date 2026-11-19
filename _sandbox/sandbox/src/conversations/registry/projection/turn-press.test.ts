@@ -9,7 +9,7 @@ import type { HeldReason } from "../../../agent/run/turn/holds/held-turn.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
 import { beginTurn } from "../../actor/conversation-actors.testing.js";
 import type { HeldRecord } from "../../actor/conversation-state.js";
-import { sendableAt } from "../../actor/limit-booking.js";
+import { type HeldReading, sendableAt } from "../../actor/limit-booking.js";
 import type { Fleet } from "../agents-registry.js";
 import { fleetStoreOver, memoryFleet } from "../agents-registry.testing.js";
 import type { Ending, PersistedAgent } from "../agents-store.js";
@@ -341,7 +341,7 @@ describe("the card's press and the record's ending, through the fleet", () => {
 
 /* EVERY CHANGE TO THE HELD TURN REACHES EVERY WINDOW. The card's `press`, like its `next`, is derived from the hold each
    time the card is projected, so what carries it out is a broadcast after each change: one the change makes itself (a
-   re-timed or walled hold, a hand-off pick, a fire, a drop, a hold restored) or the settle or begin it rides with (a
+   hold the pass read again, a hand-off pick, a fire, a drop, a hold restored) or the settle or begin it rides with (a
    refusal held, a turn superseding the hold). A change no send followed would leave every window's strip on the old
    press until something unrelated moved the card. */
 
@@ -387,9 +387,16 @@ describe("a held turn's every change", () => {
         agrees(sent);
         expect(sent.now).toEqual({ kind: "continue", ending: { reason: "limit", held: { ran: true } } });
 
-        // The pass learns its reopen.
+        // The pass reads its pool's reopen off the records (held-verdict.ts).
         const reopensAt = Math.ceil(Date.now() / 1000) + 3_600;
-        sent = await published(() => told({ kind: "held-retimed", reopensAt }));
+        const read = (reading: HeldReading) => async (): Promise<void> => {
+            const judged = fleet.conversations.state("c1")?.resume.held;
+            if (judged === undefined) {
+                throw new Error("expected a hold");
+            }
+            await told({ kind: "held-read", judged, reading });
+        };
+        sent = await published(read({ at: sendableAt(reopensAt), reopensAt }));
         agrees(sent);
         expect(sent.now).toMatchObject({ ending: { resetsAt: reopensAt } });
 
@@ -401,10 +408,10 @@ describe("a held turn's every change", () => {
         expect(sent.now).toMatchObject({ ending: { scheduled: true, nextAt: Math.ceil(sendableAt(reopensAt) / 1000) } });
 
         // The pass reads a wall in front of where it goes: the booking moves behind it.
-        const wall = sendableAt(reopensAt) + 3_600_000;
-        sent = await published(() => told({ kind: "held-walled", until: wall }));
+        const wall = reopensAt + 3_600;
+        sent = await published(read({ at: sendableAt(wall), reopensAt: wall }));
         agrees(sent);
-        expect(sent.now).toMatchObject({ ending: { nextAt: Math.ceil(wall / 1000) } });
+        expect(sent.now).toMatchObject({ ending: { resetsAt: wall, nextAt: Math.ceil(sendableAt(wall) / 1000) } });
 
         // Its one dispatch: nothing is booked any more, and every window hears so before the re-run begins, if it ever does.
         const judged = fleet.conversations.state("c1")?.resume.held;
@@ -413,7 +420,7 @@ describe("a held turn's every change", () => {
         }
         sent = await published(() => told({ kind: "held-fired", ladder: false, judged }));
         agrees(sent);
-        expect(sent.now).toEqual({ kind: "continue", ending: { reason: "limit", resetsAt: reopensAt, held: { ran: true } } });
+        expect(sent.now).toEqual({ kind: "continue", ending: { reason: "limit", resetsAt: wall, held: { ran: true } } });
 
         // A cancel drops it: nothing held, and the reopen the pass found went with the hold (the refusal named none).
         sent = await published(() => told({ kind: "resume-dropped" }));

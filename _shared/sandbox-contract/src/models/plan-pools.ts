@@ -1,6 +1,7 @@
 import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow } from "../schemas/providers/plan-limits.js";
 import { humanizeModelId } from "./model-label.js";
 import { bindingWindow, gatesModel, gatingWindows, type ModelRef, pinnedFull, provenFull, SPENT_UTILIZATION } from "./verdict/pool-gates.js";
+import { factsAt, usageLapsesAt } from "./verdict/current-windows.js";
 import { type RefusalsOnFile, refusedInstant, type ServiceFacts, standingOver } from "./verdict/refusal-verdict.js";
 import { windowPeriod } from "./verdict/window-period.js";
 
@@ -21,52 +22,24 @@ export {
     uncoveredModels,
     wordsOf,
 } from "./verdict/pool-gates.js";
-export { type RefusedInstant, refusedInstant, refusalVerdict, refusedPoolReset, type RefusalsOnFile, type ServiceFacts, standingOver } from "./verdict/refusal-verdict.js";
-export { periodWords, type WindowPeriod, windowPeriod } from "./verdict/window-period.js";
-
-// Whether a reading of this window can still be true. A published reset instant is the authority; with none, the
-// window's own length is, since a pool read as empty says nothing about the window that opened after it. A window whose
-// length nothing names keeps the old rule: only its reset instant can retire it.
-export const windowLive = (window: UsageWindow, measuredAt: number, now: number): boolean => {
-    if (window.resetsAt !== undefined) {
-        return window.resetsAt * 1000 > now;
-    }
-    const period = windowPeriod(window);
-    return period === undefined || measuredAt + period.seconds * 1000 > now;
-};
-
-// A pool whose reading belongs to a window that has since closed: still the account's pool, at the floor any new window
-// starts from, and marked with when the old window closed so a surface can say it has not been re-read since.
-const lapsedWindow = (window: UsageWindow, measuredAt: number): UsageWindow => {
-    const { resetsAt, rounded: _rounded, utilization: _utilization, ...pool } = window;
-    // Only reached for a window windowLive retired, so with no published reset its length is known.
-    const closedAt = resetsAt ?? Math.floor((measuredAt + (windowPeriod(window)?.seconds ?? 0) * 1000) / 1000);
-    return { ...pool, utilization: 0, lapsedAt: closedAt };
-};
-
-// What a reading says about each of the account's pools now. A window past its reset is kept rather than dropped, as a
-// lapsed pool (lapsedWindow): dropping it made a reading whose re-reads were failing lose its five-hour row within hours
-// while the weekly rows stayed, a partial card that reads as complete. The floor of 0 is what dropping it already meant
-// to every verdict (an absent pool binds nothing). A reading with no window still current says nothing about now and
-// answers none, so the account reads as unmeasured. Idempotent: a pool already lapsed stays as it is.
-// A pool the provider stopped reporting (`missingSince`) is dropped instead once its window closes: nothing will read it
-// again, so its floor of 0 would be a pool that is not there.
-export const currentWindows = (usage: AccountUsage, now: number): UsageWindow[] => {
-    const live = (window: UsageWindow): boolean => window.lapsedAt === undefined && windowLive(window, usage.measuredAt, now);
-    if (!usage.windows.some(live)) {
-        return [];
-    }
-    return usage.windows.flatMap((window) => {
-        if (window.lapsedAt !== undefined || live(window)) {
-            return [window];
-        }
-        return window.missingSince === undefined ? [lapsedWindow(window, usage.measuredAt)] : [];
-    });
-};
+export {
+    type RefusedInstant,
+    refusedInstant,
+    refusalVerdict,
+    refusedPoolOf,
+    refusedPoolReset,
+    type RefusalsOnFile,
+    type ServiceFacts,
+    stampedRefusal,
+    standingOver,
+} from "./verdict/refusal-verdict.js";
+export { namedPeriod, type PeriodSource, periodWords, type WindowPeriod, windowPeriod } from "./verdict/window-period.js";
+export { currentWindows, factsAt, usageAt, usageLapsesAt, windowLive } from "./verdict/current-windows.js";
 
 // Whether an account can serve a turn, and what one provider's accounts can serve together: the one rule every picker,
 // gate, listing and surface reads. The daemon and the editor run it on the same facts (the account rows and every
-// refusal on file); neither keeps a judged copy, so the two cannot disagree.
+// refusal on file) at the instant each passes, the sandbox's own clock: every reading is first taken as it stands then
+// (factsAt), so a window past its reset reads lapsed on both sides whoever re-read it last.
 
 
 // The account reopens for this question when the pools holding it shut do: all of them for a model's own question (or
@@ -177,24 +150,42 @@ const refusedPool = (refusal: ProviderRefusal): UsageWindow => {
     return pool;
 };
 
-// One limit refusal laid on a reading: the pool the refused turn's model spends (else the one asked about, else the
-// tightest) read full, since a polled reading freezes the moment a pool actually empties, and reopening when the provider
-// said to try again, where it said, over whatever the polled pool last said. Never another model's allowance. A refusal
-// whose instant no pool of the reading `polled` since resets at is a pool of its own (refusedInstant `unpublished`): a
-// Codex refusal on GPT 6.1 Sol naming a reset neither window had pinned the weekly window, which gates every model, so
-// every Codex model read spent for four days while both windows showed most of the allowance free (2026-11-14).
-const pinRefusal = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model: ModelRef | undefined, polled: AccountUsage | undefined): AccountUsage => {
+// The pool one limit refusal is laid on, or `own` where it is a pool of its own (refusedPool). The pool the ledger
+// resolved it to as it filed it (refusal-verdict.ts refusedPoolOf), where it did and the reading still names that pool:
+// exactly that one, whatever reset the reading now shows for it or which pool now binds; resolved to none the reading
+// published, its own. One filed unresolved (before 2026-11-19, a translator's bench, a reading that could not say, an
+// instant never named) is worked out here as it always was: the pool the refused turn's model spends (else the one asked
+// about, else the tightest), unless its instant is the reset of no pool a reading `polled` since publishes
+// (refusedInstant `unpublished`): a Codex refusal on GPT 6.1 Sol naming a reset neither window had pinned the weekly
+// window, which gates every model, so every Codex model read spent for four days while both windows showed most of the
+// allowance free (2026-11-14).
+const refusedIn = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model: ModelRef | undefined, polled: AccountUsage | undefined): UsageWindow | "own" => {
+    if (refusal.poolUnpublished === true) {
+        return "own";
+    }
+    const resolved = refusal.pool === undefined ? undefined : usage?.windows.find((window) => window.kind === refusal.pool);
+    if (resolved !== undefined) {
+        return resolved;
+    }
     const binding = bindingWindow(usage, refusal.model === undefined ? model : { id: refusal.model });
-    if (usage === undefined || binding === undefined || refusedInstant(refusal, polled) === "unpublished") {
+    return binding === undefined || refusedInstant(refusal, polled) === "unpublished" ? "own" : binding;
+};
+
+// One limit refusal laid on a reading: the pool it was refused in (refusedIn) read full, since a polled reading freezes
+// the moment a pool actually empties, and reopening when the provider said to try again, where it said, over whatever
+// the polled pool last said. Never another model's allowance.
+const pinRefusal = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model: ModelRef | undefined, polled: AccountUsage | undefined): AccountUsage => {
+    const refused = refusedIn(usage, refusal, model, polled);
+    if (usage === undefined || refused === "own") {
         return { ...(usage ?? { measuredAt: refusal.at }), windows: [...(usage?.windows ?? []), refusedPool(refusal)] };
     }
-    const pinned = pinnedFull(binding);
+    const pinned = pinnedFull(refused);
     // Reopening when the refusal ends (refusalVerdict), so the "back at" every surface draws is when it flips.
     const over = refusal.resetsAt ?? refusal.poolResetsAt;
     if (over !== undefined) {
         pinned.resetsAt = over;
     }
-    return { ...usage, windows: usage.windows.map((window) => (window === binding ? pinned : window)) };
+    return { ...usage, windows: usage.windows.map((window) => (window === refused ? pinned : window)) };
 };
 
 /**
@@ -216,9 +207,9 @@ export const newestRefusal = (refusals: RefusalsOnFile): ProviderRefusal | undef
  * One account's verdict on everything on file over it. `standing` is the refusals still standing over it (standingOver).
  * Precedence: a revoked sign-in outranks a lost seat (reconnecting fixes one, nothing here fixes the other), both outrank
  * the newest standing refusal where it refused the account itself, then a translator bench, then the plan limits on the
- * reading the refusals leave (judgedReading).
+ * reading the refusals leave (judgedReading), on the account's reading as it stands at `now` (factsAt).
  */
-export const serviceState = (facts: ServiceFacts, standing: RefusalsOnFile = [], model?: ModelRef, now: number = Date.now()): AccountState => {
+export const serviceState = (facts: ServiceFacts, standing: RefusalsOnFile, model: ModelRef | undefined, now: number): AccountState => {
     if (facts.needsReauth === true) {
         return { kind: "blocked", fix: "reconnect", reason: facts.detail ?? "sign-in expired" };
     }
@@ -234,7 +225,7 @@ export const serviceState = (facts: ServiceFacts, standing: RefusalsOnFile = [],
     if (newest?.kind === "entitlement") {
         return { kind: "blocked", fix: "admin", reason: newest.message };
     }
-    const plan = readingHeadroom(judgedReading(facts.usage, standing, model), model);
+    const plan = readingHeadroom(judgedReading(factsAt(facts, now).usage, standing, model), model);
     return facts.cooling === undefined ? plan : benched(facts.cooling, plan, now);
 };
 
@@ -282,17 +273,22 @@ const offPlanState = (model: ModelRef): AccountState => ({
 /** Whether a verdict says the account's plan does not include the model it was judged on: outside that model's fleet. */
 export const offPlanVerdict = (state: AccountState): boolean => state.kind === "blocked" && state.fix === "plan";
 
-/** Every account of one provider, judged together, since a refusal naming no account is answered by any of them. */
+/**
+ * Every account of one provider, judged together, since a refusal naming no account is answered by any of them. `now` is
+ * the sandbox's clock (epoch ms), never defaulted: a window's reset, a refusal's instant and a bench's end are all judged
+ * against it, so a caller holding another clock (a browser's) passes the sandbox's reading of it.
+ */
 export const serviceStates = (
     accounts: readonly ServiceFacts[],
-    refusals: RefusalsOnFile = [],
-    model?: ModelRef,
-    now: number = Date.now(),
+    refusals: RefusalsOnFile | undefined,
+    model: ModelRef | undefined,
+    now: number,
 ): ReadonlyMap<string, AccountState> => {
-    const standing = standingOver(accounts, refusals, now);
-    const excluded = offPlan(accounts, model);
+    const current = accounts.map((facts) => factsAt(facts, now));
+    const standing = standingOver(current, refusals ?? [], now);
+    const excluded = offPlan(current, model);
     return new Map(
-        accounts.map((facts) => [
+        current.map((facts) => [
             facts.account,
             model !== undefined && excluded(facts) ? offPlanState(model) : serviceState(facts, standing(facts.account), model, now),
         ]),
@@ -351,9 +347,12 @@ export const fleetOf = (accounts: readonly ServiceFacts[], states: ReadonlyMap<s
     };
 };
 
-/** A provider's capacity for one model, judged on its accounts and every refusal on file. */
-export const fleetCapacity = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile = [], model?: ModelRef, now: number = Date.now()): FleetCapacity =>
-    fleetOf(accounts, serviceStates(accounts, refusals, model, now));
+/** A provider's capacity for one model, judged on its accounts and every refusal on file, at `now` (serviceStates). */
+export const fleetCapacity = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile | undefined, model: ModelRef | undefined, now: number): FleetCapacity =>
+    fleetOf(
+        accounts.map((facts) => factsAt(facts, now)),
+        serviceStates(accounts, refusals, model, now),
+    );
 
 // Worst last: proven room, no reading either way, a pool at the line (it may hold a sliver, or nothing), known spent,
 // and nothing a turn can run on.
@@ -453,3 +452,31 @@ export const preferredAccount = <T extends RankedAccount>(entries: readonly T[])
  */
 export const bestWithRoom = <T extends RankedAccount>(entries: readonly T[]): T | undefined =>
     preferredAccount(entries.filter((entry) => entry.state.kind === "ready" && entry.state.room > 0));
+
+/* WHEN THE CLOCK ALONE NEXT CHANGES A PROVIDER'S PICTURE, so whoever holds it judges again then rather than on its next
+   read: a window resetting (or outliving the length it is trusted for), an account's reopening, a translator bench ending,
+   a refusal's own instant or the stamped reset of the pool it was refused in, and a switch-off ageing out of the week
+   that ranks an account as flapping. A refusal's horizon is not here: the ledger forgets it on read and says so as it
+   does (provider-refusals.ts horizonWatch). Every instant at or before `now` is already judged. */
+
+/** The soonest instant after `now` at which the clock alone changes any verdict on these facts, in epoch ms. */
+export const capacityValidUntil = (
+    accounts: readonly ServiceFacts[],
+    states: ReadonlyMap<string, AccountState>,
+    refusals: RefusalsOnFile,
+    switchOffs: SwitchOffs | undefined,
+    now: number,
+): number | undefined => {
+    const seconds = (at: number | undefined): number | undefined => (at === undefined ? undefined : at * 1000);
+    const instants = [
+        ...accounts.flatMap((facts) => [
+            usageLapsesAt(facts.usage, now),
+            seconds(facts.cooling?.until),
+            ...(facts.cooldowns ?? []).map((cooldown) => cooldown.until * 1000),
+        ]),
+        ...[...states.values()].map((state) => seconds(reopensAtOf(state))),
+        ...refusals.flatMap((refusal) => [seconds(refusal.resetsAt), seconds(refusal.poolResetsAt)]),
+        ...Object.values(switchOffs ?? {}).flatMap((offs) => offs.map((at) => at + FLAPPING_WINDOW_MS)),
+    ].filter((at): at is number => at !== undefined && at > now);
+    return instants.length === 0 ? undefined : Math.min(...instants);
+};

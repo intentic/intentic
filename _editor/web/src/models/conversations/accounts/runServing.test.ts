@@ -1,7 +1,10 @@
 import "@intentic/testing/dom";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { providerAccounts, providerSwitchOffs } from "../../providers/providerAccounts";
+import { providerAccounts, providerSwitchOffs, setCapacitySnapshot, setProviderCapacity } from "../../providers/providerAccounts";
+import { daemonPlacement, placementKey, placementsStale } from "../../providers/capacity/daemonPlacement";
+import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
+import { queryClient } from "../../../lib/queryPersistence";
 import { Conversation } from "../session/conversation";
 import { runServing, runSpentUntil, spentUntilOf } from "./runServing";
 
@@ -73,4 +76,62 @@ test(`one switch-off, or two a week apart, is not flapping`, () => {
     providerSwitchOffs.value = { claude: { org: [NOW - 8 * 86_400_000, NOW - 86_400_000] } };
 
     expect(runServing({ provider: `claude`, harness: `native`, model: MODEL }).account?.id).toBe(`org`);
+});
+
+// The daemon places a turn naming no account with what already runs on each account counted (placement.ts): the picker's
+// tick, the composer's pill and the account a first turn names show its answer, and this window's prediction (the rows'
+// own ranking above) only stands in against a daemon that does not give one.
+describe(`where the daemon places a turn naming no account`, () => {
+    afterEach(() => {
+        setDaemonRoutes(undefined);
+        setCapacitySnapshot({ providers: [] });
+        queryClient.removeQueries({ queryKey: [`usage.placement`] });
+    });
+
+    it(`is the daemon's own pick, over the account the verdicts alone rank first`, () => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [account(`org`, 10), account(`own`, 90)] };
+
+        const placed = runServing({ provider: `claude`, harness: `native`, model: MODEL }, () => ({ kind: `placed`, account: `own` }));
+        expect(placed.account).toEqual({ id: `own`, byAllowance: true });
+        expect(placed.state).toMatchObject({ kind: `ready` });
+    });
+
+    it(`is predicted here against a daemon whose hello does not name the route`, () => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [account(`org`, 10), account(`own`, 90)] };
+        setDaemonRoutes([`usage.capacity`]);
+
+        expect(daemonPlacement(`claude`, MODEL)).toBeUndefined();
+        expect(runServing({ provider: `claude`, harness: `native`, model: MODEL }).account).toEqual({ id: `org`, byAllowance: true });
+    });
+
+    it(`is the capacity's pick for a turn naming no model, and the daemon's cached answer for one model`, () => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [account(`org`, 10), account(`own`, 90)] };
+        setDaemonRoutes([`usage.capacity`, `usage.placement`]);
+        setProviderCapacity({ provider: `claude`, seq: 1, judgedAt: NOW, accounts: [], refusals: [], placement: `own` });
+        // A daemon from before `loop` answers the sandbox-wide pick, without `narrowed`.
+        queryClient.setQueryData(placementKey(`claude`, ``), { account: `org`, judgedAt: NOW });
+        queryClient.setQueryData(placementKey(`claude`, MODEL, `claude-code`), { account: `own`, judgedAt: NOW });
+
+        expect(daemonPlacement(`claude`, ``)).toEqual({ kind: `placed`, account: `own` });
+        expect(runServing({ provider: `claude`, harness: `native`, model: MODEL }).account).toEqual({ id: `own`, byAllowance: true });
+
+        // A capacity frame for the provider: the answer may have moved, so the next surface that shows it asks again.
+        placementsStale(`claude`);
+        expect(queryClient.getQueryState(placementKey(`claude`, MODEL, `claude-code`))?.isInvalidated).toBe(true);
+    });
+
+    // usage.placement narrowed to the chat's loop and the accounts this person may run on (2026-11-19): the turn's own
+    // answer, over the capacity's sandbox-wide pick, and over this window's rows where they have not caught up.
+    it(`is asked with the chat's loop, and a narrowed answer is the turn's own`, () => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [account(`org`, 10), account(`own`, 90)] };
+        setDaemonRoutes([`usage.capacity`, `usage.placement`]);
+        setProviderCapacity({ provider: `claude`, seq: 1, judgedAt: NOW, accounts: [], refusals: [], placement: `org` });
+        queryClient.setQueryData(placementKey(`claude`, ``, `claude-code`), { account: `own`, judgedAt: NOW, narrowed: true });
+
+        expect(daemonPlacement(`claude`, ``, `claude-code`)).toEqual({ kind: `placed`, account: `own`, narrowed: true });
+        expect(runServing({ provider: `claude`, harness: `native`, model: `` }).account).toEqual({ id: `own`, byAllowance: true });
+
+        queryClient.setQueryData(placementKey(`claude`, ``, `claude-code`), { account: `joined-since`, judgedAt: NOW, narrowed: true });
+        expect(runServing({ provider: `claude`, harness: `native`, model: `` }).account).toEqual({ id: `joined-since`, byAllowance: true });
+    });
 });

@@ -2,7 +2,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { newestRefusal } from "@intentic/sandbox-contract/models/plan-pools";
 import { formatClock, formatDayMonthTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
-import { providerRefusals } from "../../../models/providers/providerAccounts";
+import { refusalsOf } from "../../../models/providers/usageStatus";
 
 /* AN ACCOUNT SOMEBODY ELSE TURNED OFF, READ AT A GLANCE. Its row used to print the provider's sentence alone ("Your
    organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead…"), which a
@@ -14,7 +14,8 @@ const sinceWords = (at: number, now: number): string => (new Date(at).toDateStri
 
 /** The status line of an account an organisation or a plan turned off: off, by whom, since when, then the provider's words. */
 export const accountOffLine = (provider: AgentProvider, providerName: string, account: string, reason: string, now: number = Date.now()): string => {
-    const refused = (providerRefusals.value[provider] ?? []).filter((refusal) => refusal.kind === `entitlement` && refusal.account === account);
+    // The refusals on file as the verdict door holds them: the daemon's judged capacity, else the refusals feed.
+    const refused = refusalsOf(provider).filter((refusal) => refusal.kind === `entitlement` && refusal.account === account);
     const at = newestRefusal(refused)?.at;
     const off =
         at === undefined

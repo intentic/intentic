@@ -41,3 +41,34 @@ test("a new usage reading judges its provider's accounts again, and an account r
         unhear();
     }
 });
+
+// A reopen the verdict named is where the provider's accounts are read again, so the reading of the new window reaches
+// every open window as a push at the reopen, not at its next page load (2026-11-19).
+test("a reopen the verdict named re-reads its provider's accounts when it comes due", async () => {
+    const reopensAt = Math.ceil(Date.now() / 1000) + 1;
+    const refreshed: unknown[] = [];
+    const deps: CapacityWatchDeps = unstubbed<CapacityWatchDeps>("deps", {
+        claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [{ id: "a", label: "Work", connectedAt: 0 }] }),
+        claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ a: weekly(40) }) }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
+            onFile: async () => ({ claude: [{ at: Date.now() - 1_000, kind: "limit", account: "a", message: "limit", resetsAt: reopensAt }] }),
+            onChange: () => () => undefined,
+        }),
+        headroom: unstubbed<Services["headroom"]>("headroom", {
+            onChange: () => () => undefined,
+            refresh: async (options?: unknown) => {
+                refreshed.push(options);
+            },
+        }),
+        logger: recordingLogger().logger,
+    });
+    const stop = watchCapacity(deps);
+    try {
+        expect(await serviceabilities(deps, "claude")).toEqual([{ id: "a", state: { kind: "spent", reopensAt } }]);
+        expect(refreshed).toEqual([]);
+        await waitFor(() => expect(refreshed).toEqual([{ scope: { providers: ["claude"] }, maxAgeMs: 0 }]), { timeout: 6_000, interval: 50 });
+    } finally {
+        stop();
+    }
+});

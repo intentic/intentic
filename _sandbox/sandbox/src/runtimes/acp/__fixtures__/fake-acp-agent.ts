@@ -56,7 +56,11 @@ const postureBehaviour = async (
     if (text.includes("refuse")) {
         return { stopReason: "refusal" };
     }
+    // Devin's own words for a spent allowance (error-frames.test.ts, 2026-10-28), and a bare 429, which shows nothing spent.
     if (text.includes("spent-allowance")) {
+        throw new Error("Your weekly usage quota has been exhausted. Visit https://app.devin.ai/settings/usage to purchase on-demand usage or turn on auto-reload.");
+    }
+    if (text.includes("rate-limited")) {
         throw new Error("429 Too Many Requests: rate limit exceeded");
     }
     if (text.includes("which-mode")) {

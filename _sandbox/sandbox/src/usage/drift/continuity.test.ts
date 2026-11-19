@@ -34,6 +34,20 @@ test("a missing pool whose window has closed is not carried, and neither is a la
     expect(missingPools({ windows: [lapsed], measuredAt: NOW }, { windows: [THIRD_PARTY], measuredAt: NOW }, NOW)).toEqual([]);
 });
 
+// 2026-11-19: the length a reader stated (UsageWindow.periodSeconds) rides with the pool it is carried on, and is what
+// says how long a pool with no published reset may be carried.
+test("a pool carried forward keeps the length its reader stated, and is carried only within it", () => {
+    const burst: UsageWindow = { kind: "google:gemini-burst", label: "Gemini models", utilization: 60, periodSeconds: 7_200, gates: { models: ["gemini"] } };
+    const next: AccountUsage = { windows: [THIRD_PARTY], measuredAt: NOW };
+    // Read an hour ago, its two-hour window is still open: carried, length and all.
+    expect(continueReading({ windows: [burst, THIRD_PARTY], measuredAt: NOW - 3_600_000 }, next, true, NOW).windows).toEqual([
+        THIRD_PARTY,
+        { ...burst, missingSince: NOW / 1000 },
+    ]);
+    // Read three hours ago, its window has closed, though nothing in its name says how long it runs.
+    expect(missingPools({ windows: [burst, THIRD_PARTY], measuredAt: NOW - 3 * 3_600_000 }, next, NOW)).toEqual([]);
+});
+
 test("models no pool covers are kept by a partial reading only while none of its pools covers them", () => {
     const previous: AccountUsage = { windows: [THIRD_PARTY], measuredAt: NOW, uncovered: ["gemini-3.8-flash-high"] };
     expect(continueReading(previous, { windows: [THIRD_PARTY], measuredAt: NOW + 1 }, false, NOW).uncovered).toEqual(["gemini-3.8-flash-high"]);

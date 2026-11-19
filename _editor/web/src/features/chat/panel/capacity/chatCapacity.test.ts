@@ -7,14 +7,18 @@ import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount 
 // The rail's offers must all still serve a turn, and everything it withholds must be accounted for: spent, refused,
 // dropped, or pooled.
 
-const NOW = 1_700_000_000_000;
+// The real clock, to the second: a row draws its reading as it stands at that clock (usageAt), whatever instant the rail
+// is asked at, so a fixture set at a fixed date lapses once the calendar passes its resets.
+const NOW = Math.floor(Date.now() / 1000) * 1000;
+// An instant `seconds` after NOW in epoch seconds, as a pool's reset or a bench's end is published.
+const after = (seconds: number): number => NOW / 1000 + seconds;
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 // The daemon's own bench sentence for a Google credential with no Antigravity project (translator.ts), carried
 // verbatim on the wire as `cooling.reason` with no `until`, since no wait fixes it.
 const NO_PROJECT = `no Antigravity project on this Google account`;
 
 // Always a fresh reading; staleness is usageStatus's concern, not this helper's.
-const usage = (percent: number, resetsAt = 1_700_003_600): AccountUsage => ({
+const usage = (percent: number, resetsAt = after(3_600)): AccountUsage => ({
     measuredAt: NOW - 60_000,
     windows: [{ kind: `seven_day`, utilization: percent, resetsAt, gates: `all` }],
 });
@@ -79,9 +83,9 @@ describe(`what the rail offers`, () => {
                     usage: {
                         measuredAt: NOW - 60_000,
                         windows: [
-                            { kind: `five_hour`, utilization: 58, resetsAt: 1_700_003_600, gates: `all` },
-                            { kind: `seven_day`, utilization: 73, resetsAt: 1_700_400_000, gates: `all` },
-                            { kind: `model:Fable`, label: `Fable`, utilization: 100, resetsAt: 1_700_400_000, gates: { models: [`Fable`] } },
+                            { kind: `five_hour`, utilization: 58, resetsAt: after(3_600), gates: `all` },
+                            { kind: `seven_day`, utilization: 73, resetsAt: after(400_000), gates: `all` },
+                            { kind: `model:Fable`, label: `Fable`, utilization: 100, resetsAt: after(400_000), gates: { models: [`Fable`] } },
                         ],
                     },
                 }),
@@ -108,8 +112,8 @@ describe(`what the rail offers`, () => {
                     usage: {
                         measuredAt: NOW - 60_000,
                         windows: [
-                            { kind: `five_hour`, utilization: 100, resetsAt: 1_700_003_600, gates: `all` },
-                            { kind: `model:Fable`, label: `Fable`, utilization: 4, resetsAt: 1_700_400_000, gates: { models: [`Fable`] } },
+                            { kind: `five_hour`, utilization: 100, resetsAt: after(3_600), gates: `all` },
+                            { kind: `model:Fable`, label: `Fable`, utilization: 4, resetsAt: after(400_000), gates: { models: [`Fable`] } },
                         ],
                     },
                 }),
@@ -118,7 +122,7 @@ describe(`what the rail offers`, () => {
 
         const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
-        expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
+        expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: after(3_600) });
     });
 
     it(`reads a plan with no all-models pool by its roomiest family`, () => {
@@ -129,14 +133,14 @@ describe(`what the rail offers`, () => {
                     kind: `google:gemini-weekly`,
                     label: `Gemini Models · Weekly`,
                     utilization: gemini,
-                    resetsAt: 1_700_400_000,
+                    resetsAt: after(400_000),
                     gates: { models: [`gemini`] },
                 },
                 {
                     kind: `google:3p-weekly`,
                     label: `Claude and GPT Models · Weekly`,
                     utilization: thirdParty,
-                    resetsAt: 1_700_400_000,
+                    resetsAt: after(400_000),
                     gates: { models: [`claude`, `gpt`] },
                 },
             ],
@@ -191,7 +195,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
 
         const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
-        expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
+        expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: after(3_600) });
     });
 
     // The refusal pins to spent only the pool whose model matches; other pools on the account are unaffected.
@@ -204,9 +208,9 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
                     usage: {
                         measuredAt: NOW - 60_000,
                         windows: [
-                            { kind: `five_hour`, utilization: 20, resetsAt: 1_700_003_600, gates: `all` },
-                            { kind: `seven_day`, utilization: 40, resetsAt: 1_700_400_000, gates: `all` },
-                            { kind: `model:Fable`, label: `Fable`, utilization: 82, resetsAt: 1_700_400_000, gates: { models: [`Fable`] } },
+                            { kind: `five_hour`, utilization: 20, resetsAt: after(3_600), gates: `all` },
+                            { kind: `seven_day`, utilization: 40, resetsAt: after(400_000), gates: `all` },
+                            { kind: `model:Fable`, label: `Fable`, utilization: 82, resetsAt: after(400_000), gates: { models: [`Fable`] } },
                         ],
                     },
                 }),
@@ -240,8 +244,8 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
                     usage: {
                         measuredAt: NOW - 60_000,
                         windows: [
-                            { kind: `five_hour`, utilization: 88, resetsAt: 1_700_003_600, gates: `all` },
-                            { kind: `seven_day`, utilization: 40, resetsAt: 1_700_400_000, gates: `all` },
+                            { kind: `five_hour`, utilization: 88, resetsAt: after(3_600), gates: `all` },
+                            { kind: `seven_day`, utilization: 40, resetsAt: after(400_000), gates: `all` },
                         ],
                     },
                 }),
@@ -253,7 +257,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
 
         const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
-        expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
+        expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: after(3_600) });
     });
 
     it(`holds back a credential that can no longer be refreshed, and counts it where the fix is`, () => {
@@ -311,9 +315,9 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
 
         translatorAccounts.value = {
             ...NO_ROUTED,
-            gemini: [{ name: `gemini-1`, label: `busy@gmail.com`, cooling: { until: 1_700_003_600, reason: `Individual quota reached` } }],
+            gemini: [{ name: `gemini-1`, label: `busy@gmail.com`, cooling: { until: after(3_600), reason: `Individual quota reached` } }],
         };
-        expect(chatCapacity([], NOW).out[0]).toMatchObject({ reason: `cooling down`, reopensAt: 1_700_003_600 });
+        expect(chatCapacity([], NOW).out[0]).toMatchObject({ reason: `cooling down`, reopensAt: after(3_600) });
     });
 });
 
@@ -406,9 +410,9 @@ describe(`how old the rail says its readings are`, () => {
 describe(`what the rail says about what it is not offering`, () => {
     // An absent provider could mean spent-until-later or never-connected; the footnote is what tells those apart.
     it(`names a spent provider and the instant it comes back`, () => {
-        providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, 1_700_090_000) })] };
+        providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, after(90_000)) })] };
         expect(chatCapacity([], NOW).out).toEqual([
-            { provider: `claude`, label: `Claude Code`, reason: `spent`, reopensAt: 1_700_090_000, detail: undefined, mine: false },
+            { provider: `claude`, label: `Claude Code`, reason: `spent`, reopensAt: after(90_000), detail: undefined, mine: false },
         ]);
     });
 
@@ -421,19 +425,22 @@ describe(`what the rail says about what it is not offering`, () => {
                     usage: {
                         measuredAt: NOW - 60_000,
                         windows: [
-                            { kind: `five_hour`, utilization: 20, resetsAt: 1_700_003_600, gates: `all` },
-                            { kind: `seven_day`, utilization: 100, resetsAt: 1_700_400_000, gates: `all` },
+                            { kind: `five_hour`, utilization: 20, resetsAt: after(3_600), gates: `all` },
+                            { kind: `seven_day`, utilization: 100, resetsAt: after(400_000), gates: `all` },
                         ],
                     },
                 }),
             ],
         };
-        expect(chatCapacity([], NOW).out[0]?.reopensAt).toBe(1_700_400_000);
+        expect(chatCapacity([], NOW).out[0]?.reopensAt).toBe(after(400_000));
     });
 
-    it(`offers no reopen instant when every spent pool's reset has already passed`, () => {
+    // Before 2026-11-19 such an account was out with no instant to offer. The rule now takes a reading as it stands at the
+    // instant judged: a pool past its reset has reset, and a reading with no window left current says nothing, so the
+    // account is back among those a turn may try rather than out until an instant that has already gone.
+    it(`reads a spent pool whose reset has already passed as reset, never out until an instant already gone`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, Math.floor(NOW / 1000) - 60) })] };
-        expect(chatCapacity([], NOW).out[0]).toMatchObject({ reason: `spent`, reopensAt: undefined });
+        expect(chatCapacity([], NOW).out).toEqual([]);
     });
 });
 
@@ -506,7 +513,7 @@ describe(`the allowances behind one account`, () => {
         ...windows: { kind: string; label?: string; utilization: number; gates?: `all` | `none` | { models: string[] } }[]
     ): AccountUsage => ({
         measuredAt: NOW - 60_000,
-        windows: windows.map((window) => ({ resetsAt: 1_700_003_600, gates: `all` as const, ...window })),
+        windows: windows.map((window) => ({ resetsAt: after(3_600), gates: `all` as const, ...window })),
     });
 
     it(`draws a lane per allowance, longest window first, and names each by its length`, () => {

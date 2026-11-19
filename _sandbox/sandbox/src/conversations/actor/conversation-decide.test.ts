@@ -1195,3 +1195,29 @@ describe("how many turns in a row ended on one failure", () => {
         expect(repeatedFailure({ ...BWRAP(6), repeats: 2 }, BWRAP(6), { ranTurn: false, answeredAt: undefined })).toEqual(BWRAP(6));
     });
 });
+
+/* WHAT THE RESUME PASS READ ABOUT A HELD TURN (held-verdict.ts) rides on the hold in memory only: every window hears it,
+   since the card's `next` is derived from it, but the entry's stored hold is unchanged by it, so nothing is written. */
+describe("a spent allowance's hold read again by the pass", () => {
+    const held = { input: { conversationId: "c1", prompt: "go" }, reason: "limit", ran: true, reopensAt: 100, recordedAt: 1_000, fired: false, tries: 0 } as const;
+    const holding: ConversationState = { ...idleConversation(), resume: { held, authFiring: false, stopTries: 0 } };
+    type HeldRead = Extract<ConversationEvent, { kind: "held-read" }>;
+    const readOf = (judged: HeldRead["judged"], reading: HeldRead["reading"]): HeldRead => ({ kind: "held-read", judged, reading });
+
+    it("is told to every window and written nowhere", () => {
+        const decision = decide(holding, readOf(held, { at: 160_000, reopensAt: 100 }), NOW, ENTRY);
+        expect(decision.state.resume.held).toMatchObject({ reading: { at: 160_000, reopensAt: 100 } });
+        expect(decision.effects).toStrictEqual(BROADCAST);
+        expect(decision.reply).toBe(true);
+    });
+
+    it("leaves the very record it was on where the reading has not moved, and takes nothing for a record since replaced", () => {
+        const read = decide(holding, readOf(held, { at: 160_000, reopensAt: 100 }), NOW, ENTRY).state;
+        const again = decide(read, readOf(read.resume.held ?? held, { at: 160_000, reopensAt: 100 }), NOW, ENTRY);
+        expect(again.state.resume.held).toBe(read.resume.held);
+        expect(again.effects).toStrictEqual([]);
+        const stale = decide(read, readOf(held, {}), NOW, ENTRY);
+        expect(stale.state).toBe(read);
+        expect(stale.reply).toBe(false);
+    });
+});

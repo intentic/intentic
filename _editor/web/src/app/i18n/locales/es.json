@@ -4523,6 +4523,14 @@
                 "percentLeft": "te queda el {percent} de tu límite de uso"
             }
         },
+        "providerDegraded": {
+            "label": "Proveedor",
+            "outageShort": "Caído",
+            "throttleShort": "Limitando",
+            "outage": "{provider} está fallando en las solicitudes",
+            "throttle": "{provider} está rechazando solicitudes por ahora",
+            "retry": "El sandbox lo vuelve a intentar en {wait}"
+        },
         "turnFailures": {
             "installNewerEngine": "Instala un motor más reciente en Sandbox ▸ Entorno ▸ Motores de agente.",
             "installNewerEngineFloor": "Instala un motor más reciente en Sandbox ▸ Entorno ▸ Motores de agente ({floor} o posterior).",

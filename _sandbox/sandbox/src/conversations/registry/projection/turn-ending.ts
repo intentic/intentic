@@ -4,6 +4,7 @@ import { failureCourseOf } from "@intentic/sandbox-contract/policy/failure-codes
 import { RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
 import type { HeldRecord } from "../../actor/conversation-state.js";
+import { heldMoving } from "../../actor/limit-booking.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 
@@ -17,7 +18,8 @@ import { opt } from "../../../opt.js";
 /** The card's own fields an ending is read off: the projected status, never the stored ending, and the failure it reports. */
 export type EndingFacts = Pick<AgentSummary, "status" | "failureCode" | "failureRepeats" | "limitResetsAt" | "next">;
 
-// Whether the held turn ran, what each way of moving on costs, where a policy is sending it, whether only a press
+// Whether the held turn ran, what each way of moving on costs, where a policy is sending it (a booked move's destination
+// as the resume pass last read it, limit-booking.ts heldMoving), whether only a press
 // sends it again, and whether memory killed it: the frame says so where it dresses the kill (memory-death.ts), and the
 // card's press, which every window's strip follows over the frame, has to say it too, or a window would ask the stop's
 // question of a turn the stop's answer never moves. A restart memory caused writes no frame at all (memory-restart.ts),
@@ -26,7 +28,7 @@ const heldEnding = (held: HeldRecord): NonNullable<TurnEnding["held"]> => ({
     ran: held.ran,
     ...opt("contextTokens", held.contextTokens),
     ...opt("handoffTokens", held.handoffTokens),
-    ...opt("moving", held.move?.account),
+    ...opt("moving", heldMoving(held)),
     ...opt("handoff", held.handoff),
     ...opt("pressOnly", held.pressOnly === true ? true : undefined),
     ...opt("memoryKill", held.memoryKill === undefined ? undefined : true),

@@ -39,6 +39,7 @@ import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
 import { sendableAt } from "../../../../conversations/actor/limit-booking.js";
+import { claudeLimitRefusal } from "../../../providers/claude/claude-usage.testing.js";
 import { createTurnResumeScheduler, fireHeldResume, startConversationTurn } from "../turn-resume.js";
 import { resumeInterruptedTurns } from "../recovery/cut-turns.testing.js";
 import { nudgeResumesOn } from "../holds/resume-nudges.js";
@@ -2740,10 +2741,25 @@ test("a carry the other account refused re-runs fresh on that account, once", as
     clearPendingResume(services, "lim-refused-carry");
 });
 
-// A person picked another account while the hold waited: the appointment is theirs now, at that account's reopen and on
-// that account, in a fresh session since the pick did not carry it. The refused account's own reset fires nothing more.
+// A person picked another account while the hold waited: the appointment is theirs now, at that account's reopen as the
+// records say it at every pass, and on that account, in a fresh session since the pick did not carry it. The refused
+// account's own reset fires nothing more.
 test("an armed hold re-pointed by a pick fires at the picked account's reopen, on that account", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-repoint", true]]));
+    const sooner = REOPENS - 2 * 60 * 60;
+    // The picked account refused another turn, until `sooner`: the records' word on when it reopens.
+    const picked = claudeLimitRefusal({ account: "picked", resetsAt: sooner, at: RECORDED });
+    const services = unstubbed<Services>("services", {
+        ...fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-repoint", true]])),
+        claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+            list: async () => [
+                { id: "spent-one", label: "spent-one", connectedAt: 0 },
+                { id: "picked", label: "picked", connectedAt: 0 },
+            ],
+        }),
+        claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: [picked] }) }),
+    });
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
     recordHeldTurn(
@@ -2757,11 +2773,11 @@ test("an armed hold re-pointed by a pick fires at the picked account's reopen, o
         },
         RECORDED,
     );
-    const sooner = REOPENS - 2 * 60 * 60;
-    expect(services.conversations.send("lim-repoint", { kind: "held-repointed", account: "picked", carry: false, reopensAt: sooner }).reply).toBe(
-        true,
-    );
+    expect(services.conversations.send("lim-repoint", { kind: "held-repointed", account: "picked", carry: false }).reply).toBe(true);
 
+    // The pass the pick nudges reads the picked account's wall; a pass inside the grace after its reset keeps waiting it out.
+    await scheduler.tick(RECORDED + 5_000);
+    expect(turns).toHaveLength(0);
     await scheduler.tick(sendableAt(sooner) - 1_000);
     expect(turns).toHaveLength(0);
     await scheduler.tick(sendableAt(sooner) + 1);

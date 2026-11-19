@@ -19,7 +19,7 @@ import type { AgentRequest } from "../../providers/agent-request.js";
 import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
 import { withClause } from "./frame-clause.js";
-import { routedTurn, throttleAsOutage } from "./routed-throttle.js";
+import { routedTurn, throttleAsOutage } from "./limits/limit-cause.js";
 import { dressedForMemory, type MemoryDeath } from "./memory-death.js";
 import { namedVerification } from "./verification-sentence.js";
 

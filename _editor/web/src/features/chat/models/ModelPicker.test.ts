@@ -28,7 +28,7 @@ const aiKeys = ref<readonly string[] | undefined>(undefined);
 const realMembers = { ...(await import("../../../client/sandbox/useMembers")) };
 jest.mock(`../../../client/sandbox/useMembers`, () => ({ ...realMembers, selfAiAccounts: () => computed(() => aiKeys.value) }));
 
-const { providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
+const { providerAccounts, setCapacitySnapshot, setProviderCapacity, translatorAccounts } = await import("../../../models/providers/providerAccounts");
 const { acpProviders, endpointProviders, perProvider, providerModels, trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ModelPicker } = await import("./ModelPicker.vue");
 const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
@@ -146,6 +146,20 @@ it(`seats the working free trial beside the active lane, with its allowance rath
 });
 
 // Folded is not gone: a reader who types a provider's model still finds it.
+// Every account can read full of room while the provider itself fails every turn: the lane a reader chooses from says so,
+// and when the sandbox tries it again, as the daemon's capacity reports it.
+it(`marks a provider the daemon reports down, and says when the sandbox tries it again`, async () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
+    setProviderCapacity({ provider: `claude`, seq: 1, judgedAt: Date.now(), accounts: [], refusals: [], degraded: { cause: `outage`, retryAt: Date.now() + 300_000 } });
+    const element = mount();
+    await nextTick();
+
+    const lane = [...element.querySelectorAll<HTMLElement>(`[role="radiogroup"] button`)].find((button) => button.getAttribute(`aria-label`)?.startsWith(`Claude Code`));
+    expect(lane?.getAttribute(`aria-label`)).toBe(`Claude Code · Active · Claude Code is failing requests · The sandbox tries it again in about 5 min`);
+    expect(lane?.querySelector(`[data-icon="clock"]`)).not.toBeNull();
+    setCapacitySnapshot({ providers: [] });
+});
+
 it(`still finds a folded provider's models by search`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };

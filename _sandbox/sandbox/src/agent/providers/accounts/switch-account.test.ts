@@ -81,6 +81,7 @@ const verdictOf = (usage: Record<string, AccountUsage>, refusals: readonly Provi
     providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: refusals }) }),
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
     providerAccounts: async () => [],
+    logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {} }),
 });
 
 test("asked to run, a held turn runs again at once on the account named, carried when asked", async () => {
@@ -249,7 +250,8 @@ test("without run, a held turn stays held, and its booking moves to the picked a
     const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": FULL_B }, [REFUSED_B]);
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0)).toEqual({ kind: "moved" });
     expect(pressed).toEqual([]);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: true, reopensAt: REOPEN_B });
+    // Read by the one reading the resume pass judges the hold with (held-verdict.ts pickedReading), and put on it.
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: true, reading: { at: sendableAt(REOPEN_B), reopensAt: REOPEN_B } });
     // The card is re-stated in the same write: the picked account's reset; the re-run its `next` derives is the hold's.
     expect(moved).toEqual([["acct-b", { resetsAt: REOPEN_B }]]);
     expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: sendableAt(REOPEN_B) });
@@ -260,7 +262,7 @@ test("without run, a held turn stays held, and its booking moves to the picked a
 test("a pick onto an account with room clears the wait rather than keeping the refused account's", async () => {
     const { deps, moved, sent } = heldOnPick({ "acct-b": claudeReading({ five_hour: { utilization: 40, resetsAt: REOPEN_B } }, T0) });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: true, reopensAt: reopenedBy(T0) });
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: true, reading: { at: T0, reopensAt: reopenedBy(T0), openSince: T0 } });
     // No clock on the card, and the re-run booked for now, not the grace after a provider's reset: the next pass sends it.
     expect(moved).toEqual([["acct-b", {}]]);
     expectDueNow(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")?.at);

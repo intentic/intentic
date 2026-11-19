@@ -186,7 +186,8 @@ test("compaction reports its trigger and token movement; user echoes and lifecyc
 
 // Pi's own client passes the provider's sentence on, as it said it; the door every runtime's frames go out by codes it
 // (codedFailure), so the turn waits for the reset whichever loop it ran on.
-test("a provider's spent allowance, as Pi reports it, goes out in its words and is coded at the door", () => {
+// Coded at the door by its words (limit-cause.ts): a 429 that shows nothing spent is a throttle, never a spent allowance.
+test("a provider's rate limit, as Pi reports it, goes out in its words and is coded at the door", () => {
     const mapper = createPiEventMapper(WORKSPACE_ROOT);
     const [spent] = mapper.map({ type: "auto_retry_end", success: false, finalError: "429 rate_limit_error: Too many requests" });
     expect(spent).toEqual({ kind: "error", message: "429 rate_limit_error: Too many requests" });
@@ -194,5 +195,6 @@ test("a provider's spent allowance, as Pi reports it, goes out in its words and 
         type: "message_end",
         message: { role: "assistant", stopReason: "error", errorMessage: "prompt is too long: maximum context length is 200000 tokens" },
     });
-    expect([spent, outgrown].map((frame) => (frame?.kind === "error" ? codedFailure(frame).code : undefined))).toEqual(["rate_limit", "context-overflow"]);
+    expect([spent, outgrown].map((frame) => (frame?.kind === "error" ? codedFailure(frame).code : undefined))).toEqual(["provider-outage", "context-overflow"]);
+    expect(spent?.kind === "error" ? codedFailure(spent).throttle : undefined).toBe(true);
 });

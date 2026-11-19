@@ -400,6 +400,14 @@ test("a spent allowance in the agent's own words goes out as said, and the door 
     expect(failure?.kind === "error" ? [failure.code, codedFailure(failure).code] : undefined).toEqual([undefined, "rate_limit"]);
 });
 
+// A bare 429 shows nothing spent (limit-cause.ts): the door codes it as the throttle it is, never a spent allowance.
+test("a rate limit in the agent's own words that shows nothing spent is coded a throttle at the door", async () => {
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
+    const events = await collect(agent, request("rate-limited"));
+    const failure = events.find((event) => event.kind === "error");
+    expect(failure?.kind === "error" ? codedFailure(failure) : undefined).toMatchObject({ code: "provider-outage", throttle: true });
+});
+
 describe("a command the daemon runs for the agent passes the owner's rulebook first", () => {
     test("a held command is put to a person, and their no refuses the terminal", async () => {
         const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);

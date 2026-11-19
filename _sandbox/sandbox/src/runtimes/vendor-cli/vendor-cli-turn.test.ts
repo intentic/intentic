@@ -71,7 +71,7 @@ const harness = (accounts: StoredCliAccount[], replies: AgentEvent[] = [{ kind: 
         dependencies: unstubbed("dependencies", {}),
         agents: unstubbed("agents", { entry: () => undefined }),
         logger: createLogger(testConfig),
-        // The one rule a turn naming no account is placed by (serviceability.ts unnamedAccount): the CLI's own accounts
+        // The one rule a turn naming no account is placed by (placement.ts unnamedPlacement): the CLI's own accounts
         // as their door lists them, no translator subscription, and the refusals on file.
         providerAccounts: async () => accounts.map((entry) => ({ id: entry.id, label: entry.id, connectedAt: entry.connectedAt })),
         cliProxy: unstubbed("cliProxy", { accounts: async () => ({ codex: [], gemini: [], grok: [], kimi: [] }) }),

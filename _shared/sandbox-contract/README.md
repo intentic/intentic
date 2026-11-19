@@ -58,8 +58,24 @@ flowchart LR
   `AccountState` (`ready` · `spent` · `blocked` with its `fix` · `unknown`; `plan` is the fix for a model other accounts
   of the provider run and this one's plan lacks), and `fleetCapacity` folds a provider's accounts into one answer per
   model (`serving` · `spent` until when · `unknown`), leaving out the accounts whose plan lacks it. `SPENT_UTILIZATION` is the only spent line. The daemon and the editor both
-  run it, on the same account rows and the same refusals on file (`ProviderRefusalsSchema`, every refusal per provider);
-  no account row carries a verdict, so no surface can read a stale one.
+  run it, on the same account rows and the same refusals on file (`ProviderRefusalsSchema`, every refusal per provider),
+  at an instant the caller passes, the sandbox's clock: nothing in the rule reads a clock of its own. Every reading is
+  first taken as it stands at that instant (`factsAt` in `src/models/verdict/current-windows.ts`), so a window past its
+  reset reads lapsed whoever re-read it last; `capacityValidUntil` says when the clock alone next changes the answer.
+  (2026-11-19: the daemon lapsed windows as it read its store and the rule did not, so a window holding the facts it
+  had been sent judged a pool spent, "back at 12:00", at 12:05 while the daemon judged it ready; rejected, a rule that
+  is only the same on both sides when both happen to hold readings of the same age.) What the rule needs to know about a
+  pool or a refusal is resolved once, where it is known, and carried as data: a window's length by the reader that
+  parsed the provider's answer (`UsageWindow.periodSeconds`), and which pool a spent allowance's instant is the reset
+  of, or that it is none the reading published, by the daemon's ledger as it files the refusal (`ProviderRefusal.pool`,
+  `poolUnpublished`; `refusedPoolOf` in `src/models/verdict/refusal-verdict.ts`). Only a window or a refusal filed
+  without them is still read off the pool's words (`windowPeriod`) or matched against each reading's resets as it is
+  judged (`refusedInstant`). (2026-11-19: both were worked out again on every judgement, in the daemon and the browser,
+  and a Codex refusal matched against a reading taken after the fact held every model for four days; re-inferring on
+  each judgement was rejected for that.) `ProviderCapacitySchema`
+  (`src/schemas/providers/capacity.ts`) is the daemon's judged picture of one provider: every fact, each account's
+  verdict with no model named, where a turn naming no account runs, whether the provider itself is failing, and that
+  instant; `usage.capacity` answers it and the opt-in `/events` `capacity` frame pushes it as it moves.
 - So is which lane the board files a conversation in and what of a fleet calls the person (`src/models/agent-standing.ts`,
   `src/models/agent-lanes.ts`, `src/models/agent-starter.ts`, moved from the editor on 2026-10-16): the editor draws
   the board by them and re-exports them where it always imported them, and the daemon counts `GET /agents/attention`

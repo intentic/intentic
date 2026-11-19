@@ -1,5 +1,6 @@
 import type { Services } from "../../composition.js";
 import { liveRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { heldReopen } from "../../conversations/actor/limit-booking.js";
 import { supervisorOf } from "../../auth/principal.js";
 import { bookedRerunWords, sayToParent } from "../../conversations/land/child-lands.js";
 import { opt } from "../../opt.js";
@@ -146,7 +147,8 @@ const settleCutChild = (services: Services, childId: string): void => {
     const failure = kid.paused?.failure ?? RESTARTED;
     const held = services.conversations.state(childId)?.resume.held;
     if (held !== undefined && !held.fired) {
-        pauseChild(services, childId, kid.parent, kid, failure, `${failure} ${bookedRerunWords({ at: held.reopensAt }, childId)}`);
+        // Put back at boot, the hold has not been read yet: its reopen is the refusal's own word (limit-booking.ts heldReopen).
+        pauseChild(services, childId, kid.parent, kid, failure, `${failure} ${bookedRerunWords({ at: heldReopen(held) }, childId)}`);
         return;
     }
     const error = kid.paused === undefined ? RESTART_CUT : restartCutPause(failure);

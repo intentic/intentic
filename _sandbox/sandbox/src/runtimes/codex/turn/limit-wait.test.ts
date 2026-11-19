@@ -1,4 +1,4 @@
-import { allowanceReopening, limitWait } from "./limit-wait.js";
+import { allowanceReopening, handedOverFrame, LIMIT_WAIT_HANDED_OVER, LIMIT_WAIT_THROTTLED, limitWait } from "./limit-wait.js";
 
 const PATIENCE = 120_000;
 const NOW = 1_800_000_000_000;
@@ -63,6 +63,32 @@ describe("a rate-limited wait whose reopening is on file", () => {
         expect(wait.handedOver()).toBe(false);
         expect(stops.count).toBe(0);
         wait.dispose();
+    });
+});
+
+/* What the hand-over is evidence of (limit-cause.ts): a reopening on file past patience is the records calling the
+   allowance spent; patience alone is a throttle that outlasted it (2026-11-19: both were a spent allowance). */
+describe("a handed-over wait", () => {
+    afterEach(() => jest.useRealTimers());
+
+    test("handed over by its reopening on file is a spent allowance, held for the reset", async () => {
+        jest.useFakeTimers();
+        const { wait } = waitWith(async () => NOW / 1000 + 4 * 3600);
+        wait.retrying();
+        await flush();
+        expect(wait.reopensAt()).toBe(NOW / 1000 + 4 * 3600);
+        expect(handedOverFrame(wait)).toEqual({ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true });
+    });
+
+    test("handed over by patience alone is a throttle, waited out on the backoff with nothing filed", async () => {
+        jest.useFakeTimers();
+        const { wait } = waitWith(async () => undefined);
+        wait.retrying();
+        await flush();
+        jest.advanceTimersByTime(PATIENCE);
+        expect(wait.handedOver()).toBe(true);
+        expect(wait.reopensAt()).toBeUndefined();
+        expect(handedOverFrame(wait)).toEqual({ kind: "error", code: "provider-outage", throttle: true, message: LIMIT_WAIT_THROTTLED, own: true });
     });
 });
 

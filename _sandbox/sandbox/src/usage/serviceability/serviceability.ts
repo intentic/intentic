@@ -1,4 +1,4 @@
-import type { AccountState, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountState, ProviderRefusal, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
@@ -6,7 +6,6 @@ import {
     type FleetCapacity,
     fleetOf,
     type ModelRef,
-    preferredAccount,
     reopensAtOf,
     type ServiceFacts,
     serviceStates,
@@ -20,7 +19,8 @@ import { opt } from "../../opt.js";
 // itself is the contract's (`serviceStates`, `fleetOf` in models/plan-pools.ts), which the editor runs too; this module
 // feeds it every fact the daemon holds, for every provider the same way: the accounts as their own door or the translator
 // lists them (revoke marks, seat refusals, benches, plan-limit readings), and every refusal on file. Every picker, gate,
-// listing and booking in the daemon asks here and nowhere else.
+// listing and booking in the daemon asks here and nowhere else; which account a turn runs on is then decided over these
+// verdicts in one place too (agent/providers/accounts/placement.ts).
 
 // `logger`, where given, records each change of an account's verdict (state-log.ts); the daemon's callers pass the whole
 // services, which carry it.
@@ -97,15 +97,15 @@ const flappingOf = async (deps: ServiceabilityDeps, provider: AgentProvider): Pr
 };
 
 /** One account as a pick reads it: its verdict, and `flapping` where its organisation keeps switching it off. */
-interface Serviceability {
+export interface Serviceability {
     readonly id: string;
     readonly state: AccountState;
     readonly flapping?: true;
 }
 
 // Every account's facts with its verdict and its flapping mark, in the provider's own order.
-const rows = async (deps: ServiceabilityDeps, provider: AgentProvider, model: ModelRef | undefined) => {
-    const [{ facts, states }, flapping] = await Promise.all([judged(deps, provider, model), flappingOf(deps, provider)]);
+const rows = async (deps: ServiceabilityDeps, provider: AgentProvider, model: ModelRef | undefined, now: number = Date.now()) => {
+    const [{ facts, states }, flapping] = await Promise.all([judged(deps, provider, model, now), flappingOf(deps, provider)]);
     return facts.map((entry) => {
         const row: Serviceability = {
             id: entry.account,
@@ -116,53 +116,78 @@ const rows = async (deps: ServiceabilityDeps, provider: AgentProvider, model: Mo
     });
 };
 
-/** Every account of a provider with its verdict, in the provider's own order. `model` scopes the plan-limit half to the pools it spends. */
-export const serviceabilities = async (deps: ServiceabilityDeps, provider: AgentProvider, model?: ModelRef): Promise<readonly Serviceability[]> =>
-    (await rows(deps, provider, model)).map(({ row }) => row);
+/**
+ * Every account of a provider with its verdict, in the provider's own order. `model` scopes the plan-limit half to the pools
+ * it spends; `now` is the instant judged at, the caller's own where it holds one (a pass tending what was due then).
+ */
+export const serviceabilities = async (deps: ServiceabilityDeps, provider: AgentProvider, model?: ModelRef, now: number = Date.now()): Promise<readonly Serviceability[]> =>
+    (await rows(deps, provider, model, now)).map(({ row }) => row);
 
-/** As `serviceabilities`, with each account's own name beside it, for a sentence that has to name them. */
-export const namedServiceabilities = async (
-    deps: ServiceabilityDeps,
-    provider: AgentProvider,
-    model?: ModelRef,
-): Promise<readonly (Serviceability & { readonly label: string })[]> =>
-    (await rows(deps, provider, model)).map(({ entry, row }) => ({ ...row, label: entry.label ?? entry.account }));
-
-/* WHERE A TURN NAMING NO ACCOUNT RUNS, for every runtime that holds its accounts' credentials and so can be pointed at
-   one: Claude (harness-credentials.ts), Cursor (cursor-usage.ts, on the same rule over its refusals alone), Devin, the
-   minted keys (Meta, Z.ai) and a vendor CLI's sign-ins (Grok Build, Kimi CLI). One rule, preferredAccount: room (the
-   first to renew unless nearly out), then unmeasured, then at the line, then spent; Claude asks the fan-out planner first
-   (harness-credentials.ts unnamedClaude), which orders its accounts the same way with their load counted. A routed subscription is the translator's to balance and is never placed
-   here. Devin, the minted keys and the CLIs each took their first connected account instead, so a spent first account
-   took every turn while the others sat idle (Devin, 2026-10-28 and 10-29). */
+/** One account as a placement reads it: its verdict and flapping mark, its own name, and the facts both were judged from. */
+export interface JudgedAccount extends Serviceability {
+    readonly label: string;
+    readonly facts: ServiceFacts;
+}
 
 /**
- * The account a turn naming none runs on, among `accounts` (those its loop can serve, in the provider's own order),
- * judged for `model` where it names one. A single account is not a choice; a verdict that cannot be read keeps the
- * first, as before, and says so.
+ * As `serviceabilities`, with each account's own name and facts beside its verdict: what a pick reads that names the
+ * accounts in a sentence, or that projects their readings (the fan-out planner, agent/run/spend/budget-planner.ts).
  */
-export const unnamedAccount = async <T extends { readonly id: string }>(
-    deps: ServiceabilityDeps,
-    provider: AgentProvider,
-    accounts: readonly T[],
-    model?: string | undefined,
-): Promise<T | undefined> => {
-    if (accounts.length < 2) {
-        return accounts[0];
-    }
-    try {
-        const judgedRows = await serviceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
-        const picked = preferredAccount(judgedRows.filter((row) => accounts.some((account) => account.id === row.id)))?.id;
-        return accounts.find((account) => account.id === picked) ?? accounts[0];
-    } catch (error) {
-        deps.logger?.warn({ err: error, provider }, "serviceability: the accounts' verdicts could not be read, the turn runs on the first connected");
-        return accounts[0];
-    }
+export const judgedAccounts = async (deps: ServiceabilityDeps, provider: AgentProvider, model?: ModelRef): Promise<readonly JudgedAccount[]> =>
+    (await rows(deps, provider, model)).map(({ entry, row }) => ({ ...row, label: entry.label ?? entry.account, facts: entry }));
+
+/* A LISTING THAT ASKS ABOUT EVERY MODEL OF A CATALOG (the spawn listing, the Auto offer) reads the provider's accounts and
+   refusals once and judges each model on that one reading, every account judged together whatever subset it asks about:
+   a refusal naming no account is answered by any of them, so a subset judged alone reads it differently (refusal-
+   verdict.ts verdictOn). Before 2026-11-19 both ran the rule on the facts themselves, and the Auto offer judged a
+   member's accounts apart from the rest. No verdict lines are written and no flapping is read: a catalog is judged a
+   model at a time on every page that lists it, and neither listing ranks accounts. An unreadable refusal file leaves the
+   readings to speak alone, as before one was ever written; unreadable accounts throw, for the caller to leave the
+   provider out. */
+
+/** One provider's accounts, read once, judged on any model. */
+export interface AccountsJudge {
+    // Every connected account as the rule reads it, in the provider's own order.
+    readonly facts: readonly ServiceFacts[];
+    // Each account's verdict on one model, its name and facts beside it, in the provider's own order.
+    readonly accounts: (model: ModelRef | undefined) => readonly JudgedAccount[];
+    // What the accounts `among` admits (every one where absent) can serve of one model together (fleetOf).
+    readonly capacity: (model: ModelRef | undefined, among?: (account: string) => boolean) => FleetCapacity;
+}
+
+export const accountsJudge = async (deps: ServiceabilityDeps, provider: AgentProvider, now: number = Date.now()): Promise<AccountsJudge> => {
+    const [onFile, facts] = await Promise.all([
+        deps.providerRefusals.onFile().catch((error: Error): Readonly<Record<string, readonly ProviderRefusal[]>> => {
+            deps.logger?.warn({ err: error, provider }, "serviceability: the refusals on file could not be read, judging the listing by the readings alone");
+            return {};
+        }),
+        accountFactsOf(deps, provider),
+    ]);
+    // Each model judged once, however many of the listing's questions ask about it.
+    const judgedFor = new Map<string, ReadonlyMap<string, AccountState>>();
+    const states = (model: ModelRef | undefined): ReadonlyMap<string, AccountState> => {
+        const key = model === undefined ? "" : `${model.id}\u0000${model.label ?? ""}`;
+        const kept = judgedFor.get(key) ?? serviceStates(facts, onFile[provider], model, now);
+        judgedFor.set(key, kept);
+        return kept;
+    };
+    return {
+        facts,
+        accounts: (model) => {
+            const verdicts = states(model);
+            return facts.map((entry) => ({ id: entry.account, state: verdicts.get(entry.account) ?? { kind: "unknown" }, label: entry.label ?? entry.account, facts: entry }));
+        },
+        capacity: (model, among) =>
+            fleetOf(
+                facts.filter((entry) => among?.(entry.account) ?? true),
+                states(model),
+            ),
+    };
 };
 
 /** One account's verdict; `unknown` for an account the provider does not hold. */
-export const serviceability = async (deps: ServiceabilityDeps, provider: AgentProvider, account: string, model?: ModelRef): Promise<AccountState> =>
-    (await serviceabilities(deps, provider, model)).find((entry) => entry.id === account)?.state ?? { kind: "unknown" };
+export const serviceability = async (deps: ServiceabilityDeps, provider: AgentProvider, account: string, model?: ModelRef, now: number = Date.now()): Promise<AccountState> =>
+    (await serviceabilities(deps, provider, model, now)).find((entry) => entry.id === account)?.state ?? { kind: "unknown" };
 
 /** What a provider's accounts can serve of one model together: what every gate, listing and offer reads (fleetOf). */
 export const fleetCapacityOf = async (deps: ServiceabilityDeps, provider: AgentProvider, model: ModelRef | undefined, now: number = Date.now()): Promise<FleetCapacity> => {

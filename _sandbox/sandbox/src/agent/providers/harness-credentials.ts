@@ -1,12 +1,11 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { endpointIdOf, loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import type { FleetCapacity, ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
+import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { ensureFreshToken, replaceRejectedToken } from "./claude/claude-credentials.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
-import { unnamedAccount } from "../../usage/serviceability/serviceability.js";
-import { plannedClaudeAccount } from "../models/sibling-account.js";
+import { claudePickModel, unnamedPlacement } from "./accounts/placement.js";
 import { goneAccountMessage, resolveRoute, type RouteResult } from "./routes/model-routes.js";
 import type { HarnessCredential } from "./agent-request.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
@@ -158,38 +157,6 @@ export type HarnessCredentialDeps = Pick<
     | "wakeLocalModel"
 >;
 
-// The model an unnamed Claude pick is judged for: the one the turn names, else the catalog's default, which is what the
-// CLI runs. Asked with no model, the rule answers whether SOME turn can run, and an account whose only full pool is the
-// default model's own slice would win a pick it then loses.
-const pickModel = async (services: Pick<Services, "providerCatalogs">, model: string | undefined): Promise<ModelRef | undefined> => {
-    if (model !== undefined && model !== "") {
-        return { id: model };
-    }
-    // allow(silent-catch): an unreadable catalog only leaves the pick asking whether SOME turn can run, never fails the turn.
-    const fallback = await services.providerCatalogs.claude.models().then(
-        (catalog) => catalog.default,
-        () => undefined,
-    );
-    return fallback === undefined ? undefined : { id: fallback };
-};
-
-/* WHERE A CLAUDE TURN NAMING NO ACCOUNT RUNS (a conversation's first turn, a one-off, an automation naming none): where
-   the fan-out planner would place it with what already runs on each account counted (budget-planner.ts pickAccount: the
-   first to renew of the accounts that carry it, steady ones first), else the sandbox's one rule over the verdicts alone
-   (serviceability.ts unnamedAccount), which is also what every window drawing where a turn would run reads
-   (plan-pools.ts preferredAccount). The two order accounts alike; only the planner sees the load, so while children
-   crowd the account renewing first, the turn goes on the next one where a window still names the first. */
-const unnamedClaude = async <T extends { readonly id: string }>(services: HarnessCredentialDeps, connected: readonly T[], model: string | undefined): Promise<T | undefined> => {
-    if (connected.length > 1 && model !== undefined) {
-        const planned = await plannedClaudeAccount(services, model, { among: connected.map((account) => account.id) });
-        const found = connected.find((account) => account.id === planned);
-        if (found !== undefined) {
-            return found;
-        }
-    }
-    return unnamedAccount(services, "claude", connected, model);
-};
-
 // A route the harness can take, as the credentials it carries: the URL and bearer (Anthropic Messages, so the base with
 // no version path), whose account answered, whose allowance it spends, and whether it is the trial.
 const harnessOfRoute = (result: RouteResult): HarnessCredentialsResult => {
@@ -249,7 +216,8 @@ export const resolveHarnessCredentials = async (
     if (spec !== undefined && (spec.auth.kind === "minted" || spec.auth.kind === "translator")) {
         return harnessOfRoute(await resolveRoute(services, { provider: spec.id, loop: "claude-code", account: input.account, model: input.model }));
     }
-    // An unnamed account is picked by the one serviceability rule (usage/serviceability.ts); a named account is never
+    // An unnamed account is placed by the sandbox's one placement (accounts/placement.ts unnamedPlacement: the fan-out
+    // planner's pick with what already runs on each account counted, else the verdicts' order); a named account is never
     // filtered here. Routing decided it before this: a conversation's remembered account is moved off one that cannot
     // serve where the turn is planned (providers/accounts/blocked-account.ts), so a named account is a choice made for
     // this turn, or the ready account the turn was moved to. The only account there is runs whatever its state: a
@@ -260,7 +228,7 @@ export const resolveHarnessCredentials = async (
     if (unnamed && connected.length > 1) {
         await services.headroom.refresh({ scope: { providers: ["claude"] }, withinMs: PICK_REFRESH_WAIT_MS });
     }
-    const accountId = input.account ?? (await unnamedClaude(services, connected, (await pickModel(services, input.model))?.id))?.id;
+    const accountId = input.account ?? (await unnamedPlacement(services, "claude", connected, (await claudePickModel(services, input.model))?.id))?.id;
     // A refresh failure joins the other refusals rather than throwing past the caller.
     let oauthToken: string | undefined;
     if (accountId !== undefined) {

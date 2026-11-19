@@ -35,6 +35,7 @@ import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldU
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../../../models/providers/usageStatus";
 import { type SendBlock, sendBlockOf } from "../../../../models/providers/sendAvailability";
+import { type DegradedNote, degradedNote } from "../../../../models/providers/capacity/degradedNote";
 import { anyProviderReady } from "../../../../models/providers/access";
 import { providerWithheld } from "../../../../models/providers/aiReach";
 import { track } from "../../../../app/analytics";
@@ -90,14 +91,24 @@ export interface SendHost {
 }
 
 // The blocked reading a press sends past (composerIntent's sendAnyway): whether it does, the status line's words (the
-// refusal first, which outranks it) and the press's hover.
-const anywayReadings = (situation: Readonly<Ref<ComposerSituation>>, refusal: Readonly<Ref<string | undefined>>) => {
+// refusal first, which outranks it) and the press's hover. Below both, the provider itself failing or throttling turns
+// (degradedNote.ts): a press still sends, and the words say the turn meets an outage and when the sandbox tries again.
+const anywayReadings = (
+    situation: Readonly<Ref<ComposerSituation>>,
+    refusal: Readonly<Ref<string | undefined>>,
+    outage: Readonly<Ref<DegradedNote | undefined>>,
+) => {
     const block = computed(() => sendAnyway(situation.value));
     return {
         block,
         on: computed(() => block.value !== undefined),
-        statusBlock: computed(() => refusal.value ?? (block.value === undefined ? undefined : sendAnywayLine(block.value))),
-        hint: computed(() => (block.value === undefined ? undefined : sendAnywayHint(block.value))),
+        statusBlock: computed(() => refusal.value ?? (block.value === undefined ? outage.value?.line : sendAnywayLine(block.value))),
+        hint: computed((): TooltipValue => {
+            if (block.value !== undefined) {
+                return sendAnywayHint(block.value);
+            }
+            return outage.value === undefined ? undefined : { title: outage.value.title, tone: `warning`, note: outage.value.retry };
+        }),
     };
 };
 
@@ -332,7 +343,7 @@ export const useComposerSend = (host: SendHost) => {
     const intent = computed(() => sendIntentOf(situation.value));
     // Why Send is refusing, in the user's words; undefined when the press will land.
     const refusal = computed(() => sendRefusal(situation.value));
-    const anyway = anywayReadings(situation, refusal);
+    const anyway = anywayReadings(situation, refusal, computed(() => degradedNote(view.conversation.value.selection.provider.value)));
     const continueOffer = computed(() => continueOffered(situation.value));
     const goes = computed(() => pressGoes(pickUp.value, host.reachable.value, view.conversation.value.turn.continuing.value, paneNow.value));
     const reopen = reopenReadings({ situation, intent, continueOffer, spentUntil, now: paneNow, goes });

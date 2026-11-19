@@ -8,7 +8,10 @@ import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 // keeps the reopen instant), and unmeasured (listed, since no reading isn't no allowance).
 
 const window = (over: Partial<UsageWindow> & Pick<UsageWindow, "kind">): UsageWindow => ({ utilization: 10, gates: "all", ...over });
-const usage = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt: 1_000 });
+// The suite's clock: a minute before the real one the listing judges at (Date.now()), so a reading taken at T + n is still
+// current and a reset at T's second + n is still ahead.
+const T = Date.now() - 60_000;
+const usage = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt: T + 1_000 });
 
 // Claude connected with two accounts and nothing else; testProviderCatalogs answers for every provider, so readiness
 // alone decides which rows appear.
@@ -29,7 +32,7 @@ test("reports the most headroom any one account has, and names only a pool the p
     const claude = rows.find((row) => row.id === "claude");
     // The best account answers: one with room is enough to run the turn.
     // Says whose figure it is and when it was read, since the two accounts read very differently.
-    expect(claude?.models[0]?.headroom).toEqual({ percentLeft: 60, account: "fresh", readAt: 1_000 });
+    expect(claude?.models[0]?.headroom).toEqual({ percentLeft: 60, account: "fresh", readAt: T + 1_000 });
     expect(claude?.spent).toBe(0);
 });
 
@@ -52,22 +55,22 @@ test("names a pool the plan meters separately, so the number says which allowanc
     const rows = await spawnableProviders(
         claudeOnly({ one: usage(window({ kind: "opus_weekly", label: "Opus", gates: { models: ["opus"] }, utilization: 25 })) }),
     );
-    expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 75, pool: "Opus", account: "one", readAt: 1_000 });
+    expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 75, pool: "Opus", account: "one", readAt: T + 1_000 });
 });
 
 test("leaves out a model whose every account is at the cap, and keeps when it comes back", async () => {
     const full = { kind: "seven_day", label: "Weekly", gates: "all" } as const;
     const rows = await spawnableProviders(
         claudeOnly({
-            a: usage(window({ ...full, utilization: 100, resetsAt: 9_000 })),
-            b: usage(window({ ...full, utilization: 100, resetsAt: 4_000 })),
+            a: usage(window({ ...full, utilization: 100, resetsAt: Math.floor(T / 1000) + 9_000 })),
+            b: usage(window({ ...full, utilization: 100, resetsAt: Math.floor(T / 1000) + 4_000 })),
         }),
     );
     const claude = rows.find((row) => row.id === "claude");
     expect(claude?.models).toEqual([]);
     expect(claude?.spent).toBe(1);
     // The soonest reopen wins, since any one pool reopening makes the provider spendable again.
-    expect(claude?.reopensAt).toBe(4_000);
+    expect(claude?.reopensAt).toBe(Math.floor(T / 1000) + 4_000);
 });
 
 test("lists a model nothing measures rather than dropping it: no reading is not no allowance", async () => {
@@ -206,22 +209,22 @@ describe("whose figure it is, and how old", () => {
     it("quotes a reading that can still be re-read over a roomier one that cannot", async () => {
         const rows = await spawnableProviders(
             claudeOnly({
-                stuck: { windows: [weekly(10)], measuredAt: 1_000, unread: { since: 2_000, reason: "Verify your account to continue." } },
-                live: { windows: [weekly(83)], measuredAt: 5_000 },
+                stuck: { windows: [weekly(10)], measuredAt: T + 1_000, unread: { since: T + 2_000, reason: "Verify your account to continue." } },
+                live: { windows: [weekly(83)], measuredAt: T + 5_000 },
             }),
         );
-        expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 17, account: "live", readAt: 5_000 });
+        expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 17, account: "live", readAt: T + 5_000 });
     });
 
     it("marks a stale figure stale, with how long re-reading it has failed, when it is all there is", async () => {
         const rows = await spawnableProviders(
-            claudeOnly({ stuck: { windows: [weekly(83)], measuredAt: 1_000, unread: { since: 2_000, reason: "Verify your account to continue." } } }),
+            claudeOnly({ stuck: { windows: [weekly(83)], measuredAt: T + 1_000, unread: { since: T + 2_000, reason: "Verify your account to continue." } } }),
         );
         expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({
             percentLeft: 17,
             account: "stuck",
-            readAt: 1_000,
-            stale: { since: 2_000, reason: "Verify your account to continue." },
+            readAt: T + 1_000,
+            stale: { since: T + 2_000, reason: "Verify your account to continue." },
         });
     });
 

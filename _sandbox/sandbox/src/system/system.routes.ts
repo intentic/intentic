@@ -31,6 +31,7 @@ import { subscribeFileFrames } from "./file-frames.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
+import { subscribeCapacityFrames } from "../usage/serviceability/capacity-frames.js";
 import {
     captureScrollback,
     isValidSessionName,
@@ -89,12 +90,14 @@ const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => {
 };
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
-// `clientId` joins the roster for this connection's lifetime, undefined observes without joining; `roster` is how progress arrives.
+// `clientId` joins the roster for this connection's lifetime, undefined observes without joining; `roster` is how progress arrives;
+// `capacity` asks for each provider's judged capacity as it moves.
+type EventsAsk = { readonly clientId?: string | undefined; readonly roster?: RosterFrames | undefined; readonly capacity?: boolean | undefined };
 async function* systemEvents(
     services: Services,
     signal: AbortSignal | undefined,
     identity: Caller | undefined,
-    { clientId, roster }: { readonly clientId?: string | undefined; readonly roster?: RosterFrames | undefined },
+    { clientId, roster, capacity }: EventsAsk,
     principal?: Principal,
 ): AsyncGenerator<SystemEvent> {
     const controller = new AbortController();
@@ -148,15 +151,17 @@ async function* systemEvents(
         wake = undefined;
         resolve?.();
     };
+    // A frame out, and the idle wait woken for it.
+    const send = (event: SystemEvent): void => {
+        enqueue(event);
+        onWake();
+    };
     // Registers before subscribing, so the broadcast reaches existing members before the snapshot paints back.
     if (identity !== undefined && clientId !== undefined) {
         releases.push(registerPresence(clientId, identity));
     }
     releases.push(
-        subscribePresence((users) => {
-            enqueue({ kind: "presence", users });
-            onWake();
-        }),
+        subscribePresence((users) => send({ kind: "presence", users })),
         // Fleet roster: a snapshot on subscribe, then a frame per registry send; progress as just the moved cards if asked.
         services.agents.subscribe((agents, rev, whole) => {
             enqueue(whole ? { kind: "agents", agents, rev } : { kind: "agentsChanged", agents, rev, since: sentRev });
@@ -164,21 +169,14 @@ async function* systemEvents(
             onWake();
         }, roster),
         // Boot transitions re-frame the hello snapshot, so a mid-boot reconnect is consistent from its first frame.
-        services.boot.subscribe((progress) => {
-            enqueue({ kind: "boot", ...progress });
-            onWake();
-        }),
+        services.boot.subscribe((progress) => send({ kind: "boot", ...progress })),
         // Every frame that says files or repositories moved (file-frames.ts).
-        ...subscribeFileFrames((event) => {
-            enqueue(event);
-            onWake();
-        }),
+        ...subscribeFileFrames(send),
         // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click. The
         // conversations, when the moves were only theirs, keep every other review from being read again.
-        subscribeRefChanges((repos, conversations) => {
-            enqueue({ kind: "refsChanged", repos, ...opt("conversations", conversations === undefined ? undefined : [...conversations]) });
-            onWake();
-        }),
+        subscribeRefChanges((repos, conversations) =>
+            send({ kind: "refsChanged", repos, ...opt("conversations", conversations === undefined ? undefined : [...conversations]) }),
+        ),
         // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler. A
         // domain moved for one person (their drafts) reaches only the connections reading as that person.
         subscribeRuntimeChanges((domains, audiences) => {
@@ -191,15 +189,13 @@ async function* systemEvents(
             }
         }, services.logger),
         // Account plan limits or a provider refusal changed, so every open window's usage ring agrees without polling.
-        services.headroom.onChange((provider, account, usage) => {
-            enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });
-            onWake();
-        }),
-        services.providerRefusals.onChange((provider, refusals, switchOffs) => {
-            enqueue({ kind: "providerRefusal", provider, refusals: [...refusals], switchOffs });
-            onWake();
-        }),
+        services.headroom.onChange((provider, account, usage) => send({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) })),
+        services.providerRefusals.onChange((provider, refusals, switchOffs) => send({ kind: "providerRefusal", provider, refusals: [...refusals], switchOffs })),
     );
+    // Each provider's judged capacity, for a window that asked (capacity-frames.ts).
+    if (capacity === true) {
+        releases.push(subscribeCapacityFrames(services, send, () => !abort.aborted));
+    }
     // Registered after every step that could throw, right before the loop, so a dead entry can't leak. A control token's
     // stream registers too, so revoking the token cuts it rather than only refusing its next request.
     const holder = identity ?? principal;

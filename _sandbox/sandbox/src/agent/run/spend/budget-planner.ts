@@ -1,9 +1,10 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { gatingWindows, type ServiceFacts, serviceStates, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { gatingWindows, type ServiceFacts, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import { poolName, poolRunOut, type RunOut, type RunOuts } from "../../../usage/run-outs.js";
+import type { JudgedAccount } from "../../../usage/serviceability/serviceability.js";
 import { runningOn, turnPulseOf } from "../turn/turn-pulse.js";
 import { type BudgetAccount, type BudgetWindow, capacity, type ChildCost, choose, leastShort, type Projection } from "./budget.js";
 import { turnRate } from "./token-meter.js";
@@ -11,19 +12,21 @@ import { turnRate } from "./token-meter.js";
 /* THE FAN-OUT PLANNER: where a child goes, and whether it goes now, read off what the accounts can carry.
 
    The projection is budget.ts's; this gathers what it projects from. The accounts the serviceability rule calls ready
-   with room, each window the model spends with what one of its points costs (learned per account, burn-rates.ts, else
-   a prior); what runs on each account now (every turn of this sandbox's, read off its pulse, at the rate the meter
+   with room (judged by its caller through serviceability.ts, every account of the provider together, so the planner
+   never runs the rule on a subset of the facts itself), each window the model spends with what one of its points costs
+   (learned per account, burn-rates.ts, else a prior); what runs on each account now (every turn of this sandbox's, read off its pulse, at the rate the meter
    measured once it ran long enough to have one, else its model's pace), and the children this planner placed whose
    turns have not begun yet; and what one more child of the model costs.
 
    Claude is the provider whose readings this projects, so a Claude child is PLACED: the account rides on its spec, and its
-   conversation keeps it. Another provider whose accounts a turn can name (Cursor, Devin, the minted keys) publishes no
-   reading to project, so its child is placed by the turn's own rule as it plans (serviceability.ts unnamedAccount). A
-   routed provider balances its own credentials (the translator), so its ready accounts are judged as one pool, and a
-   child is only admitted or held.
+   conversation keeps it. Another provider whose accounts a turn can name (Cursor, Devin, the minted keys, a vendor CLI's
+   sign-ins) publishes no reading to project, so its child is placed by the turn's own rule as it plans (placement.ts
+   unnamedPlacement). A routed provider's requests are each placed by the daemon's gateway (translator-gateway.ts), which
+   no turn is bound to, so its ready accounts are judged as one pool, and a child is only admitted or held.
 
    Among the accounts that carry a child, it goes on the one whose allowance renews first (budget.ts choose), steady
-   accounts before flapping ones; a turn naming no account is placed the same way (pickAccount, harness-credentials.ts).
+   accounts before flapping ones; a turn naming no account, and a turn moved off an account that cannot serve it, are
+   placed the same way (pickAccount, read through agent/providers/accounts/placement.ts).
 
    Claims are made one at a time per provider: a fan-out of ten spawns in a few seconds, and each must see the ones
    before it, or ten reads of the same figure send ten children to the same account, which is the failure this is for. */
@@ -49,7 +52,7 @@ const COMMITTED_FOR_MS = 15 * 60_000;
 // A pulse stamped this much before its claim is still the claimed turn's: the two clocks are read a moment apart.
 const CLOCK_SLACK_MS = 1_000;
 
-const priorPointsPerAgentHour = (window: Pick<UsageWindow, "kind" | "label">): number => {
+const priorPointsPerAgentHour = (window: Pick<UsageWindow, "kind" | "label" | "periodSeconds">): number => {
     const period = windowPeriod(window);
     return period === undefined ? 1 : PRIOR_FIVE_HOUR_POINTS * (5 / Math.max(1 / 60, period.seconds / 3_600)) ** PERIOD_EXPONENT;
 };
@@ -69,13 +72,19 @@ const runOutPointsPerAgentHour = (window: UsageWindow, runOut: RunOut | undefine
 
 const modelShare = (model: string | undefined): number => (model === undefined ? 1 : SMALL_MODEL.test(model) ? 0.3 : MID_MODEL.test(model) ? 0.6 : 1);
 
-export type PlannerDeps = Pick<Services, "burnRates" | "providerRefusals" | "runOuts"> & { readonly sandboxSettings: Pick<Services["sandboxSettings"], "get"> };
+export type PlannerDeps = Pick<Services, "burnRates" | "runOuts"> & { readonly sandboxSettings: Pick<Services["sandboxSettings"], "get"> };
 
-/** What a plan is asked about: a provider, the model its child runs, and its accounts as the serviceability rule reads them. */
+/** One account as a plan reads it: its facts, its verdict on the plan's model, and its flapping mark (serviceability.ts). */
+export type PlanAccount = Pick<JudgedAccount, "id" | "state" | "flapping" | "facts">;
+
+/**
+ * What a plan is asked about: a provider, the model its child runs, and the accounts it may place on, each judged for that
+ * model by the serviceability rule with every other account of the provider (serviceability.ts judgedAccounts).
+ */
 export interface PlanInput {
     readonly provider: AgentProvider;
     readonly model: string;
-    readonly readings: readonly ServiceFacts[];
+    readonly accounts: readonly PlanAccount[];
 }
 
 interface Committed {
@@ -161,29 +170,19 @@ export interface PlanAccounts {
 
 const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = Date.now()): Promise<PlanAccounts> => {
     await deps.burnRates.ready();
-    const [refusals, runOuts, settings, flapping] = await Promise.all([
-        // allow(silent-catch): an unreadable refusal file leaves the readings to speak alone, as in the listing.
-        deps.providerRefusals.onFile().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
+    const [runOuts, settings] = await Promise.all([
         // allow(silent-catch): an unreadable run-out record only costs the planner a prior; the generic one stands.
         deps.runOuts.read().catch((): RunOuts => ({})),
         deps.sandboxSettings.get(),
-        // allow(silent-catch): an unreadable entitlement history costs the placement its flapping order, never the placement.
-        Promise.resolve()
-            .then(() => deps.providerRefusals.flapping(input.provider))
-            .catch((): ReadonlySet<string> => new Set()),
     ]);
     const model = { id: input.model };
-    const states = serviceStates(input.readings, refusals[input.provider], model, now);
-    const ready = input.readings.filter((reading) => {
-        const state = states.get(reading.account);
-        return state?.kind === "ready" && state.room > 0;
-    });
+    const ready = input.accounts.filter((account) => account.state.kind === "ready" && account.state.room > 0);
     const load = loadByAccount(deps, input.provider, now);
     const child = childCostOf(deps, input.provider, input.model);
     const placed = input.provider === "claude";
     const reserve = settings.subagentReservePercent;
     if (placed) {
-        const accounts = ready.map((reading): BudgetAccount => {
+        const accounts = ready.map(({ facts: reading, flapping }): BudgetAccount => {
             const here = load.get(reading.account) ?? { tokensPerHour: 0, agents: 0 };
             return {
                 id: reading.account,
@@ -191,12 +190,17 @@ const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = D
                 windows: gatingWindows(reading.usage, model).map((window) => budgetWindow(deps, { provider: input.provider, account: reading.account, runOuts }, window, now)),
                 loadTokensPerHour: here.tokensPerHour,
                 agents: here.agents,
-                ...opt("flapping", flapping.has(reading.account) ? true : undefined),
+                ...opt("flapping", flapping),
             };
         });
         return { accounts, placed, child, reserve };
     }
-    return { accounts: ready.length === 0 ? [] : [pooled(deps, input, ready, load, runOuts, now)], placed, child, reserve };
+    return {
+        accounts: ready.length === 0 ? [] : [pooled(deps, input, ready.map((account) => account.facts), load, runOuts, now)],
+        placed,
+        child,
+        reserve,
+    };
 };
 
 // A routed provider's ready accounts as one: each window's points summed across them, its reset the latest of theirs.
@@ -293,12 +297,13 @@ export const forecastBudget = async (deps: PlannerDeps, input: PlanInput, now: n
 };
 
 /**
- * Where a Claude turn the planner places should run: the account renewing first of those that carry it with what already
- * runs on them (budget.ts choose), else the one that holds out longest; never `refused`. Asked for a turn moved off a spent
- * account (sibling-account.ts) and for a turn naming none (harness-credentials.ts). Undefined where nothing is placed.
+ * Where a Claude turn the planner places should run, among `accounts`: the account renewing first of those that carry it
+ * with what already runs on them (budget.ts choose), else the one that holds out longest. Only an account with proven
+ * room is ever picked. Asked through agent/providers/accounts/placement.ts, for a turn naming no account and for one
+ * moved off an account that cannot serve it. Undefined where nothing is placed.
  */
-export const pickAccount = async (deps: PlannerDeps, input: PlanInput & { readonly refused: string | undefined }): Promise<string | undefined> => {
-    const plan = await planAccounts(deps, { ...input, readings: input.readings.filter((reading) => reading.account !== input.refused) });
+export const pickAccount = async (deps: PlannerDeps, input: PlanInput): Promise<string | undefined> => {
+    const plan = await planAccounts(deps, input);
     if (!plan.placed) {
         return undefined;
     }

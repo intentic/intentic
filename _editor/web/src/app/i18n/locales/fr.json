@@ -4523,6 +4523,14 @@
                 "percentLeft": "il reste {percent} de votre limite d'utilisation"
             }
         },
+        "providerDegraded": {
+            "label": "Fournisseur",
+            "outageShort": "En panne",
+            "throttleShort": "Limité",
+            "outage": "{provider} échoue sur les requêtes",
+            "throttle": "{provider} refuse les requêtes pour l'instant",
+            "retry": "Le sandbox réessaie dans {wait}"
+        },
         "turnFailures": {
             "installNewerEngine": "Installez un moteur plus récent dans Sandbox ▸ Environnement ▸ Moteurs d'agents.",
             "installNewerEngineFloor": "Installez un moteur plus récent dans Sandbox ▸ Environnement ▸ Moteurs d'agents ({floor} ou ultérieur).",

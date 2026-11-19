@@ -577,13 +577,17 @@ const failureFrames = (message: string, provider?: string, model?: string): Prom
         spec: { ...request.spec, ...opt("model", model) },
     });
 
-test("a spent allowance is coded rate_limit, whatever wording the provider refuses in", async () => {
+test("a spent allowance is coded rate_limit, whatever wording the provider refuses in, and a bare rate limit is a throttle", async () => {
     // Google's own wording, as the translator relays it once its account fleet is exhausted.
     const google = "429 RESOURCE_EXHAUSTED: You exceeded your current quota for gemini models";
     expect(await failureFrames(google)).toEqual([{ kind: "error", code: "rate_limit", message: google }, { kind: "done" }]);
-    // Bare rate-limit wording, reached only after OpenCode's own in-turn retries are spent.
+    // Bare rate-limit wording, reached only after OpenCode's own in-turn retries are spent: nothing in it shows an
+    // allowance spent, so it is the throttle it says (limit-cause.ts), never filed (2026-11-19: it was, as a spent one).
     const bare = "Rate limit exceeded, please try again later";
-    expect(await failureFrames(bare)).toEqual([{ kind: "error", code: "rate_limit", message: bare }, { kind: "done" }]);
+    expect(await failureFrames(bare)).toEqual([
+        { kind: "error", code: "provider-outage", throttle: true, message: expect.stringMatching(/^Rate limit exceeded, please try again later\. The provider is rate-limiting/u) },
+        { kind: "done" },
+    ]);
     // An ordinary failure stays uncoded.
     expect(await failureFrames("connection reset")).toEqual([{ kind: "error", message: "connection reset" }, { kind: "done" }]);
     // A parameter this sandbox never sent, refused upstream: an outage rather than a bad model pick, since "on this model"

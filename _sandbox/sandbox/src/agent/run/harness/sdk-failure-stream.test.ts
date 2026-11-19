@@ -2,6 +2,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type QueryFn, streamSdk } from "./claude-code-stream.js";
+import { SPENT_WORDS } from "../frames/limits/limit-cause.testing.js";
 
 const refused = "Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator.";
 const repeated = new Error(`Claude Code returned an error result: ${refused}`);
@@ -72,12 +73,13 @@ test.each(["success", "error_during_execution"] as const)(
     },
 );
 
-// A rate limit and a trial turn reword the provider's sentence in their frame; the SDK still repeats the sentence.
+// A spent allowance, a throttle and a trial turn reword the provider's sentence in their frame (limit-cause.ts tells the
+// first two apart by the words); the SDK still repeats the sentence.
 test.each([
-    ["a rate limit", false, "rate_limit", "rate_limit"],
-    ["a trial turn", true, "authentication_failed", "trial-model-unavailable"],
-] as const)("%s keeps its reworded classified failure when the SDK repeats the provider's sentence", async (_case, trial, error, code) => {
-    const said = "API Error: request refused upstream";
+    ["a spent allowance", false, "rate_limit", "rate_limit", SPENT_WORDS.claude],
+    ["a throttle", false, "rate_limit", "provider-outage", "API Error: request refused upstream"],
+    ["a trial turn", true, "authentication_failed", "trial-model-unavailable", "API Error: request refused upstream"],
+] as const)("%s keeps its reworded classified failure when the SDK repeats the provider's sentence", async (_case, trial, error, code, said) => {
     // SAFETY: The shared refusal fixture with another category and sentence; still every assistant field the fold reads.
     const reworded = { ...assistant, error, message: { content: [{ type: "text", text: said }] } } as SDKMessage;
     const frames = await collect(query([reworded, result("error_during_execution", said)], new Error(`Claude Code returned an error result: ${said}`)), [], trial);

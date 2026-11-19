@@ -4,6 +4,7 @@ import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { isContextOverflowText, isRateLimited } from "../../engines/failure-sentences.js";
 import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { opt } from "../../opt.js";
+import { limitFrame } from "../../agent/run/frames/limits/limit-cause.js";
 import { type MuseEvent, type MuseItem, type MuseToolArgs, type MuseTurnError, shellResultOf, toolArgsOf } from "./muse-wire.js";
 
 // One Muse turn's notifications as the daemon's frames: prose and reasoning as they stream, each tool call as a card
@@ -319,13 +320,10 @@ export const museUsageFrame = (state: MuseStreamState, durationMs: number | unde
               ...opt("durationMs", durationMs),
           };
 
-// How Muse's typed failure is coded, ahead of any sentence: a spent quota (Muse types it), then a window the session
-// outgrew, then a model call Muse retried and could not get through (an outage the daemon re-runs once the provider is
-// back), then the sentence rules every runtime shares. Undefined leaves the frame plain.
-export const museFailureCode = (error: MuseTurnError, retried: boolean): ErrorFrame["code"] => {
-    if (error.quota !== undefined || isRateLimited(error.message)) {
-        return "rate_limit";
-    }
+// How Muse's typed failure is coded, ahead of any sentence, besides a rate limit (museFailureFrame): a window the
+// session outgrew, then a model call Muse retried and could not get through (an outage the daemon re-runs once the
+// provider is back), then the sentence rules every runtime shares. Undefined leaves the frame plain.
+const museFailureCode = (error: MuseTurnError, retried: boolean): ErrorFrame["code"] => {
     if (isContextOverflowText(error.message)) {
         return "context-overflow";
     }
@@ -338,11 +336,18 @@ export const museFailureCode = (error: MuseTurnError, retried: boolean): ErrorFr
 // Muse's own word for a key it no longer accepts, said the way the person can act on it.
 const AUTH_REFUSED = "Muse Code's provider refused this turn's key. Connect the account again in Sandbox ▸ Agent, then send again.";
 
-export const museFailureFrame = (error: MuseTurnError, retried: boolean): ErrorFrame => ({
-    kind: "error",
-    message: error.kind === "authRequired" ? `${AUTH_REFUSED} (${error.message})` : error.message,
-    ...opt("code", museFailureCode(error, retried)),
-});
+// A rate limit first: a spent quota where Muse typed one (`quota`) or its words say so, else the throttle it is
+// (limit-cause.ts), waited out on the provider's backoff with nothing filed against the account.
+export const museFailureFrame = (error: MuseTurnError, retried: boolean): ErrorFrame => {
+    if (error.quota !== undefined || isRateLimited(error.message)) {
+        return limitFrame({ kind: "error", message: error.message }, { spent: error.quota !== undefined });
+    }
+    return {
+        kind: "error",
+        message: error.kind === "authRequired" ? `${AUTH_REFUSED} (${error.message})` : error.message,
+        ...opt("code", museFailureCode(error, retried)),
+    };
+};
 
 /** One notification's frames; turn-level bookkeeping (usage, the terminal) is read here but emitted by the loop. */
 export function* museFrames(event: MuseEvent, context: MuseStreamContext, state: MuseStreamState): Generator<AgentEvent> {

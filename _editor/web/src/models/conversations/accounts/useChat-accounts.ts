@@ -10,7 +10,14 @@ import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { accountsLoaded, providerAccounts, providerRefusals, providerSwitchOffs, translatorAccounts } from "../../providers/providerAccounts";
+import {
+    accountsLoaded,
+    providerAccounts,
+    providerRefusals,
+    providerSwitchOffs,
+    setCapacitySnapshot,
+    translatorAccounts,
+} from "../../providers/providerAccounts";
 import { endpointProviders, trialStatus } from "../../providers/providerCatalog";
 import { rememberedProviderFor, turnDefaults } from "../run/turnDefaults";
 import { accessKnown, firstReadyProvider, hasSignIn, providerReadyOn } from "../../providers/access";
@@ -19,6 +26,7 @@ import { conversations } from "../tabs/useChat-tabs";
 import { loadActiveProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "./useChat-catalog";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { advertisesRoute } from "../../../client/sandbox/useDaemonRoutes";
 
 // An unseeded provider key (an ACP agent, which owns its own credentials) simply has no account list.
 export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
@@ -81,6 +89,12 @@ const refreshProviderRefusals = (): Promise<void> =>
             providerSwitchOffs.value = body.switchOffs;
         }
     });
+
+// Every provider's capacity as the daemon judges it now (usage.capacity), for the verdict door to read in place of the
+// four reads above. Only from a daemon whose hello names the route: one from before it never answers, and the door then
+// reads those four as before.
+export const refreshCapacity = (): Promise<void> =>
+    advertisesRoute(`usage.capacity`) ? readOrKeep(sandboxRpc.usage.capacity(), setCapacitySnapshot) : Promise.resolve();
 
 // `error` carries connection/account errors only; per-turn chat errors live on each Conversation.
 export const error = sandboxRef<string | null>(() => null);
@@ -204,6 +218,7 @@ const readConnections = async (force: boolean): Promise<void> => {
         Promise.allSettled(natives.map((target) => refreshAccounts(target))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
+        refreshCapacity(),
         // The daemon's own readiness rides with the account lists rather than only with the catalogs: the two answer
         // one question, and a disconnect that moved one and not the other would leave a gone account reading ready.
         runnable.ready,

@@ -98,8 +98,8 @@ export const releaseBooked = async (services: Services, now: number, dueAt?: Due
     }
 };
 
-// When a spent allowance's unfired hold goes by itself, by the one rule the pass fires by (limit-booking.ts). Undefined
-// for a hold only a press sends.
+// When a spent allowance's unfired hold goes by itself, by the one rule the pass fires by (limit-booking.ts), over the
+// reading of the records the pass last put on it (held-verdict.ts). Undefined for a hold only a press sends.
 const heldSendAt = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string, held: HeldRecord): Promise<number | undefined> =>
     held.reason !== "limit" || held.fired ? undefined : limitBooking(held, await breakPolicyFor(services, conversationId, "limit"))?.at;
 

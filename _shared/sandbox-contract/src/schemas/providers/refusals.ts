@@ -32,6 +32,23 @@ export const ProviderRefusalSchema = z.object({
         ),
     // Stamped by the daemon's ledger as it files a spent allowance naming no instant (plan-pools.ts refusedPoolReset).
     poolResetsAt: z.number().optional().describe("Epoch seconds the refused pool reopens, for a spent allowance naming no time: it ends then."),
+    // Stamped by the daemon's ledger as it files a spent allowance naming its instant (refusal-verdict.ts refusedPoolOf),
+    // from the refused account's reading then: which pool that instant is the reset of. Before 2026-11-19 every judgement
+    // worked it out again from whatever reading it held, by matching resets within half an hour, and a Codex refusal on
+    // one model was pinned on the weekly pool that gates them all for four days (2026-11-14). Absent on a refusal filed
+    // before, or where the reading could not say: the rule then still works it out as it judges.
+    pool: z
+        .string()
+        .optional()
+        .describe(
+            "For a spent allowance that named when to try again: the `kind` of the refused account's pool (`UsageWindow.kind`) that instant is the reset of, resolved when it was filed. That pool reads full until then.",
+        ),
+    poolUnpublished: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Set on a spent allowance whose instant was the reset of no pool the refused account's reading published when it was filed: a pool of its own, such as one model's cap, which holds only the model it refused.",
+        ),
     // Cursor's "ask your admin to increase your limit": a team's spend limit, which no usage endpoint reads. Not Codex's
     // "send a request to your admin", which names a window its reading measures (failure-sentences.ts ADMIN_GRANTED).
     unmetered: z

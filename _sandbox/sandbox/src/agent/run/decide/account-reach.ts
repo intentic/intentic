@@ -1,10 +1,9 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import { preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import { type AccountReach, accountReachAllows, reachWho } from "../../../secrets/credential-reach.js";
-import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { type JudgedAccount, judgedAccounts } from "../../../usage/serviceability/serviceability.js";
 import type { AccountRoute } from "../../providers/accounts/blocked-account.js";
+import { type PlaceDeps, unnamedAmong } from "../../providers/accounts/placement.js";
 
 /* WHICH ACCOUNT A TURN MAY RUN ON, as everyone its conversation acts for may (Access ▸ People, a person's AI accounts:
    auth.ts `Member.aiAccounts`; a service's access profile; a bound organisation's ceiling; read live through
@@ -17,8 +16,9 @@ import type { AccountRoute } from "../../providers/accounts/blocked-account.js";
    - an account the CONVERSATION remembers outside the reach (somebody else started it, or an owner narrowed the list
      since) is moved off, onto the account the provider's own rule would pick among the ones inside it, as a blocked
      account is (blocked-account.ts), so a person joining a conversation runs on what is theirs;
-   - a turn LEFT TO THE SANDBOX'S PICK where the reach holds only some of the provider's accounts is pinned to that pick,
-     so no runtime's own picker (harness-credentials.ts, cursor-usage.ts, a CLI's first account) can land elsewhere;
+   - a turn LEFT TO THE SANDBOX'S PICK where the reach holds only some of the provider's accounts is pinned to the pick
+     among those (placement.ts unnamedAmong, the rule the runtime places by, load counted where the planner carries the
+     provider), so no runtime's own placement can land outside them;
    - with no account of the provider inside the reach, the turn is refused, naming the accounts that are.
    A provider holding no accounts of its own (an API-key endpoint, an installed agent, the free trial) is judged whole by
    its own key; a local model spends nobody's allowance and is never held back. */
@@ -43,16 +43,7 @@ export interface ReachTurn {
     readonly free: boolean;
 }
 
-interface NamedRow {
-    readonly id: string;
-    readonly label: string;
-    readonly state: AccountState;
-}
-
-// The account a turn left to the sandbox runs on among the ones it may use: the provider's own rule, which for every
-// provider reads the same verdicts (ready, the first to renew unless nearly out, then unmeasured, then spent), and ties
-// keep the provider's order.
-const pickAmong = (allowed: readonly NamedRow[]): NamedRow | undefined => preferredAccount(allowed) ?? allowed[0];
+type NamedRow = Pick<JudgedAccount, "id" | "label">;
 
 const listed = (rows: readonly NamedRow[]): string => rows.map((row) => `"${row.label}"`).join(", ");
 
@@ -72,7 +63,7 @@ const notAllowed = (reach: Extract<AccountReach, { kind: "some" }>, label: strin
  * Where a turn goes once the reach is asked. `route` is the blocked-account route already decided, which a reach can
  * only narrow: its hold stands, its move stands where the destination is inside the reach and is re-aimed where not.
  */
-export const routeWithinReach = async (deps: ServiceabilityDeps, reach: AccountReach, turn: ReachTurn, route: AccountRoute): Promise<ReachedRoute> => {
+export const routeWithinReach = async (deps: PlaceDeps, reach: AccountReach, turn: ReachTurn, route: AccountRoute): Promise<ReachedRoute> => {
     if (reach.kind === "all" || turn.free || route.kind === "held") {
         return route;
     }
@@ -81,7 +72,7 @@ export const routeWithinReach = async (deps: ServiceabilityDeps, reach: AccountR
     if (reach.unreadable !== undefined) {
         return { kind: "refused", message: UNREADABLE };
     }
-    const rows = await namedServiceabilities(deps, provider, turn.model === undefined || turn.model === "" ? undefined : { id: turn.model });
+    const rows = await judgedAccounts(deps, provider, turn.model === undefined || turn.model === "" ? undefined : { id: turn.model });
     // No account of its own: an endpoint, an installed agent, the trial, or a provider with nothing connected, judged whole.
     if (rows.length === 0) {
         return accountReachAllows(reach, provider, undefined) ? route : { kind: "refused", message: notAllowed(reach, label, label, []) };
@@ -93,7 +84,7 @@ export const routeWithinReach = async (deps: ServiceabilityDeps, reach: AccountR
         if (allowed.length === rows.length) {
             return route;
         }
-        const pick = pickAmong(allowed);
+        const pick = await unnamedAmong(deps, provider, allowed, turn.model);
         return pick === undefined ? { kind: "refused", message: notAllowed(reach, label, `any ${label} account`, []) } : { kind: "pin", to: pick.id };
     }
     if (allowed.some((row) => row.id === routed)) {
@@ -103,7 +94,7 @@ export const routeWithinReach = async (deps: ServiceabilityDeps, reach: AccountR
     if (named !== undefined) {
         return { kind: "refused", message: notAllowed(reach, label, `the ${label} account "${name}"`, allowed), account: named };
     }
-    const pick = pickAmong(allowed);
+    const pick = await unnamedAmong(deps, provider, allowed, turn.model);
     if (pick === undefined) {
         return { kind: "refused", message: notAllowed(reach, label, `any ${label} account`, []), account: routed };
     }

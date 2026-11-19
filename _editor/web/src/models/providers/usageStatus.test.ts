@@ -39,6 +39,9 @@ import { usageDetail } from "./usageNotes";
 
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, gates: `all`, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
+// The instant a test judged at the real clock lays its readings and refusals after, a minute before that clock: the rule
+// takes every reading as it stands when asked (usageAt), so one measured near epoch 0 has long since lapsed.
+const T = Date.now() - 60_000;
 // One account as a refusal is judged against: its reading's age and fill, and whether its sign-in still renews.
 const facts = (over: { account?: string; measuredAt?: number; percent?: number; needsReauth?: boolean } = {}): ServiceFacts => {
     const { account = `a`, measuredAt = 2_000, percent = 3, needsReauth = false } = over;
@@ -453,20 +456,20 @@ describe(`liveUsage`, () => {
     });
 
     it(`keeps a row's own reading when the map holds nothing for that account`, () => {
-        const attached = usage({ measuredAt: 500 });
+        const attached = usage({ measuredAt: T + 500 });
         expect(liveUsage(`gemini`, `gemini-account`, attached)).toBe(attached);
     });
 
     it(`reads the map wherever it has an entry, whichever source wrote it`, () => {
-        const streamed = usage({ measuredAt: 900 });
+        const streamed = usage({ measuredAt: T + 900 });
         usageByAccount.value = { "claude:claude-1": streamed };
         // toEqual, not toBe: the shared store is a Vue ref, so what comes back is its reactive proxy.
-        expect(liveUsage(`claude`, `claude-1`, usage({ measuredAt: 500 }))).toEqual(streamed);
+        expect(liveUsage(`claude`, `claude-1`, usage({ measuredAt: T + 500 }))).toEqual(streamed);
         expect(liveUsage(`claude`, `claude-1`)).toEqual(streamed);
     });
 
     it(`finds a routed subscription under its provider-qualified key`, () => {
-        const pulled = usage({ measuredAt: 100 });
+        const pulled = usage({ measuredAt: T + 100 });
         usageByAccount.value = { "gemini:g-1": pulled };
         expect(liveUsage(`gemini`, `g-1`)).toEqual(pulled);
         expect(liveUsage(`kimi`, `g-1`)).toBeUndefined();
@@ -477,7 +480,7 @@ describe(`liveUsage`, () => {
 // freezes, short of 100%.
 describe(`liveUsage under a standing refusal`, () => {
     const refusedFor = (over: Partial<ProviderRefusal> = {}): ProviderRefusal => ({
-        at: 1_000,
+        at: T + 1_000,
         kind: `limit`,
         message: `weekly limit reached`,
         account: `claude-1`,
@@ -499,29 +502,29 @@ describe(`liveUsage under a standing refusal`, () => {
 
     it(`reads the pool that refused as full, not as the floor the last reading left behind`, () => {
         providerRefusals.value = spent();
-        // The reading (measuredAt 500) predates the refusal (at 1000), the ordinary case.
-        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 })))).toEqual([40, 100]);
-        const projected = planHeadroom(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 })));
+        // The reading (measuredAt T + 500) predates the refusal (at T + 1000), the ordinary case.
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: T + 500 })))).toEqual([40, 100]);
+        const projected = planHeadroom(liveUsage(`claude`, `claude-1`, pools({ measuredAt: T + 500 })));
         expect(formatRemaining(projected?.percent ?? 0, true)).toBe(`0% left`);
     });
 
     it(`pins only the pool that was binding, the others keep their own readings`, () => {
         providerRefusals.value = spent();
-        const pinned = liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 }));
+        const pinned = liveUsage(`claude`, `claude-1`, pools({ measuredAt: T + 500 }));
         expect(pinned?.windows.find((entry) => entry.kind === `five_hour`)?.utilization).toBe(40);
-        expect(pinned?.measuredAt).toBe(500);
+        expect(pinned?.measuredAt).toBe(T + 500);
     });
 
     it(`says nothing about a sibling the refusal did not name, nor about another provider at all`, () => {
         providerRefusals.value = spent();
-        const other = pools({ measuredAt: 500 });
+        const other = pools({ measuredAt: T + 500 });
         expect(liveUsage(`claude`, `claude-2`, other)).toBe(other);
         // Keyed by provider: Claude's refusal can't reach `claude-1` filed under a different provider (kimi).
         expect(liveUsage(`kimi`, `claude-1`, other)).toBe(other);
     });
 
     it(`is the spent-allowance refusal alone: a credential or a seat says nothing about a pool`, () => {
-        const reading = pools({ measuredAt: 500 });
+        const reading = pools({ measuredAt: T + 500 });
         providerRefusals.value = spent({ kind: `auth`, message: `401` });
         expect(liveUsage(`claude`, `claude-1`, reading)).toBe(reading);
         providerRefusals.value = spent({ kind: `entitlement`, message: `disabled for this seat` });
@@ -530,22 +533,22 @@ describe(`liveUsage under a standing refusal`, () => {
 
     it(`lets go the moment a reading taken since finds room, the rule that settles the note beside it`, () => {
         providerRefusals.value = spent();
-        const reopened = usage({ windows: [window({ utilization: 12 })], measuredAt: 2_000 });
+        const reopened = usage({ windows: [window({ utilization: 12 })], measuredAt: T + 2_000 });
         expect(liveUsage(`claude`, `claude-1`, reopened)).toBe(reopened);
         // Measured since and still spent is the refusal being confirmed, not answered.
-        const stillSpent = usage({ windows: [window({ kind: `five_hour`, utilization: 40 }), window({ kind: `seven_day`, utilization: 100 })], measuredAt: 2_000 });
+        const stillSpent = usage({ windows: [window({ kind: `five_hour`, utilization: 40 }), window({ kind: `seven_day`, utilization: 100 })], measuredAt: T + 2_000 });
         expect(percentsOf(liveUsage(`claude`, `claude-1`, stillSpent))).toEqual([40, 100]);
         // Short of the contract's one spent line is room, the same verdict the daemon's pickers reach.
-        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 99.2]);
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: T + 2_000 })))).toEqual([40, 99.2]);
     });
 
     // Routed refusal names nobody; it speaks for every connection the provider holds.
     const kimiPools = (over: Partial<AccountUsage> = {}): AccountUsage =>
         usage({ windows: [window({ kind: `five_hour`, utilization: 93 }), window({ kind: `seven_day`, utilization: 79 })], ...over });
-    const kimiSpent = { kimi: [{ at: 2_000, kind: `limit` as const, message: `403 You've reached your 5-hour usage limit` }] };
+    const kimiSpent = { kimi: [{ at: T + 2_000, kind: `limit` as const, message: `403 You've reached your 5-hour usage limit` }] };
 
     it(`reads a routed subscription as spent on the refusal that could name nobody`, () => {
-        const reading = kimiPools({ measuredAt: 1_500 });
+        const reading = kimiPools({ measuredAt: T + 1_500 });
         translatorAccounts.value = { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code session`, usage: reading }] };
         providerRefusals.value = kimiSpent;
         expect(percentsOf(liveUsage(`kimi`, `kimi-1`, reading))).toEqual([100, 79]);
@@ -554,8 +557,8 @@ describe(`liveUsage under a standing refusal`, () => {
     // Each connection is answered by its own reading alone (refusal-verdict.ts, verdictOn): one account reading room
     // answered a nameless refusal for all of them, so a refused model read 0% while every turn on it was refused (2026-11-08).
     it(`is answered on each connection by its own reading since, never by another connection's room`, () => {
-        const reading = kimiPools({ measuredAt: 1_500 });
-        const spare = usage({ windows: [window({ utilization: 20 })], measuredAt: 3_000 });
+        const reading = kimiPools({ measuredAt: T + 1_500 });
+        const spare = usage({ windows: [window({ utilization: 20 })], measuredAt: T + 3_000 });
         translatorAccounts.value = {
             ...noRouted,
             kimi: [
@@ -573,11 +576,12 @@ describe(`liveUsage under a standing refusal`, () => {
     it(`cannot keep itself standing: the note is judged on the raw reading, never on the pin it causes`, () => {
         const refusal = refusedFor();
         providerRefusals.value = spent();
-        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `c`, connectedAt: 0, usage: pools({ measuredAt: 2_000 }) }] };
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `c`, connectedAt: 0, usage: pools({ measuredAt: T + 2_000 }) }] };
         // The raw 99.2% taken since answers it, so nothing is pinned and the note agrees.
-        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 99.2]);
-        expect(refusalFor(`claude`, 5_000)?.current).toBe(false);
-        const verdict = (percent: number): boolean | undefined => refusalNote(refusal, [facts({ account: `claude-1`, percent })], 5_000)?.current;
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: T + 2_000 })))).toEqual([40, 99.2]);
+        expect(refusalFor(`claude`, T + 5_000)?.current).toBe(false);
+        const verdict = (percent: number): boolean | undefined =>
+            refusalNote(refusal, [facts({ account: `claude-1`, measuredAt: T + 2_000, percent })], T + 5_000)?.current;
         expect(verdict(100)).toBe(true);
         usageByAccount.value = {};
     });
@@ -591,12 +595,12 @@ describe(`usageStatusFor`, () => {
     });
 
     it(`finds the daemon's reading on whichever list the account is on`, () => {
-        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
-        translatorAccounts.value = { ...translatorAccounts.value, gemini: [{ name: `g-1`, label: `Google`, usage: usage({ measuredAt: 7 }) }] };
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage({ measuredAt: T }) }] };
+        translatorAccounts.value = { ...translatorAccounts.value, gemini: [{ name: `g-1`, label: `Google`, usage: usage({ measuredAt: T + 7 }) }] };
 
-        expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(0);
+        expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(T);
         // A routed subscription is keyed by its auth-file name, the key its row is drawn under.
-        expect(usageStatusFor(`gemini`, `g-1`)?.measuredAt).toBe(7);
+        expect(usageStatusFor(`gemini`, `g-1`)?.measuredAt).toBe(T + 7);
         expect(usageStatusFor(`claude`, `nobody`)).toBeUndefined();
         expect(usageStatusFor(`claude`, undefined)).toBeUndefined();
         // Scoped to the asked provider; the same account name under a different provider wouldn't collide.
@@ -604,9 +608,9 @@ describe(`usageStatusFor`, () => {
     });
 
     it(`reads a turn's own frame once it has been written, the map being seeded from the rows and then kept newest`, () => {
-        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
-        usageByAccount.value = { ...usageByAccount.value, "claude:claude-1": usage({ measuredAt: 900 }) };
-        expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(900);
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage({ measuredAt: T }) }] };
+        usageByAccount.value = { ...usageByAccount.value, "claude:claude-1": usage({ measuredAt: T + 900 }) };
+        expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(T + 900);
         usageByAccount.value = {};
     });
 });
@@ -620,7 +624,7 @@ describe(`planLimitRows`, () => {
     it(`draws a routed subscription's pulled reading, not just the native accounts`, () => {
         const rows = planLimitRows(
             {},
-            { ...noRouted, gemini: [{ name: `antigravity-1`, label: `someone@gmail.com`, usage: usage({ measuredAt: 500 }) }] },
+            { ...noRouted, gemini: [{ name: `antigravity-1`, label: `someone@gmail.com`, usage: usage({ measuredAt: T + 500 }) }] },
         );
         expect(rows.map((row) => [row.provider, row.label, row.percent])).toEqual([[`gemini`, `someone@gmail.com`, 42.4]]);
     });
@@ -629,7 +633,7 @@ describe(`planLimitRows`, () => {
         // Kimi is now read like ChatGPT/Google (readable: true); SuperGrok is the one plan that publishes no limits
         // at all (readable: false).
         const rows = planLimitRows(
-            { claude: [account({ usage: usage() })] },
+            { claude: [account({ usage: usage({ measuredAt: T }) })] },
             { ...noRouted, grok: [{ name: `xai-1`, label: `SuperGrok` }], kimi: [{ name: `kimi-1`, label: `Kimi Code` }] },
         );
         expect(rows.map((row) => [row.label, row.percent, row.readable, row.pools.length])).toEqual([
@@ -644,8 +648,8 @@ describe(`planLimitRows`, () => {
             {
                 claude: [
                     account({ id: `unmeasured`, label: `Never ran` }),
-                    account({ id: `busy`, label: `Nearly spent`, usage: usage({ windows: [window({ utilization: 98 })] }) }),
-                    account({ id: `idle`, label: `Plenty left`, usage: usage({ windows: [window({ utilization: 4 })] }) }),
+                    account({ id: `busy`, label: `Nearly spent`, usage: usage({ windows: [window({ utilization: 98 })], measuredAt: T }) }),
+                    account({ id: `idle`, label: `Plenty left`, usage: usage({ windows: [window({ utilization: 4 })], measuredAt: T }) }),
                 ],
             },
             noRouted,
@@ -662,8 +666,8 @@ describe(`planLimitRows`, () => {
     });
 
     it(`draws the map's reading over the account row it arrived with`, () => {
-        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 96 })], measuredAt: 900 }) };
-        const rows = planLimitRows({ claude: [account({ usage: usage({ measuredAt: 500 }) })] }, noRouted);
+        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 96 })], measuredAt: T + 900 }) };
+        const rows = planLimitRows({ claude: [account({ usage: usage({ measuredAt: T + 500 }) })] }, noRouted);
         expect(rows[0]?.percent).toBe(96);
         usageByAccount.value = {};
     });
@@ -701,9 +705,10 @@ describe(`accountState`, () => {
     const row = (over: Partial<ServiceFacts> = {}): ServiceFacts => ({ account: `claude-1`, ...over });
 
     it(`judges the plan-limit half on a reading that landed after the list`, () => {
-        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 100, resetsAt: 9_000 })], measuredAt: 900 }) };
-        expect(accountState(`claude`, row({ usage: usage({ measuredAt: 500 }) }))).toEqual({ kind: `spent`, reopensAt: 9_000 });
-        expect(accountState(`claude`, row())).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        const reopensAt = Math.floor(T / 1000) + 9_000;
+        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 100, resetsAt: reopensAt })], measuredAt: T + 900 }) };
+        expect(accountState(`claude`, row({ usage: usage({ measuredAt: T + 500 }) }))).toEqual({ kind: `spent`, reopensAt });
+        expect(accountState(`claude`, row())).toEqual({ kind: `spent`, reopensAt });
     });
 
     it(`reads an account nothing has measured as unknown, never as room`, () => {
@@ -773,7 +778,7 @@ describe(`accountState`, () => {
     });
 
     it(`answers for the model asked about, not the account's tightest pool`, () => {
-        const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, label: `Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: 500 });
+        const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, label: `Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: T + 500 });
         const judged = row({ usage: opusSpent });
         expect(accountState(`claude`, judged)).toEqual({ kind: `ready`, room: 70 });
         expect(accountState(`claude`, judged, { id: `claude-opus-4-6` })).toEqual({ kind: `spent`, pool: `Opus` });
@@ -806,7 +811,7 @@ describe(`plan-limit aggregates`, () => {
             stale: false,
             readable: true,
             routed: false,
-            state: serviceState(judged, undefined, undefined, 0),
+            state: serviceState(judged, [], undefined, 0),
             facts: judged,
             ...rest,
         };

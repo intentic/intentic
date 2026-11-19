@@ -1,8 +1,10 @@
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
+import { pino } from "pino";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import type { CursorStore, StoredCursorAccount } from "./accounts/cursor-credentials.js";
-import { cursorAccountForTurn } from "./cursor-usage.js";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { type CursorPlacementDeps, cursorAccountForTurn } from "./cursor-usage.js";
 
 /* Cursor publishes no allowance, so which account a turn lands on comes from what it has already refused, filed in the
    one refusal ledger. What this suite pins is that a refusal stays about the one account and the one model it was given
@@ -16,15 +18,20 @@ const account = (id: string, over: Partial<StoredCursorAccount> = {}): StoredCur
 const outOf = (id: string, model: string = COMPOSER): ProviderRefusal => ({ at: Date.now(), kind: `limit`, message: REFUSED, account: id, model });
 
 type OnFile = ProviderRefusalStore["onFile"];
+// The accounts as Cursor's door lists them for the verdicts (serviceability.ts accountFactsOf) and as its store holds
+// them for the turn; nothing else is read for a Cursor pick.
 const deps = (
     accounts: readonly StoredCursorAccount[],
     refusals: readonly ProviderRefusal[] = [],
     onFile: OnFile = async () => ({ cursor: refusals }),
     flapping: readonly string[] = [],
-) => ({
-    cursorStore: unstubbed<CursorStore>(`cursorStore`, { credentials: async () => [...accounts] }),
-    providerRefusals: unstubbed<ProviderRefusalStore>(`providerRefusals`, { onFile, flapping: async () => new Set(flapping) }),
-});
+): CursorPlacementDeps =>
+    unstubbed<CursorPlacementDeps>(`services`, {
+        cursorStore: unstubbed<CursorStore>(`cursorStore`, { credentials: async () => [...accounts] }),
+        providerRefusals: unstubbed<ProviderRefusalStore>(`providerRefusals`, { onFile, flapping: async () => new Set(flapping) }),
+        providerAccounts: async (provider) => (provider === `cursor` ? accounts.map(({ id }): OauthAccount => ({ id, label: id, connectedAt: 0 })) : []),
+        logger: pino({ level: `silent` }),
+    });
 
 test("a named account is honoured, because that choice is the user's", async () => {
     expect((await cursorAccountForTurn(deps([account(`one`), account(`two`)], [outOf(`two`)]), `two`, COMPOSER))?.id).toBe(`two`);

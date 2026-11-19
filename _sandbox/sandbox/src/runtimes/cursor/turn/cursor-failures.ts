@@ -1,7 +1,8 @@
 import type { RunError } from "@cursor/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { z } from "zod";
-import { mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
+import { isRateLimited } from "../../../engines/failure-sentences.js";
+import { limitFrame } from "../../../agent/run/frames/limits/limit-cause.js";
 
 // How Cursor's own failures are coded for the daemon: an account the server refuses outright, and a run that ended on a
 // spent plan. Read beside the SDK's error classes (cursor-agent.ts codedError), which say neither.
@@ -26,15 +27,21 @@ export const refusesAccount = (code: string | undefined, message: string): boole
 // class is not re-exported through the loader this module types against.
 export const SdkCodeSchema = z.object({ code: z.string().min(1) });
 
-// What a run's own terminal error calls a spent allowance, in the SDK's code vocabulary (errors.js maps Connect's
-// ResourceExhausted to `resource_exhausted`; the agent store's own quota uses `quota_exceeded`). Matched beside the
-// sentence, since the code is the one half that survives a reworded message.
-const EXHAUSTED_RUN_CODES: ReadonlySet<string> = new Set(["resource_exhausted", "rate_limit", "quota_exceeded", "usage_limit"]);
+// A rate limit in the SDK's code vocabulary, matched beside the sentence, since the code is the one half that survives a
+// reworded message. A quota's own codes say the plan ran out (the agent store's `quota_exceeded`, `usage_limit`); the
+// others say only that requests were turned away (errors.js maps Connect's ResourceExhausted to `resource_exhausted`), a
+// throttle unless the words show an allowance spent (limit-cause.ts).
+const SPENT_CODES: ReadonlySet<string> = new Set(["quota_exceeded", "usage_limit"]);
+const LIMITED_CODES: ReadonlySet<string> = new Set([...SPENT_CODES, "resource_exhausted", "rate_limit"]);
+
+/** A Cursor rate limit as its frame: a spent allowance where its code or words show one, else the throttle it is. */
+export const cursorLimitFrame = (message: string, code: string | undefined): Extract<AgentEvent, { kind: "error" }> =>
+    limitFrame({ kind: "error", message }, { spent: code !== undefined && SPENT_CODES.has(code) });
 
 // A run that ENDED in error, as against one whose send threw: Cursor reports a spent plan this way, and `RateLimitError`
 // is reserved for an HTTP 429, so nothing above ever sees it. Classified here instead of going out bare, which is what
 // cost seven refused subagent turns their record in the observed-limit ledger, their hold and their re-run
-// (2026-10-13). Only a spent allowance is coded: an unknown vendor code must not become a daemon code, and the message
+// (2026-10-13). Only a rate limit is coded: an unknown vendor code must not become a daemon code, and the message
 // carries it to the log either way.
 export const cursorRunErrorFrame = (error: RunError | undefined): Extract<AgentEvent, { kind: "error" }> => {
     // allow(dependency-text): an emptiness test, not a reading of the SDK's words; an empty message is said as ours.
@@ -42,6 +49,6 @@ export const cursorRunErrorFrame = (error: RunError | undefined): Extract<AgentE
     if (refusesAccount(error?.code, message)) {
         return { kind: "error", message, code: "account-not-entitled" };
     }
-    const spent = mentionsSpentAllowance(message) || (error?.code !== undefined && EXHAUSTED_RUN_CODES.has(error.code));
-    return spent ? { kind: "error", message, code: "rate_limit" } : { kind: "error", message };
+    const limited = isRateLimited(message) || (error?.code !== undefined && LIMITED_CODES.has(error.code));
+    return limited ? cursorLimitFrame(message, error?.code) : { kind: "error", message };
 };

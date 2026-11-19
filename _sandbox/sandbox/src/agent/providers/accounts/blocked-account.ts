@@ -1,10 +1,10 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { providerLabel, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../claude/claude-seat-check.js";
-import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { judgedAccounts } from "../../../usage/serviceability/serviceability.js";
+import { moveTarget, type PlaceDeps } from "./placement.js";
 
 // Before moving/holding an implicitly remembered unserviceable account, ration a Claude seat recheck; an answer clears the mark.
 // Explicit account intent still attempts it (picker, automation, named press or booked move), allowing the real refusal or recovery to speak.
@@ -12,7 +12,7 @@ import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/s
 
 // The seat's re-test is Claude's alone (agent/providers/claude/claude-seat-check.ts); every provider's accounts are judged
 // by the one rule, which reads a Cursor account refused outright (`[role_forbidden]`) off the refusal ledger.
-export type BlockedAccountDeps = ServiceabilityDeps & Pick<Services, "claudeSeatCheck">;
+export type BlockedAccountDeps = PlaceDeps & Pick<Services, "claudeSeatCheck">;
 
 export type AccountRoute =
     // Run where routingFor points. `servable` marks a blocked account whose seat a re-test just found back on, which lets
@@ -66,7 +66,7 @@ export const offBlockedAccount = async (
         return KEEP;
     }
     // One reading for both questions, judged for the model the turn spends, as the limit move's destination is.
-    const accounts = await namedServiceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
+    const accounts = await judgedAccounts(deps, provider, model === undefined || model === "" ? undefined : { id: model });
     const current = accounts.find((account) => account.id === remembered);
     const state = current?.state;
     if (state?.kind !== "blocked" || state.fix !== "admin") {
@@ -78,10 +78,13 @@ export const offBlockedAccount = async (
         return SERVABLE;
     }
     // Proven room; where the plan publishes no reading to prove any (Cursor's, Devin's), or every account with a reading
-    // is refused, an account nothing has refused (account-moves.ts, the rule the limit move and the editor's offer read too).
-    const to = moveDestination(
+    // is refused, an account nothing has refused: the move every subsystem makes (placement.ts moveTarget, over the rule
+    // the limit move and the editor's offer read too, account-moves.ts).
+    const to = await moveTarget(
+        deps,
+        provider,
+        model,
         accounts.filter((account) => account.id !== remembered),
-        reportsPlanLimits(provider),
     );
     if (to !== undefined) {
         return { kind: "move", from: remembered, to: to.id, labels: { from: current?.label ?? remembered, to: to.label }, reason: state.reason };

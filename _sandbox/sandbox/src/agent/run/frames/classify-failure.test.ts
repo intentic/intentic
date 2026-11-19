@@ -14,7 +14,7 @@ import {
     type FailureWrite,
     outageFrame,
 } from "./classify-failure.js";
-import { throttleAsOutage } from "./routed-throttle.js";
+import { throttleAsOutage } from "./limits/limit-cause.js";
 import { FAR_RERUN_MS } from "../../subagents/child-records.js";
 import type { HeldReason } from "../turn/holds/held-turn.js";
 
@@ -463,6 +463,15 @@ describe("a spent allowance", () => {
             expect(throttleAsOutage(throttled, routed, filedByGateway(false).gatewayRefused)).toBe(throttled);
         });
 
+        // Nothing went out for a turn held at the door, so a throttle the gateway saw since, on another turn's request, says
+        // nothing about it: it stays the spent allowance the records hold.
+        test("a turn held at the door is no throttle, whatever the gateway saw since", async () => {
+            const held: ErrorFrame = { ...limit, message: "Every Google account is spent.", own: true, resetsAt: 1_900_000_000 };
+            const plan = await classifyFailure(held, { ...routed, door: true, answered: false }, filedByGateway("throttled"));
+            expect(plan.frame.code).toBe("rate_limit");
+            expect(plan.held).toMatchObject({ reason: "limit", turnedAway: true });
+        });
+
         test("the provider's own words for a spent allowance are still filed, whatever the gateway last saw", async () => {
             const plan = await classifyFailure(quota, routed, filedByGateway("throttled"));
             expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
@@ -482,6 +491,17 @@ describe("a spent allowance", () => {
             const plan = await classifyFailure({ ...quota, code: "claude-token-refused", message: "invalid api key" }, routed, filedByGateway(true));
             expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
         });
+    });
+
+    // 2026-11-19: a runtime's throttle (a native Claude account's API 429, Codex's `rateLimitExceeded`) was `rate_limit`,
+    // filed against the account it ran on, which then read spent until a reading or a turn answered it.
+    test("a throttle a runtime decided files nothing against the account, and is held for the outage's retry", async () => {
+        const throttle: ErrorFrame = { kind: "error", code: "provider-outage", throttle: true, message: "429 Too Many Requests. The provider is rate-limiting this model for now." };
+        const plan = await classifyFailure(throttle, context({ outage: { attempt: 0, retryAt: NOW + 30_000 } }), answering({ policy: "resend" }));
+        expect(plan.writes).toStrictEqual([]);
+        expect(plan.held).toMatchObject({ reason: "outage" });
+        expect(plan.frame).toMatchObject({ code: "provider-outage", throttle: true, autoResume: "scheduled", outage: { retryAt: Math.round((NOW + 30_000) / 1000) } });
+        expect(plan.log).toMatchObject({ level: "warn", message: "turn refused" });
     });
 
     // 2026-10-13: a Cursor run-out was filed in a ledger of its own that only the role ladder read. The refusal against

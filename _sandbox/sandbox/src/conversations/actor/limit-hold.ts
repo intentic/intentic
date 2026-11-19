@@ -67,7 +67,10 @@ export const StoredLimitHoldSchema = z.object({
     input: HeldInputSchema,
     run: z.string().optional(),
     sessionId: z.string().optional(),
-    // Epoch seconds the allowance reopens; absent is press-only, which a restart keeps too.
+    // Epoch seconds the allowance reopens as the refusal said it (a child's spread past it included): the evidence the
+    // hold is judged on, never a copy of when it goes, which the resume pass reads live (held-verdict.ts). Absent: the
+    // refusal named none, which a restart keeps too. A build before 2026-11-19 re-timed it in place (an early wake, a
+    // pick); read back, that is only an earlier word the next reading replaces.
     reopensAt: z.number().optional(),
     ran: z.boolean(),
     standing: z
@@ -76,7 +79,10 @@ export const StoredLimitHoldSchema = z.object({
     checklist: z.array(TodoItemSchema).optional(),
     contextTokens: z.number().optional(),
     handoffTokens: z.number().optional(),
+    // The owner's move as booked at the failure: whether it carries the session, and the account it was booked onto,
+    // which the resume pass re-picks among those with room once that one is spent (held-verdict.ts).
     move: RoutingPickSchema.optional(),
+    // A person's pick of where it goes: the hold waits on that account's wall as the records read it then.
     onto: RoutingPickSchema.optional(),
     carryRefused: z.boolean().optional(),
     // Held at the door (spent-door.ts): its re-run keeps the session, so a restart must keep this too.
@@ -104,7 +110,8 @@ const parsedHold = (held: HeldRecord | undefined) => {
     if (!keptHold(held)) {
         return undefined;
     }
-    const { reason, fired: _fired, tries, remint: _remint, resumeAt, ...kept } = held;
+    // What the pass read about where it goes is a reading, never stored: a restart reads it again.
+    const { reason, fired: _fired, tries, remint: _remint, resumeAt, reading: _reading, ...kept } = held;
     return StoredLimitHoldSchema.safeParse({
         ...kept,
         ...opt("reason", reason === "limit" ? undefined : reason),

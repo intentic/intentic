@@ -36,6 +36,7 @@ import { cursorSdk } from "./cursor-sdk.js";
 import { CURSOR_MCP_CALL_CEILING_MS } from "./cursor-tools.js";
 import { type CursorAccountDeps, cursorAccountDoor } from "./accounts/cursor-accounts.js";
 import { cursorAccountForTurn } from "./cursor-usage.js";
+import type { ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Cursor contributes to the daemon, listed in runtimes/runtime-table.ts; the directory's other files keep
@@ -72,11 +73,12 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
 // The door servers a Cursor turn takes as custom tools instead, run in the daemon where a card can park (cursor-tools.ts).
 const CURSOR_SERVED: ReadonlySet<string> = new Set(["ui", "code", "subagents"]);
 
-// What a Cursor turn is planned from: the account store and catalog, the refusal ledger that places an unnamed account,
-// and the seams its MCP tools and browser stack are mounted from.
+// What a Cursor turn is planned from: the account store and catalog, the verdicts that place an unnamed account
+// (cursor-usage.ts), and the seams its MCP tools and browser stack are mounted from.
 export type CursorPlanDeps = TurnToolsDeps &
     HarnessServersDeps &
     HarnessHooksDeps &
+    ServiceabilityDeps &
     Pick<Services, "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "providerRefusals" | "privacyShield" | "sandboxSettings" | "turns">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is

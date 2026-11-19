@@ -6,7 +6,7 @@ import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { HeadroomSource } from "../../../usage/headroom.js";
 import type { AnswerWatch } from "../../../usage/drift/answer-vocabulary.js";
 import { parseJsonOr } from "@intentic/base/json";
-import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "../../../usage/payload.js";
+import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso, statedPeriod } from "../../../usage/payload.js";
 
 // Reader for native Claude accounts (translator-usage.ts's counterpart): reads the same OAuth endpoint claude.ai and
 // Claude Code's /usage use, so numbers match. Not the SDK's usage-control request (null for an env token) or the
@@ -17,6 +17,20 @@ const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
 // Two unscoped kinds map onto the shared window vocabulary (WINDOW_NAMES) and gate every model. A scoped entry is named
 // by its scope: a per-model pool gates only that model, a surface-only pool gates nothing here.
 const SHARED_KINDS: Record<string, string> = { session: "five_hour", weekly_all: "seven_day" };
+
+// How long each pool runs, by the period the endpoint's own key for it names: `session` and `five_hour` the five-hour
+// window, `weekly_*` and `seven_day*` the week (a model's or a surface's slice included, which the rest of its entry
+// names only by its scope: "Fable"), `monthly_*` a month, taken as the 30 days ChatGPT states for its own. A key naming
+// none states nothing, and the pool's length is read off its name, where that names one (plan-pools.ts windowPeriod).
+const KEY_PERIODS: readonly (readonly [prefix: string, seconds: number])[] = [
+    ["session", 5 * 3_600],
+    ["five_hour", 5 * 3_600],
+    ["weekly", 7 * 86_400],
+    ["seven_day", 7 * 86_400],
+    ["monthly", 30 * 86_400],
+];
+const keyPeriod = (key: string | undefined): number | undefined =>
+    KEY_PERIODS.find(([prefix]) => key === prefix || key?.startsWith(`${prefix}_`) === true)?.[1];
 
 // A scope's display name; accepts both a bare string and the object shape the endpoint sends today (see payload.ts).
 const scopeName = (scope: Record<string, unknown> | undefined, key: string): string | undefined => {
@@ -29,25 +43,28 @@ interface PoolIdentity {
     readonly kind: string;
     readonly label?: string;
     readonly gates: WindowGates;
+    readonly periodSeconds?: number;
 }
 
+// Which pool a `limits` entry is, and how long it runs: by its `kind`, else by its `group` ("session", "weekly").
 const poolIdentity = (limit: Record<string, unknown>): PoolIdentity => {
     const kind = asString(limit[`kind`]);
+    const period = statedPeriod(keyPeriod(kind) ?? keyPeriod(asString(limit[`group`])));
     const scope = asRecord(limit[`scope`]);
     const model = scopeName(scope, `model`);
     const surface = scopeName(scope, `surface`);
     if (model !== undefined) {
-        return { kind: `model:${model}`, label: surface === undefined ? model : `${model} · ${surface}`, gates: { models: [model] } };
+        return { kind: `model:${model}`, label: surface === undefined ? model : `${model} · ${surface}`, gates: { models: [model] }, ...period };
     }
     if (surface !== undefined) {
-        return { kind: `surface:${surface}`, label: surface, gates: "none" };
+        return { kind: `surface:${surface}`, label: surface, gates: "none", ...period };
     }
     const shared = kind === undefined ? undefined : SHARED_KINDS[kind];
     if (shared !== undefined) {
-        return { kind: shared, gates: "all" };
+        return { kind: shared, gates: "all", ...period };
     }
     // Unrecognised pool keeps its raw key rather than folding into a neighbour; unscoped, so it gates everything.
-    return { kind: `claude:${kind ?? `unknown`}`, gates: "all" };
+    return { kind: `claude:${kind ?? `unknown`}`, gates: "all", ...period };
 };
 
 const appendWindow = (windows: UsageWindow[], identity: PoolIdentity, percent: number, resetsAt: number | undefined): void => {
@@ -101,7 +118,7 @@ const windowsFromPools = (body: Record<string, unknown>): UsageWindow[] => {
         if (reading === undefined || utilization === undefined || NOT_A_POOL.has(kind)) {
             continue;
         }
-        appendWindow(windows, { kind, gates: FLAT_GATES[kind] ?? "none" }, utilization, resetFromIso(reading[`resets_at`] ?? reading[`resetsAt`]));
+        appendWindow(windows, { kind, gates: FLAT_GATES[kind] ?? "none", ...statedPeriod(keyPeriod(kind)) }, utilization, resetFromIso(reading[`resets_at`] ?? reading[`resetsAt`]));
     }
     return windows;
 };

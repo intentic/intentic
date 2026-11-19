@@ -21,6 +21,14 @@ export const asString = (value: unknown): string | undefined => (typeof value ==
 
 export const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
+// A window's length as a reader states it on the pool (UsageWindow.periodSeconds), from what the provider's answer says,
+// in `unit` seconds: whole seconds, and nothing for a length that is not one, since a reading the store cannot parse
+// back would cost the account every ring rather than this one figure.
+export const statedPeriod = (length: number | undefined, unit: number = 1): { readonly periodSeconds?: number } => {
+    const seconds = length === undefined ? Number.NaN : Math.round(length * unit);
+    return Number.isFinite(seconds) && seconds > 0 ? { periodSeconds: seconds } : {};
+};
+
 // ISO-8601 reset instant to epoch seconds, the wire's unit for Anthropic/Google/Kimi (Codex sends numbers, see
 // resetSeconds in translator-usage.ts); one parse so an unreadable instant drops the same way everywhere.
 export const resetFromIso = (value: unknown): number | undefined => {

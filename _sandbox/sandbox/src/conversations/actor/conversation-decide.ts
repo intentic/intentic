@@ -14,9 +14,10 @@ import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
+import type { HeldReading } from "./limit-booking.js";
 import { comingBackNow, failureOf, sanitizeFailure } from "./turn-failure.js";
 import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
-import { onHandoffChosen, onHeldRepointed, onHeldRetimed, onHeldWalled, onKeepWarmArmed, onKeepWarmEnded, onKeepWarmRefreshed } from "./held-decide.js";
+import { onHandoffChosen, onHeldRead, onHeldRepointed, onKeepWarmArmed, onKeepWarmEnded, onKeepWarmRefreshed } from "./held-decide.js";
 import {
     type Booking,
     edited,
@@ -162,14 +163,13 @@ export type ConversationEvent =
     | { readonly kind: "hold-restored"; readonly held: HeldRecord }
     // A spent stop ladder stands down: the hold stays for a press, never fired by the pass again; the count restarts.
     | { readonly kind: "ladder-spent" }
-    // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
-    // that account's reopen (`reopensAt`, epoch s; absent leaves it press-only). Answers whether a hold took it.
-    | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reopensAt?: number }
-    // When a spent allowance's hold can go, as the pass learns it (held-standing.ts): `held-retimed` times one refused with
-    // no reopen once the records know it (epoch s), or, `early`, brings a timed one sooner once its model can be served
-    // (held-decide.ts says which takes it); `held-walled` is the wall in front of where it goes (ms; limit-due.ts).
-    | { readonly kind: "held-retimed"; readonly reopensAt: number; readonly early?: true }
-    | { readonly kind: "held-walled"; readonly until: number | undefined }
+    // A person picked another account while a spent allowance held the turn: the booking follows the pick, at that
+    // account's reopen as `reading` (held-verdict.ts pickedReading) says it, or as the next pass reads it where absent.
+    // Answers whether a hold took it.
+    | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reading?: HeldReading }
+    // What the resume pass read about where the spent allowance's hold `judged` can go (held-verdict.ts readHeld): the
+    // only write of a hold's reading. Taken only by that very record (held-decide.ts onHeldRead).
+    | { readonly kind: "held-read"; readonly judged: HeldRecord; readonly reading: HeldReading }
     // A person picked how a spent allowance's held turn continues once it is sent again; answers whether the hold took it.
     | { readonly kind: "handoff-chosen"; readonly handoff: HandoffMode }
     // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
@@ -273,7 +273,7 @@ interface Replies {
     readonly "resume-superseded": HeldRecord | undefined;
     readonly "held-fired": boolean;
     readonly "held-repointed": boolean;
-    readonly "held-retimed": boolean;
+    readonly "held-read": boolean;
     readonly "handoff-chosen": boolean;
     readonly "steer-reserved": number | undefined;
     readonly "steers-taken": readonly (TurnCheckpoint | undefined)[];
@@ -728,8 +728,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             ? { state: withResume(state, { held: event.held }), effects: BROADCAST, reply: undefined }
             : unchanged(state, undefined),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
-    "held-retimed": (state, event) => onHeldRetimed(state, event),
-    "held-walled": (state, event) => onHeldWalled(state, event.until),
+    "held-read": (state, event) => onHeldRead(state, event),
     "handoff-chosen": (state, event) => onHandoffChosen(state, event),
     "ladder-spent": (state) =>
         unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
@@ -793,10 +792,23 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
 const keepLimitHold = <R>(before: ConversationState, decision: Decision<R>): Decision<R> => {
     const was = before.resume.held;
     const is = decision.state.resume.held;
-    if (was === is || (!keptHold(was) && !keptHold(is))) {
+    if (was === is || (!keptHold(was) && !keptHold(is)) || onlyReadAgain(was, is)) {
         return decision;
     }
     return { ...decision, effects: [...decision.effects, { kind: "hold-written", hold: storedLimitHold(is) }, { kind: "persist" }] };
+};
+
+// A hold whose only change is what the pass read about it (`held-read`): the stored record leaves the reading out, so
+// there is nothing new to write. Every other key is the very value it was, since onHeldRead spreads the record.
+const onlyReadAgain = (was: HeldRecord | undefined, is: HeldRecord | undefined): boolean => {
+    if (was === undefined || is === undefined) {
+        return false;
+    }
+    const { reading: _was, ...before } = was;
+    const { reading: _is, ...after } = is;
+    const kept = new Map<string, unknown>(Object.entries(before));
+    const entries = Object.entries(after);
+    return entries.length === kept.size && entries.every(([key, value]) => kept.has(key) && kept.get(key) === value);
 };
 
 /* ONE EVENT, APPLIED WHOLE: the next state, the effects in the order they must run, and the sender's answer. */

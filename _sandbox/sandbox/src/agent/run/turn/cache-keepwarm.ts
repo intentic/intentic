@@ -376,8 +376,9 @@ export const refreshCache = async (deps: KeepWarmDeps, conversationId: string, k
 
 // Whether the account can afford another refresh, by the one serviceability rule: a refresh is itself a turn, so it
 // stops where the rule says no turn runs, and short of that, once only the owner's reserve is left. Unmeasured goes on.
-const allowanceStop = async (deps: KeepWarmDeps, keepable: Keepable): Promise<{ readonly reason: KeepWarmEnd; readonly detail: string } | undefined> => {
-    const state = await serviceability(deps, keepable.provider, keepable.account, keepable.model === undefined ? undefined : { id: keepable.model });
+// Judged at the instant the pass tends, the one every other check of the hold reads, never a clock of its own.
+const allowanceStop = async (deps: KeepWarmDeps, keepable: Keepable, now: number): Promise<{ readonly reason: KeepWarmEnd; readonly detail: string } | undefined> => {
+    const state = await serviceability(deps, keepable.provider, keepable.account, keepable.model === undefined ? undefined : { id: keepable.model }, now);
     if (state.kind === "blocked") {
         return { reason: "failed", detail: state.reason };
     }
@@ -454,7 +455,7 @@ export const tendKeepWarm = async (deps: KeepWarmDeps, conversationId: string, n
         scheduleNext(deps, conversationId, now);
         return;
     }
-    const stop = await allowanceStop(deps, keepable);
+    const stop = await allowanceStop(deps, keepable, now);
     if (stop !== undefined) {
         end(stop.reason, stop.detail);
         return;

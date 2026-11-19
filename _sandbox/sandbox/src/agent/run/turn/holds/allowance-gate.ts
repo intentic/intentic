@@ -1,8 +1,8 @@
 import { type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../../composition.js";
 import type { TurnInput } from "../../../../seams/turn-starter.js";
-import { spentRung } from "../../../models/role-model-quota.js";
-import { allowanceWall } from "../../../../usage/serviceability/serviceability.js";
+import { opt } from "../../../../opt.js";
+import { type AllowanceWall, allowanceWall, fleetCapacityOf, type ServiceabilityDeps } from "../../../../usage/serviceability/serviceability.js";
 import { reopenOfRouted } from "../booking-ask.js";
 import { sendableAt } from "../../../../conversations/actor/limit-booking.js";
 
@@ -17,34 +17,48 @@ import { sendableAt } from "../../../../conversations/actor/limit-booking.js";
 // The request a release would make, as far as who pays for it: the provider, the account, the model.
 type Routed = Pick<TurnInput, "agent" | "harness" | "account" | "model"> & { readonly conversationId: string };
 
+// What the wall is read from: the verdicts, and the log a verdict that cannot be read is said in.
+export type WallDeps = ServiceabilityDeps & Pick<Services, "logger">;
+
+/**
+ * The allowance wall in front of `account` for one model (serviceability.ts allowanceWall), or, naming no account, in
+ * front of the provider's every account together (fleetCapacityOf: a wall only once every one is spent or blocked):
+ * undefined while it can serve, `{}` where it is spent with no reopening named. The one reading of it that the gate,
+ * every rung of the resume pass and a held turn's verdict (held-verdict.ts) share. A verdict that cannot be read puts
+ * nothing in the way: the turn goes, as it did before any of them read one, and the provider answers.
+ */
+export const wallAhead = async (
+    services: WallDeps,
+    on: { readonly provider: AgentProvider; readonly account: string | undefined; readonly model: string | undefined },
+    now: number,
+): Promise<AllowanceWall | undefined> => {
+    const { provider, account } = on;
+    const model = on.model === undefined || on.model === "" ? undefined : { id: on.model };
+    try {
+        if (account !== undefined) {
+            return await allowanceWall(services, provider, account, model, now);
+        }
+        const fleet = await fleetCapacityOf(services, provider, model, now);
+        return fleet.kind === "spent" ? opt("reopensAt", fleet.reopensAt) : undefined;
+    } catch (error) {
+        services.logger.warn({ err: error, provider, account }, "allowance gate: could not read the verdict, so nothing is held back by it");
+        return undefined;
+    }
+};
+
 /**
  * When the account these words would go on lets them through again, in milliseconds (its reopening and the grace after
  * it, limit-booking.ts RESET_GRACE_MS), where the records call it spent with that still ahead; undefined to let them go
- * now (room, no reading, a spent reading naming no reopening, or a reopening already past). The account is the one the words name, else the conversation's own; with neither, every
- * account of the provider must read spent, as spent-door.ts reads it.
+ * now (room, no reading, a spent reading naming no reopening, or a reopening already past). The account is the one the
+ * words name, else the conversation's own; with neither, every account of the provider must read spent, as
+ * spent-door.ts reads it.
  */
-export const spentUntil = async (services: Services, turn: Routed, now: number = Date.now()): Promise<number | undefined> => {
+export const spentUntil = async (services: WallDeps & Pick<Services, "agents">, turn: Routed, now: number = Date.now()): Promise<number | undefined> => {
     const { agent } = withRuntimeDefaults(turn);
-    const model = turn.model === undefined || turn.model === "" ? undefined : turn.model;
     const account = turn.account ?? services.agents.entry(turn.conversationId)?.profile.account;
-    const reopensAt =
-        account === undefined
-            ? (await spentRung(services, { provider: agent, model: model ?? "" }, now))?.reopensAt
-            : await accountReopening(services, agent, account, model, now);
+    const reopensAt = (await wallAhead(services, { provider: agent, account, model: turn.model }, now))?.reopensAt;
     const until = reopensAt === undefined ? undefined : sendableAt(reopensAt);
     return until === undefined || until <= now ? undefined : until;
-};
-
-// One account's reopening while the records call it spent (serviceability.ts allowanceWall); undefined for any other
-// verdict, a wall with no instant named, or a failed read.
-const accountReopening = async (services: Services, provider: AgentProvider, account: string, model: string | undefined, now: number): Promise<number | undefined> => {
-    try {
-        return (await allowanceWall(services, provider, account, model === undefined ? undefined : { id: model }, now))?.reopensAt;
-    } catch (error) {
-        // An unread verdict gates nothing: the words go, as they did before this gate, and the provider answers.
-        services.logger.warn({ err: error, provider, account }, "allowance gate: could not read the account's verdict, the words go as they are");
-        return undefined;
-    }
 };
 
 /**

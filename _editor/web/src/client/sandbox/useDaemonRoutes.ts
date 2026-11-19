@@ -88,6 +88,11 @@ export const supportsRoute = (name: string): boolean => {
     return known === undefined || known.has(name) || (former !== undefined && known.has(former));
 };
 
+// Only on positive evidence: the daemon's hello named the route. For a read that stands in for a judgement this window can
+// still make for itself (where a turn naming no account runs, the capacity the verdict door reads), where asking a daemon
+// that has said nothing yet would only replace a working answer with a pending one.
+export const advertisesRoute = (name: string): boolean => advertisedFor(name) !== undefined && supportsRoute(name);
+
 // How many calls each side names, which is what makes a drift count mean anything: "7 disagree" out of a surface
 // neither side's size is stated for is a number with no scale. Undefined for a daemon that never said.
 export const advertisedRouteCount = computed<number | undefined>(() =>

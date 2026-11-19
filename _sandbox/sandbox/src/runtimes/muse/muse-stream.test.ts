@@ -2,6 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { museFailureFrame, museFrames, museStreamState, type MuseStreamState, museUsageFrame } from "./muse-stream.js";
 import { type MuseNotification, readMuseEvent } from "./muse-wire.js";
+import { SPENT_WORDS, THROTTLE_WORDS } from "../../agent/run/frames/limits/limit-cause.testing.js";
 
 const CWD = WORKSPACE_ROOT;
 
@@ -190,6 +191,13 @@ describe("a failed turn is coded by Muse's type before its sentence", () => {
         expect(museFailureFrame({ kind: "modelError", message: "quota", retryable: false, quota: { limitKind: "tierLimit", resetsAtMs: 1 } }, false).code).toBe(
             "rate_limit",
         );
+    });
+
+    // Muse types a plan's quota (`quota`); a rate limit it did not type so is a throttle unless its words show one spent
+    // (limit-cause.ts). 2026-11-19: every rate limit in Muse's words was `rate_limit`, filed against the account.
+    it("codes a rate limit Muse typed as no quota as a throttle, unless its words show an allowance spent", () => {
+        expect(museFailureFrame({ kind: "modelError", message: THROTTLE_WORDS.anthropic, retryable: false }, false)).toMatchObject({ code: "provider-outage", throttle: true });
+        expect(museFailureFrame({ kind: "modelError", message: SPENT_WORDS.devin, retryable: false }, false).code).toBe("rate_limit");
     });
 
     it("codes a window the session outgrew as context-overflow", () => {

@@ -8,7 +8,8 @@ import type { Services } from "../../composition.js";
 // itself (the turn decision's latch, the registry's profile write, the resume press, the queue drain) asks here.
 //
 // An account left undefined is `auto`: nothing on file for this provider, so the credential resolver takes the
-// serviceability pick (usage/serviceability.ts via preferredAccount), and the session frame then latches what served.
+// sandbox's one placement (agent/providers/accounts/placement.ts unnamedPlacement), and the session frame then latches
+// what served.
 // An account filled in from the profile (the turn named none) is the conversation's remembered routing, not a choice
 // made for this turn: where it can no longer serve, planning moves the conversation off it (blocked-account.ts).
 // Continuing (`continues`) is decided here too, and only here: a client's own idea of the session is no say in it.

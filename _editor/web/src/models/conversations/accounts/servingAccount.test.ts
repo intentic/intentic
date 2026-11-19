@@ -111,3 +111,52 @@ describe(`a turn left to the conversation's own account`, () => {
         expect(servingAccount(`kimi`, [row(`mine`, SPENT), row(`other`, ready(80))], { account: `mine`, named: false })).toEqual({ id: `mine`, byAllowance: false });
     });
 });
+
+// The daemon places a turn naming no account with what already runs on each account counted (placement.ts), which no
+// prediction here can see: while children crowded the account renewing first, the turn went to the next one and the
+// picker still ticked the first (2026-11-15, -17). Where the daemon answers, its pick is the tick.
+describe(`where the daemon says it places a turn naming no account`, () => {
+    it(`is the account ticked, over the one the rule here would rank first`, () => {
+        expect(servingAccount(`claude`, FLEET, { account: undefined, named: false, placed: { kind: `placed`, account: `personal` } })).toEqual({
+            id: `personal`,
+            byAllowance: true,
+        });
+    });
+
+    it(`is predicted here while the answer is on its way, marked so the turn never names the prediction`, () => {
+        expect(servingAccount(`claude`, FLEET, { account: undefined, named: false, placed: { kind: `pending` } })).toEqual({
+            id: `spare`,
+            byAllowance: true,
+            provisional: true,
+        });
+    });
+
+    it(`leaves the prediction where the daemon names none, or a sandbox-wide answer this person's rows leave out`, () => {
+        expect(servingAccount(`claude`, FLEET, { account: undefined, named: false, placed: { kind: `placed`, account: undefined } })).toEqual({
+            id: `spare`,
+            byAllowance: true,
+        });
+        expect(servingAccount(`claude`, FLEET, { account: undefined, named: false, placed: { kind: `placed`, account: `someone-else` } })).toEqual({
+            id: `spare`,
+            byAllowance: true,
+        });
+    });
+
+    // Narrowed to this person's loop and accounts (usage.placement `narrowed`, 2026-11-19), the answer is where the turn
+    // runs: a row this window has not caught up with yet is no reason to predict another.
+    it(`takes an answer the daemon narrowed to this person as is, a row this window does not hold yet included`, () => {
+        expect(
+            servingAccount(`claude`, FLEET, { account: undefined, named: false, placed: { kind: `placed`, account: `joined-since`, narrowed: true } }),
+        ).toEqual({ id: `joined-since`, byAllowance: true });
+        expect(servingAccount(`claude`, FLEET, { account: undefined, named: false, placed: { kind: `placed`, account: `personal`, narrowed: true } })).toEqual({
+            id: `personal`,
+            byAllowance: true,
+        });
+    });
+
+    it(`says nothing about a turn that names its account, or runs on its record`, () => {
+        const placed = { kind: `placed`, account: `personal` } as const;
+        expect(servingAccount(`claude`, FLEET, { account: `spare`, named: true, placed })).toEqual({ id: `spare`, byAllowance: false });
+        expect(servingAccount(`claude`, FLEET, { account: `spare`, named: false, placed })).toEqual({ id: `spare`, byAllowance: false });
+    });
+});

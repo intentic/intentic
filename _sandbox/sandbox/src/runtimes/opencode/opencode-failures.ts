@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { isContextOverflowText, isModelRefusalText, isRateLimited, isUnsentParameterRefusalText } from "../../engines/failure-sentences.js";
 import { codedFailure, type FailureRule, modelUnavailableFrame, unsentParameterFrame } from "../../agent/run/frames/error-frames.js";
+import { type LimitEvidence, limitCause, throttled } from "../../agent/run/frames/limits/limit-cause.js";
 import { opt } from "../../opt.js";
 import { latestOf, namedReset } from "../../usage/reset-sentences.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";
@@ -33,15 +34,22 @@ const OPENCODE_MODEL_UNAVAILABLE = /\bmodel unavailable\b/i;
 
 export const isModelInvalid = (message: string): boolean => isModelRefusalText(message, OPENCODE_MODEL_UNAVAILABLE);
 
-// What a failure is, for the daemon: a spent allowance waits for its reset, a provider having a bad time is re-run on
-// backoff, a session past its window is re-run fresh, a model the route cannot reach is taken off the picker, and a
-// response the provider's own filter blocked is held for a person.
+// What a failure is, for the daemon: a rate limit waits for its reset where an allowance is spent and on backoff where
+// it is a throttle (limit-cause.ts), a provider having a bad time is re-run on backoff, a session past its window is
+// re-run fresh, a model the route cannot reach is taken off the picker, and a response the provider's own filter blocked
+// is held for a person.
 type FailureKind = "rate-limit" | "outage" | "no-route" | "content-filter" | undefined;
+
+// OpenCode's own type for a plan's quota run out, as against `provider.rate-limit`, the provider slowing requests down.
+const QUOTA_TYPE = "provider.quota";
+
+// What a rate limit OpenCode reports shows about an allowance: its type, the provider's words and the body behind them.
+const limitEvidence = (error: StructuredError, retryAt?: number): LimitEvidence => ({ said: errorDetail(error), spent: error.type === QUOTA_TYPE, retryAt });
 
 // OpenCode's types (2.0.26 `SessionExecution` → `provider.*`), each read as what the daemon can do about it.
 const KIND_OF_TYPE = new Map<string, FailureKind>([
     ["provider.rate-limit", "rate-limit"],
-    ["provider.quota", "rate-limit"],
+    [QUOTA_TYPE, "rate-limit"],
     ["provider.transport", "outage"],
     ["provider.internal", "outage"],
     ["provider.timeout", "outage"],
@@ -77,7 +85,8 @@ const SENTENCE_RULES: readonly FailureRule[] = [[isModelInvalid, "grok-model-inv
 const typedFrame = (error: StructuredError, kind: FailureKind, target: FailureTarget): ErrorFrame | undefined => {
     switch (kind) {
         case "rate-limit":
-            return { kind: "error", code: "rate_limit", message: error.message };
+            // A spent allowance where its type or words show one, else the throttle it is.
+            return limitCause(limitEvidence(error)) === "spent" ? { kind: "error", code: "rate_limit", message: error.message } : throttled({ kind: "error", message: error.message });
         case "outage":
             return { kind: "error", code: "provider-outage", message: error.message };
         case "content-filter":
@@ -130,8 +139,9 @@ export interface ScheduledRetry {
 /**
  * Whether a retry OpenCode scheduled should be left to it, or handed to the daemon as the coded failure the hold and
  * auto-resume read: undefined lets it run. A retry falling past what is left of the turn's cap is handed over whatever
- * it is, since the turn would end before it came; a spent quota at once, since waiting in-turn cannot refill it; a rate
- * limit whose wait outlasts RATE_LIMIT_PATIENCE_MS with its reset named; an outage once OUTAGE_ATTEMPTS have failed.
+ * it is, since the turn would end before it came; a spent allowance at once, since waiting in-turn cannot refill it
+ * (its type, its words, or a retry the provider put past a retry's horizon, limit-cause.ts); a throttle whose wait
+ * outlasts RATE_LIMIT_PATIENCE_MS, as the throttle it is; an outage once OUTAGE_ATTEMPTS have failed.
  */
 export const retryHandover = (retry: ScheduledRetry, capRemainingMs: number, now = Date.now()): ErrorFrame | undefined => {
     const kind = kindOf(retry.error) ?? (isRateLimited(retry.error.message) ? "rate-limit" : "outage");
@@ -140,9 +150,12 @@ export const retryHandover = (retry: ScheduledRetry, capRemainingMs: number, now
     if (kind === "rate-limit") {
         // OpenCode's own retry is capped at fifteen minutes, so it is a floor: the vendor's countdown in the error or its
         // body ("Resets in 166h40m39s") is when the quota reopens (usage/reset-sentences.ts).
-        const resetsAt = latestOf(Math.ceil(retry.at / 1_000), namedReset(errorDetail(retry.error), now));
-        const handed = pastCap || retry.error.type === "provider.quota" || wait > RATE_LIMIT_PATIENCE_MS;
-        return handed ? { kind: "error", code: "rate_limit", message: retry.error.message, ...opt("resetsAt", resetsAt) } : undefined;
+        const retryAt = Math.ceil(retry.at / 1_000);
+        if (limitCause({ ...limitEvidence(retry.error, retryAt), now }) === "spent") {
+            const resetsAt = latestOf(retryAt, namedReset(errorDetail(retry.error), now));
+            return { kind: "error", code: "rate_limit", message: retry.error.message, ...opt("resetsAt", resetsAt) };
+        }
+        return pastCap || wait > RATE_LIMIT_PATIENCE_MS ? throttled({ kind: "error", message: retry.error.message }) : undefined;
     }
     // A filter's block: OpenCode's own retries may still get past one (a recitation is not always repeated), so they run,
     // but never past the turn's cap, where the wait would end the turn as its own ceiling (`turn-cap`, a Continue) rather

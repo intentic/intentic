@@ -474,6 +474,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             .optional(),
         // provider-outage only, while the breaker has tries left: epoch seconds its backoff next lets one through.
         outage: z.object({ retryAt: z.number() }).optional(),
+        // provider-outage only: a rate limit nothing showed to be a spent allowance (the daemon's limit-cause.ts), which
+        // waits on the provider's backoff as an outage does and is filed against no account. `rate_limit` stays the spent one.
+        throttle: z
+            .literal(true)
+            .optional()
+            .describe(
+                "provider-outage only: the provider was rate-limiting requests, and nothing it said or the records hold showed an allowance spent. It waits on the provider's backoff like an outage, and nothing is held against an account.",
+            ),
         // Laddered walls only (an outage, a stopped turn): how far the automatic re-runs have got.
         retries: RetryLadderSchema.optional(),
         // sandbox-memory-low only: the cgroup reading the refusal was decided on, so a client can offer to raise the

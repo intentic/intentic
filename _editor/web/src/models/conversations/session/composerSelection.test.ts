@@ -7,6 +7,9 @@ import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { computed, reactive, ref, shallowRef } from "vue";
 import { providerAccounts } from "../../providers/providerAccounts";
+import { placementKey } from "../../providers/capacity/daemonPlacement";
+import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
+import { queryClient } from "../../../lib/queryPersistence";
 import { modelLabelFor } from "../../providers/providerCatalog";
 import { AUTO_PROVIDER } from "../accounts/modelPickerState";
 import { turnDefaults } from "../run/turnDefaults";
@@ -348,6 +351,36 @@ describe(`the account the next turn runs on`, () => {
         expect(selection.accountNamed.value).toBe(true);
         expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: false });
         expect(selection.turnSettings()).toMatchObject({ account: `spare`, accountPicked: true });
+    });
+
+    // The daemon's own pick counts what already runs on each account, which the window's ranking cannot see (placement.ts).
+    describe(`from a daemon that answers where it places the turn`, () => {
+        beforeEach(() => {
+            setDaemonRoutes([`usage.placement`]);
+        });
+
+        afterEach(() => {
+            setDaemonRoutes(undefined);
+            queryClient.removeQueries({ queryKey: [`usage.placement`] });
+        });
+
+        it(`is the daemon's pick on a fresh chat, and the first turn names it`, () => {
+            const { selection } = selectionOf();
+            queryClient.setQueryData(placementKey(`claude`, selection.model.value, `claude-code`), { account: `personal`, judgedAt: Date.now() });
+
+            expect(selection.servingAccount.value).toEqual({ id: `personal`, byAllowance: true });
+            expect(selection.turnSettings().account).toBe(`personal`);
+        });
+
+        it(`is predicted here while the answer is on its way, and the turn then names none, for the daemon to place`, () => {
+            const { selection } = selectionOf();
+            // An ask that has not come back; the cleanup cancels it, which is no failure of the test's.
+            const asked = queryClient.fetchQuery({ queryKey: placementKey(`claude`, selection.model.value, `claude-code`), queryFn: () => new Promise<never>(() => undefined) });
+            asked.catch(() => undefined);
+
+            expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: true, provisional: true });
+            expect(selection.turnSettings().account).toBeUndefined();
+        });
     });
 });
 

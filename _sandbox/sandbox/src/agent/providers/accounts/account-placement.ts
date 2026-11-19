@@ -1,19 +1,19 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
-import { bestWithRoom, NEARLY_OUT_ROOM } from "@intentic/sandbox-contract/models/plan-pools";
+import { NEARLY_OUT_ROOM } from "@intentic/sandbox-contract/models/plan-pools";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { PROMPT_CACHE_1H_MS } from "../../run/turn/prompt-cache.js";
-import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { judgedAccounts } from "../../../usage/serviceability/serviceability.js";
 import type { AccountRoute } from "./blocked-account.js";
+import { coldTarget, moveTarget, type PlaceDeps } from "./placement.js";
 
 /* WHERE A CONVERSATION RUNS ONCE ITS CACHE IS COLD. An account pays for a turn and keeps one thing for the next: the
    provider's prompt cache, which lives on that account. Once the cache has expired, nothing ties the conversation to the
    account any more. The session is carried to wherever the turn runs (turn-plan.ts: the move is the conversation's, and
    the session frame binds it there), so moving costs no more than staying. A conversation nobody pinned is then run on
-   the account the sandbox's pick prefers (plan-pools.ts preferredAccount: the allowance that renews first, unless it is
-   nearly out), rather than on whichever one it happened to start on. That spends what would otherwise reset unspent,
+   the account the sandbox's placement prefers (placement.ts coldTarget: the allowance that renews first, unless it is
+   nearly out, and where the fan-out planner carries the provider, with what already runs on each account counted),
+   rather than on whichever one it happened to start on. That spends what would otherwise reset unspent,
    and it moves conversations off an account about to run out before that account refuses them.
 
    Asked after blocked-account.ts, which moves a turn off an account that cannot serve it, pinned or not. This rule only
@@ -94,17 +94,22 @@ const coldGain = (here: Ready, there: Ready): "nearly-out" | "renews-sooner" | "
 };
 
 /** Where a cold, unpinned conversation goes: keep, or a move onto an account clearly better to spend now. */
-export const placeCold = async (deps: ServiceabilityDeps, turn: ColdTurn, now: number = Date.now()): Promise<AccountRoute> => {
+export const placeCold = async (deps: PlaceDeps, turn: ColdTurn, now: number = Date.now()): Promise<AccountRoute> => {
     const { provider, named, remembered, pinned, cold, model } = turn;
     if (named !== undefined || remembered === undefined || pinned || !cold || KeyedProviderSchema.safeParse(provider).success) {
         return { kind: "keep" };
     }
-    const rows = await namedServiceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
+    const rows = await judgedAccounts(deps, provider, model === undefined || model === "" ? undefined : { id: model });
     const current = rows.find((row) => row.id === remembered);
     if (current?.state.kind !== "ready") {
         return { kind: "keep" };
     }
-    const best = bestWithRoom(rows.filter((row) => row.id !== remembered));
+    const best = await coldTarget(
+        deps,
+        provider,
+        model,
+        rows.filter((row) => row.id !== remembered),
+    );
     if (best?.state.kind !== "ready") {
         return { kind: "keep" };
     }
@@ -130,25 +135,27 @@ export const placeCold = async (deps: ServiceabilityDeps, turn: ColdTurn, now: n
    placeCold, for the account the conversation remembers, pinned or not: a pin holds while the account can serve, and a
    spent one cannot. A person's press always went out, so a conversation placed on an account whose allowance was spent
    was refused on every press while the provider's other accounts sat idle: a Devin chat was refused twice in half an hour
-   with two accounts beside it nothing had refused (2026-10-29). It goes where every move goes (account-moves.ts
-   moveDestination): proven room, or where the provider publishes no allowance, an account nothing has refused. With
+   with two accounts beside it nothing had refused (2026-10-29). It goes where every move goes (placement.ts moveTarget):
+   proven room, or where the provider publishes no allowance, an account nothing has refused. With
    nowhere to go it stays, and the provider's own refusal says why. A turn naming another account is never asked, nor one
    a person picked the account for (turn-facts.ts accountRouteOf): the records are not always right. */
 
 /** Where a conversation remembering a spent account goes: keep, or a move onto the account the move rule picks. */
-export const offSpentAccount = async (deps: ServiceabilityDeps, turn: Pick<ColdTurn, "provider" | "named" | "remembered" | "model">): Promise<AccountRoute> => {
+export const offSpentAccount = async (deps: PlaceDeps, turn: Pick<ColdTurn, "provider" | "named" | "remembered" | "model">): Promise<AccountRoute> => {
     const { provider, named, remembered, model } = turn;
     if (named !== undefined || remembered === undefined || KeyedProviderSchema.safeParse(provider).success) {
         return { kind: "keep" };
     }
-    const rows = await namedServiceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
+    const rows = await judgedAccounts(deps, provider, model === undefined || model === "" ? undefined : { id: model });
     const current = rows.find((row) => row.id === remembered);
     if (current?.state.kind !== "spent") {
         return { kind: "keep" };
     }
-    const to = moveDestination(
+    const to = await moveTarget(
+        deps,
+        provider,
+        model,
         rows.filter((row) => row.id !== remembered),
-        reportsPlanLimits(provider),
     );
     if (to === undefined) {
         return { kind: "keep" };

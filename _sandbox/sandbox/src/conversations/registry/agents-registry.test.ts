@@ -23,7 +23,7 @@ import { type JournalledTurn, sqliteTurnJournal } from "../../store/journals/tur
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { nextPromptDayAt } from "../actor/conversation-state.js";
-import { sendableAt } from "../actor/limit-booking.js";
+import { type HeldReading, reopenedBy, sendableAt } from "../actor/limit-booking.js";
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.
@@ -3067,9 +3067,10 @@ it("follows the sandbox's answers as Settings changes them", async () => {
     await waitFor(() => expect(told.length).toBeGreaterThan(0));
 });
 
-// The wall the resume pass read in front of where a hold goes (limit-due.ts) is a fact on the hold, so the card's `next`
-// says the instant the pass will fire at, later than the reset where the account is still spent then (2026-10-19).
-it("derives a re-run behind the wall the pass read, and back at the reset once the wall lifts", async () => {
+// What the resume pass read of the records about where a hold goes (held-verdict.ts) rides on the hold, so the card's
+// `next` and its reset say the instant the pass will fire at: later than the refusal's reset where the account is still
+// spent then (2026-10-19), sooner where it reopened early (2026-11-08). Only the very hold the pass read takes it.
+it("derives a re-run and its reset from what the pass read, the refusal's own word until it has read any", async () => {
     const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
     await registry.init();
     await beginTurn(conversations, turn(), 1_000);
@@ -3077,12 +3078,24 @@ it("derives a re-run behind the wall the pass read, and back at the reset once t
     holdLimit(conversations, "c1");
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     await registry.setBreakPolicy("c1", "limit", "resend");
-    const reset = sendableAt(conversations.state("c1")?.resume.held?.reopensAt ?? 0);
-    const wall = reset + 3_600_000;
-    conversations.send("c1", { kind: "held-walled", until: wall });
-    expect(registry.get("c1")?.next).toEqual({ kind: "rerun", at: wall });
-    conversations.send("c1", { kind: "held-walled", until: undefined });
-    expect(registry.get("c1")?.next).toEqual({ kind: "rerun", at: reset });
+    const refused = conversations.state("c1")?.resume.held?.reopensAt ?? 0;
+    expect(registry.get("c1")).toMatchObject({ limitResetsAt: refused, next: { kind: "rerun", at: sendableAt(refused) } });
+
+    const read = (reading: HeldReading): boolean => {
+        const judged = conversations.state("c1")?.resume.held;
+        return judged !== undefined && conversations.send("c1", { kind: "held-read", judged, reading }).reply;
+    };
+    const walled = refused + 3_600;
+    expect(read({ at: sendableAt(walled), reopensAt: walled })).toBe(true);
+    expect(registry.get("c1")).toMatchObject({ limitResetsAt: walled, next: { kind: "rerun", at: sendableAt(walled) } });
+    const open = Date.now();
+    expect(read({ at: open, reopensAt: reopenedBy(open), openSince: open })).toBe(true);
+    expect(registry.get("c1")).toMatchObject({ limitResetsAt: reopenedBy(open), next: { kind: "rerun", at: open } });
+
+    // A reading of a hold since replaced is not taken.
+    const stale = conversations.state("c1")?.resume.held;
+    conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: true });
+    expect(stale !== undefined && conversations.send("c1", { kind: "held-read", judged: stale, reading: {} }).reply).toBe(false);
 });
 
 // The booking is the actor's hold, which goes without any turn ending: a parent's cancel drops it, the resume pass gives

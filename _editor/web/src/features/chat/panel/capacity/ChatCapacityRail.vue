@@ -16,6 +16,7 @@ import {
 } from "./chatCapacity";
 import { accountsLoaded } from "../../../../models/providers/providerAccounts";
 import { formatAge, formatRemaining, formatReset } from "../../../../models/providers/usageStatus";
+import { verdictNow } from "../../../../models/providers/capacity/verdictClock";
 import { heldAccounts, refreshConnections } from "../../../../models/conversations/accounts/useChat-accounts";
 import { useRemeasure } from "../../accounts/pickerAccounts";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
@@ -33,7 +34,9 @@ const { mine } = defineProps<{ mine?: CapacityMine | undefined }>();
 onMounted(() => void refreshConnections());
 
 // Held accounts ride in so the age below counts only what a press could actually move; the line under it says the rest.
-const capacity = computed(() => chatCapacity(heldAccounts.value, Date.now(), mine));
+// At the verdict clock, not a bare Date.now(): read once, that left a pool that reset drawn spent until some reading
+// moved the rail (verdictClock.ts).
+const capacity = computed(() => chatCapacity(heldAccounts.value, verdictNow(), mine));
 // Unread isn't empty: until the accounts are read, the rail must not claim the fleet has nothing.
 const reading = useLoaded(() => ({ data: accountsLoaded.value ? capacity.value : undefined, error: undefined, fetching: false, wanted: true }));
 

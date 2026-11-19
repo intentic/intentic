@@ -21,6 +21,9 @@ const { formatReset } = await import("../../../../models/providers/usageStatus")
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 const MEASURED_AT = Date.now() - 60_000;
+// The clock in epoch seconds, as a reset is published: a pool past its reset reads lapsed (usageAt), so a reset a test
+// means to be ahead is laid after it.
+const NOW_SECONDS = Math.floor(Date.now() / 1000);
 // A park still standing: one that has passed is no longer a reason for anything, so the rail drops it.
 const HELD_UNTIL = Math.floor(Date.now() / 1000) + 1_800;
 
@@ -139,7 +142,7 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
         {
             id: `a`,
             label: `spent@example.com`,
-            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: 1_700_090_000, gates: `all` }] },
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: NOW_SECONDS + 90_000, gates: `all` }] },
         },
     ]);
 
@@ -158,7 +161,7 @@ it(`draws an account that is nearly spent in the warning tone rather than droppi
         {
             id: `a`,
             label: `first@example.com`,
-            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] },
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: NOW_SECONDS + 90_000, gates: `all` }] },
         },
     ]);
 
@@ -193,12 +196,12 @@ it(`spells out for a screen reader what the bar says by its width`, () => {
         {
             id: `a`,
             label: `first@example.com`,
-            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000, gates: `all` }] },
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: NOW_SECONDS + 90_000, gates: `all` }] },
         },
     ]);
 
     // Every part the column shortens or drops is spoken here or nowhere; a bar is decoration to a screen reader.
-    expect(spoken(el)).toContain(`Weekly · all models 59% left (resets ${formatReset(1_700_090_000)})`);
+    expect(spoken(el)).toContain(`Weekly · all models 59% left (resets ${formatReset(NOW_SECONDS + 90_000)})`);
     // Spoken once: the drawn row is hidden from the tree, or a reader would hear both the truncated and full line.
     expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`59%`);
 });
@@ -210,11 +213,13 @@ it(`draws both the session and the week, each named by its own window`, () => {
         {
             id: `a`,
             label: `first@example.com`,
+            // No published resets: each window is current for its own length past the reading, and a reset still ahead
+            // would draw its countdown beside the lane's name, which another test covers.
             usage: {
                 measuredAt: MEASURED_AT,
                 windows: [
-                    { kind: `five_hour`, utilization: 12, resetsAt: 1_700_020_000, gates: `all` },
-                    { kind: `seven_day`, utilization: 87, resetsAt: 1_700_090_000, gates: `all` },
+                    { kind: `five_hour`, utilization: 12, gates: `all` },
+                    { kind: `seven_day`, utilization: 87, gates: `all` },
                 ],
             },
         },

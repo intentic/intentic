@@ -177,8 +177,9 @@ export const mentionsSpentAllowance = (text: string): boolean =>
 const RATE_LIMITED =
     /rate.?limit|resource.?(?:has been )?exhausted|too many requests|(?:^|\n)\s*429\b|\b(?:status(?:[ _]?code)?|http(?:\/[\d.]+)?|code|error)\W{0,3}429\b|[([]429[)\]]|\bcredentials for model .+ are cooling down\b/i;
 
-// A refusal driven by quota or allowance, not a real failure: the chat offers a retry-later notice instead of a Continue
-// that would just re-fail.
+// A refusal driven by a rate limit, not a real failure: a spent allowance or a provider slowing requests down, which the
+// words alone rarely tell apart. Which one it is, is decided in one place, on evidence (agent/run/frames/limits/limit-cause.ts):
+// these words name the family, never the spent half.
 export const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
 
 // A failure with its process's stderr folded in behind it, so a bare exit code becomes the actual reason. Folded behind

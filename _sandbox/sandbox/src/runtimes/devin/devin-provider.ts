@@ -26,7 +26,8 @@ import type { AcpConnections } from "../acp/acp-connection.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { type DevinAccountDeps, devinAccountDoor } from "./accounts/devin-accounts.js";
 import { type DevinStore, fileDevinStore, liveDevinAccounts, readDevinCredentials } from "./accounts/devin-credentials.js";
-import { type ServiceabilityDeps, unnamedAccount } from "../../usage/serviceability/serviceability.js";
+import type { ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
+import { unnamedPlacement } from "../../agent/providers/accounts/placement.js";
 import { DEVIN_CLI_MISSING, devinAgentId, devinCli, devinLaunch } from "./devin-cli.js";
 import { createDevinCatalog, DEVIN_OWN_PICK, type DevinCatalog } from "./models/devin-catalog.js";
 
@@ -116,11 +117,11 @@ export const planDevinTurn = async (
         return { ok: false, ...(readiness.code !== undefined ? { code: readiness.code } : {}), message: readiness.detail };
     }
     // A pinned account while it can still serve, else the one the sandbox's rule picks for the turn's model
-    // (serviceability.ts unnamedAccount): on 2026-10-28 three SWE-1.6 subagents in a row went to the first connected
+    // (placement.ts unnamedPlacement): on 2026-10-28 three SWE-1.6 subagents in a row went to the first connected
     // account, whose weekly quota was spent, with three others free.
     const accounts = await liveDevinAccounts(services.devinStore);
     const account =
-        input.account === undefined ? await unnamedAccount(services, "devin", accounts, input.model) : accounts.find((entry) => entry.id === input.account);
+        input.account === undefined ? await unnamedPlacement(services, "devin", accounts, input.model) : accounts.find((entry) => entry.id === input.account);
     if (account === undefined) {
         return { ok: false, message: "That Devin account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Models." };
     }
