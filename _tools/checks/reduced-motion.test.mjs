@@ -29,7 +29,8 @@ test("an animation: declaration starts a CSS animation, a transition does not", 
     assert.deepEqual(lines(cssAnimations(`.press { transition: transform 120ms; animation-name: none }`)), []);
 });
 
-const sheen = (scheme) => `--ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg%3E%3Canimate attributeName='x1' dur='1.8s' repeatCount='indefinite'/%3E%3C/svg%3E"); /* ${scheme} */`;
+const sheen = (scheme) =>
+    `--ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg%3E%3Canimate attributeName='x1' dur='1.8s' repeatCount='indefinite'/%3E%3C/svg%3E"); /* ${scheme} */`;
 const utilities = (skeleton, sheens = [sheen(`light`), sheen(`dark`), sheen(`contrast`)]) => `.skeleton {${skeleton}}\n${sheens.join("\n")}`;
 const SKELETON = ` background-color: var(--ui-skeleton-ink); mask-image: var(--ui-skeleton-sheen); `;
 
@@ -40,9 +41,31 @@ test("a skeleton masked by a looping SMIL sheen in every scheme is right", () =>
 test("a skeleton that animates in CSS, lost its mask or a scheme's sheen, or whose sheen stands still is not", () => {
     assert.deepEqual(skeletonProblems(utilities(`${SKELETON} animation: pulse 2s infinite;`)), [`.skeleton starts a CSS animation`]);
     assert.deepEqual(skeletonProblems(utilities(` background-color: red; `)), [`.skeleton is not masked by var(--ui-skeleton-sheen)`]);
-    assert.deepEqual(skeletonProblems(utilities(SKELETON, [sheen(`light`), sheen(`dark`)])), [`2 --ui-skeleton-sheen definitions, where every scheme has one (3)`]);
-    assert.deepEqual(skeletonProblems(utilities(SKELETON, [sheen(`light`), sheen(`dark`), `--ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E");`])), [
-        `--ui-skeleton-sheen #3 has no <animate repeatCount='indefinite'>`,
+    assert.deepEqual(skeletonProblems(utilities(SKELETON, [sheen(`light`), sheen(`dark`)])), [
+        `2 --ui-skeleton-sheen definitions, where every scheme has one (3)`,
     ]);
+    assert.deepEqual(
+        skeletonProblems(utilities(SKELETON, [sheen(`light`), sheen(`dark`), `--ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E");`])),
+        [`--ui-skeleton-sheen #3 never loops: no <animate> with repeatCount='indefinite' or begun again on its own end`],
+    );
     assert.deepEqual(skeletonProblems(`.bar { color: red }`), [`no .skeleton rule`]);
+});
+
+// The sweep as it shipped until 2026-11-19: 1.3s across, then 0.5s held at the end inside the same 1.8s loop, which kept every
+// bar on screen repainting through the rest.
+const HELD = `%3Canimate attributeName='x1' values='-.7;1;1' keyTimes='0;.72;1' dur='1.8s' repeatCount='indefinite'/%3E`;
+// The same rest written as a gap: one interval begun again 0.504s after its own end, frozen in between.
+const GAP = `%3Canimate id='a' attributeName='x1' values='-.7;1' dur='1.296s' begin='0s;a.end+.504s' fill='freeze'/%3E`;
+const sheenOf = (animate) => `--ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg%3E${animate}%3C/svg%3E");`;
+
+test("a sheen that rests between intervals loops; one that holds a value inside its interval does not pass", () => {
+    assert.deepEqual(skeletonProblems(utilities(SKELETON, [sheenOf(GAP), sheenOf(GAP), sheen(`reduced`)])), []);
+    assert.deepEqual(skeletonProblems(utilities(SKELETON, [sheenOf(HELD), sheenOf(GAP), sheen(`reduced`)])), [
+        `--ui-skeleton-sheen #1 holds a value inside its interval (values='-.7;1;1'): put the rest between intervals instead`,
+    ]);
+    // Begun again on another element's end is a chain, not a loop of its own.
+    const chained = `%3Canimate id='a' attributeName='x1' values='-.7;1' dur='1s' begin='0s;b.end' fill='freeze'/%3E`;
+    assert.deepEqual(skeletonProblems(utilities(SKELETON, [sheenOf(chained), sheenOf(GAP), sheen(`reduced`)])), [
+        `--ui-skeleton-sheen #1 never loops: no <animate> with repeatCount='indefinite' or begun again on its own end`,
+    ]);
 });

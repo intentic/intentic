@@ -175,7 +175,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [clipboard-tiers](clipboard-tiers.mjs) | the clipboard reached through `navigator.clipboard` in the editor or an extension instead of through the kit |
 | [modifier-tiers](modifier-tiers.mjs) | a primary modifier read as "Ctrl or Cmd" in the editor or an extension instead of the kit's `primaryHeld` (⌘ on a Mac, Ctrl elsewhere) |
 | [vue-model-names](vue-model-names.mjs) | a `defineModel` named with a template literal, which the TypeScript 7 Vue content mappers turn into code that does not parse |
-| [reduced-motion](reduced-motion.mjs) | the OS asked about reduced motion outside `@intentic/ui/motion`, a CSS animation utility or `motion-reduce:` variant in the app shell, the kit or an extension, or a skeleton that moves by CSS animation |
+| [reduced-motion](reduced-motion.mjs) | the OS asked about reduced motion outside `@intentic/ui/motion`, a CSS animation utility or `motion-reduce:` variant in the app shell, the kit or an extension, a skeleton that moves by CSS animation, or a skeleton sheen that holds still inside its SMIL interval instead of resting between intervals |
 | [layout](layout.mjs) | ghost, over-full, twin, colliding or dead directories |
 | [package-readmes](package-readmes.mjs) | a package with no `README.md`, or one with no H1 and lead sentence, found the way `intentic-docs validate` finds packages |
 | [dead-code](dead-code.mjs) | a new unused export, type or file, or a new unused, unlisted or unresolved dependency, as knip reads `knip.json` (ratcheted per file in `baselines/dead-code.json`, per manifest in `baselines/dead-code-deps.json`; an export kept for something knip cannot see takes knip's `/** @public */` tag) |

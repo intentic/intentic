@@ -149,6 +149,11 @@
    (_tools/checks/reduced-motion.mjs). An SVG drawn as an image keeps its own timeline, one per image, so every bar on
    the screen sweeps in step, and it costs a repaint of the bars alone: nothing is re-styled or laid out.
 
+   The rest is a gap between sweeps, not a held value: each sweep is its own 1.296s interval, begun again 0.504s after
+   the last ends and frozen off the bar in between, because while any SMIL animation in an image is active the browser
+   redraws it every frame, changed or not (docs/architecture/conventions.md, UI). The band leaves past the bar's right
+   edge and comes back from beyond its left, so the jump from one end to the other is never seen.
+
    The mask only weights the bar's own colour, so the hue is the theme's (`--ui-skeleton-ink`, which a skin may
    answer): light takes ink AWAY under the band, letting the paper through, and dark adds it, so the band is a
    highlight in both. Under reduced motion nothing travels; the bar breathes in place instead, slowly, since a still
@@ -163,12 +168,12 @@
     }
     :root {
         /* Full ink at rest, a band dipping to 45% of it sweeping left to right in 1.3s, then 0.5s still. */
-        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='s' x1='-.7' x2='0'%3E%3Cstop offset='0' stop-opacity='1'/%3E%3Cstop offset='.5' stop-opacity='.45'/%3E%3Cstop offset='1' stop-opacity='1'/%3E%3Canimate attributeName='x1' values='-.7;1;1' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3Canimate attributeName='x2' values='0;1.7;1.7' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23s)'/%3E%3C/svg%3E");
+        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='s' x1='-.7' x2='0'%3E%3Cstop offset='0' stop-opacity='1'/%3E%3Cstop offset='.5' stop-opacity='.45'/%3E%3Cstop offset='1' stop-opacity='1'/%3E%3Canimate id='a' attributeName='x1' values='-.7;1' calcMode='spline' keySplines='.45 0 .25 1' dur='1.296s' begin='0s;a.end+.504s' fill='freeze'/%3E%3Canimate attributeName='x2' values='0;1.7' calcMode='spline' keySplines='.45 0 .25 1' dur='1.296s' begin='a.begin' fill='freeze'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23s)'/%3E%3C/svg%3E");
     }
     :root[data-mode="dark"] {
         --ui-skeleton-ink: color-mix(in oklab, var(--color-content) 15%, transparent);
         /* 62% of the ink at rest, the band rising to all of it. */
-        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='s' x1='-.7' x2='0'%3E%3Cstop offset='0' stop-opacity='.62'/%3E%3Cstop offset='.5' stop-opacity='1'/%3E%3Cstop offset='1' stop-opacity='.62'/%3E%3Canimate attributeName='x1' values='-.7;1;1' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3Canimate attributeName='x2' values='0;1.7;1.7' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23s)'/%3E%3C/svg%3E");
+        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='s' x1='-.7' x2='0'%3E%3Cstop offset='0' stop-opacity='.62'/%3E%3Cstop offset='.5' stop-opacity='1'/%3E%3Cstop offset='1' stop-opacity='.62'/%3E%3Canimate id='a' attributeName='x1' values='-.7;1' calcMode='spline' keySplines='.45 0 .25 1' dur='1.296s' begin='0s;a.end+.504s' fill='freeze'/%3E%3Canimate attributeName='x2' values='0;1.7' calcMode='spline' keySplines='.45 0 .25 1' dur='1.296s' begin='a.begin' fill='freeze'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23s)'/%3E%3C/svg%3E");
     }
     /* Reduced motion, in either scheme: the whole bar eases between full ink and 60% of it, every 2.8s. */
     :root[data-motion="reduced"] {
