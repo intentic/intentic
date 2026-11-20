@@ -5399,7 +5399,7 @@
                 "failed": "Konnte sie nicht öffnen.",
                 "reason": "Grund",
                 "reasonPlaceholder": "Warum du sie lesen musst. {name} liest das.",
-                "reasonHint": "{count} Zeichen, {min} bis {max}",
+                "reasonHint": "{count} von {max} Zeichen",
                 "for": "Für",
                 "readOnlyUntil": "Nur lesen, bis {until}",
                 "isTold": "Erfährt es sofort",

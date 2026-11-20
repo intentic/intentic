@@ -67,7 +67,8 @@ export const SealAskSchema = SealPersonSchema.extend({ at: z.number() });
 export type SealAsk = z.infer<typeof SealAskSchema>;
 
 export const SEAL_OPEN_HOURS = 24;
-export const SEAL_REASON_MIN = 10;
+// Any reason the owner writes will do: a minimum length only disabled the press on a short, honest one ("Help").
+export const SEAL_REASON_MIN = 1;
 export const SEAL_REASON_MAX = 500;
 
 // An opening without asking. Kept on the conversation for good; no route removes one. `approvedBy` is the second

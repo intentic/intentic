@@ -5399,7 +5399,7 @@
                 "failed": "No se pudo abrir.",
                 "reason": "Motivo",
                 "reasonPlaceholder": "Por qué necesitas leerla. {name} lo leerá.",
-                "reasonHint": "{count} caracteres, de {min} a {max}",
+                "reasonHint": "{count} de {max} caracteres",
                 "for": "Por",
                 "readOnlyUntil": "Solo lectura, hasta {until}",
                 "isTold": "Recibe aviso ahora",

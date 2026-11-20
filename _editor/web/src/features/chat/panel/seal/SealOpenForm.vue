@@ -62,7 +62,7 @@ const confirm = async (): Promise<void> => {
                 @keydown.ctrl.enter.prevent="confirm"
                 @keydown.meta.enter.prevent="confirm"
             ></textarea>
-            <span class="text-2xs text-subtle">{{ t(`chat.seal.open.reasonHint`, { min: SEAL_REASON_MIN, count: length, max: SEAL_REASON_MAX }) }}</span>
+            <span class="text-2xs text-subtle">{{ t(`chat.seal.open.reasonHint`, { count: length, max: SEAL_REASON_MAX }) }}</span>
         </label>
 
         <!-- What it buys and what it costs, as the label/value pairs a settings block reads in. -->
