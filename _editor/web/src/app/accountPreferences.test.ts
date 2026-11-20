@@ -5,7 +5,7 @@
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync, freshImport, realYield } from "@intentic/testing/bun";
 import { ACCOUNT_PREFERENCE_NAME, ACCOUNT_PREFERENCES_MAX, type AccountPreferences, type AccountPreferencesPatch } from "@intentic/api-contract";
-import { definePreference, receivePreferenceChange } from "@intentic/ui/preference";
+import { boolPreference, definePreference, receivePreferenceChange } from "@intentic/ui/preference";
 import { openAccountPartition, resetAccountPartitionForTests } from "@intentic/ui/storage";
 import { ORPCError } from "@orpc/client";
 import { type Ref, ref } from "vue";
@@ -24,6 +24,8 @@ const gauges = definePreference<string>({ key: `ui-agents-live-metrics`, read: (
 const audience = definePreference<string>({ key: `ui-audience`, read: (raw) => raw ?? `developer`, write: (value) => value });
 // No stored language reads as the browser's own, as @intentic/ui/i18n reads it.
 const locale = definePreference<string>({ key: `ui-locale`, read: (raw) => raw ?? `en`, write: (value) => value });
+// The file tree's test filter, as workbench/window/useLayout.ts declares it.
+const hideTests = boolPreference(`ui-workspace-hide-tests`);
 
 // The platform as it keeps an account's preferences: a read answers the whole set, a patch merges into it and answers
 // the set after. `refusal` fails every call; `holdReads` keeps a read unanswered until released.
@@ -208,6 +210,26 @@ test(`an account coming back wears its own again, and a choice it made on the wa
     expect(locale.value).toBe(`pl`);
     expect(Object.fromEntries(second.values)).toEqual({ "ui-locale": `de` });
     expect(first.patches).toEqual([]);
+});
+
+test(`each account on one browser keeps its own file tree filters`, async () => {
+    jest.useFakeTimers();
+    const first = keeping();
+    const one = await start(first, `account-1`);
+    hideTests.value = true;
+    await advanceTimersByTimeAsync(500);
+    expect(Object.fromEntries(first.values)).toEqual({ "ui-workspace-hide-tests": `1` });
+    one.value = null;
+
+    // The next account in never chose to hide tests: it sees them, and its choice stays its own.
+    const second = keeping();
+    const two = await start(second, `account-2`);
+    expect(hideTests.value).toBe(false);
+    expect(second.writes).toBe(0);
+    two.value = null;
+
+    await start(first, `account-1`);
+    expect(hideTests.value).toBe(true);
 });
 
 test(`a choice made signed out is nobody's, and the next account in takes it`, async () => {

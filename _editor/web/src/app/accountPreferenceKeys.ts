@@ -13,6 +13,19 @@ export const ACCOUNT_PREFERENCE_KEYS: readonly string[] = [
     `ui-changes-largest-first`,
     `ui-chat-show-tool-calls`,
     `ui-agents-live-metrics`,
+    // What the file tree lists (workbench/window/useLayout.ts): left device-wide, every account on a browser shared one
+    // set of filters, and switching accounts meant flipping them back each time.
+    `ui-workspace-show-ignored`,
+    `ui-workspace-hide-tests`,
+    `ui-workspace-hide-technical`,
+    // How a diff and a file read (useLayout.ts again), for the same reason.
+    `ui-diff-open`,
+    `ui-diff-layout`,
+    `ui-diff-prose`,
+    `ui-diff-document`,
+    `ui-diff-show-comments`,
+    `ui-file-hide-comments`,
+    `ui-markdown-outline`,
 ];
 // Left out on purpose. `ui-accent`: index.html paints the accent before any module runs, from `ui-accent-vars`, a copy
 // that only the window picking the colour refreshes (useTheme's `setAccent`), never the preference's own `apply`; an
