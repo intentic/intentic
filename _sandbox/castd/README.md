@@ -41,6 +41,12 @@ Exactly browser-wire's protocol (`_sandbox/netd/crates/browser-wire/src/lib.rs`)
   else the one delivering the most, never the slowest: voxl took the minimum over every viewer, so one phone on a train
   blurred the picture for the person typing. A viewer that falls behind the steering one has frames skipped until what
   it has drains, then gets a keyframe (no sooner than a second after the last, since each is a burst for everyone).
+- **New content gets room.** A keyframe, and the first paints of new content over a third of the picture or more
+  after 300 ms without such a change (a page that loaded, a route that changed, a panel that opened; at most three
+  frames within 250 ms of the first), are encoded with a VBV buffer of eight frames at four times the cap, full,
+  instead of the steady 1.25 frames. Squeezed into the steady buffer, a new page came out at QP 40 and more, the old
+  page's text showing through it, until the paint-over 150 ms later. A scroll or a drag starts the same way and costs
+  nothing extra (CRF keeps its motion vectors cheap); a video or an animation gets the room only at its start.
 - **`resize`** from the driving viewer (or any read-write viewer while nobody drives) RandR-resizes the screen to
   round(width × scale) × round(height × scale), even, clamped to `--max-size` and what RandR allows, then fits every
   toplevel that covered the old screen to the new one, as a window manager would for a fullscreen window (Chromium does
@@ -144,11 +150,15 @@ castd is a Cargo workspace of its own, so netd builds without x264. It needs
 [image/runtime-packages.txt](image/runtime-packages.txt) to run; `--no-default-features` leaves out the `audio`
 feature (Opus and PulseAudio) and the `nvenc` feature (NVENC's headers; nothing NVIDIA's is ever linked).
 
-Two patches from voxl make it faster, and castd works without either:
+Patches to x264 and Xvfb make castd faster and sharper, and castd works without them:
 
 - [patches/x264](patches/x264) (pixelflux's, plus voxl's two): x264 skips the macroblocks castd's damage map marks
   unchanged instead of analysing and copying them, about 40% less encode time on small damage, the stream bit for bit
-  the same. [image/build-x264.sh](image/build-x264.sh) builds it at the commit Debian trixie's libx264-164 is cut from,
+  the same. castd's own 0007 lets a reconfigure set the VBV buffer's fill, which the room new content gets (above)
+  needs: stock x264 keeps the fill the steady buffer held, so a larger buffer gives the frame nothing. On a test page
+  that took a new text page's first frame from 24 dB luma PSNR against the settled picture (QP 43) to 38 dB (QP 30), at
+  about 110 KB against 32 KB, and the joining viewer's keyframe from QP 39 to QP 21.
+  [image/build-x264.sh](image/build-x264.sh) builds it at the commit Debian trixie's libx264-164 is cut from,
   so the soname matches; castd built with its prefix first on `PKG_CONFIG_PATH` gets an rpath to it and otherwise runs
   on Debian's library.
 - [patches/xorg-server-xtest-scroll.patch](patches/xorg-server-xtest-scroll.patch): Xvfb's XTEST pointer gets a

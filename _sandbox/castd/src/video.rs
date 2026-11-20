@@ -45,6 +45,8 @@ struct Job {
     paintover: bool,
     /// Last pass of a paint-over burst.
     paintover_final: bool,
+    /// New content over much of the picture after a lull (FreshContent): given a keyframe's budget.
+    fresh: bool,
     /// Rows that changed in this capture.
     band: Option<Band>,
     /// Per-macroblock change map for this capture (None: analyse everything).
@@ -351,6 +353,62 @@ impl Refiner {
     }
 }
 
+/// A page that loads, a route that changes, a panel that opens: much of the picture turns into new content at once,
+/// after a while of only small changes. Squeezed into the steady per-frame budget (1.25 frames at the cap), such a frame
+/// came out at a QP so high that most of the old page stayed showing through the new one (24-25 dB luma against the
+/// settled picture on a text page) until the paint-over 150 ms later. Its first frames get a keyframe's budget instead:
+/// a link pays one larger frame, the person sees the new page clean at once. A scroll or a drag starts the same way and
+/// costs nothing extra (its motion vectors are cheap whatever the cap); a video or an animation gets the budget only at
+/// its start, since large changes that keep coming are no onset.
+struct FreshContent {
+    /// When the last large change was captured.
+    last_large: Option<Instant>,
+    /// When the onset that opened the current window was captured, and how many of its frames got the budget.
+    onset: Option<(Instant, u32)>,
+}
+
+/// The share of the picture's macroblocks that must change for a capture to count as large.
+const FRESH_SHARE: f64 = 1.0 / 3.0;
+/// How long without a large change before the next one is an onset.
+const FRESH_QUIET: Duration = Duration::from_millis(300);
+/// How long after an onset, and for how many frames, large changes keep the budget: a page often paints in steps (the
+/// first paint, then its images and web fonts).
+const FRESH_WINDOW: Duration = Duration::from_millis(250);
+const FRESH_FRAMES: u32 = 3;
+
+impl FreshContent {
+    fn new() -> Self {
+        FreshContent {
+            last_large: None,
+            onset: None,
+        }
+    }
+
+    /// Notes a motion frame that changed `changed` of the picture's `total` macroblocks; whether it gets the budget.
+    fn motion(&mut self, changed: usize, total: usize, at: Instant) -> bool {
+        if (changed as f64) < total as f64 * FRESH_SHARE {
+            return false;
+        }
+        let lull = self
+            .last_large
+            .is_none_or(|t| at.saturating_duration_since(t) >= FRESH_QUIET);
+        self.last_large = Some(at);
+        if lull {
+            self.onset = Some((at, 1));
+            return true;
+        }
+        match &mut self.onset {
+            Some((start, n))
+                if *n < FRESH_FRAMES && at.saturating_duration_since(*start) < FRESH_WINDOW =>
+            {
+                *n += 1;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Notes the damage the capturer has taken for /wait, whether or not anyone is watching.
 pub(crate) fn note_changes(cap: &mut Capturer, hub: &Hub) {
     if !cap.changes.is_empty() {
@@ -385,6 +443,7 @@ fn capture_loop(
     let mut had_clients = false;
     let mut full_next = true;
     let mut refiner = Refiner::new(w.div_ceil(16) * h.div_ceil(16), w.div_ceil(16));
+    let mut fresh = FreshContent::new();
 
     loop {
         if hub.resize_req.lock().is_some() || hub.crop_req.lock().is_some() || cap.needs_rebuild() {
@@ -559,12 +618,27 @@ fn capture_loop(
             .fetch_add((t2 - t1).as_micros() as u64, Ordering::Relaxed);
         hub.stats.captured.fetch_add(1, Ordering::Relaxed);
 
+        let blocks = refiner.pending.len();
+        let fresh_frame = is_motion
+            && !want_key
+            && fresh.motion(
+                mb_dirty
+                    .as_ref()
+                    .map_or(blocks, |m| m.iter().filter(|&&d| d != 0).count()),
+                blocks,
+                t0,
+            );
         let mut refine = None;
         let paintover = if is_motion {
             last_motion = Instant::now();
             paintover_left = cfg.paintover_burst;
-            // Piggyback sharpening of blocks that have gone still on this frame.
-            refine = if want_key { None } else { refiner.due() };
+            // Piggyback sharpening of blocks that have gone still on this frame; not on a fresh one, whose budget is
+            // for the new content at motion quality.
+            refine = if want_key || fresh_frame {
+                None
+            } else {
+                refiner.due()
+            };
             refine.is_some()
         } else if paintover_due {
             paintover_left -= 1;
@@ -619,6 +693,7 @@ fn capture_loop(
                 force_idr: want_key,
                 paintover,
                 paintover_final: frame_paintover && paintover_left == 0,
+                fresh: fresh_frame,
                 mb_dirty: mb_map,
                 band,
                 captured_at: origin,
@@ -678,6 +753,8 @@ struct StripeJob {
     force_idr: bool,
     /// A paint-over or refinement pass (`crf` is the paint-over CRF).
     paintover: bool,
+    /// New content after a lull (FreshContent): a keyframe's budget at motion quality.
+    fresh: bool,
     crf: f32,
     cap: u32,
     mb_dirty: Option<Arc<Vec<u8>>>,
@@ -888,12 +965,13 @@ fn stripe_worker(
         } else {
             job.crf
         };
-        if job.force_idr {
-            // A keyframe is what a new viewer sees first; don't starve it to the
-            // steady-state frame budget (up to ~8 frames' worth at 4x the cap).
+        if job.force_idr || job.fresh {
+            // A keyframe is what a new viewer sees first, and a fresh frame the new page; don't starve either to the
+            // steady-state frame budget. Eight frames of buffer at 4x the cap, full, of which x264 lets one frame take
+            // half: up to 16 frames' worth of the cap, though CRF keeps most far under it. The next frame sets the cap
+            // back.
             let boost = job.cap.saturating_mul(4).max(16_000);
-            s.enc
-                .set_rate_buf(job.crf, boost, boost / s.cfg.fps.max(1) * 8);
+            s.enc.set_rate_buf(crf, boost, boost / s.cfg.fps.max(1) * 8);
             s.applied_kbps = 0;
         } else {
             let moved = s.applied_kbps == 0
@@ -1066,6 +1144,7 @@ fn encode_loop(
                     ts,
                     force_idr: job.force_idr,
                     paintover: job.paintover,
+                    fresh: job.fresh,
                     crf: want_crf,
                     cap,
                     mb_dirty: job.mb_dirty.clone(),
@@ -1432,5 +1511,33 @@ mod tests {
             after <= during / 2.0,
             "correction {after} after the paint-overs, {during} during the drag"
         );
+    }
+
+    #[test]
+    fn a_page_that_loads_after_a_lull_gets_the_budget_for_its_first_paints() {
+        let mut fresh = FreshContent::new();
+        let t = Instant::now();
+        let ms = |n: u64| t + Duration::from_millis(n);
+        // Hovering a link: small changes never count.
+        assert!(!fresh.motion(40, 3600, ms(0)));
+        // The new page's first paint, its images 20 ms later, its web fonts 60 ms after that.
+        assert!(fresh.motion(3500, 3600, ms(100)));
+        assert!(fresh.motion(1800, 3600, ms(120)));
+        assert!(fresh.motion(2000, 3600, ms(180)));
+        // A fourth large paint inside the window is past the frames it allows.
+        assert!(!fresh.motion(2000, 3600, ms(200)));
+        // The next page, after a lull.
+        assert!(fresh.motion(3600, 3600, ms(900)));
+    }
+
+    #[test]
+    fn large_changes_that_keep_coming_get_it_only_at_their_start() {
+        let mut fresh = FreshContent::new();
+        let t = Instant::now();
+        // A full-screen video at 60 fps: its first frames are an onset, the rest steady motion.
+        let boosted = (0..600u64)
+            .filter(|&i| fresh.motion(3600, 3600, t + Duration::from_micros(i * 16_667)))
+            .count();
+        assert_eq!(boosted, FRESH_FRAMES as usize);
     }
 }

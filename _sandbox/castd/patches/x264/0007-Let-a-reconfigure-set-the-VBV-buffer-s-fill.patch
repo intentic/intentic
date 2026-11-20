@@ -1,0 +1,54 @@
+From a4a5d42976ebd431b734db0839076e978a9d359f Mon Sep 17 00:00:00 2001
+From: castd <castd@intentic.invalid>
+Date: Fri, 20 Nov 2026 11:33:28 +0000
+Subject: [PATCH] Let a reconfigure set the VBV buffer's fill
+
+x264_encoder_reconfig changes the VBV buffer's size and rate but keeps the fill the old buffer held, so a caller that
+widens the buffer for one large frame (a keyframe for a viewer that joined, a page that loaded) gives that frame no
+more room than the old buffer had, and less: with five frames of buffer or more x264 lets a frame take only half the
+fill, and it raises the QP while the fill is under half the buffer. A reconfigure with rc.f_vbv_buffer_init above 0
+now sets the fill to that share of the new buffer (above 1: in kbit, as at init); 0 leaves it as it is, as before.
+x264_param_default sets 0.9, so a caller that reconfigures with defaults refills the buffer each time: castd sets 0
+on every reconfigure but its bursts.
+---
+ encoder/encoder.c     | 3 +++
+ encoder/ratecontrol.c | 9 +++++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/encoder/encoder.c b/encoder/encoder.c
+index 98a709e..55e8642 100644
+--- a/encoder/encoder.c
++++ b/encoder/encoder.c
+@@ -1919,6 +1919,9 @@ static int encoder_try_reconfig( x264_t *h, x264_param_t *param, int *rc_reconfi
+         COPY( rc.i_vbv_max_bitrate );
+         COPY( rc.i_vbv_buffer_size );
+         COPY( rc.i_bitrate );
++        /* A reconfigure that names a buffer fill (above 0) sets the buffer that full; 0 leaves the fill as it is. */
++        *rc_reconfig |= param->rc.f_vbv_buffer_init > 0;
++        COPY( rc.f_vbv_buffer_init );
+     }
+     *rc_reconfig |= h->param.rc.f_rf_constant != param->rc.f_rf_constant;
+     *rc_reconfig |= h->param.rc.f_rf_constant_max != param->rc.f_rf_constant_max;
+diff --git a/encoder/ratecontrol.c b/encoder/ratecontrol.c
+index ff8f27f..29005af 100644
+--- a/encoder/ratecontrol.c
++++ b/encoder/ratecontrol.c
+@@ -737,6 +737,15 @@ void x264_ratecontrol_init_reconfigurable( x264_t *h, int b_init )
+                           && h->param.rc.i_rc_method == X264_RC_ABR
+                           && h->param.rc.i_vbv_max_bitrate <= h->param.rc.i_bitrate;
+         }
++        else if( h->param.rc.f_vbv_buffer_init > 0 )
++        {
++            /* The fill a reconfigure names, as a share of the new buffer or (above 1) in kbit, as at init. Without it
++             * the fill stays what the old buffer held, so a larger buffer gives the next frame no more room. */
++            float init = h->param.rc.f_vbv_buffer_init > 1. ? h->param.rc.f_vbv_buffer_init / h->param.rc.i_vbv_buffer_size
++                                                            : h->param.rc.f_vbv_buffer_init;
++            rc->buffer_fill_final =
++            rc->buffer_fill_final_min = rc->buffer_size * x264_clip3f( init, 0, 1 ) * h->sps->vui.i_time_scale;
++        }
+     }
+ }
+ 
+-- 
+2.47.3
+

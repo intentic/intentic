@@ -49,7 +49,8 @@ pub trait VideoEncoder: Send {
     /// Quality and bitrate cap from now on (a buffer of ~1.25 frames at `max_kbps`). `crf` is x264's scale; a hardware
     /// encoder maps it onto its own constant-quality target.
     fn set_rate(&mut self, crf: f32, max_kbps: u32);
-    /// The same with an explicit VBV buffer, in kbit.
+    /// The same with an explicit VBV buffer, in kbit, which starts full: room for one large picture (a keyframe, a page
+    /// that loaded) however little the steady buffer held. The next `set_rate` brings the steady buffer back.
     fn set_rate_buf(&mut self, crf: f32, max_kbps: u32, buf_kbit: u32);
     /// Encodes one picture, appending its Annex B access unit to `out`. `force_idr` asks for an IDR, `qp` forces the
     /// frame's QP, and `mb_info` (one byte per macroblock, 1 where nothing changed) lets an encoder skip unchanged

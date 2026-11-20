@@ -110,6 +110,21 @@ impl X264 {
     }
 }
 
+impl X264 {
+    /// Quality, cap and buffer from now on; `fill` above 0 sets how full the buffer is (patched x264), 0 leaves it.
+    fn reconfig(&mut self, crf: f32, max_kbps: u32, buf_kbit: u32, fill: f32) {
+        unsafe {
+            self.param.rc.f_rf_constant = crf;
+            if max_kbps > 0 {
+                self.param.rc.i_vbv_max_bitrate = max_kbps as i32;
+                self.param.rc.i_vbv_buffer_size = buf_kbit.max(1) as i32;
+                self.param.rc.f_vbv_buffer_init = fill;
+            }
+            ffi::x264_encoder_reconfig(self.h, &mut self.param);
+        }
+    }
+}
+
 impl VideoEncoder for X264 {
     fn name(&self) -> &'static str {
         "x264"
@@ -119,25 +134,22 @@ impl VideoEncoder for X264 {
         true
     }
 
-    /// Reconfigure rate control on the fly (buffer of ~1.25 frames at `max_kbps`).
+    /// Reconfigure rate control on the fly (buffer of ~1.25 frames at `max_kbps`), its fill left as it is.
     fn set_rate(&mut self, crf: f32, max_kbps: u32) {
-        self.set_rate_buf(
+        self.reconfig(
             crf,
             max_kbps,
             vbv_buffer_kbit(max_kbps, self.param.i_fps_num),
+            0.0,
         );
     }
 
-    /// Reconfigure rate control with an explicit VBV buffer (kbit).
+    /// Reconfigure rate control with an explicit VBV buffer (kbit), full. Stock x264 keeps the fill a reconfigure
+    /// finds, so a larger buffer gave the next frame no more room than the old one held, and less: past five frames of
+    /// buffer x264 lets a frame take only half the fill, and raises the QP while the fill is under half the buffer.
+    /// patches/x264's 0007 takes the fill from `f_vbv_buffer_init`; a stock x264 ignores it.
     fn set_rate_buf(&mut self, crf: f32, max_kbps: u32, buf_kbit: u32) {
-        unsafe {
-            self.param.rc.f_rf_constant = crf;
-            if max_kbps > 0 {
-                self.param.rc.i_vbv_max_bitrate = max_kbps as i32;
-                self.param.rc.i_vbv_buffer_size = buf_kbit.max(1) as i32;
-            }
-            ffi::x264_encoder_reconfig(self.h, &mut self.param);
-        }
+        self.reconfig(crf, max_kbps, buf_kbit, 1.0);
     }
 
     /// Encode one picture. `force_idr` requests a keyframe, `qp` (if set) forces the frame QP.

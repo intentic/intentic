@@ -2,7 +2,9 @@
 # Builds libx264 with the patches in ../patches/x264 into $PREFIX (default /opt/castd), for castd to link instead of
 # Debian's libx264-dev. The patches skip the work x264 does on macroblocks castd's damage map marks unchanged: a frame
 # where a small area changed encodes in about 40% less time, and the stream comes out bit for bit as stock x264 codes
-# it. They add no API, so castd builds against a stock x264 as well (the fallback: `apt-get install libx264-dev`).
+# it. 0007 lets a reconfigure set the VBV buffer's fill (`rc.f_vbv_buffer_init` above 0), which stock x264 ignores, so
+# castd still builds and runs against a stock x264 (the fallback: `apt-get install libx264-dev`): its keyframes and new
+# pages then get no more room than the steady buffer.
 #
 # Pinned to 31e19f92, the commit Debian trixie's libx264-164 is cut from, so the patched library keeps that package's
 # soname (libx264.so.164) and a castd built against either runs against either.
