@@ -151,6 +151,15 @@
             auto,
             auto;
         background-repeat: no-repeat;
+/* The mark sits inside the edge; the tint and the ground's gradient start at the border box. Left at the default
+   padding box, an `auto`-sized no-repeat gradient stops 1px short of the transparent border on every side, so a ring
+   of whatever lies behind the card (the wallpaper, most visibly) showed round it until hover swapped in a flat fill. */
+        background-origin:
+            padding-box,
+            padding-box,
+            padding-box,
+            border-box,
+            border-box;
         --card-ring: inset 0 0 #0000;
         --card-ledge: inset 0 0 #0000;
         --card-lift: 0 0 #0000;
