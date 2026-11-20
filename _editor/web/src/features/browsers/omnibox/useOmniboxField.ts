@@ -261,8 +261,15 @@ export const useOmniboxField = (options: OmniboxFieldOptions): OmniboxField => {
                 state.wanted.value = options.value.value === ``;
                 void ranking.refresh();
             }
-            // Focusing selects the whole address, so a click then Ctrl+C copies it, and typing replaces it.
-            void nextTick(() => input.value?.select());
+            // Focusing selects the whole address, so a click then Ctrl+C copies it, and typing replaces it. Only while
+            // the field still has the keyboard: select() focuses a field in Chromium, so a field that lost it meanwhile
+            // would take it back, and two fields focused in one tick (the address bar and the start page's box once the
+            // last tab closes) would trade it forever in microtasks, freezing the whole app.
+            void nextTick(() => {
+                if (focused.value) {
+                    input.value?.select();
+                }
+            });
         },
         onBlur: () => {
             focused.value = false;
