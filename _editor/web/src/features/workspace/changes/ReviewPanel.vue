@@ -1263,7 +1263,7 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
              One line at any width: agent chips shrink by cutting their names (logo and count stay, the hover card names
              them), and only once nothing is left to cut does the row scroll sideways rather than wrap into a stack.
              The 2px above and below keep a focus ring inside the scroller's clip; the negative margin gives it back. -->
-        <div v-if="chipRowShown" class="scrollbar-none -mb-0.5 flex shrink-0 items-center gap-1 overflow-x-auto px-2 pt-1.5 pb-0.5">
+        <div v-if="chipRowShown" class="scrollbar-none -mb-0.5 flex shrink-0 items-center gap-1 overflow-x-auto pl-3 pr-2 pt-1.5 pb-0.5">
             <span class="shrink-0 text-2xs text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
                  wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,

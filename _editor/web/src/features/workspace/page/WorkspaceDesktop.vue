@@ -677,8 +677,8 @@ const homeTooltip = computed((): Tip => ({
                 <!-- Files and Changes are the primary modes; restore history is deliberately quieter, sharing one resize handle. -->
                 <!-- No bar rule: the tabs' own line is the header's foot, up to its buttons; `shadow-none` drops the skin fillet that would draw a second. -->
                 <!-- Tabs, not pills: they name the column, and pills here read as one more mode beside the search's own Name | Text below. -->
-                <!-- 14px in from the rail: flush with the column's 8px edge, the underlined "Files" read as touching the icon rail. -->
-                <div class="view-header flex items-center gap-1 pl-3.5 pr-2 shadow-none">
+                <!-- "Files" starts 12px in, on the line the text of the chips below (Name, From) starts on, not on the 8px box edge: there it read as touching the rail. -->
+                <div class="view-header flex items-center gap-1 pl-3 pr-2 shadow-none">
                     <SegmentedControl v-model="sidebarMode" size="xs" variant="underline" :options="sidebarModeOptions" class="min-w-0 flex-1 self-stretch" />
                     <button
                         type="button"
