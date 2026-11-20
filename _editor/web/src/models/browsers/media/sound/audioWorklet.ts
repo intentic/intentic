@@ -26,7 +26,8 @@ interface ProcessorBase {
 }
 
 interface ProcessorOptions {
-    readonly processorOptions: { readonly channels: number; readonly sampleRate: number };
+    // `minTargetMs`: the jitter buffer's floor, AudioRing's own where absent.
+    readonly processorOptions: { readonly channels: number; readonly sampleRate: number; readonly minTargetMs?: number };
 }
 
 /** The processor as registered: its ring, and the audio thread's call for every 128 frames. */
@@ -49,7 +50,8 @@ export const defineRingProcessor = (
         reportedAt: number;
         constructor(options: ProcessorOptions) {
             super();
-            this.ring = new Ring(options.processorOptions.channels, options.processorOptions.sampleRate);
+            const { channels, sampleRate, minTargetMs } = options.processorOptions;
+            this.ring = new Ring(channels, sampleRate, minTargetMs);
             this.reportedAt = 0;
             this.port.addEventListener(`message`, (event) => {
                 const data = event.data;

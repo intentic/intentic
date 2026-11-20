@@ -231,7 +231,14 @@ fn begin(
         ));
     }
     let (tx, rx) = mpsc::unbounded_channel();
-    let client = r.hub.add_client(tx, true, true);
+    let client = r.hub.add_client(
+        tx,
+        crate::hub::Joining {
+            read_only: true,
+            internal: true,
+            ..Default::default()
+        },
+    );
     client.video.store(true, Ordering::Relaxed);
     r.hub.wake();
     let hub = r.hub.clone();

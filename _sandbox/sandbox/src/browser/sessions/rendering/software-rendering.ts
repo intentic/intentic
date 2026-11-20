@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Every Chromium this daemon starts renders in software, on purpose and said so, never on a GPU by accident.
+// Every Chromium this daemon starts renders in software, on purpose and said so, never on a GPU by accident. The one
+// exception is on purpose too: a window a person opened draws on WSL2's GPU where the sandbox has it (window-gpu.ts).
 //
 // The sandbox can run with the host's GPU passed in (`--gpus=all` on a WSL2 machine), and its environment then carries
 // LD_LIBRARY_PATH=/usr/lib/wsl/lib and friends. A browser launched with `{ ...process.env }` inherited that, so it was

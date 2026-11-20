@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libx264-dev libyuv-dev libopus-dev libpulse-dev \
         meson ninja-build x11proto-dev xtrans-dev xfonts-utils x11-xkb-utils libpixman-1-dev libxkbfile-dev \
         libxfont-dev libfontenc-dev libfreetype-dev libxcvt-dev libxau-dev libxdmcp-dev libxcb1-dev libxshmfence-dev \
-        libgcrypt20-dev libbsd-dev libmd-dev libepoxy-dev libssl-dev
+        libgcrypt20-dev libbsd-dev libmd-dev libepoxy-dev libssl-dev mesa-common-dev libgl-dev
 COPY image /src/_sandbox/castd/image
 COPY patches /src/_sandbox/castd/patches
 # The patched libraries first: they change only when their recipe or patches do, so this layer outlives castd edits.

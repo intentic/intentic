@@ -2,7 +2,7 @@
 // and every context built is closed again, including one still starting when the sound goes.
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
-import { mediaSound } from "./mediaSound";
+import { mediaSound, soundFloorMs } from "./mediaSound";
 
 const contexts: FakeContext[] = [];
 let releaseModule: (() => void) | undefined;
@@ -36,14 +36,24 @@ class FakeContext {
     }
 }
 
+const nodes: FakeNode[] = [];
+
 class FakeNode {
     readonly port = { postMessage: () => undefined, addEventListener: () => undefined, start: () => undefined };
+    constructor(
+        readonly context: FakeContext,
+        readonly name: string,
+        readonly options: AudioWorkletNodeOptions,
+    ) {
+        nodes.push(this);
+    }
     connect(): void {}
     disconnect(): void {}
 }
 
 beforeEach(() => {
     contexts.length = 0;
+    nodes.length = 0;
     releaseModule = undefined;
     refuseModule = undefined;
     stubGlobal(`AudioContext`, FakeContext);
@@ -115,5 +125,33 @@ it("gives up on sound in a browser that refuses its worklet, rather than buildin
     await waitFor(() => expect(contexts[0]?.state).toBe(`closed`));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(contexts).toHaveLength(1);
+    sound.close();
+});
+
+it("buffers sound to a 20 ms floor for a viewer on castd's own computer, and 40 ms over a network", () => {
+    expect(soundFloorMs(true)).toBe(20);
+    expect(soundFloorMs(false)).toBe(40);
+    expect(soundFloorMs(undefined)).toBe(40);
+});
+
+it("hands the worklet the floor the hello calls for, and starts it again when the floor changes", async () => {
+    const sound = mediaSound({ ask: () => undefined, feed: () => undefined });
+    sound.hello(opus, true);
+    sound.shown(true);
+    await waitFor(() => expect(releaseModule).toEqual(expect.any(Function)));
+    release();
+    await waitFor(() => expect(nodes).toHaveLength(1));
+    expect(nodes[0]?.options.processorOptions).toEqual({ channels: 2, sampleRate: 48_000, minTargetMs: 20 });
+    // The same sound again from a castd on this computer: nothing is rebuilt.
+    sound.hello(opus, true);
+    expect(contexts[0]?.state).not.toBe(`closed`);
+    // Now over a network: the buffer is rebuilt to its usual floor.
+    releaseModule = undefined;
+    sound.hello(opus, false);
+    expect(contexts[0]?.state).toBe(`closed`);
+    await waitFor(() => expect(releaseModule).toEqual(expect.any(Function)));
+    release();
+    await waitFor(() => expect(nodes).toHaveLength(2));
+    expect(nodes[1]?.options.processorOptions).toEqual({ channels: 2, sampleRate: 48_000, minTargetMs: 40 });
     sound.close();
 });

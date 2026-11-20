@@ -148,7 +148,7 @@ impl Netd {
                 route::Media::Session(session) => Some(session.to_owned()),
                 route::Media::BadName => None,
             };
-            return self.media(session, request).await;
+            return self.media(session, listener, request).await;
         }
         // The owner's guard is checked before Node is asked anything, so a visitor without a pass costs Node nothing
         // but the page a navigation is shown.
@@ -256,8 +256,15 @@ impl Netd {
 
     // The media socket's upgrade, relayed to `<cast dir>/<session>.sock` as the HTTP/1.1 it arrived as (castd checks the
     // token, netd only carries it), then spliced. Only an upgrade: castd's control routes (`/health`, `/screenshot`, …)
-    // are Node's to ask on the socket itself, and a path under the media route never names one.
-    async fn media(&self, session: Option<String>, request: Request<Incoming>) -> Response<Body> {
+    // are Node's to ask on the socket itself, and a path under the media route never names one. One that arrived on the
+    // loopback port says so (browser-wire's MEDIA_LISTENER_HEADER, the name netd gives Node too): the viewer runs on this
+    // computer, and castd encodes for it as for no network at all.
+    async fn media(
+        &self,
+        session: Option<String>,
+        listener: Listener,
+        request: Request<Incoming>,
+    ) -> Response<Body> {
         let Some(session) = session else {
             return plain(StatusCode::NOT_FOUND, MEDIA_NAMES);
         };
@@ -278,6 +285,13 @@ impl Netd {
         };
         let (mut parts, incoming) = request.into_parts();
         for_next_hop(&mut parts.headers, true);
+        // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
+        if matches!(listener, Listener::Loopback { .. }) {
+            parts.headers.insert(
+                NetdHeader::Listener.name(),
+                HeaderValue::from_static(LOOPBACK_LISTENER),
+            );
+        }
         parts.version = Version::HTTP_11;
         let outbound = in_origin_form(Request::from_parts(parts, body::incoming(incoming)));
         relay::exchange(io, outbound)

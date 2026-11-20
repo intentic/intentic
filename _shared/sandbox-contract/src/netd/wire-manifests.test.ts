@@ -8,10 +8,12 @@ import {
     BROWSER_MEDIA_SOCKET_DIR,
     BROWSER_VIEW_PATH,
     EDGE_TRANSPORTS,
+    MEDIA_CLIP_LEN,
     MEDIA_CLOSE_CODES,
     MEDIA_FLAGS,
     MEDIA_HEADER_LEN,
     MEDIA_KINDS,
+    MEDIA_LOSSLESS_QUERY,
     MEDIA_TOKEN_GRACE_SECONDS,
     RTC_CHANNELS,
     RTC_MESSAGE_MAX,
@@ -52,6 +54,8 @@ const browser = manifest("browser-wire") as {
         headerLen: number;
         kinds: Record<string, number>;
         flags: Record<string, number>;
+        clipLen: number;
+        losslessQuery: string;
         rtcChannels: Record<string, { ordered: boolean; maxRetransmits: number | null }>;
         rtcMessageMax: number;
         tokenGraceSeconds: number;
@@ -118,6 +122,8 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
         expect(MEDIA_HEADER_LEN).toBe(browser.browserMedia.headerLen);
         expect<Record<string, number>>(MEDIA_KINDS).toEqual(browser.browserMedia.kinds);
         expect<Record<string, number>>(MEDIA_FLAGS).toEqual(browser.browserMedia.flags);
+        expect(MEDIA_CLIP_LEN).toBe(browser.browserMedia.clipLen);
+        expect(MEDIA_LOSSLESS_QUERY).toBe(browser.browserMedia.losslessQuery);
         expect(MEDIA_TOKEN_GRACE_SECONDS).toBe(browser.browserMedia.tokenGraceSeconds);
         expect<Record<string, number>>(MEDIA_CLOSE_CODES).toEqual(browser.browserMedia.closeCodes);
         expect<Record<string, { ordered: boolean; maxRetransmits: number | null }>>(RTC_CHANNELS).toEqual(browser.browserMedia.rtcChannels);

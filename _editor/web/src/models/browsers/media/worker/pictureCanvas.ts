@@ -1,10 +1,13 @@
 import type { DecodeSeams, Painter, Surface } from "./decodeSeams";
+import { paintExact, stripePainter } from "./exactPicture";
+import type { ExactCopy } from "../mediaHeader";
 import type { DecodedStripe } from "./stripeVideo";
 import { tabSwitch, type TabSwitch } from "./tabSwitch";
 
 // THE PICTURE ON ITS CANVAS, IN THE DECODE WORKER: the OffscreenCanvas the page transferred, backed at the picture's
 // own pixels (hello's width × height), which the page shows at width/scale CSS px, so a DPR-2 screen gets the picture
-// 1:1. Each stripe is drawn at its top row the moment it decodes. The canvas is resized on the first frame of a new
+// 1:1. Each stripe is drawn at its top row the moment it decodes, only inside its frame's clip where castd clipped it,
+// and castd's exact copies where they belong (exactPicture.ts). The canvas is resized on the first frame of a new
 // size, never ahead of it, since resizing clears it. What the page needs to place the picture (its painted size, its
 // edge colour, that a picture is up) is posted as it changes.
 
@@ -14,13 +17,15 @@ export interface PictureCanvas {
     readonly start: (width: number, height: number) => void;
     // Draws a decoded stripe and closes it; `drawnAt` hears when it landed, with its capture time.
     readonly draw: (decoded: DecodedStripe) => void;
+    // Draws castd's exact copy of a rectangle, on a canvas already at the stream's size.
+    readonly exact: (copy: ExactCopy) => void;
     readonly edge: () => string | undefined;
     readonly tabs: TabSwitch;
     readonly reset: () => void;
 }
 
 export const pictureCanvas = (
-    seams: Pick<DecodeSeams, `post` | `edge` | `surface` | `snapshot` | `now`>,
+    seams: Pick<DecodeSeams, `post` | `edge` | `surface` | `snapshot` | `now` | `bgrxFrame` | `imageData`>,
     drawnAt: (captureMs: number) => void,
 ): PictureCanvas => {
     let surface: Surface | undefined;
@@ -51,14 +56,19 @@ export const pictureCanvas = (
     );
 
     const draw = (decoded: DecodedStripe): void => {
+        // Undefined for a stripe its frame's clip misses, which changes nothing on the canvas.
+        const paint = stripePainter(decoded);
         try {
+            if (paint === undefined) {
+                return;
+            }
             const first = !drawn || surface?.width !== size?.width || surface?.height !== size?.height;
             const resized = size !== undefined && resize(size.width, size.height);
             const target = tabs.painter() ?? painter;
             if (target === undefined || surface === undefined) {
                 return;
             }
-            target.drawImage(decoded.frame, 0, decoded.top);
+            paint(target);
             drawn = true;
             tabs.drew(decoded.captureMs);
             drawnAt(decoded.captureMs);
@@ -79,6 +89,13 @@ export const pictureCanvas = (
         }
     };
 
+    // A canvas not yet at the stream's size is cleared by the frame that sizes it: a copy drawn there is lost anyway.
+    const exact = (copy: ExactCopy): void => {
+        const target = tabs.painter() ?? painter;
+        const sized = size !== undefined && surface?.width === size.width && surface.height === size.height;
+        return target === undefined || !sized ? undefined : paintExact(target, copy, seams);
+    };
+
     return {
         attach: (next) => {
             tabs.release();
@@ -96,6 +113,7 @@ export const pictureCanvas = (
             said = false;
         },
         draw,
+        exact,
         edge: () => (surface === undefined || !drawn ? undefined : seams.edge(surface)),
         tabs,
         reset: () => {

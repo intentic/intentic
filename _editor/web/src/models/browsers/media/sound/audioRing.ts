@@ -1,9 +1,10 @@
 // THE SOUND'S JITTER BUFFER, RUN ON THE AUDIO THREAD. Decoded Opus arrives in packets (10-20 ms each) whenever the
 // network and the decode worker let it; the audio thread asks for 128 frames every 2.7 ms at 48 kHz, on its own clock.
-// The ring in between holds a small target of sound (40 ms on a steady link, more as arrivals get jittery), primes to
-// it before playing, and keeps to it: a little faster or slower (±2%, resampled, inaudible) when it drifts, a jump back
-// to the target when it is far behind (a stall that delivered a burst), and silence and a fresh priming when it runs
-// dry. Sound that lags the picture by more than the buffer is worse than a skipped syllable.
+// The ring in between holds a small target of sound (40 ms on a steady link, 20 on this computer's loopback, more as
+// arrivals get jittery), primes to it before playing, and keeps to it: a little faster or slower (±2%, resampled,
+// inaudible) when it drifts, a jump back to the target when it is far behind (a stall that delivered a burst), and
+// silence and a fresh priming when it runs dry. Sound that lags the picture by more than the buffer is worse than a
+// skipped syllable.
 //
 // The class is shipped to the AudioWorklet as its own source text (audioWorklet.ts), so it may not reference anything
 // outside itself: no imports, no module constants, no field initialisers a compiler could lower into a helper.
@@ -32,7 +33,8 @@ export class AudioRing {
     minTargetMs: number;
     maxTargetMs: number;
 
-    constructor(channels: number, sampleRate: number) {
+    // `minTargetMs`: the floor the target never goes below, 40 ms unless said.
+    constructor(channels: number, sampleRate: number, minTargetMs?: number) {
         this.channels = Math.max(1, Math.floor(channels));
         this.sampleRate = sampleRate;
         // A second of sound: far more than any target, so a burst after a stall is held rather than torn.
@@ -49,7 +51,7 @@ export class AudioRing {
         this.lastArrival = -1;
         this.underruns = 0;
         this.drops = 0;
-        this.minTargetMs = 40;
+        this.minTargetMs = minTargetMs ?? 40;
         this.maxTargetMs = 120;
     }
 

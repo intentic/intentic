@@ -1,19 +1,22 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { BrowserMediaClientMessage } from "@intentic/sandbox-contract/browser-wire";
 import { closeCodec, type DecodeSeams, type FrameLike, type VideoDecoderLike } from "./decodeSeams";
-import { type Ack, ackBook } from "../frameBook";
-import type { MediaHeader } from "../mediaHeader";
+import { type Ack, ackBook, type FrameQueue, frameQueue } from "../frameBook";
+import type { MediaHeader, PictureRect } from "../mediaHeader";
 
 // THE PICTURE'S DECODERS: one VideoDecoder per stripe, since each stripe is an H.264 stream of its own (castd encodes
 // them in parallel and sends only those that changed), each frame acked once every stripe of it that came has
 // decoded (frameBook.ts). A stripe's decoder is built at its first keyframe; one that fails is closed for good, its
-// stripe waits for a keyframe, and one is asked for (keyframePolicy below).
+// stripe waits for a keyframe, and one is asked for (keyframePolicy below). What waits for the frames before it (castd's
+// exact copies, exactPicture.ts) runs once each of them came out of its decoder or was given up.
 
 /** A decoded stripe, for the canvas: drawn at its top row; closed by whoever draws it. */
 export interface DecodedStripe {
     readonly frame: FrameLike;
     readonly top: number;
     readonly captureMs: number;
+    // Drawn only inside this rectangle of the picture, where castd clipped its frame; undefined draws it whole.
+    readonly clip?: PictureRect;
 }
 
 export interface StripeVideoIo {
@@ -25,7 +28,11 @@ export interface StripeVideoIo {
 export interface StripeVideo {
     // A `hello`: the stream starts over, every stripe at its next keyframe, on this codec.
     readonly start: (codec: string) => void;
-    readonly push: (header: MediaHeader, payload: Uint8Array) => void;
+    // One stripe's access unit, drawn inside `clip` where castd clipped its frame.
+    readonly push: (header: MediaHeader, payload: Uint8Array, clip?: PictureRect) => void;
+    // Runs `then` once every frame up to `id` that reached a decoder has come out of it or been given up; dropped, never
+    // run, when the stream starts over.
+    readonly after: (id: number, then: () => void) => void;
     // Settles frames whose outputs were lost, and sends a keyframe ask the rate limit held back; on the worker's tick.
     readonly sweep: () => void;
     // The picture's canvas was replaced: a stream under way repaints only the stripes that change, so the rest of a
@@ -46,20 +53,23 @@ interface Stripe {
     awaitingKey: boolean;
     stamp: number;
     // What each chunk in the decoder was, by the timestamp it comes back with.
-    readonly sent: Map<number, { readonly id: number; readonly captureMs: number }>;
+    readonly sent: Map<number, { readonly id: number; readonly captureMs: number; readonly clip: PictureRect | undefined }>;
 }
 
-// Says an ack on the socket, and hands its decode time to the stats.
+// Says on the socket each ack a settle completed, hands its decode time to the stats, and runs what waited on the
+// frames it settled.
 const acker =
-    (io: StripeVideoIo) =>
-    (done: Ack | undefined): void => {
-        if (done === undefined) {
-            return;
+    (io: StripeVideoIo, waiting: FrameQueue) =>
+    (...settled: readonly (Ack | undefined)[]): void => {
+        for (const done of settled) {
+            if (done !== undefined) {
+                io.send(done.decodeMs === undefined ? { type: `ack`, id: done.id } : { type: `ack`, id: done.id, decodeMs: done.decodeMs });
+            }
+            if (done?.decodeMs !== undefined) {
+                io.decoded(done.decodeMs);
+            }
         }
-        io.send(done.decodeMs === undefined ? { type: `ack`, id: done.id } : { type: `ack`, id: done.id, decodeMs: done.decodeMs });
-        if (done.decodeMs !== undefined) {
-            io.decoded(done.decodeMs);
-        }
+        waiting.drain();
     };
 
 // WHEN CASTD IS ASKED FOR A KEYFRAME. castd never sends one unasked (its GOP is endless), so an ask the rate limit
@@ -114,9 +124,10 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
     const stripes = new Map<number, Stripe>();
     const acks = ackBook();
     const keyframe = keyframePolicy(seams, io.send);
+    const waiting = frameQueue(acks.settledThrough);
     let codec = ``;
 
-    const ack = acker(io);
+    const ack = acker(io, waiting);
 
     const lose = (index: number, stripe: Stripe, error?: DOMException): void => {
         closeCodec(stripe.decoder);
@@ -125,7 +136,7 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
         stripe.sent.clear();
         // A decoder of a stream since replaced: whatever waits on this index now is the new stream's.
         if (stripes.get(index) === stripe) {
-            acks.lostStripe(index, seams.now()).forEach(ack);
+            ack(...acks.lostStripe(index, seams.now()));
             keyframe.lost(error);
         }
     };
@@ -140,7 +151,7 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
                         frame.close();
                         return;
                     }
-                    io.draw({ frame, top: stripe.top, captureMs: sent.captureMs });
+                    io.draw({ frame, top: stripe.top, captureMs: sent.captureMs, clip: sent.clip });
                     ack(acks.settled(sent.id, index, seams.now(), true));
                 },
                 error: (error) => lose(index, stripe, error),
@@ -153,7 +164,7 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
         }
     };
 
-    const push = (header: MediaHeader, payload: Uint8Array): void => {
+    const push = (header: MediaHeader, payload: Uint8Array, clip?: PictureRect): void => {
         const now = seams.now();
         const index = header.stripeIndex;
         const stripe = stripeOf(stripes, header);
@@ -169,7 +180,7 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
         }
         stripe.awaitingKey = false;
         stripe.stamp += 1;
-        stripe.sent.set(stripe.stamp, { id: header.id, captureMs: header.captureMs });
+        stripe.sent.set(stripe.stamp, { id: header.id, captureMs: header.captureMs, clip });
         try {
             decoder.decode(seams.videoChunk({ type: header.key ? `key` : `delta`, timestamp: stripe.stamp, data: payload }));
         } catch {
@@ -185,6 +196,7 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
         }
         stripes.clear();
         acks.reset();
+        waiting.drop();
         keyframe.reset();
     };
 
@@ -194,8 +206,9 @@ export const stripeVideo = (seams: Pick<DecodeSeams, `videoDecoder` | `videoChun
             codec = next;
         },
         push,
+        after: waiting.after,
         sweep: () => {
-            acks.sweep(seams.now()).forEach(ack);
+            ack(...acks.sweep(seams.now()));
             keyframe.tick();
         },
         repaint: keyframe.repaint,

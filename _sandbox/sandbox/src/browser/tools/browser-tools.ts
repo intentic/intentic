@@ -19,7 +19,7 @@ import { chromiumWindowArgs, type Display, displayAnswers, ensureDisplay, holdDi
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
 import { isProfileOpen, launchSessionDir, passkeyPath, profileOwner } from "../sessions/session-store.js";
 import { ensureStealthScript } from "../sessions/stealth.js";
-import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS, softwareRenderingEnv } from "../sessions/software-rendering.js";
+import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS, softwareRenderingEnv } from "../sessions/rendering/software-rendering.js";
 import { ANONYMOUS_BROWSER_SERVER, ROUTED_BROWSER_SERVER } from "./browser-servers.js";
 import { coveredHostsOf } from "./account-hosts.js";
 import { CHATGPT_CALL_TIMEOUT_MS, chatgptReachable } from "./chatgpt-kit.js";

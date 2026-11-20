@@ -9,13 +9,14 @@ import type {
     Drawable,
     FrameLike,
     Painter,
+    PixelsLike,
     SocketLike,
     StillPicture,
     Surface,
     VideoDecoderInitLike,
     VideoDecoderLike,
 } from "./decodeSeams";
-import { type MediaHeader, writeMediaMessage } from "../mediaHeader";
+import { type MediaHeader, type PictureRect, rectPayload, writeMediaMessage } from "../mediaHeader";
 import type { FromWorker } from "./workerWire";
 
 class FakeSocket implements SocketLike {
@@ -40,7 +41,8 @@ class FakeSocket implements SocketLike {
     say(message: BrowserMediaServerMessage): void {
         this.listeners.get(`message`)?.({ data: JSON.stringify(message), code: 0, reason: `` });
     }
-    picture(header: Partial<MediaHeader>): void {
+    // A video message; with `clip`, castd's clipped frame, its rectangle before the access unit.
+    picture(header: Partial<MediaHeader>, clip?: PictureRect): void {
         const whole = {
             kind: `video`,
             key: false,
@@ -52,11 +54,18 @@ class FakeSocket implements SocketLike {
             stripeCount: 1,
             ...header,
         } as const;
+        const unit = new Uint8Array([0, 0, 0, 1]);
         this.listeners.get(`message`)?.({
-            data: writeMediaMessage({ ...whole, kind: `video` }, new Uint8Array([0, 0, 0, 1])).buffer,
+            data: writeMediaMessage({ ...whole, kind: `video`, clip: clip !== undefined }, clip === undefined ? unit : rectPayload(clip, unit)).buffer,
             code: 0,
             reason: ``,
         });
+    }
+    // castd's exact copy of `rect` (every pixel `bgrx`), drawn after frame `id`.
+    lossless(id: number, rect: PictureRect, bgrx = [1, 2, 3, 0]): void {
+        const pixels = Uint8Array.from({ length: rect.width * rect.height * 4 }, (_, at) => bgrx[at % 4] ?? 0);
+        const header = { kind: `lossless`, key: false, refine: false, id, captureMs: 0, stripeTop: 0, stripeIndex: 0, stripeCount: 0 } as const;
+        this.listeners.get(`message`)?.({ data: writeMediaMessage(header, rectPayload(rect, pixels)).buffer, code: 0, reason: `` });
     }
     of(type: string): Record<string, unknown>[] {
         return this.sent.filter((message) => message[`type`] === type);
@@ -66,6 +75,8 @@ class FakeSocket implements SocketLike {
 class FakeDecoder implements VideoDecoderLike {
     state: CodecState = `unconfigured`;
     readonly chunks: ChunkLike[] = [];
+    // The size of what it decodes: a whole picture, unless a test cuts it into stripes.
+    size = { width: 2560, height: 1600 };
     constructor(readonly init: VideoDecoderInitLike) {}
     configure(): void {
         this.state = `configured`;
@@ -79,7 +90,13 @@ class FakeDecoder implements VideoDecoderLike {
     // The decoder hands back its oldest chunk as a frame.
     emit(): FrameLike & { closed: boolean } {
         const chunk = this.chunks.shift();
-        const frame = { timestamp: chunk?.timestamp ?? -1, closed: false, close: () => (frame.closed = true) };
+        const frame = {
+            timestamp: chunk?.timestamp ?? -1,
+            displayWidth: this.size.width,
+            displayHeight: this.size.height,
+            closed: false,
+            close: () => (frame.closed = true),
+        };
         this.init.output(frame);
         return frame;
     }
@@ -90,16 +107,29 @@ class FakeDecoder implements VideoDecoderLike {
 }
 
 interface Draw {
-    readonly image: Drawable;
+    readonly image: Drawable | PixelsLike;
     readonly x: number;
     readonly y: number;
+    // Where only part of the image is drawn: that part, in the image's own pixels.
+    readonly from?: PictureRect;
 }
 
 const surface = (): Surface & { readonly draws: Draw[] } => {
     const draws: Draw[] = [];
-    const painter: Painter = { drawImage: (image: Drawable, x: number, y: number) => draws.push({ image, x, y }) };
+    const painter: Painter = {
+        drawImage: (image: Drawable, ...at: number[]) => {
+            const [x = 0, y = 0, width = 0, height = 0, dx = 0, dy = 0] = at;
+            draws.push(at.length === 8 ? { image, x: dx, y: dy, from: { x, y, width, height } } : { image, x, y });
+        },
+        putImageData: (image: PixelsLike, x: number, y: number) => draws.push({ image, x, y }),
+    };
     return { width: 300, height: 150, draws, getContext: () => painter };
 };
+
+// What a fake exact copy is drawn as: the pixels castd sent, and where a VideoFrame of them went.
+interface ExactFrame extends FrameLike {
+    readonly pixels: Uint8Array;
+}
 
 const harness = () => {
     let now = 1000;
@@ -108,6 +138,7 @@ const harness = () => {
     const decoders: FakeDecoder[] = [];
     const timers: { ms: number; run: () => void }[] = [];
     const stills: StillPicture[] = [];
+    const exacts: ExactFrame[] = [];
     const core = decodeCore({
         post: (message) => posted.push(message),
         dial: () => {
@@ -124,6 +155,14 @@ const harness = () => {
         videoChunk: (init) => ({ type: init.type, timestamp: init.timestamp }),
         audioChunk: () => {
             throw new Error(`no sound in this suite`);
+        },
+        bgrxFrame: (pixels, width, height) => {
+            const frame: ExactFrame = { timestamp: 0, displayWidth: width, displayHeight: height, pixels, close: () => undefined };
+            exacts.push(frame);
+            return frame;
+        },
+        imageData: () => {
+            throw new Error(`this suite's browser makes BGRX VideoFrames`);
         },
         surface: () => surface(),
         snapshot: async (canvas) => {
@@ -153,6 +192,7 @@ const harness = () => {
         decoders,
         posted,
         stills,
+        exacts,
         advance: (ms: number) => (now += ms),
         // The worker's own clock: every timer due at `ms`'s period runs once.
         tick: (ms: number) => timers.filter((timer) => timer.ms === ms).forEach((timer) => timer.run()),
@@ -270,12 +310,15 @@ it("shows a picked tab's last picture at once, and the live one once the window 
     expect(canvas.draws.at(-1)).toMatchObject({ x: 0, y: 0 });
 });
 
-// A video message as castd writes it, to hand the worker as the page hands it what arrived on the peer.
-const peerPicture = (id: number, key: boolean): ArrayBuffer =>
-    writeMediaMessage(
-        { kind: `video`, key, refine: false, id, captureMs: 0, stripeTop: 0, stripeIndex: 0, stripeCount: 1 },
-        new Uint8Array([0, 0, 0, 1]),
+// A video message as castd writes it, to hand the worker as the page hands it what arrived on the peer (joined whole,
+// mediaRtcWire.ts); with `clip`, a clipped frame's rectangle before its access unit.
+const peerPicture = (id: number, key: boolean, clip?: PictureRect): ArrayBuffer => {
+    const unit = new Uint8Array([0, 0, 0, 1]);
+    return writeMediaMessage(
+        { kind: `video`, key, refine: false, clip: clip !== undefined, id, captureMs: 0, stripeTop: 0, stripeIndex: 0, stripeCount: 1 },
+        clip === undefined ? unit : rectPayload(clip, unit),
     ).buffer;
+};
 
 it("draws pictures only from the carrier castd said its latest hello on, the peer's and then the socket's again", () => {
     const { socket, core, decoders, hello } = harness();
@@ -430,4 +473,123 @@ it("files no tab's last picture under another tab named by a state that lagged t
     await settle();
     core.receive({ type: `page`, key: `w\nb`, switching: true });
     expect(canvas.draws.at(-1)?.image).toBe(ofB);
+});
+
+const WHOLE = { x: 0, y: 0, width: 2560, height: 1600 };
+
+it("draws each stripe of a clipped frame only where it meets the clip, and acks it as any frame", () => {
+    const { socket, canvas, decoders, hello } = harness();
+    hello();
+    // The keyframe the exact picture starts from comes clipped to all of it.
+    socket.picture({ key: true, id: 1, stripeIndex: 0, stripeTop: 0, stripeCount: 2 }, WHOLE);
+    socket.picture({ key: true, id: 1, stripeIndex: 1, stripeTop: 800, stripeCount: 2 }, WHOLE);
+    for (const decoder of decoders) {
+        decoder.size = { width: 2560, height: 800 };
+    }
+    const [top, bottom] = [decoders[0]!.emit(), decoders[1]!.emit()];
+    expect(canvas.draws).toEqual([
+        { image: top, x: 0, y: 0, from: { x: 0, y: 0, width: 2560, height: 800 } },
+        { image: bottom, x: 0, y: 800, from: { x: 0, y: 0, width: 2560, height: 800 } },
+    ]);
+    // A change across the stripes' seam: each draws its own rows of it, at the same place in the picture.
+    const seam = { x: 100, y: 700, width: 50, height: 200 };
+    socket.picture({ key: false, id: 2, stripeIndex: 0, stripeTop: 0, stripeCount: 2 }, seam);
+    socket.picture({ key: false, id: 2, stripeIndex: 1, stripeTop: 800, stripeCount: 2 }, seam);
+    const [upper, lower] = [decoders[0]!.emit(), decoders[1]!.emit()];
+    expect(canvas.draws.slice(2)).toEqual([
+        { image: upper, x: 100, y: 700, from: { x: 100, y: 700, width: 50, height: 100 } },
+        { image: lower, x: 100, y: 800, from: { x: 100, y: 0, width: 50, height: 100 } },
+    ]);
+    expect(socket.of(`ack`)).toEqual([
+        { type: `ack`, id: 1, decodeMs: 0 },
+        { type: `ack`, id: 2, decodeMs: 0 },
+    ]);
+});
+
+it("decodes a frame clipped to nothing, draws none of it, lets its picture go and acks it", () => {
+    const { socket, canvas, decoders, hello } = harness();
+    hello();
+    socket.picture({ key: true, id: 1 }, WHOLE);
+    decoders[0]!.emit();
+    socket.picture({ key: false, id: 2 }, { x: 0, y: 0, width: 0, height: 0 });
+    expect(decoders[0]!.chunks.map((chunk) => chunk.type)).toEqual([`delta`]);
+    const nothing = decoders[0]!.emit();
+    expect(canvas.draws).toHaveLength(1);
+    expect(nothing.closed).toBe(true);
+    expect(socket.of(`ack`).map((ack) => ack[`id`])).toEqual([1, 2]);
+});
+
+it("draws castd's exact copy only once the frames sent before it are drawn, and never decodes or acks it", () => {
+    const { socket, canvas, decoders, exacts, hello } = harness();
+    hello();
+    socket.picture({ key: true, id: 1 }, WHOLE);
+    decoders[0]!.emit();
+    // Nothing is in a decoder: the copy is drawn at once, where castd read it.
+    socket.lossless(1, { x: 4, y: 6, width: 2, height: 1 });
+    expect(canvas.draws.at(-1)).toEqual({ image: exacts[0]!, x: 4, y: 6 });
+    expect([...exacts[0]!.pixels]).toEqual([1, 2, 3, 0, 1, 2, 3, 0]);
+    // A change, and the copy that makes it exact, which arrives while the change is still decoding.
+    socket.picture({ key: false, id: 2 }, { x: 10, y: 10, width: 20, height: 20 });
+    socket.lossless(2, { x: 10, y: 10, width: 20, height: 20 });
+    expect(canvas.draws).toHaveLength(2);
+    const change = decoders[0]!.emit();
+    expect(canvas.draws.slice(2)).toEqual([
+        { image: change, x: 10, y: 10, from: { x: 10, y: 10, width: 20, height: 20 } },
+        { image: exacts[1]!, x: 10, y: 10 },
+    ]);
+    expect(decoders[0]!.chunks).toEqual([]);
+    expect(socket.of(`ack`).map((ack) => ack[`id`])).toEqual([1, 2]);
+});
+
+it("draws a waiting copy once the frame it waits on is given up, since that frame will never come out", () => {
+    const { socket, canvas, decoders, exacts, hello } = harness();
+    hello();
+    socket.picture({ key: true, id: 1 }, WHOLE);
+    decoders[0]!.emit();
+    socket.picture({ key: false, id: 2 }, WHOLE);
+    socket.lossless(2, WHOLE);
+    expect(exacts).toEqual([]);
+    decoders[0]!.fail();
+    expect(canvas.draws.at(-1)).toEqual({ image: exacts[0]!, x: 0, y: 0 });
+});
+
+it("drops a copy still waiting when the stream starts over, rather than drawing it over the new stream", () => {
+    const { socket, canvas, decoders, exacts, hello } = harness();
+    hello();
+    socket.picture({ key: true, id: 1 }, WHOLE);
+    decoders[0]!.emit();
+    socket.picture({ key: false, id: 2 }, WHOLE);
+    socket.lossless(2, { x: 0, y: 0, width: 8, height: 8 });
+    hello();
+    socket.picture({ key: true, id: 1 }, WHOLE);
+    const fresh = decoders.at(-1)!.emit();
+    expect(exacts).toEqual([]);
+    expect(canvas.draws.at(-1)).toMatchObject({ image: fresh, x: 0, y: 0 });
+});
+
+it("draws an exact copy behind a held tab's picture, as it would a frame", async () => {
+    const { core, socket, canvas, decoders, stills, exacts, hello } = harness();
+    hello(300, 150);
+    core.receive({ type: `page`, key: `w\na`, switching: false });
+    socket.picture({ key: true, id: 1, captureMs: 0 }, { x: 0, y: 0, width: 300, height: 150 });
+    decoders[0]!.size = { width: 300, height: 150 };
+    decoders[0]!.emit();
+    core.receive({ type: `page`, key: `w\nb`, switching: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    core.receive({ type: `page`, key: `w\na`, switching: true });
+    expect(canvas.draws.at(-1)?.image).toBe(stills[0]);
+    socket.lossless(1, { x: 1, y: 1, width: 1, height: 1 });
+    // The still stays on top; the copy went where frames go during the hold.
+    expect(exacts).toHaveLength(1);
+    expect(canvas.draws.at(-1)?.image).toBe(stills[0]);
+});
+
+it("draws a clipped frame that came on the peer, joined whole, only inside its clip", () => {
+    const { core, canvas, decoders } = harness();
+    core.receive({ type: `peerData`, data: JSON.stringify({ type: `hello`, width: 2560, height: 1600, scale: 2, codec: `avc1.42c033`, readOnly: false }) });
+    core.receive({ type: `peerData`, data: peerPicture(1, true, WHOLE) });
+    decoders[0]!.emit();
+    core.receive({ type: `peerData`, data: peerPicture(2, false, { x: 30, y: 40, width: 5, height: 6 }) });
+    const change = decoders[0]!.emit();
+    expect(canvas.draws.at(-1)).toEqual({ image: change, x: 30, y: 40, from: { x: 30, y: 40, width: 5, height: 6 } });
 });

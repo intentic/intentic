@@ -10,6 +10,7 @@ pub mod config;
 pub mod convert;
 pub mod desktop;
 pub mod encoder;
+pub mod exact;
 pub mod header;
 pub mod hub;
 pub mod input;

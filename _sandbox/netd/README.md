@@ -75,7 +75,9 @@ flowchart LR
   and `BROWSER_MEDIA_SOCKET_DIR`), then spliced, before anything waits for Node: a picture, sound and the person's
   input keep flowing while the daemon restarts, and none of it crosses Node's event loop. netd checks only the name
   (`[A-Za-z0-9_-]{1,64}`, else 404, since it becomes a file name) and that it is an upgrade (else 426); the token in
-  its query is castd's to check. No castd listening is netd's own 502 naming the session. A test's netd looks in
+  its query is castd's to check. An upgrade that arrived on the loopback port is relayed with `x-intentic-listener:
+  loopback` (browser-wire's `MEDIA_LISTENER_HEADER`, netd's own header name, stripped from everything arriving), which
+  is how castd knows its viewer runs on this computer and gives it the local profile and exact pictures (2026-11-20). No castd listening is netd's own 502 naming the session. A test's netd looks in
   `cast/` beside its run directory. (Rejected: relaying through Node, which the daemon does only behind a netd older
   than this route, `browser/media/media-relay.ts`.)
 - In the editor's own sessions (`web-…`, never an agent's) netd also notices a password typed at a hidden prompt (2026-10-19,

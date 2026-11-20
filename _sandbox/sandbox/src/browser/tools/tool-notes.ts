@@ -7,7 +7,7 @@ import type { McpToolSchema } from "./browser-router.js";
 // of one game-building sandbox): reading SwiftShader frame times as the owner's GPU, writing Node into
 // browser_run_code_unsafe, and opening a build over file://.
 
-// Every browser here renders in software (software-rendering.ts), so a frame rate is the container's CPU, not a GPU.
+// Every browser here renders in software (sessions/rendering/software-rendering.ts), so a frame rate is the container's CPU, not a GPU.
 const SOFTWARE_NOTE =
     "This sandbox browser renders in software (SwiftShader: WebGL through ANGLE, and on the `web` browser WebGPU as a " +
     "SwiftShader fallback adapter; the signed-in browsers have no WebGPU). There is no GPU: frame rates, frame times, " +

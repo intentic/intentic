@@ -24,6 +24,18 @@ it("plays silence until it holds its target, then every sample as written", () =
     expect(ring.fillMs()).toBe(30);
 });
 
+it("primes to 20 ms where it is told that floor, as on this computer's loopback, and keeps to it on a steady link", () => {
+    const ring = new AudioRing(1, RATE, 20);
+    expect(ring.targetMs()).toBe(20);
+    ring.write([ramp(1, 19)]);
+    expect([...read(ring, 5)[0]!]).toEqual([0, 0, 0, 0, 0]);
+    ring.write([ramp(20, 1)]);
+    expect([...read(ring, 5)[0]!]).toEqual([1, 2, 3, 4, 5]);
+    // Jitter still raises it, past the floor it was given.
+    ring.jitterMs = 10;
+    expect(ring.targetMs()).toBe(50);
+});
+
 it("goes silent and primes again when it runs dry, and counts it", () => {
     const ring = new AudioRing(1, RATE);
     ring.write([ramp(1, 45)]);
@@ -102,8 +114,27 @@ it("stands alone as the worklet's source: registered and playing with nothing fr
         },
         PROCESSOR_NAME,
     );
+    expect(made!.ring.minTargetMs).toBe(40);
     made!.ring.write([ramp(1, 50)]);
     const out = [[new Float32Array(4)]];
     expect(made!.process([], out)).toBe(true);
     expect([...out[0]![0]!]).toEqual([1, 2, 3, 4]);
+});
+
+it("builds its ring with the floor the page passed it", () => {
+    let made: RingProcessorLike | undefined;
+    class FakeBase {
+        readonly port = { addEventListener: () => undefined, postMessage: () => undefined, start: () => undefined };
+    }
+    defineRingProcessor(
+        FakeBase,
+        AudioRing,
+        () => 0,
+        (_name, Processor) => {
+            made = new Processor({ processorOptions: { channels: 2, sampleRate: 48_000, minTargetMs: 20 } });
+        },
+        PROCESSOR_NAME,
+    );
+    expect(made!.ring.minTargetMs).toBe(20);
+    expect(made!.ring.targetMs()).toBe(20);
 });

@@ -20,6 +20,9 @@ export const HelloSchema = z.object({
     readOnly: z.boolean().catch(false),
     // castd takes a peer connection on this window (mediaRtc.ts).
     rtc: maybe(z.boolean()),
+    // This viewer reaches castd on this computer's loopback: an exact picture where the socket asked for one, and sound
+    // with the jitter buffer's lower floor.
+    local: maybe(z.boolean()),
 });
 export type MediaHello = z.infer<typeof HelloSchema>;
 

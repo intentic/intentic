@@ -7,6 +7,12 @@
 # The source is Debian's own xorg-server package when deb-src is enabled (it carries Debian's security fixes), else the
 # upstream release of the same version. Only the Xvfb target is built; it uses the system's xkbcomp and keymaps, and
 # links nothing the stock `xvfb` package's dependencies do not already bring (install that package beside it).
+#
+# With GLX, as Debian's own Xvfb has it (2026-11-20): without it Chromium's GPU process exits at start ("GLX is not
+# present"), so a person's window on a sandbox with WSL2's GPU (the daemon's window-gpu.ts) could not draw on it and had
+# no WebGL at all. Measured on rog: WebGL on the GPU at 60 fps on 0.31 cores at 2560x1600, and a window without a GPU
+# scrolling as before (0.20 cores against 0.22). Building it needs Mesa's and libglvnd's headers (mesa-common-dev,
+# libgl-dev); it links libGL from libglvnd, which the `xvfb` package depends on anyway.
 set -eu
 
 PREFIX=${PREFIX:-/opt/castd}
@@ -26,7 +32,7 @@ cd "$SRC"
 patch -p1 < "$PATCH"
 meson setup build --prefix="$PREFIX" --buildtype=release \
     -Dxorg=false -Dxephyr=false -Dxnest=false -Dxwin=false -Dxvfb=true -Dxquartz=false \
-    -Dglamor=false -Dglx=false -Ddri1=false -Ddri2=false -Ddri3=false -Ddrm=false \
+    -Dglamor=false -Dglx=true -Ddri1=false -Ddri2=false -Ddri3=false -Ddrm=false \
     -Dudev=false -Dudev_kms=false -Dsystemd_logind=false -Dhal=false -Dlibunwind=false -Dsecure-rpc=false \
     -Ddocs=false -Ddevel-docs=false -Dxkb_dir=/usr/share/X11/xkb -Dxkb_bin_dir=/usr/bin \
     -Dxkb_output_dir=/var/lib/xkb

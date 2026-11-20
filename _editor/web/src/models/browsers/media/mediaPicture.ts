@@ -2,6 +2,7 @@ import type { BrowserMediaClientMessage } from "@intentic/sandbox-contract/brows
 import { ref, type Ref, shallowRef } from "vue";
 import { type ClipboardOut, stageClipboard } from "./clipboardOut";
 import { cursorCss, supportsImageSetCursor } from "./cursorCss";
+import type { FrameWindow } from "./displayRate";
 import type { MediaStats } from "./frameBook";
 import { type MediaHello, type MediaOffer, type MediaServerMessage, readMediaText } from "./mediaMessages";
 import { mediaRtc, type PeerLike } from "./mediaRtc";
@@ -71,10 +72,11 @@ export interface MediaPictureOptions {
     readonly peerWanted?: () => boolean;
     // This browser cannot decode castd's stream, in the decoder's words: no picture will come on this path.
     readonly onFailed?: (message: string) => void;
-    // Seams for a test: the worker, the clipboard's, and the peer connection.
+    // Seams for a test: the worker, the clipboard's, the peer connection, and the display's refresh rate.
     readonly worker?: () => MediaWorker | undefined;
     readonly clipboard?: ClipboardOut;
     readonly peer?: () => PeerLike | undefined;
+    readonly displayRate?: (view: FrameWindow) => Promise<number | undefined>;
 }
 
 // What the page shows of the picture, and how it is forgotten when the picture goes.
@@ -160,7 +162,7 @@ const textReader =
             refs.hello.value = message;
             refs.live.value = true;
             refs.pictured.value = false;
-            parts.sound.hello(message.audio);
+            parts.sound.hello(message.audio, message.local);
             parts.size.fresh();
             parts.onHello?.(message);
         } else if (message?.type === `cursor`) {
@@ -220,7 +222,7 @@ export const mediaPicture = (options: MediaPictureOptions): MediaPicture => {
     });
     const drives = (): boolean => live.value && hello.value?.readOnly === false;
     const stageWindow = (): Window => windowOf(stage);
-    const size = mediaSize((box) => send({ type: `resize`, ...box }), drives, stageWindow);
+    const size = mediaSize((box) => send({ type: `resize`, ...box }), drives, stageWindow, options.displayRate);
 
     const onText = textReader({ state, sound, size, clipboard, onHello: options.onHello, signalled: (message) => peer.signalled(message) });
 

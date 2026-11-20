@@ -52,6 +52,16 @@ pub fn behind(n: usize, age_ms: f64, rtt_ms: f64, interval_ms: f64) -> bool {
     n >= max_n || age_ms > max_age
 }
 
+/// The frames per second the capture aims at: `fps`, or while a viewer on this computer drives, its display's rate
+/// (`display_hz`, 0 when it never said) up to `local_fps`. Never below `fps`, which every viewer is served at, and a
+/// display that never said is taken at `fps`: a faster screen makes Chromium draw that much more often.
+pub fn frame_rate(fps: u32, local_fps: u32, display_hz: Option<u32>) -> u32 {
+    match display_hz {
+        Some(hz) if hz > 0 && local_fps > fps => hz.clamp(fps, local_fps),
+        _ => fps,
+    }
+}
+
 /// Delay-based bitrate adaptation on the steering viewer's acks: back off toward the measured delivery rate when acks
 /// show queueing, probe upward slowly when the path is clear. voxl's controller, fed one viewer instead of the minimum
 /// of all.
@@ -90,6 +100,19 @@ impl RateCtl {
             ceiling_at: past,
             following: None,
         }
+    }
+
+    /// Moves the ceiling: the local one while a viewer on this computer drives, the network's otherwise. `open`: the
+    /// target goes straight to the new ceiling (a loopback has no capacity to probe for); else it only comes down to it.
+    pub fn set_ceiling(&mut self, max: f64, open: bool) {
+        self.max = max.max(self.min);
+        self.target = if open {
+            self.max
+        } else {
+            self.target.min(self.max)
+        };
+        self.ceiling = f64::MAX;
+        self.slow_start = !open;
     }
 
     /// Re-evaluates at most every 100 ms against `steer`, the steering viewer (None: nobody to follow, hold).
@@ -250,6 +273,36 @@ mod tests {
         rc.rewind();
         rc.update(Some(&congested_driver));
         assert!(rc.target < before);
+    }
+
+    #[test]
+    fn a_local_driver_opens_the_ceiling_at_once_and_a_remote_one_closes_it() {
+        let mut rc = RateCtl::new(30_000.0, 500.0);
+        assert_eq!(rc.target, START_KBPS);
+        rc.set_ceiling(200_000.0, true);
+        assert_eq!(rc.target, 200_000.0);
+        // Congestion still brings it down: a loopback forwarded somewhere slow is still a link.
+        let mut congested = viewer(1, 10, 20_000.0, 400.0);
+        congested.backlog_age_ms = 500.0;
+        rc.rewind();
+        rc.update(Some(&congested));
+        assert_eq!(rc.target, 200_000.0 * 0.85);
+        // A remote driver brings the target down to its ceiling, and starts probing from there.
+        rc.set_ceiling(30_000.0, false);
+        assert_eq!(rc.target, 30_000.0);
+    }
+
+    #[test]
+    fn the_frame_rate_follows_a_local_display_within_the_bounds() {
+        // No local driver, or no faster local rate allowed: --fps.
+        assert_eq!(frame_rate(60, 60, Some(240)), 60);
+        assert_eq!(frame_rate(60, 120, None), 60);
+        // A display that never said is taken at --fps.
+        assert_eq!(frame_rate(60, 120, Some(0)), 60);
+        assert_eq!(frame_rate(60, 120, Some(144)), 120);
+        assert_eq!(frame_rate(60, 240, Some(144)), 144);
+        // A slower display never takes the screen below what every viewer is served at.
+        assert_eq!(frame_rate(60, 240, Some(30)), 60);
     }
 
     #[test]

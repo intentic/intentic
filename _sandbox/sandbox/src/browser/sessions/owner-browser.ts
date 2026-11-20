@@ -9,7 +9,8 @@ import { z } from "zod";
 import type { BrowserFingerprint } from "./fingerprint.js";
 import { watchWindowFailures } from "./window-failures.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
-import { softwareRenderingEnv } from "./software-rendering.js";
+import { softwareRenderingEnv } from "./rendering/software-rendering.js";
+import { type WindowGpu, windowGpu } from "./rendering/window-gpu.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { ensureWindowSound } from "../media/cast-audio.js";
 import { castdAvailable, castdDir } from "../media/castd.js";
@@ -50,6 +51,8 @@ export interface OwnerBrowserOptions {
     readonly extensions?: readonly string[] | undefined;
     // Where the launch and close lines go (info level). Absent logs nothing.
     readonly log?: ((fields: Record<string, unknown>, message: string) => void) | undefined;
+    // The GPU the window draws with (rendering/window-gpu.ts); absent draws in software. Found by the launch itself.
+    readonly gpu?: WindowGpu | undefined;
 }
 
 export interface OwnerBrowser {
@@ -78,6 +81,7 @@ export const ownerBrowserArgs = (options: Omit<OwnerBrowserOptions, "executableP
     `--user-data-dir=${options.userDataDir}`,
     ...(options.proxy === undefined ? [] : [`--proxy-server=${options.proxy}`]),
     ...(options.extensions === undefined || options.extensions.length === 0 ? [] : [`--load-extension=${options.extensions.join(",")}`]),
+    ...(options.gpu?.args ?? []),
     ...options.windowArgs,
     "about:blank",
 ];
@@ -92,6 +96,7 @@ export const describeLaunch = (options: Omit<OwnerBrowserOptions, "executablePat
     profile: options.userDataDir,
     display: options.display,
     proxy: options.proxy !== undefined,
+    gpu: options.gpu !== undefined,
     locale: options.fingerprint.locale,
     timezone: options.fingerprint.timezoneId,
     args: ownerBrowserArgs(options).map((arg) => (arg.startsWith("--proxy-server=") ? "--proxy-server=<exit>" : arg)),
@@ -224,7 +229,8 @@ const exited = (child: ChildProcess, ms: number): Promise<boolean> =>
               });
           });
 
-export const launchOwnerBrowser = async (playwright: typeof import("playwright"), options: OwnerBrowserOptions): Promise<OwnerBrowser> => {
+export const launchOwnerBrowser = async (playwright: typeof import("playwright"), asked: OwnerBrowserOptions): Promise<OwnerBrowser> => {
+    const options: OwnerBrowserOptions = { ...asked, gpu: asked.gpu ?? windowGpu() };
     if (!existsSync(options.executablePath)) {
         throw new Error("browser not installed, rebuild the sandbox (Environment card) first");
     }
@@ -235,11 +241,13 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
     await forgetTabs(options.userDataDir);
     await seedPreferences(options.userDataDir, options.fingerprint.languages);
     // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
-    // Never the GPU a `--gpus` sandbox inherited (software-rendering.ts). The environment only, not the agent browsers'
-    // ANGLE switches: this window's flags are kept to what a plain desktop start passes, since sign-in risk checks
-    // tell launches apart, and without the host's libraries and ICDs there is no GPU left for it to find.
+    // Never the GPU a `--gpus` sandbox inherited by accident (rendering/software-rendering.ts): the environment is stripped of it,
+    // and the agent browsers' SwiftShader switches are not passed, since sign-in risk checks tell launches apart. Where
+    // the sandbox has WSL2's GPU, a person's window draws on it on purpose (rendering/window-gpu.ts), with the switches a Linux
+    // desktop runs on anyway and the variables that name Mesa's d3d12 driver.
     const env: NodeJS.ProcessEnv = {
         ...softwareRenderingEnv(process.env, options.executablePath),
+        ...options.gpu?.env,
         ...detachedStamp("login-browser"),
         DISPLAY: options.display,
         TZ: options.fingerprint.timezoneId,

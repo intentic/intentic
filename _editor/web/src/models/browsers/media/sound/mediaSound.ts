@@ -10,7 +10,8 @@ import type { MediaHello } from "../mediaMessages";
 // window has sound, is not muted and can be seen, and once the browser lets the page play: an AudioContext starts only
 // after the person has interacted with the page (autoplay rules), so the first press in the stage starts it if nothing
 // did before. The decode worker decodes and posts straight to the AudioWorklet over a channel this hands each end of;
-// the page carries no sound itself. Muting is remembered per window, as a browser remembers a muted site.
+// the page carries no sound itself. Muting is remembered per window, as a browser remembers a muted site. A viewer on
+// castd's own computer (hello's `local`) plays with a shallower jitter buffer: its loopback has no jitter to absorb.
 
 export interface MediaSound {
     // The window has sound and this browser can play it: what shows the mute control.
@@ -21,7 +22,8 @@ export interface MediaSound {
     readonly report: Ref<AudioReport | undefined>;
     // A press or a key in the stage: a gesture the browser lets the page start sound in.
     readonly gesture: () => void;
-    readonly hello: (audio: MediaHello[`audio`]) => void;
+    // castd's hello: its sound, and whether this viewer reaches it on this computer's loopback.
+    readonly hello: (audio: MediaHello[`audio`], local?: boolean) => void;
     // Which window this is, for its remembered mute; and whether its picture is live and seen.
     readonly window: (name: string | undefined) => void;
     readonly shown: (on: boolean) => void;
@@ -50,13 +52,19 @@ const rememberMuted = (name: string, muted: boolean): void => {
 // Whether the page may start sound without a gesture now: the person has interacted with it since it loaded.
 const activated = (): boolean => navigator.userActivation?.hasBeenActive ?? false;
 
+/** The jitter buffer's floor (AudioRing's minTargetMs): 20 ms on this computer's loopback, 40 over a network. */
+export const soundFloorMs = (local: boolean | undefined): number => (local === true ? 20 : 40);
+
+// The sound castd sends, and the floor it is buffered to.
+type SoundFormat = NonNullable<MediaHello[`audio`]> & { readonly floorMs: number };
+
 interface Playback {
     readonly context: AudioContext;
     readonly node: AudioWorkletNode;
 }
 
 // Builds the context and its worklet; the context is made inside the caller's turn, so a gesture's activation holds.
-const startPlayback = async (audio: NonNullable<MediaHello[`audio`]>, report: (value: AudioReport) => void): Promise<Playback | undefined> => {
+const startPlayback = async (audio: SoundFormat, report: (value: AudioReport) => void): Promise<Playback | undefined> => {
     const context = new AudioContext({ sampleRate: audio.sampleRate, latencyHint: `interactive` });
     const url = URL.createObjectURL(new Blob([workletSource()], { type: `text/javascript` }));
     try {
@@ -72,7 +80,7 @@ const startPlayback = async (audio: NonNullable<MediaHello[`audio`]>, report: (v
         const node = new AudioWorkletNode(context, PROCESSOR_NAME, {
             numberOfInputs: 0,
             outputChannelCount: [audio.channels],
-            processorOptions: { channels: audio.channels, sampleRate: audio.sampleRate },
+            processorOptions: { channels: audio.channels, sampleRate: audio.sampleRate, minTargetMs: audio.floorMs },
         });
         node.port.addEventListener(`message`, (event: MessageEvent<AudioReport>) => report(event.data));
         node.port.start();
@@ -97,7 +105,7 @@ const playbackStarts = (report: (value: AudioReport) => void) => {
     return {
         busy: () => starting,
         refused: () => refused,
-        start: (audio: NonNullable<MediaHello[`audio`]>, made: (playback: Playback | undefined) => void): void => {
+        start: (audio: SoundFormat, made: (playback: Playback | undefined) => void): void => {
             const mine = generation;
             starting = true;
             void startPlayback(audio, report)
@@ -123,7 +131,7 @@ const playbackStarts = (report: (value: AudioReport) => void) => {
 };
 
 export const mediaSound = (seams: SoundSeams): MediaSound => {
-    const audio = ref<MediaHello[`audio`]>();
+    const audio = ref<SoundFormat>();
     const muted = ref(false);
     const report = ref<AudioReport | undefined>();
     let name: string | undefined;
@@ -192,9 +200,11 @@ export const mediaSound = (seams: SoundSeams): MediaSound => {
         },
         report,
         gesture: sync,
-        hello: (next) => {
-            const changed = next?.sampleRate !== audio.value?.sampleRate || next?.channels !== audio.value?.channels;
-            audio.value = next;
+        hello: (next, local) => {
+            const format = next === undefined ? undefined : { ...next, floorMs: soundFloorMs(local) };
+            const was = audio.value;
+            const changed = format?.sampleRate !== was?.sampleRate || format?.channels !== was?.channels || format?.floorMs !== was?.floorMs;
+            audio.value = format;
             if (changed) {
                 stopPlayback();
             }

@@ -6,9 +6,10 @@
 use crate::capture::{Band, Capturer, Rect};
 use crate::convert::I420;
 use crate::encoder::{self, Backend, Encoded, EncoderConfig, Planes, VideoEncoder};
+use crate::exact;
 use crate::header::{FLAG_KEY, FLAG_REFINE, Header, KIND_VIDEO};
 use crate::hub::wait_any;
-use crate::hub::{Hub, Inflight, Media, Out};
+use crate::hub::{Client, Hub, Inflight, Lossless, Media, Out};
 use crate::rate::{self, RateCtl};
 use bytes::Bytes;
 use std::sync::Arc;
@@ -31,6 +32,14 @@ pub struct VideoConfig {
     pub paintover_burst: u32,
     pub paintover_delay_ms: u64,
     pub min_kbps: u32,
+    /// While a viewer on this computer's loopback drives: motion's quality, the bitrate ceiling (where the rate starts
+    /// too) and the frame rate at most.
+    pub local_crf: f32,
+    pub local_max_kbps: u32,
+    pub local_fps: u32,
+    /// Exact copies (exact.rs) for local viewers that ask, once the screen has been still this long.
+    pub lossless: bool,
+    pub lossless_delay: Duration,
     pub coalesce: Duration,
     pub stripes: u32,
     pub adaptive_threads: bool,
@@ -51,9 +60,25 @@ struct Job {
     band: Option<Band>,
     /// Per-macroblock change map for this capture (None: analyse everything).
     mb_dirty: Option<Arc<Vec<u8>>>,
+    /// The part of the picture whose content changed in this capture (not what a refinement sharpens): what an exact
+    /// viewer's picture stops being exact in.
+    changed: Option<Rect>,
     captured_at: Instant,
 }
 
+/// An exact copy of part of the picture, read by the capture thread once the screen was still and sent by the encode
+/// thread in order with the frames before it.
+struct ExactCopy {
+    rect: Rect,
+    pixels: Vec<u8>,
+    captured_at: Instant,
+}
+
+/// What the capture thread hands the encode thread, in order.
+enum Work {
+    Frame(Job),
+    Copy(ExactCopy),
+}
 fn union(a: Option<Band>, b: Band) -> Band {
     match a {
         None => b,
@@ -67,7 +92,7 @@ fn union(a: Option<Band>, b: Band) -> Band {
 /// One capture/encode setup for the current screen size.
 struct Pipeline {
     cap: Capturer,
-    job_tx: mpsc::SyncSender<Job>,
+    job_tx: mpsc::SyncSender<Work>,
     ret_rx: mpsc::Receiver<(usize, Box<I420>)>,
     encode: std::thread::JoinHandle<()>,
 }
@@ -114,6 +139,7 @@ pub fn spawn(
                         log::warn!("resize to {w}x{h} failed: {e}");
                     }
                 }
+
                 p = match build(&cfg, &hub) {
                     Ok(p) => p,
                     Err(e) => {
@@ -146,7 +172,7 @@ fn build(cfg: &VideoConfig, hub: &Arc<Hub>) -> Result<Pipeline, String> {
         cfg.threads
     );
 
-    let (job_tx, job_rx) = mpsc::sync_channel::<Job>(1);
+    let (job_tx, job_rx) = mpsc::sync_channel::<Work>(1);
     let (ret_tx, ret_rx) = mpsc::channel::<(usize, Box<I420>)>();
     // A hardware encoder is one engine: stripes would only spend its sessions (a GeForce allows a few at once).
     let hardware = cfg.encoder != Backend::X264;
@@ -205,10 +231,14 @@ fn build(cfg: &VideoConfig, hub: &Arc<Hub>) -> Result<Pipeline, String> {
     }
     *hub.stripes.lock() = layout;
     let hub2 = hub.clone();
-    let (crf, po_crf, fps) = (cfg.crf, cfg.paintover_crf, cfg.fps);
+    let quality = Quality {
+        crf: cfg.crf,
+        paintover_crf: cfg.paintover_crf,
+        local_crf: cfg.local_crf,
+    };
     let encode = std::thread::Builder::new()
         .name("encode".into())
-        .spawn(move || encode_loop(stripes, job_rx, ret_tx, hub2, crf, po_crf, fps))
+        .spawn(move || encode_loop(stripes, job_rx, ret_tx, hub2, quality))
         .map_err(|e| e.to_string())?;
     // New geometry (and a keyframe) for viewers already connected; nobody at startup.
     hub.restart_clients();
@@ -409,6 +439,50 @@ impl FreshContent {
     }
 }
 
+/// Viewers on this computer get an exact copy only while their round trip says the link is no network: a copy is the
+/// changed area's raw pixels, which a slower link would queue every frame behind.
+const LOSSLESS_MAX_RTT_MS: f64 = 20.0;
+
+/// Whether `c` takes exact copies now: it draws them, its picture has started, it keeps up, and its link is local.
+fn takes_copies(c: &Client) -> bool {
+    c.exacting()
+        && c.started.load(Ordering::Relaxed)
+        && !c.skipping.load(Ordering::Relaxed)
+        && c.rtt_ms() <= LOSSLESS_MAX_RTT_MS
+}
+
+/// The box of what is lossy for every viewer that takes exact copies now; None when each one's picture is exact.
+fn lossy_area(clients: &[Arc<Client>]) -> Option<Rect> {
+    clients
+        .iter()
+        .filter(|c| takes_copies(c))
+        .filter_map(|c| c.exact.lock().lossy)
+        .reduce(exact::union)
+}
+
+/// Sends an exact copy to every viewer it makes exact somewhere, drawn after the last frame each was sent.
+fn send_copy(hub: &Hub, copy: ExactCopy) {
+    let bytes = copy.pixels.len() as u64;
+    let shared = Arc::new(Lossless {
+        rect: copy.rect,
+        captured: copy.captured_at,
+        pixels: Bytes::from(copy.pixels),
+    });
+    for c in hub.video_clients() {
+        if !takes_copies(&c) {
+            continue;
+        }
+        let mut st = c.exact.lock();
+        if !exact::wants_copy(&st, copy.rect) {
+            continue;
+        }
+        c.send(Out::Lossless(shared.clone(), st.last_id));
+        exact::copied(&mut st, copy.rect);
+        hub.stats.lossless.fetch_add(1, Ordering::Relaxed);
+        hub.stats.lossless_bytes.fetch_add(bytes, Ordering::Relaxed);
+    }
+}
+
 /// Notes the damage the capturer has taken for /wait, whether or not anyone is watching.
 pub(crate) fn note_changes(cap: &mut Capturer, hub: &Hub) {
     if !cap.changes.is_empty() {
@@ -421,7 +495,7 @@ fn capture_loop(
     cap: &mut Capturer,
     cfg: VideoConfig,
     hub: Arc<Hub>,
-    job_tx: mpsc::SyncSender<Job>,
+    job_tx: mpsc::SyncSender<Work>,
     ret_rx: mpsc::Receiver<(usize, Box<I420>)>,
 ) -> Result<(), String> {
     let (w, h) = (cap.width() as usize, cap.height() as usize);
@@ -431,14 +505,20 @@ fn capture_loop(
     ];
     let mut pending: [Option<Band>; 2] = [Some(cap.full()), Some(cap.full())];
     let mut next_idx = 0usize;
-    let interval = Duration::from_secs_f64(1.0 / cfg.fps as f64);
-    // Allow slight early capture so source jitter doesn't alias into dropped frames.
-    let min_interval = interval.mul_f64(0.85);
-    let interval_ms = interval.as_secs_f64() * 1000.0;
-    let mut last_capture = Instant::now() - interval;
+    // The frame rate follows the viewer driving: the local one's display, up to --local-fps, else --fps.
+    let mut fps = hub.fps.load(Ordering::Relaxed);
+    if fps == 0 {
+        fps = cfg.fps;
+        hub.fps.store(fps, Ordering::Relaxed);
+    }
+    let mut last_capture = Instant::now() - Duration::from_secs(1);
     let mut last_motion = Instant::now();
+    let mut last_copy = Instant::now() - Duration::from_secs(1);
+    let mut copy_pace = exact::CopyPace::new(cfg.lossless_delay);
     let mut paintover_left = 0u32;
     let mut rc = RateCtl::new(cfg.max_kbps as f64, cfg.min_kbps as f64);
+    let mut local = false;
+    hub.local_steering.store(false, Ordering::Relaxed);
     hub.target_kbps.store(rc.target as u32, Ordering::Relaxed);
     let mut had_clients = false;
     let mut full_next = true;
@@ -449,6 +529,10 @@ fn capture_loop(
         if hub.resize_req.lock().is_some() || hub.crop_req.lock().is_some() || cap.needs_rebuild() {
             return Ok(());
         }
+        let interval = Duration::from_secs_f64(1.0 / fps as f64);
+        // Allow slight early capture so source jitter doesn't alias into dropped frames.
+        let min_interval = interval.mul_f64(0.85);
+        let interval_ms = interval.as_secs_f64() * 1000.0;
         cap.pump()?;
         if cap.needs_rebuild() {
             return Ok(());
@@ -481,9 +565,13 @@ fn capture_loop(
         if clients.is_empty() {
             if had_clients {
                 rc = RateCtl::new(cfg.max_kbps as f64, cfg.min_kbps as f64);
+                local = false;
+                hub.local_steering.store(false, Ordering::Relaxed);
                 hub.target_kbps.store(rc.target as u32, Ordering::Relaxed);
                 hub.steering.store(0, Ordering::Relaxed);
             }
+            fps = cfg.fps;
+            hub.fps.store(fps, Ordering::Relaxed);
             had_clients = false;
             wait_any(&[cap.fd(), hub.waker.waitable()], 500);
             continue;
@@ -492,8 +580,40 @@ fn capture_loop(
         let steer = rate::steering(&viewers);
         hub.steering
             .store(steer.map_or(0, |v| v.id), Ordering::Relaxed);
+        // A viewer on this computer's loopback drives: no network to spare, so the ceiling (and the rate, at once) is
+        // the local one, motion is encoded sharper, and the frame rate may follow its display.
+        let driver = steer.and_then(|v| clients.iter().find(|c| c.id == v.id));
+        let driver_local = driver.is_some_and(|c| c.local);
+        if driver_local != local {
+            local = driver_local;
+            let ceiling = if local {
+                cfg.local_max_kbps
+            } else {
+                cfg.max_kbps
+            };
+            rc.set_ceiling(ceiling as f64, local);
+            hub.local_steering.store(local, Ordering::Relaxed);
+        }
         rc.update(steer);
         hub.target_kbps.store(rc.target as u32, Ordering::Relaxed);
+        // The pace is the driving viewer's (its last input), else the steering one's; with neither (a restart's viewers
+        // waiting on their keyframe) it holds. Only the capture's: Chromium on Xvfb draws on its own 60 Hz clock
+        // whatever RandR's refresh rate says (measured 2026-11-20), so a faster pace needs a window started with
+        // --disable-frame-rate-limit.
+        let pace = hub.driver().or_else(|| driver.cloned());
+        let want_fps = pace.map_or(fps, |c| {
+            rate::frame_rate(
+                cfg.fps,
+                cfg.local_fps,
+                c.local.then(|| c.display_hz.load(Ordering::Relaxed)),
+            )
+        });
+        if want_fps != fps {
+            log::info!("{fps} -> {want_fps} frames per second at most");
+            fps = want_fps;
+            hub.fps.store(fps, Ordering::Relaxed);
+            continue;
+        }
         // A lagging viewer's recovery waits for a gap since the last keyframe; a new viewer, a viewer whose decoder
         // broke, and the steering one do not.
         let recent_key = hub.last_keyframe.lock().elapsed() < RECOVERY_KEYFRAME_GAP;
@@ -511,14 +631,45 @@ fn capture_loop(
         }
         let paintover_due = paintover_left > 0
             && last_motion.elapsed() >= Duration::from_millis(cfg.paintover_delay_ms);
+        // An exact copy of what is lossy for the local viewers that draw them, once the screen has been still: read
+        // here, sent by the encode thread after every frame queued before it.
+        let lossy = if cfg.lossless && !cap.damaged && !want_key {
+            lossy_area(&clients)
+        } else {
+            None
+        };
+        if !cap.damaged {
+            copy_pace.still(last_copy.elapsed().min(last_motion.elapsed()));
+        }
+        if let Some(rect) = lossy {
+            let quiet = last_motion.elapsed().min(last_copy.elapsed());
+            if quiet >= copy_pace.wait() {
+                last_copy = Instant::now();
+                copy_pace.sent();
+                let copy = ExactCopy {
+                    rect,
+                    pixels: cap.region(rect)?,
+                    captured_at: Instant::now(),
+                };
+                if job_tx.send(Work::Copy(copy)).is_err() {
+                    return Err("encoder gone".into());
+                }
+                continue;
+            }
+        }
         if !cap.damaged && !want_key && !paintover_due {
-            let timeout = if paintover_left == 0 {
+            let mut timeout = if paintover_left == 0 {
                 100
             } else {
                 cfg.paintover_delay_ms
                     .saturating_sub(last_motion.elapsed().as_millis() as u64) as i32
                     + 1
             };
+            if lossy.is_some() {
+                let quiet = last_motion.elapsed().min(last_copy.elapsed());
+                let left = copy_pace.wait().saturating_sub(quiet).as_millis() as i32 + 1;
+                timeout = timeout.min(left);
+            }
             wait_any(&[cap.fd(), hub.waker.waitable()], timeout);
             continue;
         }
@@ -584,6 +735,18 @@ fn capture_loop(
             // Damage was empty after all.
             continue;
         }
+        // What this capture changed, for the exact viewers' clips: the changed blocks' box, else the damaged rows.
+        let changed = band.map(|b| {
+            mb_dirty
+                .as_ref()
+                .and_then(|m| exact::bounding_box(m, w.div_ceil(16), w as u32, h as u32))
+                .unwrap_or(Rect {
+                    x: 0,
+                    y: b.y0,
+                    w: w as u32,
+                    h: b.y1.saturating_sub(b.y0),
+                })
+        });
         // Sharpen only what was sent at motion quality; nothing pending, nothing to send.
         let paint_map = if paintover_due && !is_motion && !want_key {
             match refiner.pending_map() {
@@ -630,6 +793,7 @@ fn capture_loop(
             );
         let mut refine = None;
         let paintover = if is_motion {
+            copy_pace.moved(last_copy.elapsed());
             last_motion = Instant::now();
             paintover_left = cfg.paintover_burst;
             // Piggyback sharpening of blocks that have gone still on this frame; not on a fresh one, whose budget is
@@ -687,7 +851,7 @@ fn capture_loop(
         last_capture = t0;
         next_idx = 1 - idx;
         if job_tx
-            .send(Job {
+            .send(Work::Frame(Job {
                 buf,
                 idx,
                 force_idr: want_key,
@@ -696,8 +860,9 @@ fn capture_loop(
                 fresh: fresh_frame,
                 mb_dirty: mb_map,
                 band,
+                changed,
                 captured_at: origin,
-            })
+            }))
             .is_err()
         {
             return Err("encoder gone".into());
@@ -1077,14 +1242,20 @@ fn stripe_worker(
     }
 }
 
+/// The CRFs a frame is encoded at: motion's, the local viewer's motion, and the paint-over's.
+#[derive(Clone, Copy)]
+struct Quality {
+    crf: f32,
+    paintover_crf: f32,
+    local_crf: f32,
+}
+
 fn encode_loop(
     stripes_in: Vec<Stripe>,
-    rx: mpsc::Receiver<Job>,
+    rx: mpsc::Receiver<Work>,
     ret: mpsc::Sender<(usize, Box<I420>)>,
     hub: Arc<Hub>,
-    crf: f32,
-    po_crf: f32,
-    fps: u32,
+    quality: Quality,
 ) {
     let epoch = Instant::now();
     let mut frame_id: u32 = 0;
@@ -1107,7 +1278,20 @@ fn encode_loop(
             (tx, h)
         })
         .collect();
-    while let Ok(job) = rx.recv() {
+    let whole = Rect {
+        x: 0,
+        y: 0,
+        w: hub.width.load(Ordering::Relaxed),
+        h: hub.height.load(Ordering::Relaxed),
+    };
+    while let Ok(work) = rx.recv() {
+        let job = match work {
+            Work::Frame(job) => job,
+            Work::Copy(copy) => {
+                send_copy(&hub, copy);
+                continue;
+            }
+        };
         let t0 = Instant::now();
         let selected: Vec<bool> = stripes
             .iter()
@@ -1124,7 +1308,16 @@ fn encode_loop(
             continue;
         }
         let target = hub.target_kbps.load(Ordering::Relaxed);
-        let want_crf = if job.paintover { po_crf } else { crf };
+        let motion_crf = if hub.local_steering.load(Ordering::Relaxed) {
+            quality.local_crf
+        } else {
+            quality.crf
+        };
+        let want_crf = if job.paintover {
+            quality.paintover_crf.min(motion_crf)
+        } else {
+            motion_crf
+        };
         // Each stripe may use up to twice its area share of the budget; the delay-based
         // controller reins the total in if several stripes move at once.
         let share = ((target as u64 * 2) / n as u64).max(target as u64 / n as u64 + 1) as u32;
@@ -1212,12 +1405,14 @@ fn encode_loop(
             .collect();
         let now = Instant::now();
         let steer = hub.steering.load(Ordering::Relaxed);
-        let interval_ms = 1000.0 / fps.max(1) as f64;
+        let interval_ms = 1000.0 / hub.fps.load(Ordering::Relaxed).max(1) as f64;
         for c in hub.video_clients() {
+            let mut starting = false;
             if !c.started.load(Ordering::Relaxed) {
                 if !all_key {
                     continue;
                 }
+                starting = true;
                 c.started.store(true, Ordering::Relaxed);
                 c.skipping.store(false, Ordering::Relaxed);
                 c.inflight.lock().clear();
@@ -1260,8 +1455,18 @@ fn encode_loop(
                 });
             }
             c.frames.fetch_add(1, Ordering::Relaxed);
-            for m in &msgs {
-                c.send(Out::Media(m.clone()));
+            if c.exacting() {
+                // Drawn only where this viewer's picture is not exact (exact.rs); what it changes is lossy until the
+                // next exact copy.
+                let clip =
+                    exact::frame_clip(&mut c.exact.lock(), frame_id, starting, job.changed, whole);
+                for m in &msgs {
+                    c.send(Out::Clipped(m.clone(), clip));
+                }
+            } else {
+                for m in &msgs {
+                    c.send(Out::Media(m.clone()));
+                }
             }
         }
         hub.stats.send_lat_us.fetch_add(

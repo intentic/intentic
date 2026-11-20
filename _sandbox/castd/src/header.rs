@@ -34,8 +34,10 @@ const fn const_eq(a: &str, b: &str) -> bool {
 
 pub const KIND_VIDEO: u8 = named(&MEDIA_KINDS, "video");
 pub const KIND_AUDIO: u8 = named(&MEDIA_KINDS, "audio");
+pub const KIND_LOSSLESS: u8 = named(&MEDIA_KINDS, "lossless");
 pub const FLAG_KEY: u8 = named(&MEDIA_FLAGS, "key");
 pub const FLAG_REFINE: u8 = named(&MEDIA_FLAGS, "refine");
+pub const FLAG_CLIP: u8 = named(&MEDIA_FLAGS, "clip");
 
 /// One message's header fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -141,8 +143,11 @@ mod tests {
         let flags: std::collections::HashMap<_, _> = MEDIA_FLAGS.into_iter().collect();
         assert_eq!(KIND_VIDEO, kinds["video"]);
         assert_eq!(KIND_AUDIO, kinds["audio"]);
+        assert_eq!(KIND_LOSSLESS, kinds["lossless"]);
         assert_eq!(FLAG_KEY, flags["key"]);
         assert_eq!(FLAG_REFINE, flags["refine"]);
+        assert_eq!(FLAG_CLIP, flags["clip"]);
         assert_eq!(FLAG_KEY & FLAG_REFINE, 0);
+        assert_eq!((FLAG_KEY | FLAG_REFINE) & FLAG_CLIP, 0);
     }
 }

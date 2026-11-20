@@ -4,7 +4,7 @@
 //! never an error: the socket and castd outlive any viewer's mistake.
 
 use crate::desktop::ClipContent;
-use crate::hub::{Client, Out, WantSize};
+use crate::hub::{Client, Joining, Out, WantSize};
 use crate::input::{InputEvent, Mods};
 use crate::keys;
 use crate::server::App;
@@ -39,22 +39,43 @@ enum CarrierChange {
 /// How long a socket castd ends may take to send its close frame before its writer is stopped anyway.
 const CLOSE_WITHIN: Duration = Duration::from_secs(1);
 
-pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims) {
+/// How a viewer reaches castd, as its upgrade said: on this computer's loopback (netd's header), and whether it draws
+/// `clip`ped frames and `lossless` copies (its query).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Reach {
+    pub local: bool,
+    pub lossless: bool,
+}
+
+pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, reach: Reach) {
     use futures_util::{SinkExt, StreamExt};
     let hub = app.hub.clone();
     let read_only = claims.ro;
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Out>();
     let (carrier_tx, mut carrier_rx) = mpsc::unbounded_channel::<CarrierChange>();
-    let client = hub.add_client(tx, read_only, false);
+    let client = hub.add_client(
+        tx,
+        Joining {
+            read_only,
+            internal: false,
+            local: reach.local,
+            lossless: reach.lossless,
+        },
+    );
     client.token_exp.store(claims.exp, Ordering::Relaxed);
     log::info!(
-        "viewer {} connected{}",
+        "viewer {} connected{}{}",
         client.id,
-        if read_only { " (read-only)" } else { "" }
+        if read_only { " (read-only)" } else { "" },
+        match (reach.local, reach.lossless) {
+            (true, true) => " on this computer, exact pictures",
+            (true, false) => " on this computer",
+            _ => "",
+        }
     );
     client.video.store(true, Ordering::Relaxed);
-    client.send(Out::Hello(hub.hello(read_only)));
+    client.send(Out::Hello(hub.hello(&client)));
     if let Some(cursor) = hub.cursor.lock().clone() {
         client.send(Out::Text(cursor));
     }
@@ -75,16 +96,18 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims) {
                         // A fresh hello on the carrier the stream now rides, ahead of anything queued, and a keyframe
                         // after it: the viewer believes pictures only from the carrier of the hello it heard last.
                         client.restart_video();
-                        let hello = hub.hello(client.read_only);
+                        let hello = hub.hello(&client);
                         epoch = Instant::now();
                         match change {
                             CarrierChange::ToPeer(peer) => {
                                 log::info!("viewer {}: the stream moves onto its peer connection", client.id);
+                                client.on_peer.store(true, Ordering::Relaxed);
                                 peer.send(crate::rtc::ToPeer::Text(hello));
                                 carrier = Carrier::Peer(peer);
                             }
                             CarrierChange::ToSocket(reason) => {
                                 log::info!("viewer {}: the stream is back on its socket ({reason})", client.id);
+                                client.on_peer.store(false, Ordering::Relaxed);
                                 carrier = Carrier::Socket;
                                 let closed = serde_json::to_string(&BrowserMediaServerMessage::RtcClosed { reason })
                                     .expect("rtcClosed serializes");
@@ -123,6 +146,12 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims) {
                 let msg = match m {
                     Out::Text(t) | Out::Hello(t) => Message::Text(t.into()),
                     Out::Media(media) => Message::Binary(media.bytes_since(epoch).into()),
+                    Out::Clipped(media, clip) => {
+                        Message::Binary(media.clipped_since(epoch, clip).into())
+                    }
+                    Out::Lossless(copy, after) => {
+                        Message::Binary(copy.bytes_since(epoch, after).into())
+                    }
                     Out::Ping(t) => Message::Ping(t.to_be_bytes().to_vec().into()),
                     // Sent above, before the carrier is asked.
                     Out::Close(..) => break,
@@ -292,6 +321,10 @@ where
                 ToPeer::Video(bytes)
             }
         }
+        // Queued before the stream moved: a peer carries none of them (`Client::exacting`), and the restart that moved
+        // it starts the viewer's picture over from a keyframe anyway.
+        Out::Clipped(media, _) => ToPeer::Video(media.bytes_since(epoch)),
+        Out::Lossless(..) => return true,
     };
     peer.send(to_peer);
     true
@@ -586,7 +619,12 @@ pub fn handle(app: &App, c: &Arc<Client>, m: BrowserMediaClientMessage) {
             width,
             height,
             scale,
+            hz,
         } => {
+            if let Some(hz) = hz.filter(|hz| hz.is_finite() && (1.0..=1000.0).contains(hz)) {
+                c.display_hz.store(hz.round() as u32, Ordering::Relaxed);
+                hub.wake();
+            }
             if sane_box(width, height, scale) {
                 hub.on_resize(
                     c,

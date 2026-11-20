@@ -4,7 +4,7 @@
  * What the editor sends on a media socket, each a JSON text message. Coordinates are in the picture's own pixels, as
  * on the browser view socket.
  */
-export type BrowserMediaClientMessage = { "type": "mouse", action: PointerAction, x: number, y: number, button?: number, buttons?: number, clickCount?: number, ctrl?: boolean, shift?: boolean, alt?: boolean, } | { "type": "scroll", x: number, y: number, dx: number, dy: number, } | { "type": "key", key: string, code?: string, action?: KeyAction, ctrl?: boolean, shift?: boolean, alt?: boolean, } | { "type": "text", text: string, } | { "type": "clipboard", content: ClipboardContent, } | { "type": "releaseAll" } | { "type": "ack", id: number, decodeMs?: number, } | { "type": "keyframe" } | { "type": "resize", width: number, height: number, scale: number, } | { "type": "pause" } | { "type": "resume" } | { "type": "audio", on: boolean, } | { "type": "ping", t: number, } | { "type": "rtcOffer", sdp: string, } | { "type": "rtcCandidate", candidate: string, sdpMid?: string, } | { "type": "rtcClose" } | { "type": "token", token: string, };
+export type BrowserMediaClientMessage = { "type": "mouse", action: PointerAction, x: number, y: number, button?: number, buttons?: number, clickCount?: number, ctrl?: boolean, shift?: boolean, alt?: boolean, } | { "type": "scroll", x: number, y: number, dx: number, dy: number, } | { "type": "key", key: string, code?: string, action?: KeyAction, ctrl?: boolean, shift?: boolean, alt?: boolean, } | { "type": "text", text: string, } | { "type": "clipboard", content: ClipboardContent, } | { "type": "releaseAll" } | { "type": "ack", id: number, decodeMs?: number, } | { "type": "keyframe" } | { "type": "resize", width: number, height: number, scale: number, hz?: number, } | { "type": "pause" } | { "type": "resume" } | { "type": "audio", on: boolean, } | { "type": "ping", t: number, } | { "type": "rtcOffer", sdp: string, } | { "type": "rtcCandidate", candidate: string, sdpMid?: string, } | { "type": "rtcClose" } | { "type": "token", token: string, };
 
 /**
  * What a media socket sends as JSON text; the pictures and sound travel as binary messages with the
@@ -15,7 +15,13 @@ export type BrowserMediaServerMessage = { "type": "hello", width: number, height
  * castd takes a peer connection on this window (`rtcOffer`): it serves one on an address a viewer on its
  * network may reach. Absent from a castd that serves none.
  */
-rtc?: boolean, } | { "type": "cursor", cursor: MediaCursor, } | { "type": "clipboard", content: ClipboardContent, } | { "type": "stats", rttMs: number, targetKbps: number, fps: number, queueMs: number, } | { "type": "pong", t: number, } | { "type": "error", message: string, } | { "type": "rtcAnswer", sdp: string, } | { "type": "rtcClosed", reason: string, };
+rtc?: boolean, 
+/**
+ * This viewer reaches castd on the loopback of the computer the sandbox runs on (netd said so): while it
+ * drives, castd encodes at the quality a link that is no network allows, and, where it asked for
+ * [`MEDIA_LOSSLESS_QUERY`], sends it `clip`ped frames and `lossless` rectangles. Absent otherwise.
+ */
+local?: boolean, } | { "type": "cursor", cursor: MediaCursor, } | { "type": "clipboard", content: ClipboardContent, } | { "type": "stats", rttMs: number, targetKbps: number, fps: number, queueMs: number, } | { "type": "pong", t: number, } | { "type": "error", message: string, } | { "type": "rtcAnswer", sdp: string, } | { "type": "rtcClosed", reason: string, };
 
 /**
  * What the editor sends on a browser view socket, each a JSON text message. Nothing that drives the page is sent

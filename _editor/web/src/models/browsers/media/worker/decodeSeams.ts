@@ -14,7 +14,17 @@ export interface Surface {
 /** A decoded picture as the worker handles one: a VideoFrame, as far as it is read, drawn and let go of. */
 export interface FrameLike {
     readonly timestamp: number;
+    // Its size as drawn: a stripe's is the picture's width and its own rows.
+    readonly displayWidth: number;
+    readonly displayHeight: number;
     close(): void;
+}
+
+/** Pixels a painter puts as they are: an ImageData, as far as the worker makes one. */
+export interface PixelsLike {
+    readonly width: number;
+    readonly height: number;
+    readonly data: Uint8ClampedArray;
 }
 
 /** Anything the worker draws: a picture source, one of its own canvases, a decoded frame. */
@@ -24,6 +34,8 @@ export type Drawable = CanvasImageSource | Surface | FrameLike;
 export interface Painter {
     drawImage(image: Drawable, dx: number, dy: number): void;
     drawImage(image: Drawable, dx: number, dy: number, dw: number, dh: number): void;
+    drawImage(image: Drawable, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number): void;
+    putImageData(pixels: PixelsLike, dx: number, dy: number): void;
 }
 
 /** An encoded chunk, as far as the worker's decoders are handed one. */
@@ -70,6 +82,10 @@ export interface DecodeSeams {
     readonly audioDecoder: (init: AudioDecoderInit) => AudioDecoderLike | undefined;
     readonly videoChunk: (init: EncodedVideoChunkInit) => ChunkLike;
     readonly audioChunk: (init: EncodedAudioChunkInit) => EncodedAudioChunk;
+    // A picture of castd's exact pixels (B, G, R, unused), as a VideoFrame; throws where the browser makes none of them.
+    readonly bgrxFrame: (pixels: Uint8Array<ArrayBuffer>, width: number, height: number) => FrameLike;
+    // The same pixels turned to RGBA, for a browser that makes no such VideoFrame.
+    readonly imageData: (rgba: Uint8ClampedArray<ArrayBuffer>, width: number, height: number) => PixelsLike;
     // A canvas of the worker's own (what a tab switch draws the live picture onto behind its still).
     readonly surface: (width: number, height: number) => Surface | undefined;
     // A copy of what a canvas shows now, for the tabs' last pictures.

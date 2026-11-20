@@ -690,7 +690,7 @@ flowchart LR
   session sets off waits until the backend exits (`holdDisplay`); a backend whose display died anyway is replaced on its
   next call. Every one renders in software, on purpose: the GPU-selecting environment a `--gpus` sandbox carries
   (`LD_LIBRARY_PATH`, `MESA_*`, `VK_*`, …) is dropped, WebGL runs on ANGLE/SwiftShader and Vulkan may open only
-  Chromium's own SwiftShader driver (`browser/sessions/software-rendering.ts`). `web` also offers WebGPU, on a SwiftShader
+  Chromium's own SwiftShader driver (`browser/sessions/rendering/software-rendering.ts`). `web` also offers WebGPU, on a SwiftShader
   fallback adapter, and carries no stealth script: it reports the SwiftShader it renders on. The signed-in profiles keep
   their per-owner disguise (`fingerprint.ts`, `stealth.ts`) and no WebGPU, as desktop Linux Chrome has none. An action
   waits 30 s and a navigation 60 s, since a software-rendered game frame takes seconds; one call is cut off at 5 minutes.

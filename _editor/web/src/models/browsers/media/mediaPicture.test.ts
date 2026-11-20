@@ -42,7 +42,8 @@ afterEach(() => {
     unstubAllGlobals();
 });
 
-const setup = (now = Date.now()) => {
+// `hz`: the rate the stage's display refreshes at, as measured; none unless a test says.
+const setup = (now = Date.now(), hz?: number) => {
     const fake = fakeWorker();
     const copies: ClipboardContent[] = [];
     const asked: string[] = [];
@@ -50,6 +51,7 @@ const setup = (now = Date.now()) => {
         base: () => `https://sandbox.example`,
         askFresh: () => asked.push(`media`),
         worker: () => fake.worker,
+        displayRate: async () => hz,
         clipboard: { remote: (content) => copies.push(content), gesture: () => undefined, held: () => undefined, forget: () => undefined },
     });
     pictures.push(picture);
@@ -65,11 +67,11 @@ const setup = (now = Date.now()) => {
 
 const hello = { type: `hello`, width: 2000, height: 1200, scale: 2, codec: `avc1.42c033`, readOnly: false } as const;
 
-it("dials castd's path with its token on the sandbox's own base, and takes the hello as the picture", async () => {
+it("dials castd's path with its token on the sandbox's own base, asking for an exact picture, and takes the hello as the picture", async () => {
     const { fake, picture, offer } = setup();
     offer();
     await waitFor(() => expect(fake.dials()).toHaveLength(1));
-    expect(fake.dials()[0]?.url).toBe(`wss://sandbox.example/system/browser-media/cast-1?token=${encodeURIComponent(token(false))}`);
+    expect(fake.dials()[0]?.url).toBe(`wss://sandbox.example/system/browser-media/cast-1?token=${encodeURIComponent(token(false))}&lossless=1`);
     fake.open();
     expect(picture.live.value).toBe(false);
     fake.castd(hello);
@@ -157,6 +159,18 @@ it("asks castd for the stage in whole CSS px at the screen's ratio, only once it
     expect(fake.sent().filter((message) => message.type === `resize`)).toEqual([]);
     fake.castd(hello);
     expect(fake.sent().filter((message) => message.type === `resize`)).toEqual([{ type: `resize`, width: 1001, height: 700, scale: 1.5 }]);
+});
+
+it("says the rate the stage's display refreshes at with the box", async () => {
+    stubGlobal(`devicePixelRatio`, 2);
+    const { fake, picture, offer } = setup(Date.now(), 144);
+    offer();
+    await waitFor(() => expect(fake.dials()).toHaveLength(1));
+    fake.open();
+    picture.requestSize(800, 600);
+    await Promise.resolve();
+    fake.castd(hello);
+    expect(fake.sent().filter((message) => message.type === `resize`)).toEqual([{ type: `resize`, width: 800, height: 600, scale: 2, hz: 144 }]);
 });
 
 it("asks no box on a read-only socket: castd sizes the screen to whoever drives", async () => {

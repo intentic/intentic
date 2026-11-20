@@ -21,6 +21,13 @@ castd: one window's picture, sound and input on a Unix socket, in browser-wire's
   --paintover-delay-ms N how long content is still before it is sharpened (default: 150)
   --max-kbps N           bitrate ceiling (default: 30000)
   --min-kbps N           bitrate floor (default: 500)
+  --local-crf N          x264 quality of moving content while a viewer on this computer's loopback drives (default: 18)
+  --local-max-kbps N     bitrate ceiling while such a viewer drives; it starts there (default: 200000)
+  --local-fps N          frames per second at most while such a viewer drives, following what its display shows
+                         (default: --fps; Chromium itself draws faster only when started --disable-frame-rate-limit)
+  --lossless B           send viewers on this computer that ask for it an exact copy of what changed once the picture
+                         is still, and draw video only where theirs is not exact yet (default: true)
+  --lossless-delay-ms N  how long the picture is still before that copy is sent (default: 100)
   --preset NAME          x264 preset (default: ultrafast)
   --encoder-threads N    most x264 threads per stripe (default: min(4, cores/4), at least 1)
   --adaptive-threads B   one encoder thread until frames miss their budget (default: true)
@@ -58,6 +65,16 @@ pub struct Config {
     pub paintover_delay_ms: u64,
     pub max_kbps: u32,
     pub min_kbps: u32,
+    /// The quality, the bitrate ceiling and the frame rate while a viewer on this computer's own loopback drives
+    /// (netd says which, browser-wire's MEDIA_LISTENER_HEADER): the link is no network, so nothing is saved by spending
+    /// less.
+    pub local_crf: f32,
+    pub local_max_kbps: u32,
+    pub local_fps: u32,
+    /// Exact copies of what changed to local viewers that ask (browser-wire's `lossless` kind), and how long the picture
+    /// is still first.
+    pub lossless: bool,
+    pub lossless_delay_ms: u64,
     pub preset: String,
     pub encoder_threads: u32,
     pub adaptive_threads: bool,
@@ -175,6 +192,11 @@ impl Config {
             "paintover-delay-ms",
             "max-kbps",
             "min-kbps",
+            "local-crf",
+            "local-max-kbps",
+            "local-fps",
+            "lossless",
+            "lossless-delay-ms",
             "preset",
             "encoder-threads",
             "adaptive-threads",
@@ -220,7 +242,8 @@ impl Config {
         if !(scale.is_finite() && (0.25..=8.0).contains(&scale)) {
             return Err(format!("--scale {scale}: expected 0.25 to 8"));
         }
-        let fps: u32 = num(&m, "fps", 60)?;
+        let fps: u32 = num(&m, "fps", 60)?.clamp(1, 240);
+        let local_fps: u32 = num(&m, "local-fps", fps)?.clamp(1, 240);
         let (rtc_udp, rtc_candidates) = rtc_flags(&m)?;
         let socket_mode = match m.get("socket-mode") {
             None => 0o600,
@@ -242,13 +265,20 @@ impl Config {
             crop,
             max_size,
             scale,
-            fps: fps.clamp(1, 240),
+            fps,
             crf: num(&m, "crf", 24.0)?,
             paintover_crf: num(&m, "paintover-crf", 16.0)?,
             paintover_burst: num(&m, "paintover-burst", 3)?,
             paintover_delay_ms: num(&m, "paintover-delay-ms", 150)?,
             max_kbps: num(&m, "max-kbps", 30_000)?,
             min_kbps: num(&m, "min-kbps", 500)?,
+            local_crf: num(&m, "local-crf", 18.0)?,
+            local_max_kbps: num(&m, "local-max-kbps", 200_000)?,
+            local_fps,
+            lossless: m
+                .get("lossless")
+                .is_none_or(|v| matches!(v.as_str(), "true" | "1" | "yes" | "on")),
+            lossless_delay_ms: num(&m, "lossless-delay-ms", 100)?,
             preset: m
                 .get("preset")
                 .cloned()
@@ -308,6 +338,25 @@ mod tests {
         assert_eq!(c.socket_mode, 0o600);
         assert!(c.adaptive_threads);
         assert_eq!(c.audio_source, None);
+        // A viewer on this computer: sharper, unbounded by any network, at the remote frame rate unless asked.
+        assert_eq!(
+            (
+                c.local_crf,
+                c.local_max_kbps,
+                c.local_fps,
+                c.lossless,
+                c.lossless_delay_ms
+            ),
+            (18.0, 200_000, 30, true, 100)
+        );
+        let local = Config::parse(&args(
+            "--session s --key-file /k --local-fps 144 --local-crf 14 --lossless false",
+        ))
+        .unwrap();
+        assert_eq!(
+            (local.fps, local.local_fps, local.local_crf, local.lossless),
+            (60, 144, 14.0, false)
+        );
     }
 
     #[test]

@@ -1,7 +1,9 @@
 //! What the capture, encode, audio, cursor and clipboard threads share with the viewers' sockets: who is connected,
 //! what each has acknowledged, who drives the window, and the picture's geometry.
 
-use crate::header::{Header, LEN};
+use crate::capture::Rect;
+use crate::exact::Exact;
+use crate::header::{FLAG_CLIP, Header, KIND_LOSSLESS, LEN};
 use crate::rate::Viewer;
 use browser_wire::{BrowserMediaServerMessage, MediaAudio, MediaCursor};
 use bytes::Bytes;
@@ -35,6 +37,67 @@ impl Media {
         out.extend_from_slice(&self.payload);
         out
     }
+
+    /// The message as a viewer drawing only `clip` of its picture receives it: the `clip` flag, and the rectangle
+    /// ahead of the access unit (browser-wire's MEDIA_CLIP_LEN).
+    pub fn clipped_since(&self, epoch: Instant, clip: Rect) -> Vec<u8> {
+        let mut h = self.header;
+        h.flags |= FLAG_CLIP;
+        h.capture_ms = ms_since(self.captured, epoch);
+        let mut out = Vec::with_capacity(LEN + CLIP_LEN + self.payload.len());
+        out.resize(LEN, 0);
+        h.write(&mut out);
+        out.extend_from_slice(&rect_bytes(clip));
+        out.extend_from_slice(&self.payload);
+        out
+    }
+}
+
+/// How many bytes a rectangle takes on the wire (browser-wire's MEDIA_CLIP_LEN).
+pub const CLIP_LEN: usize = browser_wire::MEDIA_CLIP_LEN;
+
+/// A rectangle as the wire carries it: x, y, width, height, u16 big-endian each.
+pub fn rect_bytes(r: Rect) -> [u8; CLIP_LEN] {
+    let mut b = [0u8; CLIP_LEN];
+    for (i, v) in [r.x, r.y, r.w, r.h].into_iter().enumerate() {
+        b[i * 2..i * 2 + 2].copy_from_slice(&(v.min(u16::MAX as u32) as u16).to_be_bytes());
+    }
+    b
+}
+
+fn ms_since(at: Instant, epoch: Instant) -> u32 {
+    at.saturating_duration_since(epoch)
+        .as_millis()
+        .min(u32::MAX as u128) as u32
+}
+
+/// An exact copy of a rectangle of the picture (browser-wire's `lossless` kind): the X server's BGRX pixels, row after
+/// row, read once the screen was still. Shared by every viewer it goes to; the frame it follows is each viewer's own.
+pub struct Lossless {
+    pub rect: Rect,
+    pub captured: Instant,
+    pub pixels: Bytes,
+}
+
+impl Lossless {
+    /// The message for a viewer whose clock started at `epoch` and whose last video frame was `after`.
+    pub fn bytes_since(&self, epoch: Instant, after: u32) -> Vec<u8> {
+        let h = Header {
+            kind: KIND_LOSSLESS,
+            flags: 0,
+            id: after,
+            capture_ms: ms_since(self.captured, epoch),
+            stripe_top: 0,
+            stripe_index: 0,
+            stripe_count: 0,
+        };
+        let mut out = Vec::with_capacity(LEN + CLIP_LEN + self.pixels.len());
+        out.resize(LEN, 0);
+        h.write(&mut out);
+        out.extend_from_slice(&rect_bytes(self.rect));
+        out.extend_from_slice(&self.pixels);
+        out
+    }
 }
 
 pub enum Out {
@@ -43,6 +106,10 @@ pub enum Out {
     /// A `hello`: this viewer's capture clock restarts when it is sent.
     Hello(String),
     Media(Arc<Media>),
+    /// A video message for a viewer that draws only this rectangle of it (`clip`).
+    Clipped(Arc<Media>, Rect),
+    /// An exact copy of part of the picture, drawn after the video frame with this id.
+    Lossless(Arc<Lossless>, u32),
     /// A WebSocket ping carrying the time it was sent, for the round trip.
     Ping(u64),
     /// The socket's close frame, its code and words: the last thing a viewer castd ends is sent (`Client::end`).
@@ -72,6 +139,18 @@ pub struct RateEst {
 /// The smallest and the largest screen RandR may set, (width, height) each.
 pub type ResizeLimits = ((u32, u32), (u32, u32));
 
+/// Who a new viewer is: what its token allows, whether castd itself is the viewer (a recording), and how it reaches
+/// castd.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Joining {
+    pub read_only: bool,
+    pub internal: bool,
+    /// On this computer's own loopback (netd said so).
+    pub local: bool,
+    /// Asked for `clip`ped frames and `lossless` copies.
+    pub lossless: bool,
+}
+
 /// A size the viewer's box asks for: CSS pixels and device pixel ratio.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WantSize {
@@ -87,6 +166,18 @@ pub struct Client {
     pub read_only: bool,
     /// castd's own viewer (a recording): never steers the bitrate, never falls behind.
     pub internal: bool,
+    /// Reaches castd on this computer's own loopback (netd's MEDIA_LISTENER_HEADER): while it drives, castd encodes for
+    /// no network at all.
+    pub local: bool,
+    /// Asked for `clip`ped frames and `lossless` copies (MEDIA_LOSSLESS_QUERY); castd sends them while it is `local`
+    /// and its stream is on the socket.
+    pub lossless: bool,
+    /// Its stream rides a peer connection now, where no copy goes.
+    pub on_peer: AtomicBool,
+    /// Where its picture is exact (exact.rs), kept by the encode thread.
+    pub exact: Mutex<Exact>,
+    /// How many pictures a second its display shows, as its last `resize` said (0: never said).
+    pub display_hz: AtomicU32,
     pub video: AtomicBool,
     pub audio: AtomicBool,
     pub inflight: Mutex<VecDeque<Inflight>>,
@@ -121,6 +212,11 @@ pub struct Client {
 impl Client {
     pub fn send(&self, m: Out) {
         let _ = self.tx.send(m);
+    }
+
+    /// Whether its frames are `clip`ped to where its picture is not exact, and exact copies go to it.
+    pub fn exacting(&self) -> bool {
+        self.lossless && self.local && !self.on_peer.load(Ordering::Relaxed)
     }
 
     /// Ends this viewer's socket with `code` and `reason` (cut to what a close frame carries); the first ending holds.
@@ -288,6 +384,9 @@ pub struct Stats {
     pub keyframes: AtomicU64,
     pub refines: AtomicU64,
     pub skipped: AtomicU64,
+    /// Exact copies sent (one per viewer each went to), and their pixels' bytes.
+    pub lossless: AtomicU64,
+    pub lossless_bytes: AtomicU64,
     pub damage_wait_us: AtomicU64,
     pub send_lat_us: AtomicU64,
 }
@@ -323,6 +422,10 @@ pub struct Hub {
     pub target_kbps: AtomicU32,
     /// The viewer the bitrate follows now (0: none), chosen by the capture thread.
     pub steering: AtomicU64,
+    /// That viewer is on this computer's loopback: motion is encoded at the local quality.
+    pub local_steering: AtomicBool,
+    /// Frames per second the capture aims at now: the local rate while a local viewer drives, else `--fps`.
+    pub fps: AtomicU32,
     /// The latest cursor message, replayed to new viewers.
     pub cursor: Mutex<Option<String>>,
     /// Wakes the capture thread (acks, joins, keyframe requests).
@@ -378,6 +481,8 @@ impl Hub {
             audio,
             target_kbps: AtomicU32::new(0),
             steering: AtomicU64::new(0),
+            local_steering: AtomicBool::new(false),
+            fps: AtomicU32::new(0),
             stripes: Mutex::new(Vec::new()),
             cursor: Mutex::new(None),
             waker: Wake::new().expect("wake pipe"),
@@ -452,17 +557,17 @@ impl Hub {
         self.epoch.elapsed().as_millis() as u64 + 1
     }
 
-    pub fn add_client(
-        &self,
-        tx: mpsc::UnboundedSender<Out>,
-        read_only: bool,
-        internal: bool,
-    ) -> Arc<Client> {
+    pub fn add_client(&self, tx: mpsc::UnboundedSender<Out>, joining: Joining) -> Arc<Client> {
         let c = Arc::new(Client {
             id: self.next_id.fetch_add(1, Ordering::Relaxed),
             tx,
-            read_only,
-            internal,
+            read_only: joining.read_only,
+            internal: joining.internal,
+            local: joining.local,
+            lossless: joining.lossless,
+            on_peer: AtomicBool::new(false),
+            exact: Mutex::new(Exact::default()),
+            display_hz: AtomicU32::new(0),
             video: AtomicBool::new(false),
             audio: AtomicBool::new(false),
             inflight: Mutex::new(VecDeque::new()),
@@ -609,15 +714,16 @@ impl Hub {
     }
 
     /// The `hello` for a viewer.
-    pub fn hello(&self, read_only: bool) -> String {
+    pub fn hello(&self, c: &Client) -> String {
         serde_json::to_string(&BrowserMediaServerMessage::Hello {
             width: self.width.load(Ordering::Relaxed),
             height: self.height.load(Ordering::Relaxed),
             scale: self.scale(),
             codec: self.codec.lock().clone(),
             audio: self.audio.clone(),
-            read_only,
+            read_only: c.read_only,
             rtc: crate::rtc::offered().then_some(true),
+            local: c.local.then_some(true),
         })
         .expect("hello serializes")
     }
@@ -627,7 +733,7 @@ impl Hub {
     pub fn restart_clients(&self) {
         for c in self.clients.lock().iter() {
             c.restart_video();
-            c.send(Out::Hello(self.hello(c.read_only)));
+            c.send(Out::Hello(self.hello(c)));
         }
     }
 

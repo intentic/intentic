@@ -35,6 +35,8 @@ export interface AckBook {
     readonly sweep: (at: number) => readonly Ack[];
     // Frames that settled with nothing decoded, since the book began.
     readonly dropped: () => number;
+    // Whether every frame up to `id` that arrived has settled: none of them is still in a decoder.
+    readonly settledThrough: (id: number) => boolean;
     // A fresh stream (`hello`): nothing pending carries over, and ids may start again.
     readonly reset: () => void;
 }
@@ -102,9 +104,43 @@ export const ackBook = (): AckBook => {
                 at,
             ),
         dropped: () => dropped,
+        settledThrough: (id) => ![...pending.keys()].some((waiting) => notAfter(waiting, id)),
         reset: () => {
             pending.clear();
             lastAcked = undefined;
+        },
+    };
+};
+
+/**
+ * Work that waits for the frames before it: each piece runs once every frame up to its id has settled
+ * (`settledThrough`), in the order the pieces came, a piece waiting holding back every piece after it. castd's exact
+ * copies are drawn this way, after the frames sent before them, since a decoder hands its frames back later than they
+ * arrive.
+ */
+export interface FrameQueue {
+    readonly after: (id: number, run: () => void) => void;
+    // Frames settled: whatever no longer waits runs.
+    readonly drain: () => void;
+    // A fresh stream: what waits is dropped, never run.
+    readonly drop: () => void;
+}
+
+export const frameQueue = (settledThrough: (id: number) => boolean): FrameQueue => {
+    const waiting: { readonly id: number; readonly run: () => void }[] = [];
+    const drain = (): void => {
+        while (waiting.length > 0 && settledThrough(waiting[0]!.id)) {
+            waiting.shift()!.run();
+        }
+    };
+    return {
+        after: (id, run) => {
+            waiting.push({ id, run });
+            drain();
+        },
+        drain,
+        drop: () => {
+            waiting.length = 0;
         },
     };
 };

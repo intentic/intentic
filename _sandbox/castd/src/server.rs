@@ -85,6 +85,7 @@ async fn media(
     State(app): State<App>,
     Path(session): Path<String>,
     Query(q): Query<HashMap<String, String>>,
+    headers: axum::http::HeaderMap,
     // Taken as a Result so a request with no token or a bad one hears that, before whether it was an upgrade at all.
     ws: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
@@ -122,8 +123,16 @@ async fn media(
         Ok(ws) => ws,
         Err(rejection) => return rejection.into_response(),
     };
+    // netd says which upgrades arrived on the sandbox's loopback port, and strips that header from everything else.
+    let local = headers
+        .get(browser_wire::MEDIA_LISTENER_HEADER)
+        .is_some_and(|v| v.as_bytes() == browser_wire::MEDIA_LOOPBACK.as_bytes());
+    let lossless = q
+        .get(browser_wire::MEDIA_LOSSLESS_QUERY)
+        .is_some_and(|v| matches!(v.as_str(), "1" | "true"));
+    let reach = crate::media::Reach { local, lossless };
     ws.max_message_size(MAX_MESSAGE)
-        .on_upgrade(move |socket| crate::media::serve(socket, app, claims))
+        .on_upgrade(move |socket| crate::media::serve(socket, app, claims, reach))
 }
 
 /// `POST /viewers/drop[?read_write=1][&reason=…]`: ends every viewer's media socket (and with it any peer connection
@@ -285,6 +294,9 @@ async fn stats(State(app): State<App>) -> Response {
                 "id": c.id,
                 "readOnly": c.read_only,
                 "internal": c.internal,
+                "local": c.local,
+                "exact": c.exacting() && c.exact.lock().lossy.is_none(),
+                "displayHz": c.display_hz.load(Ordering::Relaxed),
                 "steering": c.id == steer,
                 "video": c.video.load(Ordering::Relaxed),
                 "skipping": c.skipping.load(Ordering::Relaxed),
@@ -312,6 +324,10 @@ async fn stats(State(app): State<App>) -> Response {
             "keyframes": load(&st.keyframes),
             "refines": load(&st.refines),
             "skipped": load(&st.skipped),
+            "lossless": load(&st.lossless),
+            "losslessBytes": load(&st.lossless_bytes),
+            "fps": hub.fps.load(Ordering::Relaxed),
+            "localSteering": hub.local_steering.load(Ordering::Relaxed),
             "damageWaitUsTotal": load(&st.damage_wait_us),
             "sendLatUsTotal": load(&st.send_lat_us),
             "targetKbps": hub.target_kbps.load(Ordering::Relaxed),

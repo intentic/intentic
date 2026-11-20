@@ -1,7 +1,7 @@
 // What castd's bitrate control runs on: one ack per frame, once every stripe of it that arrived has decoded, with the
 // time from the first stripe in to the last stripe out; a frame nothing of which decoded is still acked (so castd's
 // queue drains) without a decode time, and counted as dropped. And the overlay's arithmetic.
-import { ackBook, captureEpoch, frameAge, statsBook } from "./frameBook";
+import { ackBook, captureEpoch, frameAge, frameQueue, statsBook } from "./frameBook";
 
 it("acks a whole frame once, with its decode time, the moment its only stripe decodes", () => {
     const book = ackBook();
@@ -77,6 +77,49 @@ it("starts over with a fresh stream, whose ids may begin again", () => {
     book.reset();
     book.arrived(1, 0, 2);
     expect(book.settled(1, 0, 3, true)).toEqual({ id: 1, decodeMs: 1 });
+});
+
+it("says the frames up to an id settled only once none of them is still in a decoder, across the ids' wrap", () => {
+    const book = ackBook();
+    expect(book.settledThrough(5)).toBe(true);
+    book.arrived(0xffff_ffff, 0, 0);
+    book.arrived(2, 0, 0);
+    book.arrived(2, 1, 0);
+    expect(book.settledThrough(1)).toBe(false);
+    book.settled(0xffff_ffff, 0, 1, false);
+    expect(book.settledThrough(1)).toBe(true);
+    // Frame 2 waits on its second stripe still; a frame after it says nothing about it.
+    book.settled(2, 0, 2, true);
+    expect(book.settledThrough(2)).toBe(false);
+    expect(book.settledThrough(1)).toBe(true);
+    book.lostStripe(1, 3);
+    expect(book.settledThrough(2)).toBe(true);
+    book.arrived(3, 0, 4);
+    book.reset();
+    expect(book.settledThrough(3)).toBe(true);
+});
+
+it("runs held work once the frames before it settle, in the order it came, and drops what waits on a fresh stream", () => {
+    const book = ackBook();
+    const queue = frameQueue(book.settledThrough);
+    const ran: string[] = [];
+    book.arrived(1, 0, 0);
+    book.arrived(2, 0, 0);
+    queue.after(1, () => ran.push(`after 1`));
+    queue.after(0, () => ran.push(`after 0`));
+    // Nothing before frame 0 waits, but the piece ahead of it does: it keeps its turn.
+    expect(ran).toEqual([]);
+    book.settled(1, 0, 1, true);
+    queue.drain();
+    expect(ran).toEqual([`after 1`, `after 0`]);
+    queue.after(2, () => ran.push(`after 2`));
+    queue.drop();
+    book.settled(2, 0, 2, true);
+    queue.drain();
+    expect(ran).toEqual([`after 1`, `after 0`]);
+    // With nothing in a decoder, held work runs at once.
+    queue.after(2, () => ran.push(`at once`));
+    expect(ran).toEqual([`after 1`, `after 0`, `at once`]);
 });
 
 it("reads a frame's age off castd's capture epoch: the hello's arrival less half the round trip", () => {

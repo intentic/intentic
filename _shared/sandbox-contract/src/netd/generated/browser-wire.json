@@ -291,12 +291,19 @@
           "type": "object"
         },
         {
-          "description": "The viewer's picture box in CSS px and its device pixel ratio: the size the window's screen is asked to take,\nat `scale` display pixels per CSS pixel. Only the viewer driving the window decides it.",
+          "description": "The viewer's picture box in CSS px and its device pixel ratio: the size the window's screen is asked to take,\nat `scale` display pixels per CSS pixel. Only the viewer driving the window decides it. `hz`: how many times a\nsecond the viewer's display shows a new picture, as it measured it; a castd serving it on this computer's\nloopback runs the window's screen at that rate, up to its own `--local-fps`.",
           "properties": {
             "height": {
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
+            },
+            "hz": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "scale": {
               "format": "double",
@@ -453,19 +460,25 @@
       ],
       "title": "BrowserMediaClientMessage"
     },
+    "clipLen": 8,
     "closeCodes": {
       "dropped": 4001,
       "expired": 4002
     },
     "flags": {
+      "clip": 4,
       "key": 1,
       "refine": 2
     },
     "headerLen": 16,
     "kinds": {
       "audio": 2,
+      "lossless": 3,
       "video": 1
     },
+    "listenerHeader": "x-intentic-listener",
+    "loopback": "loopback",
+    "losslessQuery": "lossless",
     "path": "/system/browser-media",
     "rtcChannels": {
       "audio": {
@@ -591,6 +604,13 @@
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
+            },
+            "local": {
+              "description": "This viewer reaches castd on the loopback of the computer the sandbox runs on (netd said so): while it\ndrives, castd encodes at the quality a link that is no network allows, and, where it asked for\n[`MEDIA_LOSSLESS_QUERY`], sends it `clip`ped frames and `lossless` rectangles. Absent otherwise.",
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "readOnly": {
               "type": "boolean"

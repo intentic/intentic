@@ -1,6 +1,6 @@
 import type { DecodeSeams, Surface } from "./decodeSeams";
 import { captureClock, type MediaStats, statsBook } from "../frameBook";
-import { mediaPayload, readMediaHeader } from "../mediaHeader";
+import { mediaPayload, readExactCopy, readMediaHeader, readVideo } from "../mediaHeader";
 import { type MediaHello, readMediaText } from "../mediaMessages";
 import { type PictureCanvas, pictureCanvas } from "./pictureCanvas";
 import { soundDecode } from "./soundDecode";
@@ -11,7 +11,9 @@ import type { ToWorker } from "./workerWire";
 // THE DECODE WORKER: one media socket, its picture and its sound, off the page's main thread. Every video message is
 // one stripe of one frame (stripeVideo.ts), decoded and drawn at its top row on the canvas the page transferred
 // (pictureCanvas.ts), and acked with its decode time, since castd steers its bitrate on acks; sound is decoded and
-// posted straight to the audio thread (soundDecode.ts). The page hears only what it acts on (workerWire.ts).
+// posted straight to the audio thread (soundDecode.ts). The page hears only what it acts on (workerWire.ts). The socket
+// asks for an exact picture, which castd sends only to a viewer on its own computer: a clipped frame is drawn only
+// inside its clip, and castd's exact copy of a rectangle once every frame sent before it is drawn (exactPicture.ts).
 //
 // The stream arrives on one of two carriers, the socket or the page's peer connection (mediaRtc.ts), and castd says
 // `hello` on whichever it moves the stream onto: pictures and sound count only from the carrier of the latest hello,
@@ -37,8 +39,9 @@ export interface DecodeCore {
     readonly receive: (message: ToWorker) => void;
 }
 
-// A canvas the page handed over starts blank, and a stream under way repaints only the stripes that change: a picture
-// that came before it (castd's keyframe can beat the page's canvas, which mounts on the hello) asks for a keyframe.
+// A canvas the page handed over starts blank, and a stream under way repaints only the stripes that change (and, for an
+// exact picture, only the clip within them): a picture that came before it (castd's keyframe can beat the page's
+// canvas, which mounts on the hello) asks for a keyframe, which castd sends whole, the exact picture started over.
 const attachCanvas = (canvas: PictureCanvas, video: StripeVideo, surface: Surface | undefined): void => {
     canvas.attach(surface);
     if (surface !== undefined) {
@@ -99,9 +102,16 @@ const streamReader = (parts: StreamParts) => {
             parts.stats.bytes(parts.now(), bytes.byteLength);
             if (header?.kind === `video`) {
                 parts.clock.arrived(header.captureMs);
-                parts.video.push(header, mediaPayload(bytes));
+                const { unit, clip } = readVideo(header, bytes);
+                parts.video.push(header, unit, clip);
             } else if (header?.kind === `audio`) {
                 parts.sound.push(mediaPayload(bytes));
+            } else if (header?.kind === `lossless`) {
+                // Neither decoded nor acked: drawn after the frames castd sent before it, never under them.
+                const copy = readExactCopy(bytes);
+                if (copy !== undefined) {
+                    parts.video.after(header.id, () => parts.canvas.exact(copy));
+                }
             }
         },
     };

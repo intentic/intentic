@@ -508,16 +508,43 @@ pub const BROWSER_MEDIA_SOCKET_DIR: &str = "/run/intentic/cast";
 /// `[0]` kind ([`MEDIA_KINDS`]), `[1]` flags ([`MEDIA_FLAGS`]), `[2..6]` the frame's id (u32, rising; video only, what
 /// `ack` names), `[6..10]` when its content was captured, in milliseconds since the stream's `hello` (u32), `[10..12]`
 /// the stripe's top row in picture pixels (u16), `[12]` the stripe's index and `[13]` how many stripes the picture is cut
-/// into (1 when it is whole), `[14..16]` reserved, zero. Video's payload is one H.264 access unit in Annex B; audio's is
-/// one Opus packet.
+/// into (1 when it is whole), `[14..16]` reserved, zero. Video's payload is one H.264 access unit in Annex B, after the
+/// [`MEDIA_CLIP_LEN`]-byte rectangle its `clip` flag announces; audio's is one Opus packet; `lossless`'s is
+/// [`MEDIA_CLIP_LEN`] bytes of rectangle and then its pixels.
 pub const MEDIA_HEADER_LEN: usize = 16;
 
-/// What a binary media message carries, its header's byte 0.
-pub const MEDIA_KINDS: [(&str, u8); 2] = [("video", 1), ("audio", 2)];
+/// What a binary media message carries, its header's byte 0. `lossless` (only to a viewer that asked for it with
+/// [`MEDIA_LOSSLESS_QUERY`]): an exact copy of a rectangle of the picture, which the viewer draws once every video frame
+/// it received before it has been drawn (the header's id is the last such frame's). Its payload is the rectangle (x, y,
+/// width, height in picture pixels, u16 each) and then width × height pixels, four bytes each in the order B, G, R and
+/// one unused, row after row with no padding: the X server's own pixels, nothing converted.
+pub const MEDIA_KINDS: [(&str, u8); 3] = [("video", 1), ("audio", 2), ("lossless", 3)];
 
 /// Bits of a video message's byte 1. `key`: an IDR a decoder can start from. `refine`: a sharpening pass over content
-/// that has gone still (castd's paint-over), drawn like any frame and never a sign of motion.
-pub const MEDIA_FLAGS: [(&str, u8); 2] = [("key", 1), ("refine", 2)];
+/// that has gone still (castd's paint-over), drawn like any frame and never a sign of motion. `clip` (only to a viewer
+/// that asked for `lossless`): the payload starts with a rectangle (x, y, width, height in picture pixels, u16 each), and
+/// only that part of the decoded picture is drawn, since the rest of the viewer's picture is already exact; an empty one
+/// means decode it and draw nothing. A frame without it is drawn whole.
+pub const MEDIA_FLAGS: [(&str, u8); 3] = [("key", 1), ("refine", 2), ("clip", 4)];
+
+/// How many bytes the rectangle that starts a `clip`ped video message's payload, and a `lossless` message's, takes: x,
+/// y, width and height, u16 big-endian each.
+pub const MEDIA_CLIP_LEN: usize = 8;
+
+/// The query parameter a viewer adds to the media socket's upgrade (`lossless=1`) to say it draws `clip`ped frames and
+/// `lossless` rectangles. castd sends neither to a viewer that did not ask, and to one that did only while it reaches
+/// castd on this computer's own loopback ([`MEDIA_LISTENER_HEADER`]), where an exact copy of what changed costs nothing
+/// the link would notice.
+pub const MEDIA_LOSSLESS_QUERY: &str = "lossless";
+
+/// The request header netd sets on a media socket's upgrade it relays from the sandbox's loopback port, valued
+/// [`MEDIA_LOOPBACK`]: the browser that dialled runs on the computer the sandbox runs on. netd strips it from every
+/// request arriving from outside, as it does all its own headers (netd-wire's `NetdHeader::Listener`, the same name), so
+/// castd can believe it.
+pub const MEDIA_LISTENER_HEADER: &str = "x-intentic-listener";
+
+/// The value of [`MEDIA_LISTENER_HEADER`] on an upgrade that arrived on the loopback port.
+pub const MEDIA_LOOPBACK: &str = "loopback";
 
 /// The DataChannels a viewer opens on a media peer connection (`rtcOffer`), by label, each carrying a part of the media
 /// socket's traffic once castd says `hello` on `media`, with the reliability the viewer must open it with:
@@ -704,11 +731,16 @@ pub enum BrowserMediaClientMessage {
     /// The decoder lost the stream: a keyframe, please.
     Keyframe,
     /// The viewer's picture box in CSS px and its device pixel ratio: the size the window's screen is asked to take,
-    /// at `scale` display pixels per CSS pixel. Only the viewer driving the window decides it.
+    /// at `scale` display pixels per CSS pixel. Only the viewer driving the window decides it. `hz`: how many times a
+    /// second the viewer's display shows a new picture, as it measured it; a castd serving it on this computer's
+    /// loopback runs the window's screen at that rate, up to its own `--local-fps`.
     Resize {
         width: u32,
         height: u32,
         scale: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        hz: Option<f64>,
     },
     /// Nobody can see the picture now: stop sending video (and sound) until `resume`.
     Pause,
@@ -773,6 +805,12 @@ pub enum BrowserMediaServerMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         rtc: Option<bool>,
+        /// This viewer reaches castd on the loopback of the computer the sandbox runs on (netd said so): while it
+        /// drives, castd encodes at the quality a link that is no network allows, and, where it asked for
+        /// [`MEDIA_LOSSLESS_QUERY`], sends it `clip`ped frames and `lossless` rectangles. Absent otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        local: Option<bool>,
     },
     /// The pointer's look changed.
     Cursor {
@@ -841,6 +879,10 @@ mod tests {
                 "headerLen": MEDIA_HEADER_LEN,
                 "kinds": MEDIA_KINDS.iter().map(|(name, tag)| (name.to_string(), serde_json::json!(tag))).collect::<serde_json::Map<_, _>>(),
                 "flags": MEDIA_FLAGS.iter().map(|(name, bit)| (name.to_string(), serde_json::json!(bit))).collect::<serde_json::Map<_, _>>(),
+                "clipLen": MEDIA_CLIP_LEN,
+                "losslessQuery": MEDIA_LOSSLESS_QUERY,
+                "listenerHeader": MEDIA_LISTENER_HEADER,
+                "loopback": MEDIA_LOOPBACK,
                 "rtcChannels": RTC_CHANNELS.iter().map(|(label, ordered, retransmits)| (label.to_string(), serde_json::json!({"ordered": ordered, "maxRetransmits": retransmits}))).collect::<serde_json::Map<_, _>>(),
                 "rtcMessageMax": RTC_MESSAGE_MAX,
                 "tokenGraceSeconds": MEDIA_TOKEN_GRACE_SECONDS,
@@ -1075,9 +1117,24 @@ mod tests {
                 }),
                 read_only: false,
                 rtc: None,
+                local: None,
             })
             .unwrap(),
             r#"{"type":"hello","width":2560,"height":1600,"scale":2.0,"codec":"avc1.42c033","audio":{"codec":"opus","sampleRate":48000,"channels":2},"readOnly":false}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::Hello {
+                width: 1280,
+                height: 880,
+                scale: 1.0,
+                codec: "avc1.640028".into(),
+                audio: None,
+                read_only: false,
+                rtc: None,
+                local: Some(true),
+            })
+            .unwrap(),
+            r#"{"type":"hello","width":1280,"height":880,"scale":1.0,"codec":"avc1.640028","readOnly":false,"local":true}"#
         );
         assert_eq!(
             serde_json::to_string(&BrowserMediaServerMessage::Cursor {

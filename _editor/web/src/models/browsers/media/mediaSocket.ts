@@ -1,4 +1,4 @@
-import { type BrowserMediaClientMessage, MEDIA_CLOSE_CODES } from "@intentic/sandbox-contract/browser-wire";
+import { type BrowserMediaClientMessage, MEDIA_CLOSE_CODES, MEDIA_LOSSLESS_QUERY } from "@intentic/sandbox-contract/browser-wire";
 import { liveSocket, type LiveLink, type LiveSocket } from "../../../client/session/liveSocket";
 import { type MediaOffer, tokenReadOnly } from "./mediaMessages";
 import type { MediaWorker } from "./mediaWorker";
@@ -10,7 +10,9 @@ import type { FromWorker } from "./worker/workerWire";
 // path and access renews the token held for the next dial and is handed to castd on the open socket (`token`), which
 // castd counts the socket's life from, while a new path or another access (a desktop's read-only token swapped for a
 // driving one) dials again. A token's `expiresAt` is never read against this computer's clock, which may be minutes off
-// castd's: the latest token is dialled, and castd says when it will not take one.
+// castd's: the latest token is dialled, and castd says when it will not take one. Every dial asks for an exact picture
+// (MEDIA_LOSSLESS_QUERY), which castd sends only to a viewer that reaches it on this computer's loopback; the decode
+// worker draws either kind of stream.
 
 export interface MediaSocketOptions {
     readonly worker: () => MediaWorker;
@@ -140,7 +142,7 @@ export const mediaSocket = (options: MediaSocketOptions): MediaSocket => {
                 return undefined;
             }
             dialled = { path: offer.path, readOnly: tokenReadOnly(offer.token) };
-            return `${wsBase(base)}${offer.path}?token=${encodeURIComponent(offer.token)}`;
+            return `${wsBase(base)}${offer.path}?token=${encodeURIComponent(offer.token)}&${MEDIA_LOSSLESS_QUERY}=1`;
         },
         open: (url, link) => {
             counter += 1;

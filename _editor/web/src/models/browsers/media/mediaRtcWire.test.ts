@@ -1,6 +1,7 @@
 // The DataChannel's cuts, both ways: castd's long video message joined back byte for byte before the decoder, and the
 // viewer's long JSON cut into chunks castd joins (castd's src/rtc/chunk.rs holds the other half of each).
 import { MEDIA_HEADER_LEN, RTC_MESSAGE_MAX } from "@intentic/sandbox-contract/browser-wire";
+import { readMediaHeader, readVideo, rectPayload, writeMediaMessage } from "./mediaHeader";
 import { inputMessages, mediaJoiner } from "./mediaRtcWire";
 
 // A video message as castd writes it: kind video, the key flag, frame `id`, then `length` payload bytes.
@@ -80,4 +81,18 @@ it("sends a JSON message that fits as itself, and a longer one as chunks castd j
 
 it("sends nothing on the peer for a message past 255 chunks: the socket takes it", () => {
     expect(inputMessages(`x`.repeat(255 * (RTC_MESSAGE_MAX - 2) + 1))).toEqual([]);
+});
+
+it("joins a clipped frame's chunks into its rectangle and the whole access unit after it", () => {
+    const join = mediaJoiner();
+    const unit = Uint8Array.from({ length: 2 * RTC_MESSAGE_MAX }, (_, at) => (at * 13) % 256);
+    const clipped = writeMediaMessage(
+        { kind: `video`, key: true, refine: false, clip: true, id: 6, captureMs: 0, stripeTop: 0, stripeIndex: 0, stripeCount: 1 },
+        rectPayload({ x: 640, y: 360, width: 320, height: 200 }, unit),
+    );
+    const joined = castdChunks(clipped).map(join).at(-1);
+    const bytes = new Uint8Array(joined ?? new ArrayBuffer(0));
+    const video = readVideo(readMediaHeader(bytes)!, bytes);
+    expect(video.clip).toEqual({ x: 640, y: 360, width: 320, height: 200 });
+    expect(video.unit).toEqual(unit);
 });

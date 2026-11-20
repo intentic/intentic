@@ -7,7 +7,7 @@
 
 use browser_wire::{BrowserMediaClientMessage, BrowserMediaServerMessage};
 use castd::client::{MediaClient, Received};
-use castd::header::{FLAG_KEY, FLAG_REFINE, KIND_AUDIO, KIND_VIDEO};
+use castd::header::{FLAG_CLIP, FLAG_KEY, FLAG_REFINE, KIND_AUDIO, KIND_LOSSLESS, KIND_VIDEO};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -22,6 +22,9 @@ castd-bench --socket PATH --session NAME (--key-file PATH | --token T) [options]
   --flip-s N         turn the scroll's direction every N seconds (default: 2)
   --read-only        mint a read-only token (with --key-file)
   --audio            ask for sound too, and count its packets
+  --local            dial as a viewer on this computer's loopback (the header netd sets on such an upgrade)
+  --lossless         ask for clipped frames and exact copies, and count them
+  --hz N             say the display shows N pictures a second (with --resize)
 ";
 
 fn args() -> Result<HashMap<String, String>, String> {
@@ -90,19 +93,35 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
         }
         (None, None) => return Err("--key-file or --token is required".into()),
     };
-    let mut c = MediaClient::connect(&a["socket"], session, &token).await?;
+    let reach = castd::media::Reach {
+        local: a.contains_key("local"),
+        lossless: a.contains_key("lossless"),
+    };
+    let mut c = MediaClient::connect_as(&a["socket"], session, &token, reach).await?;
     if a.contains_key("audio") {
         c.send(&BrowserMediaClientMessage::Audio { on: true })
             .await?;
     }
     let mut want_hellos = 1;
+    // The screen the resize asks for, in display pixels: one the screen has already gets no second hello.
+    let mut asked = None;
     if let Some(r) = a.get("resize") {
         let (wh, s) = r.split_once('@').unwrap_or((r, "1"));
         let (w, h) = wh.split_once('x').ok_or("--resize WxH@S")?;
+        let (width, height, scale): (u32, u32, f64) = (
+            w.parse().map_err(|_| "--resize width")?,
+            h.parse().map_err(|_| "--resize height")?,
+            s.parse().map_err(|_| "--resize scale")?,
+        );
+        asked = Some((
+            (f64::from(width) * scale).round() as u32 & !1,
+            (f64::from(height) * scale).round() as u32 & !1,
+        ));
         c.send(&BrowserMediaClientMessage::Resize {
-            width: w.parse().map_err(|_| "--resize width")?,
-            height: h.parse().map_err(|_| "--resize height")?,
-            scale: s.parse().map_err(|_| "--resize scale")?,
+            width,
+            height,
+            scale,
+            hz: a.get("hz").and_then(|v| v.parse().ok()),
         })
         .await?;
         want_hellos = 2;
@@ -129,6 +148,9 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
                 hellos += 1;
                 if let BrowserMediaServerMessage::Hello { width, height, .. } = &m {
                     size = (*width, *height);
+                    if hellos == 1 && asked == Some(size) {
+                        want_hellos = 1;
+                    }
                 }
                 hello = serde_json::to_value(&m).unwrap_or_default();
                 // A resize to the size the screen already has sends no second hello: give it a moment.
@@ -157,6 +179,8 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
     let mut latencies = Vec::new();
     let (mut frames, mut keyframes, mut refines, mut bytes, mut audio) =
         (0u64, 0u64, 0u64, 0u64, 0u64);
+    // Clipped frames, those that draw nothing, exact copies and their bytes.
+    let (mut clipped, mut undrawn, mut copies, mut copy_bytes) = (0u64, 0u64, 0u64, 0u64);
     let mut last_stats = serde_json::Value::Null;
     let mut next_scroll = Instant::now();
     let mut dir = 1.0;
@@ -188,7 +212,13 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
             measure_to.saturating_duration_since(Instant::now())
         };
         match c.recv(wait).await {
-            Some(Received::Media { header, len, at }) if header.kind == KIND_VIDEO => {
+            Some(Received::Media {
+                header,
+                len,
+                at,
+                rect,
+                ..
+            }) if header.kind == KIND_VIDEO => {
                 c.send(&BrowserMediaClientMessage::Ack {
                     id: header.id,
                     decode_ms: Some(0.0),
@@ -198,6 +228,10 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
                     continue;
                 }
                 frames += 1;
+                if header.flags & FLAG_CLIP != 0 {
+                    clipped += 1;
+                    undrawn += u64::from(rect.is_some_and(|r| r.w == 0 || r.h == 0));
+                }
                 bytes += len as u64;
                 keyframes += u64::from(header.flags & FLAG_KEY != 0);
                 refines += u64::from(header.flags & FLAG_REFINE != 0);
@@ -206,6 +240,14 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
                 }
             }
             Some(Received::Media { header, .. }) if header.kind == KIND_AUDIO => audio += 1,
+            Some(Received::Media {
+                header, len, at, ..
+            }) if header.kind == KIND_LOSSLESS => {
+                if at >= measure_from {
+                    copies += 1;
+                    copy_bytes += len as u64;
+                }
+            }
             Some(Received::Json(m @ BrowserMediaServerMessage::Stats { .. })) => {
                 last_stats = serde_json::to_value(&m).unwrap_or_default();
             }
@@ -232,6 +274,10 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
         "keyframes": keyframes,
         "refines": refines,
         "audioPackets": audio,
+        "clippedFrames": clipped,
+        "undrawnFrames": undrawn,
+        "losslessCopies": copies,
+        "losslessBytes": copy_bytes,
         "fps": round(frames as f64 / seconds),
         "kbps": round(bytes as f64 * 8.0 / 1000.0 / seconds),
         "bytes": bytes,

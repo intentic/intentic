@@ -355,6 +355,20 @@ the media socket there. Three planes: castd for media, the daemon's CDP control 
   several castds share one container, netd owning that port and handing each datagram to the castd whose ICE ufrag
   its binding request names, the way it owns every TCP port. A hosted sandbox has no LAN to offer and stays on the
   edge.
+- **A viewer on this computer** (2026-11-20). The loopback shortcut was already as short as a way gets (0.39 ms and
+  1.1-1.4 GB/s from Windows into a container on WSL2), but castd encoded for it as for the internet. netd now marks an
+  upgrade from the loopback port (browser-wire's `MEDIA_LISTENER_HEADER`), and castd, while such a viewer drives,
+  encodes at its local profile (CRF 18 under 200 Mbit/s, starting there), and to one that asked (`lossless=1`, which
+  the editor always asks) sends `clip`ped frames and, once the screen is still, an exact copy of what changed
+  (`lossless`, raw BGRX), so a still page is the screen pixel for pixel rather than 4:2:0 H.264. castd's README has the
+  rules and the measurements. Not taken: more than 60 fps, since Chromium on Xvfb draws on its own 60 Hz clock and only
+  an unbounded `--disable-frame-rate-limit` lifts it (about four cores at 2560×1600); NVENC, which doubled capture to
+  arrival on the loopback.
+- **A person's window on the GPU** (2026-11-20). Where the sandbox has WSL2's GPU and NVIDIA's driver (`--gpus=all`),
+  the person's own window and a profile's sign-in window start on Mesa's d3d12 driver
+  ([`window-gpu.ts`](../../_sandbox/sandbox/src/browser/sessions/rendering/window-gpu.ts)); agents' browsers stay on SwiftShader
+  (`rendering/software-rendering.ts`). castd's Xvfb is built with GLX for it, without which the window's GPU process exited and it
+  had no WebGL at all; with it WebGL runs on the GPU at 60 fps. `INTENTIC_WINDOW_GPU=0` keeps every window in software.
 - **Cropped windows.** A window the daemon did not launch (an agent's @playwright/mcp browser) is a rectangle of its
   screen: castd runs `--crop` on the page's viewport (`region.ts`), moved live (`POST /crop`) as the window, a popup's
   chrome or a phone moves it, and the window is still sized to a `resize` sent on the view socket.

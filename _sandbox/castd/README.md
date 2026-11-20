@@ -69,6 +69,38 @@ Exactly browser-wire's protocol (`_sandbox/netd/crates/browser-wire/src/lib.rs`)
 - **`stats`** about once a second: the round trip (WebSocket pings castd sends), the bitrate aimed for, frames sent in
   the last second, and how long acks queue beyond their minimum.
 
+## A viewer on this computer
+
+A sandbox on the owner's own machine is watched over that machine's loopback, where the network's limits are not there
+to work around (2026-11-20: 0.39 ms round trip and 1.1-1.4 GB/s from Windows into a container on WSL2, against a
+30 Mbit/s ceiling). netd marks a media upgrade that arrived on the sandbox's loopback port (browser-wire's
+`MEDIA_LISTENER_HEADER`, which it strips from everything else), its `hello` says `local: true`, and castd does three
+things for it that no remote viewer gets ([src/exact.rs](src/exact.rs)).
+
+- **The local profile.** While a local viewer drives (`rate::steering`), motion is encoded at `--local-crf` (18, not 24)
+  under `--local-max-kbps` (200 Mbit/s, not 30), and the rate starts at that ceiling instead of climbing from 8 Mbit/s;
+  it still falls back on congestion, since a loopback port can be forwarded somewhere slow. Measured scrolling
+  [tests/fixtures/page.html](tests/fixtures/page.html) at 1280x880: 3.0 Mbit/s against 2.4, the same 0.15 cores and
+  2.8 ms capture to arrival.
+- **Exact pictures**, for a viewer that also asked (`lossless=1`, browser-wire's `MEDIA_LOSSLESS_QUERY`): H.264 is 4:2:0
+  and lossy even at the paint-over's CRF, so a still page never matched the screen pixel for pixel. castd keeps, per
+  such viewer, the box its picture is lossy in. Every frame goes to it `clip`ped to that box joined with what the frame
+  changed (the first, a keyframe, whole), so video never draws over an exact pixel; once the screen has been still for
+  `--lossless-delay-ms` (100) the capture thread reads that box off the framebuffer and the encode thread sends it
+  as a `lossless` message, raw BGRX, after the frames queued before it, and the box is empty again. A keystroke costs
+  the glyph's few blocks. Only while the viewer's round trip is under 20 ms: the copy is raw pixels, which a slower
+  link would queue every frame behind. A copy the screen moves under before it has held as long as it waited (an
+  animation that pauses between steps) doubles the next wait, up to 2 s (`CopyPace`): on a page of 60 animated cards
+  at 16-18 fps a whole-screen copy went out every 250 ms or so, 29 MB/s at 2560x1600, each drawn over at once, and
+  none does now. The integration test holds a local viewer's copy of a still screen against `/screenshot`: equal in
+  every pixel.
+- **The frame rate may follow its display.** A `resize` says the viewer's display rate (`hz`), and while a local
+  viewer drives castd captures at that rate up to `--local-fps` (default `--fps`, so nothing changes unless asked).
+  Chromium on Xvfb draws on its own 60 Hz clock whatever RandR's refresh rate says (measured: a mode at 120 Hz, set
+  before or after Chromium started, left it at 60), and only `--disable-frame-rate-limit` lifts it, by drawing as
+  fast as it can: at 2560x1600, compositing on the CPU, 156 fps of scrolling for 1.92 cores of Chromium and 1.97 of
+  castd, against 0.22 and 0.43 at 60. So the daemon starts no window that way.
+
 ## Peer connections
 
 A viewer on the sandbox's own network can reach castd without the edge: a public https page cannot open the plain
@@ -166,6 +198,9 @@ Patches to x264 and Xvfb make castd faster and sharper, and castd works without 
   [image/build-xvfb.sh](image/build-xvfb.sh) builds only the Xvfb target, from Debian's source package when deb-src is
   enabled, else the same upstream release. On a stock Xvfb castd falls back to wheel clicks.
 
+The Xvfb is built with GLX (the `xvfb` package's own build has it), so Chromium's GPU process starts on it: a person's
+window draws on the GPU where the sandbox has one, and without GLX it had no WebGL.
+
 [build.Dockerfile](build.Dockerfile) runs both on the image's Debian release and exports `/opt/castd` (`bin/castd`,
 `bin/castd-bench`, `bin/Xvfb`, `lib/libx264.so.164`); its header has the `docker buildx` line. Start the display's
 Xvfb with `-shmem` (castd then reads its framebuffer in place, no copy at all) at the largest size a viewer may ask
@@ -174,15 +209,17 @@ for, since RandR can only shrink it.
 ## Tests and the bench
 
 `cargo test` runs the unit tests (token test vector, key names, header layout, the steering policy, scroll carry, crop
-clipping, MP4, STUN routing, chunking), [tests/rtc.rs](tests/rtc.rs) (a str0m viewer against castd's peer port: ICE,
+clipping, MP4, STUN routing, chunking, a local viewer's clips and copy pacing), [tests/rtc.rs](tests/rtc.rs) (a str0m viewer against castd's peer port: ICE,
 DTLS, SCTP and the three channels over loopback UDP, no X needed) and [tests/integration.rs](tests/integration.rs),
-which also moves a viewer's stream onto a peer connection and back: Xvfb `-shmem`, Chromium in kiosk mode on
+which also moves a viewer's stream onto a peer connection and back and holds a local viewer's exact copy against the
+screen: Xvfb `-shmem`, Chromium in kiosk mode on
 [tests/fixtures/page.html](tests/fixtures/page.html), and castd, driven as a viewer over the Unix socket. It stands
 down with its reason when Xvfb or Chromium is missing (`CASTD_TEST_XVFB`, `CASTD_TEST_CHROME`).
 
 `castd-bench --socket … --session … --key-file …` connects as one viewer, acks every frame, and prints JSON: frames per
 second, kbps, and capture-to-arrival latency percentiles off the headers; `--resize WxH@S` and `--scroll-px N` drive the
-window while it measures.
+window while it measures, and `--local` and `--lossless` dial as a viewer on this computer that asks for exact pictures
+(it counts clipped frames, copies and their bytes).
 
 Measured 2026-11-19 on this sandbox's host (16 cores, load around 18), 1280×880 screen = window, stock Debian x264,
 castd's own CPU over 12 s with one castd-bench viewer, Chromium software-rendering
@@ -248,16 +285,25 @@ CPU:
 | 2560×1600 | scroll, GPU-rendered | 0.39 cores | 0.14 cores |
 | 2560×1600 | animation, GPU-rendered | 0.34 cores | not run |
 
-Chromium's own rendering is the larger cost. In software (today's `--use-angle=swiftshader`) it took about 2.1 cores
-to hold 60 fps at 1280×880 and fell to 23–25 fps at 2560×1600 (2.4 cores); a page of 60 blurred, shadowed cards ran at
-2 fps on 8.7–10 cores, and a full-screen WebGL shader at 42 fps (1280×880) and 12 fps (2560×1600). With
-`--use-gl=angle --use-angle=gl --enable-gpu-rasterization` on Mesa's d3d12 driver (`LD_LIBRARY_PATH=/usr/lib/wsl/lib
-GALLIUM_DRIVER=d3d12`), scroll and animation held 60 fps on 0.21 cores (0.31 at 2560×1600), WebGL held 60 fps at both
-sizes on 0.23–0.34 cores, and the card page reached 24–25 fps on 1.0–1.2 cores. The Intel iGPU
-(`MESA_D3D12_DEFAULT_ADAPTER_NAME=Intel`) did as well, except that its WebGL frames never reached the X screen (the
-page counted 60 fps, castd saw no damage). Debian's Mesa has no Dozen Vulkan driver, so
-Vulkan on WSL2 was not measured. software-rendering.ts keeps the agents' browsers off the GPU on purpose; this is the
-measurement for deciding otherwise, not a change to it.
+Chromium's own rendering is the larger cost for the agents' browsers. On SwiftShader (their `--use-angle=swiftshader`)
+it took about 2.1 cores to hold 60 fps at 1280×880 and fell to 23–25 fps at 2560×1600 (2.4 cores); a page of 60
+blurred, shadowed cards ran at 2 fps on 8.7–10 cores, and a full-screen WebGL shader at 42 fps (1280×880) and 12 fps
+(2560×1600). With `--use-gl=angle --use-angle=gl --enable-gpu-rasterization` on Mesa's d3d12 driver
+(`LD_LIBRARY_PATH=/usr/lib/wsl/lib GALLIUM_DRIVER=d3d12`), scroll and animation held 60 fps on 0.21 cores (0.31 at
+2560×1600), WebGL held 60 fps at both sizes on 0.23–0.34 cores, and the card page reached 24–25 fps on 1.0–1.2 cores.
+The Intel iGPU (`MESA_D3D12_DEFAULT_ADAPTER_NAME=Intel`) did as well, except that its WebGL frames never reached the X
+screen (the page counted 60 fps, castd saw no damage). Debian's Mesa has no Dozen Vulkan driver, so Vulkan on WSL2 was
+not measured. software-rendering.ts keeps the agents' browsers off the GPU on purpose.
+
+A person's own window is not on SwiftShader (2026-11-20, rog, the sandbox image's Chromium 1248): it is started
+without the agents' switches, and on castd's Xvfb, built without GLX until then, its GPU process exited at start and
+Chromium composited on the CPU. That is cheap (scrolling at 60 fps on 0.14 cores at 1280×880, 0.22 at 2560×1600) but
+left the window with no WebGL at all. castd's Xvfb now has GLX, and where the sandbox has WSL2's GPU and NVIDIA's
+driver the daemon starts a person's window on it (`browser/sessions/rendering/window-gpu.ts`, adapter named NVIDIA for the iGPU's
+WebGL above): WebGL then runs on the GPU, 60 fps at 2560×1600 on 0.31 cores, scrolling costs about what it did (0.29 cores),
+and the card page goes from 16 to 18 fps. Without a GPU the GLX build changes nothing measurable (0.20 cores). NVENC
+for such a window was measured too and not taken: it cut castd from 0.43 to 0.18 cores at 2560×1600 but doubled capture
+to arrival on the loopback (7.3 to 14.9 ms), and a local viewer's latency is what the window is for.
 
 ## Credits and license
 

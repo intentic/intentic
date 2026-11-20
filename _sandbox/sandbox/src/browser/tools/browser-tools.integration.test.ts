@@ -16,7 +16,7 @@ import {
     WEBMCP_LAUNCH_ARG,
     writeBrowserConfig,
 } from "./browser-tools.js";
-import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS } from "../sessions/software-rendering.js";
+import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS } from "../sessions/rendering/software-rendering.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH, releaseDisplay } from "../cast/display.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";

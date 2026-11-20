@@ -2,7 +2,8 @@ import { MEDIA_HEADER_LEN, RTC_MESSAGE_MAX } from "@intentic/sandbox-contract/br
 
 // THE TWO WAYS A MESSAGE IS CUT TO FIT A DATACHANNEL (browser-wire's RTC_MESSAGE_MAX). castd cuts a long video message
 // into chunks that each carry its header, byte 14 the chunk's index and byte 15 their count, and the page joins them
-// back before the decoder sees anything, so the decoder reads exactly what the socket would have carried. The viewer
+// back before the decoder sees anything, so the decoder reads exactly what the socket would have carried: a clipped
+// frame's rectangle, which starts its payload and so only its first chunk, is read off the joined message. The viewer
 // cuts a long JSON message (a paste) into binary chunks of one byte of index, one of count and the next slice of its
 // UTF-8, which castd joins in order on the ordered `input` channel, so a paste stays in order with the keys around it.
 

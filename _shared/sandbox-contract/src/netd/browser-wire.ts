@@ -65,11 +65,23 @@ export const BROWSER_MEDIA_SOCKET_DIR = "/run/intentic/cast";
 // frame's id, its capture time in ms since `hello`, the stripe's top row, index and count, then reserved bytes.
 export const MEDIA_HEADER_LEN = 16;
 
-// Byte 0 of that header: what the payload is, one H.264 access unit or one Opus packet.
-export const MEDIA_KINDS = { video: 1, audio: 2 } as const;
+// Byte 0 of that header: what the payload is, one H.264 access unit, one Opus packet, or `lossless`, an exact copy of a
+// rectangle of the picture (the rectangle, then its pixels as B, G, R and one unused byte each, row after row), drawn
+// once every video frame up to the header's id has been.
+export const MEDIA_KINDS = { video: 1, audio: 2, lossless: 3 } as const;
 
-// Bits of byte 1: `key`, an IDR a decoder can start on; `refine`, castd sharpening content that has gone still.
-export const MEDIA_FLAGS = { key: 1, refine: 2 } as const;
+// Bits of byte 1: `key`, an IDR a decoder can start on; `refine`, castd sharpening content that has gone still; `clip`,
+// the payload starts with the rectangle the decoded picture is drawn in, the rest of the viewer's picture being exact
+// already (an empty one: decode, draw nothing).
+export const MEDIA_FLAGS = { key: 1, refine: 2, clip: 4 } as const;
+
+// The rectangle a `clip`ped video message's payload and a `lossless` message's start with: x, y, width and height in
+// picture pixels, u16 big-endian each.
+export const MEDIA_CLIP_LEN = 8;
+
+// The query parameter (`lossless=1`) a viewer adds to the media socket's upgrade to say it draws `clip`ped frames and
+// `lossless` rectangles; castd sends either only to a viewer that asked and reaches it on this computer's loopback.
+export const MEDIA_LOSSLESS_QUERY = "lossless";
 
 // The DataChannels a viewer opens on a peer connection straight to castd (browser-wire's RTC_CHANNELS), each with the
 // reliability it must be opened with: `media` (castd's JSON and video, in order, every one), `audio` (Opus packets, none

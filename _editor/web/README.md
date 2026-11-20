@@ -248,8 +248,12 @@ flowchart LR
   ladder that starts over when the sandbox answers again. Where castd serves a window, its socket names castd's media
   socket instead (`media`), and the picture, sound, pointer, keys and clipboard move there, held by a decode worker off
   the main thread (`models/browsers/media/`): H.264 stripes drawn 1:1 in device pixels on an OffscreenCanvas and acked
-  for castd's bitrate control, Opus played through an AudioWorklet jitter buffer. A media socket that never says hello
-  sends the window back to its own socket's picture. Where castd's hello offers one and the socket is not on the
+  for castd's bitrate control, Opus played through an AudioWorklet jitter buffer. The socket asks for an exact picture
+  (`lossless=1`), which castd sends only on the loopback shortcut: there the worker draws each of castd's clipped frames
+  only inside its rectangle and draws castd's lossless copy of a rectangle once every frame sent before it has been
+  drawn, and the jitter buffer's floor drops from 40 to 20 ms. The box castd is asked for carries the display's refresh
+  rate, which a castd started with `--local-fps` runs a loopback viewer's screen at. A media socket that never says
+  hello sends the window back to its own socket's picture. Where castd's hello offers one and the socket is not on the
   loopback shortcut, a peer connection straight to castd (`mediaRtc.ts`, WebRTC DataChannels signalled on the media
   socket) carries the stream and the person's input beside the socket, which stays as control and fallback; the worker
   believes pictures only from the carrier castd said its latest hello on.

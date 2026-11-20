@@ -377,12 +377,7 @@ fn cast_daemon(socket: &std::path::Path) -> mpsc::UnboundedReceiver<String> {
                     }
                     head.push(byte[0]);
                 }
-                let line = String::from_utf8_lossy(&head)
-                    .lines()
-                    .next()
-                    .unwrap_or_default()
-                    .to_owned();
-                let _ = seen.send(line);
+                let _ = seen.send(String::from_utf8_lossy(&head).into_owned());
                 let switching = b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
                 if stream.write_all(switching).await.is_err() {
                     return;
@@ -424,14 +419,51 @@ async fn a_media_socket_is_spliced_to_its_windows_castd_never_to_node() {
         let answer = head_of(&mut stream).await;
         assert!(answer.starts_with("HTTP/1.1 101"), "{answer}");
         // In origin form with its query, the token castd checks.
+        let seen = lines.recv().await.unwrap();
         assert_eq!(
-            lines.recv().await.unwrap(),
-            "GET /system/browser-media/browser-own?token=a.b HTTP/1.1"
+            seen.lines().next(),
+            Some("GET /system/browser-media/browser-own?token=a.b HTTP/1.1")
+        );
+        // Neither port is this computer's loopback, so castd is not told the viewer is local.
+        assert!(
+            !seen.to_ascii_lowercase().contains("x-intentic-listener"),
+            "{seen}"
         );
         stream.write_all(b"frame").await.unwrap();
         let mut echoed = [0_u8; 5];
         stream.read_exact(&mut echoed).await.unwrap();
         assert_eq!(&echoed, b"frame");
+    }
+}
+
+#[tokio::test]
+async fn a_media_socket_from_the_loopback_port_tells_castd_its_viewer_is_local() {
+    let (harness, daemon, _preview, loopback) = started("media-local", upstream().await).await;
+    let mut lines = cast_daemon(&harness.dir.join("cast/browser-own.sock"));
+    let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+    let header = format!(
+        "{}: {}",
+        browser_wire::MEDIA_LISTENER_HEADER,
+        browser_wire::MEDIA_LOOPBACK
+    );
+    // The name castd reads is netd's own header, so netd strips a copy any request arrives with.
+    assert_eq!(
+        browser_wire::MEDIA_LISTENER_HEADER,
+        netd_wire::NetdHeader::Listener.name()
+    );
+    assert_eq!(browser_wire::MEDIA_LOOPBACK, netd_wire::LOOPBACK_LISTENER);
+    for (port, local) in [(loopback, true), (daemon, false)] {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        // A spoofed copy from the browser is never what castd hears.
+        let head = format!(
+            "GET /system/browser-media/browser-own?token=a.b HTTP/1.1\r\nHost: {own}\r\n{header}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        );
+        stream.write_all(head.as_bytes()).await.unwrap();
+        let answer = head_of(&mut stream).await;
+        assert!(answer.starts_with("HTTP/1.1 101"), "{answer}");
+        let seen = lines.recv().await.unwrap().to_ascii_lowercase();
+        let said = seen.matches(&header.to_ascii_lowercase()).count();
+        assert_eq!(said, usize::from(local), "port {port}: {seen}");
     }
 }
 

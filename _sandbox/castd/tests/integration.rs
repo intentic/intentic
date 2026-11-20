@@ -7,7 +7,7 @@ use browser_wire::{
     BrowserMediaClientMessage as C, BrowserMediaServerMessage as S, ClipboardContent, KeyAction,
 };
 use castd::client::{MediaClient, Received};
-use castd::header::{FLAG_KEY, KIND_VIDEO};
+use castd::header::{FLAG_CLIP, FLAG_KEY, KIND_LOSSLESS, KIND_VIDEO};
 use castd::token::{Claims, now_ms, sign};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -455,6 +455,7 @@ async fn castd_streams_types_pastes_and_idles_on_a_real_chromium() {
         width: 640,
         height: 400,
         scale: 1.5,
+        hz: None,
     })
     .await;
     let resized = v
@@ -533,6 +534,7 @@ async fn castd_streams_types_pastes_and_idles_on_a_real_chromium() {
         width: 700,
         height: 500,
         scale: 1.0,
+        hz: None,
     })
     .await;
     v.until(Duration::from_millis(500), |_| false).await;
@@ -551,6 +553,7 @@ async fn castd_streams_types_pastes_and_idles_on_a_real_chromium() {
         width: 640,
         height: 400,
         scale: 1.5,
+        hz: None,
     })
     .await;
     assert!(
@@ -674,6 +677,14 @@ async fn castd_streams_types_pastes_and_idles_on_a_real_chromium() {
 
     peer_carries_the_stream_and_hands_it_back(sock, &token(false, "itest", later)).await;
 
+    // Nothing focused, so nothing blinks: the next viewer's first exact copy is of a screen that holds still.
+    v.click(f64::from(sw) / 2.0, f64::from(sh) * 0.75).await;
+    assert_eq!(
+        json(&socket, "GET", "/wait?quiet_ms=700&timeout_ms=10000")["timed_out"],
+        false
+    );
+    a_local_viewer_gets_exact_pictures(sock, &socket, &token(false, "itest", later)).await;
+
     // A second castd on the same desktop serves one region of it, and moves the region without a restart.
     let crop_socket = dir.join("crop.sock");
     let crop = Proc(
@@ -796,6 +807,187 @@ async fn castd_streams_types_pastes_and_idles_on_a_real_chromium() {
     assert!(!socket.exists(), "the socket file outlived castd");
     drop(castd);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A viewer on this computer's loopback that asks for exact pictures: its frames are clipped (the first one whole), the
+/// still screen comes as an exact copy identical to castd's own screenshot, and after a keystroke only the area that
+/// changed is drawn by video and then copied. A viewer that asks but is not local, or is local and does not ask, gets the
+/// stream as before.
+async fn a_local_viewer_gets_exact_pictures(sock: &str, socket: &Path, token: &str) {
+    use castd::media::Reach;
+    const WITHIN: Duration = Duration::from_secs(5);
+    let mut v = MediaClient::connect_as(
+        sock,
+        "itest",
+        token,
+        Reach {
+            local: true,
+            lossless: true,
+        },
+    )
+    .await
+    .expect("connect");
+    let (w, h) = match v.recv(WITHIN).await {
+        Some(Received::Json(S::Hello {
+            width,
+            height,
+            local,
+            ..
+        })) => {
+            assert_eq!(local, Some(true), "a local viewer is told so");
+            (width, height)
+        }
+        other => panic!("expected a hello, got {other:?}"),
+    };
+    let whole = castd::capture::Rect { x: 0, y: 0, w, h };
+    // The starting keyframe is drawn whole, then the still screen comes exact.
+    let mut first_clip = None;
+    let mut copy = None;
+    let end = Instant::now() + Duration::from_secs(5);
+    while copy.is_none() && Instant::now() < end {
+        match v.recv(WITHIN).await {
+            Some(Received::Media { header, rect, .. }) if header.kind == KIND_VIDEO => {
+                assert_ne!(header.flags & FLAG_CLIP, 0, "every frame is clipped");
+                first_clip.get_or_insert(rect);
+                v.send(&C::Ack {
+                    id: header.id,
+                    decode_ms: Some(1.0),
+                })
+                .await
+                .unwrap();
+            }
+            Some(Received::Media {
+                header,
+                rect,
+                pixels,
+                ..
+            }) if header.kind == KIND_LOSSLESS => copy = Some((rect, pixels)),
+            Some(_) => {}
+            None => break,
+        }
+    }
+    assert_eq!(
+        first_clip,
+        Some(Some(whole)),
+        "the starting keyframe is drawn whole"
+    );
+    let (rect, pixels) = copy.expect("an exact copy of the still screen");
+    assert_eq!(rect, Some(whole));
+    let pixels = pixels.expect("the copy's pixels");
+    assert_eq!(pixels.len(), (w * h * 4) as usize);
+    // Exact: the X server's pixels, as castd's screenshot reads them.
+    let (status, png_bytes) = http(socket, "GET", "/screenshot");
+    assert_eq!(status, 200);
+    let mut reader = png::Decoder::new(std::io::Cursor::new(png_bytes))
+        .read_info()
+        .unwrap();
+    let mut rgb = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut rgb).unwrap();
+    assert_eq!((info.width, info.height), (w, h));
+    let channels = info.color_type.samples();
+    let differing = (0..(w * h) as usize)
+        .filter(|&i| {
+            let (b, g, r) = (pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]);
+            [r, g, b] != rgb[i * channels..i * channels + 3]
+        })
+        .count();
+    assert_eq!(
+        differing, 0,
+        "the copy differs from the screen in {differing} pixels"
+    );
+
+    // A keystroke: video draws only around what changed, and that area is copied again once still.
+    for (action, buttons) in [
+        (browser_wire::PointerAction::Move, 0),
+        (browser_wire::PointerAction::Down, 1),
+        (browser_wire::PointerAction::Up, 0),
+    ] {
+        v.send(&C::Mouse {
+            action,
+            x: f64::from(w) / 2.0,
+            y: f64::from(h) / 8.0,
+            button: Some(0),
+            buttons: Some(buttons),
+            click_count: Some(1),
+            ctrl: None,
+            shift: None,
+            alt: None,
+        })
+        .await
+        .unwrap();
+    }
+    v.send(&C::Key {
+        key: "q".into(),
+        code: None,
+        action: Some(KeyAction::Press),
+        ctrl: None,
+        shift: None,
+        alt: None,
+    })
+    .await
+    .unwrap();
+    let (mut clips, mut small_copy) = (Vec::new(), None);
+    let end = Instant::now() + Duration::from_secs(5);
+    while small_copy.is_none() && Instant::now() < end {
+        match v.recv(WITHIN).await {
+            Some(Received::Media { header, rect, .. }) if header.kind == KIND_VIDEO => {
+                clips.push(rect.expect("a clipped frame's rectangle"));
+                v.send(&C::Ack {
+                    id: header.id,
+                    decode_ms: Some(1.0),
+                })
+                .await
+                .unwrap();
+            }
+            Some(Received::Media { header, rect, .. }) if header.kind == KIND_LOSSLESS => {
+                small_copy = rect
+            }
+            Some(_) => {}
+            None => break,
+        }
+    }
+    let area = |r: &castd::capture::Rect| u64::from(r.w) * u64::from(r.h);
+    assert!(!clips.is_empty(), "the keystroke was drawn");
+    assert!(
+        clips.iter().all(|r| area(r) * 4 <= area(&whole)),
+        "frames after a keystroke draw only near it: {clips:?}"
+    );
+    let small_copy = small_copy.expect("the changed area copied once still");
+    assert!(area(&small_copy) * 4 <= area(&whole), "{small_copy:?}");
+    v.close().await;
+
+    // Asking without being local, or being local without asking: the stream as it always was.
+    for reach in [
+        Reach {
+            local: false,
+            lossless: true,
+        },
+        Reach {
+            local: true,
+            lossless: false,
+        },
+    ] {
+        let mut other = MediaClient::connect_as(sock, "itest", token, reach)
+            .await
+            .expect("connect");
+        let mut key = None;
+        let end = Instant::now() + Duration::from_secs(5);
+        while key.is_none() && Instant::now() < end {
+            match other.recv(WITHIN).await {
+                Some(Received::Media { header, .. }) if header.kind == KIND_VIDEO => {
+                    key = Some(header.flags)
+                }
+                Some(Received::Media { header, .. }) => {
+                    assert_ne!(header.kind, KIND_LOSSLESS, "{reach:?} got a copy")
+                }
+                Some(_) => {}
+                None => break,
+            }
+        }
+        let flags = key.expect("a keyframe");
+        assert_eq!(flags & FLAG_CLIP, 0, "{reach:?} got a clipped frame");
+        other.close().await;
+    }
 }
 
 /// A viewer's peer connection beside its socket: castd answers the offer the socket carries, says `hello` on the peer's

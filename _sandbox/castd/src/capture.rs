@@ -379,6 +379,25 @@ impl Capturer {
         Ok(out)
     }
 
+    /// An exact copy of `r` of the picture as packed BGRX (`r.w * 4` bytes per row), clamped to the picture: what a
+    /// `lossless` message carries. Read without grabbing the server: it is asked for once the screen has been still, and
+    /// a repaint that lands meanwhile brings its own damage, so the next frame draws it over the copy anyway.
+    pub fn region(&self, r: Rect) -> Result<Vec<u8>, String> {
+        let x = r.x.min(self.area.w);
+        let y = r.y.min(self.area.h);
+        let w = r.w.min(self.area.w - x) as usize;
+        let h = r.h.min(self.area.h - y);
+        self.grab(Band { y0: y, y1: y + h })?;
+        let px = self.pixels();
+        let row = w * 4;
+        let mut out = Vec::with_capacity(row * h as usize);
+        for line in y..y + h {
+            let at = line as usize * self.stride + x as usize * 4;
+            out.extend_from_slice(&px[at..at + row]);
+        }
+        Ok(out)
+    }
+
     /// Whether a root configure event changed the screen's size.
     pub fn needs_rebuild(&self) -> bool {
         self.resize_pending

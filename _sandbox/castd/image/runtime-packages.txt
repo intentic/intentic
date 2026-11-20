@@ -2,3 +2,4 @@ libx264-164
 libyuv0
 libopus0
 libpulse0
+libgl1
