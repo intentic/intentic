@@ -11,6 +11,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     panels: 250,
     ports: 250,
     browsers: 1000,
+    // A star or a rename is one press; an import or a folder removed at once still reads as one change.
+    bookmarks: 250,
     // A window opening or closing is one change, and a program that opens three at once is still one piece of news.
     desktop: 250,
     // The disk watch moves at most once a minute; nothing to fold.
