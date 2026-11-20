@@ -1057,8 +1057,8 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
         <!-- Commit box first (VSCode's placement). It records the index — staging is the selection. Commit and the sync
              share one bar inside the field's frame (CommitField), so the box costs the field and a single row of presses,
              and every line the bar says starts on the message's own column. A container, so the bar thins against its
-             own width (sidebar, phone or pop-out) rather than the window's. Every block down to the list stands 8px
-             under the one above it and on the panel's 8px edge, the header's tabs included. -->
+             own width (sidebar, phone or pop-out) rather than the window's. Every block stands 8px under the one above,
+             boxes on the panel's 8px edge, loose text (bare bar, empty list) on the header tabs' 12px column. -->
         <div v-if="actionBar" class="@container flex shrink-0 flex-col gap-2 px-2 pt-2">
             <!-- The lit chip's message being written, or why none was, reports inside the field it is filling. With
                  nothing to commit there is no field, and the bar stands alone on the panel's edge. -->
@@ -1345,16 +1345,16 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
         <!-- 8px under the block above, as every block over it stands; the first row's wash starts there. -->
         <div class="min-h-0 flex-1 overflow-auto pt-2 pb-1">
             <!-- Loading appears only before the first answer. A land under way is said on its FROM chip above. -->
-            <p v-if="!changes.loaded.value && !changes.error.value" class="px-2 py-2 text-2xs text-subtle">
+            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">
                 {{ t(`workspace.words.loadingChanges`) }}
             </p>
             <!-- An explicitly clean tree distinguishes empty results from missing data — but only once it is a claim
                  anyone can make: mid-land the tree is being written, and the arriving chip above already says so. -->
-            <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-2 py-2 text-2xs text-subtle">
+            <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-3 py-2 text-2xs text-subtle">
                 {{ t(`workspace.reviewPanel.noUncommittedChanges`) }}
             </p>
             <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
-            <p v-else-if="dirty.length === 0 && filterLabel" class="px-2 py-2 text-2xs text-subtle">
+            <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
                 {{ t(`workspace.reviewPanel.nothingLeftInTree`, { filterLabel }) }}
             </p>
 

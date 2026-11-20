@@ -86,7 +86,7 @@ const confirmRestore = (id: string): void => {
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
-        <SectionHeader :label="words.restorePoints" density="dense" class="shrink-0 border-b border-line px-2 py-1.5">
+        <SectionHeader :label="words.restorePoints" density="dense" class="shrink-0 border-b border-line pl-3 pr-2 py-1.5">
             <template #actions>
                 <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin :aria-label="t(`workspace.words.working`)" />
                 <button
@@ -101,7 +101,7 @@ const confirmRestore = (id: string): void => {
             </template>
         </SectionHeader>
 
-        <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="error">{{ error }}</p>
+        <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.right.overflow="error">{{ error }}</p>
         <Notice v-if="actionError" :of="actionError" class="mx-2 shrink-0" />
 
         <div class="min-h-0 flex-1 overflow-auto py-1">
@@ -110,7 +110,7 @@ const confirmRestore = (id: string): void => {
             <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row" :class="selectedId === snapshot.id ? `bg-content/4` : ``">
                 <button
                     type="button"
-                    class="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-overlay max-md:min-h-11"
+                    class="flex w-full items-center gap-2 pl-3 pr-2 py-1.5 text-left transition-colors hover:bg-overlay max-md:min-h-11"
                     @click="select(snapshot)"
                 >
                     <Icon class="text-2xs text-subtle" :name="selectedId === snapshot.id ? 'chevron-down' : 'chevron-right'" />

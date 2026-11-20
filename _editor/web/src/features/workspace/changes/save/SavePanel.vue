@@ -298,7 +298,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 </template>
             </CommitField>
             <!-- What stops Save, in full: the one line here a maker has to act on, so it wraps rather than truncates. -->
-            <p v-if="pending > 0 && blockedByConflicts" class="text-2xs text-danger">
+            <p v-if="pending > 0 && blockedByConflicts" class="pl-1 text-2xs text-danger">
                 {{ t(`workspace.savePanel.twoEditsToSame`, { agent: words.agent }) }}
             </p>
             <!-- What a press failed at, held under the presses rather than under the list: the list is what it's about. -->
@@ -324,14 +324,14 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 
         <div class="min-h-0 flex-1 overflow-auto pt-2 pb-2">
             <!-- Where the incoming rows will appear, so it reads as "on their way here". -->
-            <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-2 py-2 text-2xs text-link">
+            <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-3 py-2 text-2xs text-link">
                 <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>
                 <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
             </p>
-            <p v-if="!changes.loaded.value && !changes.error.value" class="px-2 py-2 text-2xs text-subtle">{{ t(`workspace.savePanel.looking`) }}</p>
+            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">{{ t(`workspace.savePanel.looking`) }}</p>
             <p
                 v-else-if="changes.loaded.value && pending === 0 && !changes.landing.value"
-                class="flex items-center gap-1.5 px-2 py-2 text-2xs text-subtle"
+                class="flex items-center gap-1.5 px-3 py-2 text-2xs text-subtle"
             >
                 <span :class="LEAD"><Icon name="check" class="text-2xs text-success" /></span>{{ t(`workspace.savePanel.everythingSaved`) }}
             </p>

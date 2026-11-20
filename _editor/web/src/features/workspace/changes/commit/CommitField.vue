@@ -136,7 +136,9 @@ defineExpose({ focus: (): void => box.value?.focus() });
 </script>
 
 <template>
-    <slot v-if="bare" name="bar" />
+    <!-- Bare, the bar's line is loose text in the panel: 4px in from the panel's 8px edge puts it on the 12px column the
+         sidebar header's tabs ("Files") and the panel's other loose lines start on, not against the rail. -->
+    <div v-if="bare" class="pl-1"><slot name="bar" /></div>
     <!-- A press on the frame's own padding puts the caret in the message, as a click inside a field would. -->
     <div v-else class="ui-field-shell flex min-w-0 flex-col" @mousedown.self.prevent="box?.focus()">
         <div class="relative">
