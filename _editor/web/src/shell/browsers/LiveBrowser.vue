@@ -10,7 +10,7 @@ import { useHeldAddress } from "../../features/browsers/heldAddress";
 import { browsersFront, browsersOpened, browsersPinned, browsersWantPreview, showTab, unpinTab } from "../../workbench/browsers/browsersSurface";
 import { cycleTab } from "../../workbench/side/sideTabs";
 import { shownSideTabs } from "../../workbench/side/sideViews";
-import { BLANK, pageLabel, publishTabNames } from "./tabNames";
+import { addressLabel, BLANK, pageLabel, publishTabNames } from "./tabNames";
 import { parseTabKey, sameTab, tabKey, type LiveTab, type PinnedTab } from "../../workbench/browsers/browsersPaths";
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import LiveTabStrip from "../../features/browsers/LiveTabStrip.vue";
@@ -454,9 +454,13 @@ const blankAsked = ref(false);
 // An address Enter sent from a blank tab still on its way, sent to that tab by id once it arrives (takePendingTab).
 const queued = ref<string | undefined>();
 // One strip key per open, and the ones tabs took over on arrival, by strip id: the tab drawn at once and the tab that
-// arrives are one tab on the strip, filled in, rather than one folding away while another grows in beside it.
+// arrives are one tab on the strip, filled in, rather than one folding away while another grows in beside it. The key is
+// the next open's until a tab takes it (takePendingTab), so the start page's own tab, standing where that open's tab
+// will be, carries it too: an address typed there turns that tab into the page, as Enter does in a browser.
 let opens = 0;
 const openingKey = ref(`${OPENING_ID}:0`);
+// The address the open in flight is on its way to, which its tab says while it loads; none for a blank one.
+const openingAt = ref<string | undefined>();
 // The person's own tabs as the open found them, by strip id: whichever else the list carries before the open answers is
 // the one on its way.
 const ownBefore = shallowRef<ReadonlySet<string> | undefined>();
@@ -482,7 +486,7 @@ const openingTab = computed<StripTab | undefined>(() =>
         ? {
               id: OPENING_ID,
               key: openingKey.value,
-              label: t(`browsers.browsers.newTab`),
+              label: blankOnTheWay.value ? t(`browsers.browsers.newTab`) : addressLabel(openingAt.value ?? ``),
               icon: blankOnTheWay.value ? `globe` : `spinner`,
               spin: !blankOnTheWay.value,
               closable: false,
@@ -494,9 +498,20 @@ const openingTab = computed<StripTab | undefined>(() =>
 
 const webTabs = computed<readonly StripTab[]>(() => {
     if (current.value === undefined) {
-        // With no web window, the start page has its tab only while it is in front; behind a pin it is nothing at all.
+        // With no web window, the start page has its tab only while it is in front; behind a pin it is nothing at all. It
+        // carries the key the open it starts will give its tab, and loads as that tab does once an address is sent.
         return webInFront.value || pinned.value.length === 0
-            ? [{ id: START_ID, label: t(`browsers.browsers.newTab`), icon: `globe`, closable: false, pinned: false }]
+            ? [
+                  {
+                      id: START_ID,
+                      key: openingKey.value,
+                      label: opening.value ? addressLabel(openingAt.value ?? ``) : t(`browsers.browsers.newTab`),
+                      icon: opening.value && openingAt.value !== undefined ? `spinner` : `globe`,
+                      spin: opening.value && openingAt.value !== undefined,
+                      closable: false,
+                      pinned: false,
+                  },
+              ]
             : [];
     }
     // The tab on its way stands in for the one it becomes until that one is taken, so the strip never shows both: by id
@@ -663,8 +678,7 @@ const openOwn = async (url?: string): Promise<void> => {
         return;
     }
     queued.value = undefined;
-    opens += 1;
-    openingKey.value = `${OPENING_ID}:${opens}`;
+    openingAt.value = url;
     const own = ownWindow.value;
     ownBefore.value = new Set(own === undefined ? [] : own.pages.map((page) => stripIdOf(own.name, page.id)));
     if (url === undefined) {
@@ -727,6 +741,11 @@ const takePendingTab = (): void => {
     pendingTab.value = undefined;
     if (pending.key !== undefined) {
         arrivedKeys.value = new Map(arrivedKeys.value).set(stripIdOf(pending.name, page.id), pending.key);
+        // Taken: the next open's tab, and the start page's, grow in under a key of their own.
+        if (pending.key === openingKey.value) {
+            opens += 1;
+            openingKey.value = `${OPENING_ID}:${opens}`;
+        }
     }
     pickPage(page);
     const sent = pending.blank === true ? queued.value : undefined;

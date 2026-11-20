@@ -56,10 +56,13 @@ const frontKey = computed(() => tabKey(browsersFront.value));
 // in place of the web as it stands, which is a new tab's page until something is opened from it. The first look adopts
 // the tab in front for a side tab that names none, which is what the panel's one Browsers tab was before each tab was
 // its own.
+// A new tab's side tab becomes the window's in place, as a browser's new tab becomes the page typed into it.
 const replaceUnnamed = (key: string): void => {
-    openBeside(BROWSERS_SIDE_VIEW, browsersSideInput(browsersFront.value), { keep: true });
+    const unnamed = sideTabId(BROWSERS_SIDE_VIEW, {});
+    openBeside(BROWSERS_SIDE_VIEW, browsersSideInput(browsersFront.value), { keep: true, replace: key === `` ? unnamed : undefined });
     if (key === ``) {
-        closeTabs(new Set([sideTabId(BROWSERS_SIDE_VIEW, {})]));
+        // Already gone when it was replaced; still there when the window had a side tab of its own to go to.
+        closeTabs(new Set([unnamed]));
     }
 };
 let looked = false;

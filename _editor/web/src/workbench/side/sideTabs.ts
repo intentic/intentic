@@ -37,6 +37,9 @@ export interface OpenBesideOptions {
     readonly keep?: boolean;
     // Where a view that scrolls (a file) lands; not part of what the tab is, so a second line refocuses the same tab.
     readonly line?: number;
+    // A tab this one takes the place of, where it stands on the strip: the same tab now showing something else, rather
+    // than one closing while another opens at the end.
+    readonly replace?: string | undefined;
 }
 
 const EMPTY: SideState = { tabs: [], active: null, peek: null, split: false };
@@ -155,6 +158,12 @@ export const openBeside = (view: string, input: SideInput, options: OpenBesideOp
         return;
     }
     const tab: SideTab = { id, view, input };
+    const taking = options.replace === undefined ? -1 : current.tabs.findIndex((candidate) => candidate.id === options.replace);
+    if (taking !== -1) {
+        const peek = current.peek === options.replace ? (options.keep === true ? null : id) : current.peek;
+        set({ tabs: current.tabs.with(taking, tab), active: id, peek });
+        return;
+    }
     const replacing = options.keep === true ? -1 : current.tabs.findIndex((candidate) => candidate.id === current.peek);
     const tabs = replacing === -1 ? [...current.tabs, tab] : current.tabs.with(replacing, tab);
     set({ tabs, active: id, peek: options.keep === true ? (replacing === -1 ? current.peek : null) : id });

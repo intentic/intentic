@@ -21,15 +21,11 @@ const hostOf = (url: string): string => {
 
 // A tab's text: title, else host, else raw url, the same ladder the daemon uses for the session label, so a tab and
 // its window row never disagree. A page with none of them is a fresh tab, and says so.
-export const pageLabel = (page: BrowserPage): string => {
-    if (page.title !== undefined && page.title !== ``) {
-        return page.title;
-    }
-    if (page.url === `` || page.url === BLANK) {
-        return t(`browsers.browsers.newTab`);
-    }
-    return hostOf(page.url) || page.url;
-};
+export const pageLabel = (page: BrowserPage): string =>
+    page.title !== undefined && page.title !== `` ? page.title : addressLabel(page.url);
+
+// The rest of that ladder, for a tab known only by the address it is on, or on its way to.
+export const addressLabel = (url: string): string => (url === `` || url === BLANK ? t(`browsers.browsers.newTab`) : hostOf(url) || url);
 
 export interface TabNameSources {
     // The window whose pages are shown, and the page picked in it.

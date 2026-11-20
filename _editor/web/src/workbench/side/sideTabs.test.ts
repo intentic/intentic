@@ -67,6 +67,16 @@ describe(`peeks`, () => {
         expect(panel.peek.value).toBeNull();
     });
 
+    it(`puts a tab in the place of the one it replaces, rather than at the end`, () => {
+        openBeside(`file`, file(`a.ts`), { keep: true });
+        openBeside(`file`, file(`b.ts`), { keep: true });
+        openBeside(`file`, file(`c.ts`), { keep: true });
+        openBeside(`file`, file(`d.ts`), { keep: true, replace: idOf(`b.ts`) });
+
+        expect(paths()).toEqual([`a.ts`, `d.ts`, `c.ts`]);
+        expect(panel.active.value).toBe(idOf(`d.ts`));
+    });
+
     it(`promotes the peek when the same target is opened to keep`, () => {
         openBeside(`file`, file(`a.ts`));
         openBeside(`file`, file(`a.ts`), { keep: true });
