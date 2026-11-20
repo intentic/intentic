@@ -21,9 +21,9 @@ import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, modelCooldowns, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
 import { superviseTranslator } from "./translator-supervisor.js";
-import { authFilesOnDisk, cliProxyAuthDir, connectedTranslatorProviders } from "./translator-auth-files.js";
+import { authFilesOnDisk, cliProxyAuthDir, connectedTranslatorProviders, enabledNames, providerFiles } from "./translator-auth-files.js";
 import { createAccountPinning, logPins, type PinReport } from "./translator-prefixes.js";
-import { createCredentialModels } from "./translator-models.js";
+import { createCredentialModels, refusedModelsFile } from "./translator-models.js";
 
 // CLIProxyAPI: a bundled Go proxy holding the user's Codex/Grok/Kimi/Gemini subscriptions and re-serving them keyed by
 // model id, on every wire a loop here speaks: Anthropic Messages (the Claude Code harness), OpenAI Responses (native
@@ -211,6 +211,10 @@ export interface CliProxyClient {
     // Reads one credential's model list again (translator-models.ts): the translator turned a request for a model away
     // from it, so the list its row carries may be out of date.
     readonly recheckModels: (name: string) => void;
+    // The provider refused this model on this credential as off its plan: off its list for days (translator-models.ts).
+    readonly refuseModel: (name: string, model: string) => Promise<void>;
+    // What the provider refused on enabled credentials and none of their lists carries, which /v1/models still offers.
+    readonly refusedModels: (provider: KeyedProvider) => Promise<string[]>;
     // Replaces the running proxy's whole endpoint list, since the daemon owns every entry; rejects when the proxy can't
     // be reached, and answers how it took the list otherwise.
     readonly putCompat: (entries: readonly CompatEntry[]) => Promise<{ readonly ok: boolean; readonly status: number }>;
@@ -251,6 +255,8 @@ export const createCliProxyClient = (params: {
     authDir: string;
     // Read only: readings are written by the headroom service, which is the one place a failed read is marked.
     usageStore: Pick<AccountUsageStore, "read">;
+    // Where the provider's refusals of a model on one credential are kept (translator-models.ts).
+    refusedPath?: string;
     answers?: AnswerWatch;
     fetchFn?: typeof fetch;
     binaryPresent?: () => Promise<boolean>;
@@ -265,7 +271,10 @@ export const createCliProxyClient = (params: {
     // Read off the files, since the listing does not say which carry their prefix.
     const pinning = createAccountPinning({ managementUrl, auth, files: () => authFilesOnDisk(authDir), fetchFn });
     // What each credential's plan includes, kept between reads of the rows (translator-models.ts).
-    const credentialLists = createCredentialModels({ read: (name) => credentialModels(fetchFn, managementUrl, auth, name) });
+    const credentialLists = createCredentialModels({
+        read: (name) => credentialModels(fetchFn, managementUrl, auth, name),
+        store: params.refusedPath === undefined ? undefined : refusedModelsFile(params.refusedPath),
+    });
 
     // No binary in the image needs a rebuild; a binary that's present but not answering is mid-boot or mid-restart and
     // just needs a moment.
@@ -556,10 +565,6 @@ export const createCliProxyClient = (params: {
             })),
     };
 
-    // A provider's files, each paired with the proxy's current verdict and its recorded usage snapshot.
-    const providerFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
-        files.flatMap((file) => (file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined ? [{ ...file, name: file.name }] : []));
-
     // Every credential the proxy would still hand a turn to that cannot answer one. Runs at boot and on every read of
     // the account list, so one that got past its own sign-in (a listing that lagged the write, a bench the proxy had
     // not loaded yet) is out of the rotation by the time anyone looks at the list it appeared on.
@@ -643,12 +648,10 @@ export const createCliProxyClient = (params: {
                       ],
             );
         },
-        planModels: async (provider) => {
-            const files = providerFiles(await listFiles(), provider).filter((file) => file.disabled !== true);
-            const lists = await credentialLists.of(files.map((file) => file.name));
-            return [...new Set([...lists.values()].flat())];
-        },
+        planModels: async (provider) => [...new Set([...(await credentialLists.of(enabledNames(await listFiles(), provider))).values()].flat())],
         recheckModels: (name) => credentialLists.recheck(name),
+        refuseModel: credentialLists.refused,
+        refusedModels: async (provider) => credentialLists.withdrawn(enabledNames(await listFiles(), provider)),
         putCompat: async (entries) => {
             const response = await fetchFn(`${managementUrl}/openai-compatibility`, {
                 method: "PUT",

@@ -1,4 +1,5 @@
-import { createCredentialModels } from "../translator-models.js";
+import type { JsonFile } from "../../../store/json-file.js";
+import { createCredentialModels, REFUSED_FOR_MS, type RefusedModels } from "../translator-models.js";
 
 // What each credential's plan includes, kept between reads of the account rows: read once, handed out as held, re-read
 // in the background once old, and at once when the translator turned a request away from it.
@@ -63,4 +64,74 @@ test("a recheck reads the credential again at once", async () => {
     await settled();
     expect(await models.of(["free"])).toEqual(new Map([["free", ["gpt-6-luna", "gpt-6.2-sol"]]]));
     expect(asked).toEqual(["free", "free"]);
+});
+
+// A store held in memory, written whole on each update as the file is.
+const memoryStore = (initial: RefusedModels = {}) => {
+    let value = initial;
+    const store: JsonFile<RefusedModels> = {
+        read: async () => value,
+        state: async () => ({ value, unreadable: false }),
+        update: async (change) => {
+            value = change(value);
+            return value;
+        },
+    };
+    return { store, written: () => value };
+};
+
+// 2026-11-20: the translator listed GPT-6.1-Terra and GPT-6 Chat Thinking for both ChatGPT Free sign-ins, which ChatGPT
+// refused on every request.
+const FREE = ["gpt-6-chat-thinking", "gpt-6-luna", "gpt-6.1-terra", "gpt-5.6-terra"];
+
+test("a model the provider refused on a credential leaves that credential's list, and only that one's", async () => {
+    const { read } = reader(new Map([["free", FREE], ["team", ["gpt-6.2-sol", ...FREE]]]));
+    const { store, written } = memoryStore();
+    const models = createCredentialModels({ read, store, now: () => 1_000 });
+
+    await models.refused("free", "gpt-6.1-terra");
+    await models.refused("free", "gpt-6-chat-thinking");
+
+    expect(await models.of(["free", "team"])).toEqual(
+        new Map([
+            ["free", ["gpt-6-luna", "gpt-5.6-terra"]],
+            ["team", ["gpt-6.2-sol", ...FREE]],
+        ]),
+    );
+    // Both refusals kept, though they were filed together.
+    expect(written()).toEqual({ free: { "gpt-6.1-terra": 1_000, "gpt-6-chat-thinking": 1_000 } });
+});
+
+test("a refusal kept on disk holds across a restart, and is over once REFUSED_FOR_MS has passed", async () => {
+    const { read } = reader(new Map([["free", FREE]]));
+    let clock = 5_000;
+    const { store } = memoryStore({ free: { "gpt-6.1-terra": 5_000 } });
+    const models = createCredentialModels({ read, store, now: () => clock });
+
+    expect((await models.of(["free"])).get("free")).toEqual(["gpt-6-chat-thinking", "gpt-6-luna", "gpt-5.6-terra"]);
+    clock = 5_000 + REFUSED_FOR_MS;
+    expect((await models.of(["free"])).get("free")).toEqual(FREE);
+});
+
+test("a model refused on every credential that lists it is withdrawn; one another credential still runs is not", async () => {
+    const { read } = reader(new Map([["free-a", FREE], ["free-b", FREE], ["team", ["gpt-6.2-sol", ...FREE]]]));
+    const models = createCredentialModels({ read, now: () => 0 });
+    await models.refused("free-a", "gpt-6.1-terra");
+    await models.refused("free-b", "gpt-6.1-terra");
+
+    expect(await models.withdrawn(["free-a", "free-b"])).toEqual(["gpt-6.1-terra"]);
+    expect(await models.withdrawn(["free-a", "free-b", "team"])).toEqual([]);
+});
+
+test("a store that cannot be read or written leaves the refusal held in memory", async () => {
+    const { read } = reader(new Map([["free", FREE]]));
+    const broken: JsonFile<RefusedModels> = {
+        read: async () => { throw new Error("disk"); },
+        state: async () => { throw new Error("disk"); },
+        update: async () => { throw new Error("disk"); },
+    };
+    const models = createCredentialModels({ read, store: broken, now: () => 0 });
+
+    await models.refused("free", "gpt-6.1-terra");
+    expect((await models.of(["free"])).get("free")).not.toContain("gpt-6.1-terra");
 });

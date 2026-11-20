@@ -78,3 +78,11 @@ export const connectedTranslatorProviders = async (authRoot: string): Promise<Se
         }),
     );
 };
+
+// A provider's files in the proxy's own listing (TranslatorAuthFile), the ones it names.
+export const providerFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
+    files.flatMap((file) => (file.provider === (cliProxyIdOf(provider) ?? provider) && file.name !== undefined ? [{ ...file, name: file.name }] : []));
+
+// The names of a provider's credentials the proxy may hand a turn to: connected and not switched off.
+export const enabledNames = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): string[] =>
+    providerFiles(files, provider).flatMap((file) => (file.disabled === true ? [] : [file.name]));

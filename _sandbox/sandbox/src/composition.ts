@@ -279,6 +279,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         configPath: cliProxyConfigPath(config),
         // The credential store the proxy reads, so the connection list survives a proxy that isn't answering yet.
         authDir: cliProxyAuthDir(authRoot),
+        refusedPath: join(authRoot, "translator-refused-models.json"),
         usageStore: accountUsage,
         answers,
     });
@@ -334,7 +335,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         // Spread whole into Services; their members' docs live on the area interfaces, beside the code.
         areas: {
             ...claude,
-            ...createCodexSlice({ config, authRoot, planModels: () => cliProxy.planModels("codex") }),
+            ...createCodexSlice({ config, authRoot, translator: cliProxy }),
             ...cursor,
             // The ACP pool serves Devin's turns and its model list; built after these slices, so read when first asked.
             ...createDevinSlice({ authRoot, logger, acpConnections: () => whole().acpConnections }),

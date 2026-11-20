@@ -100,6 +100,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
     const warned: string[] = [];
     const said: string[] = [];
     const unrouted: string[] = [];
+    const offPlan: [string, string][] = [];
     const gateway = createTranslatorGateway({
         translator: { url: "http://127.0.0.1:8789/", token: TOKEN },
         loopbackBase: LOOPBACK,
@@ -109,6 +110,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         covers: options.covers,
         reread: (provider, account) => reread.push([provider, account]),
         unrouted: (_provider, account) => unrouted.push(account),
+        offPlan: (_provider, account, model) => offPlan.push([account, model]),
         logger: { info: (_fields: object, message?: string) => said.push(message ?? ""), warn: (_fields: object, message?: string) => warned.push(message ?? "") },
         fetch: upstream.fetchFn,
     });
@@ -129,7 +131,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         }
         return app.request(`/translator-gateway/${base}${path}`, request);
     };
-    return { ledger, settled, reread, warned, said, unrouted, gateway, upstream, send };
+    return { ledger, settled, reread, warned, said, unrouted, offPlan, gateway, upstream, send };
 };
 
 const chat = { model: MODEL, stream: true, messages: [{ role: "user", content: "hi" }] };
@@ -317,6 +319,54 @@ test("an account whose plan does not include the model is never asked for it", a
 
     expect(response.status).toBe(200);
     expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(B)}/${MODEL}`]);
+});
+
+// 2026-11-20: the translator listed GPT-6.1-Terra for two ChatGPT Free sign-ins, ChatGPT refused it on both in these
+// words, and the gateway handed the first refusal straight back, never asking the next account, and kept no note of it.
+const notOnPlan = (model: string | undefined): Response =>
+    Response.json(
+        {
+            error: {
+                type: "invalid_request_error",
+                code: "model_not_found",
+                message: `The '${(model ?? "").split("/").at(-1) ?? ""}' model is not supported when using Codex with a ChatGPT account.`,
+            },
+        },
+        { status: 400 },
+    );
+// The translator's own answer once it has rested a credential on that refusal, relaying it as the last upstream error.
+const restedOnIt = (model: string | undefined): Response =>
+    Response.json(
+        { error: { message: `auth_unavailable: no auth available (providers=codex, model=${model ?? ""}; last upstream error: model_not_found: The model is not supported)` } },
+        { status: 503 },
+    );
+
+test("an account the provider says lacks the model on its plan is passed for the next, filed nowhere, and noted off its list", async () => {
+    const { ledger, upstream, send, offPlan, reread } = harness((model) => (model === `${accountPrefix(A)}/${MODEL}` ? notOnPlan(model) : sse()));
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(200);
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(A)}/${MODEL}`, `${accountPrefix(B)}/${MODEL}`]);
+    expect(offPlan).toStrictEqual([[A, MODEL]]);
+    // Not the account's allowance: nothing on the ledger, nothing re-read.
+    expect(await filed(ledger)).toStrictEqual([]);
+    expect(reread).toStrictEqual([]);
+});
+
+test("every account's plan lacks the model: the loop gets the provider's own words, never an unpinned retry", async () => {
+    const { upstream, send, offPlan, said } = harness((model) => (model === `${accountPrefix(A)}/${MODEL}` ? notOnPlan(model) : restedOnIt(model)));
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain("model_not_found");
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(A)}/${MODEL}`, `${accountPrefix(B)}/${MODEL}`]);
+    expect(offPlan).toStrictEqual([
+        [A, MODEL],
+        [B, MODEL],
+    ]);
+    expect(said.filter((line) => line.startsWith("translator gateway: no account would take the request"))).toHaveLength(1);
 });
 
 test("the one account that runs the model resting in the translator: the loop gets its bench, and the line names it", async () => {

@@ -879,6 +879,45 @@ test("answers what every enabled credential of a provider is registered for, ben
     expect((await client.planModels("codex")).toSorted()).toEqual(["gpt-5.5", "gpt-6-astra", "gpt-6-luna", "gpt-6.1-sol"]);
 });
 
+// 2026-11-20: ChatGPT refused GPT-6.1-Terra on a Free sign-in the translator listed it for; the gateway reports it.
+test("a model the provider refused on a credential leaves its row and the plan, and is withdrawn once no credential lists it", async () => {
+    const registered = new Map([
+        ["codex-team.json", ["gpt-6.2-sol", "gpt-6.1-terra", "gpt-6-luna"]],
+        ["codex-free.json", ["gpt-6.1-terra", "gpt-6-luna"]],
+    ]);
+    let files = [
+        { name: "codex-team.json", provider: "codex" },
+        { name: "codex-free.json", provider: "codex" },
+    ];
+    stubGlobal(
+        "fetch",
+        jest.fn(async (url: string) => {
+            if (url.endsWith("/auth-files")) {
+                return Response.json({ files });
+            }
+            const name = decodeURIComponent(new URL(url).searchParams.get("name") ?? "");
+            return Response.json({ models: (registered.get(name) ?? []).map((id) => ({ id })) });
+        }),
+    );
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    await client.refuseModel("codex-free.json", "gpt-6.1-terra");
+
+    expect((await client.accounts()).codex.find((row) => row.name === "codex-free.json")?.models).toEqual(["gpt-6-luna"]);
+    // The Team sign-in still runs it: on the plan, and not withdrawn.
+    expect((await client.planModels("codex")).toSorted()).toEqual(["gpt-6-luna", "gpt-6.1-terra", "gpt-6.2-sol"]);
+    expect(await client.refusedModels("codex")).toEqual([]);
+    // With the Team sign-in gone, nothing here runs it.
+    files = [{ name: "codex-free.json", provider: "codex" }];
+    expect(await client.refusedModels("codex")).toEqual(["gpt-6.1-terra"]);
+});
+
 test("answers no plan models when the proxy cannot say, rather than throwing", async () => {
     stubGlobal(
         "fetch",

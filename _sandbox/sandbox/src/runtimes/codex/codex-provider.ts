@@ -22,7 +22,7 @@ import type { AgentRequest, CodexCredential } from "../../agent/providers/agent-
 import { opt } from "../../opt.js";
 import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { type ProviderModule, translatorAccountEntries, translatorReady } from "../../agent/providers/provider-module.js";
-import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
+import { type CliProxyClient, connectedTranslatorProviders } from "../../agent/providers/translator.js";
 import type { Services } from "../../composition.js";
 import { turnRole } from "../../roles/roles.js";
 import { engineReady } from "../../engines/engine-resolve.js";
@@ -53,13 +53,21 @@ export interface CodexSlice {
 export const createCodexSlice = (input: {
     readonly config: Config;
     readonly authRoot: string;
-    // What the translator's Codex credentials are registered for, benched or not (CliProxyClient.planModels).
-    readonly planModels?: () => Promise<readonly string[]>;
+    // What the translator's Codex credentials are registered for, benched or not (CliProxyClient.planModels), and what the
+    // provider refused on all of them that the translator still lists (CliProxyClient.refusedModels).
+    readonly translator?: Pick<CliProxyClient, "planModels" | "refusedModels">;
 }): CodexSlice => {
+    const { translator } = input;
     // Base dir for the sandbox-wide CODEX_HOME; also the adapter's OPENAI_API_KEY-fallback default home.
     const codexHome = join(input.authRoot, "codex");
     return {
-        codexModels: createCodexCatalog(input.config, codexHome, input.planModels === undefined ? {} : { planModels: input.planModels }),
+        codexModels: createCodexCatalog(
+            input.config,
+            codexHome,
+            translator === undefined
+                ? {}
+                : { planModels: () => translator.planModels("codex"), refusedModels: () => translator.refusedModels("codex") },
+        ),
         codexHome,
         codexThreadExists: (threadId) => codexThreadExists(codexHome, threadId),
         codexAgent: createCodexAgent({ codexHome }),

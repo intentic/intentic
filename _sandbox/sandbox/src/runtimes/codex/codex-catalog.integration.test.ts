@@ -58,6 +58,19 @@ test("keeps a model the plan covers while the translator has it benched, and dro
     expect(catalog.models.map((model) => model.id)).toEqual(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.5"]);
 });
 
+// 2026-11-20: the translator listed GPT-6.1-Terra for two ChatGPT Free sign-ins, ChatGPT refused it on both, and the
+// picker kept offering it because the translator's /v1/models still did.
+test("drops a model the provider refused on every credential the translator listed it for", async () => {
+    const catalog = await createCodexCatalog(translatorConfig, await codexHome(), {
+        fetchImpl: translatorServes(["gpt-6.1-terra", "gpt-6-chat-thinking", "gpt-6-luna", "gpt-5.6-terra"]),
+        listModels: listsNothing,
+        planModels: async () => ["gpt-6-luna", "gpt-5.6-terra"],
+        refusedModels: async () => ["gpt-6.1-terra", "gpt-6-chat-thinking"],
+    }).models();
+
+    expect(catalog.models.map((model) => model.id)).toEqual(["gpt-6-luna", "gpt-5.6-terra"]);
+});
+
 test("still serves the translator's list when the plan cannot be read", async () => {
     const catalog = await createCodexCatalog(translatorConfig, await codexHome(), {
         fetchImpl: translatorServes(["gpt-6-luna", "gpt-5.5"]),

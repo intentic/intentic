@@ -15,6 +15,9 @@ import { discoverCodexModels, discoverTranslatorCodexModels, isCodexModel, SEED_
 //    spent team seat took every team-only model (the whole Sol family) off the picker for as long as the allowance
 //    stayed spent. A covered model stays listed; a known reopening is marked on it (provider-registry.ts), and a turn on
 //    it is refused in the provider's own words.
+//    Less what ChatGPT itself refused on every credential the translator listed it for (translator-models.ts): the
+//    translator's table of what each plan includes is its own, and GPT-6.1-Terra stayed on the picker for Free sign-ins
+//    that ChatGPT refused it on every time (2026-11-20).
 // 2. OpenAI's REST /v1/models with the container OPENAI_API_KEY (dev fallback)
 // Either answers ids alone, so the CLI's own model/list runs alongside them for what an id cannot say: display name,
 // description, and the reasoning rungs the model accepts. With no id source configured, model/list is the catalog.
@@ -41,10 +44,14 @@ export const createCodexCatalog = (
         readonly listModels?: CodexModelListReader;
         // The ids the connected credentials' plans cover (CliProxyClient.planModels); absent where nothing routes Codex.
         readonly planModels?: () => Promise<readonly string[]>;
+        // The ids the provider refused on every credential whose plan the translator says covers them
+        // (CliProxyClient.refusedModels): the translator's /v1/models goes on offering them, and no turn on them can run.
+        readonly refusedModels?: () => Promise<readonly string[]>;
     } = {},
 ): CodexCatalog => {
     const fetchImpl = injected.fetchImpl ?? fetch;
     const planModels = injected.planModels ?? (async () => []);
+    const refusedModels = injected.refusedModels ?? (async () => []);
     const listModels = injected.listModels ?? codexModelList(codexHome);
     // What the runtime last published about each id, so a turn's self-heal and an id-only discovery both render a model
     // with its own scale rather than stripping it back to a label.
@@ -56,14 +63,15 @@ export const createCodexCatalog = (
 
     const discoverIds = async (): Promise<readonly string[]> => {
         // The translator holds the Codex subscription: what it serves now, and what its plans cover however benched.
-        const fromTranslator =
+        const [served, covered, refused] =
             config.translator.url !== ""
                 ? await Promise.all([
                       discoverTranslatorCodexModels(config.translator.url, config.translator.token, fetchImpl).catch((): string[] => []),
                       planModels().catch((): readonly string[] => []),
+                      refusedModels().catch((): readonly string[] => []),
                   ])
-                : [];
-        const ids = [...new Set(fromTranslator.flat())].filter(isCodexModel);
+                : [[], [], []];
+        const ids = [...new Set([...served, ...covered])].filter((id) => isCodexModel(id) && !refused.includes(id));
         if (ids.length > 0) {
             return ids;
         }

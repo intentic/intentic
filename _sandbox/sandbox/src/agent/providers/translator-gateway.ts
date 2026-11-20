@@ -92,6 +92,9 @@ export interface TranslatorGatewayDeps {
     // Re-reads the models one account runs: the translator turned a request for a model away from it (`unroutable`), so
     // the list its row carries, which keeps it out of that model's candidates, may be out of date.
     readonly unrouted?: ((provider: KeyedProvider, account: string) => void) | undefined;
+    // The provider said this account's plan does not include the model, which the translator listed for it (`offPlan`):
+    // the model leaves that account's list (translator-models.ts), so it is not placed there again.
+    readonly offPlan?: ((provider: KeyedProvider, account: string, model: string) => void) | undefined;
     readonly logger: Pick<Logger, "info" | "warn">;
     readonly fetch?: typeof fetch;
     readonly now?: () => number;
@@ -215,6 +218,14 @@ const causeOf = (refusal: ReadRefusal, now: number): RefusalCause | undefined =>
 const unroutable = (refusal: ReadRefusal, prefix: string): boolean =>
     refusal.status === 400 && refusal.text.includes("model_not_found") && refusal.text.includes(`${prefix}/`);
 
+/* The provider's own word that this account's plan does not include the model, on a request the translator routed to it
+   because its table says the plan does: ChatGPT's 400 `model_not_found` ("The 'gpt-6.1-terra' model is not supported when
+   using Codex with a ChatGPT account.", for both Free sign-ins on 2026-11-20), or the translator's 503 `auth_unavailable`
+   relaying it as the last upstream error once it has rested the credential on that model. Not the account's allowance,
+   so nothing is filed against it; the next account is asked, since another plan may include the model. Read after
+   `unroutable`, which is the translator's own 400 naming the prefix. */
+const offPlan = (refusal: ReadRefusal): boolean => (refusal.status === 400 || refusal.status === 503) && refusal.text.includes("model_not_found");
+
 // Shaped like each wire's own error, so the loop shows the sentence instead of a parse failure.
 const failure = (status: number, type: string, message: string): Response => Response.json({ type: "error", error: { type, message } }, { status });
 
@@ -319,23 +330,69 @@ const handedThrottle = (g: Gateway, asked: Pinnable, refusal: ReadRefusal, tried
     return handedOn(refusal);
 };
 
-// The line a request no account would take leaves: which accounts the translator is resting, and which do not run the
-// model. Both are skipped without a word of their own, so without it a turn refused that way named nobody (2026-11-19).
-const nobodyTook = (g: Gateway, asked: Pinnable, benched: readonly string[], unrouted: readonly string[]): void => {
+// What one request's round of asking has met so far, account by account.
+interface Round {
+    last?: { readonly refusal: ReadRefusal; readonly cause: RefusalCause };
+    throttles: number;
+    readonly benched: string[];
+    readonly unrouted: string[];
+    readonly offPlanned: string[];
+    lastOffPlan?: ReadRefusal;
+}
+
+// The line a request no account would take leaves: which accounts the translator is resting, which do not run the model,
+// and which the provider said do not have it on their plan. All are skipped without a word of their own, so without it a
+// turn refused that way named nobody (2026-11-19).
+const nobodyTook = (g: Gateway, asked: Pinnable, round: Round): void => {
     g.logger.info(
-        { provider: asked.provider, model: asked.model, benched, unrouted },
-        "translator gateway: no account would take the request (benched: the translator is resting it; unrouted: it does not run this model)",
+        { provider: asked.provider, model: asked.model, benched: round.benched, unrouted: round.unrouted, offPlan: round.offPlanned },
+        "translator gateway: no account would take the request (benched: the translator is resting it; unrouted: it does not run this model; offPlan: the provider said its plan does not include it)",
     );
 };
 
+// A refusal that says nothing of the account's allowance: the translator does not route the model to it, or the provider
+// said its plan lacks the model, which then leaves that account's list. Noted, and the next account is asked.
+const passedOver = (g: Gateway, asked: Pinnable, candidate: PinCandidate, refusal: ReadRefusal, round: Round): boolean => {
+    if (unroutable(refusal, candidate.prefix)) {
+        round.unrouted.push(candidate.account);
+        g.unrouted?.(asked.provider, candidate.account);
+        return true;
+    }
+    if (!offPlan(refusal)) {
+        return false;
+    }
+    round.offPlanned.push(candidate.account);
+    round.lastOffPlan = refusal;
+    g.offPlan?.(asked.provider, candidate.account, asked.model);
+    g.logger.warn(
+        { provider: asked.provider, account: candidate.account, model: asked.model, status: refusal.status },
+        "translator gateway: the provider said this account's plan does not include the model, trying the next",
+    );
+    return true;
+};
+
+// What the loop gets once every account was asked and none answered: the last refusal as it came (a throttle as one);
+// where every account that answered said its plan lacks the model, the provider's own words; where none routed the
+// prefix at all, undefined, and the caller sends unpinned.
+const roundEnd = (g: Gateway, asked: Pinnable, round: Round): Response | undefined => {
+    const { last, lastOffPlan } = round;
+    if (last === undefined) {
+        if (round.unrouted.length > 0 || lastOffPlan !== undefined) {
+            nobodyTook(g, asked, round);
+        }
+        return lastOffPlan === undefined ? undefined : handedOn(lastOffPlan);
+    }
+    if (last.cause === "benched") {
+        nobodyTook(g, asked, round);
+    }
+    return last.cause === "throttled" ? handedThrottle(g, asked, last.refusal, round.throttles) : handedOn(last.refusal);
+};
+
 // Asks each candidate in turn, at most once, until one answers or refuses for something other than a spent allowance, a
-// translator's bench or a throttle (causeOf). Past THROTTLED_ASKS throttles, the last one as it came. Every one refused:
-// the last refusal as it came. None routed the prefix at all: undefined, and the caller sends unpinned.
+// translator's bench, a throttle (causeOf) or a plan that lacks the model. Past THROTTLED_ASKS throttles, the last one as
+// it came; otherwise how the round ended (roundEnd).
 const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidates: readonly PinCandidate[]): Promise<Response | undefined> => {
-    let last: { readonly refusal: ReadRefusal; readonly cause: RefusalCause } | undefined;
-    let throttles = 0;
-    const benched: string[] = [];
-    const unrouted: string[] = [];
+    const round: Round = { throttles: 0, benched: [], unrouted: [], offPlanned: [] };
     for (const candidate of candidates) {
         const askedAt = g.clock();
         const { url, method, headers, signal } = outgoing;
@@ -344,35 +401,24 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
             return answered(response, settleOn(g, asked, candidate, askedAt, signal));
         }
         const refusal = await readRefusal(response);
-        if (unroutable(refusal, candidate.prefix)) {
-            unrouted.push(candidate.account);
-            g.unrouted?.(asked.provider, candidate.account);
+        if (passedOver(g, asked, candidate, refusal, round)) {
             continue;
         }
         const cause = causeOf(refusal, g.clock());
         if (cause === undefined) {
             return handedOn(refusal);
         }
-        last = { refusal, cause };
+        round.last = { refusal, cause };
         if (cause === "benched") {
-            benched.push(candidate.account);
+            round.benched.push(candidate.account);
         }
         if (cause === "spent") {
             await fileRefusal(g, asked, candidate, refusal);
-        } else if (cause === "throttled" && ++throttles >= THROTTLED_ASKS) {
-            return handedThrottle(g, asked, refusal, throttles);
+        } else if (cause === "throttled" && ++round.throttles >= THROTTLED_ASKS) {
+            return handedThrottle(g, asked, refusal, round.throttles);
         }
     }
-    if (last === undefined) {
-        if (unrouted.length > 0) {
-            nobodyTook(g, asked, benched, unrouted);
-        }
-        return undefined;
-    }
-    if (last.cause === "benched") {
-        nobodyTook(g, asked, benched, unrouted);
-    }
-    return last.cause === "throttled" ? handedThrottle(g, asked, last.refusal, throttles) : handedOn(last.refusal);
+    return roundEnd(g, asked, round);
 };
 
 // The pinned answer, or undefined where there is no account to pin the request to.
@@ -464,6 +510,7 @@ export const translatorGatewaySlice = defineSlice<TranslatorGatewaySlice>({
             reread: (provider, account) =>
                 void whole().headroom.refresh({ scope: { providers: [provider], account: usageKey(provider, account) }, maxAgeMs: 0 }),
             unrouted: (_provider, account) => whole().cliProxy.recheckModels(account),
+            offPlan: (_provider, account, model) => void whole().cliProxy.refuseModel(account, model),
             logger,
         }),
     }),
