@@ -101,8 +101,9 @@ fn load_cuda() -> Result<Cuda, String> {
             lib.get(b"cuInit\0").map_err(|e| e.to_string())?;
         let device_get: libloading::Symbol<unsafe extern "C" fn(*mut i32, i32) -> CuResult> =
             lib.get(b"cuDeviceGet\0").map_err(|e| e.to_string())?;
-        let device_name: libloading::Symbol<unsafe extern "C" fn(*mut std::ffi::c_char, i32, i32) -> CuResult> =
-            lib.get(b"cuDeviceGetName\0").map_err(|e| e.to_string())?;
+        let device_name: libloading::Symbol<
+            unsafe extern "C" fn(*mut std::ffi::c_char, i32, i32) -> CuResult,
+        > = lib.get(b"cuDeviceGetName\0").map_err(|e| e.to_string())?;
         let ctx_create: libloading::Symbol<
             unsafe extern "C" fn(*mut *mut c_void, u32, i32) -> CuResult,
         > = lib.get(b"cuCtxCreate_v2\0").map_err(|e| e.to_string())?;
