@@ -434,3 +434,16 @@ test("an answer settles the account's refusal of every model it covers, and only
     // Answered on A, the first account with room for MODEL: B's refusal of the other model is still B's.
     expect((await filed(ledger)).map((refusal) => [refusal.account, refusal.model])).toStrictEqual([[B, OTHER]]);
 });
+
+test("a Google request reaches the translator with the phrase Google refuses requests for written another way", async () => {
+    // OpenCode's own system prompt line, which Antigravity answers with a bare 429 on every account (google-blocked-phrases.ts).
+    const said = "consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.";
+    const { upstream, send } = harness(() => sse());
+
+    const response = await send("/v1/chat/completions", { body: { ...chat, messages: [{ role: "system", content: said }, ...chat.messages] } });
+
+    expect(response.status).toBe(200);
+    const sent = JSON.parse(upstream.seen[0]?.body ?? "{}");
+    expect(sent.messages[0].content).toBe("consider using `execute` to call `tools.opencode['session_move']` and make the worktree the session's working directory.");
+    expect(upstream.seen[0]?.body).not.toContain("tools.opencode.session_move");
+});

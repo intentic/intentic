@@ -19,6 +19,7 @@ import type { ServiceabilityDeps } from "../../usage/serviceability/serviceabili
 import { opt } from "../../opt.js";
 import { saysSpent } from "../run/frames/limits/limit-cause.js";
 import { pinOrder } from "./accounts/placement.js";
+import { withoutGoogleBlockedPhrases } from "./google-blocked-phrases.js";
 import { usageKey } from "./translator.js";
 import { logPins, PINNED_MODEL_ID } from "./translator-prefixes.js";
 import { type TranslatorGatewaySessions, translatorGatewaySessions } from "./translator-gateway-session.js";
@@ -248,14 +249,16 @@ interface Outgoing {
     readonly signal: AbortSignal;
 }
 
-const outgoingOf = async (c: Context<AppEnv>, translatorUrl: string, session: string): Promise<Outgoing> => {
+// A Google request has the phrases Google refuses requests for written another way (google-blocked-phrases.ts), pinned or not.
+const outgoingOf = async (c: Context<AppEnv>, translatorUrl: string, session: string, provider: KeyedProvider): Promise<Outgoing> => {
     const headers = forwardHeaders(c.req.raw.headers, REQUEST_REFRAMED);
     headers.set("accept-encoding", "identity");
+    const raw = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : new Uint8Array(await c.req.arrayBuffer());
     return {
         url: `${translatorUrl.replace(/\/$/u, "")}${restOf(c, session)}`,
         method: c.req.method,
         headers,
-        raw: c.req.method === "GET" || c.req.method === "HEAD" ? undefined : new Uint8Array(await c.req.arrayBuffer()),
+        raw: raw !== undefined && provider === "gemini" ? withoutGoogleBlockedPhrases(raw) : raw,
         signal: c.req.raw.signal,
     };
 };
@@ -456,7 +459,7 @@ const routeOf =
         if (g.translator.token === "" || !tokenEquals(presented(c.req.raw.headers), g.translator.token)) {
             return failure(401, "authentication_error", "This is the model translator's door, and the request did not carry its bearer.");
         }
-        const outgoing = await outgoingOf(c, g.translator.url, session);
+        const outgoing = await outgoingOf(c, g.translator.url, session, provider);
         try {
             const asked = pinnableOf(provider, c.req.header("content-type") ?? null, outgoing.raw);
             return (asked === undefined ? undefined : await pinnedAnswer(g, outgoing, asked)) ?? (await unpinned(g, outgoing));
