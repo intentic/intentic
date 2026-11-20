@@ -2,6 +2,10 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { BrowserContext, Page } from "playwright";
+import { noteClosed } from "../state/closed-tabs.js";
+import { wakeDeferred } from "../state/deferred-tabs.js";
+import { pageTargetId, watchFavicon } from "../state/page-favicon.js";
+import { browserWindows } from "../state/window-registry.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { releaseDisplay } from "../cast/display.js";
 import { placeWindow } from "../cast/region.js";
@@ -10,9 +14,11 @@ import { freshNavigation, navigationCommitted, watchLoading, watchNavigation } f
 import { type FrontReader, frontReader } from "../state/front-reader.js";
 import { frontTab } from "../state/front-tab.js";
 import { historyOf } from "../state/page-history.js";
+import { noteBrowsing } from "../history/browsing-feed.js";
 import { nextSeq, windowChanged, windowWatched } from "../state/window-feed.js";
 import type { BrowserSessionRecord, PageRecord } from "../state/window-record.js";
 import { summarizeWindow } from "../state/window-summary.js";
+import { armPageTools } from "../permissions/arm-page.js";
 
 // Makes the agent's browser (launched and owned by @playwright/mcp) visible to the daemon: it attaches over CDP the
 // first time a browser tool is called, without taking over Chromium's lifecycle.
@@ -35,7 +41,7 @@ const RETAIN_FINISHED_MS = 2 * 3_600_000;
 // later, once it lists the tab, for one opened behind (a Ctrl+click).
 const OPENED_TAB_SETTLE_MS = 150;
 
-const sessions = new Map<string, BrowserSessionRecord>();
+const sessions = browserWindows;
 const consumers = new WeakMap<BrowserSessionRecord, number>();
 const unused = (record: BrowserSessionRecord): boolean => record.help === undefined && (consumers.get(record) ?? 0) === 0;
 
@@ -71,9 +77,11 @@ export const browserServerOfTool = (tool: string): string | undefined => {
     return match?.[1];
 };
 
+// A tab a restore left unloaded loads once it is in front, whoever put it there (deferred-tabs.ts).
 const bringForward = (record: BrowserSessionRecord, pageId: string): void => {
     record.activePageId = pageId;
     record.lastPageId = pageId;
+    wakeDeferred(record.pages.get(pageId));
 };
 
 // The window's reader of which tab is in front (front-reader.ts), for a browser with a DevTools port to ask.
@@ -84,8 +92,10 @@ const readerFor = (record: BrowserSessionRecord, context: BrowserContext): Front
     const endpoint = `http://127.0.0.1:${record.port}`;
     return frontReader({
         read: async () => {
+            const picks = record.picks;
             const page = await frontTab(context, endpoint);
-            return [...record.pages.values()].find((entry) => entry.page === page && !entry.closed)?.id;
+            // A tab picked while Chromium was being asked is in front now, whatever the answer says.
+            return record.picks === picks ? [...record.pages.values()].find((entry) => entry.page === page && !entry.closed)?.id : undefined;
         },
         apply: (pageId) => {
             if (record.activePageId !== pageId && record.finishedAt === undefined) {
@@ -107,6 +117,8 @@ const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promis
     }
     entry.url = entry.page.url();
     await readTitle(entry);
+    // Where the window's profile has been, for the address bar's suggestions (history/browsing-feed.ts).
+    noteBrowsing(record.server, entry);
     entry.history = entry.cdp === undefined ? entry.history : ((await historyOf(entry.cdp)) ?? entry.history);
     // Rate-limited on the bus, not here.
     windowChanged(record);
@@ -148,7 +160,12 @@ const watchPageSession = async (record: BrowserSessionRecord, context: BrowserCo
     });
     entry.page.once("close", () => void session.detach().catch(() => undefined));
     await session.send("Page.enable").catch(() => undefined);
+    // allow(silent-catch): its file chooser and permission asks (permissions/arm-page.ts); a page closing has none left.
+    void armPageTools(record, entry.page, entry.id, session, () => windowChanged(record, true)).catch(() => undefined);
     await watchLoading(session, entry.navigation, () => navigationMoved(record, entry));
+    // Its target id, which the tab helper's sound is keyed by (window-summary.ts): read now, so the tab is listed with its
+    // sound from here on rather than once something else asks for the id.
+    await pageTargetId(entry);
     // What arrived before this session opened has a history already.
     entry.history = (await historyOf(session)) ?? entry.history;
     windowChanged(record);
@@ -188,6 +205,7 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
         void placeWindow(record.context, page).catch(() => undefined);
     }
     void notePage(record, entry);
+    watchFavicon(record, entry);
     watchNavigation(page, entry.navigation, () => navigationMoved(record, entry));
     page.on("framenavigated", (frame) => {
         if (frame.parentFrame() === null) {
@@ -200,6 +218,7 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     // Closed tab leaves the strip; active falls back to the newest still-open page until Chromium says which one it put
     // in front. lastPageId is untouched here.
     page.on("close", () => {
+        noteClosed(record, entry);
         entry.closed = true;
         if (record.activePageId === entry.id) {
             record.activePageId = [...record.pages.values()].findLast((other) => !other.closed)?.id;
@@ -245,34 +264,8 @@ const finish = (record: BrowserSessionRecord): void => {
     windowChanged(record);
 };
 
-// State side of the help-request flow (accounts-tools.ts holds the waiter); the view's banner renders from this.
-// Looked up by account, since a profile can only be open in one running session; undefined if that account isn't
-// browsing.
-export const raiseBrowserHelp = (
-    account: string,
-    help: { readonly requestId: string; readonly message: string; readonly requestedAt: number },
-    abandon: (note: string) => void,
-): string | undefined => {
-    const record = [...sessions.values()].find((candidate) => candidate.server === account && candidate.finishedAt === undefined);
-    if (record === undefined) {
-        return undefined;
-    }
-    record.help = help;
-    record.abandonHelp = abandon;
-    windowChanged(record, true);
-    return record.name;
-};
-
-// Clears by requestId, not session name, so this can't clear a newer request raised on the same session.
-export const clearBrowserHelp = (requestId: string): void => {
-    for (const record of sessions.values()) {
-        if (record.help?.requestId === requestId) {
-            record.help = undefined;
-            record.abandonHelp = undefined;
-            windowChanged(record);
-        }
-    }
-};
+// The help-request flow's state side lives in browser-help.ts, over the same windows.
+export { clearBrowserHelp, raiseBrowserHelp } from "./browser-help.js";
 
 // Polls Chromium's DevTools endpoint then attaches over CDP.
 // Tolerant of failure: a session that never attaches still lists (unwatchable but real) rather than vanishing.
@@ -410,6 +403,9 @@ export const adoptBrowserSession = (input: {
     windowChanged(record);
 };
 
+// The running window by this name, for its own tools to answer about (downloads/, uploads/, permissions/, devtools/).
+export const browserWindowRecord = (name: string): BrowserSessionRecord | undefined => (sessions.get(name)?.finishedAt === undefined ? sessions.get(name) : undefined);
+
 // Whether a session by this name is open now; a finished record still listed for its strip is not.
 export const browserSessionRunning = (name: string): boolean => {
     const record = sessions.get(name);
@@ -442,7 +438,9 @@ export const browserSessionBlankPage = (name: string): { readonly page: Page; re
     if (record === undefined || record.finishedAt !== undefined) {
         return undefined;
     }
-    const entry = [...record.pages.values()].find((candidate) => !candidate.closed && (candidate.url === "" || candidate.url === "about:blank"));
+    const entry = [...record.pages.values()].find(
+        (candidate) => !candidate.closed && candidate.deferred === undefined && (candidate.url === "" || candidate.url === "about:blank"),
+    );
     return entry === undefined ? undefined : { page: entry.page, id: entry.id };
 };
 
@@ -526,6 +524,7 @@ export const pickBrowserPage = async (name: string, pageId: string): Promise<Pag
     }
     // allow(silent-catch): a tab closing as it is picked is answered by its own close event.
     await entry.page.bringToFront().catch(() => undefined);
+    record.picks = (record.picks ?? 0) + 1;
     bringForward(record, entry.id);
     windowChanged(record, true);
     return entry.page;

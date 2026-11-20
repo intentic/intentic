@@ -11,6 +11,8 @@ import { watchWindowFailures } from "./window-failures.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { softwareRenderingEnv } from "./software-rendering.js";
 import { spawnAs } from "../../workload/workload-class.js";
+import { ensureWindowSound } from "../media/cast-audio.js";
+import { castdAvailable, castdDir } from "../media/castd.js";
 import { parseJsonWith } from "@intentic/base/json";
 import { readTextIfExists } from "@intentic/base/fs";
 
@@ -43,6 +45,9 @@ export interface OwnerBrowserOptions {
     readonly proxy?: string | undefined;
     // Window placement on the display (chromiumWindowArgs).
     readonly windowArgs: readonly string[];
+    // Unpacked extensions the window loads: the person's own window's tab helper (tab-helper.ts). Not seen by pages: an
+    // extension with no content script and no web-accessible resource has nothing a site can probe for.
+    readonly extensions?: readonly string[] | undefined;
     // Where the launch and close lines go (info level). Absent logs nothing.
     readonly log?: ((fields: Record<string, unknown>, message: string) => void) | undefined;
 }
@@ -72,6 +77,7 @@ export const ownerBrowserArgs = (options: Omit<OwnerBrowserOptions, "executableP
     "--remote-debugging-port=0",
     `--user-data-dir=${options.userDataDir}`,
     ...(options.proxy === undefined ? [] : [`--proxy-server=${options.proxy}`]),
+    ...(options.extensions === undefined || options.extensions.length === 0 ? [] : [`--load-extension=${options.extensions.join(",")}`]),
     ...options.windowArgs,
     "about:blank",
 ];
@@ -148,7 +154,8 @@ export const seedPreferences = async (userDataDir: string, languages: readonly s
 // also tells it to reopen them, unasked, whenever the last run did not end cleanly: and a daemon restarting ends every
 // window uncleanly. The person's own window came back after a sandbox update with every tab it had before beside the
 // one they asked for, the picture on a tab the strip did not select (2026-10-08). Cookies, storage and sign-ins live
-// elsewhere in the profile and stay.
+// elsewhere in the profile and stay. Bringing the person's own tabs back is the daemon's, in order and with the strip
+// agreeing (own-tabs.ts), never Chromium's.
 export const forgetTabs = async (userDataDir: string): Promise<void> => {
     await rm(join(userDataDir, "Default", "Sessions"), { recursive: true, force: true });
 };
@@ -227,21 +234,28 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
     await rm(portFile, { force: true });
     await forgetTabs(options.userDataDir);
     await seedPreferences(options.userDataDir, options.fingerprint.languages);
+    // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
+    // Never the GPU a `--gpus` sandbox inherited (software-rendering.ts). The environment only, not the agent browsers'
+    // ANGLE switches: this window's flags are kept to what a plain desktop start passes, since sign-in risk checks
+    // tell launches apart, and without the host's libraries and ICDs there is no GPU left for it to find.
+    const env: NodeJS.ProcessEnv = {
+        ...softwareRenderingEnv(process.env, options.executablePath),
+        ...detachedStamp("login-browser"),
+        DISPLAY: options.display,
+        TZ: options.fingerprint.timezoneId,
+        LANGUAGE: localeEnv(options.fingerprint.locale),
+    };
+    // Its sound into a sink of its own, which the display's castd sends to whoever watches (cast-audio.ts). Only where
+    // castd serves the window: without it nothing would hear the sink, and the window stays as it was.
+    const sound = castdAvailable() ? await ensureWindowSound(options.display, castdDir()) : undefined;
+    if (sound !== undefined) {
+        env["PULSE_SERVER"] = sound.server;
+        env["PULSE_SINK"] = sound.sink;
+        // A microphone that hears nothing: never another window's sink, whatever a page is allowed.
+        env["PULSE_SOURCE"] = sound.microphone;
+    }
     // Ranked as a service for the OOM killer: after an agent's command, before a turn's runtime.
-    const child = spawnAs({ class: "service" }, options.executablePath, ownerBrowserArgs(options), {
-        // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
-        // Never the GPU a `--gpus` sandbox inherited (software-rendering.ts). The environment only, not the agent browsers'
-        // ANGLE switches: this window's flags are kept to what a plain desktop start passes, since sign-in risk checks
-        // tell launches apart, and without the host's libraries and ICDs there is no GPU left for it to find.
-        env: {
-            ...softwareRenderingEnv(process.env, options.executablePath),
-            ...detachedStamp("login-browser"),
-            DISPLAY: options.display,
-            TZ: options.fingerprint.timezoneId,
-            LANGUAGE: localeEnv(options.fingerprint.locale),
-        },
-        stdio: "ignore",
-    });
+    const child = spawnAs({ class: "service" }, options.executablePath, ownerBrowserArgs(options), { env, stdio: "ignore" });
     const log = options.log ?? ((): void => undefined);
     const openedAt = Date.now();
     log(describeLaunch(options, child.pid), "owner browser: launched");

@@ -1,4 +1,773 @@
 {
+  "browserMedia": {
+    "client": {
+      "$defs": {
+        "ClipboardContent": {
+          "description": "What a clipboard holds, either way across a media socket: plain text, HTML, and a PNG (base64), any of them absent.",
+          "properties": {
+            "html": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "png": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "KeyAction": {
+          "description": "Whether a key event presses, releases, or does both.",
+          "enum": [
+            "down",
+            "up",
+            "press"
+          ],
+          "type": "string"
+        },
+        "PointerAction": {
+          "description": "What a pointer event did.",
+          "enum": [
+            "move",
+            "down",
+            "up",
+            "wheel"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "What the editor sends on a media socket, each a JSON text message. Coordinates are in the picture's own pixels, as\non the browser view socket.",
+      "oneOf": [
+        {
+          "description": "A pointer event, as on the browser view socket. `wheel` is not one: precise scrolling is `scroll`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/PointerAction"
+            },
+            "alt": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "button": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "buttons": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "clickCount": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ctrl": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "shift": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "mouse",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "action",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Scrolling at a point, in picture pixels with their fractions: a trackpad's small steps and a wheel's notches\nalike. castd keeps what a step left over for the next one, so nothing a trackpad sends is lost.",
+          "properties": {
+            "dx": {
+              "format": "double",
+              "type": "number"
+            },
+            "dy": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "scroll",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y",
+            "dx",
+            "dy"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A key by its DOM name (`event.key`, layout already applied: `ą`, `Enter`, `ArrowLeft`), with `code` for the\nphysical key where the name alone is ambiguous. `press` (the default) is a down and an up.",
+          "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/KeyAction"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "alt": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ctrl": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "key": {
+              "type": "string"
+            },
+            "shift": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Text to type as it stands: an IME's commit, dictation, a mobile keyboard's word. Long text is not typed: a paste\nsets the `clipboard` and sends Ctrl+V.",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets the remote clipboard, in order with the keys around it (a paste is this, then Ctrl+V).",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/ClipboardContent"
+            },
+            "type": {
+              "const": "clipboard",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lets go of every key and button castd holds down for this viewer: the editor lost focus mid-chord.",
+          "properties": {
+            "type": {
+              "const": "releaseAll",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The video frame `id` was decoded, and how long decoding took; what castd's bitrate control reads.",
+          "properties": {
+            "decodeMs": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "id": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "ack",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The decoder lost the stream: a keyframe, please.",
+          "properties": {
+            "type": {
+              "const": "keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The viewer's picture box in CSS px and its device pixel ratio: the size the window's screen is asked to take,\nat `scale` display pixels per CSS pixel. Only the viewer driving the window decides it.",
+          "properties": {
+            "height": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scale": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "resize",
+              "type": "string"
+            },
+            "width": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height",
+            "scale"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Nobody can see the picture now: stop sending video (and sound) until `resume`.",
+          "properties": {
+            "type": {
+              "const": "pause",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "resume",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sound on or off for this viewer.",
+          "properties": {
+            "on": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "audio",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "on"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The client's liveness and a round-trip probe: echoed as `pong` with the same `t`.",
+          "properties": {
+            "t": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "ping",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An SDP offer for a peer connection straight to castd, which the viewer makes with the [`RTC_CHANNELS`] and no\nmedia, only where `hello` said `rtc`. castd answers `rtcAnswer`, or `rtcClosed` when it cannot take one. Once its\n`media` channel is open castd says `hello` there and moves the stream onto the channels; until then, and again\nwhenever the peer fails, the stream stays on this socket.",
+          "properties": {
+            "sdp": {
+              "type": "string"
+            },
+            "type": {
+              "const": "rtcOffer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "sdp"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One of the viewer's ICE candidates, as the browser's `RTCIceCandidate.candidate` writes it. castd is an ICE-lite\nagent that learns the viewer's address from its checks, so this is never needed and never harmful.",
+          "properties": {
+            "candidate": {
+              "type": "string"
+            },
+            "sdpMid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "rtcCandidate",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "candidate"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The viewer gave up on its peer connection: castd brings the stream back to this socket with a `hello`.",
+          "properties": {
+            "type": {
+              "const": "rtcClose",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A fresh token for this socket: the one the browser view socket handed the viewer in its latest `media`, sent\nwhenever that does not mean dialling again. castd checks it as at the upgrade and, when it holds and opens the\nsame access the socket has, counts [`MEDIA_TOKEN_GRACE_SECONDS`] from its expiry instead. One that does not hold\nchanges nothing. Taken on the peer's `input` channel as well.",
+          "properties": {
+            "token": {
+              "type": "string"
+            },
+            "type": {
+              "const": "token",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "token"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "BrowserMediaClientMessage"
+    },
+    "closeCodes": {
+      "dropped": 4001,
+      "expired": 4002
+    },
+    "flags": {
+      "key": 1,
+      "refine": 2
+    },
+    "headerLen": 16,
+    "kinds": {
+      "audio": 2,
+      "video": 1
+    },
+    "path": "/system/browser-media",
+    "rtcChannels": {
+      "audio": {
+        "maxRetransmits": 0,
+        "ordered": false
+      },
+      "input": {
+        "maxRetransmits": null,
+        "ordered": true
+      },
+      "media": {
+        "maxRetransmits": null,
+        "ordered": true
+      }
+    },
+    "rtcMessageMax": 32768,
+    "server": {
+      "$defs": {
+        "ClipboardContent": {
+          "description": "What a clipboard holds, either way across a media socket: plain text, HTML, and a PNG (base64), any of them absent.",
+          "properties": {
+            "html": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "png": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "MediaAudio": {
+          "description": "The sound a media socket carries, when it carries any.",
+          "properties": {
+            "channels": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "codec": {
+              "description": "The WebCodecs codec string, `opus`.",
+              "type": "string"
+            },
+            "sampleRate": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "codec",
+            "sampleRate",
+            "channels"
+          ],
+          "type": "object"
+        },
+        "MediaCursor": {
+          "description": "The pointer's look over the picture: a CSS keyword, or the X server's own cursor image (a native menu's, a resize\nedge's), a PNG in base64 with its hotspot, in picture pixels.",
+          "properties": {
+            "css": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hotX": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "hotY": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "png": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "description": "What a media socket sends as JSON text; the pictures and sound travel as binary messages with the\n[`MEDIA_HEADER_LEN`]-byte header.",
+      "oneOf": [
+        {
+          "description": "What the pictures after this one are: their size in display pixels, `scale` of them per CSS pixel, the H.264\ncodec string read off the stream, and the sound's format when there is sound. Sent first, and again whenever\nthe picture changes shape; a keyframe follows it. `readOnly`: input from this viewer is ignored.",
+          "properties": {
+            "audio": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MediaAudio"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "codec": {
+              "type": "string"
+            },
+            "height": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "readOnly": {
+              "type": "boolean"
+            },
+            "rtc": {
+              "description": "castd takes a peer connection on this window (`rtcOffer`): it serves one on an address a viewer on its\nnetwork may reach. Absent from a castd that serves none.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "scale": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "hello",
+              "type": "string"
+            },
+            "width": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height",
+            "scale",
+            "codec",
+            "readOnly"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The pointer's look changed.",
+          "properties": {
+            "cursor": {
+              "$ref": "#/$defs/MediaCursor"
+            },
+            "type": {
+              "const": "cursor",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cursor"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The remote clipboard changed (the page copied, or Ctrl+C in it): for the person's own clipboard.",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/ClipboardContent"
+            },
+            "type": {
+              "const": "clipboard",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "How the stream is doing, about once a second: the round trip, the bitrate castd aims for, frames sent in the\nlast second, and how long frames wait unacknowledged.",
+          "properties": {
+            "fps": {
+              "format": "double",
+              "type": "number"
+            },
+            "queueMs": {
+              "format": "double",
+              "type": "number"
+            },
+            "rttMs": {
+              "format": "double",
+              "type": "number"
+            },
+            "targetKbps": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rttMs",
+            "targetKbps",
+            "fps",
+            "queueMs"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "t": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "pong",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The window's media is gone for good, in words for the person; the viewer must not reconnect.",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "castd's answer to `rtcOffer`: its candidates are in it (ICE-lite, host candidates only), so nothing trickles.",
+          "properties": {
+            "sdp": {
+              "type": "string"
+            },
+            "type": {
+              "const": "rtcAnswer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "sdp"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "castd let go of the viewer's peer connection, or never took it, in words for a log: the stream is on this socket,\nand a `hello` here says so before any picture.",
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "type": {
+              "const": "rtcClosed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "BrowserMediaServerMessage"
+    },
+    "socketDir": "/run/intentic/cast",
+    "tokenGraceSeconds": 600
+  },
   "browserView": {
     "client": {
       "$defs": {
@@ -484,6 +1253,19 @@
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "A fresh `media` now: the viewer must dial its media socket again and the token it holds has lapsed. Answered\nonly where the window has a castd; elsewhere it is nothing.",
+          "properties": {
+            "type": {
+              "const": "media",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ],
       "title": "BrowserViewClientMessage"
@@ -752,6 +1534,34 @@
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "This window's pictures, sound, pointer, keys and clipboard travel on a media socket of their own, answered by the\nwindow's media daemon (castd) rather than by Node: dial `path` with `?token=`, and expect no pictures on this\nsocket. Sent once the window has a castd, and again with a fresh token before the last one expires; absent while\nthe window is shown the old way (no castd on this sandbox, or a browser with no display), whose pictures keep\narriving here. What drives the browser as a program (tabs, addresses, dialogs, `emulate`) stays on this socket.",
+          "properties": {
+            "expiresAt": {
+              "description": "When the token stops being accepted for a new connection, in milliseconds since the epoch. A socket already\nopen is not closed by it. A JSON number: milliseconds since the epoch stay far inside a double's exact range.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "token": {
+              "type": "string"
+            },
+            "type": {
+              "const": "media",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "token",
+            "expiresAt"
           ],
           "type": "object"
         }

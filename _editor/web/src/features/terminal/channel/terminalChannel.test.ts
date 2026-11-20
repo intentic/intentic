@@ -1,5 +1,5 @@
 import { constants, createDeflateRaw } from "node:zlib";
-import { StreamSocket } from "./streamSocket";
+import { StreamSocket } from "../../../client/transport/streamSocket";
 import { type ChannelEvents, socketChannel } from "./terminalChannel";
 
 // The editor's end of a terminal on a WebTransport stream: a WebSocket spoken by hand, read through the same channel a

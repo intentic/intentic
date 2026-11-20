@@ -26,12 +26,13 @@ test("profiles name real packs, and placement/overlayability inference matches e
             expect(profile, `no profile may bake the ${closed} pack: its licence grants no redistribution`).not.toContain(closed);
         }
     }
-    for (const name of ["messaging", "speech"]) {
+    for (const name of ["messaging", "speech", "castd"]) {
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);
     }
     // messaging copies per-commit deploy trees; speech copies a static layer root, which splices above them.
     expect(byName.get("messaging")?.postTrees, "messaging must splice below the tree COPYs").toBe(true);
     expect(byName.get("speech")?.postTrees, "speech copies a static layer root and must splice above the tree COPYs").toBe(false);
+    expect(byName.get("castd")?.postTrees, "castd copies a static layer root and must splice above the tree COPYs").toBe(false);
     // Privileges belong to capability handlers, not packs; rebuild executors grep for the runtime-directive token.
     for (const pack of packs) {
         expect(pack.content.includes("intentic:" + "runtime"), `${pack.name} must not carry the runtime-directive token`).toBe(false);

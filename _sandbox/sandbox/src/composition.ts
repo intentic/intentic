@@ -85,7 +85,7 @@ import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstalls
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { cardDeps } from "./conversations/actor/card-deps.js";
 import { turnStandingOf } from "./conversations/actor/turn-standing.js";
-import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
+import { turnNotice, turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { awaitingResolved } from "./push/notifications.js";
@@ -504,7 +504,6 @@ const createDaemonMembers = (
         }),
         orgPolicy: deps.orgPolicy,
         reach: createReachReporter(config, logger, () => boot),
-        browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger, presentation: presentation.mirror, config })),
         turnGranted: (conversationId: string) => turnStandingOf(conversations, conversationId)?.granted,
         desktopServers: desktopServersOf,
         probeAcpAgent,
@@ -753,8 +752,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         ...capabilitiesParts.slice,
         ...secretsSlice,
         ...brokerSlice,
-        // Read by the turn's credential resolution and the gateway route alike, so a policy change holds from the next
-        // model request whichever runtime sends it.
+        // Read by turns' credential resolution and the gateway route alike: a policy change holds from any runtime's next request.
         ...createPrivacySlice({
             authRoot,
             workspaceRoot: workspace.root,
@@ -799,6 +797,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
             platformIdentityKey: authSlice.platformIdentityKey,
             orgPolicy,
         }),
+        browserRouters: createBrowserRouters(() => ({ ...whole(), turnNotice: turnNotice(conversations) })),
         trial,
         platformTunnel,
         roles,

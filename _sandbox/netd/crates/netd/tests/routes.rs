@@ -357,6 +357,131 @@ async fn a_previews_upgrade_reaches_its_upstream_in_origin_form() {
     assert_eq!(&echoed, b"ping");
 }
 
+// A window's castd on its Unix socket: the request line it was sent goes on `seen`, it answers 101 to anything and
+// echoes, as `upgrade_upstream` does over TCP.
+fn cast_daemon(socket: &std::path::Path) -> mpsc::UnboundedReceiver<String> {
+    std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
+    let _ = std::fs::remove_file(socket);
+    let listener = tokio::net::UnixListener::bind(socket).unwrap();
+    let (seen, lines) = mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        loop {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut byte = [0_u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    if stream.read_exact(&mut byte).await.is_err() {
+                        return;
+                    }
+                    head.push(byte[0]);
+                }
+                let line = String::from_utf8_lossy(&head)
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned();
+                let _ = seen.send(line);
+                let switching = b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
+                if stream.write_all(switching).await.is_err() {
+                    return;
+                }
+                let mut buffer = [0_u8; 1024];
+                while let Ok(read @ 1..) = stream.read(&mut buffer).await {
+                    if stream.write_all(&buffer[..read]).await.is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    lines
+}
+
+async fn head_of(stream: &mut TcpStream) -> String {
+    let mut answer = Vec::new();
+    let mut byte = [0_u8; 1];
+    while !answer.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).await.unwrap();
+        answer.push(byte[0]);
+    }
+    String::from_utf8_lossy(&answer).into_owned()
+}
+
+#[tokio::test]
+async fn a_media_socket_is_spliced_to_its_windows_castd_never_to_node() {
+    let (harness, daemon, preview, _loopback) = started("media", upstream().await).await;
+    let mut lines = cast_daemon(&harness.dir.join("cast/browser-own.sock"));
+    let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+    // The daemon's own port, and the daemon's host on the preview port (where the tunnel's streams are routed alike).
+    for port in [daemon, preview] {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let head = format!(
+            "GET /system/browser-media/browser-own?token=a.b HTTP/1.1\r\nHost: {own}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        );
+        stream.write_all(head.as_bytes()).await.unwrap();
+        let answer = head_of(&mut stream).await;
+        assert!(answer.starts_with("HTTP/1.1 101"), "{answer}");
+        // In origin form with its query, the token castd checks.
+        assert_eq!(
+            lines.recv().await.unwrap(),
+            "GET /system/browser-media/browser-own?token=a.b HTTP/1.1"
+        );
+        stream.write_all(b"frame").await.unwrap();
+        let mut echoed = [0_u8; 5];
+        stream.read_exact(&mut echoed).await.unwrap();
+        assert_eq!(&echoed, b"frame");
+    }
+}
+
+#[tokio::test]
+async fn a_media_socket_nobody_serves_or_names_wrongly_is_answered_by_netd() {
+    let (harness, daemon, _preview, _loopback) = started("media-refused", upstream().await).await;
+    let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+    // `close` beside `Upgrade`, so a refusal ends the connection and its answer can be read to the end.
+    let upgrade = "Connection: Upgrade, close\r\nUpgrade: websocket\r\n";
+    // No castd for that window: netd's own 502, saying which.
+    let answer = raw(
+        daemon,
+        &format!("GET /system/browser-media/browser-gone HTTP/1.1\r\nHost: {own}\r\n{upgrade}\r\n"),
+    )
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 502"), "{answer}");
+    assert!(
+        answer.ends_with("no media daemon is serving the browser session browser-gone"),
+        "{answer}"
+    );
+    // A name that could leave the directory never reaches the filesystem, even with a socket where it would point.
+    let _lines = cast_daemon(&harness.dir.join("escape.sock"));
+    let answer = raw(
+        daemon,
+        &format!("GET /system/browser-media/..%2Fescape HTTP/1.1\r\nHost: {own}\r\n{upgrade}\r\n"),
+    )
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 404"), "{answer}");
+    // Only an upgrade is relayed: castd's own routes are Node's to ask on the socket.
+    let _served = cast_daemon(&harness.dir.join("cast/browser-own.sock"));
+    let answer = raw(
+        daemon,
+        &format!(
+            "GET /system/browser-media/browser-own HTTP/1.1\r\nHost: {own}\r\nConnection: close\r\n\r\n"
+        ),
+    )
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 426"), "{answer}");
+    // A preview's app keeps its own path of the same name.
+    let answer = raw(
+        daemon,
+        &format!("GET /system/browser-mediax HTTP/1.1\r\nHost: {own}\r\nConnection: close\r\n\r\n"),
+    )
+    .await;
+    assert!(
+        answer.ends_with("/system/browser-mediax mark=-"),
+        "{answer}"
+    );
+}
+
 // One request written as it stands, its whole answer read back: for heads a client library would not write.
 async fn raw(port: u16, head: &str) -> String {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();

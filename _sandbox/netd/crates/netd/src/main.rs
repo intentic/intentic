@@ -161,12 +161,19 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         let _ = link.tell(&message);
     });
     let terminals = Terminals::new(Hubs::telling(Tmux::default(), Some(teller)));
+    // The windows' media daemons listen where browser-wire says; a test's netd looks beside its own run directory.
+    let cast_dir = if own {
+        PathBuf::from(browser_wire::BROWSER_MEDIA_SOCKET_DIR)
+    } else {
+        run_dir.join("cast")
+    };
     let netd = Arc::new(Netd::new(
         link,
         http.clone(),
         config,
         terminals.clone(),
         vitals,
+        cast_dir,
     ));
     let certificates = Arc::new(CertificateSlot::default());
     let mut listeners = Listeners::new(netd.clone(), certificates.clone());

@@ -64,6 +64,17 @@ export const RAW_ROUTES = {
     "GET /system/sync/ssh": { sync: "pipe", control: "never", lane: "bulk" },
     "GET /system/browser-profile": { auth: "door", beforeBoot: true, control: "never" },
     "GET /system/browser-view": { auth: "door", beforeBoot: true, control: "never" },
+    // A file the person picked for a page's file chooser, or dropped on one (browser/uploads): operating the window,
+    // like the view's own socket, so the maintainer's. Into a temp folder the daemon cleans, never the workspace.
+    "POST /browser/uploads": { floor: "maintainer", control: "never", lane: "bulk" },
+    // A finished browser download, saved by the person's own browser: navigated to, so no header, and its ticket
+    // (browser.downloadTicket, minted at maintainer) is checked in the handler.
+    "GET /browser/downloads/file": { auth: "door", control: "never", lane: "bulk" },
+    // Chromium's own DevTools for one page, framed by the editor: the frontend's files and the page's DevTools socket,
+    // proxied from the window's debugging port. A frame and its socket send no header, so the ticket is the path's first
+    // segment (browser.devtools, minted at maintainer), checked in the handler. The socket first: it is the narrower.
+    "GET /browser/devtools/{ticket}/ws/{kind}/{target}": { auth: "door", control: "never" },
+    "GET /browser/devtools/{ticket}/*": { auth: "door", control: "never" },
     // The sandbox's own desktop, watched and driven by the owner (desktop/desktop-view.ts); the same query ticket.
     "GET /system/desktop-view": { auth: "door", beforeBoot: true, control: "never" },
     // An event automation's webhook, gated by the automation's own token.

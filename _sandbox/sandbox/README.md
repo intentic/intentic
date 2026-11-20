@@ -709,6 +709,62 @@ flowchart LR
   polled Chromium once a second on its own, and the list called the tab that last navigated the active one, so a tab
   loading behind the others took the strip while the picture stayed put. A page cannot say whether it is in front:
   Playwright's focus emulation keeps every tab "visible".)
+- A window's tabs are drawn by the editor, so what a browser's own strip knows is the daemon's to say
+  (`browser/tabs/browser-tabs.ts`). The tab order is the daemon's (`tab-order.ts`): Chromium's own strip is never
+  seen, so a drag moves a tab in the window's record and every viewer, and the restore, agree. Each tab carries its
+  site's icon as a data: URL of at most 4 KB (`favicons.ts`, `page-favicon.ts`): the address Chromium settled on
+  (`faviconUrl` on its DevTools list), fetched through the tab's own network stack (`Network.loadNetworkResource`),
+  so the person's browser never asks a third-party origin for anything; a multi-size .ico gives up its 32-pixel
+  picture, and icons are cached by address. A running window keeps the tabs it closed, newest first
+  (`closed-tabs.ts`), and Reopen closed tab brings one back at the place it had. The person's own window loads a tiny
+  extension (`tab-helper.ts`) the daemon drives over CDP, for what CDP cannot say or do: whether a tab plays sound,
+  muting it, a copy and a reopen that keep the tab's back and forward (Chromium's own `chrome.sessions`, which
+  records tabs the daemon closes over CDP like any other). Without it (a Chromium that refuses `--load-extension`)
+  there is no sound indicator, and a reopen or a copy opens the address fresh.
+- The person's own window comes back as it stood after an end nobody asked for (a daemon restart, a sandbox update,
+  Chromium crashing): its tabs, in order, with the same one in front, kept in `.intentic/local/browser/_own.tabs.json`
+  (`own-tabs.ts`) as they change. Only the tab in front loads; the rest stand as where they were and load when first
+  picked. Closing the window on purpose forgets them. Chromium's own restore stays off (`forgetTabs` clears its
+  Sessions directory on every start): it reopened every tab unasked beside the one asked for, with the picture on a
+  tab the strip had not selected (2026-10-08). Agents' windows are never restored.
+- What a window does besides its pages is drawn by the editor, since Chromium's own chrome for it is never in the
+  picture, and answered by the `browser` routes (`browser/window-tools.routes.ts`); a window's state carries what is
+  pending. Downloads (`browser/downloads/`): the person's own window saves every file into its profile's folder
+  (`.intentic/local/browser/<profile>.downloads/`, a week, 2 GiB and 100 files) through `Browser.setDownloadBehavior`,
+  and each is fetched onto their computer behind a five-minute ticket (`GET /browser/downloads/file`) or copied into a
+  workspace folder, never `.intentic/` or a `.git`. An agent's window keeps @playwright/mcp's own download handling,
+  which its tools read. Uploads (`browser/uploads/`): a file input's chooser is intercepted and held for the person's own
+  picker; what they pick or drop on the page goes up to a temp folder (`POST /browser/uploads`, 2 GiB a file, 8 GiB in
+  all, kept a day) and is set on the input, or dropped at the point with `Input.dispatchDragEvent`. Permissions
+  (`browser/permissions/`): a script every page runs first wraps the asks (notifications, location, clipboard,
+  camera and microphone) and reports them through a DevTools binding; the person answers in the editor, the answer is
+  kept per site (`.intentic/local/browser/<profile>.permissions.json`) and set on Chromium with `Browser.setPermission`
+  each time a window starts, since a DevTools override lasts only as long as the session that set it. There is no
+  camera or microphone, so a page asking is told none is there. DevTools (`browser/devtools/`): Chromium's own frontend
+  and the page's socket are proxied from the window's debugging port behind a ticket in the path, which the editor frames.
+- Where each browser profile has been is an index of its own (`browser/history/`): `_own` for the person's window,
+  `web` for the agents' credential-free browser, an account's id for its signed-in one, never mixed. The daemon feeds it
+  from every navigation it watches (`browsing-feed.ts`, called as a window's record re-reads a tab): an address change
+  is a visit, typed or followed as Chromium's own navigation list says (an address sent from the editor's address bar
+  arrives as `Page.navigate`, which Chromium records as typed), and a results page of one of the address bar's engines
+  is also a search term. A persistent profile is seeded once from Chromium's own `Default/History`, read from a copy
+  taken with its write-ahead log (Chromium holds the file open, and its newest writes sit in the log), never written.
+  Each page keeps its counts and its newest ten visits, from which frecency is computed; one file per profile under
+  `.intentic/local/browser/_history/` (`browsingHistoryDocument`), saved two seconds after a change and at once after a
+  forget. `GET /system/browsing/history` answers the best 5,000 whole, then, given the cursor of an earlier answer, only
+  what changed since: forgotten addresses as tombstones, and a forgotten stretch of time or everything as a new
+  generation that older cursors miss. `GET /system/browsing/suggest` asks the chosen engine (Brave, Google,
+  DuckDuckGo, Bing, Kagi; the `searchEngine` setting is the editor's to pass) from the sandbox's own address with the
+  person's browser's languages, cut off at 1.5 s and answered as nothing rather than an error, and cached ten minutes.
+  The address bar's ranking is the editor's, on every keystroke.
+- Bookmarks are a tree per profile too (`browser/bookmarks/`): the bar and the other bookmarks as two fixed roots, folders
+  and pages in the order the person put them, each page's icon as the tab carried it when it was kept. A persistent
+  profile is seeded once from Chromium's own `Default/Bookmarks` (read, never written; the bar's to the bar, the rest to
+  the other bookmarks, Chromium's own pages left behind). One file per profile under `.intentic/local/browser/_bookmarks/`
+  (`bookmarksDocument`), saved whole after every change before it is answered, changes queued one at a time per profile.
+  The `bookmarks.*` group lists the whole tree and adds, edits, moves and removes; a folder cannot go inside itself and
+  the roots stay put. Every change is pushed as the `bookmarks` runtime domain, so every star, bar and manager moves at
+  once. Like the profiles around them they do not travel in a bundle.
 - The routers also answer tools of their own, sent to a backend as its own tools: `browser_webmcp_call`
   (`webmcp-call.ts`) and, on `browser`, the ChatGPT kit of [site-kits](../../_shared/site-kits) (`chatgpt_send`,
   `chatgpt_read`, `chatgpt_image`; `chatgpt-kit.ts`), listed only when one of the turn's accounts signs in on
@@ -725,7 +781,8 @@ flowchart LR
   (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser
   routers (`browserServersOf`), and drives it through
   [desktop-automation](../../_devices/desktop-automation)'s frames, the same code a connected machine's screenshots go
-  through. The owner watches and drives it at `GET /system/desktop-view` (video and XTEST, as the browser view);
+  through. The owner watches and drives it at `GET /system/desktop-view` (video and XTEST, as the browser view, or
+  castd's media socket for a viewer that asks with `media=1`, docs/architecture/sandbox.md's media plane);
   driving it holds it, and the agent's input is refused until they hand it back or stop for 20 s. `GET /system/desktop`
   says whether it is up and how many windows are open on it, counted off openbox's client list by one `xprop -spy` and
   pushed as the `desktop` runtime domain: the editor tiles it while a window is open, and says an empty desktop is empty

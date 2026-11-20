@@ -13,6 +13,8 @@ import { areasContract } from "./contracts/areas.contract.js";
 import { auditContract } from "./contracts/audit.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
 import { basesContract } from "./contracts/bases.contract.js";
+import { bookmarksContract } from "./contracts/bookmarks.contract.js";
+import { browserContract } from "./contracts/browser.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
@@ -33,19 +35,19 @@ import { offloadContract } from "./contracts/offload.contract.js";
 import { orgContract } from "./contracts/org.contract.js";
 import { pagesContract } from "./contracts/pages.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
-import { rolesContract } from "./contracts/roles.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { privacyContract } from "./contracts/privacy.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
+import { rolesContract } from "./contracts/roles.contract.js";
 import { runsContract } from "./contracts/runs.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
+import { sealContract } from "./contracts/seal.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { servicesContract } from "./contracts/services.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
-import { sealContract } from "./contracts/seal.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
@@ -71,6 +73,8 @@ export const sandboxContract: {
     audit: typeof auditContract;
     automations: typeof automationsContract;
     bases: typeof basesContract;
+    bookmarks: typeof bookmarksContract;
+    browser: typeof browserContract;
     capabilities: typeof capabilitiesContract;
     chores: typeof choresContract;
     ci: typeof ciContract;
@@ -91,19 +95,19 @@ export const sandboxContract: {
     org: typeof orgContract;
     pages: typeof pagesContract;
     panels: typeof panelsContract;
-    roles: typeof rolesContract;
     ports: typeof portsContract;
     privacy: typeof privacyContract;
     providers: typeof providersContract;
     public: typeof publicContract;
     push: typeof pushContract;
+    roles: typeof rolesContract;
     runs: typeof runsContract;
     safety: typeof safetyContract;
+    seal: typeof sealContract;
     secrets: typeof secretsContract;
     services: typeof servicesContract;
     sessions: typeof sessionsContract;
     settings: typeof settingsContract;
-    seal: typeof sealContract;
     share: typeof shareContract;
     skills: typeof skillsContract;
     system: typeof systemContract;
@@ -123,6 +127,8 @@ export const sandboxContract: {
     audit: auditContract,
     automations: automationsContract,
     bases: basesContract,
+    bookmarks: bookmarksContract,
+    browser: browserContract,
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,
@@ -143,19 +149,19 @@ export const sandboxContract: {
     org: orgContract,
     pages: pagesContract,
     panels: panelsContract,
-    roles: rolesContract,
     ports: portsContract,
     privacy: privacyContract,
     providers: providersContract,
     public: publicContract,
     push: pushContract,
+    roles: rolesContract,
     runs: runsContract,
     safety: safetyContract,
+    seal: sealContract,
     secrets: secretsContract,
     services: servicesContract,
     sessions: sessionsContract,
     settings: settingsContract,
-    seal: sealContract,
     share: shareContract,
     skills: skillsContract,
     system: systemContract,

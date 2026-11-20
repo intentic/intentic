@@ -291,3 +291,30 @@ test("a dropped view dials again the moment the sandbox is reachable, not when i
     // The ladder's floor is a second, so a socket inside half of one came from the sandbox coming back.
     await waitFor(() => expect(sockets).toHaveLength(2), { timeout: 500 });
 });
+
+test("on castd's media socket, a pointer move inside the throttle is held back as on the daemon's", async () => {
+    const { desktopHands } = await import(`./useDesktopView`);
+    const sent: object[] = [];
+    let throttled = false;
+    const hands = desktopHands(
+        {
+            media: { live: ref(true), send: (message) => sent.push(message) },
+            width: ref(1280),
+            height: ref(800),
+            // The screencast's own throttle: a move inside it is answered with nothing.
+            pointerAt: (action, event) =>
+                throttled && action === `move` ? undefined : { type: `mouse`, action, x: event.clientX, y: event.clientY },
+        },
+        ref(true),
+        () => undefined,
+        () => undefined,
+    );
+    hands.onPointer(`move`, pointerAt(10, 20), picture);
+    throttled = true;
+    hands.onPointer(`move`, pointerAt(11, 20), picture);
+    hands.onPointer(`down`, pointerAt(11, 20), picture);
+    expect(sent).toMatchObject([
+        { type: `mouse`, action: `move`, x: 10, y: 20 },
+        { type: `mouse`, action: `down`, x: 11, y: 20, button: 0 },
+    ]);
+});

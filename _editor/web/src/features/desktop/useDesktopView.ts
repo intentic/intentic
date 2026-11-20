@@ -1,11 +1,15 @@
 import { errorMessage } from "@intentic/base/errors";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
 import { keyMessage, pointerMessage, wheelGauge, type DesktopKey, type DesktopMouse, type DesktopPointerAction, type DesktopText } from "./desktopInput";
-import { type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
+import { mediaKey, mediaPointer, mediaScroll } from "../../models/browsers/media/mediaHands";
+import type { MediaPicture } from "../../models/browsers/media/mediaPicture";
+import { type Screencast, type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
 import { socketUrl } from "../../client/sandbox/streams/wsTicket";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
 // display, or of one window on it, into a canvas, and, once the owner takes over, their pointer and keys back onto it.
+// Where castd serves the display, the picture and the owner's hands travel on its media socket instead
+// (useScreencast's media path, mediaHands.ts); the hold and the window's comings and goings stay on this socket.
 // One desktop per sandbox, so the only thing followed is which sandbox is active; nothing reaches the desktop until the
 // owner takes over.
 
@@ -32,6 +36,9 @@ export interface DesktopView {
     readonly driving: Ref<boolean>;
     // True while the owner holds the desktop and the agent's own desktop tools are refused.
     readonly held: Ref<boolean>;
+    // Which picture this is: the daemon's video, or castd's (drawn by the media path's worker on its own canvas).
+    readonly kind: Ref<`video` | `frames` | `media` | undefined>;
+    readonly media: MediaPicture | undefined;
     // Where the video paints; null is the canvas going away, as a template ref reads once unmounted.
     readonly attachCanvas: (canvas: HTMLCanvasElement | null) => void;
     readonly takeOver: () => void;
@@ -76,6 +83,79 @@ export interface DesktopViewOptions {
     readonly visible?: Ref<boolean>;
 }
 
+// The owner's hands onto whichever socket carries the picture: castd's media socket in its own vocabulary while it is
+// live (mediaHands.ts), the daemon's otherwise. Nothing goes unless driving; each input renews the hold. Exported for
+// its test, which hands it a screencast of only what it reads.
+export const desktopHands = (
+    cast: Pick<Screencast<DesktopPointerAction, DesktopMouse, Outgoing>, `pointerAt` | `width` | `height`> & {
+        readonly media: Pick<MediaPicture, `live` | `send`> | undefined;
+    },
+    driving: Ref<boolean>,
+    sendInput: (message: DesktopMouse | DesktopKey | DesktopText) => void,
+    renew: () => void,
+): Pick<DesktopView, `onPointer` | `onWheel` | `onKeyDown` | `onPaste`> => {
+    const wheel = wheelGauge();
+    const media = (): Pick<MediaPicture, `send`> | undefined => (cast.media?.live.value === true ? cast.media : undefined);
+    const toMedia = (message: Parameters<MediaPicture[`send`]>[0] | undefined): void => {
+        if (message !== undefined && driving.value) {
+            media()?.send(message);
+            renew();
+        }
+    };
+    return {
+        onPointer: (action, event, picture) => {
+            // Through the screencast's throttle on either socket, so a 1000 Hz mouse floods neither.
+            const message = cast.pointerAt(action, event, picture);
+            if (message !== undefined && media() !== undefined) {
+                toMedia(mediaPointer(action, event, picture, cast.width.value, cast.height.value));
+            } else if (message !== undefined) {
+                sendInput(message);
+            }
+        },
+        onWheel: (event, picture) => {
+            if (!driving.value) {
+                return;
+            }
+            event.preventDefault();
+            if (media() !== undefined) {
+                toMedia(mediaScroll(event, picture, cast.width.value, cast.height.value));
+                return;
+            }
+            const notches = wheel(event);
+            const at = notches === undefined ? undefined : pointerMessage(`move`, event, picture, cast.width.value, cast.height.value);
+            if (notches !== undefined && at !== undefined) {
+                sendInput({ ...at, action: `wheel`, ...notches });
+            }
+        },
+        onKeyDown: (event) => {
+            if (!driving.value) {
+                return;
+            }
+            const onMedia = media() === undefined ? undefined : mediaKey(event);
+            const onDaemon = media() === undefined ? keyMessage(event) : undefined;
+            if (onMedia !== undefined || onDaemon !== undefined) {
+                event.preventDefault();
+            }
+            toMedia(onMedia);
+            if (onDaemon !== undefined) {
+                sendInput(onDaemon);
+            }
+        },
+        onPaste: (event) => {
+            const text = event.clipboardData?.getData(`text/plain`);
+            if (!driving.value || text === undefined || text === ``) {
+                return;
+            }
+            event.preventDefault();
+            if (media() === undefined) {
+                sendInput({ type: `text`, text });
+            } else {
+                toMedia({ type: `text`, text });
+            }
+        },
+    };
+};
+
 // Follows `sandbox` (any value that changes when the active sandbox does): a change tears the socket down and dials
 // the new one's desktop. Undefined dials nothing.
 export const useDesktopView = (sandbox: Ref<string | undefined>, options: DesktopViewOptions = {}): DesktopView => {
@@ -83,7 +163,6 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
     const driving = ref(false);
     const held = ref(false);
     const hold = holdClock(held);
-    const wheel = wheelGauge();
 
     // The screencast below, declared ahead so every verb can say something on it.
     const send = (message: Outgoing): void => cast.live.send(message);
@@ -120,6 +199,10 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
     const cast = useScreencast<DesktopPointerAction, DesktopMouse, Outgoing>({
         mint: () => (windowId === undefined ? socketUrl(`/system/desktop-view`) : socketUrl(`/system/desktop-view`, { window: windowId })),
         pointer: pointerMessage,
+        media: true,
+        onMediaDrop: () => {
+            status.value = { kind: `reconnecting` };
+        },
         visible: options.visible,
         onMessage,
         onReady: () => {
@@ -199,6 +282,8 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
         height: cast.height,
         driving,
         held,
+        kind: cast.kind,
+        media: cast.media,
         attachCanvas: (canvas) => video.attach(canvas),
         takeOver: () => {
             driving.value = true;
@@ -208,37 +293,6 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
             driving.value = false;
             send({ type: `control`, driving: false });
         },
-        onPointer: (action, event, picture) => {
-            const message = cast.pointerAt(action, event, picture);
-            if (message !== undefined) {
-                sendInput(message);
-            }
-        },
-        onWheel: (event, picture) => {
-            if (!driving.value) {
-                return;
-            }
-            event.preventDefault();
-            const notches = wheel(event);
-            const at = notches === undefined ? undefined : pointerMessage(`move`, event, picture, cast.width.value, cast.height.value);
-            if (notches !== undefined && at !== undefined) {
-                sendInput({ ...at, action: `wheel`, ...notches });
-            }
-        },
-        onKeyDown: (event) => {
-            const message = driving.value ? keyMessage(event) : undefined;
-            if (message !== undefined) {
-                event.preventDefault();
-                sendInput(message);
-            }
-        },
-        onPaste: (event) => {
-            const text = event.clipboardData?.getData(`text/plain`);
-            if (!driving.value || text === undefined || text === ``) {
-                return;
-            }
-            event.preventDefault();
-            sendInput({ type: `text`, text });
-        },
+        ...desktopHands(cast, driving, sendInput, () => held.value && hold.renew()),
     };
 };

@@ -258,6 +258,13 @@ export const turnRunOf = (actors: Pick<HoldingsIndex, "holdings">, conversationI
     return run;
 };
 
+// A notice row in a conversation's running turn, for a part of the sandbox below the turn's layer that has something to
+// say in it (the browser's recordings, browser/media/agent-recording.ts); nothing when no turn runs.
+export const turnNotice =
+    (actors: Pick<HoldingsIndex, "holdings">) =>
+    (conversationId: string, text: string): void =>
+        turnRunOf(actors, conversationId)?.note({ role: "notice", text });
+
 // The conversation's run while it is live; undefined once it has settled, however recently.
 export const liveRunOf = (actors: Pick<HoldingsIndex, "holdings">, conversationId: string): LiveRun | undefined => {
     const run = turnRunOf(actors, conversationId);

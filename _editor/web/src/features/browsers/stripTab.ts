@@ -11,6 +11,14 @@ export interface StripTab {
     // The hover's second line: an address, or a state worth a sentence.
     readonly note?: string | undefined;
     readonly icon: IconName;
+    // The site's own icon, a data: URL the sandbox fetched (so drawing it asks nothing of the site); drawn in place of
+    // the glyph while the tab rests, never while it turns or warns.
+    readonly favicon?: string | undefined;
+    // Whether the tab is playing sound, or has had it muted: a speaker after the title that mutes and unmutes it.
+    readonly sound?: `playing` | `muted` | undefined;
+    // Its window's picture is being recorded and this is the tab in front, what the recording shows: a red dot after
+    // the title.
+    readonly recording?: boolean | undefined;
     // What the glyph says, for a reader who cannot see it: spoken after the title, never drawn.
     readonly kind?: string | undefined;
     // A colour for the glyph, where the kind has a state to show (a live app running, starting, stopped).
@@ -18,6 +26,8 @@ export interface StripTab {
     // The glyph turns while the tab is on its way (an app starting, a page loading).
     readonly spin?: boolean | undefined;
     readonly closable: boolean;
+    // It can be dragged along its own run (one window's pages), and has a menu of its own on a right-click.
+    readonly movable?: boolean | undefined;
     // Pins sit before the web pages, set off by a hairline; the strip draws the seam where the group changes.
     readonly pinned: boolean;
     // The window a web page lives in, when the strip names whose tabs are whose: its tabs run together behind one label.
@@ -77,10 +87,24 @@ export const stripItems = (tabs: readonly StripTab[]): StripItem[] =>
 // show: turning while it is on its way, a warning on the error page with why on hover, the globe at rest. A daemon from
 // before those fields says none of this, and the tab rests as it always did (2026-11-18: a click that sent a page to a
 // host that never answered looked like a click that did nothing).
-export const pageTabLook = (page: BrowserPage): Pick<StripTab, `note` | `icon` | `spin` | `tint`> => {
+// At rest, the site's own icon stands in for the globe where the sandbox could fetch one (2026-11-19), and a tab
+// playing sound or muted says so after its title.
+export const pageTabLook = (page: BrowserPage): Pick<StripTab, `note` | `icon` | `spin` | `tint` | `favicon` | `sound`> => {
     const note = page.url === `` ? undefined : page.error === undefined ? page.url : `${page.url} · ${page.error}`;
+    const sound = page.muted === true ? `muted` : page.audible === true ? `playing` : undefined;
     if (page.loading === true) {
-        return { note, icon: `spinner`, spin: true };
+        return { note, icon: `spinner`, spin: true, sound };
     }
-    return page.error === undefined ? { note, icon: `globe` } : { note, icon: `exclamation-triangle`, tint: `text-warning` };
+    return page.error === undefined
+        ? { note, icon: `globe`, favicon: page.favicon, sound }
+        : { note, icon: `exclamation-triangle`, tint: `text-warning`, sound };
+};
+
+// Where a tab dragged along its run lands: the run's tab ids with the dragged one taken out and put back at `to`.
+// Only tabs of the same run (one window's pages, never a pin) trade places; anything else stays as it is.
+export const runOf = (tabs: readonly StripTab[], id: string): StripTab[] => {
+    const tab = tabs.find((candidate) => candidate.id === id);
+    return tab === undefined || tab.movable !== true
+        ? []
+        : tabs.filter((candidate) => candidate.movable === true && !candidate.pinned && candidate.group?.id === tab.group?.id);
 };

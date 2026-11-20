@@ -1,0 +1,34 @@
+From 8ad65397cc7b189f343342a9107dd693361119f4 Mon Sep 17 00:00:00 2001
+From: "tembo[bot]" <208362400+tembo-io[bot]@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 04:39:00 +0000
+Subject: [PATCH 5/6] Skip constant macroblocks only where the full path would
+ at emergency QPs
+
+The full path's mb_info fast skip compares the reference's effective QP with h->mb.i_qp after
+mb_analyse_init_qp, which clamps an emergency QP above QP_MAX_SPEC to QP_MAX_SPEC (it only sets
+lambda from the higher one). macroblock_skip_constant compared it with the unclamped QP, so under
+VBV emergency QPs it coded as P_SKIP a macroblock the full path analyses (and may code as P_L0
+with a residual), and the stream was no longer the full path's. It compares with the clamped QP
+now, and stores the analysis QP as the full path does.
+---
+ encoder/encoder.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/encoder/encoder.c b/encoder/encoder.c
+index 253838f..07c72d5 100644
+--- a/encoder/encoder.c
++++ b/encoder/encoder.c
+@@ -2790,7 +2790,9 @@ static int macroblock_skip_constant( x264_t *h, int mb_x, int mb_y )
+     int qp = x264_ratecontrol_mb_qp( h );
+     if( h->param.rc.i_aq_mode && h->param.analyse.i_subpel_refine < 10 )
+         qp = abs(qp - h->mb.i_last_qp) == 1 ? h->mb.i_last_qp : qp;
+-    if( h->fref[0][0]->effective_qp[mb_xy] > qp )
++    /* The full path compares against the QP x264_mb_analyse_init_qp codes with, which an
++     * emergency QP above QP_MAX_SPEC only sets lambda from; it stores the QP it analysed at. */
++    if( h->fref[0][0]->effective_qp[mb_xy] > X264_MIN( qp, QP_MAX_SPEC ) )
+         return 0;
+     h->fdec->effective_qp[mb_xy] = qp;
+ 
+-- 
+2.50.1
+

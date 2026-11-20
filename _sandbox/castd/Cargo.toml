@@ -1,0 +1,70 @@
+# castd: one window's picture, sound and input, served on a Unix socket. A workspace of its own rather than a member of
+# netd's: it links x264, libyuv, Opus and PulseAudio, which netd must keep building without.
+[workspace]
+
+[package]
+name = "castd"
+edition = "2024"
+version = "0.1.0"
+publish = false
+# The capture, encoder, flow control, input and recording code is voxl's (MIT, see LICENSE and README.md).
+license = "MIT"
+
+[lib]
+name = "castd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "castd"
+path = "src/main.rs"
+
+[[bin]]
+name = "castd-bench"
+path = "src/bin/castd-bench.rs"
+
+[features]
+default = ["audio", "nvenc"]
+# PulseAudio monitor -> Opus. Without it castd links neither library and its hello never offers sound.
+audio = []
+# NVIDIA's hardware encoder, behind `--encoder nvenc|auto`. Builds against the ffnvcodec headers and links nothing:
+# the driver's libnvidia-encode and libcuda are opened at runtime, so the binary runs where there is no NVIDIA driver.
+nvenc = ["dep:libloading"]
+
+[dependencies]
+browser-wire = { path = "../netd/crates/browser-wire" }
+axum = { version = "0.8", default-features = false, features = ["ws", "http1", "tokio", "query"] }
+base64 = "0.22"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hmac = "0.12"
+libc = "0.2"
+# The NVIDIA driver's libraries, opened at runtime by the nvenc feature.
+libloading = { version = "0.8", optional = true }
+log = "0.4"
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+nix = { version = "0.31", features = ["fs", "poll", "time", "signal"] }
+parking_lot = "0.12"
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+# Sans-IO WebRTC for a viewer's peer connection (src/rtc): castd hands it datagrams and timeouts and sends what it
+# writes, so one UDP socket and castd's own runtime carry every viewer's peer. Always built, since it is pure Rust and
+# links nothing of the system's; rust-crypto rather than the default aws-lc-rs, which needs cmake and a C toolchain.
+str0m = { version = "0.25", default-features = false, features = ["rust-crypto"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
+tokio-tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
+x11rb = { version = "0.13", features = ["shm", "damage", "xfixes", "xtest", "xinput", "randr"] }
+
+[build-dependencies]
+bindgen = "0.72"
+pkg-config = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+# A panic in a connection's task ends that task and nothing else; one in the capture or encode thread ends the process
+# (main.rs's hook), since a window whose picture stopped is better restarted by the daemon than left frozen.
+panic = "unwind"
+debug = 1

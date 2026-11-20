@@ -325,6 +325,10 @@
         "_tools/*": {
             "entry": ["src/{index,cli,main}.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
+        // The viewer and the workload pages are bundled by path for the browser (src/pages.ts), so no import reaches them.
+        "_tools/castbench": {
+            "entry": ["src/cli.ts", "src/client/decoder.ts", "src/pages/workload.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
         // The probe is spawned under Valgrind by path and each scenario is imported by its file name, so neither is
         // reachable through an import.
         "_tools/perf": {

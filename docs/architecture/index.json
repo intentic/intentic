@@ -1961,6 +1961,21 @@
       "to": "_tools/tsconfig"
     },
     {
+      "dev": false,
+      "from": "_tools/castbench",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_tools/castbench",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_tools/castbench",
+      "to": "_tools/tsconfig"
+    },
+    {
       "dev": true,
       "from": "_tools/code-read",
       "to": "_tools/testing"
@@ -2290,14 +2305,14 @@
       "anchors": [],
       "behind": 0,
       "dir": "_devices/keyring",
-      "files": 104,
+      "files": 106,
       "hasTests": true,
-      "loc": 12491,
+      "loc": 12643,
       "name": "@intentic/keyring",
       "oneLiner": "intentic-keyring, the password vault behind Passwords on a user's own computer: a protected service of its own beside intentic-machine that types a secret into a window, answers an ssh or sudo…",
-      "readmeRev": "a6f0888d630401dc27dc58fd7068cf8b434c0b1e",
+      "readmeRev": "0391375c9ee0d9da122535ba71fb3ff3cc5d474d",
       "stale": false,
-      "updatedAt": 1794433569000
+      "updatedAt": 1795004170000
     },
     {
       "anchors": [
@@ -2330,16 +2345,17 @@
           "what": "the shapes as text in, lines out; held to the layout fixture ic shares."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "devices",
       "dir": "_devices/local-agent",
       "files": 18,
       "hasTests": true,
-      "loc": 3818,
+      "loc": 3839,
       "name": "@intentic/local-agent",
       "oneLiner": "The shared plumbing for intentic CLIs that run on a user's own computer: a private state directory, login autostart, re-launching itself, and one background agent found again by pidfile.",
       "readmeRev": "3498f89d5cacaf5e95272f2c24a6ecb5ca37f129",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1794945858000
     },
     {
@@ -2377,7 +2393,7 @@
           "what": "new folder, move, copy, and the delete that goes to the system's trash."
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "devices",
       "dir": "_devices/local-files",
       "files": 40,
@@ -2385,10 +2401,9 @@
       "loc": 5649,
       "name": "@intentic/local-files",
       "oneLiner": "intentic-files, the desktop app's sidecar: it serves the folders and documents the app opens from the user's own disk to the editor's file views, over loopback, one grant per window.",
-      "readmeRev": "aaf1f9289da6893273bc08375088797c025ddbf1",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1792581368000
+      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
+      "stale": false,
+      "updatedAt": 1795025063000
     },
     {
       "anchors": [
@@ -2460,14 +2475,14 @@
       "behind": 0,
       "component": "devices",
       "dir": "_devices/machine",
-      "files": 317,
+      "files": 321,
       "hasTests": true,
-      "loc": 60430,
+      "loc": 61669,
       "name": "@intentic/machine",
       "oneLiner": "intentic-machine, the one agent on a user's own computer: it lets a paired sandbox work on the device under scopes enforced locally, and mirrors a sandbox's folder and ports onto it.",
-      "readmeRev": "3498f89d5cacaf5e95272f2c24a6ecb5ca37f129",
+      "readmeRev": "513a1877e6e211356ada33e2877b7304f793c601",
       "stale": false,
-      "updatedAt": 1794945858000
+      "updatedAt": 1795101024000
     },
     {
       "anchors": [
@@ -2800,16 +2815,16 @@
           "what": "and src/device/intenticOs/ThisComputer.vue — Intentic OS: this computer's network, sound, screens, keyboard and drives as ic os reports them, the changes the This computer cards make, and the thread that watches the drives."
         }
       ],
-      "behind": 2,
+      "behind": 4,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 160,
       "hasTests": true,
-      "loc": 21408,
+      "loc": 21419,
       "name": "@intentic/desktop-app",
       "oneLiner": "The Tauri app for Windows and Linux that opens on the hosted workspace's Home from the first launch, opens the editor on a folder of the user's own computer with no account, runs sandboxes on that…",
       "readmeRev": "0635a6adc5ada32536ad23b7ae3061780c6ca616",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794568665000
     },
@@ -2919,15 +2934,15 @@
           "what": "an open conversation's rows and how a run's patches change them."
         }
       ],
-      "behind": 2,
+      "behind": 4,
       "component": "editor",
       "dir": "_editor/mobile-core",
       "files": 47,
       "hasTests": true,
-      "loc": 9686,
+      "loc": 9705,
       "oneLiner": "The native mobile client's Rust core: everything the app does that is not drawing or the platform's own APIs, so the Kotlin above it (and a Swift app later) stays a thin layer of views.",
       "readmeRev": "5230cca04e0f6ee23f16e065f0d0f95068d4b47d",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794251838000
     },
@@ -3002,18 +3017,18 @@
           "what": "the <Button> tiers and how each maps onto PrimeVue."
         }
       ],
-      "behind": 29,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 255,
+      "files": 254,
       "hasTests": false,
-      "loc": 31583,
+      "loc": 31730,
       "name": "@intentic/ui",
       "oneLiner": "The design system every editor surface mounts, holding the Vue components, composables, icons, theme tokens, translations and the product's one markdown engine.",
-      "readmeRev": "3389cba6c7403d20d1f275ceed87f5012fd74add",
-      "reason": "29 commits have touched this package since its README was written",
+      "readmeRev": "98d679daa29fb8c495b254689a4380726244b169",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1793800471000
+      "updatedAt": 1795090185000
     },
     {
       "anchors": [
@@ -3042,17 +3057,18 @@
           "what": "the persistent shell, split by form factor."
         }
       ],
-      "behind": 0,
+      "behind": 2,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 3378,
+      "files": 3396,
       "hasTests": true,
-      "loc": 475766,
+      "loc": 477649,
       "name": "@intentic/web",
       "oneLiner": "The Vue app the user works in, with files, chat, terminals and agents, talking to the platform for the account and straight to the sandbox daemon for everything else.",
-      "readmeRev": "4c0d0cb51e5d761aed4291f8690fe51df67e073b",
-      "stale": false,
-      "updatedAt": 1795000945000
+      "readmeRev": "790451ced52868a02877ed726943aa8840d79895",
+      "reason": "2 commits have touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1795115196000
     },
     {
       "anchors": [
@@ -3144,7 +3160,7 @@
           "what": "in-place post editing, saved as typed."
         }
       ],
-      "behind": 5,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/approvals",
       "files": 28,
@@ -3152,10 +3168,9 @@
       "loc": 2611,
       "name": "@intentic/ext-approvals",
       "oneLiner": "The Approvals rail view: the queue of everything the agent prepared but may not do unasked, from posts and actions to held automation wakes and workspace hooks, with a badge on its tile for every…",
-      "readmeRev": "3d91839fe3215077c18d66e89798669940691408",
-      "reason": "5 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1793040100000
+      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
+      "stale": false,
+      "updatedAt": 1795025063000
     },
     {
       "anchors": [
@@ -3200,7 +3215,7 @@
           "what": "the week grid, its lane and its agenda; src/calendar/CalendarPeek.vue is the card a slot opens."
         }
       ],
-      "behind": 3,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/automations",
       "files": 77,
@@ -3208,10 +3223,10 @@
       "loc": 9535,
       "name": "@intentic/ext-automations",
       "oneLiner": "The Automations rail view, where the owner creates, edits and watches the agent's wake-ups: a trigger, an optional guard and the prompt the agent wakes with.",
-      "readmeRev": "725feb4aa3ce978915501daca9f37684855aabee",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1793147390000
+      "updatedAt": 1795025063000
     },
     {
       "anchors": [
@@ -3447,7 +3462,7 @@
           "what": "the card, listener events, watcher process and template."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/google-workspace",
       "files": 40,
@@ -3456,7 +3471,8 @@
       "name": "@intentic/ext-google-workspace",
       "oneLiner": "The Google Workspace connection: one card that gives the agent gw, a CLI for Gmail, Calendar, Drive, Docs, Sheets and Contacts, plus a watcher that wakes automations on new mail and upcoming meetings.",
       "readmeRev": "8694755c6c380b82483462fff4b9d6e568ee312d",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1794406174000
     },
     {
@@ -3608,15 +3624,15 @@
           "what": ": the entry the desktop app imports."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "dir": "_extensions/passwords",
       "files": 32,
       "hasTests": true,
-      "loc": 4128,
+      "loc": 4170,
       "name": "@intentic/ext-passwords",
       "oneLiner": "Passwords is the owner's password manager.",
       "readmeRev": "056ac99c1b5188acaba7463e4cbe7cbcfe827c7d",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794428397000
     },
@@ -4081,9 +4097,13 @@
         {
           "path": "_os/os-image/install-test.sh",
           "what": "the installer end to end, with a software TPM and Secure Boot."
+        },
+        {
+          "path": "_os/os-image/publish-download.sh",
+          "what": "a release's ISO and VM disk, up to the R2 bucket intentic.dev/os serves."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "os",
       "dir": "_os/os-image",
       "files": 0,
@@ -4091,10 +4111,9 @@
       "loc": 0,
       "name": "@intentic/os-image",
       "oneLiner": "The Intentic OS images: a bootc container image of Fedora that boots straight into Docker, ic and a first sandbox that manages the machine, plus the scripts that build it, turn it into a disk or an…",
-      "readmeRev": "ebc5d412f33a41e47f623b0be1688c591feb7770",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1792487607000
+      "readmeRev": "935fb3299f176016918d8ef13490bcf964290c60",
+      "stale": false,
+      "updatedAt": 1795016814000
     },
     {
       "anchors": [
@@ -4131,16 +4150,16 @@
           "what": "the hostname and signed grant each sandbox gets."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "platform",
       "dir": "_platform/api",
       "files": 215,
       "hasTests": true,
-      "loc": 42519,
+      "loc": 42546,
       "name": "@intentic/api",
       "oneLiner": "The platform's HTTP server (@intentic/api): sign-in, the registry of sandboxes and their addresses, hosted Fly machines, the hosted plan and the agent wallet.",
       "readmeRev": "dc968a9064ec0b44784a3eb5da4e52f20da4ca1d",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794953727000
     },
@@ -4171,7 +4190,7 @@
           "what": "every setting and its env var."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "platform",
       "dir": "_platform/ingress",
       "files": 32,
@@ -4180,7 +4199,8 @@
       "name": "@intentic/ingress",
       "oneLiner": "The edge every sandbox hostname points at: it terminates TLS for them and carries browser traffic down the tunnels sandboxes dial, hosted ones included, over TCP, or over QUIC where it is turned on…",
       "readmeRev": "5230cca04e0f6ee23f16e065f0d0f95068d4b47d",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1794251838000
     },
     {
@@ -4202,7 +4222,7 @@
           "what": "a guarded forward fix, the model for the runbook below."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "platform",
       "dir": "_platform/prisma",
       "files": 73,
@@ -4211,7 +4231,7 @@
       "name": "@intentic/prisma",
       "oneLiner": "The platform's Postgres schema, its append-only migration history and the Prisma client generated from them, shared as @intentic/prisma.",
       "readmeRev": "5f107bad18835d4c7f6ffb5e9cdd2049cc05b84d",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794415015000
     },
@@ -4250,10 +4270,10 @@
       "loc": 2412,
       "name": "@intentic/agent-context",
       "oneLiner": "What a coding agent is told as a session opens, and the per-session readings that show whether it helped, shared by the sandbox daemon and the Claude Code plugin.",
-      "readmeRev": "87ba260084bfdd7b2764046ffd539681c199d818",
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1794311755000
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [],
@@ -4265,9 +4285,9 @@
       "loc": 1784,
       "name": "@intentic/claude-plugin",
       "oneLiner": "Trims Bash output before Claude reads it, opens each session with a map of the project, teaches the fileq CLI, and reports what each of these saved.",
-      "readmeRev": "1f2a93e190c12abb5b6301db955c9a72b77c57f0",
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
       "stale": false,
-      "updatedAt": 1793958984000
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -4331,7 +4351,7 @@
           "what": "fileq render: conversion, rasterizing and the render cache."
         }
       ],
-      "behind": 11,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/fileq",
       "files": 62,
@@ -4339,10 +4359,9 @@
       "loc": 8962,
       "name": "@intentic/fileq",
       "oneLiner": "A CLI that shows an agent the contents of binary workspace files (Office documents, PDFs, images, audio, archives) as budgeted markdown, cached by content, and checks and draws the documents an…",
-      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
-      "reason": "11 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1792087577000
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
+      "stale": false,
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -4462,7 +4481,7 @@
           "what": "ic image prefetch and the cache connect loads; src/fetch.rs"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/ic",
       "files": 133,
@@ -4470,7 +4489,8 @@
       "loc": 84666,
       "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, gets Docker there first, and takes Intentic off it again.",
       "readmeRev": "448b334a436b7278fc3d80c51226a3b047e63c80",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1794996028000
     },
     {
@@ -4644,16 +4664,17 @@
           "what": "the real binary on real ports: routing, preview relay, TLS, upgrades."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/netd",
       "files": 0,
       "hasTests": false,
       "loc": 0,
       "oneLiner": "The sandbox's network daemon, named the Unix way (like sshd): a Rust binary that owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and keeps the daemon…",
-      "readmeRev": "e732bf18066bb078065c0fdc3114373592fe9df4",
-      "stale": false,
-      "updatedAt": 1794917201000
+      "readmeRev": "84628abeb1fa6a7ae3e52f4dbb32eb176e9d027e",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1795037700000
     },
     {
       "anchors": [
@@ -4670,16 +4691,16 @@
           "what": "where netd answers the vitals this crate shapes."
         }
       ],
-      "behind": 2,
+      "behind": 1,
       "dir": "_sandbox/netd/crates/browser-wire",
       "files": 1,
       "hasTests": false,
-      "loc": 351,
-      "oneLiner": "Everything a browser sees of a sandbox's netd and of the edge in front of it outside the daemon's oRPC contract: the terminal socket, netd's vitals, the WebTransport path and the verdict the edge…",
-      "readmeRev": "3b22a8b9e928475013f891963a1b8a72c0cc9354",
-      "reason": "2 commits have touched this package since its README was written",
+      "loc": 1070,
+      "oneLiner": "Everything a browser sees of a sandbox's netd and of the edge in front of it outside the daemon's oRPC contract: the terminal socket, the browser view socket, netd's vitals, the WebTransport path…",
+      "readmeRev": "84628abeb1fa6a7ae3e52f4dbb32eb176e9d027e",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1792182619000
+      "updatedAt": 1795037700000
     },
     {
       "anchors": [
@@ -4856,8 +4877,12 @@
           "what": "filterOutput, filterRun and the sandbox's adapter."
         },
         {
-          "path": "_sandbox/output-cleaners/src/filter-stats.mjs",
+          "path": "_sandbox/output-cleaners/src/stats/filter-stats.mjs",
           "what": "the savings summary every report shares."
+        },
+        {
+          "path": "_sandbox/output-cleaners/src/test-runs.mjs",
+          "what": ", src/test-outcomes.mjs, src/test-digest.mjs and"
         },
         {
           "path": "_sandbox/output-cleaners/src/retrieve-output.mjs",
@@ -4871,14 +4896,14 @@
       "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/output-cleaners",
-      "files": 23,
+      "files": 30,
       "hasTests": true,
-      "loc": 4272,
+      "loc": 5845,
       "name": "@intentic/output-cleaners",
       "oneLiner": "Trims a coding agent's Bash output before the model reads it, keeps the raw text retrievable, and ledgers what each cleaner saved.",
-      "readmeRev": "936dcdd845e48328c67b031f36d95320d943656c",
+      "readmeRev": "062a18699bf536af8de8cb4e9bb02f9d933712ba",
       "stale": false,
-      "updatedAt": 1794958579000
+      "updatedAt": 1795119931000
     },
     {
       "anchors": [
@@ -4954,18 +4979,18 @@
           "what": "provider and harness adapter selection."
         }
       ],
-      "behind": 3,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 3516,
+      "files": 3601,
       "hasTests": true,
-      "loc": 567855,
+      "loc": 584259,
       "name": "@intentic/sandbox",
       "oneLiner": "The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.",
-      "readmeRev": "5929f9fc5a3a1841fff82d682116e5a3c2a53d8d",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "062a18699bf536af8de8cb4e9bb02f9d933712ba",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1794995166000
+      "updatedAt": 1795119931000
     },
     {
       "anchors": [
@@ -5169,7 +5194,7 @@
           "what": "how a files-to-include pattern is read, as ripgrep's -g reads it."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "search",
       "dir": "_search/text-search",
       "files": 11,
@@ -5177,10 +5202,9 @@
       "loc": 823,
       "name": "@intentic/text-search",
       "oneLiner": "The searches behind the editor's search box: text in files and file names, each one a ripgrep walk of the tree as it is on disk, with no index to build or keep.",
-      "readmeRev": "8f8c029305c484b88a06900cea7d27d973db473e",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795001010000
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
+      "stale": false,
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -5214,12 +5238,12 @@
       "dir": "_shared/api-contract",
       "files": 16,
       "hasTests": true,
-      "loc": 2510,
+      "loc": 2524,
       "name": "@intentic/api-contract",
       "oneLiner": "The contracts the platform api is written against: the editor's oRPC contract, and the table of plain routes machines call on it.",
-      "readmeRev": "936dcdd845e48328c67b031f36d95320d943656c",
+      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
       "stale": false,
-      "updatedAt": 1794958579000
+      "updatedAt": 1795025063000
     },
     {
       "anchors": [
@@ -5240,7 +5264,7 @@
           "what": "which effects each kind discloses."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "shared",
       "dir": "_shared/capability-catalog",
       "files": 10,
@@ -5249,7 +5273,8 @@
       "name": "@intentic/capability-catalog",
       "oneLiner": "The catalog of capability tiles an owner can connect, with each tile's add form and the side effects connecting it has, shared by the editor and the daemon.",
       "readmeRev": "936dcdd845e48328c67b031f36d95320d943656c",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1794958579000
     },
     {
@@ -5406,18 +5431,17 @@
           "what": "sandboxPoll and sandboxLedger for work done off screen."
         }
       ],
-      "behind": 7,
+      "behind": 0,
       "component": "shared",
       "dir": "_shared/extension-api",
       "files": 19,
       "hasTests": true,
-      "loc": 2572,
+      "loc": 2576,
       "name": "@intentic/extension-api",
       "oneLiner": "The versioned public API an intentic extension compiles against: IntenticApi for its browser half, ExtensionServerApi for its backend half, and the helpers both halves share.",
-      "readmeRev": "06e0a3263e7c4b591f3445bffb0d0ee2a91807ab",
-      "reason": "7 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1793039333000
+      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
+      "stale": false,
+      "updatedAt": 1795025063000
     },
     {
       "anchors": [
@@ -5482,16 +5506,16 @@
           "what": "where the shell publishes its instances to extension bundles."
         }
       ],
-      "behind": 7,
+      "behind": 8,
       "component": "shared",
       "dir": "_shared/extension-ui",
       "files": 12,
       "hasTests": false,
-      "loc": 1493,
+      "loc": 1504,
       "name": "@intentic/extension-ui",
       "oneLiner": "The UI kit extensions render with: a curated slice of the editor's design system that the host supplies at runtime, so extension views use the shell's own component instances.",
       "readmeRev": "dc51096a61352ddecef3e6f4c530be5b1395dccd",
-      "reason": "7 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1792539105000
     },
@@ -5593,18 +5617,18 @@
           "what": "a narrow entry point, one of several that keep small bundles off the barrel."
         }
       ],
-      "behind": 67,
+      "behind": 3,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
-      "files": 511,
+      "files": 517,
       "hasTests": true,
-      "loc": 71700,
+      "loc": 72999,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire contract between the editor and the sandbox daemon: every route, its schemas and its access policy, as one oRPC contract both ends compile against.",
-      "readmeRev": "6d75df4619b7266c29c216adc1c516f5cfbbc7f1",
-      "reason": "67 commits have touched this package since its README was written",
+      "readmeRev": "790451ced52868a02877ed726943aa8840d79895",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1793888745000
+      "updatedAt": 1795115196000
     },
     {
       "anchors": [
@@ -5629,7 +5653,7 @@
           "what": "coverage, grouping and determinism, checked by walking the contract."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "shared",
       "dir": "_shared/sandbox-openapi",
       "files": 6,
@@ -5638,7 +5662,7 @@
       "name": "@intentic/sandbox-openapi",
       "oneLiner": "Generates the sandbox daemon's wire contract as one OpenAPI 3.1 document, which the site renders as its API reference and serves as openapi.json.",
       "readmeRev": "8b409cbcd96190b930d90b17eaa53a1154e4e6bc",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1793893299000
     },
@@ -5736,7 +5760,7 @@
           "what": "which paths count as ignored, by example."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "shared",
       "dir": "_shared/workspace-ignore",
       "files": 4,
@@ -5744,10 +5768,9 @@
       "loc": 333,
       "name": "@intentic/workspace-ignore",
       "oneLiner": "Decides which paths in a workspace are project files and which are machine noise, so the file tree and search agree.",
-      "readmeRev": "c3026dfc73eeccc3fbe04406a6b9c9f4c99442f4",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1790372260000
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
+      "stale": false,
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -5844,16 +5867,16 @@
           "what": "the account's sandboxes as live state, written by the platform and the machines alike."
         }
       ],
-      "behind": 19,
+      "behind": 24,
       "component": "site",
       "dir": "_site/demo",
       "files": 293,
       "hasTests": false,
-      "loc": 32612,
+      "loc": 32590,
       "name": "@intentic/demo",
       "oneLiner": "The interactive demo at intentic.dev/demo/: the real editor built from @intentic/web source, with its network replaced by an in-browser world of the platform, the sandbox daemons and the services…",
       "readmeRev": "5e3b2bbed2cc2f643dabfba51c44724f0d3c9b25",
-      "reason": "19 commits have touched this package since its README was written",
+      "reason": "24 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794071365000
     },
@@ -5884,18 +5907,17 @@
           "what": "the schema, limits and link allowlist for the live document."
         }
       ],
-      "behind": 16,
+      "behind": 0,
       "component": "site",
       "dir": "_site/site",
-      "files": 62,
+      "files": 65,
       "hasTests": true,
-      "loc": 9502,
+      "loc": 9937,
       "name": "@intentic/site",
       "oneLiner": "The Astro site behind intentic.dev, prerendered to static pages and served by a Cloudflare Worker that adds redirects, versionless downloads and a live notice.",
-      "readmeRev": "4a9b9b8d3a7fdb60cd25dc28f60705a9ab585db0",
-      "reason": "16 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1793259614000
+      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
+      "stale": false,
+      "updatedAt": 1795025063000
     },
     {
       "anchors": [
@@ -5928,16 +5950,16 @@
           "what": "the home page's \"Who reaches what\" band: its words and the sample sandbox it draws, held to the daemon's access rules by site/site/src/lib/access-lighting.test.ts."
         }
       ],
-      "behind": 3,
+      "behind": 5,
       "component": "site",
       "dir": "_site/site-content",
       "files": 26,
       "hasTests": false,
-      "loc": 7130,
+      "loc": 7131,
       "name": "@intentic/site-content",
       "oneLiner": "The words, documentation trees and page metadata of intentic.dev as typed TypeScript data, kept apart from the Astro markup that lays them out.",
       "readmeRev": "6ac1ee9c48ca6d8e28854549844bfd32e9735887",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1793059988000
     },
@@ -5964,7 +5986,7 @@
           "what": "countParser, which refuses negative, infinite and NaN budgets."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/agent-cli",
       "files": 10,
@@ -5972,10 +5994,9 @@
       "loc": 338,
       "name": "@intentic/agent-cli",
       "oneLiner": "The process contract, budgeted output and in-process test runner that the agent-facing CLIs fileq and webq share, so a failure never reads as an empty answer.",
-      "readmeRev": "2fed33289bd16dbbbcdacdca4398a9f919c87c50",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1790266332000
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
+      "stale": false,
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -6008,7 +6029,7 @@
           "what": "writeFileAtomic (its synchronous twin for a write on the way out, and writeChunksAtomic for content produced a chunk at a time), renameOver, syncDirectories, queueOnFile, pathExists and freePort, the file primitives of every Node tier."
         }
       ],
-      "behind": 3,
+      "behind": 1,
       "component": "tools",
       "dir": "_tools/base",
       "files": 86,
@@ -6016,10 +6037,49 @@
       "loc": 11529,
       "name": "@intentic/base",
       "oneLiner": "Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path…",
-      "readmeRev": "b54af99fb1de4dcb5583b6088bdd9a44c0d8e7fc",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1793711616000
+      "updatedAt": 1795012866000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_tools/castbench/src/run.ts",
+          "what": "one matrix: stage, pipeline, relay and viewer per run, and the window each is measured in."
+        },
+        {
+          "path": "_tools/castbench/src/daemon.ts",
+          "what": "the daemon's own cast modules, loaded from source so the legacy column is today's code."
+        },
+        {
+          "path": "_tools/castbench/src/client/decoder.ts",
+          "what": "the viewer: both wires, VideoDecoder, the marker read off decoded luma, typing."
+        },
+        {
+          "path": "_tools/castbench/src/analysis.ts",
+          "what": "raw events to numbers: new pictures, latencies, stalls, keystrokes."
+        },
+        {
+          "path": "_tools/castbench/src/shaper.ts",
+          "what": "the relay and its bottleneck, beside the arithmetic in src/link.ts."
+        },
+        {
+          "path": "_tools/castbench/budgets.json",
+          "what": "the stream's budgets, judged by src/compare.ts."
+        }
+      ],
+      "behind": 0,
+      "component": "tools",
+      "dir": "_tools/castbench",
+      "files": 30,
+      "hasTests": true,
+      "loc": 3701,
+      "name": "@intentic/castbench",
+      "oneLiner": "End-to-end benchmark of the in-editor browser's stream: what a page costs to encode, how soon its pixels are decoded, and how fast a keystroke comes back, for today's ffmpeg pipeline and for castd,…",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
     },
     {
       "anchors": [
@@ -6084,18 +6144,17 @@
           "what": "the words this repository retired and what each became."
         }
       ],
-      "behind": 9,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/constants",
-      "files": 32,
+      "files": 36,
       "hasTests": true,
-      "loc": 4710,
+      "loc": 5892,
       "name": "@intentic/constants",
       "oneLiner": "The values several packages must agree on (ports, workspace paths, origins, install-script URLs, sign-in parameters, name limits, the hosted price ladder), defined once so no copy drifts.",
-      "readmeRev": "b54af99fb1de4dcb5583b6088bdd9a44c0d8e7fc",
-      "reason": "9 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1793711616000
+      "readmeRev": "062a18699bf536af8de8cb4e9bb02f9d933712ba",
+      "stale": false,
+      "updatedAt": 1795119931000
     },
     {
       "anchors": [
@@ -6239,7 +6298,7 @@
           "what": "shared WCAG 2.1 A/AA axe scan and per-rule summaries."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "tools",
       "dir": "_tools/e2e",
       "files": 47,
@@ -6248,7 +6307,7 @@
       "name": "@intentic/e2e",
       "oneLiner": "Playwright harnesses that drive the real web app in Chromium: the sign-in gate, the N-1 check against the released sandbox, the local-stack browser tier, the post-deploy sign-in smoke, the mobile…",
       "readmeRev": "d823048412d3d78149eac1a46c63205ec9c35ed0",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794389336000
     },
@@ -6440,18 +6499,17 @@
           "what": "the interactions the browser counts cover."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/perf",
       "files": 49,
       "hasTests": true,
-      "loc": 3935,
+      "loc": 4046,
       "name": "@intentic/perf",
       "oneLiner": "Performance checks that count work instead of timing it, failing only on a few declared budgets and reporting every other count against a baseline checked into this package, beside two timed labs,…",
-      "readmeRev": "772d8d55f38092492244aaf905991426eb25033c",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1792537009000
+      "readmeRev": "98d679daa29fb8c495b254689a4380726244b169",
+      "stale": false,
+      "updatedAt": 1795090185000
     },
     {
       "anchors": [
@@ -6512,7 +6570,7 @@
           "what": "the stateful Fly Machines API over fetch."
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/testing",
       "files": 26,
@@ -6520,10 +6578,9 @@
       "loc": 3336,
       "name": "@intentic/testing",
       "oneLiner": "The test support every package's suites share: the suites runner behind each test script, fakes for Fly and Stripe, and helpers bun test lacks.",
-      "readmeRev": "eb2c001d9eb74d641d38badeee2b34af99750bca",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1793659551000
+      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
+      "stale": false,
+      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -6553,7 +6610,7 @@
       "updatedAt": 1792927378000
     }
   ],
-  "generatedAt": 1795008470488,
+  "generatedAt": 1795133927489,
   "orphans": [],
   "repo": "intentic",
   "undocumented": []

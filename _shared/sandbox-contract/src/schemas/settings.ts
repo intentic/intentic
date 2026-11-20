@@ -15,6 +15,7 @@ import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
+import { DEFAULT_SEARCH_ENGINE, RecordAgentBrowsingSchema, SearchEngineSchema } from "./browsing.js";
 import { DEFAULT_SANDBOX_MODE, SandboxModeSchema } from "./sandbox-mode.js";
 import { VoiceSettingsSchema } from "./voice.js";
 import {
@@ -636,6 +637,12 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Let Intentic's product analytics (usage events and session recordings in the editor, for people who agreed to them) run while this sandbox is open. Off sends nothing about any visit to this sandbox, whatever each person agreed to.",
         ),
+    // searchEngine is the editor's (its address bar's searches, handed to the suggestion route on each call), and
+    // recordAgentBrowsing the daemon's browser routers' (browser/media/recordings.ts); both in schemas/browsing.ts.
+    searchEngine: SearchEngineSchema.default(DEFAULT_SEARCH_ENGINE).describe(
+        "Where the sandbox's browser sends what is typed into its address bar when it is not an address, and whose suggestions it shows while typing.",
+    ),
+    recordAgentBrowsing: RecordAgentBrowsingSchema,
     aiNotice: AiNoticeSchema.prefault({}).describe(
         "A notice members confirm once, telling them they are working with an AI and what to check before relying on it.",
     ),

@@ -2,7 +2,22 @@ import { readFileSync } from "node:fs";
 import { EDGE_VERDICT_HEADER, edgeVerdictOf } from "../protocol/edge-verdict.js";
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH } from "../protocol/ingress-contract.js";
 import { VITALS_FILE, VITALS_PATH } from "../protocol/vitals.js";
-import { BROWSER_FRAME_TAGS, BROWSER_VIEW_PATH, EDGE_TRANSPORTS, TERMINAL_PATH, WEBTRANSPORT_PATH } from "./browser-wire.js";
+import {
+    BROWSER_FRAME_TAGS,
+    BROWSER_MEDIA_PATH,
+    BROWSER_MEDIA_SOCKET_DIR,
+    BROWSER_VIEW_PATH,
+    EDGE_TRANSPORTS,
+    MEDIA_CLOSE_CODES,
+    MEDIA_FLAGS,
+    MEDIA_HEADER_LEN,
+    MEDIA_KINDS,
+    MEDIA_TOKEN_GRACE_SECONDS,
+    RTC_CHANNELS,
+    RTC_MESSAGE_MAX,
+    TERMINAL_PATH,
+    WEBTRANSPORT_PATH,
+} from "./browser-wire.js";
 import {
     ASK_PATIENCE_MS,
     FRAME_LENGTH_BYTES,
@@ -31,6 +46,17 @@ const socket = manifest("netd-wire") as {
 };
 const browser = manifest("browser-wire") as {
     browserView: { path: string; frameTags: Record<string, number> };
+    browserMedia: {
+        path: string;
+        socketDir: string;
+        headerLen: number;
+        kinds: Record<string, number>;
+        flags: Record<string, number>;
+        rtcChannels: Record<string, { ordered: boolean; maxRetransmits: number | null }>;
+        rtcMessageMax: number;
+        tokenGraceSeconds: number;
+        closeCodes: Record<string, number>;
+    };
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
     terminal: { path: string; upgrade: string };
     vitals: { path: string; file: string; body: { $defs: { NodeLink: { oneOf: { const: string }[] } } } };
@@ -84,6 +110,18 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
     it("opens the browser view where browser-wire says, and tags its pictures as it numbers them", () => {
         expect(BROWSER_VIEW_PATH).toBe(browser.browserView.path);
         expect<Record<string, number>>(BROWSER_FRAME_TAGS).toEqual(browser.browserView.frameTags);
+    });
+
+    it("opens a window's media socket where browser-wire says, and reads its header as it lays it out", () => {
+        expect(BROWSER_MEDIA_PATH).toBe(browser.browserMedia.path);
+        expect(BROWSER_MEDIA_SOCKET_DIR).toBe(browser.browserMedia.socketDir);
+        expect(MEDIA_HEADER_LEN).toBe(browser.browserMedia.headerLen);
+        expect<Record<string, number>>(MEDIA_KINDS).toEqual(browser.browserMedia.kinds);
+        expect<Record<string, number>>(MEDIA_FLAGS).toEqual(browser.browserMedia.flags);
+        expect(MEDIA_TOKEN_GRACE_SECONDS).toBe(browser.browserMedia.tokenGraceSeconds);
+        expect<Record<string, number>>(MEDIA_CLOSE_CODES).toEqual(browser.browserMedia.closeCodes);
+        expect<Record<string, { ordered: boolean; maxRetransmits: number | null }>>(RTC_CHANNELS).toEqual(browser.browserMedia.rtcChannels);
+        expect(RTC_MESSAGE_MAX).toBe(browser.browserMedia.rtcMessageMax);
     });
 
     it("finds netd's vitals where browser-wire says it answers them, in the states it names", () => {

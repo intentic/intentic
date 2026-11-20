@@ -47,6 +47,7 @@ _site/site/public/desktop
 # ic (the host-side CLI), the sandbox netd and the Windows launcher stub: their Rust build trees.
 _sandbox/ic/target
 _sandbox/netd/target
+_sandbox/castd/target
 _platform/ingress/target
 _shared/relay/target
 _devices/win-launcher/target

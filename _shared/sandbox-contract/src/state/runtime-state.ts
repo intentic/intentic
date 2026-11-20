@@ -27,6 +27,10 @@ const RUNTIME_DOMAINS = [
     // The agent's Chromiums and open pages, daemon-held, minted from its own browser tool-call hooks.
     { domain: "browsers", invalidates: [["browsers"]] },
 
+    // A browser profile's bookmarks: added, renamed, moved or removed from any window (browser/bookmarks/), which every
+    // address bar's star, bookmarks bar and manager reads.
+    { domain: "bookmarks", invalidates: [["bookmarks"]] },
+
     // The sandbox's own desktop: up, and how many windows are open on it, watched off its window manager's client list.
     { domain: "desktop", invalidates: [["desktop"]] },
 

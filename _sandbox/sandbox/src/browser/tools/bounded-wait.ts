@@ -39,6 +39,15 @@ export const boundedWaitOf = (params: NonNullable<RpcMessage["params"]>, now = D
     return { params: { ...params, arguments: rest }, deadline: now + Math.min(time, MAX_WAIT_S) * 1000 };
 };
 
+// A wait_for given a time and nothing to wait for: a pause, which a window castd streams times on its pixels instead
+// (media/agent-capture.ts castdPause). Its seconds, bounded as upstream bounds them; undefined for any other call.
+const PauseSchema = z.looseObject({ time: z.number().positive(), text: z.undefined(), textGone: z.undefined() });
+
+export const pauseOf = (params: NonNullable<RpcMessage["params"]>): number | undefined => {
+    const parsed = params["name"] === WAIT_FOR_TOOL ? PauseSchema.safeParse(params["arguments"]) : undefined;
+    return parsed?.success === true ? Math.min(parsed.data.time, MAX_WAIT_S) : undefined;
+};
+
 const TimedOutSchema = z.object({ isError: z.literal(true), content: z.array(z.looseObject({ text: z.string() })) });
 
 /** Whether a backend answer is a text wait that ran out of time, the one failure worth sending the wait again for. */
@@ -49,8 +58,9 @@ export const waitTimedOut = (answer: RpcMessage): boolean => {
 
 // What `time` means once the router has rewritten it, said where the model reads it.
 const TIME_DESCRIPTION =
-    `The time to wait in seconds, at most ${MAX_WAIT_S}. Alone, a pause that long. With text or textGone, the most to ` +
-    "wait for it: the call returns as soon as the text appears (or goes).";
+    `The time to wait in seconds, at most ${MAX_WAIT_S}. Alone, a pause that long, which ends early where the sandbox ` +
+    "watches the window's screen: once it has changed and then held still. With text or textGone, the most to wait for " +
+    "it: the call returns as soon as the text appears (or goes).";
 
 /** The listed wait_for schema, its `time` described as the router now treats it. */
 export const describeBoundedWait = (tools: readonly McpToolSchema[]): McpToolSchema[] =>

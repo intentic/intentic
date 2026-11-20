@@ -1,7 +1,10 @@
 import { parseJsonWith } from "@intentic/base/json";
-import { onScopeDispose, ref, type Ref, watch } from "vue";
+import { computed, onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
-import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
+import { boxAsker } from "./boxAsker";
+import { FRAME_WEBP, type FrameUrls, frameUrls, videoTag } from "./frameUrls";
+import type { MediaPicture } from "./media/mediaPicture";
+import { screencastMedia } from "./media/screencastMedia";
 import { canDecodeVideo, type VideoSink, videoSink } from "./videoSink";
 import { liveSocket, type LiveSocket, type LiveSocketOptions, useLiveSocket, webSocketChannel } from "../../client/session/liveSocket";
 import { onScreen } from "../../workbench/window/onScreen";
@@ -10,15 +13,14 @@ import { onScreen } from "../../workbench/window/onScreen";
 // (useDesktopView) and a connected account's sign-in window (BrowserProfileDialog) each hold a live socket to a daemon
 // route that sends a `ready` and then tagged pictures, and takes pointer moves, a size and pause/resume back. What each
 // one says about it (its words, its status, its own messages) stays with it; how the picture is read, paused, sized
-// and pointed at is decided once, here, so a safeguard one of them has is had by all three.
+// and pointed at is decided once, here, so a safeguard one of them has is had by all three. Where castd serves the
+// window, its socket names a media socket instead of sending pictures, and the picture, sound and input move there
+// (media/screencastMedia.ts); the window's own socket keeps everything else.
 
 // Roughly one display frame, the rate the far side can act on anyway: only enough to keep a 1000 Hz mouse from
 // flooding the socket; each move is a few dozen bytes of JSON, and a press carries its own position.
 export const MOVE_THROTTLE_MS = 16;
-// A box that changes after holding still this long is asked at once (a panel opened or closed, the window maximised);
-// one changing again within it is a drag, asked once it holds still this long, since every step of a drag would
-// otherwise restart the encoder.
-export const RESIZE_DEBOUNCE_MS = 250;
+export { RESIZE_DEBOUNCE_MS } from "./boxAsker";
 
 // A field the daemon sends, read loosely: one of a type this build does not expect is absent, not a refused message.
 const maybe = <T extends z.ZodType>(schema: T) => schema.optional().catch(undefined);
@@ -50,7 +52,7 @@ const readMessage = (raw: string): ScreencastMessage | undefined => {
 // What the screencast itself says on the socket, beside each route's own vocabulary. `keyframe`: the decoder lost the
 // stream, and a fresh one is asked for.
 export type ScreencastControl =
-    | { readonly type: `pause` | `resume` | `keyframe` }
+    | { readonly type: `pause` | `resume` | `keyframe` | `media` }
     | { readonly type: `resize`; readonly width: number; readonly height: number };
 
 interface Size {
@@ -58,69 +60,11 @@ interface Size {
     readonly height: number;
 }
 
-const sameSize = (left: Size | undefined, right: Size | undefined): boolean =>
-    left !== undefined && right !== undefined && left.width === right.width && left.height === right.height;
-
-interface BoxAsker {
-    // The box was measured at this size, in CSS px.
-    readonly measured: (width: number, height: number) => void;
-    // Asks for the box now, unless it is not to be asked or the daemon was asked it already.
-    readonly ask: () => void;
-    // The daemon has forgotten every box asked (a fresh socket, another picture, a phone let go of).
-    readonly forget: () => void;
-    readonly dispose: () => void;
-}
-
-// The box the daemon is asked to size the picture to: the last one measured, sent when `canAsk` allows and only when the
-// daemon does not have it already, with RESIZE_DEBOUNCE_MS's rule for when.
-const boxAsker = (send: (size: Size) => void, canAsk: () => boolean): BoxAsker => {
-    let box: Size | undefined;
-    let asked: Size | undefined;
-    let timer: number | undefined;
-    // When the box last changed size: what tells a one-step change from a drag.
-    let changedAt = 0;
-    const ask = (): void => {
-        if (box !== undefined && canAsk() && !sameSize(box, asked)) {
-            asked = box;
-            send(box);
-        }
-    };
-    return {
-        measured: (boxWidth, boxHeight) => {
-            const size = { width: Math.round(boxWidth), height: Math.round(boxHeight) };
-            if (size.width <= 0 || size.height <= 0 || sameSize(size, box)) {
-                return;
-            }
-            box = size;
-            const held = timer === undefined && Date.now() - changedAt >= RESIZE_DEBOUNCE_MS;
-            changedAt = Date.now();
-            window.clearTimeout(timer);
-            timer = held
-                ? undefined
-                : window.setTimeout(() => {
-                      timer = undefined;
-                      ask();
-                  }, RESIZE_DEBOUNCE_MS);
-            if (held) {
-                ask();
-            }
-        },
-        ask,
-        forget: () => {
-            asked = undefined;
-        },
-        dispose: () => {
-            window.clearTimeout(timer);
-            timer = undefined;
-        },
-    };
-};
-
 // The video frame as painted on the canvas, for a pane that places it and fills around it.
 export interface PaintedPicture {
     // Its size in its own pixels; it trails `width`/`height` by the moment a new stream's first frame takes to decode.
     // Undefined until one paints, and on the frames path.
-    readonly painted: Ref<Size | undefined>;
+    readonly painted: Readonly<Ref<Size | undefined>>;
     // The page's background as its edges show it (videoSink's edgeColour); undefined when it has none.
     readonly edgeColour: () => string | undefined;
 }
@@ -145,6 +89,10 @@ export interface ScreencastOptions<Action extends string, Pointer, Out> {
     // Whether this route may answer with CDP's page-only frames instead of video (`ready`'s `kind`); without it every
     // picture is video.
     readonly frames?: boolean;
+    // Whether this route may hand the picture to castd's media socket (`media=1`); without it the picture is its own.
+    readonly media?: boolean;
+    // The media socket dropped; the window's own socket may still be up.
+    readonly onMediaDrop?: () => void;
     // Whether anyone can see the picture besides the window being on screen (its tab in front, its view not parked).
     readonly visible?: Ref<boolean>;
     // The picture's owner is gone while its socket stays up for something else (a dialog closed during a save):
@@ -160,8 +108,10 @@ export interface ScreencastOptions<Action extends string, Pointer, Out> {
 export interface Screencast<Action extends string, Pointer, Out> {
     readonly live: LiveSocket<Out | ScreencastControl>;
     readonly video: VideoSink;
-    // Which picture this is; undefined until `ready`.
-    readonly kind: Ref<`video` | `frames` | undefined>;
+    // The media path, on a route that may take it; its picture is up while `kind` is `media`.
+    readonly media: MediaPicture | undefined;
+    // Which picture this is; undefined until `ready`, or castd's `hello`.
+    readonly kind: Ref<`video` | `frames` | `media` | undefined>;
     // The picture's size in its own pixels, off `ready`; pointer coordinates are mapped onto it.
     readonly width: Ref<number>;
     readonly height: Ref<number>;
@@ -182,10 +132,46 @@ export interface Screencast<Action extends string, Pointer, Out> {
     readonly reset: () => void;
 }
 
+// One binary message on the window's own socket; the first byte is the daemon's own tag (screencast.ts/videocast.ts
+// share the table). Read per picture rather than behind a mode flag, which could go stale across a reconnect onto a
+// browser whose display just appeared. Answers the frames path's object URL, if the message was one.
+const legacyPicture = (video: VideoSink, pictures: FrameUrls | undefined, isVideo: () => boolean, painted: () => void) => (data: ArrayBuffer): string | undefined => {
+    const bytes = new Uint8Array(data);
+    const tag = bytes[0];
+    const coded = videoTag(tag);
+    if (coded !== undefined) {
+        video.push(bytes.subarray(1), coded.key, coded.quiet);
+        painted();
+        return undefined;
+    }
+    if (tag === FRAME_WEBP && isVideo()) {
+        // The settled page, sharp; laid over the video until it moves.
+        video.still(bytes.subarray(1));
+        return undefined;
+    }
+    return pictures?.from(data);
+};
+
+// Roughly one display frame between pointer moves sent; a press always goes.
+const moveThrottle = () => {
+    let lastMove = 0;
+    return (action: string): boolean => {
+        if (action !== `move`) {
+            return true;
+        }
+        const now = Date.now();
+        if (now - lastMove < MOVE_THROTTLE_MS) {
+            return false;
+        }
+        lastMove = now;
+        return true;
+    };
+};
+
 export const useScreencast = <Action extends string, Pointer extends object, Out extends object = object>(
     options: ScreencastOptions<Action, Pointer, Out>,
 ): Screencast<Action, Pointer, Out> => {
-    const kind = ref<`video` | `frames` | undefined>();
+    const kind = ref<`video` | `frames` | `media` | undefined>();
     const width = ref(1280);
     const height = ref(800);
     const scale = ref(1);
@@ -193,21 +179,39 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
     const painted = ref<Size | undefined>();
     // Turns each frames-path picture into an object URL, releasing ones the img has moved on from.
     const pictures = options.frames === true ? frameUrls() : undefined;
-    let lastMove = 0;
+    const throttle = moveThrottle();
 
     // The socket below; declared ahead so every verb can say something on it.
     const say = (message: ScreencastControl): void => live.send(message);
-    const sizes = boxAsker((size) => say({ type: `resize`, ...size }), () => kind.value === `video` && options.holdSize?.() !== true);
+    const sizes = boxAsker(
+        (box) => say({ type: `resize`, width: box.width, height: box.height }),
+        () => (kind.value === `video` || kind.value === `media`) && options.holdSize?.() !== true,
+    );
     const video = videoSink(options.onVideoError, {
         onLost: () => say({ type: `keyframe` }),
         onSize: (paintedWidth, paintedHeight) => {
             painted.value = { width: paintedWidth, height: paintedHeight };
         },
     });
+    // castd's hello is this path's `ready`: the picture's geometry, and the caller's word that a picture is coming.
+    const media =
+        options.media === true
+            ? screencastMedia({
+                  askFresh: () => say({ type: `media` }),
+                  redial: () => live.connect(),
+                  onHello: (hello) => {
+                      [kind.value, width.value, height.value, scale.value] = [`media`, hello.width, hello.height, hello.scale];
+                      options.onReady?.({ type: `ready`, kind: `video`, width: hello.width, height: hello.height, scale: hello.scale, codec: hello.codec });
+                  },
+                  onPicture: () => options.onPicture?.(),
+                  onDrop: () => options.onMediaDrop?.(),
+              })
+            : undefined;
 
     // Sent before any picture, and again for every fresh stream (a resize, another window): which decoder to build and
     // what a click's coordinates mean. The codec is read out of the stream by the daemon rather than assumed.
     const onReady = (message: ScreencastMessage): void => {
+        media?.ready();
         kind.value = options.frames === true && message.kind !== `video` ? `frames` : `video`;
         width.value = message.width ?? width.value;
         height.value = message.height ?? height.value;
@@ -225,7 +229,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
 
     const takeText = (raw: string): void => {
         const message = readMessage(raw);
-        if (message === undefined) {
+        if (message === undefined || media?.take(message) === true) {
             return;
         }
         if (message.type === `pong`) {
@@ -239,27 +243,9 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
         }
     };
 
-    // One binary message; the first byte is the daemon's own tag (screencast.ts/videocast.ts share the table). Read
-    // per picture rather than behind a mode flag, which could go stale across a reconnect onto a browser whose display
-    // just appeared.
+    const legacy = legacyPicture(video, pictures, () => kind.value === `video`, () => options.onPicture?.());
     const takePicture = (data: ArrayBuffer): void => {
-        if (options.detached?.() === true) {
-            return;
-        }
-        const bytes = new Uint8Array(data);
-        const tag = bytes[0];
-        const coded = videoTag(tag);
-        if (coded !== undefined) {
-            video.push(bytes.subarray(1), coded.key, coded.quiet);
-            options.onPicture?.();
-            return;
-        }
-        if (tag === FRAME_WEBP && kind.value === `video`) {
-            // The settled page, sharp; laid over the video until it moves.
-            video.still(bytes.subarray(1));
-            return;
-        }
-        const picture = pictures?.from(data);
+        const picture = options.detached?.() === true ? undefined : legacy(data);
         if (picture !== undefined) {
             frame.value = picture;
             options.onPicture?.();
@@ -268,7 +254,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
 
     const socketOptions: LiveSocketOptions<string, Out | ScreencastControl> = {
         ...options.socket,
-        mint: options.mint,
+        mint: async () => (media === undefined ? options.mint() : media.address(await options.mint())),
         open: webSocketChannel({ text: takeText, binary: takePicture }),
         onOpen: () => {
             // A fresh socket knows nothing of the box; the first `ready` asks again.
@@ -281,7 +267,11 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
     // A picture nobody can see would keep pulling every frame down the tunnel to nothing. The daemon holds its binding
     // across a pause, so resuming is one frame away, not a reconnect. onScreen rather than document.hidden: a Windows
     // webview hidden in the tray still reports itself visible.
-    const syncVisibility = (): void => say({ type: onScreen.value && options.visible?.value !== false ? `resume` : `pause` });
+    const syncVisibility = (): void => {
+        const seen = onScreen.value && options.visible?.value !== false;
+        say({ type: seen ? `resume` : `pause` });
+        media?.picture.setVisible(seen);
+    };
     watch(onScreen, syncVisibility);
     if (options.visible !== undefined) {
         watch(options.visible, syncVisibility);
@@ -292,28 +282,30 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
         // An unreleased object URL holds its blob for the life of the document; a decoder holds buffers of its own.
         pictures?.release();
         video.close();
+        media?.dispose();
     });
 
     return {
         live,
         video,
+        media: media?.picture,
         kind,
         width,
         height,
         scale,
         frame,
-        picture: { painted, edgeColour: () => video.edgeColour() },
-        pointerAt: (action, event, picture) => {
-            if (action === `move`) {
-                const now = Date.now();
-                if (now - lastMove < MOVE_THROTTLE_MS) {
-                    return undefined;
-                }
-                lastMove = now;
-            }
-            return options.pointer(action, event, picture, width.value, height.value);
+        picture: {
+            painted: computed(() => (kind.value === `media` ? media?.picture.painted.value : painted.value)),
+            edgeColour: () => (kind.value === `media` ? media?.picture.edgeColour() : video.edgeColour()),
         },
-        requestSize: sizes.measured,
+        pointerAt: (action, event, picture) => (throttle(action) ? options.pointer(action, event, picture, width.value, height.value) : undefined),
+        requestSize: (boxWidth, boxHeight) => {
+            sizes.measured(boxWidth, boxHeight);
+            media?.picture.requestSize(boxWidth, boxHeight);
+            if (kind.value === `media`) {
+                media?.picture.sampleEdge();
+            }
+        },
         askSizeAgain: () => {
             sizes.forget();
             sizes.ask();
@@ -326,6 +318,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
             painted.value = undefined;
             // A decoder holds state for the stream it was built for; the next `ready` builds a new one.
             video.close();
+            media?.reset();
             kind.value = undefined;
         },
     };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BrowserDownloadSchema, BrowserFileChooserSchema, BrowserPermissionAskSchema, BrowserRecordingSchema } from "./browser-tools.js";
 // Every live surface the sandbox's one global panel can show: tmux sessions, plus the agent's browser (not a terminal,
 // but the same question, what is running and can I look at it).
 // shell: a session the user opened.
@@ -101,7 +102,27 @@ export const BrowserPageSchema = z.object({
     // and before the first arrival, when the buttons stay as they were.
     canGoBack: z.boolean().optional().describe("Its history has a page before this one to go back to."),
     canGoForward: z.boolean().optional().describe("Its history has a page after this one to go forward to."),
+    // The site's icon, fetched by the sandbox through the window itself and sent inline, so the editor draws it without
+    // the person's own browser ever asking the site for anything. Absent from an older daemon.
+    favicon: z
+        .string()
+        .optional()
+        .describe(
+            "The page's icon as a small data: URL, fetched inside the sandbox so drawing it asks nothing of the site. Absent when the page has none, it has not loaded yet, or its icon was too large to send.",
+        ),
+    // Read off Chromium's own tab state where the window can ask it (the person's own window); absent elsewhere.
+    audible: z.boolean().optional().describe("It is playing sound now. Absent where the window cannot tell, and from an older daemon."),
+    muted: z.boolean().optional().describe("Its sound is muted. Absent where the window cannot tell, and from an older daemon."),
 });
+// A tab closed in a window that is still open: what Reopen closed tab brings back, at the place it had.
+export const BrowserClosedTabSchema = z.object({
+    id: z.string().describe("What the reopen route takes to bring this one back rather than the newest."),
+    url: z.string().describe("Where it was when it closed."),
+    title: z.string().optional().describe("Its title when it closed. Absent when it had none."),
+    favicon: z.string().optional().describe("Its icon when it closed, as the open tab carried it."),
+    closedAt: z.number().describe("When it closed, in milliseconds."),
+});
+export type BrowserClosedTab = z.infer<typeof BrowserClosedTabSchema>;
 export const BrowserSessionSchema = z.object({
     name: z.string().describe("Its id, and what the close route takes."),
     // Rises on every change to the window, across daemon restarts too. The same window arrives two ways, in this list
@@ -144,9 +165,26 @@ export const BrowserSessionSchema = z.object({
         })
         .optional()
         .describe("A dialog a page has open and is waiting on. You or the agent answers it; present only while it is open."),
+    // What the browser's own chrome would show and the picture never does (schemas/browser-tools.ts): the downloads of
+    // the window's profile, a file a page asked for, and a permission a site asked for. Each absent when there is none,
+    // and from an older daemon.
+    downloads: z
+        .array(BrowserDownloadSchema)
+        .optional()
+        .describe("This window's profile's recent downloads, newest first. Absent for a window whose downloads this browser does not keep."),
+    fileChooser: BrowserFileChooserSchema.optional().describe("A page asked for files and is waiting; present only while it is."),
+    permissionAsk: BrowserPermissionAskSchema.optional().describe("A site asked for a permission and is waiting on the answer; present only while it is."),
+    recording: BrowserRecordingSchema.optional().describe("The window's picture is being recorded; present only while it is."),
     pages: z
         .array(BrowserPageSchema)
-        .describe("Every page it has open. A browser holds several at once, which is the reason it is listed apart from the terminals."),
+        .describe(
+            "Every page it has open, in the order its tab strip shows them. A browser holds several at once, which is the reason it is listed apart from the terminals.",
+        ),
+    // Kept by the daemon per window while it runs, newest first and capped; absent when none, and from an older daemon.
+    closed: z
+        .array(BrowserClosedTabSchema)
+        .optional()
+        .describe("Tabs closed in this window while it ran, newest first: what Reopen closed tab brings back. Absent when there are none."),
     // Opened from the browser view by the person, not by an agent's tool; absent on an agent's and from an older daemon.
     own: z
         .boolean()
@@ -180,6 +218,26 @@ export const OpenBrowserResultSchema = z.object({
     pageId: z.string().optional().describe("The tab it opened, once the window has it. Absent when the tab had not appeared in time."),
 });
 export type OpenBrowserResult = z.infer<typeof OpenBrowserResultSchema>;
+export const ReopenBrowserPageInputSchema = z.object({
+    name: z.string().describe("Which browser."),
+    closedId: z.string().optional().describe("Which closed tab, from the window's `closed` list. Absent brings back the one closed last."),
+});
+export type ReopenBrowserPageInput = z.infer<typeof ReopenBrowserPageInputSchema>;
+export const MoveBrowserPageInputSchema = z.object({
+    name: z.string().describe("Which browser."),
+    pageId: z.string().describe("Which of its tabs."),
+    index: z.number().int().min(0).describe("Where it goes among the window's open tabs, counted from the first; past the end is the end."),
+});
+export type MoveBrowserPageInput = z.infer<typeof MoveBrowserPageInputSchema>;
+// What a tab's own menu does to one tab, whichever window it is in and whether or not it is in front.
+export const BrowserPageActionSchema = z.enum(["reload", "duplicate", "mute", "unmute"]);
+export type BrowserPageAction = z.infer<typeof BrowserPageActionSchema>;
+export const BrowserPageActionInputSchema = z.object({
+    name: z.string().describe("Which browser."),
+    pageId: z.string().describe("Which of its tabs."),
+    action: BrowserPageActionSchema.describe("Reload it, open a copy of it beside it, or silence or unsilence it."),
+});
+export type BrowserPageActionInput = z.infer<typeof BrowserPageActionInputSchema>;
 // One window on the sandbox's desktop, as its window manager lists it. The id is what /system/desktop-view takes as
 // `window` to stream that window alone, and what the agent's own desktop tools name it by.
 export const DesktopWindowSchema = z.object({

@@ -1,5 +1,5 @@
 import type { BrowserPage } from "@intentic/sandbox-contract/schemas/terminal";
-import { initialOf, pageTabLook, stripItems, type StripGroup, type StripTab } from "./stripTab";
+import { initialOf, pageTabLook, runOf, stripItems, type StripGroup, type StripTab } from "./stripTab";
 
 const group = (id: string): StripGroup => ({ id, label: id, mark: { kind: `icon`, icon: `user` }, current: false });
 const tab = (id: string, extra: Partial<StripTab> = {}): StripTab => ({ id, label: id, icon: `globe`, closable: true, pinned: false, ...extra });
@@ -88,5 +88,40 @@ describe(`a web page's tab between two addresses`, () => {
     test(`rests as the globe, as it always did against a daemon that says none of this, with no hover for no address`, () => {
         expect(pageTabLook(page())).toEqual({ note: `http://192.168.0.103:9120/login`, icon: `globe` });
         expect(pageTabLook(page({ url: `` }))).toEqual({ note: undefined, icon: `globe` });
+    });
+
+    test(`rests as the site's own icon where the sandbox sent one, never while turning or warning`, () => {
+        const favicon = `data:image/png;base64,iVBORw0KGgo=`;
+        expect(pageTabLook(page({ favicon }))).toEqual({ note: `http://192.168.0.103:9120/login`, icon: `globe`, favicon });
+        expect(pageTabLook(page({ favicon, loading: true }))).toEqual({ note: `http://192.168.0.103:9120/login`, icon: `spinner`, spin: true });
+        expect(pageTabLook(page({ favicon, error: `net::ERR_FAILED` }))).not.toHaveProperty(`favicon`, favicon);
+    });
+
+    test(`says it is playing sound, or muted, whatever else it is doing`, () => {
+        expect(pageTabLook(page({ audible: true, muted: false })).sound).toBe(`playing`);
+        expect(pageTabLook(page({ audible: true, muted: true })).sound).toBe(`muted`);
+        expect(pageTabLook(page({ audible: false, muted: true, loading: true })).sound).toBe(`muted`);
+        expect(pageTabLook(page({ audible: false, muted: false })).sound).toBeUndefined();
+        expect(pageTabLook(page()).sound).toBeUndefined();
+    });
+});
+
+describe(`a tab's run, the tabs it can be dragged among`, () => {
+    test(`is its own window's movable pages, never a pin or another window's`, () => {
+        const agent = group(`agent`);
+        const own = group(`own`);
+        const tabs = [
+            tab(`app`, { pinned: true, movable: false }),
+            tab(`a1`, { group: agent, movable: true }),
+            tab(`a2`, { group: agent, movable: true }),
+            tab(`o1`, { group: own, movable: true }),
+            tab(`o2`, { group: own, movable: true }),
+            tab(`opening`, { group: own }),
+        ];
+        expect(runOf(tabs, `o2`).map((entry) => entry.id)).toEqual([`o1`, `o2`]);
+        expect(runOf(tabs, `a1`).map((entry) => entry.id)).toEqual([`a1`, `a2`]);
+        expect(runOf(tabs, `opening`)).toEqual([]);
+        expect(runOf(tabs, `app`)).toEqual([]);
+        expect(runOf(tabs, `nobody`)).toEqual([]);
     });
 });

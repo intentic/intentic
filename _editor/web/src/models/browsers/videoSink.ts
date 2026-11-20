@@ -7,6 +7,9 @@
 // is sharp exactly while someone is reading it and the moving picture costs no scaling.
 
 import { t } from "@intentic/ui/i18n";
+import { readEdgeColour } from "./edgeColour";
+
+export { commonColour } from "./edgeColour";
 
 // Microseconds per frame at the daemon's fixed 30fps, since chunks require an increasing timestamp.
 const FRAME_US = Math.round(1_000_000 / 30);
@@ -16,38 +19,6 @@ const FRAME_US = Math.round(1_000_000 / 30);
 // the picture, hence rounded). Never below 1, so a still a pixel narrower than the picture is not read as half scale.
 export const stillScale = (still: { readonly width: number }, picture: { readonly width: number }): number =>
     picture.width > 0 ? Math.max(1, Math.round(still.width / picture.width)) : 1;
-
-// How many points along each edge the edge colour is read from, and how far in from the right the column is read: past
-// a classic scrollbar, which is the scrollbar's grey rather than the page's own background.
-const EDGE_SAMPLES = 64;
-const SCROLLBAR_PX = 20;
-// The share of samples one colour needs to count as the page's background rather than whatever runs to its edge.
-const EDGE_MAJORITY = 0.25;
-
-// The commonest colour among pixels, by 5 bits a channel so a video's ±1 noise on a flat white counts as one colour;
-// undefined when none holds EDGE_MAJORITY of them. A pixel not fully opaque is a canvas nothing has painted yet, which
-// would otherwise read as black, and counts for no colour.
-export const commonColour = (pixels: Uint8ClampedArray): string | undefined => {
-    const counts = new Map<number, number>();
-    let best: number | undefined;
-    let bestCount = 0;
-    for (let at = 0; at + 3 < pixels.length; at += 4) {
-        if (pixels[at + 3] !== 255) {
-            continue;
-        }
-        const key = ((pixels[at]! >> 3) << 10) | ((pixels[at + 1]! >> 3) << 5) | (pixels[at + 2]! >> 3);
-        const count = (counts.get(key) ?? 0) + 1;
-        counts.set(key, count);
-        if (count > bestCount) {
-            bestCount = count;
-            best = at;
-        }
-    }
-    if (best === undefined || bestCount < (pixels.length / 4) * EDGE_MAJORITY) {
-        return undefined;
-    }
-    return `rgb(${pixels[best]} ${pixels[best + 1]} ${pixels[best + 2]})`;
-};
 
 // What the pane hears from the sink besides an error.
 export interface VideoSinkEvents {
@@ -80,31 +51,13 @@ export interface VideoSink {
 // Safari <16.4 and Firefox <130 can't decode video; there's no fallback, so saying so beats a black rectangle.
 export const canDecodeVideo = (): boolean => typeof globalThis.VideoDecoder === `function`;
 
-// A small canvas the edges are copied into to be read: reading the picture's own canvas back makes Chromium move it off
-// the GPU, which a 30 fps picture cannot afford. Made on first use, and shared, since a read is over before it returns.
+// A small canvas the edges are copied into to be read (edgeColour.ts). Made on first use, and shared, since a read is
+// over before it returns.
 let probe: CanvasRenderingContext2D | null | undefined;
 
-// The edge colour of a painted picture: a column just inside its right edge and its bottom row, each copied into a row
-// of the probe pixel for pixel, never blended.
-const readEdgeColour = (source: HTMLCanvasElement): string | undefined => {
-    if (source.width <= SCROLLBAR_PX || source.height < 2) {
-        return undefined;
-    }
+const edgeOf = (source: HTMLCanvasElement): string | undefined => {
     probe ??= document.createElement(`canvas`).getContext(`2d`, { willReadFrequently: true });
-    if (probe === null) {
-        return undefined;
-    }
-    probe.canvas.width = EDGE_SAMPLES;
-    probe.canvas.height = EDGE_SAMPLES + 1;
-    probe.imageSmoothingEnabled = false;
-    probe.drawImage(source, 0, source.height - 1, source.width - SCROLLBAR_PX, 1, 0, 0, EDGE_SAMPLES, 1);
-    probe.drawImage(source, source.width - SCROLLBAR_PX, 0, 1, source.height, 0, 1, 1, EDGE_SAMPLES);
-    const row = probe.getImageData(0, 0, EDGE_SAMPLES, 1).data;
-    const column = probe.getImageData(0, 1, 1, EDGE_SAMPLES).data;
-    const both = new Uint8ClampedArray(row.length + column.length);
-    both.set(row);
-    both.set(column, row.length);
-    return commonColour(both);
+    return probe === null ? undefined : readEdgeColour(source, probe);
 };
 
 // Paints a decoded still over the video (`under`) and shows it. Backed at the video's shape at the still's scale, not
@@ -261,7 +214,7 @@ export const videoSink = (onError: (message: string) => void, events: VideoSinkE
             motion += 1;
             hideStill();
         },
-        edgeColour: () => (canvas === undefined ? undefined : readEdgeColour(canvas)),
+        edgeColour: () => (canvas === undefined ? undefined : edgeOf(canvas)),
         attach: (video, still) => {
             // Normalised here, the one door in: everything below reads "no canvas" as undefined, and a template ref
             // hands over null the moment its element unmounts.

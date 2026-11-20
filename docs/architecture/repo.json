@@ -23,6 +23,7 @@
             "oneLiner": "One private box per project, where your code and the agents live.",
             "packages": [
                 "_sandbox/agent-context",
+                "_sandbox/castd",
                 "_sandbox/claude-plugin",
                 "_sandbox/cli",
                 "_sandbox/fileq",
@@ -165,6 +166,7 @@
             "packages": [
                 "_tools/agent-cli",
                 "_tools/base",
+                "_tools/castbench",
                 "_tools/checks",
                 "_tools/code-read",
                 "_tools/constants",

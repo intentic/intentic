@@ -19,6 +19,7 @@ import { createBasesRoutes } from "./conversations/worktrees/bases/bases.routes.
 import { probeDockerGpu } from "./hosts/gpu/docker-gpu-probe.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
 import { createRolesRoutes } from "./roles/roles.routes.js";
+import { createBrowserToolsRoutes } from "./browser/window-tools.routes.js";
 import { createOrgRoutes } from "./org/org.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
@@ -31,6 +32,8 @@ import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
+import { createBrowsingSystemRoutes } from "./browser/history/browsing.routes.js";
+import { createBookmarksRoutes } from "./browser/bookmarks/bookmarks.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIssuesRoutes } from "./issues/issues.routes.js";
@@ -155,6 +158,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
     automations: createAutomationsRoutes(services),
     // A read-only checkout of where a conversation's work started, for the `base` command's before-and-after.
     bases: createBasesRoutes(baseCheckoutsOf(services)),
+    bookmarks: createBookmarksRoutes(services),
+    browser: createBrowserToolsRoutes(services),
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
@@ -230,11 +235,11 @@ export const createRouter = (services: Services): SandboxRouter => ({
             return entry === undefined || visibleTo(caller, provenanceOf(entry));
         },
     }),
-    // The device procedures live in hosts/devices.routes.ts beside the devices they act on, the storage ones beside the
-    // disk; merged here, above all three, so no subsystem has to import another's values.
+    // Device, browsing and storage procedures live beside what they act on; merged here so no subsystem imports another.
     system: {
         ...createSystemRoutes(services),
         ...createDeviceSystemRoutes(services),
+        ...createBrowsingSystemRoutes(services),
         ...storageRoutes(services),
     },
     usage: createUsageRoutes(services),

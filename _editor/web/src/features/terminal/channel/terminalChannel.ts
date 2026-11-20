@@ -1,11 +1,11 @@
 import { parseJsonWith } from "@intentic/base/json";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
 import { z } from "zod";
-import type { SocketLike } from "./streamSocket";
+import type { SocketLike } from "../../../client/transport/streamSocket";
 
 // A terminal's socket, a WebSocket whichever way it rides: the browser's own over TCP, or one spoken on a stream of the
-// edge's WebTransport session (streamSocket.ts). Either delivers the pane's bytes, the server's messages and exactly one
-// close, which arrives after `close()` returns.
+// edge's WebTransport session (client/transport/streamSocket.ts). Either delivers the pane's bytes, the server's
+// messages and exactly one close, which arrives after `close()` returns.
 
 export interface ChannelEvents {
     readonly open: () => void;

@@ -43,10 +43,13 @@ import {
 import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "../schemas/updates.js";
 import {
     BrowserNameParamSchema,
+    BrowserPageActionInputSchema,
     BrowserPageParamSchema,
     BrowsersListSchema,
+    MoveBrowserPageInputSchema,
     OpenBrowserInputSchema,
     OpenBrowserResultSchema,
+    ReopenBrowserPageInputSchema,
     DesktopStateSchema,
     SubagentsListSchema,
     TerminalNameParamSchema,
@@ -55,6 +58,14 @@ import {
     TerminalsListSchema,
 } from "../schemas/terminal.js";
 import { UsageSummarySchema } from "../schemas/providers/usage.js";
+import {
+    BrowsingForgetInputSchema,
+    BrowsingForgetResultSchema,
+    BrowsingHistoryQuerySchema,
+    BrowsingHistorySchema,
+    SearchSuggestQuerySchema,
+    SearchSuggestionsSchema,
+} from "../schemas/browsing.js";
 
 // The box itself (terminals, devices, sessions, spend), which no control token reaches whatever the floor.
 const systemRoute = procedure.meta({ control: "never" });
@@ -343,6 +354,38 @@ export const systemContract = {
         })
         .input(BrowserNameParamSchema)
         .output(OkSchema),
+    // The rest of what a tab's own menu does, over the roster rather than a picture socket for the same reason as
+    // closeBrowserPage: every window's tabs are on the strip, and only the one in front has a socket.
+    reopenBrowserPage: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/browsers/{name}/closed",
+            summary: "Reopen a closed tab",
+            description:
+                "Brings back a tab closed in a browser window that is still open, at the place it had, as a browser's own Reopen closed tab does. Without a tab named it is the one closed last. Answers the tab it opened.",
+        })
+        .input(ReopenBrowserPageInputSchema)
+        .output(OpenBrowserResultSchema),
+    moveBrowserPage: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/browsers/{name}/pages/{pageId}/move",
+            summary: "Move a tab along its window's strip",
+            description:
+                "Puts one tab at another place in its window's order, the order every view of the window draws its tabs in and the order your own window reopens them in.",
+        })
+        .input(MoveBrowserPageInputSchema)
+        .output(OkSchema),
+    browserPageAction: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/browsers/{name}/pages/{pageId}/action",
+            summary: "Reload, duplicate or mute a tab",
+            description:
+                "Does one thing to one tab of a browser window, whether or not it is the tab in front: reloads it, opens a copy of it beside it, or mutes or unmutes it. Answers the tab acted on, or the copy.",
+        })
+        .input(BrowserPageActionInputSchema)
+        .output(OpenBrowserResultSchema),
     // One tab, closed without watching its window: the Browsers strip shows every window's tabs, and only the window in
     // front has a picture socket to say a close on.
     closeBrowserPage: systemRoute
@@ -355,6 +398,41 @@ export const systemContract = {
         })
         .input(BrowserPageParamSchema)
         .output(OkSchema),
+    // What the sandbox's browsers remember, one index per profile (schemas/browsing.ts): the address bar ranks it in the
+    // editor on every keystroke, so it ships whole once and then only what changed, by cursor.
+    browsingHistory: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/browsing/history",
+            summary: "Where a browser has been",
+            description:
+                "The pages one of the sandbox's browsers has visited and the searches made in it, most worth suggesting first, for the address bar's suggestions and the history page. Hand back the cursor an answer gave to be told only what changed since. Each browser profile keeps its own: your own window's is `_own`, and nothing from an agent's browser is mixed into it.",
+        })
+        // Where the person went is theirs and the maintainers': a viewer reads the windows open, not their history.
+        .meta({ floor: "maintainer" })
+        .input(BrowsingHistoryQuerySchema)
+        .output(BrowsingHistorySchema),
+    forgetBrowsingHistory: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/browsing/history/forget",
+            summary: "Forget part of a browser's history",
+            description:
+                "Removes pages from one browser profile's history: some addresses, everything visited in a stretch of time, or all of it. The address bar stops suggesting them at once. Chromium's own files inside the profile are not touched.",
+        })
+        .input(BrowsingForgetInputSchema)
+        .output(BrowsingForgetResultSchema),
+    // Fetched by the sandbox, so the engine sees the same address the browsing itself leaves from.
+    searchSuggestions: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/browsing/suggest",
+            summary: "What a search engine suggests for some text",
+            description:
+                "Asks the chosen search engine what it would suggest for text typed into the address bar, from the sandbox's own address like the browsing itself. Answers an empty list rather than an error when the engine is slow or unreachable, since the address bar has its own suggestions to show.",
+        })
+        .input(SearchSuggestQuerySchema)
+        .output(SearchSuggestionsSchema),
     // The picture and the hands come over /system/desktop-view; this is whether there is anything on it, and which windows
     // a tab could show alone. Pushed through the `desktop` runtime domain as windows open, close and take the keyboard,
     // and as their titles change while a view is open; never polled by the client.

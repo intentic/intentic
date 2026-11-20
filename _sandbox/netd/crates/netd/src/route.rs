@@ -55,6 +55,33 @@ pub fn is_daemon_host(host: &str, sandbox_id: Option<&str>) -> bool {
     sandbox_id.is_some_and(|id| relay::label_of(host).strip_prefix("sandbox-") == Some(id))
 }
 
+/// What a request under browser-wire's media path asks for: the window's media daemon by its session's name, or
+/// nothing it could name. `None` is a path outside the media route entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Media<'a> {
+    Session(&'a str),
+    BadName,
+}
+
+/// `/system/browser-media/<session>`, the session `[A-Za-z0-9_-]{1,64}`. The name becomes a socket's file name, so
+/// nothing else is let through: no dot, no slash, no escape.
+pub fn media(path: &str) -> Option<Media<'_>> {
+    let rest = path.strip_prefix(browser_wire::BROWSER_MEDIA_PATH)?;
+    if rest.is_empty() {
+        return Some(Media::BadName);
+    }
+    let name = rest.strip_prefix('/')?;
+    let valid = (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
+    Some(if valid {
+        Media::Session(name)
+    } else {
+        Media::BadName
+    })
+}
+
 pub fn target(listener: Listener, host: &str, sandbox_id: Option<&str>) -> Target {
     match listener {
         Listener::Daemon | Listener::Loopback { tls: true } => Target::Node,
@@ -127,6 +154,39 @@ mod tests {
             "sandbox-abcdef012345.sbx.example.test",
             None
         ));
+    }
+
+    #[test]
+    fn a_media_path_names_one_session_or_none() {
+        assert_eq!(
+            media("/system/browser-media/browser-own"),
+            Some(Media::Session("browser-own"))
+        );
+        assert_eq!(
+            media("/system/browser-media/Agent_7-x"),
+            Some(Media::Session("Agent_7-x"))
+        );
+        let longest = "a".repeat(64);
+        assert_eq!(
+            media(&format!("/system/browser-media/{longest}")),
+            Some(Media::Session(longest.as_str()))
+        );
+        for bad in [
+            "/system/browser-media",
+            "/system/browser-media/",
+            "/system/browser-media/..",
+            "/system/browser-media/a.b",
+            "/system/browser-media/a/b",
+            "/system/browser-media/a%2fb",
+            "/system/browser-media/ą",
+            &format!("/system/browser-media/{}", "a".repeat(65)),
+        ] {
+            assert_eq!(media(bad), Some(Media::BadName), "{bad}");
+        }
+        // A path that only starts the same way is another route's.
+        assert_eq!(media("/system/browser-mediax/a"), None);
+        assert_eq!(media("/system/browser-view"), None);
+        assert_eq!(media("/"), None);
     }
 
     #[test]

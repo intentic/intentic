@@ -137,7 +137,8 @@ flowchart LR
   would scale that chrome, change the CSS pixels the app sizes windows by and the live views map pointers with, and be
   remembered per webview. The wheel listener can cancel, so the compositor waits on it before a scroll starts. It is
   attached only while the modifier is held. A surface that zooms its own content on Ctrl+wheel (`ImageView`) keeps it.
-  A browser tab gets none of this, because its own zoom answers these keys.
+  A browser tab gets none of this, because its own zoom answers these keys, and neither does a live browser's picture,
+  whose keys zoom the page it shows (`data-zooms-own-page` on its keyboard field, `keyIntent.ts`).
 - **Keyboard access.** The first Tab reveals “Skip to main content” in the workspace and local shells. It focuses the visible main surface, including a side panel filling the centre. Agent and workflow titles are native buttons beside their independent actions. The jump palette is a named dialog with an input combobox, named result groups and active-descendant navigation. The backend-free accessibility checks live in `_tools/e2e/accessibility/demo.spec.ts`.
 - **Results one press away.** The documents a turn made (Word, OpenDocument, RTF, PDF, decks, sheets, web pages) are
   chips under its answer, each with Download and Print beside it (`features/chat/transcript/deliverables/`). A press on
@@ -240,10 +241,17 @@ flowchart LR
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
   in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
   frames missed while disconnected. Terminals, the browser view and the desktop view (the sandbox's own screen, or one
-  window on it, which a maintainer can take over) use WebSockets opened with a short-lived ticket (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
-  edge serves one (`features/terminal/channel/`). Each of them, and a connected account's browser window, rides one
+  window on it, which a maintainer can take over) use WebSockets opened with a short-lived ticket (`wsTicket.ts`); a terminal's and a window's media socket are spoken on a stream of the edge's WebTransport session where the sandbox
+  row says the edge serves one (`client/transport/`). Each of them, and a connected account's browser window, rides one
   live socket (`client/session/liveSocket.ts`): minted, pinged, closed when silent, and redialled on one
-  ladder that starts over when the sandbox answers again.
+  ladder that starts over when the sandbox answers again. Where castd serves a window, its socket names castd's media
+  socket instead (`media`), and the picture, sound, pointer, keys and clipboard move there, held by a decode worker off
+  the main thread (`models/browsers/media/`): H.264 stripes drawn 1:1 in device pixels on an OffscreenCanvas and acked
+  for castd's bitrate control, Opus played through an AudioWorklet jitter buffer. A media socket that never says hello
+  sends the window back to its own socket's picture. Where castd's hello offers one and the socket is not on the
+  loopback shortcut, a peer connection straight to castd (`mediaRtc.ts`, WebRTC DataChannels signalled on the media
+  socket) carries the stream and the person's input beside the socket, which stays as control and fallback; the worker
+  believes pictures only from the carrier castd said its latest hello on.
 - **Unsent words are the sandbox's.** What a composer holds (words, finished files, the model picked) is the
   conversation's draft, kept by the sandbox per person (`agents.drafts`), so every window and device opens the same
   composer and the board shows a draft card for words typed on another device. This browser keeps one optimistic copy
@@ -528,6 +536,23 @@ flowchart LR
   (`features/browsers/activePage.ts`). The tab in front is the window's word for every viewer: a picked tab is brought
   in front for all of them, and the pick lasts only until the window says so, after which an agent switching tabs moves
   the strip with the picture.
+  The address bar (`features/browsers/Omnibox.vue`, and the start page's box, its twin) ranks its suggestions here on
+  every keystroke, from what the editor already holds: the profile's history (fetched whole once, then only what
+  changed since, `omnibox/useBrowsingHistory.ts`), the open tabs, past searches and the engine's own suggestions, which
+  join the list when they arrive and are never asked for an address (`omnibox/rank.ts`, measured at well under a frame
+  for 5,000 pages). The first row is what Enter does: the page the text completes to inline ("192" to "192.168.0.168",
+  the rest selected), a keyword's search (`yt`, `gh`, `w`, `npm`, `mdn`, and each engine by a short name), the address
+  typed, or a search on the sandbox's `searchEngine`. Its keys are a browser's (`omnibox/useOmniboxField.ts`): ↑/↓,
+  Tab to keep a completion, Shift+Delete to forget a page, Ctrl+Enter for `www.<word>.com`, Escape twice. The history
+  page (`features/browsers/history/`, Ctrl+H or the menu) lays the same index out by day over whatever tab is in front,
+  needing no page in the sandbox's browser.
+  Bookmarks are the person's own (`features/browsers/bookmarks/`, the daemon's `bookmarks.*` and its push): a star at the
+  address bar's end, filled for a page kept, which Ctrl+D presses (a page not kept is kept at once, onto the bar, and a
+  card opens to rename it or file it in a folder); a bookmarks bar under the toolbar, off until the menu or Ctrl+Shift+B
+  asks for it, remembered per device, its folders opening as menus; and a manager beside the history page in the same
+  library, searchable, each bookmark edited or removed in place and dragged to a new place or folder. They feed the
+  address bar: a bookmark is found never visited, ranks above plain history at an equal match, and its icon, or an open
+  tab's for the same site, is drawn on its row.
   _2026-10-08: the Preview and Desktop views became tabs of Browsers. Both had been a screen of their own for one kind
   of live thing, with a picker standing in for tabs; `/preview` and `/desktop` redirect to their tabs._
 - **The browser tab.** `shell/browser-tab/` (its chimes and preferences in `workbench/browser-tab/`) shows the fleet's

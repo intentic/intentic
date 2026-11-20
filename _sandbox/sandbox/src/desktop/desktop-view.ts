@@ -5,7 +5,7 @@ import { z } from "zod";
 import { redeemTicket } from "../auth/tokens/ws-tickets.js";
 import { regionsEqual, type Region } from "../browser/cast/region.js";
 import { encodeVideo, frameGate, type FrameGate, startVideocast, type Videocast, type VideoFrame } from "../browser/cast/videocast.js";
-import { startXInput, type XInput } from "../browser/cast/xinput.js";
+import type { XInput } from "../browser/cast/xinput.js";
 import type { Services } from "../composition.js";
 import {
     agentDesktop,
@@ -19,10 +19,12 @@ import {
     windowListed,
 } from "./agent-desktop.js";
 import { parseJsonWith } from "@intentic/base/json";
+import { type DesktopMedia, desktopPicture } from "./desktop-media.js";
 
 /* /system/desktop-view streams x11grab H.264 and XTEST input in one coordinate space; owner control holds out agent input until handback/idle/close.
  * window=<list id> crops/follows a window, remaps pointer pixels and raises it for keys; movement/resize emits a new ready, closure sends gone/1000.
- * Client JSON: ping, pause/resume, keyframe, control and driving-only mouse/key/text. Server: ready, binary frame tags 3/4, pong and held owner changes. */
+ * Client JSON: ping, pause/resume, keyframe, control and driving-only mouse/key/text. Server: ready, binary frame tags 3/4, pong and held owner changes.
+ * media=1 in the query, where castd serves the display: `media` (desktop-media.ts) instead of video, and input on the media socket. */
 
 type Socket = WSContext;
 
@@ -49,6 +51,8 @@ export const DesktopViewMessageSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("resume") }),
     // The view's decoder lost the stream: a restart brings a fresh keyframe (videocast.ts's frameGate).
     z.object({ type: z.literal("keyframe") }),
+    // A fresh `media` now, on the media path (desktop-media.ts).
+    z.object({ type: z.literal("media") }),
     z.object({ type: z.literal("control"), driving: z.boolean() }),
     MouseMessageSchema,
     z.object({ type: z.literal("key"), key: z.string().min(1), ctrl: z.boolean().optional(), alt: z.boolean().optional(), shift: z.boolean().optional() }),
@@ -139,6 +143,38 @@ export const windowRegion = (place: Place, screen: { readonly width: number; rea
 // The whole screen, for the view of the desktop itself.
 const wholeScreen = (screen: { readonly width: number; readonly height: number }): Region => ({ x: 0, y: 0, width: screen.width, height: screen.height, scale: 1 });
 
+// Where a view's picture starts: the whole screen, or the window where it is now (undefined while it cannot be read).
+const startRegion = async (desk: AgentDesktop, only: string | undefined): Promise<Region | undefined> => {
+    const place = only === undefined ? undefined : await readWindowPlace(desk.display, only);
+    return place === undefined || place === "gone" ? (only === undefined ? wholeScreen(desk.display) : undefined) : windowRegion(place, desk.display);
+};
+
+// Text as typed, split on newlines here rather than trusted to the writer: a newline is Return, never a second xdotool
+// command.
+const typeLines = (input: XInput, text: string): void => {
+    text.split(/\r?\n/).forEach((part, index, parts) => {
+        if (part !== "") {
+            input.type(part);
+        }
+        if (index < parts.length - 1) {
+            input.key("Return");
+        }
+    });
+};
+
+// Taking over a window's view brings that window up and gives it the keyboard, the way the agent's focus_window does,
+// so what the owner types goes where they are looking.
+const raiseWindow = async (desk: AgentDesktop | undefined, only: string | undefined, services: Services): Promise<void> => {
+    if (desk === undefined || only === undefined) {
+        return;
+    }
+    try {
+        await desk.screen.focusWindow(only);
+    } catch (err) {
+        services.logger.warn({ err }, "desktop-view could not raise its window");
+    }
+};
+
 // What `window=` may say: an X window id as wmctrl spells it, or as a number. Anything else names no window.
 const WINDOW_ID = /^(0x[0-9a-f]{1,8}|\d{1,10})$/i;
 
@@ -200,6 +236,8 @@ export const createDesktopViewRoute = (services: Services) =>
         let following = false;
         let unlisted = 0;
         let unwatch: (() => void) | undefined;
+        // castd's media path, when the viewer asked and castd answers: no video and no XTEST here then.
+        let media: DesktopMedia | undefined;
 
         const announceHold = (ws: Socket): void => {
             ws.send(JSON.stringify({ type: "held", owner: ownerHolds() }));
@@ -229,6 +267,10 @@ export const createDesktopViewRoute = (services: Services) =>
             if (at === undefined || shown === undefined || paused || closed) {
                 return;
             }
+            if (media !== undefined) {
+                void media.moveTo(shown);
+                return;
+            }
             cast?.stop();
             gate?.started();
             cast = startVideocast(at.display, shown, {
@@ -249,6 +291,7 @@ export const createDesktopViewRoute = (services: Services) =>
             closed = true;
             clearTimeout(lapse);
             clearInterval(follower);
+            media?.stop();
             gate?.stop();
             cast?.stop();
             input?.stop();
@@ -303,19 +346,7 @@ export const createDesktopViewRoute = (services: Services) =>
             }
         };
 
-        // Taking over a window's view brings that window up and gives it the keyboard, the way the agent's focus_window
-        // does, so what the owner types goes where they are looking.
-        const raise = async (): Promise<void> => {
-            const at = desk;
-            if (at === undefined || only === undefined) {
-                return;
-            }
-            try {
-                await at.screen.focusWindow(only);
-            } catch (err) {
-                services.logger.warn({ err }, "desktop-view could not raise its window");
-            }
-        };
+        const raise = (): Promise<void> => raiseWindow(desk, only, services);
 
         const onInput = (message: DesktopViewMessage, ws: Socket): void => {
             if (!driving || input === undefined) {
@@ -336,15 +367,7 @@ export const createDesktopViewRoute = (services: Services) =>
             } else if (message.type === "key") {
                 input.key(desktopChord(message));
             } else if (message.type === "text") {
-                // Split on newlines here, not trusted to the writer: a newline is Return, never a second xdotool command.
-                message.text.split(/\r?\n/).forEach((part, index, parts) => {
-                    if (part !== "") {
-                        input?.type(part);
-                    }
-                    if (index < parts.length - 1) {
-                        input?.key("Return");
-                    }
-                });
+                typeLines(input, message.text);
             }
         };
 
@@ -382,7 +405,8 @@ export const createDesktopViewRoute = (services: Services) =>
                 if (closed) {
                     return;
                 }
-                input = startXInput(desk.display);
+                const at = desk;
+                ({ media, input } = await desktopPicture(at.display, only, params.get("media") === "1", () => startRegion(at, only), (text) => ws.send(text), () => closed));
                 unwatch = desktopWatched();
                 announceHold(ws);
                 if (only === undefined) {
@@ -425,6 +449,9 @@ export const createDesktopViewRoute = (services: Services) =>
                     case "keyframe":
                         gate?.askKey();
                         return;
+                    case "media":
+                        media?.resend();
+                        return;
                     case "control":
                         driving = message.driving;
                         if (driving) {
@@ -434,6 +461,7 @@ export const createDesktopViewRoute = (services: Services) =>
                         } else {
                             ownerHandedBack();
                         }
+                        media?.hand(driving);
                         announceHold(ws);
                         return;
                     default:

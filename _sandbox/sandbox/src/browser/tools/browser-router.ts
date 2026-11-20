@@ -6,7 +6,7 @@ import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { onMessages, PROTOCOL_VERSION, ROUTER_CLIENT } from "./browser-schema-cache.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 import { placeArtifact, placedNote, SCREENSHOT_VERB, writesFilename } from "../cast/browser-artifacts.js";
-import { describeBoundedWait, sendBoundingWait } from "./bounded-wait.js";
+import { describeBoundedWait, pauseOf, sendBoundingWait } from "./bounded-wait.js";
 import { withSignedInDoor } from "./account-hosts.js";
 import { fileUrlRefusal, withSandboxNotes } from "./tool-notes.js";
 import { settleTargets } from "./element-targets.js";
@@ -93,7 +93,39 @@ export interface RouterDeps {
     readonly webmcpGraceMs?: number;
     // What the router's site kits need of the workspace (chatgpt-kit.ts); absent lists none.
     readonly kits?: KitDeps;
+    // What a window castd streams answers itself (media/agent-capture.ts, media/agent-recording.ts); absent, every call
+    // goes to its backend.
+    readonly castd?: RouterCastd;
 }
+
+// A screenshot of the viewport and a bare pause, answered off castd when the owner's window has one (undefined sends
+// the call to the backend as before); and the turn's browsing, told of each answered call and of the router's close,
+// for its recording.
+export interface RouterCastd {
+    readonly screenshot: (owner: string, params: NonNullable<RpcMessage["params"]>) => Promise<RpcMessage["result"] | undefined>;
+    readonly pause: (owner: string, seconds: number) => Promise<RpcMessage["result"] | undefined>;
+    readonly browsed: (owner: string, conversationId: string | undefined) => void;
+    readonly closed: (conversationId: string | undefined) => void;
+}
+
+// Tells the turn's recording of a call that answered while the router is open: one answering after the close is past
+// the turn's end, which has kept the recording already, and would start one nothing ends.
+const tellBrowsed = (castd: RouterCastd | undefined, open: boolean, owner: string, conversationId: string | undefined): void => {
+    if (open) {
+        castd?.browsed(owner, conversationId);
+    }
+};
+
+// The answer castd gives a call, or undefined for one it does not take (anything but a viewport screenshot or a bare
+// pause, or a window it does not stream).
+const castdAnswer = async (castd: RouterCastd | undefined, owner: string, params: NonNullable<RpcMessage["params"]>): Promise<RpcMessage | undefined> => {
+    if (castd === undefined) {
+        return undefined;
+    }
+    const pause = pauseOf(params);
+    const result = params["name"] === SCREENSHOT_VERB ? await castd.screenshot(owner, params) : pause === undefined ? undefined : await castd.pause(owner, pause);
+    return result === undefined ? undefined : { jsonrpc: "2.0", result };
+};
 
 // ---- one owner's lazily spawned real server --------------------------------------------------------------------
 
@@ -443,10 +475,14 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         const toBackend = ready.send;
         // A page tool is looked up in the page as it stands (webmcp-call.ts); a timed text wait goes as the text wait it
         // means, answering the moment the text is there (bounded-wait.ts).
-        const answer = webmcp === undefined ? await sendBoundingWait(params, signal, toBackend) : await callWebmcp(webmcp, params, toBackend, deps.webmcpGraceMs);
+        const answer =
+            webmcp === undefined
+                ? ((await castdAnswer(deps.castd, owner, params)) ?? (await sendBoundingWait(params, signal, toBackend)))
+                : await callWebmcp(webmcp, params, toBackend, deps.webmcpGraceMs);
         if (webmcp === undefined && message.params?.["name"] === SCREENSHOT_VERB && answer.error === undefined) {
             deps.screenshotTaken?.({ owner, conversationId: manifest.conversationId, params: message.params, answer });
         }
+        tellBrowsed(deps.castd, !closed, owner, manifest.conversationId);
         const steered = withSignedInDoor(manifest.coveredHosts, message.params, withPlacedNote(answer, note));
         return { ...(network === undefined ? steered : redactNetworkAnswer(network, steered)), id: message.id ?? null };
     };
@@ -502,6 +538,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         handle,
         close: () => {
             closed = true;
+            deps.castd?.closed(manifest.conversationId);
             for (const backend of backends.values()) {
                 backend.child.kill("SIGTERM");
             }

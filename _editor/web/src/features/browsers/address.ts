@@ -1,10 +1,9 @@
+import { DEFAULT_SEARCH_ENGINE, type SearchEngine } from "@intentic/sandbox-contract/schemas/browsing";
+import { searchUrl } from "./omnibox/engines";
+
 // What the address bar sends the browser for what was typed: an address as it stands, a host given its scheme, or
 // anything else as a search. The same rule an omnibox applies, since the chrome is ours and Chromium's never sees the
-// text.
-
-// Where a query goes; the sandbox's browser has no search engine of its own. An index of its own rather than a resold
-// one, no account, no tracking; the chrome never names it, since nothing here is an advert for it.
-const SEARCH_URL = `https://search.brave.com/search?q=`;
+// text. Where a search goes is the sandbox's `searchEngine` setting (omnibox/engines.ts); Brave unless it says otherwise.
 
 // Something with a scheme (`https:`, `about:`, `file:`), taken as written. A colon followed by digits and nothing
 // but a path is a host with a port (`localhost:5173`), not a scheme.
@@ -14,19 +13,32 @@ const HOST = /^(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[\w-]+(?:\.[\w-]+)+)(?::\d{1
 // Hosts a certificate is not expected on; everything else is asked over https first.
 const PLAIN_HTTP = /^(?:localhost|(?:\d{1,3}\.){3}\d{1,3})(?::|\/|$)/i;
 
-export const toUrl = (typed: string): string | undefined => {
+// The address for typed text that names one, undefined for anything that would be a search.
+export const addressOf = (typed: string): string | undefined => {
     const text = typed.trim();
-    if (text === ``) {
-        return undefined;
-    }
     if (SCHEME.test(text)) {
         return text;
     }
     // A space is never in a host, so anything containing one is a search however host-like its first word.
-    if (!/\s/.test(text) && HOST.test(text)) {
+    if (text !== `` && !/\s/.test(text) && HOST.test(text)) {
         return `${PLAIN_HTTP.test(text) ? `http` : `https`}://${text}`;
     }
-    return `${SEARCH_URL}${encodeURIComponent(text)}`;
+    return undefined;
+};
+
+export const toUrl = (typed: string, engine: SearchEngine = DEFAULT_SEARCH_ENGINE): string | undefined => {
+    const text = typed.trim();
+    if (text === ``) {
+        return undefined;
+    }
+    return addressOf(text) ?? searchUrl(engine, text);
+};
+
+// Ctrl+Enter's address: a bare word wrapped as a site (`intentic` to `https://www.intentic.com`), the shortcut every
+// desktop browser keeps. Anything already an address, or with a space or a dot in it, is left to Enter's own rule.
+export const wrappedUrl = (typed: string): string | undefined => {
+    const text = typed.trim();
+    return /^[\p{L}\p{N}-]+$/u.test(text) ? `https://www.${text}.com` : undefined;
 };
 
 // How the address bar draws an address while nobody is editing it: the scheme dropped (the padlock says it instead),

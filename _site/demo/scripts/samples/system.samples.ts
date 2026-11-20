@@ -21,6 +21,10 @@ export const systemSamples: GroupSamples<`system`> = ({ host }) => ({
     closeBrowser: { name: `browser-flaky-signup` },
     closeBrowserPage: { name: `browser-checkout-stripe`, pageId: `page_docs` },
     desktop: undefined,
+    browsingHistory: { profile: `_own` },
+    // A page the fixture never had: nothing to forget, and the rest of the visit sees the same history.
+    forgetBrowsingHistory: { profile: `_own`, forget: { kind: `urls`, urls: [`https://never-visited.test/`] } },
+    searchSuggestions: { q: `router`, engine: `brave` },
     subagents: undefined,
     storage: undefined,
     diskPressure: undefined,

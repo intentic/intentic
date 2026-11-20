@@ -1,0 +1,1066 @@
+{
+    "recordedAt": "2026-11-20T00:11:05.760Z",
+    "host": {
+        "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+        "cores": 16,
+        "kernel": "6.18.58.1-microsoft-standard-WSL2",
+        "chromium": "156.0.8078.4",
+        "ffmpeg": "ffmpeg version 7.1.5-0+deb13u1"
+    },
+    "load": {
+        "before": [
+            7.5,
+            16.1,
+            32.7
+        ],
+        "after": [
+            5.2,
+            10.2,
+            26.5
+        ]
+    },
+    "settings": {
+        "seconds": 12,
+        "warmupSeconds": 3,
+        "queueMs": 200,
+        "size": "1280x880",
+        "stage": "daemon"
+    },
+    "runs": [
+        {
+            "pipeline": "legacy",
+            "workload": "still",
+            "link": "direct",
+            "seconds": 12,
+            "encoderCores": 0.2,
+            "xvfbCores": 0.02,
+            "chromiumCores": 0,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 0,
+                "min": 0,
+                "p10": 0
+            },
+            "mbps": 0.04,
+            "latencyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "displayMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pipelineMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "stalls": null,
+            "maxGapMs": null,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "still",
+            "link": "10mbit-40ms",
+            "seconds": 12,
+            "encoderCores": 0.19,
+            "xvfbCores": 0.02,
+            "chromiumCores": 0.01,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 0,
+                "min": 0,
+                "p10": 0
+            },
+            "mbps": 0.04,
+            "latencyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "displayMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pipelineMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "stalls": null,
+            "maxGapMs": null,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "still",
+            "link": "5mbit-60ms",
+            "seconds": 12,
+            "encoderCores": 0.2,
+            "xvfbCores": 0.02,
+            "chromiumCores": 0,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 0,
+                "min": 0,
+                "p10": 0
+            },
+            "mbps": 0.04,
+            "latencyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "displayMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pipelineMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "stalls": null,
+            "maxGapMs": null,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "anim",
+            "link": "direct",
+            "seconds": 12,
+            "encoderCores": 0.2,
+            "xvfbCores": 0.04,
+            "chromiumCores": 0.12,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 30,
+                "p10": 30
+            },
+            "mbps": 0.33,
+            "latencyMs": {
+                "n": 360,
+                "p50": 59,
+                "p99": 62,
+                "mean": 59.1,
+                "max": 65
+            },
+            "displayMs": {
+                "n": 359,
+                "p50": 18,
+                "p99": 20,
+                "mean": 17.9,
+                "max": 21
+            },
+            "pipelineMs": {
+                "n": 359,
+                "p50": 41,
+                "p99": 44.5,
+                "mean": 41.2,
+                "max": 46.9
+            },
+            "stalls": 0,
+            "maxGapMs": 38.7,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "anim",
+            "link": "10mbit-40ms",
+            "seconds": 12,
+            "encoderCores": 0.2,
+            "xvfbCores": 0.04,
+            "chromiumCores": 0.12,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 30,
+                "p10": 30
+            },
+            "mbps": 0.33,
+            "latencyMs": {
+                "n": 360,
+                "p50": 76,
+                "p99": 80,
+                "mean": 76.3,
+                "max": 82
+            },
+            "displayMs": {
+                "n": 358,
+                "p50": 2,
+                "p99": 3,
+                "mean": 2,
+                "max": 4
+            },
+            "pipelineMs": {
+                "n": 358,
+                "p50": 74.1,
+                "p99": 78.2,
+                "mean": 74.2,
+                "max": 79.5
+            },
+            "stalls": 0,
+            "maxGapMs": 39.4,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "anim",
+            "link": "5mbit-60ms",
+            "seconds": 12,
+            "encoderCores": 0.19,
+            "xvfbCores": 0.03,
+            "chromiumCores": 0.12,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 30,
+                "p10": 30
+            },
+            "mbps": 0.33,
+            "latencyMs": {
+                "n": 360,
+                "p50": 73,
+                "p99": 77,
+                "mean": 73,
+                "max": 79
+            },
+            "displayMs": {
+                "n": 358,
+                "p50": 2,
+                "p99": 3,
+                "mean": 2,
+                "max": 4
+            },
+            "pipelineMs": {
+                "n": 358,
+                "p50": 70.8,
+                "p99": 75.2,
+                "mean": 71,
+                "max": 77.6
+            },
+            "stalls": 0,
+            "maxGapMs": 39.9,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "scroll",
+            "link": "direct",
+            "seconds": 12,
+            "encoderCores": 0.21,
+            "xvfbCores": 0.05,
+            "chromiumCores": 0.16,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 30,
+                "p10": 30
+            },
+            "mbps": 0.97,
+            "latencyMs": {
+                "n": 360,
+                "p50": 64,
+                "p99": 68,
+                "mean": 64.4,
+                "max": 72
+            },
+            "displayMs": {
+                "n": 359,
+                "p50": 19,
+                "p99": 21,
+                "mean": 18.8,
+                "max": 21
+            },
+            "pipelineMs": {
+                "n": 359,
+                "p50": 45.5,
+                "p99": 49.3,
+                "mean": 45.5,
+                "max": 52.8
+            },
+            "stalls": 0,
+            "maxGapMs": 41,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "scroll",
+            "link": "10mbit-40ms",
+            "seconds": 12,
+            "encoderCores": 0.2,
+            "xvfbCores": 0.06,
+            "chromiumCores": 0.17,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 30,
+                "p10": 30
+            },
+            "mbps": 0.98,
+            "latencyMs": {
+                "n": 360,
+                "p50": 88,
+                "p99": 94,
+                "mean": 88.8,
+                "max": 96
+            },
+            "displayMs": {
+                "n": 358,
+                "p50": 19,
+                "p99": 21,
+                "mean": 18.9,
+                "max": 21
+            },
+            "pipelineMs": {
+                "n": 358,
+                "p50": 69.4,
+                "p99": 75.2,
+                "mean": 69.9,
+                "max": 77.1
+            },
+            "stalls": 0,
+            "maxGapMs": 42.2,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "scroll",
+            "link": "5mbit-60ms",
+            "seconds": 12,
+            "encoderCores": 0.2,
+            "xvfbCores": 0.05,
+            "chromiumCores": 0.17,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 29,
+                "p10": 30
+            },
+            "mbps": 1.43,
+            "latencyMs": {
+                "n": 360,
+                "p50": 94,
+                "p99": 193,
+                "mean": 100.6,
+                "max": 214
+            },
+            "displayMs": {
+                "n": 358,
+                "p50": 19,
+                "p99": 20,
+                "mean": 18.8,
+                "max": 21
+            },
+            "pipelineMs": {
+                "n": 358,
+                "p50": 75.3,
+                "p99": 174.5,
+                "mean": 81.9,
+                "max": 195.3
+            },
+            "stalls": 4,
+            "maxGapMs": 140.3,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "typing",
+            "link": "direct",
+            "seconds": 12,
+            "encoderCores": 0.19,
+            "xvfbCores": 0.02,
+            "chromiumCores": 0.02,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 3.3,
+                "min": 0,
+                "p10": 1
+            },
+            "mbps": 0.62,
+            "latencyMs": {
+                "n": 36,
+                "p50": 57,
+                "p99": 70,
+                "mean": 55.4,
+                "max": 70
+            },
+            "displayMs": {
+                "n": 36,
+                "p50": 2,
+                "p99": 7,
+                "mean": 2.2,
+                "max": 7
+            },
+            "pipelineMs": {
+                "n": 36,
+                "p50": 54.7,
+                "p99": 68.2,
+                "mean": 53.2,
+                "max": 68.2
+            },
+            "stalls": null,
+            "maxGapMs": null,
+            "keyMs": {
+                "n": 33,
+                "p50": 58,
+                "p99": 72.4,
+                "mean": 56.2,
+                "max": 72.4
+            },
+            "keyInputMs": {
+                "n": 33,
+                "p50": 1,
+                "p99": 3,
+                "mean": 1.3,
+                "max": 3
+            },
+            "pasteMs": {
+                "n": 3,
+                "p50": 66.9,
+                "p99": 67,
+                "mean": 64.5,
+                "max": 67
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "typing",
+            "link": "10mbit-40ms",
+            "seconds": 12,
+            "encoderCores": 0.19,
+            "xvfbCores": 0.02,
+            "chromiumCores": 0.02,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 2.7,
+                "min": 0,
+                "p10": 1
+            },
+            "mbps": 0.61,
+            "latencyMs": {
+                "n": 30,
+                "p50": 79,
+                "p99": 182,
+                "mean": 86.1,
+                "max": 182
+            },
+            "displayMs": {
+                "n": 30,
+                "p50": 2,
+                "p99": 7,
+                "mean": 2.2,
+                "max": 7
+            },
+            "pipelineMs": {
+                "n": 30,
+                "p50": 77.5,
+                "p99": 174.5,
+                "mean": 83.9,
+                "max": 174.5
+            },
+            "stalls": null,
+            "maxGapMs": null,
+            "keyMs": {
+                "n": 27,
+                "p50": 99.9,
+                "p99": 112,
+                "mean": 98.2,
+                "max": 112
+            },
+            "keyInputMs": {
+                "n": 27,
+                "p50": 22,
+                "p99": 24,
+                "mean": 21.7,
+                "max": 24
+            },
+            "pasteMs": {
+                "n": 3,
+                "p50": 194.3,
+                "p99": 205.4,
+                "mean": 195.9,
+                "max": 205.4
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "typing",
+            "link": "5mbit-60ms",
+            "seconds": 12,
+            "encoderCores": 0.19,
+            "xvfbCores": 0.02,
+            "chromiumCores": 0.02,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 2.6,
+                "min": 0,
+                "p10": 1
+            },
+            "mbps": 0.61,
+            "latencyMs": {
+                "n": 29,
+                "p50": 88,
+                "p99": 270,
+                "mean": 103.8,
+                "max": 270
+            },
+            "displayMs": {
+                "n": 29,
+                "p50": 2,
+                "p99": 6,
+                "mean": 2.1,
+                "max": 6
+            },
+            "pipelineMs": {
+                "n": 29,
+                "p50": 86.4,
+                "p99": 265.1,
+                "mean": 101.7,
+                "max": 265.1
+            },
+            "stalls": null,
+            "maxGapMs": null,
+            "keyMs": {
+                "n": 26,
+                "p50": 118.4,
+                "p99": 134.9,
+                "mean": 117.5,
+                "max": 134.9
+            },
+            "keyInputMs": {
+                "n": 26,
+                "p50": 32,
+                "p99": 33,
+                "mean": 31.8,
+                "max": 33
+            },
+            "pasteMs": {
+                "n": 3,
+                "p50": 294.6,
+                "p99": 304.2,
+                "mean": 293.6,
+                "max": 304.2
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "flood",
+            "link": "direct",
+            "seconds": 12,
+            "encoderCores": 0.23,
+            "xvfbCores": 0.06,
+            "chromiumCores": 0.26,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30.1,
+            "uniqueFps": {
+                "mean": 30.1,
+                "min": 29,
+                "p10": 30
+            },
+            "mbps": 6.01,
+            "latencyMs": {
+                "n": 361,
+                "p50": 68,
+                "p99": 79,
+                "mean": 68.9,
+                "max": 92
+            },
+            "displayMs": {
+                "n": 359,
+                "p50": 18,
+                "p99": 20,
+                "mean": 18.2,
+                "max": 20
+            },
+            "pipelineMs": {
+                "n": 359,
+                "p50": 50.1,
+                "p99": 60,
+                "mean": 50.6,
+                "max": 74.6
+            },
+            "stalls": 0,
+            "maxGapMs": 47.3,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "flood",
+            "link": "10mbit-40ms",
+            "seconds": 12,
+            "encoderCores": 0.24,
+            "xvfbCores": 0.05,
+            "chromiumCores": 0.24,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 30,
+            "uniqueFps": {
+                "mean": 30,
+                "min": 30,
+                "p10": 30
+            },
+            "mbps": 6,
+            "latencyMs": {
+                "n": 360,
+                "p50": 106,
+                "p99": 117,
+                "mean": 106.6,
+                "max": 134
+            },
+            "displayMs": {
+                "n": 358,
+                "p50": 18,
+                "p99": 20,
+                "mean": 18.2,
+                "max": 21
+            },
+            "pipelineMs": {
+                "n": 358,
+                "p50": 88,
+                "p99": 97.1,
+                "mean": 88.3,
+                "max": 116.5
+            },
+            "stalls": 0,
+            "maxGapMs": 60,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        },
+        {
+            "pipeline": "legacy",
+            "workload": "flood",
+            "link": "5mbit-60ms",
+            "seconds": 12,
+            "encoderCores": 0.24,
+            "xvfbCores": 0.05,
+            "chromiumCores": 0.25,
+            "encoderStarts": 1,
+            "picture": {
+                "width": 1280,
+                "height": 880
+            },
+            "framesPerSec": 25,
+            "uniqueFps": {
+                "mean": 25,
+                "min": 24,
+                "p10": 25
+            },
+            "mbps": 4.99,
+            "latencyMs": {
+                "n": 300,
+                "p50": 1871,
+                "p99": 2844,
+                "mean": 1876.4,
+                "max": 2875
+            },
+            "displayMs": {
+                "n": 275,
+                "p50": 18,
+                "p99": 20,
+                "mean": 18.1,
+                "max": 21
+            },
+            "pipelineMs": {
+                "n": 275,
+                "p50": 1939.1,
+                "p99": 2832.7,
+                "mean": 1941.1,
+                "max": 2857.5
+            },
+            "stalls": 0,
+            "maxGapMs": 92.5,
+            "keyMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "keyInputMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "pasteMs": {
+                "n": 0,
+                "p50": null,
+                "p99": null,
+                "mean": null,
+                "max": null
+            },
+            "inputMissed": 0,
+            "markerErrors": 0,
+            "decodeErrors": 0,
+            "keyframes": 1
+        }
+    ]
+}

@@ -36,6 +36,7 @@ import { officeResponse } from "../fixture/offices/office";
 import { vendoredBundle } from "../fixture/sandbox";
 import { demoSelf } from "../floors";
 import { json } from "../transport";
+import { browserRaw } from "./machine/browserTools";
 import { conversationBundle } from "./board/bundle";
 import { STARTED_AT } from "./board/roster";
 
@@ -176,6 +177,8 @@ export const raw = {
     "GET /fleet/{handle}/bundle": ({ param }) => json(conversationBundle(param(`handle`))),
     // Pre-flight for the upload queue; nothing here is ever a re-drop, so it always reports none to skip.
     "POST /workspace/upload-diff": () => json({ skip: [] }),
+    // The visitor's own window's uploads and saved downloads (machine/browserTools.ts).
+    ...browserRaw,
     // The one binary diff the demo carries whole: the handover document, both versions built in code.
     "GET /diff/raw": ({ url }) => documentBytes(url.searchParams.get(`which`) === `before` ? HANDOVER_DOCX_BEFORE : HANDOVER_DOCX),
     // The listed extensions' bundles, served as a daemon serves an installed checkout's `entry`; the loader blob-imports

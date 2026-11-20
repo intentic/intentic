@@ -22,7 +22,8 @@ import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandb
 import { z } from "zod";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { InProcessServer, RpcMessage, TurnLease } from "../agent/tools/turn-mounts.js";
-import { type AgentDesktop, agentDesktop, assertAgentMayDrive, DESKTOP_SIZE, DesktopHeldError, desktopAvailable } from "./agent-desktop.js";
+import { type AgentDesktop, agentDesktop, assertAgentMayDrive, DESKTOP_KEY, DESKTOP_SIZE, DesktopHeldError, desktopAvailable } from "./agent-desktop.js";
+import { castdSettled } from "./desktop-media.js";
 import { onScreenGuidance, SCREEN_SOCKET } from "./on-screen.js";
 
 /* The `desktop` tools: the sandbox's own virtual desktop (agent-desktop.ts), driven the way a connected machine is
@@ -56,7 +57,10 @@ const shotContent = (shot: Shot, what: string, desk: AgentDesktop): unknown[] =>
 // An action's answer: what it did, then the same part of the screen as the latest screenshot, or a sentence when not
 // one pixel of it changed.
 const confirmingLook = async (said: string, desk: AgentDesktop): Promise<ToolAnswer> => {
-    await settle(desk.screen, frames);
+    // Timed on castd's pixels where the desktop is watched on the media path, else on digests of screenshots.
+    if (!(await castdSettled(DESKTOP_KEY))) {
+        await settle(desk.screen, frames);
+    }
     const shot = await reshoot(desk.screen, frames);
     if (shot.unchanged && frames.unchangedStreak() <= MAX_UNCHANGED) {
         return textResult(

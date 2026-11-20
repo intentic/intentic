@@ -1,4 +1,4 @@
-import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
+import { computed, type ComputedRef, onScopeDispose, ref, type Ref, watch } from "vue";
 import type { BrowserView } from "./useBrowserView";
 
 // WHERE THE LIVE PICTURE SITS ON ITS STAGE, AND WHAT SHOWS BESIDE IT (LiveBrowser.vue). The daemon sizes the page to the
@@ -36,9 +36,37 @@ export interface PictureFit {
     readonly measure: (width: number, height: number) => void;
 }
 
+// The stage's box is what the daemon sizes the page's viewport to, so the picture is the page at 1:1 rather than
+// scaled into whatever is left; measured via ResizeObserver, since the chrome's own text-scaled height is part of
+// what's left. Each size goes to `measured`.
+const observeStage = (stage: Ref<HTMLElement | null>, measured: (width: number, height: number) => void): void => {
+    let observer: ResizeObserver | undefined;
+    watch(stage, (element) => {
+        observer?.disconnect();
+        observer = undefined;
+        // Null, not undefined: the stage lives under `v-if="current"`, and Vue writes null into the ref the moment that
+        // element goes. `observe(null)` throws where the picture stops rather than where it is read.
+        if (element === null) {
+            return;
+        }
+        observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                measured(entry.contentRect.width, entry.contentRect.height);
+            }
+        });
+        observer.observe(element);
+    });
+    onScopeDispose(() => observer?.disconnect());
+};
+
 // Sized by the frame on the canvas (`painted`) rather than the size `ready` announced, which runs ahead of it until the
-// new stream's first frame decodes, so the frame being replaced is never stretched to the next one's shape.
-export const usePictureFit = (view: Pick<BrowserView, `kind` | `picture` | `viewScale`>, phone: Ref<boolean>): PictureFit => {
+// new stream's first frame decodes, so the frame being replaced is never stretched to the next one's shape. Given the
+// stage, it is measured here and its size asked of the view.
+export const usePictureFit = (
+    view: Pick<BrowserView, `kind` | `picture` | `viewScale` | `requestSize`>,
+    phone: Ref<boolean>,
+    stageElement?: Ref<HTMLElement | null>,
+): PictureFit => {
     const stage = ref<Size | undefined>();
     const colour = ref<string | undefined>();
     let sampledAt = 0;
@@ -48,6 +76,18 @@ export const usePictureFit = (view: Pick<BrowserView, `kind` | `picture` | `view
     };
     // Each new size paints once, and its edge is read as it does; the watcher runs after the frame is drawn.
     watch(view.picture.painted, sample);
+    const measure = (width: number, height: number): void => {
+        stage.value = { width, height };
+        if (Date.now() - sampledAt >= GAP_SAMPLE_MS) {
+            sample();
+        }
+    };
+    if (stageElement !== undefined) {
+        observeStage(stageElement, (width, height) => {
+            measure(width, height);
+            view.requestSize(width, height);
+        });
+    }
     return {
         box: computed(() => {
             const painted = view.picture.painted.value;
@@ -57,12 +97,7 @@ export const usePictureFit = (view: Pick<BrowserView, `kind` | `picture` | `view
             const fitted = fitPicture(painted, view.viewScale.value, stage.value);
             return { width: `${fitted.width}px`, height: `${fitted.height}px` };
         }),
-        gap: computed(() => (colour.value === undefined || view.kind.value !== `video` || phone.value ? undefined : { backgroundColor: colour.value })),
-        measure: (width, height) => {
-            stage.value = { width, height };
-            if (Date.now() - sampledAt >= GAP_SAMPLE_MS) {
-                sample();
-            }
-        },
+        gap: computed(() => (colour.value === undefined || view.kind.value === `frames` || phone.value ? undefined : { backgroundColor: colour.value })),
+        measure,
     };
 };

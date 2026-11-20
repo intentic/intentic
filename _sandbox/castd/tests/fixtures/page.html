@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- The page castd's integration test and its measurements show. `#anim` runs a CSS animation, `#scroll` scrolls the
+     page by script every frame, and nothing moves otherwise, so a still page is truly still (no caret: nothing is
+     focused until the test clicks the top half). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>castd test page</title>
+<style>
+  body { margin: 0; font: 16px/1.5 sans-serif; background: #fff; color: #222; }
+  #field { position: fixed; left: 20px; top: 20px; width: 400px; height: 32px; font-size: 18px; z-index: 2; }
+  #log { position: fixed; left: 20px; top: 70px; width: 600px; height: 24px; z-index: 2; background: #eef; }
+  #box { position: fixed; left: 500px; top: 200px; width: 320px; height: 320px; z-index: 2;
+         background: linear-gradient(45deg, #e33, #33e); display: none; }
+  body.anim #box { display: block; animation: spin 2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .row { padding: 6px 20px; border-bottom: 1px solid #ddd; }
+  .row:nth-child(2n) { background: #f6f6f6; }
+  #rows { padding-top: 120px; }
+</style>
+</head>
+<body>
+<input id="field" autocomplete="off">
+<div id="log"></div>
+<div id="box"></div>
+<div id="rows"></div>
+<script>
+  const rows = document.getElementById("rows");
+  for (let i = 0; i < 400; i++) {
+    const d = document.createElement("div");
+    d.className = "row";
+    d.textContent = `Row ${i}: the quick brown fox jumps over the lazy dog, zażółć gęślą jaźń, ${i * 7919 % 1000}`;
+    rows.appendChild(d);
+  }
+  const log = document.getElementById("log");
+  const field = document.getElementById("field");
+  field.addEventListener("input", (e) => { log.textContent = e.target.value; });
+  // Where the field lands depends on bars Chromium may draw above the page, so the test does not aim at it: a press
+  // in the top half of the window focuses it, one in the bottom half blurs it (no caret blinking while still).
+  document.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    if (e.clientY < innerHeight / 2) field.focus(); else field.blur();
+  });
+  if (location.hash === "#anim") document.body.classList.add("anim");
+  if (location.hash === "#scroll") {
+    let dir = 1;
+    const step = () => {
+      window.scrollBy(0, 8 * dir);
+      if (window.scrollY + innerHeight >= document.body.scrollHeight - 2 || window.scrollY <= 0) dir = -dir;
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+</script>
+</body>
+</html>

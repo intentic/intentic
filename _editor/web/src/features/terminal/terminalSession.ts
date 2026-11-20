@@ -9,13 +9,12 @@ import { boundCommand } from "../../workbench/commands/useCommands";
 import { isApplePlatform } from "../../workbench/commands/keybindings";
 import { toScreenPx } from "../../workbench/window/uiScale";
 import { acquireStreamSlot } from "../../lib/streamBudget";
-import { transportFor } from "./channel/webTransport";
-import { useEndpoint } from "../../client/endpoint/useEndpoint";
-import { useSandbox } from "../../client/sandbox/useSandbox";
+import { webTransportDeclared } from "../../client/transport/declared";
+import { transportFor } from "../../client/transport/webTransport";
 import { liveSocket, type LiveSocket } from "../../client/session/liveSocket";
 import { socketAddress } from "../../client/sandbox/streams/wsTicket";
 import { type ChannelEvents, readsDeflate, socketChannel, type TerminalChannel } from "./channel/terminalChannel";
-import { StreamSocket } from "./channel/streamSocket";
+import { StreamSocket } from "../../client/transport/streamSocket";
 import { editKeyBytes, optionIsMeta } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./links/terminalFileLinks";
 import { registerUrlLinks } from "./links/terminalUrlLinks";
@@ -32,9 +31,6 @@ import "@xterm/xterm/css/xterm.css";
 
 // Debounces viewport size requests during a panel drag.
 const RESIZE_SETTLE_MS = 120;
-
-const { usingLocal } = useEndpoint();
-const { active } = useSandbox();
 
 export type TerminalSession = TerminalSizing & {
     // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
@@ -124,10 +120,6 @@ const terminalParams = (s: Omit<TerminalSession, "live">): TerminalParams => {
     }
     return params;
 };
-
-// Whether the address terminals open on is an edge that declared WebTransport: the sandbox row says what its edge
-// serves, and a loopback shortcut is no edge at all, so it declares nothing.
-const webTransportDeclared = (): boolean => !usingLocal.value && (active.value?.edgeTransports ?? []).includes(`webtransport`);
 
 // A WebSocket on a stream of the edge's WebTransport session where it is declared and ready, else the browser's own.
 const openChannel = (base: string, query: string, events: ChannelEvents): TerminalChannel => {

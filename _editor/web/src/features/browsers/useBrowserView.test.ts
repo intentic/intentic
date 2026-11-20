@@ -3,7 +3,9 @@
 // machine.
 import "@intentic/testing/dom";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
+import type { BrowserMediaClientMessage } from "@intentic/sandbox-contract/browser-wire";
 import { effectScope, ref } from "vue";
+import type { FromWorker, ToWorker } from "../../models/browsers/media/worker/workerWire";
 
 // The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
 const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbox.test/system/browser-view`);
@@ -63,11 +65,16 @@ const mouse = (over: Partial<MouseEvent> = {}): MouseEvent =>
 const press = (key: string, held: { ctrl?: boolean; shift?: boolean } = {}): KeyboardEvent =>
     ({
         key,
+        code: ``,
         ctrlKey: held.ctrl === true,
         metaKey: false,
         shiftKey: held.shift === true,
         altKey: false,
+        isComposing: false,
+        keyCode: 0,
+        getModifierState: () => false,
         preventDefault: jest.fn(),
+        stopPropagation: jest.fn(),
     }) as unknown as KeyboardEvent;
 
 // A paste as the host browser delivers it: the clipboard answers by MIME type, and only text is asked for.
@@ -565,3 +572,139 @@ test("the window's own state is held as it arrives, and a copy of any other wind
     expect(view.session.value?.seq).toBe(9);
 });
 
+// A trackpad sends many small steps; each used to become a whole 53 px notch or nothing. They reach the page at their
+// size now, summed over a frame, in the picture's own pixels.
+test("a trackpad's small scroll steps reach the page whole, one message a frame", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    for (const deltaY of [0.4, 0.75, 1.1]) {
+        view.onWheel(new WheelEvent(`wheel`, { clientX: 300, clientY: 400, deltaY, cancelable: true }), stage());
+    }
+    // A mouse wheel in lines (Firefox) is Chromium's own 40 px a line.
+    await waitFor(() => expect(wire()).toContainEqual({ type: `mouse`, action: `wheel`, x: 300, y: 400, buttons: 0, deltaX: 0, deltaY: 2.25 }));
+    view.onWheel(new WheelEvent(`wheel`, { clientX: 300, clientY: 400, deltaY: 3, deltaMode: 1, ctrlKey: true, cancelable: true }), stage());
+    await waitFor(() =>
+        expect(wire()).toContainEqual({ type: `mouse`, action: `wheel`, x: 300, y: 400, buttons: 0, deltaX: 0, deltaY: 120, ctrl: true }),
+    );
+});
+
+test("nothing scrolls a browser the user is only watching, and the wheel stays the host's", async () => {
+    const { view, wire } = await connected();
+    const event = new WheelEvent(`wheel`, { clientX: 300, clientY: 400, deltaY: 100, cancelable: true });
+    view.onWheel(event, stage());
+    expect(event.defaultPrevented).toBe(false);
+    expect(wire()).toHaveLength(0);
+});
+
+// Focus leaving mid-drag (a click on the address bar, another window) used to leave the remote button down, so the next
+// move dragged.
+test("the picture losing the keyboard lets go of a held button", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    view.onMouseDown(mouse({ button: 0, buttons: 1, detail: 1 }), stage());
+    view.releaseInput();
+    expect(wire().at(-1)).toEqual({ type: `mouse`, action: `up`, x: 100, y: 200, button: 0, buttons: 0 });
+});
+
+test("handing the wheel back lets go of a held button too", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    view.onMouseDown(mouse({ button: 2, buttons: 2, detail: 1 }), stage());
+    view.driving.value = false;
+    await waitFor(() => expect(wire().at(-1)).toEqual({ type: `mouse`, action: `up`, x: 100, y: 200, button: 2, buttons: 0 }));
+});
+
+// The browser zooms itself, so the page reflows as it would under a local Ctrl+=.
+test("zooming the page is Chromium's own chord on the display", async () => {
+    const { view, wire } = await connected();
+    view.zoomPage(`in`);
+    view.zoomPage(`out`);
+    view.zoomPage(`reset`);
+    expect(wire().slice(-3)).toEqual([
+        { type: `key`, key: `=`, ctrl: true, raw: true },
+        { type: `key`, key: `-`, ctrl: true, raw: true },
+        { type: `key`, key: `0`, ctrl: true, raw: true },
+    ]);
+});
+
+test("a finger's tap is a click where it landed", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    const touch = (type: string) => new PointerEvent(type, { pointerId: 7, pointerType: `touch`, clientX: 640, clientY: 400, cancelable: true });
+    view.onTouch(`down`, touch(`pointerdown`), stage(), stage());
+    view.onTouch(`up`, touch(`pointerup`), stage(), stage());
+    expect(wire().slice(-3)).toEqual([
+        { type: `mouse`, action: `move`, x: 640, y: 400, buttons: 0 },
+        { type: `mouse`, action: `down`, x: 640, y: 400, button: 0, buttons: 1, clickCount: 1 },
+        { type: `mouse`, action: `up`, x: 640, y: 400, button: 0, buttons: 0, clickCount: 1 },
+    ]);
+});
+
+// An IME's commit, an emoji from the panel and dictation arrive as text in the field, never as a keydown that names them.
+test("text an input method commits reaches the page once, inserted", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    view.onKeyDown(press(`Process`));
+    view.onCompositionEnd(new CompositionEvent(`compositionend`, { data: `日本語` }));
+    view.onBeforeInput(new InputEvent(`beforeinput`, { inputType: `insertText`, data: `🎉`, cancelable: true }));
+    expect(wire()).toEqual([
+        { type: `text`, text: `日本語` },
+        { type: `text`, text: `🎉` },
+    ]);
+});
+
+// The real URL, before a test above stands in for its object URLs: the media path resolves its worker's script with it.
+const RealUrl = URL;
+
+// The decode worker the media path starts, as the page sees one: what it was told, and a way to answer.
+class FakeWorker {
+    static made: FakeWorker[] = [];
+    readonly posted: ToWorker[] = [];
+    private listener: ((event: { data: FromWorker }) => void) | undefined;
+    constructor() {
+        FakeWorker.made.push(this);
+    }
+    postMessage(message: ToWorker): void {
+        this.posted.push(message);
+    }
+    addEventListener(_type: string, listener: (event: { data: FromWorker }) => void): void {
+        this.listener = listener;
+    }
+    terminate(): void {}
+    say(message: FromWorker): void {
+        this.listener?.({ data: message });
+    }
+    sent(): BrowserMediaClientMessage[] {
+        return this.posted.flatMap((message) => (message.type === `send` ? [message.message] : []));
+    }
+}
+
+test("where castd serves the window, its picture and the person's input move to the media socket", async () => {
+    FakeWorker.made = [];
+    stubGlobal(`URL`, RealUrl);
+    stubGlobal(`Worker`, FakeWorker);
+    // What the page asks of the browser before it starts a decode worker: that one could draw and decode there.
+    stubGlobal(`OffscreenCanvas`, function OffscreenCanvas() {});
+    stubGlobal(`VideoDecoder`, function VideoDecoder() {});
+    const { view, wire, socket } = await connected();
+    socket().deliver({ type: `media`, path: `/system/browser-media/cast-1`, token: `t.m`, expiresAt: Date.now() + 60_000 });
+    await waitFor(() => expect(FakeWorker.made[0]?.posted.some((message) => message.type === `dial`)).toBe(true));
+    const worker = FakeWorker.made[0]!;
+    const dial = worker.posted.find((message) => message.type === `dial`);
+    expect(dial).toMatchObject({ url: `wss://sandbox.test/system/browser-media/cast-1?token=t.m` });
+    const id = dial?.type === `dial` ? dial.socket : 0;
+    worker.say({ type: `open`, socket: id });
+    worker.say({ type: `text`, socket: id, data: JSON.stringify({ type: `hello`, width: 1280, height: 800, scale: 1, codec: `avc1.42c033`, readOnly: false }) });
+    expect(view.kind.value).toBe(`media`);
+
+    view.driving.value = true;
+    const before = wire().length;
+    view.onMouseDown(mouse({ buttons: 1 }), stage());
+    view.find();
+    expect(worker.sent().slice(-2)).toEqual([
+        { type: `mouse`, action: `down`, x: 100, y: 200, button: 0, buttons: 1 },
+        { type: `key`, key: `f`, ctrl: true },
+    ]);
+    // Nothing of it went on the window's own socket.
+    expect(wire().slice(before)).toEqual([]);
+});

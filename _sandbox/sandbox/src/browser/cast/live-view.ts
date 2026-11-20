@@ -1,13 +1,14 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { BrowserContext, CDPSession, Page } from "playwright";
 import { type Display, displayOf } from "./display.js";
-import { type Device, EmulateMessageSchema, PHONE_BOX, type Phone, phoneFor, putPhoneOn, takePhoneOff } from "./emulation.js";
+import { type Device, PHONE_BOX, type Phone, phoneFor, putPhoneOn, takePhoneOff } from "./emulation.js";
 import { frontTab, knownTargetId } from "../state/front-tab.js";
 import { regionsEqual, type Region, type Screen } from "./region.js";
 import {
     applySelect,
     cursorReporter,
     dispatchInput,
+    dispatchWheel,
     encodeFrame,
     readSelect,
     readSelection,
@@ -22,7 +23,9 @@ import { videoWindow } from "./video-window.js";
 import { encodeVideo, frameGate, grabStill, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
 import { startXInput, type XInput } from "./xinput.js";
 import { sanitizeUrl } from "../tools/network-redaction.js";
-import { stopLoading } from "../navigation/page-navigation.js";
+import { castdAvailable } from "../media/castd.js";
+import { startMediaView } from "../media/media-view.js";
+import { askedDevice, isSteer, openTab, steer } from "./view-steering.js";
 
 // One live browser over one socket; the choice of video vs frames is made once here, not per route. Video grabs the
 // page's viewport off its X display (region.ts): cheaper than frames and showing everything Chromium draws there, a
@@ -73,52 +76,6 @@ export interface LiveReady {
 // How often the shown page is checked for having gone behind another tab or changed shape; the picture itself is the
 // display, so only the cursor, keys and stills are ever this late.
 const FOLLOW_MS = 1000;
-
-// The device an emulate asks for, undefined to take it off, or "invalid" for a frame of any other shape, which is dropped.
-const askedDevice = (message: ScreencastClientMessage): Device | undefined | "invalid" => {
-    const parsed = EmulateMessageSchema.safeParse(message);
-    return parsed.success ? parsed.data.device : "invalid";
-};
-
-type Steer = Extract<ScreencastClientMessage, { type: "navigate" | "back" | "forward" | "reload" | "stop" }>;
-
-const STEERS: ReadonlySet<string> = new Set<Steer["type"]>(["navigate", "back", "forward", "reload", "stop"]);
-const isSteer = (message: ScreencastClientMessage): message is Steer => STEERS.has(message.type);
-
-// A tab the owner asked for, at the address they typed if any; undefined when the browser is gone.
-const openTab = async (context: BrowserContext, url: string | undefined): Promise<Page | undefined> => {
-    const page = await context.newPage().catch(() => undefined);
-    if (page !== undefined && url !== undefined) {
-        steer(page, { type: "navigate", url });
-    }
-    return page;
-};
-
-// Not awaited past the commit and never past an error: Chromium shows its own error page for a bad address, and a
-// slow site must not hold the socket's handler.
-const steer = (page: Page | undefined, message: Steer): void => {
-    if (page === undefined) {
-        return;
-    }
-    const swallow = (): undefined => undefined;
-    switch (message.type) {
-        case "navigate":
-            void page.goto(message.url, { waitUntil: "commit" }).catch(swallow);
-            return;
-        case "back":
-            void page.goBack({ waitUntil: "commit" }).catch(swallow);
-            return;
-        case "forward":
-            void page.goForward({ waitUntil: "commit" }).catch(swallow);
-            return;
-        case "reload":
-            void page.reload({ waitUntil: "commit" }).catch(swallow);
-            return;
-        case "stop":
-            void stopLoading(page).catch(swallow);
-            return;
-    }
-};
 
 // Whether the page has a single <select> focused: its menu is native, and only a keystroke on the display reaches it,
 // so the keyboard goes by XTEST while this holds. Walks frames like readSelect, since controls often live in one.
@@ -335,7 +292,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         } else {
             stills.noteAction();
         }
-        pointer(input, message, at);
+        pointer(input, message, at, { session: selectFocused ? undefined : session, shrunk: at.scale * (sizing.phone()?.fit ?? 1) });
         if (message.action === "move" && session !== undefined) {
             // Fire-and-forget and throttled, so the cursor shape never blocks the next input; the page is asked in its
             // own CSS pixels, a phone's shrinking undone.
@@ -438,16 +395,30 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
 // sends null, and `Math.round(null)` is 0, which replays as a real click in the top-left corner.
 const aimed = (message: MouseMessage): boolean => Number.isFinite(message.x) && Number.isFinite(message.y);
 
+// Where a wheel lands: the page's session, absent while a native menu has the keyboard (and so the wheel), and the page's
+// own CSS pixels per picture pixel (the display's scale, a phone's shrinking).
+interface WheelTarget {
+    readonly session: CDPSession | undefined;
+    readonly shrunk: number;
+}
+
 // A pointer event, in the picture's own coordinates, moved to the display's by the region's origin: the space the grab
-// and XTEST share.
-const pointer = (input: XInput, message: MouseMessage, region: Region): void => {
+// and XTEST share. A wheel scrolls the page through CDP by its exact pixel deltas, so a trackpad scrolls as smoothly as
+// it would locally, not awaited, so a page mid-navigation never holds the next input; X knows only whole notches, which
+// a native menu (a <select> with the keyboard) gets, counted in the page's CSS pixels.
+const pointer = (input: XInput, message: MouseMessage, region: Region, wheel: WheelTarget): void => {
     if (!aimed(message)) {
         return;
     }
     const x = message.x + region.x;
     const y = message.y + region.y;
+    if (message.action === "wheel" && wheel.session !== undefined) {
+        // allow(silent-catch): a page gone mid-scroll has nothing left to scroll, and one dropped step is all it costs.
+        void dispatchWheel(wheel.session, message, wheel.shrunk).catch(() => undefined);
+        return;
+    }
     if (message.action === "wheel") {
-        input.wheel(x, y, message.deltaX ?? 0, message.deltaY ?? 0);
+        input.wheel(x, y, (message.deltaX ?? 0) / wheel.shrunk, (message.deltaY ?? 0) / wheel.shrunk);
         return;
     }
     if (message.action === "move") {
@@ -466,7 +437,18 @@ const pointer = (input: XInput, message: MouseMessage, region: Region): void => 
 };
 
 // Modifiers join a keysym with plus signs (xdotool syntax); names mostly match the DOM's, letters pass through.
-const XKEYS: Record<string, string> = { Enter: "Return", Backspace: "BackSpace", Delete: "Delete", Escape: "Escape", Tab: "Tab", " ": "space" };
+// The zoom chords' characters are keysyms by name (`ctrl+equal`), since xdotool reads `=` as no key at all.
+const XKEYS: Record<string, string> = {
+    Enter: "Return",
+    Backspace: "BackSpace",
+    Delete: "Delete",
+    Escape: "Escape",
+    Tab: "Tab",
+    " ": "space",
+    "=": "equal",
+    "+": "plus",
+    "-": "minus",
+};
 
 export const chordOf = (message: { readonly key: string; readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean }): string => {
     const held = [message.ctrl === true ? "ctrl" : undefined, message.alt === true ? "alt" : undefined, message.shift === true ? "shift" : undefined];
@@ -499,21 +481,15 @@ const startFramesView = async (context: BrowserContext, sink: Sink, onError: (re
         sink.send(JSON.stringify({ type: "ready", kind: "frames", width: size.width, height: size.height, scale: 1 } satisfies LiveReady));
     };
     announce();
+    // Through the screencast, which keeps the change clear of a still capture that would undo it (Screencast.dress).
     const emulate = async (asked: Device | undefined): Promise<void> => {
-        const session = cast.attached();
-        const page = cast.page();
-        if (asked === undefined) {
-            if (phone === undefined) {
-                return;
-            }
-            phone = undefined;
-            // allow(silent-catch): a page that closed while dressed has nothing left to take off.
-            await (session === undefined || page === undefined ? undefined : takePhoneOff(session, page).catch(() => undefined));
-        } else {
-            phone = phoneFor(asked, PHONE_BOX);
-            // allow(silent-catch): a page that closed under the phone is followed by the next one, which is dressed then.
-            await (session === undefined ? undefined : putPhoneOn(session, phone).catch(() => undefined));
+        if (asked === undefined && phone === undefined) {
+            return;
         }
+        const next = asked === undefined ? undefined : phoneFor(asked, PHONE_BOX);
+        phone = next;
+        // allow(silent-catch): a page that closed under the change is followed by the next one, which is dressed then.
+        await cast.dress((session, page) => (next === undefined ? takePhoneOff(session, page) : putPhoneOn(session, next))).catch(() => undefined);
         announce();
     };
     // A pointer or keystroke to the page's CDP session, and what the surface owes after it.
@@ -589,10 +565,17 @@ export interface LiveViewOptions {
     // Debug lines from the video path: each tab the picture follows and why, and what it sent and dropped when it
     // stops. Absent logs nothing.
     readonly log?: ((fields: Record<string, unknown>, message: string) => void) | undefined;
+    // The viewer can dial a media socket (`media=1` on its socket's query): only such a viewer is handed one, since an
+    // editor from before castd would be left with no picture at all.
+    readonly media?: boolean | undefined;
+    // The viewer may watch and not drive: its media token says so, and castd ignores its input.
+    readonly readOnly?: boolean | undefined;
 }
 
-// Shows `context` on `sink`, the best way its browser allows. `key` names the display it was allocated under; this only
-// asks whether one exists, since starting one now would put it on a display the browser isn't.
+// Shows `context` on `sink`, the best way its browser allows: on a media socket of its own when castd serves its
+// display (media-view.ts: this socket then carries no picture), else as video off the display, else as frames. `key`
+// names the display it was allocated under; this only asks whether one exists, since starting one now would put it on
+// a display the browser isn't. A castd that will not come up leaves the window on the video path.
 export const startLiveView = async (
     context: BrowserContext,
     key: string,
@@ -601,5 +584,9 @@ export const startLiveView = async (
     options: LiveViewOptions = {},
 ): Promise<LiveView> => {
     const display = displayOf(key);
-    return display === undefined ? startFramesView(context, sink, onError) : startVideoView(context, display, sink, onError, options);
+    if (display === undefined) {
+        return startFramesView(context, sink, onError);
+    }
+    const media = options.media === true && castdAvailable() ? await startMediaView(context, key, display, sink, options) : undefined;
+    return media ?? startVideoView(context, display, sink, onError, options);
 };

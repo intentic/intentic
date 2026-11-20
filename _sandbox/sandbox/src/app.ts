@@ -24,6 +24,7 @@ import { createRouter } from "./router.js";
 import { verifySyncToken } from "./peers/desktop-sync.js";
 import { logContext } from "./logger.js";
 import { appRawRoutes } from "./app-raw-routes.js";
+import { DEVTOOLS_PATH } from "./browser/devtools/devtools-proxy.js";
 import { PREVIEW_PATH } from "./workspace/files/workspace-preview.js";
 import { serveRawRoutes } from "./http/raw-route-server.js";
 
@@ -90,7 +91,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         crossOriginOpenerPolicy: false,
         originAgentCluster: false,
     });
-    app.use("*", (c, next) => (c.req.path.startsWith(PREVIEW_PATH) ? previewHardened(c, next) : hardened(c, next)));
+    // Chromium's DevTools for a page (browser/devtools/) is framed by the editor from another origin too, behind a ticket.
+    app.use("*", (c, next) => (c.req.path.startsWith(PREVIEW_PATH) || c.req.path.startsWith(DEVTOOLS_PATH) ? previewHardened(c, next) : hardened(c, next)));
 
     // Inside the hardening, outside everything that writes an answer, so every JSON body leaves compressed when the
     // browser accepts it, error bodies included.

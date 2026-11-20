@@ -4,17 +4,24 @@
      rather than a background that jumps, and a tab grows in as it opens and folds away as it closes. Middle-click closes
      a tab and double-clicking the empty strip opens one, the two gestures a browser's own strip answers to. Pinned tabs
      (a live app, the desktop, a window on it) lead, set off from the web pages by a hairline. When the web pages come
-     from more than one window, each window's run of tabs opens with a small mark of whose it is. What a tab
-     IS stays the caller's: this draws, it decides nothing. -->
+     from more than one window, each window's run of tabs opens with a small mark of whose it is. A web page shows
+     its site's icon at rest and a speaker while it plays sound (pressed, it mutes); a right-click opens the tab's own
+     menu, whose rows the caller gives; and a tab is dragged along its own window's run to a new place. What a tab IS
+     stays the caller's: this draws, it decides nothing. -->
 <script setup lang="ts">
-import { Icon, ui, vMiddleclick } from "@intentic/ui";
+import { ContextMenu, Icon, ui, vMiddleclick } from "@intentic/ui";
+import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
-import { stripItems, type StripGroup, type StripTab } from "./stripTab";
+import { slotAt } from "../../components/sortable/sortableDrag";
+import { swallowClick } from "../../lib/swallowClick";
+import { runOf, stripItems, type StripGroup, type StripTab } from "./stripTab";
 
-const { tabs, activeId } = defineProps<{
+const { tabs, activeId, menuOf } = defineProps<{
     tabs: readonly StripTab[];
     activeId: string | undefined;
+    // A tab's own menu, read when it is right-clicked; none for a tab that has nothing to offer.
+    menuOf?: ((tab: StripTab) => MenuItem[]) | undefined;
 }>();
 
 // `quickOpen` is a web tab straight away, what a browser's + and a double-click on its strip both do; `open` is the
@@ -26,6 +33,10 @@ const emit = defineEmits<{
     pickGroup: [group: StripGroup];
     open: [anchor: HTMLElement];
     quickOpen: [];
+    // Its speaker pressed: silence it, or let it be heard again.
+    mute: [tab: StripTab];
+    // Dragged along its run (runOf) and let go at `to`, a place among that run's tabs.
+    move: [tab: StripTab, to: number];
 }>();
 
 const t = useT();
@@ -99,6 +110,134 @@ const close = (tab: StripTab): void => {
 };
 
 const items = computed(() => stripItems(tabs));
+
+// ===== The tab's own menu =====
+
+const menu = ref<{ show: (event: Event) => void } | undefined>();
+const menuItems = ref<MenuItem[]>([]);
+const openMenu = (event: MouseEvent, tab: StripTab): void => {
+    const rows = menuOf?.(tab) ?? [];
+    if (rows.length === 0) {
+        return;
+    }
+    menuItems.value = rows;
+    menu.value?.show(event);
+};
+
+// ===== Dragging a tab along its run =====
+
+// Far enough that a click with a shaky hand still picks the tab, as every drag in the app.
+const DRAG_THRESHOLD_PX = 5;
+
+// A tab pressed and maybe carried: where along the strip it was pressed, then, once it has travelled, its run as drawn
+// (ids, each tab's middle and width), where it came from, and the place it would land now.
+interface Carry {
+    readonly tab: StripTab;
+    readonly x: number;
+    dx: number;
+    ids?: readonly string[];
+    middles?: readonly number[];
+    width?: number;
+    from?: number;
+    to?: number;
+}
+const carry = ref<Carry | undefined>();
+
+const tabEl = (id: string): HTMLElement | null | undefined => stripEl.value?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(id)}"]`);
+
+// The run as drawn the moment the tab starts travelling; undefined for a tab with no run to travel along.
+const lift = (held: Carry): boolean => {
+    const ids = runOf(tabs, held.tab.id).map((tab) => tab.id);
+    const els = ids.map(tabEl);
+    const from = ids.indexOf(held.tab.id);
+    const own = els[from];
+    if (ids.length < 2 || from < 0 || own === null || own === undefined || els.some((el) => el === null || el === undefined)) {
+        return false;
+    }
+    held.ids = ids;
+    held.middles = els.map((el) => (el === null || el === undefined ? 0 : el.offsetLeft + el.offsetWidth / 2));
+    held.width = own.offsetWidth;
+    held.from = from;
+    held.to = from;
+    return true;
+};
+
+const onMove = (event: PointerEvent): void => {
+    const held = carry.value;
+    if (held === undefined) {
+        return;
+    }
+    held.dx = event.clientX - held.x;
+    if (held.ids === undefined && (Math.abs(held.dx) < DRAG_THRESHOLD_PX || !lift(held))) {
+        return;
+    }
+    held.to = slotAt((held.middles?.[held.from ?? 0] ?? 0) + held.dx, held.middles ?? []);
+};
+
+const stopCarry = (): void => {
+    window.removeEventListener(`pointermove`, onMove);
+    window.removeEventListener(`pointerup`, onUp);
+    window.removeEventListener(`pointercancel`, stopCarry);
+    window.removeEventListener(`keydown`, onKey, true);
+    carry.value = undefined;
+};
+
+function onUp(): void {
+    const held = carry.value;
+    stopCarry();
+    if (held?.ids === undefined) {
+        return;
+    }
+    // The release lands as a click on the tab it was pressed on, which would pick it: the drag was the gesture.
+    swallowClick();
+    if (held.to !== undefined && held.to !== held.from) {
+        emit(`move`, held.tab, held.to);
+    }
+}
+
+// Escape puts the carried tab back where it was.
+function onKey(event: KeyboardEvent): void {
+    if (event.key === `Escape` && carry.value?.ids !== undefined) {
+        event.preventDefault();
+        event.stopPropagation();
+        stopCarry();
+    }
+}
+
+// Mouse and pen only: a touch on the strip scrolls it.
+const onPress = (event: PointerEvent, tab: StripTab): void => {
+    if (event.button !== 0 || event.pointerType === `touch` || tab.movable !== true) {
+        return;
+    }
+    carry.value = { tab, x: event.clientX, dx: 0 };
+    window.addEventListener(`pointermove`, onMove);
+    window.addEventListener(`pointerup`, onUp);
+    window.addEventListener(`pointercancel`, stopCarry);
+    window.addEventListener(`keydown`, onKey, true);
+};
+onBeforeUnmount(stopCarry);
+
+// How far a tab is drawn from its own place while one is carried: the carried one follows the pointer, and those it
+// passes step aside by its width toward the place it left.
+const shiftOf = (id: string | undefined): number => {
+    const held = carry.value;
+    if (held?.ids === undefined || id === undefined || held.from === undefined || held.to === undefined) {
+        return 0;
+    }
+    if (id === held.tab.id) {
+        return held.dx;
+    }
+    const at = held.ids.indexOf(id);
+    const width = held.width ?? 0;
+    if (at < 0) {
+        return 0;
+    }
+    if (held.from < held.to && at > held.from && at <= held.to) {
+        return -width;
+    }
+    return held.to < held.from && at >= held.to && at < held.from ? width : 0;
+};
+const carrying = (id: string): boolean => carry.value?.ids !== undefined && carry.value.tab.id === id;
 </script>
 
 <template>
@@ -109,8 +248,8 @@ const items = computed(() => stripItems(tabs));
             <div
                 v-if="indicator"
                 class="tab-lift pointer-events-none absolute bottom-0 left-0 h-8"
-                :class="gliding ? 'tab-lift-glide' : ''"
-                :style="{ transform: `translateX(${indicator.left}px)`, width: `${indicator.width}px` }"
+                :class="gliding && !carrying(activeId ?? ``) ? 'tab-lift-glide' : ''"
+                :style="{ transform: `translateX(${indicator.left + shiftOf(activeId)}px)`, width: `${indicator.width}px` }"
                 aria-hidden="true"
             />
             <TransitionGroup name="tab">
@@ -150,9 +289,16 @@ const items = computed(() => stripItems(tabs));
                         v-else
                         :data-selected="item.tab.id === activeId"
                         :data-seam="item.seam"
+                        :data-tab-id="item.tab.id"
                         class="browser-tab group/tab @container relative flex h-8 w-60 min-w-14 shrink items-center transition-colors"
-                        :class="item.tab.id === activeId ? 'text-content' : 'text-muted hover:text-content'"
+                        :class="[
+                            item.tab.id === activeId ? 'text-content' : 'text-muted hover:text-content',
+                            carrying(item.tab.id) ? 'tab-carried' : carry?.ids ? 'tab-stepping' : '',
+                        ]"
+                        :style="shiftOf(item.tab.id) === 0 ? undefined : { transform: `translateX(${shiftOf(item.tab.id)}px)` }"
                         v-middleclick="() => close(item.tab)"
+                        @pointerdown="onPress($event, item.tab)"
+                        @contextmenu.prevent="openMenu($event, item.tab)"
                     >
                         <button
                             type="button"
@@ -166,7 +312,17 @@ const items = computed(() => stripItems(tabs));
                         >
                             <!-- Squeezed, a tab gives up what a browser's does: the selected one its glyph and then its title, keeping
                                  its close; the rest their title, keeping the glyph that still says what each is. -->
+                            <!-- The site's own icon, inline from the sandbox: drawing it asks nothing of the site. -->
+                            <img
+                                v-if="item.tab.favicon !== undefined"
+                                :src="item.tab.favicon"
+                                alt=""
+                                draggable="false"
+                                class="size-4 shrink-0 object-contain"
+                                :class="item.tab.id === activeId && item.tab.closable ? '@max-[5.5rem]:hidden' : ''"
+                            />
                             <Icon
+                                v-else
                                 :name="item.tab.icon"
                                 :spin="item.tab.spin === true"
                                 class="shrink-0 text-2xs"
@@ -174,6 +330,26 @@ const items = computed(() => stripItems(tabs));
                             />
                             <span class="min-w-0 flex-1 truncate @max-[4.5rem]:hidden">{{ item.tab.label }}</span>
                             <span v-if="item.tab.kind" class="sr-only">, {{ item.tab.kind }}</span>
+                        </button>
+                        <!-- The window's picture is being recorded, and this tab is what it shows. -->
+                        <span
+                            v-if="item.tab.recording === true"
+                            class="size-1.5 shrink-0 animate-pulse rounded-full bg-danger @max-[6.5rem]:hidden"
+                            role="img"
+                            :aria-label="t(`browsers.tools.recording`)"
+                            v-tooltip.bottom="t(`browsers.tools.recording`)"
+                        />
+                        <!-- Playing or muted: the speaker says which, and pressing it turns the sound off or back on. -->
+                        <button
+                            v-if="item.tab.sound !== undefined"
+                            type="button"
+                            :class="ui.iconButton({ size: `xs`, round: true, ...(item.tab.sound === `muted` ? { tone: `muted` } : {}) }, `@max-[6.5rem]:hidden`)"
+                            :aria-label="item.tab.sound === `muted` ? t(`browsers.browsers.unmuteTab`) : t(`browsers.browsers.muteTab`)"
+                            :aria-pressed="item.tab.sound === `muted`"
+                            v-tooltip.bottom="item.tab.sound === `muted` ? t(`browsers.browsers.unmuteTab`) : t(`browsers.browsers.playingAudio`)"
+                            @click="emit('mute', item.tab)"
+                        >
+                            <Icon :name="item.tab.sound === `muted` ? `volume-off` : `volume-up`" class="text-3xs" />
                         </button>
                         <button
                             v-if="item.tab.closable"
@@ -225,6 +401,8 @@ const items = computed(() => stripItems(tabs));
 
         <!-- The strip's far end, where a browser keeps its list of everything open. -->
         <slot name="end" />
+
+        <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
     </div>
 </template>
 
@@ -308,6 +486,19 @@ const items = computed(() => stripItems(tabs));
     display: none;
 }
 
+/* A tab carried along its run rides over its neighbours, which step aside smoothly as it passes them. */
+.tab-carried {
+    z-index: 10;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--color-card);
+    box-shadow: 0 1px 6px color-mix(in srgb, var(--color-content) 18%, transparent);
+    cursor: grabbing;
+}
+
+.tab-stepping {
+    transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 .tab-enter-active,
 .tab-leave-active {
     overflow: hidden;
@@ -324,7 +515,7 @@ const items = computed(() => stripItems(tabs));
     opacity: 0;
 }
 
-:root[data-motion="reduced"] :is(.tab-lift-glide, .tab-enter-active, .tab-leave-active) {
+:root[data-motion="reduced"] :is(.tab-lift-glide, .tab-enter-active, .tab-leave-active, .tab-stepping) {
     transition: none;
 }
 </style>

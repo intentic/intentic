@@ -191,7 +191,8 @@ export const createBrowserViewRoute = (services: Services) =>
                 return;
             }
             try {
-                // Display key decides video vs frames; a headless session has none, so frames answers instead.
+                // Display key decides the picture: castd's media socket where castd serves the display (this socket then
+                // sends `media` and no picture), video off the display otherwise, and frames for a headless session.
                 const display = browserSessionDisplayKey(session);
                 view = await startLiveView(
                     context,
@@ -200,7 +201,11 @@ export const createBrowserViewRoute = (services: Services) =>
                     (reason) => {
                         services.logger.warn({ reason }, "browser-view stream failed");
                     },
-                    { front: { page: () => browserSessionFront(session), watch: (changed) => watchWindow(session, changed) }, log: debug },
+                    {
+                        front: { page: () => browserSessionFront(session), watch: (changed) => watchWindow(session, changed) },
+                        log: debug,
+                        media: url.searchParams.get("media") === "1",
+                    },
                 );
                 debug({ display }, "browser-view: opened");
             } catch (err) {

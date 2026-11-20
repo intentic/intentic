@@ -115,20 +115,34 @@ const keyDescriptor = (message: { readonly key: string; readonly shift?: boolean
 
 export type MouseMessage = Extract<ScreencastClientMessage, { type: "mouse" }>;
 
-const dispatchMouse = async (session: CDPSession, message: MouseMessage): Promise<void> => {
+// A wheel event as CDP replays it: the page scrolls by exactly these deltas, fractions and all, at the pointer, so a
+// trackpad's small steps move it and a wheel's notches do not jump. `shrink` is how many of the picture's pixels make
+// one of the page's CSS pixels (the display's scale, a phone's fit): the message is in the picture's, CDP in the page's.
+// Buttons and modifiers ride along, for Ctrl+wheel zoom and scrolling during a drag.
+export const wheelEvent = (message: MouseMessage, shrink = 1) => ({
+    type: "mouseWheel" as const,
+    x: message.x / shrink,
+    y: message.y / shrink,
+    modifiers: cdpModifiers(message),
+    buttons: message.buttons ?? 0,
+    deltaX: (message.deltaX ?? 0) / shrink,
+    deltaY: (message.deltaY ?? 0) / shrink,
+});
+
+// What input is dispatched over: a page's CDP session, of which only `send` is used.
+export type InputSession = Pick<CDPSession, "send">;
+
+/** Scrolls the page under a wheel message by its exact deltas (see `wheelEvent`). */
+export const dispatchWheel = async (session: InputSession, message: MouseMessage, shrink = 1): Promise<void> => {
+    await session.send("Input.dispatchMouseEvent", wheelEvent(message, shrink));
+};
+
+const dispatchMouse = async (session: InputSession, message: MouseMessage): Promise<void> => {
     // Buttons and modifiers ride on every event, including wheel, for Ctrl+wheel zoom and scroll during a drag.
     const modifiers = cdpModifiers(message);
     const buttons = message.buttons ?? 0;
     if (message.action === "wheel") {
-        await session.send("Input.dispatchMouseEvent", {
-            type: "mouseWheel",
-            x: message.x,
-            y: message.y,
-            modifiers,
-            buttons,
-            deltaX: message.deltaX ?? 0,
-            deltaY: message.deltaY ?? 0,
-        });
+        await dispatchWheel(session, message);
         return;
     }
     const move = message.action === "move";
@@ -145,7 +159,7 @@ const dispatchMouse = async (session: CDPSession, message: MouseMessage): Promis
     });
 };
 
-const dispatchKey = async (session: CDPSession, message: Extract<ScreencastClientMessage, { type: "key" }>): Promise<void> => {
+const dispatchKey = async (session: InputSession, message: Extract<ScreencastClientMessage, { type: "key" }>): Promise<void> => {
     const descriptor = keyDescriptor(message);
     if (descriptor === undefined) {
         return;
@@ -164,7 +178,7 @@ const dispatchKey = async (session: CDPSession, message: Extract<ScreencastClien
 
 // Forwards one input frame to the page's CDP session; `bind`/`pause`/`resume`/`done`/`ping` are handled by the route,
 // not here.
-export const dispatchInput = async (session: CDPSession, message: ScreencastClientMessage): Promise<void> => {
+export const dispatchInput = async (session: InputSession, message: ScreencastClientMessage): Promise<void> => {
     if (message.type === "mouse") {
         await dispatchMouse(session, message);
         return;
@@ -345,8 +359,40 @@ export interface Screencast {
     readonly bind: (page: Page, pin?: boolean) => Promise<void>;
     // Stops/restarts frame flow without losing the binding; distinct from `stop`, which ends the view entirely.
     readonly setPaused: (paused: boolean) => Promise<void>;
+    // Puts a device on the streamed page or takes it off (`change`, given the page's session), never beside a still
+    // capture: Chromium ends a capture by putting back the device metrics it began with, so a phone put on meanwhile was
+    // undone (`captureStill`). The stream starts again after it, so the new screen is sent (`restartScreencast`).
+    // Nothing is done while no page is bound.
+    readonly dress: (change: (session: CDPSession, page: Page) => Promise<void>) => Promise<void>;
     readonly stop: () => Promise<void>;
 }
+
+// One sharp still of the viewport, as base64 WebP; undefined when the page navigated, closed or is blocked on a dialog
+// mid-capture. Clip is in document coordinates, not viewport; a stale scroll offset gets a blank image back from
+// Chromium. A clip at a scale is taken by emulating a device for the capture and putting back the metrics in force when
+// it began (measured on Chromium 156, 2026-11-20), which is why a device change waits for it (`Screencast.dress`).
+const captureStill = async (session: CDPSession): Promise<string | undefined> => {
+    const shot = await session
+        .send("Page.getLayoutMetrics")
+        .then(({ visualViewport }) =>
+            session.send("Page.captureScreenshot", {
+                format: "webp",
+                quality: STILL_QUALITY,
+                clip: { x: visualViewport.pageX, y: visualViewport.pageY, width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: STILL_SCALE },
+            }),
+        )
+        // allow(silent-catch): navigated, closed, or blocked on a dialog mid-capture; the next motion frame schedules another.
+        .catch(() => undefined);
+    return shot?.data;
+};
+
+// The stream started again on the same page, whose first frame is the surface as it stands: a device change alone does
+// not always bring one (measured on Chromium 156, 2026-11-20: a phone put on just after a still capture sent no frame in
+// 4 runs of 8 until the page next painted), and an idle page may not paint again for as long as it is watched.
+const restartScreencast = async (session: CDPSession): Promise<void> => {
+    await session.send("Page.stopScreencast");
+    await session.send("Page.startScreencast", SCREENCAST_OPTIONS);
+};
 
 // Streams one of a context's pages, following the newest page by default (an OAuth popup, or an agent-opened tab). Once
 // the user explicitly binds a page it's pinned, and only that page closing releases the pin.
@@ -358,8 +404,9 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     // Page `attached` is streaming; needed to tell whether a closing page is the pinned one.
     let boundTo: Page | undefined;
     let stillTimer: NodeJS.Timeout | undefined;
-    // Whether a frame now is the page moving or this module's own still capture shaking it; see CAPTURE_ECHO_MS.
-    let capturing = false;
+    // The still capture in flight (a frame now may be its echo, CAPTURE_ECHO_MS), and the device changes waiting it out.
+    let capturing: Promise<string | undefined> | undefined;
+    let dressing = 0;
     let echoUntil = 0;
     // When the current echo-suppressed capture began, and when the owner last acted; a frame in the window is ours only
     // if nothing was input since. See `noteInput`.
@@ -374,32 +421,21 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     // via captureScreenshot's own argument rather than page zoom, so the agent's own devicePixelRatio and srcset are
     // untouched.
     const still = async (session: CDPSession): Promise<void> => {
-        if (stopped || paused || session !== attached || hooks.sharp?.() === false) {
+        if (stopped || paused || session !== attached || hooks.sharp?.() === false || dressing > 0) {
             return;
         }
-        // Clip is in document coordinates, not viewport; a stale scroll offset gets a blank image back from Chromium.
-        capturing = true;
         const startedAt = Date.now();
         captureStartedAt = startedAt;
-        const shot = await session
-            .send("Page.getLayoutMetrics")
-            .then(({ visualViewport }) =>
-                session.send("Page.captureScreenshot", {
-                    format: "webp",
-                    quality: STILL_QUALITY,
-                    clip: { x: visualViewport.pageX, y: visualViewport.pageY, width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: STILL_SCALE },
-                }),
-            )
-            // Navigated, closed, or blocked on a dialog mid-capture; the next motion frame schedules another.
-            .catch(() => undefined);
-        capturing = false;
+        capturing = captureStill(session);
+        const shot = await capturing;
+        capturing = undefined;
         // Echo duration scales with what this capture cost; see CAPTURE_ECHO_FACTOR.
         const echoFor = Math.min(Math.max(CAPTURE_ECHO_MS, (Date.now() - startedAt) * CAPTURE_ECHO_FACTOR), STILL_IDLE_MS);
         echoUntil = Date.now() + echoFor;
-        if (shot === undefined || stopped || paused || session !== attached) {
+        if (shot === undefined || stopped || paused || session !== attached || hooks.sharp?.() === false) {
             return;
         }
-        if (shot.data === lastStill) {
+        if (shot === lastStill) {
             // Pixel-identical to the client's current frame: nothing moved, so this confirms the recent frames were
             // echoes.
             quiet += 1;
@@ -408,8 +444,8 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         quiet = 0;
         // Compared as base64 (what CDP returns) but sent as decoded bytes, so the cheap check runs on every capture and
         // the decode only on ones worth sending.
-        lastStill = shot.data;
-        onFrame({ bytes: Buffer.from(shot.data, "base64"), format: "webp" });
+        lastStill = shot;
+        onFrame({ bytes: Buffer.from(shot, "base64"), format: "webp" });
     };
 
     // Every path wanting another sharp reading goes through here, so the back-off is applied consistently.
@@ -449,9 +485,9 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             if (paused || stopped) {
                 return;
             }
-            // Input since the capture began means this frame is a real response; forward it rather than dropping it as
-            // an echo.
-            if ((capturing || Date.now() < echoUntil) && lastInputAt < captureStartedAt) {
+            // Input since the capture began means this frame is a real response, and with stills off (a phone) none would
+            // come to replace it, which left an emulated phone's screen unshown under load: forward it, not drop it as an echo.
+            if ((capturing !== undefined || Date.now() < echoUntil) && lastInputAt < captureStartedAt && hooks.sharp?.() !== false) {
                 // Dropping a frame still schedules another still to settle the question.
                 armStill(session);
                 return;
@@ -526,6 +562,16 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             }
             // A page gone while hidden is normal, not an error; the close handler already rebound elsewhere.
             await (next ? session.send("Page.stopScreencast") : session.send("Page.startScreencast", SCREENCAST_OPTIONS)).catch(() => {});
+        },
+        dress: async (change) => {
+            dressing += 1;
+            try {
+                await capturing;
+                await (attached === undefined || boundTo === undefined ? undefined : change(attached, boundTo));
+                await (attached === undefined || paused || stopped ? undefined : restartScreencast(attached));
+            } finally {
+                dressing -= 1;
+            }
         },
         stop: async () => {
             stopped = true;

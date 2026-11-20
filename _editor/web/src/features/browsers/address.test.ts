@@ -1,4 +1,4 @@
-import { addressParts, securityOf, toUrl } from "./address";
+import { addressOf, addressParts, securityOf, toUrl, wrappedUrl } from "./address";
 
 // The address bar is the client's own now, so what a typed line becomes is decided here, not by an omnibox.
 describe("toUrl", () => {
@@ -25,6 +25,39 @@ describe("toUrl", () => {
 
     test("nothing typed goes nowhere", () => {
         expect(toUrl(`   `)).toBeUndefined();
+    });
+
+    test("a search goes to the engine the sandbox's settings name", () => {
+        expect(toUrl(`vue router`, `google`)).toBe(`https://www.google.com/search?q=vue%20router`);
+        expect(toUrl(`vue router`, `duckduckgo`)).toBe(`https://duckduckgo.com/?q=vue%20router`);
+        expect(toUrl(`vue router`, `bing`)).toBe(`https://www.bing.com/search?q=vue%20router`);
+        expect(toUrl(`vue router`, `kagi`)).toBe(`https://kagi.com/search?q=vue%20router`);
+        // An address is an address whichever engine is chosen.
+        expect(toUrl(`192.168.0.168`, `google`)).toBe(`http://192.168.0.168`);
+    });
+});
+
+describe("addressOf", () => {
+    test("names the address typed text stands for, and nothing for a search", () => {
+        expect(addressOf(`192.168.0.168`)).toBe(`http://192.168.0.168`);
+        expect(addressOf(`github.com/intentic`)).toBe(`https://github.com/intentic`);
+        expect(addressOf(`router login`)).toBeUndefined();
+        expect(addressOf(`intentic`)).toBeUndefined();
+        expect(addressOf(``)).toBeUndefined();
+    });
+});
+
+describe("wrappedUrl", () => {
+    test("Ctrl+Enter makes a bare word a .com site", () => {
+        expect(wrappedUrl(`intentic`)).toBe(`https://www.intentic.com`);
+        expect(wrappedUrl(` my-shop `)).toBe(`https://www.my-shop.com`);
+    });
+
+    test("anything already an address, or more than one word, is left to Enter", () => {
+        expect(wrappedUrl(`example.com`)).toBeUndefined();
+        expect(wrappedUrl(`two words`)).toBeUndefined();
+        expect(wrappedUrl(`https://x`)).toBeUndefined();
+        expect(wrappedUrl(``)).toBeUndefined();
     });
 });
 

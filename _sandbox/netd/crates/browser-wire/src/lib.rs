@@ -380,6 +380,9 @@ pub enum BrowserViewClientMessage {
     Done,
     /// The client's liveness; answered by `pong`.
     Ping,
+    /// A fresh `media` now: the viewer must dial its media socket again and the token it holds has lapsed. Answered
+    /// only where the window has a castd; elsewhere it is nothing.
+    Media,
 }
 
 /// Which decoder a picture needs.
@@ -474,6 +477,336 @@ pub enum BrowserViewServerMessage {
     },
     /// The account sign-in window only: its profile was kept.
     Saved,
+    /// This window's pictures, sound, pointer, keys and clipboard travel on a media socket of their own, answered by the
+    /// window's media daemon (castd) rather than by Node: dial `path` with `?token=`, and expect no pictures on this
+    /// socket. Sent once the window has a castd, and again with a fresh token before the last one expires; absent while
+    /// the window is shown the old way (no castd on this sandbox, or a browser with no display), whose pictures keep
+    /// arriving here. What drives the browser as a program (tabs, addresses, dialogs, `emulate`) stays on this socket.
+    #[serde(rename_all = "camelCase")]
+    Media {
+        path: String,
+        token: String,
+        /// When the token stops being accepted for a new connection, in milliseconds since the epoch. A socket already
+        /// open is not closed by it. A JSON number: milliseconds since the epoch stay far inside a double's exact range.
+        #[ts(type = "number")]
+        expires_at: u64,
+    },
+}
+
+/// Where a browser media socket opens, on a sandbox's address, with the session's name after it
+/// (`/system/browser-media/<session>`): a WebSocket that netd hands to that window's castd on its Unix socket. It
+/// carries the window's picture and sound, and takes the person's pointer, keys, clipboard and box back, the hot path
+/// kept off Node's event loop. The name is the one castd serves under, `[A-Za-z0-9_-]{1,64}`: one per X display
+/// (`cast-<display key>`), which every browser session on that display shares, since the picture is the display's.
+pub const BROWSER_MEDIA_PATH: &str = "/system/browser-media";
+
+/// Where each window's castd listens inside the container: `<dir>/<session>.sock`, an HTTP/1.1 server netd relays the
+/// media socket's upgrade to, the way it relays the daemon's.
+pub const BROWSER_MEDIA_SOCKET_DIR: &str = "/run/intentic/cast";
+
+/// The fixed header every binary message on a media socket starts with, big-endian, before its payload:
+/// `[0]` kind ([`MEDIA_KINDS`]), `[1]` flags ([`MEDIA_FLAGS`]), `[2..6]` the frame's id (u32, rising; video only, what
+/// `ack` names), `[6..10]` when its content was captured, in milliseconds since the stream's `hello` (u32), `[10..12]`
+/// the stripe's top row in picture pixels (u16), `[12]` the stripe's index and `[13]` how many stripes the picture is cut
+/// into (1 when it is whole), `[14..16]` reserved, zero. Video's payload is one H.264 access unit in Annex B; audio's is
+/// one Opus packet.
+pub const MEDIA_HEADER_LEN: usize = 16;
+
+/// What a binary media message carries, its header's byte 0.
+pub const MEDIA_KINDS: [(&str, u8); 2] = [("video", 1), ("audio", 2)];
+
+/// Bits of a video message's byte 1. `key`: an IDR a decoder can start from. `refine`: a sharpening pass over content
+/// that has gone still (castd's paint-over), drawn like any frame and never a sign of motion.
+pub const MEDIA_FLAGS: [(&str, u8); 2] = [("key", 1), ("refine", 2)];
+
+/// The DataChannels a viewer opens on a media peer connection (`rtcOffer`), by label, each carrying a part of the media
+/// socket's traffic once castd says `hello` on `media`, with the reliability the viewer must open it with:
+/// `[label, ordered, max retransmits]`, where no maximum means fully reliable.
+///
+/// - `media`, castd to viewer, ordered and reliable: every JSON message and every video message, in the order the socket
+///   would carry them. castd's H.264 has no intra refresh, so a delta lost is a picture wrong until the next keyframe,
+///   which is ten to fifty times its size; on the LAN this path exists for, a retransmit costs one round trip of a few
+///   milliseconds, far less than that keyframe. castd's ack window already bounds how many frames can wait behind one.
+///   Ordered with the frames, a `hello` always precedes the keyframe it announces.
+/// - `audio`, castd to viewer, unordered with no retransmits: one Opus packet a message. A packet is independent and the
+///   decoder conceals a lost one; a late one is worth nothing.
+/// - `input`, viewer to castd, ordered and reliable: every JSON message the viewer would send on the socket. Keys, acks
+///   and clipboard writes must all arrive, in order.
+pub const RTC_CHANNELS: [(&str, bool, Option<u16>); 3] = [
+    ("media", true, None),
+    ("audio", false, Some(0)),
+    ("input", true, None),
+];
+
+/// The largest DataChannel message either side sends. A video message longer than this is cut into chunks, each a
+/// message of its own carrying the same header with byte `[14]` the chunk's index and `[15]` the count (the header's
+/// reserved bytes, zero everywhere else and in a whole message); the viewer joins the payloads in order before
+/// decoding. A JSON message castd would send that is longer goes on the socket instead (a copied image: nothing orders
+/// it against the pictures). A JSON message the viewer sends that is longer goes on `input` as binary chunks, `[index]`
+/// `[count]` and then the next slice of its UTF-8, which castd joins in order, so a paste stays in order with the keys
+/// around it. Chrome takes at most 256 KiB in a message, and SCTP sends one message's fragments back to back, so the cap
+/// is also how long a keyframe can hold up the sound channel.
+pub const RTC_MESSAGE_MAX: usize = 32 * 1024;
+
+/// How long past its newest token's expiry castd keeps a media socket open, in seconds. A token is checked at the
+/// upgrade and a socket outlives it, so the viewer sends each fresh token the browser view socket hands it on the open
+/// socket (`token`), which moves this bound on: only a viewer cut off from the view socket (its access revoked, its tab
+/// gone without closing) runs out, and castd closes it with [`MEDIA_CLOSE_CODES`]' `expired`.
+pub const MEDIA_TOKEN_GRACE_SECONDS: u64 = 600;
+
+/// The codes castd closes an open media socket with, on the WebSocket close frame, each meaning the token the viewer
+/// holds is dead and a fresh one must be asked of the browser view socket (`{type: "media"}`) before dialling again.
+/// `dropped`: the daemon dropped the window's viewers (a member's access revoked, or a desktop's control handed back),
+/// and castd now refuses every token minted before that. `expired`: the socket's newest token expired more than
+/// [`MEDIA_TOKEN_GRACE_SECONDS`] ago.
+pub const MEDIA_CLOSE_CODES: [(&str, u16); 2] = [("dropped", 4001), ("expired", 4002)];
+
+/// Whether a key event presses, releases, or does both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum KeyAction {
+    Down,
+    Up,
+    Press,
+}
+
+/// What a clipboard holds, either way across a media socket: plain text, HTML, and a PNG (base64), any of them absent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct ClipboardContent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub html: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub png: Option<String>,
+}
+
+/// The pointer's look over the picture: a CSS keyword, or the X server's own cursor image (a native menu's, a resize
+/// edge's), a PNG in base64 with its hotspot, in picture pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct MediaCursor {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub css: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub png: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub hot_x: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub hot_y: Option<u32>,
+}
+
+/// The sound a media socket carries, when it carries any.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct MediaAudio {
+    /// The WebCodecs codec string, `opus`.
+    pub codec: String,
+    pub sample_rate: u32,
+    pub channels: u8,
+}
+
+/// What the editor sends on a media socket, each a JSON text message. Coordinates are in the picture's own pixels, as
+/// on the browser view socket.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum BrowserMediaClientMessage {
+    /// A pointer event, as on the browser view socket. `wheel` is not one: precise scrolling is `scroll`.
+    #[serde(rename_all = "camelCase")]
+    Mouse {
+        action: PointerAction,
+        x: f64,
+        y: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        button: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        buttons: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        click_count: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        ctrl: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        shift: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        alt: Option<bool>,
+    },
+    /// Scrolling at a point, in picture pixels with their fractions: a trackpad's small steps and a wheel's notches
+    /// alike. castd keeps what a step left over for the next one, so nothing a trackpad sends is lost.
+    Scroll {
+        x: f64,
+        y: f64,
+        dx: f64,
+        dy: f64,
+    },
+    /// A key by its DOM name (`event.key`, layout already applied: `ą`, `Enter`, `ArrowLeft`), with `code` for the
+    /// physical key where the name alone is ambiguous. `press` (the default) is a down and an up.
+    Key {
+        key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        code: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        action: Option<KeyAction>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        ctrl: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        shift: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        alt: Option<bool>,
+    },
+    /// Text to type as it stands: an IME's commit, dictation, a mobile keyboard's word. Long text is not typed: a paste
+    /// sets the `clipboard` and sends Ctrl+V.
+    Text {
+        text: String,
+    },
+    /// Sets the remote clipboard, in order with the keys around it (a paste is this, then Ctrl+V).
+    Clipboard {
+        content: ClipboardContent,
+    },
+    /// Lets go of every key and button castd holds down for this viewer: the editor lost focus mid-chord.
+    ReleaseAll,
+    /// The video frame `id` was decoded, and how long decoding took; what castd's bitrate control reads.
+    #[serde(rename_all = "camelCase")]
+    Ack {
+        id: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        decode_ms: Option<f64>,
+    },
+    /// The decoder lost the stream: a keyframe, please.
+    Keyframe,
+    /// The viewer's picture box in CSS px and its device pixel ratio: the size the window's screen is asked to take,
+    /// at `scale` display pixels per CSS pixel. Only the viewer driving the window decides it.
+    Resize {
+        width: u32,
+        height: u32,
+        scale: f64,
+    },
+    /// Nobody can see the picture now: stop sending video (and sound) until `resume`.
+    Pause,
+    Resume,
+    /// Sound on or off for this viewer.
+    Audio {
+        on: bool,
+    },
+    /// The client's liveness and a round-trip probe: echoed as `pong` with the same `t`.
+    Ping {
+        t: f64,
+    },
+    /// An SDP offer for a peer connection straight to castd, which the viewer makes with the [`RTC_CHANNELS`] and no
+    /// media, only where `hello` said `rtc`. castd answers `rtcAnswer`, or `rtcClosed` when it cannot take one. Once its
+    /// `media` channel is open castd says `hello` there and moves the stream onto the channels; until then, and again
+    /// whenever the peer fails, the stream stays on this socket.
+    RtcOffer {
+        sdp: String,
+    },
+    /// One of the viewer's ICE candidates, as the browser's `RTCIceCandidate.candidate` writes it. castd is an ICE-lite
+    /// agent that learns the viewer's address from its checks, so this is never needed and never harmful.
+    #[serde(rename_all = "camelCase")]
+    RtcCandidate {
+        candidate: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sdp_mid: Option<String>,
+    },
+    /// The viewer gave up on its peer connection: castd brings the stream back to this socket with a `hello`.
+    RtcClose,
+    /// A fresh token for this socket: the one the browser view socket handed the viewer in its latest `media`, sent
+    /// whenever that does not mean dialling again. castd checks it as at the upgrade and, when it holds and opens the
+    /// same access the socket has, counts [`MEDIA_TOKEN_GRACE_SECONDS`] from its expiry instead. One that does not hold
+    /// changes nothing. Taken on the peer's `input` channel as well.
+    Token {
+        token: String,
+    },
+}
+
+/// What a media socket sends as JSON text; the pictures and sound travel as binary messages with the
+/// [`MEDIA_HEADER_LEN`]-byte header.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum BrowserMediaServerMessage {
+    /// What the pictures after this one are: their size in display pixels, `scale` of them per CSS pixel, the H.264
+    /// codec string read off the stream, and the sound's format when there is sound. Sent first, and again whenever
+    /// the picture changes shape; a keyframe follows it. `readOnly`: input from this viewer is ignored.
+    #[serde(rename_all = "camelCase")]
+    Hello {
+        width: u32,
+        height: u32,
+        scale: f64,
+        codec: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        audio: Option<MediaAudio>,
+        read_only: bool,
+        /// castd takes a peer connection on this window (`rtcOffer`): it serves one on an address a viewer on its
+        /// network may reach. Absent from a castd that serves none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        rtc: Option<bool>,
+    },
+    /// The pointer's look changed.
+    Cursor {
+        cursor: MediaCursor,
+    },
+    /// The remote clipboard changed (the page copied, or Ctrl+C in it): for the person's own clipboard.
+    Clipboard {
+        content: ClipboardContent,
+    },
+    /// How the stream is doing, about once a second: the round trip, the bitrate castd aims for, frames sent in the
+    /// last second, and how long frames wait unacknowledged.
+    #[serde(rename_all = "camelCase")]
+    Stats {
+        rtt_ms: f64,
+        target_kbps: u32,
+        fps: f64,
+        queue_ms: f64,
+    },
+    Pong {
+        t: f64,
+    },
+    /// The window's media is gone for good, in words for the person; the viewer must not reconnect.
+    Error {
+        message: String,
+    },
+    /// castd's answer to `rtcOffer`: its candidates are in it (ICE-lite, host candidates only), so nothing trickles.
+    RtcAnswer {
+        sdp: String,
+    },
+    /// castd let go of the viewer's peer connection, or never took it, in words for a log: the stream is on this socket,
+    /// and a `hello` here says so before any picture.
+    RtcClosed {
+        reason: String,
+    },
 }
 
 #[cfg(test)]
@@ -501,6 +834,19 @@ mod tests {
                 "frameTags": BROWSER_FRAME_TAGS.iter().map(|(name, tag)| (name.to_string(), serde_json::json!(tag))).collect::<serde_json::Map<_, _>>(),
                 "client": schema::<BrowserViewClientMessage>(),
                 "server": schema::<BrowserViewServerMessage>(),
+            },
+            "browserMedia": {
+                "path": BROWSER_MEDIA_PATH,
+                "socketDir": BROWSER_MEDIA_SOCKET_DIR,
+                "headerLen": MEDIA_HEADER_LEN,
+                "kinds": MEDIA_KINDS.iter().map(|(name, tag)| (name.to_string(), serde_json::json!(tag))).collect::<serde_json::Map<_, _>>(),
+                "flags": MEDIA_FLAGS.iter().map(|(name, bit)| (name.to_string(), serde_json::json!(bit))).collect::<serde_json::Map<_, _>>(),
+                "rtcChannels": RTC_CHANNELS.iter().map(|(label, ordered, retransmits)| (label.to_string(), serde_json::json!({"ordered": ordered, "maxRetransmits": retransmits}))).collect::<serde_json::Map<_, _>>(),
+                "rtcMessageMax": RTC_MESSAGE_MAX,
+                "tokenGraceSeconds": MEDIA_TOKEN_GRACE_SECONDS,
+                "closeCodes": MEDIA_CLOSE_CODES.iter().map(|(name, code)| (name.to_string(), serde_json::json!(code))).collect::<serde_json::Map<_, _>>(),
+                "client": schema::<BrowserMediaClientMessage>(),
+                "server": schema::<BrowserMediaServerMessage>(),
             },
             "terminal": {
                 "path": TERMINAL_PATH,
@@ -666,6 +1012,187 @@ mod tests {
             .unwrap(),
             r#"{"type":"gone","pageId":"p1"}"#
         );
+    }
+
+    #[test]
+    fn a_media_socket_speaks_json_both_ends_can_read() {
+        let scroll: BrowserMediaClientMessage =
+            serde_json::from_str(r#"{"type":"scroll","x":10,"y":20,"dx":0,"dy":3.5}"#).unwrap();
+        assert_eq!(
+            scroll,
+            BrowserMediaClientMessage::Scroll {
+                x: 10.0,
+                y: 20.0,
+                dx: 0.0,
+                dy: 3.5
+            }
+        );
+        let key: BrowserMediaClientMessage =
+            serde_json::from_str(r#"{"type":"key","key":"ą","code":"KeyA","action":"down"}"#)
+                .unwrap();
+        assert!(matches!(
+            key,
+            BrowserMediaClientMessage::Key {
+                action: Some(KeyAction::Down),
+                ..
+            }
+        ));
+        let paste: BrowserMediaClientMessage =
+            serde_json::from_str(r#"{"type":"clipboard","content":{"text":"hi"}}"#).unwrap();
+        assert!(matches!(
+            paste,
+            BrowserMediaClientMessage::Clipboard {
+                content: ClipboardContent {
+                    text: Some(_),
+                    html: None,
+                    png: None
+                }
+            }
+        ));
+        let ack: BrowserMediaClientMessage =
+            serde_json::from_str(r#"{"type":"ack","id":7,"decodeMs":1.5}"#).unwrap();
+        assert_eq!(
+            ack,
+            BrowserMediaClientMessage::Ack {
+                id: 7,
+                decode_ms: Some(1.5)
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaClientMessage::ReleaseAll).unwrap(),
+            r#"{"type":"releaseAll"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::Hello {
+                width: 2560,
+                height: 1600,
+                scale: 2.0,
+                codec: "avc1.42c033".into(),
+                audio: Some(MediaAudio {
+                    codec: "opus".into(),
+                    sample_rate: 48_000,
+                    channels: 2
+                }),
+                read_only: false,
+                rtc: None,
+            })
+            .unwrap(),
+            r#"{"type":"hello","width":2560,"height":1600,"scale":2.0,"codec":"avc1.42c033","audio":{"codec":"opus","sampleRate":48000,"channels":2},"readOnly":false}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::Cursor {
+                cursor: MediaCursor {
+                    css: Some("pointer".into()),
+                    png: None,
+                    hot_x: None,
+                    hot_y: None
+                }
+            })
+            .unwrap(),
+            r#"{"type":"cursor","cursor":{"css":"pointer"}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserViewServerMessage::Media {
+                path: "/system/browser-media/browser-own".into(),
+                token: "t".into(),
+                expires_at: 1,
+            })
+            .unwrap(),
+            r#"{"type":"media","path":"/system/browser-media/browser-own","token":"t","expiresAt":1}"#
+        );
+    }
+
+    #[test]
+    fn a_fresh_token_rides_the_open_media_socket_and_its_close_codes_are_the_private_range() {
+        let token: BrowserMediaClientMessage =
+            serde_json::from_str(r#"{"type":"token","token":"e30.c2ln"}"#).unwrap();
+        assert_eq!(
+            token,
+            BrowserMediaClientMessage::Token {
+                token: "e30.c2ln".into()
+            }
+        );
+        // 4000 to 4999: what an application may close a WebSocket with, never a code the browser or a proxy uses.
+        for (name, code) in MEDIA_CLOSE_CODES {
+            assert!((4000..5000).contains(&code), "{name} {code}");
+        }
+        assert_eq!(MEDIA_TOKEN_GRACE_SECONDS, 600);
+    }
+
+    #[test]
+    fn a_media_peer_is_signalled_in_json_both_ends_can_read() {
+        let offer: BrowserMediaClientMessage =
+            serde_json::from_str(r#"{"type":"rtcOffer","sdp":"v=0\r\n"}"#).unwrap();
+        assert_eq!(
+            offer,
+            BrowserMediaClientMessage::RtcOffer {
+                sdp: "v=0\r\n".into()
+            }
+        );
+        let candidate: BrowserMediaClientMessage = serde_json::from_str(
+            r#"{"type":"rtcCandidate","candidate":"candidate:1 1 udp 1 10.0.0.2 5000 typ host","sdpMid":"0"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            candidate,
+            BrowserMediaClientMessage::RtcCandidate {
+                candidate: "candidate:1 1 udp 1 10.0.0.2 5000 typ host".into(),
+                sdp_mid: Some("0".into())
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaClientMessage::RtcClose).unwrap(),
+            r#"{"type":"rtcClose"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::RtcAnswer { sdp: "v=0".into() })
+                .unwrap(),
+            r#"{"type":"rtcAnswer","sdp":"v=0"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::RtcClosed {
+                reason: "ICE failed".into()
+            })
+            .unwrap(),
+            r#"{"type":"rtcClosed","reason":"ICE failed"}"#
+        );
+        let hello: BrowserMediaServerMessage = serde_json::from_str(
+            r#"{"type":"hello","width":2,"height":2,"scale":1,"codec":"avc1","readOnly":true,"rtc":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            hello,
+            BrowserMediaServerMessage::Hello {
+                rtc: Some(true),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn every_rtc_channel_is_its_own_and_a_chunk_count_fits_its_byte() {
+        let mut labels: Vec<&str> = RTC_CHANNELS.iter().map(|(label, _, _)| *label).collect();
+        labels.sort_unstable();
+        labels.dedup();
+        assert_eq!(labels, ["audio", "input", "media"]);
+        // A chunk's index and count are one byte each: 255 chunks still hold an 8 MB keyframe.
+        assert!(255 * (RTC_MESSAGE_MAX - MEDIA_HEADER_LEN) >= 8_000_000);
+        assert!(RTC_MESSAGE_MAX <= 256 * 1024);
+    }
+
+    #[test]
+    fn every_media_kind_and_flag_is_its_own() {
+        let mut kinds: Vec<u8> = MEDIA_KINDS.iter().map(|(_, tag)| *tag).collect();
+        kinds.sort_unstable();
+        kinds.dedup();
+        assert_eq!(kinds.len(), MEDIA_KINDS.len());
+        let bits = MEDIA_FLAGS.iter().fold(0u8, |all, (_, bit)| {
+            assert_eq!(all & bit, 0, "a flag bit used twice");
+            assert_eq!(bit.count_ones(), 1, "a flag is one bit");
+            all | bit
+        });
+        assert_ne!(bits, 0);
+        assert_eq!(MEDIA_HEADER_LEN, 16);
     }
 
     #[test]

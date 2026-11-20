@@ -25,6 +25,8 @@ import { logsDoors } from "./machine/logs.handler";
 import { loopsDoors } from "./board/loops.handler";
 import { needsDoors } from "./board/needs.handler";
 import { netdiskDoors } from "./machine/netdisk.handler";
+import { bookmarksDoors } from "./machine/bookmarks.handler";
+import { browserDoors } from "./machine/browserTools";
 import { offloadDoors } from "./machine/offload.handler";
 import { orgDoors } from "./account/org.handler";
 import { pagesDoors } from "./board/pages.handler";
@@ -93,6 +95,9 @@ export const procedures = {
     activity: activityDoors,
     history: historyDoors,
     netdisk: netdiskDoors,
+    bookmarks: bookmarksDoors,
+    // What the visitor's own browser window does besides its pages (machine/browserTools.ts).
+    browser: browserDoors,
     pages: pagesDoors,
     public: publicDoors,
     push: pushDoors,

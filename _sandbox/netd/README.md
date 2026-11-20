@@ -69,6 +69,15 @@ flowchart LR
   background tab held the pane at 13 rows in every other window, so only viewers in sight count.)
   A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
+- A browser window's media socket is netd's to carry and castd's to answer (2026-11-19): `GET
+  /system/browser-media/<session>` on the daemon's host, from any listener or the tunnel, is relayed as the HTTP/1.1
+  upgrade it is to that window's castd on `/run/intentic/cast/<session>.sock` (browser-wire's `BROWSER_MEDIA_PATH`
+  and `BROWSER_MEDIA_SOCKET_DIR`), then spliced, before anything waits for Node: a picture, sound and the person's
+  input keep flowing while the daemon restarts, and none of it crosses Node's event loop. netd checks only the name
+  (`[A-Za-z0-9_-]{1,64}`, else 404, since it becomes a file name) and that it is an upgrade (else 426); the token in
+  its query is castd's to check. No castd listening is netd's own 502 naming the session. A test's netd looks in
+  `cast/` beside its run directory. (Rejected: relaying through Node, which the daemon does only behind a netd older
+  than this route, `browser/media/media-relay.ts`.)
 - In the editor's own sessions (`web-…`, never an agent's) netd also notices a password typed at a hidden prompt (2026-10-19,
   `term/hidden.rs`): output that stopped on a password-ish question, then keystrokes while the pane's tty has echo off
   (asked of the tty with `tcgetattr`). The line is edited as the tty does and told to Node once (`ToNode::HiddenLine`),

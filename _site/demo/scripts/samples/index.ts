@@ -8,6 +8,7 @@ import { agentsSamples } from "./agents.samples.ts";
 import { approvalsSamples } from "./approvals.samples.ts";
 import { areasSamples } from "./areas.samples.ts";
 import { auditSamples } from "./audit.samples.ts";
+import { browserSamples } from "./browser.samples.ts";
 import { automationsSamples } from "./automations.samples.ts";
 import { capabilitiesSamples } from "./capabilities.samples.ts";
 import { choresSamples } from "./chores.samples.ts";
@@ -24,6 +25,7 @@ import { logsSamples } from "./logs.samples.ts";
 import { loopsSamples } from "./loops.samples.ts";
 import { needsSamples } from "./needs.samples.ts";
 import { netdiskSamples } from "./netdisk.samples.ts";
+import { bookmarksSamples } from "./bookmarks.samples.ts";
 import { offloadSamples } from "./offload.samples.ts";
 import { orgSamples } from "./org.samples.ts";
 import { pagesSamples } from "./pages.samples.ts";
@@ -56,6 +58,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
     const context = sampleContext(fixtures, now);
     return {
         system: systemSamples(context),
+        browser: browserSamples(context),
         agents: agentsSamples(context),
         agent: agentSamples(context),
         sessions: sessionsSamples(context),
@@ -96,6 +99,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         activity: activitySamples(context),
         history: historySamples(context),
         netdisk: netdiskSamples(context),
+        bookmarks: bookmarksSamples(context),
         pages: pagesSamples(context),
         public: publicSamples(context),
         push: pushSamples(context),

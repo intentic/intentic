@@ -249,6 +249,9 @@ export const RAW_JSON_ROUTES = {
     // A dropped tree as one tar, extracted entry by entry.
     "POST /workspace/upload-archive": { bytes: true, output: OkSchema },
     "POST /workspace/upload-diff": { input: UploadManifestSchema, output: UploadSkipSchema },
+    // One file for a page's file chooser or a drop (`?id=` the uploader's, `&name=` the file's own), in parts like a
+    // workspace upload; answered by browser.answerFileChooser or browser.dropFiles naming the id.
+    "POST /browser/uploads": { bytes: true, output: OkSchema },
 } as const satisfies Partial<Record<RawRouteKey, RawJsonRoute>>;
 
 export type RawJsonRouteKey = keyof typeof RAW_JSON_ROUTES;

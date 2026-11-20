@@ -1,0 +1,46 @@
+From fb5ac2f46ad50291f2c7d42debcbd406c9b538e8 Mon Sep 17 00:00:00 2001
+From: "tembo[bot]" <208362400+tembo-io[bot]@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 04:39:13 +0000
+Subject: [PATCH 6/6] Align changed luma runs to the AVX-512 copy's 64 bytes
+
+The changed-macroblock copy widened a luma run to even macroblocks, the 32 bytes the AVX copy
+stores at, and handed it to h->mc.plane_copy. On a CPU with AVX-512 that is
+x264_plane_copy_avx512, which stores with aligned (non-temporal) 64-byte stores from the run's
+start and ends each row with a whole-vector store, zeroing the bytes after the run up to the next
+64. A run starting on an odd pair of macroblocks faulted (SIGSEGV on the first frame with
+mb_info where a change began at such a macroblock), and one ending short of a 64-byte boundary
+would have zeroed the input pixels after it. A run is widened to four macroblocks either side
+now, which copies current pixels as before since the source holds the whole picture; at the
+right edge it ends where the whole-frame copy ends a row, writing the same padding.
+---
+ common/frame.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/common/frame.c b/common/frame.c
+index ea893c8..231010a 100644
+--- a/common/frame.c
++++ b/common/frame.c
+@@ -417,13 +417,15 @@ static int frame_copy_changed( x264_t *h, x264_frame_t *dst, x264_picture_t *src
+                 x++;
+                 continue;
+             }
+-            /* The source holds the whole current picture, so a run widened to even macroblocks
+-             * copies current pixels: the 32-byte alignment the SIMD luma copy stores at. The
+-             * chroma interleave takes the C copy, the SIMD one coming out different on a run. */
+-            int x0 = x & ~1;
++            /* The source holds the whole current picture, so a run widened to four macroblocks
++             * either side copies current pixels: 64 bytes, the alignment the AVX-512 luma copy
++             * stores at (as do the AVX and SSE ones at 32 and 16), whose last store also writes
++             * a whole vector, zeroing what follows a run that ends short of it. The chroma
++             * interleave takes the C copy, the SIMD one coming out different on a run. */
++            int x0 = x & ~3;
+             while( x < mb_w && (changed[x + y*mb_w] > held) )
+                 x++;
+-            x = X264_MIN( (x + 1) & ~1, mb_w );
++            x = X264_MIN( (x + 3) & ~3, mb_w );
+             int cols = X264_MIN( 16*(x - x0), h->param.i_width - 16*x0 );
+             if( cols <= 0 || rows <= 0 )
+                 continue;
+-- 
+2.50.1
+

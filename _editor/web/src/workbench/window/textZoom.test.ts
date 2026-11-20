@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { wheelCounter, zoomStepOf } from "./textZoom";
+import { wheelCounter, zoomStepOf, zoomsOwnPage } from "./textZoom";
 
 const key = (init: KeyboardEventInit): KeyboardEvent => new KeyboardEvent(`keydown`, init);
 
@@ -34,6 +34,24 @@ describe(`zoomStepOf`, () => {
     it(`takes ⌘ on a Mac, where Ctrl+minus stays the system's`, () => {
         expect(zoomStepOf(key({ metaKey: true, key: `=`, code: `Equal` }), true)).toBe(1);
         expect(zoomStepOf(key({ ctrlKey: true, key: `-`, code: `Minus` }), true)).toBeUndefined();
+    });
+});
+
+// Ctrl+= over a live browser zooms the page it shows, not the editor's text, so the window's capture leaves it alone.
+describe(`zoomsOwnPage`, () => {
+    test(`a live browser's keyboard keeps the zoom keys, and any other field does not`, () => {
+        const sink = document.createElement(`textarea`);
+        sink.setAttribute(`data-zooms-own-page`, ``);
+        const stage = document.createElement(`div`);
+        stage.setAttribute(`data-zooms-own-page`, ``);
+        const inside = document.createElement(`span`);
+        stage.append(inside);
+        expect([zoomsOwnPage(sink), zoomsOwnPage(inside), zoomsOwnPage(document.createElement(`input`)), zoomsOwnPage(null)]).toEqual([
+            true,
+            true,
+            false,
+            false,
+        ]);
     });
 });
 

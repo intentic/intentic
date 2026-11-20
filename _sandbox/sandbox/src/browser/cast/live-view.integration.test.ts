@@ -16,6 +16,19 @@ import { FRAME_H264_DELTA, FRAME_H264_DELTA_QUIET, FRAME_H264_KEY, FRAME_H264_KE
 // quiet, and that a resize and a navigation from the client's chrome land.
 
 const DISPLAY_KEY = "live-view-test";
+
+// The old picture path is what runs where no castd serves a display, so the mode is pinned: with a castd build present
+// (an image that ships one, or a dev build under _sandbox/castd) the display would take castd's layout, a fullscreen
+// window on a larger screen, which is not what this path draws. An empty `INTENTIC_CASTD` turns castd off (castd.ts).
+const castdBefore = process.env["INTENTIC_CASTD"];
+process.env["INTENTIC_CASTD"] = "";
+afterAll(() => {
+    if (castdBefore === undefined) {
+        delete process.env["INTENTIC_CASTD"];
+    } else {
+        process.env["INTENTIC_CASTD"] = castdBefore;
+    }
+});
 const SCREEN = { width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
 
 interface Wire {

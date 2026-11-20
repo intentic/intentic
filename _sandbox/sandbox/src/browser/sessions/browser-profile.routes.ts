@@ -231,7 +231,7 @@ const createBrowserProfileRoute = (services: Services) =>
                             ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
                         }
                     },
-                    { endpoint: owned.endpoint, log: (fields, message) => services.logger.debug({ capability: requested, ...fields }, message) },
+                    { endpoint: owned.endpoint, media: url.searchParams.get("media") === "1", log: (fields, message) => services.logger.debug({ capability: requested, ...fields }, message) },
                 );
                 // Doesn't fail on a slow page; the owner can interact once it paints.
                 await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {

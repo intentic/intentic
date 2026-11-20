@@ -1,0 +1,28 @@
+{
+    "name": "@intentic/castbench",
+    "version": "0.0.0",
+    "description": "End-to-end benchmark of the in-editor browser's stream: real Chromium workloads on Xvfb, today's ffmpeg pipeline or castd, decoded by WebCodecs in a headless Chromium, over direct and shaped links, judged against a checked-in baseline and the stream's budgets",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "typecheck": "bun check -p tsconfig.test.json",
+        "test": "suites",
+        "castbench": "bun --conditions=@intentic/src src/cli.ts"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "playwright": "catalog:",
+        "ws": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@types/ws": "catalog:",
+        "typescript": "catalog:"
+    }
+}

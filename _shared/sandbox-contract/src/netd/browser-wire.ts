@@ -4,10 +4,16 @@
 // which contract.lock.json pins.
 
 export type {
+    BrowserMediaClientMessage,
+    BrowserMediaServerMessage,
     BrowserViewClientMessage,
     BrowserViewServerMessage,
+    ClipboardContent,
     EdgeVerdict,
     EmulatedDevice,
+    KeyAction,
+    MediaAudio,
+    MediaCursor,
     PictureKind,
     PointerAction,
     SelectMenu,
@@ -45,3 +51,48 @@ export const BROWSER_FRAME_TAGS = {
     h264KeyQuiet: 5,
     h264DeltaQuiet: 6,
 } as const;
+
+// Where a browser media socket opens on a sandbox's address, with the browser session's name after it
+// (`${BROWSER_MEDIA_PATH}/<session>`): the window's picture, sound, pointer, keys and clipboard, answered by that window's
+// castd through netd rather than by Node. The browser view socket names it, with a token, in its `media` message.
+export const BROWSER_MEDIA_PATH = "/system/browser-media";
+
+// Where each window's castd listens inside the container, `<dir>/<session>.sock`: what netd relays the media socket's
+// upgrade to, and where the daemon keeps the key castd checks tokens with.
+export const BROWSER_MEDIA_SOCKET_DIR = "/run/intentic/cast";
+
+// The header every binary message on a media socket starts with (browser-wire's MEDIA_HEADER_LEN): kind, flags, the
+// frame's id, its capture time in ms since `hello`, the stripe's top row, index and count, then reserved bytes.
+export const MEDIA_HEADER_LEN = 16;
+
+// Byte 0 of that header: what the payload is, one H.264 access unit or one Opus packet.
+export const MEDIA_KINDS = { video: 1, audio: 2 } as const;
+
+// Bits of byte 1: `key`, an IDR a decoder can start on; `refine`, castd sharpening content that has gone still.
+export const MEDIA_FLAGS = { key: 1, refine: 2 } as const;
+
+// The DataChannels a viewer opens on a peer connection straight to castd (browser-wire's RTC_CHANNELS), each with the
+// reliability it must be opened with: `media` (castd's JSON and video, in order, every one), `audio` (Opus packets, none
+// retransmitted, in any order) and `input` (everything the viewer would send on the socket, in order, every one). The
+// Rust constant's comment holds the reasons.
+export const RTC_CHANNELS = {
+    media: { ordered: true, maxRetransmits: null },
+    audio: { ordered: false, maxRetransmits: 0 },
+    input: { ordered: true, maxRetransmits: null },
+} as const;
+
+export type RtcChannelLabel = keyof typeof RTC_CHANNELS;
+
+// The largest DataChannel message castd sends; a longer video message arrives as chunks of the same header with byte 14
+// the chunk's index and byte 15 the count, joined in order before decoding.
+export const RTC_MESSAGE_MAX = 32 * 1024;
+
+// How long past its newest token's expiry castd keeps a media socket open, in seconds: the viewer sends each fresh token
+// the browser view socket hands it on the open socket (`{type: "token"}`), which moves the bound on.
+export const MEDIA_TOKEN_GRACE_SECONDS = 600;
+
+// The codes castd closes an open media socket with, each meaning the held token is dead: ask the browser view socket
+// for a fresh `media` before dialling again. `dropped`: the daemon dropped the window's viewers (access revoked, a
+// desktop's control handed back), and castd refuses every token minted before it. `expired`: the socket's newest token
+// expired more than MEDIA_TOKEN_GRACE_SECONDS ago.
+export const MEDIA_CLOSE_CODES = { dropped: 4001, expired: 4002 } as const;

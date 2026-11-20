@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { Socket } from "node:net";
 import { createInterface } from "node:readline";
+import { pollUntil } from "@intentic/base/async";
 import { exec } from "@intentic/base/git";
 import { type Desktop, DesktopError, desktop } from "@intentic/desktop-automation";
 import type { DesktopState, DesktopWindow } from "@intentic/sandbox-contract/schemas/terminal";
@@ -30,9 +31,13 @@ export const desktopAvailable = (): boolean => REQUIRED.every((path) => existsSy
 // nothing and wmctrl has nothing to ask: it is what makes the display a desktop.
 const managers = new Map<string, ChildProcess>();
 
-const startWindowManager = (display: Display): void => {
+const managerRunning = (display: Display): boolean => {
     const running = managers.get(display.name);
-    if (running !== undefined && running.exitCode === null && running.signalCode === null) {
+    return running !== undefined && running.exitCode === null && running.signalCode === null;
+};
+
+const startWindowManager = (display: Display): void => {
+    if (managerRunning(display)) {
         return;
     }
     // A manager left from a previous daemon life (the display is adopted across restarts) makes this one exit at once
@@ -217,12 +222,29 @@ export interface AgentDesktop {
     readonly screen: Desktop;
 }
 
+/* A window mapped while openbox is still taking the screen is never managed: it stays unmapped and off the client list
+   for good, so the first program an agent starts on a desktop just started could never be seen, listed or clicked.
+   Measured 2026-11-20: 14 of 20 xmessage windows started together with openbox were lost, none of 70 started once the
+   root carried openbox's client list (about 30 ms after its start). So a use waits for that list, which the spy hears,
+   unless there is no spy to hear it (no xprop) or no window manager starting (openbox absent, or exited because another
+   one already holds the screen, whose list the spy then reads at once). */
+const MANAGER_WAIT_MS = 5_000;
+const MANAGER_POLL_MS = 20;
+
+const managerUp = async (display: Display): Promise<void> => {
+    await pollUntil(() => clients !== undefined || watcher === undefined || !managerRunning(display), {
+        intervalMs: MANAGER_POLL_MS,
+        timeoutMs: MANAGER_WAIT_MS,
+    });
+};
+
 // The desktop, started on first use: a turn that never calls a desktop tool never pays for a display.
 export const agentDesktop = async (): Promise<AgentDesktop> => {
     const before = displayOf(DESKTOP_KEY);
     const display = await ensureDisplay(DESKTOP_KEY, DESKTOP_SIZE);
     startWindowManager(display);
     watchWindows(display);
+    await managerUp(display);
     if (before?.name !== display.name) {
         publishRuntimeChange("desktop");
     }

@@ -1,0 +1,86 @@
+{
+    "$comment": "The browser stream's performance budgets, approved with the castd architecture (2026-11-19). Each is a one-directional claim a run is judged against with --compare; metric names are compare.ts's METRICS. 60 fps is judged as at least 57 unique frames a second, five percent short of the page's own rate, so one late frame is not a failure.",
+    "budgets": [
+        {
+            "id": "idle-encoder",
+            "claim": "A page that does not change costs the encoder nothing: no capture, no encode, until something moves.",
+            "workload": "still",
+            "link": "direct",
+            "metric": "encoderCores",
+            "max": 0
+        },
+        {
+            "id": "scroll-encoder",
+            "claim": "Scrolling a page at 60 fps at about 1280x880 costs the encoder at most a fifth of a core.",
+            "workload": "scroll",
+            "link": "direct",
+            "metric": "encoderCores",
+            "max": 0.2
+        },
+        {
+            "id": "scroll-fps",
+            "claim": "A page scrolled at 60 fps is seen at 60 fps.",
+            "workload": "scroll",
+            "link": "direct",
+            "metric": "uniqueFps.mean",
+            "min": 57
+        },
+        {
+            "id": "lan-latency-p50",
+            "claim": "On a LAN, what the page drew is decoded within 40 ms for half the frames.",
+            "workload": "anim",
+            "link": "direct",
+            "metric": "latencyMs.p50",
+            "max": 40
+        },
+        {
+            "id": "lan-latency-p99",
+            "claim": "On a LAN, what the page drew is decoded within 60 ms for all but one frame in a hundred.",
+            "workload": "anim",
+            "link": "direct",
+            "metric": "latencyMs.p99",
+            "max": 60
+        },
+        {
+            "id": "wan10-latency-p50",
+            "claim": "Over 10 Mbit/s with a 40 ms round trip, half the frames are decoded within 90 ms of being drawn.",
+            "workload": "anim",
+            "link": "10mbit-40ms",
+            "metric": "latencyMs.p50",
+            "max": 90
+        },
+        {
+            "id": "wan5-fps",
+            "claim": "Over 5 Mbit/s with a 60 ms round trip, a 60 Hz animation is still seen at 60 fps.",
+            "workload": "anim",
+            "link": "5mbit-60ms",
+            "metric": "uniqueFps.mean",
+            "min": 57
+        },
+        {
+            "id": "wan5-stalls",
+            "claim": "Over 5 Mbit/s with a 60 ms round trip, the picture never stands still for 100 ms while the page moves.",
+            "workload": "anim",
+            "link": "5mbit-60ms",
+            "metric": "stalls",
+            "max": 0
+        },
+        {
+            "id": "keystroke",
+            "claim": "A keystroke's glyph is decoded within the link's round trip plus 30 ms, for half the keystrokes.",
+            "workload": "typing",
+            "link": "*",
+            "metric": "keyMs.p50",
+            "max": 30,
+            "plusRtt": true
+        },
+        {
+            "id": "paste",
+            "claim": "A 10,000-character paste is all on screen in under a second.",
+            "workload": "typing",
+            "link": "*",
+            "metric": "pasteMs.max",
+            "max": 1000
+        }
+    ]
+}

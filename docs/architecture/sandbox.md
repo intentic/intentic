@@ -283,6 +283,127 @@ The Changes panel stages everything and commits everything as runs, the push's s
 - Settings `offload.sessions` decides what the composer does with it (Agent → Tools → Where heavy work runs → New chats when this machine is busy). `suggest`, the default, draws one line above a new chat's composer offering the machine. `auto` places the draft there and says so, with Keep it here. `off` says nothing. The placement menu shows every machine's standing either way. A draft the fleet moved stays while that machine is no worse off than this one, so it does not bounce at a threshold. A person's pick is never moved again.
 - 2026-10-12: the automatic move happens in the composer, as a visible placement on the draft, and not in the daemon at a new conversation's first turn. A conversation's machine latches with its first turn, so the person should see it before Send. A daemon-side default would also have moved automations' and channels' new conversations with nobody watching. CPU is read from load and pressure rather than `/system/metrics`'s CPU percent, which needs a baseline from the last ten seconds and so is absent from a reading taken every few seconds.
 
+## Browser pictures: the media plane
+
+A browser window's picture, sound and the person's input travel on a socket of their own, answered by that window's
+media daemon, castd (`_sandbox/castd`, Rust, a fork of voxl), and never by the Node daemon. The daemon keeps what
+drives the browser as a program (tabs, addresses, dialogs, `emulate`) on the browser view socket, and hands the editor
+the media socket there. Three planes: castd for media, the daemon's CDP control for the browser, the editor for the UI.
+
+- **One castd per X display** with a watched window ([`castd.ts`](../../_sandbox/sandbox/src/browser/media/castd.ts),
+  [`castd-process.ts`](../../_sandbox/sandbox/src/browser/media/castd-process.ts)), started when a view opens, in the
+  class the display's browser runs as, detached so a daemon restart adopts it by its pid file and socket, started again
+  with backoff when it dies, and ended with its display (`onDisplayRelease`). It listens on
+  `/run/intentic/cast/<session>.sock` (browser-wire's `BROWSER_MEDIA_SOCKET_DIR`), the session `cast-<display key>` (a
+  hashed stem for an account's key), which every browser session on that display shares, since the picture is the
+  display's. Its control routes (`/health`, `/geometry`, `/pin`, `/unpin`, `/crop`) are the daemon's to ask on the
+  socket; the socket file's 0600 is their guard. Without a castd binary (`INTENTIC_CASTD`, the castd pack's
+  `/opt/castd/bin/castd`, or a dev build in `_sandbox/castd/target/release`) nothing changes: ffmpeg, stills and xdotool
+  on the browser view socket as before.
+- **The route.** netd relays `GET /system/browser-media/<session>` on the daemon's host, from any listener or the tunnel,
+  to that socket as the upgrade it is, before anything waits for Node (netd's README). The daemon relays the same path
+  as bytes for a netd older than the route ([`media-relay.ts`](../../_sandbox/sandbox/src/browser/media/media-relay.ts)),
+  in front of every other upgrade its HTTP server answers.
+- **The handoff.** A viewer that says it can dial a media socket (`media=1` on the browser view's or the account
+  window's query) and whose window castd serves gets `media {path, token, expiresAt}` and no picture on the view socket
+  ([`media-view.ts`](../../_sandbox/sandbox/src/browser/media/media-view.ts)); pointer, keys and `resize` sent there are
+  dropped. The token ([`media-token.ts`](../../_sandbox/sandbox/src/browser/media/media-token.ts), castd's
+  `src/token.rs` and its test vector) is an HMAC under a per-boot key in `/run/intentic/cast/key` (0600), lives a
+  minute, says when it was minted (`iat`), is re-sent 15 s before it lapses and at once whenever castd starts again, and
+  is read-only only for a viewer who may watch and not drive. A viewer without `media=1` is shown the old way whatever
+  the sandbox has. (2026-11-19: an editor older than castd would otherwise be left with no picture at all, since the
+  editor and the sandbox update apart.)
+- **Who stays on.** A media socket is castd's, outside every transport the daemon registers for revocation, so access
+  ending reaches it two ways. Every revocation (`connections.onRevoke`: a member's access, every session) drops every
+  castd's viewers (`dropCastdViewers`, castd's `POST /viewers/drop`): castd ends each socket and its peer connection with
+  browser-wire's `dropped` close code and refuses every token minted before it, and a castd started later is told the
+  same (`--not-before`). A viewer still entitled asks its view socket for a fresh token and dials again; a revoked one
+  has no view socket left to ask. And castd closes a socket whose newest token expired more than ten minutes ago
+  (`expired`), which the editor never lets happen: it hands each fresh token to the open socket as `token`. (2026-11-20:
+  an open socket used to outlive every token and every revocation.)
+- **Screen = viewport.** A window the daemon launches (the person's own, an account's sign-in window) starts fullscreen
+  where castd serves it (`chromiumWindowArgs`): no toolbar, so the X screen is the page's viewport, and castd RandR-sizes
+  the screen to the driving viewer's box × pixel ratio, so text is pixel-exact at any ratio. Measured on Chromium 1248
+  against a bare Xvfb ([`screen-fit.ts`](../../_sandbox/sandbox/src/browser/media/screen-fit.ts)): Chromium follows no
+  RandR resize by itself in any mode, CDP's `setWindowBounds` takes a window out of fullscreen, and an X ConfigureWindow
+  of its toplevel keeps it fullscreen. castd fits every toplevel that covered the old screen after each resize; the
+  daemon fits the window once each time castd starts, since a fresh one covers no screen and RandR puts a dead castd's
+  screen back, and puts a window someone took out of fullscreen back while it is watched. The pixel ratio follows
+  XSETTINGS `Xft/DPI` live (an xsettingsd per display at castd's scale, read off `/geometry` every 400 ms while a view
+  is open). Rejected: `--force-device-scale-factor`, which needs a relaunch per change; `--kiosk`, which drops the
+  page's context menu; an explicit `--window-size`, which keeps the toolbar. Kept: Chromium's "press and hold Esc to
+  exit full screen" bubble over the first seconds of a window. The display
+  starts at 3840×2400 (`-shmem`, which castd reads in place), the largest a 1920×1200 box at a ratio of 2 asks, since
+  RandR on Xvfb only shrinks; it is held at 1280×880 until a viewer asks for its own box. A phone pins the screen to the
+  device's CSS size at the viewer's ratio, whole and unshrunk.
+- **The way to castd.** The editor dials the media socket on the base its window's socket took (`screencastMedia.ts`),
+  so the media socket rides the loopback shortcut whenever the rest of the sandbox's traffic does, and the edge, on a
+  stream of its WebTransport session where it declares one, otherwise. Beside the socket, a viewer may open a peer
+  connection straight to castd (castd's `src/rtc/`, the editor's `mediaRtc.ts`): WebRTC DataChannels over DTLS and
+  SCTP, signalled on the media socket (`rtcOffer`, `rtcAnswer`), castd an ICE-lite agent on one UDP port
+  (`--rtc-udp`) whose host candidates are the addresses that port is published on (`--rtc-candidates`). Once the
+  peer's `media` channel opens, castd says `hello` there and moves the stream onto it; whenever the peer fails the
+  stream comes back to the socket with another `hello`, and the editor believes pictures only from the carrier of the
+  latest one. The socket's token is what authenticates the peer: castd's answer carries its DTLS fingerprint and ICE
+  password, so only the viewer holding the socket can finish the handshake. (2026-11-20: a public https page cannot
+  open `ws://` to a LAN address, and no public certificate names one, so a viewer on the sandbox's own network had no
+  way to castd but the edge's hairpin.) What a sandbox on an owner's device still lacks for it, and nothing starts
+  castd with `--rtc-udp` until it has: the run contract publishing one UDP port to the LAN (`sandboxRunSpec`'s
+  `publish`, `0.0.0.0:<port>:<port>/udp`, a port derived from the sandbox id as `localDaemonPort` derives its own, and
+  the same in the Compose file), the device agent telling the sandbox the host's LAN addresses as they change (a host
+  fact like `HOST_LABEL`, but live, since a laptop changes networks), the daemon starting castd with both, and, since
+  several castds share one container, netd owning that port and handing each datagram to the castd whose ICE ufrag
+  its binding request names, the way it owns every TCP port. A hosted sandbox has no LAN to offer and stays on the
+  edge.
+- **Cropped windows.** A window the daemon did not launch (an agent's @playwright/mcp browser) is a rectangle of its
+  screen: castd runs `--crop` on the page's viewport (`region.ts`), moved live (`POST /crop`) as the window, a popup's
+  chrome or a phone moves it, and the window is still sized to a `resize` sent on the view socket.
+- **The desktop** ([`desktop-media.ts`](../../_sandbox/sandbox/src/desktop/desktop-media.ts)): with `media=1`, the whole
+  desktop is a castd cropped to the whole screen (a viewer's box never resizes the screen the agent's programs are laid
+  out on), and one program's window a castd of its own cropped to the window as it moves. The token drives only while
+  the view has taken the desktop, and a fresh one goes out at each change of hands, after castd has ended every
+  read-write socket on that picture and refused the read-write tokens minted before (`POST /viewers/drop?read_write=1`),
+  so a socket that drove cannot go on driving whatever its client does; the daemon cannot see the keys a media socket
+  carries, so a driving view holds the agent out until it hands back or closes, not until it is idle.
+- **Agents' screenshots and pauses** ([`agent-capture.ts`](../../_sandbox/sandbox/src/browser/media/agent-capture.ts)):
+  where the owner's window has a castd, the router answers `browser_take_screenshot` of the viewport off castd's `GET
+  /screenshot` (moving a cropped castd onto the front tab's viewport first), not the backend, so long as the page the
+  agent drives is the tab shown (`document.visibilityState`; a person may have picked another): the pixels a viewer sees,
+  Chromium's popups, `<select>` menus, autofill, context menus and dialogs included, nothing re-rendered and so no echo.
+  It is scaled to CSS pixels unless the call asks for `device`, in the format asked, written and linked as
+  @playwright/mcp words its own. An element's or a full page's shot is on no screen and stays the backend's, as does
+  every shot of a window with no castd. A bare `browser_wait_for` `time` is timed on castd's `GET /wait`: it ends once
+  the screen changed and then held still for 0.5 s, and runs out as before when nothing changes (a page reacting on a
+  timer is still waited for) or nothing stops changing. The desktop's confirming look (desktop-tools.ts) waits the same
+  way, at its own 80 ms within 1.5 s, where its castd runs. Rejected: rewriting @playwright/mcp's own 350 ms pause after
+  each action, which happens inside the backend before its answer's snapshot, where no castd wait can reach.
+- **Recording** ([`recordings.ts`](../../_sandbox/sandbox/src/browser/media/recordings.ts)): castd's `POST /record/start`
+  and `/record/stop`, the H.264 stream it already encodes rewrapped as an MP4, without sound and without encoding again.
+  castd writes it as it goes to a file the daemon names in `.intentic/local/browser/recordings/` (`--record-dir`), which
+  the daemon moves where it is kept once it stops: neither process ever holds a recording in memory, and a staged file
+  nobody came for is swept two hours on. The browser menu's Record (the window in front,
+  `browser.startRecording`/`stopRecording`, one per window, a second start answering the first) lists the MP4 with the
+  window's downloads, whose own policy ages it out, where Save to my computer and Save to workspace take it; the
+  window's state says `recording` while it runs, which the tab strip shows as a red dot on the tab in front, and the
+  daemon stops it itself just before castd's longest (five minutes by default). With the sandbox's `recordAgentBrowsing` on (off by default), an agent's turn is
+  recorded from its first browser call with a window to its end ([`agent-recording.ts`](../../_sandbox/sandbox/src/browser/media/agent-recording.ts)):
+  the castd already serving the window records it as it frames it (a person's view of it, as its whole screen, is never
+  turned into a crop under them), else one is started cropped to the tab in front; the conversation gets a notice
+  naming the file as it starts, and the MP4 lands in `.intentic/records/artifacts/browser/<conversation>/`, one part per
+  stretch of castd's longest and one more each time a cropped window moves (castd ends a recording when its picture
+  changes size). The turn's end stops every part, a start still under way included, and nothing starts after it. Turns'
+  recordings are kept a week and 2 GiB in all, the oldest going first (recordings.ts, the downloads' policy).
+- **Sound** ([`cast-audio.ts`](../../_sandbox/sandbox/src/browser/media/cast-audio.ts)): one PulseAudio server for the
+  sandbox's displays on `/run/intentic/cast/pulse.sock`, a 48 kHz null sink per display (`x<number>`) that the
+  window's Chromium plays into (`PULSE_SERVER`, `PULSE_SINK` at its launch), and castd sends the sink's monitor as Opus.
+  Its microphone (`PULSE_SOURCE`) is a null source that hears nothing: left to Pulse's default, a page given the
+  microphone would record a sink's monitor, another window's sound included. Agents' windows are not given one.
+- **The image.** castd's tree (castd, its Xvfb with XTEST scroll axes, which the daemon prefers, and its patched
+  libx264) is built by `_tools/scripts/image/build-castd.sh` with castd's own `build.Dockerfile` and baked by the
+  bake-only `castd` pack as a static layer root; the overlayable `browser` pack carries what castd links, PulseAudio,
+  xsettingsd and `fonts-noto-cjk`. (2026-11-19: a builder stage cannot live in a pack, which is a fragment spliced into
+  one stage and into overlays; netd's way, built outside and copied from the trees context, is the repository's.)
+
 ## Priority and memory
 
 - Every process the daemon starts for a purpose gets a workload class from whoever started it, never from its command line ([`workload-class.ts`](../../_sandbox/sandbox/src/workload/workload-class.ts)). The class sets its niceness, its IO class and its `oom_score_adj`, and children inherit all three, so the whole tree carries it. When memory runs out, the kernel takes, in order (netd's memory guard, below, weighs the same tiers against each process's size): builds a heavy-command rule matched (800), agent commands and dependency installs (600), services, gateways, backends and panels, the owner's browser with its display and screen video among them (500), then agent runtimes, 100 plus 100 per spawn level, so a child goes before its parent. The daemon and whatever it starts without a class stay at 0. All of these run in the `workload` cgroup leaf, and the daemon in a leaf of its own, which a kill at the workload leaf's bound cannot reach and the guard never kills in.

@@ -1,20 +1,28 @@
 import { errorMessage } from "@intentic/base/errors";
+import type { BrowserViewClientMessage } from "@intentic/sandbox-contract/browser-wire";
 import { type BrowserSession, BrowserSessionSchema } from "@intentic/sandbox-contract/schemas/terminal";
 import { t } from "@intentic/ui/i18n";
-import { type ComputedRef, onScopeDispose, ref, type Ref, watch } from "vue";
+import { computed, type ComputedRef, onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
-import { keyFrames, keyIntent, type BrowserCommand, type KeyFrame } from "../../models/browsers/keyIntent";
+import type { PasteEvent } from "../../models/browsers/inputSink";
+import { mediaInput, viewInput, type InputPort, type ViewInputOptions } from "../../models/browsers/inputWire";
+import type { BrowserCommand } from "../../models/browsers/keyIntent";
+import { liveInput, type LiveInput, type TouchPhase } from "../../models/browsers/liveInput";
 import { pointerFrame, type PointerAction } from "../../models/browsers/pointerFrame";
+import type { Point } from "../../models/browsers/touchGestures";
 import { selectionCopy } from "../../models/browsers/selectionCopy";
+import type { MediaPicture } from "../../models/browsers/media/mediaPicture";
 import { type PaintedPicture, type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../client/sandbox/streams/wsTicket";
 import { useLineWithElapsed } from "../../components/progress/useProgress";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
 // (H.264 of the page's viewport off the browser's own X display into a canvas, with a sharp still laid over it once
-// the page settles) or frames (CDP's page-only compositor surface into an img); kind and geometry always come off the
-// wire. The chrome around the picture is the pane's own, steered by the verbs below. No scrollback to preserve like
-// a terminal, so this is plain reactive state, and nothing is sent to the page until the user takes control.
+// the page settles) or frames (CDP's page-only compositor surface into an img); where castd serves the window, `media`
+// moves the picture, sound and input to castd's media socket (useScreencast's media path), and this socket keeps the
+// tabs, addresses, dialogs and the phone. Kind and geometry always come off the wire. The chrome around the picture
+// is the pane's own, steered by the verbs below. No scrollback to preserve like a terminal, so this is plain reactive
+// state, and nothing is sent to the page until the user takes control.
 
 // Mirrors the daemon's SelectMenu (screencast.ts); the browser package can't import that contract, so it's
 // re-declared here, and read as the daemon's word rather than trusted.
@@ -29,8 +37,10 @@ export interface BrowserView {
     // The window whole (its tabs, the one in front, a dialog), as its own socket last sent it: newer than the browsers
     // list whenever its `seq` is higher. Undefined until the socket says, and from a sandbox too old to.
     readonly session: Ref<BrowserSession | undefined>;
-    // Which picture this is, so the pane mounts canvases or an img; undefined until `ready`.
-    readonly kind: Ref<"video" | "frames" | undefined>;
+    // Which picture this is, so the pane mounts canvases or an img; undefined until `ready` (or castd's `hello`).
+    readonly kind: Ref<"video" | "frames" | "media" | undefined>;
+    // The media path: its canvas, sound, stats and cursor, while `kind` is `media`.
+    readonly media: MediaPicture | undefined;
     // Remote geometry pointer coordinates map onto (the page's viewport, in the display's pixels on video); off the
     // wire, never assumed.
     readonly viewWidth: Ref<number>;
@@ -54,8 +64,8 @@ export interface BrowserView {
     readonly statusWithElapsed: ComputedRef<string | undefined>;
     // True while the user's input is being forwarded; off by default.
     readonly driving: Ref<boolean>;
-    // CSS cursor keyword from the daemon: the picture carries no pointer, the pane draws the local one in this shape.
-    readonly cursor: Ref<string>;
+    // CSS cursor from the daemon or castd: the picture carries no pointer, the pane draws the local one in this shape.
+    readonly cursor: Readonly<Ref<string>>;
     // Stream a specific page instead of following the agent; brings it in front.
     readonly bindPage: (pageId: string) => void;
     // A native <select> renders outside the page, so no frame shows it; the daemon reports options instead.
@@ -67,12 +77,29 @@ export interface BrowserView {
     readonly onMouseMove: (event: MouseEvent, frame: HTMLElement) => void;
     readonly onMouseDown: (event: MouseEvent, frame: HTMLElement) => void;
     readonly onMouseUp: (event: MouseEvent, frame: HTMLElement) => void;
+    // Exact pixel deltas, a frame at a time, nothing rounded away (wheelSteps.ts).
     readonly onWheel: (event: WheelEvent, frame: HTMLElement) => void;
-    // The chrome's own verbs (keyIntent's `command`) go to `onCommand`, which the pane answers with its tabs and
-    // address bar; the page's keys go to the browser.
+    // The keyboard's hidden field (inputSink.ts). The chrome's own verbs (keyIntent's `command`) go to `onCommand`, which
+    // the pane answers with its tabs and address bar; the page's keys go to the browser.
     readonly onKeyDown: (event: KeyboardEvent, onCommand?: (command: BrowserCommand) => void) => void;
+    // What an input method, an emoji panel, dictation or a phone's keyboard commits into the field.
+    readonly onBeforeInput: (event: InputEvent) => void;
+    readonly onInput: (event: Event) => void;
+    readonly onCompositionEnd: (event: CompositionEvent) => void;
     // Left to the host: the remote clipboard is the sandbox's own, and the host's paste event carries the real one.
-    readonly onPaste: (event: ClipboardEvent) => void;
+    readonly onPaste: (event: PasteEvent) => void;
+    // A finger on the stage (touchGestures.ts): `surface` is the box a pinch magnifies.
+    readonly onTouch: (phase: TouchPhase, event: PointerEvent, frame: HTMLElement, surface: HTMLElement) => void;
+    // The picture lost the keyboard: every button and key held for the person is let go.
+    readonly releaseInput: () => void;
+    // A pinch's magnification of the picture here, as the surface's style; undefined at rest.
+    readonly zoom: Ref<{ transform: string; transformOrigin: string } | undefined>;
+    // Trackpad mode for a finger, and its cursor in client pixels while on.
+    readonly trackpad: Ref<boolean>;
+    readonly setTrackpad: (on: boolean) => void;
+    readonly trackpadCursor: Ref<Point | undefined>;
+    // Chromium's own zoom of the page, by its own chords on the display.
+    readonly zoomPage: (step: `in` | `out` | `reset`) => void;
     // The tab the picture shows, or the one `pageId` names: a tab the picture may not be on yet (one just opened).
     readonly navigate: (url: string, pageId?: string) => void;
     readonly back: () => void;
@@ -149,6 +176,61 @@ const statusLine = (first: string) => {
     };
 };
 
+// The person's input on the view socket (inputWire.ts). Keys go raw to the display while Chromium's find bar has them,
+// until an Escape closes it or a press puts the keyboard back on the page; handing the wheel back lets go of whatever
+// the person still held, and nothing else is sent once they stop driving.
+const viewSocketInput = (options: {
+    readonly send: (message: BrowserViewClientMessage) => void;
+    // The media socket while it carries the picture: then input goes there, in its own vocabulary, and castd types it.
+    readonly media: () => InputPort | undefined;
+    readonly driving: Ref<boolean>;
+    readonly copy: NonNullable<ViewInputOptions[`copy`]>;
+    readonly raw: { readonly on: () => boolean; readonly off: () => void };
+    readonly size: () => { readonly width: number; readonly height: number };
+}): LiveInput => {
+    const { raw } = options;
+    const viewPort = viewInput(options.send, { raw: raw.on, copy: options.copy });
+    const port: InputPort = {
+        send: (message) => {
+            (options.media() ?? viewPort).send(message);
+            if (raw.on() && message.type === `key` && message.key === `Escape`) {
+                raw.off();
+            }
+        },
+    };
+    // Synchronous, so a hand-back within the tick it was taken in is not read as no change at all.
+    watch(
+        options.driving,
+        (now, before) => {
+            if (before && !now) {
+                port.send({ type: `releaseAll` });
+            }
+        },
+        { flush: `sync` },
+    );
+    return liveInput({ port, driving: options.driving, size: options.size, onPress: raw.off });
+};
+
+// Chromium's zoom chords, sent to the display so the browser itself zooms the page as it would under a local Ctrl+=.
+const ZOOM_CHORDS = { in: `=`, out: `-`, reset: `0` } as const;
+
+// A chord for Chromium itself (its find bar, its zoom): on the media socket a key castd types on the display, on the
+// view socket a raw key the daemon sends there. Answers whether the media socket took it.
+const chromeChord = (media: MediaPicture | undefined, send: (message: BrowserViewClientMessage) => void, key: string): boolean => {
+    if (media?.live.value === true) {
+        media.send({ type: `key`, key, ctrl: true });
+        return true;
+    }
+    send({ type: `key`, key, ctrl: true, raw: true });
+    return false;
+};
+
+// The tab a `state` says the window has in front, as the media path's stills know it: window and page.
+const frontKey = (window: BrowserSession): string | undefined => {
+    const page = window.pages.find((candidate) => candidate.active);
+    return page === undefined ? undefined : `${window.name}\n${page.id}`;
+};
+
 // Follows `name` as the view switches browsers; a change tears the old socket down and opens a new one, with
 // nothing to preserve across the switch.
 export const useBrowserView = (name: Ref<string | undefined>, options: BrowserViewOptions = {}): BrowserView => {
@@ -168,6 +250,17 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
     // The screencast below; declared ahead so every verb can say something on it.
     const send = (message: object): void => cast.live.send(message);
     const copy = selectionCopy(send);
+    // The element the last keystroke landed on: a copy's clipboard write goes through its window (selectionCopy.ts).
+    let keyTarget: Element | undefined;
+    const mediaPort = mediaInput((message) => cast.media?.send(message));
+    const input = viewSocketInput({
+        send,
+        media: () => (cast.media?.live.value === true ? mediaPort : undefined),
+        driving,
+        copy: (chord) => void copy.copyOut(chord, keyTarget),
+        raw: { on: () => rawKeys, off: () => (rawKeys = false) },
+        size: () => ({ width: cast.width.value, height: cast.height.value }),
+    });
 
     // The daemon knows this session is done for good; reconnecting would only ask the same dead question.
     const onError = (reason: string | undefined): void => {
@@ -186,9 +279,15 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             case `selection`:
                 copy.answer(message.text);
                 break;
-            case `state`:
+            case `state`: {
                 streamed.value = windowOf(message, name.value) ?? streamed.value;
+                const key = streamed.value === undefined ? undefined : frontKey(streamed.value);
+                if (key !== undefined) {
+                    cast.media?.fronted(key);
+                    cast.media?.showPage(key, false);
+                }
                 break;
+            }
             case `select`:
                 // Sent after every release: a menu to draw, or null to close one the user clicked away from.
                 select.value = SelectMenuSchema.nullable().catch(null).parse(message[`menu`]) ?? undefined;
@@ -214,6 +313,8 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         },
         pointer: pointerFrame,
         frames: true,
+        media: true,
+        onMediaDrop: () => say(t(`browsers.browserView.reconnecting`), true),
         visible: options.visible,
         holdSize: () => device !== undefined,
         onMessage,
@@ -276,7 +377,10 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             cursor.value = `default`;
             // A menu from the browser being left has nothing left to point at.
             select.value = undefined;
+            // Nor a magnified view or a scroll on its way.
+            input.reset();
             restart(name.value === undefined ? undefined : t(`browsers.browserView.connecting`));
+            cast.media?.sound.window(name.value);
             if (name.value !== undefined) {
                 cast.live.connect();
             }
@@ -296,21 +400,14 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         // remote origin instead of where the user pointed.
         const pointer = cast.pointerAt(action, event, element);
         if (pointer !== undefined) {
-            send(pointer);
-        }
-    };
-
-    // A page keystroke, on the display instead while the find bar has the keyboard.
-    const sendKey = (chord: KeyFrame): void => {
-        send(rawKeys ? { ...chord, raw: true } : chord);
-        if (rawKeys && chord.key === `Escape`) {
-            rawKeys = false;
+            input.pointer(pointer);
         }
     };
 
     return {
         session: streamed,
         kind: cast.kind,
+        media: cast.media,
         viewWidth: cast.width,
         viewHeight: cast.height,
         viewScale: cast.scale,
@@ -319,12 +416,13 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         frame: cast.frame,
         ...line,
         driving,
-        cursor,
+        cursor: computed(() => (cast.kind.value === `media` ? (cast.media?.cursor.value ?? `default`) : cursor.value)),
         bindPage: (pageId) => {
             // Another tab: the still over the picture is of the one being left (the frames path's img is replaced by
             // the next frame anyway).
             if (pinned !== pageId) {
                 cast.video.dropStill();
+                cast.media?.showPage(`${name.value ?? ``}\n${pageId}`, true);
             }
             pinned = pageId;
             send({ type: `bind`, pageId });
@@ -341,45 +439,29 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         onMouseDown: (event, element) => {
             // A click puts the keyboard back on the page, wherever the find bar left it.
             rawKeys = false;
+            cast.media?.gesture();
             sendPointer(`down`, event, element);
         },
         onMouseUp: (event, element) => sendPointer(`up`, event, element),
-        onWheel: (event, element) => {
-            if (!driving.value) {
-                return;
-            }
-            event.preventDefault();
-            sendPointer(`wheel`, event, element);
-        },
+        onWheel: input.onWheel,
         // Which half of the keyboard a keystroke belongs to is keyIntent's call (paste stays with the host, select-all
         // doesn't, a browser verb is the pane's); nothing happens unless the user has taken the wheel.
         onKeyDown: (event, onCommand) => {
-            if (!driving.value) {
-                return;
-            }
-            const intent = keyIntent(event);
-            if (intent.kind === `device`) {
-                return;
-            }
-            event.preventDefault();
-            if (intent.kind === `command`) {
-                onCommand?.(intent.command);
-            } else if (intent.kind === `text`) {
-                send(rawKeys ? { type: `text`, text: intent.text, raw: true } : { type: `text`, text: intent.text });
-            } else if (intent.kind === `key`) {
-                keyFrames(intent).forEach(sendKey);
-            } else {
-                void copy.copyOut(intent.frame, event.target instanceof Element ? event.target : undefined);
-            }
+            keyTarget = event.target instanceof Element ? event.target : undefined;
+            cast.media?.gesture();
+            input.onKeyDown(event, onCommand);
         },
-        onPaste: (event) => {
-            const text = event.clipboardData?.getData(`text/plain`);
-            if (!driving.value || text === undefined || text === ``) {
-                return;
-            }
-            event.preventDefault();
-            send({ type: `text`, text });
-        },
+        onBeforeInput: input.onBeforeInput,
+        onInput: input.onInput,
+        onCompositionEnd: input.onCompositionEnd,
+        onPaste: input.onPaste,
+        onTouch: input.onTouch,
+        releaseInput: input.release,
+        zoom: input.zoom,
+        trackpad: input.trackpad,
+        setTrackpad: input.setTrackpad,
+        trackpadCursor: input.trackpadCursor,
+        zoomPage: (step) => chromeChord(cast.media, send, ZOOM_CHORDS[step]),
         navigate: (url, pageId) => send(pageId === undefined ? { type: `navigate`, url } : { type: `navigate`, url, pageId }),
         back: () => send({ type: `back` }),
         forward: () => send({ type: `forward` }),
@@ -388,8 +470,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         newTab: (url) => send(url === undefined ? { type: `newTab` } : { type: `newTab`, url }),
         closeTab: (pageId) => send({ type: `closeTab`, pageId }),
         find: () => {
-            send({ type: `key`, key: `f`, ctrl: true, raw: true });
-            rawKeys = true;
+            rawKeys = !chromeChord(cast.media, send, `f`);
         },
         requestSize: cast.requestSize,
         emulate: (next) => {

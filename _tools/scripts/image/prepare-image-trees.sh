@@ -190,6 +190,15 @@ normalize_times "$out/layers/messaging-deps"
 # payload no JS build produces, and whose glibc must be the image's rather than this machine's.
 bash _tools/scripts/image/build-netd.sh "$out/netd"
 
+# castd, each browser window's media daemon, compiled the same way, carried as a static layer root for the castd pack
+# (image-packs/castd.Dockerfile). A tree without castd's sources (a checkout from before it) carries an empty root, so
+# the pack copies nothing and the daemon shows windows the old way.
+mkdir -p "$out/layers/castd"
+if [ -f _sandbox/castd/build.Dockerfile ]; then
+    bash _tools/scripts/image/build-castd.sh "$out/castd"
+    static_layer castd "$out/castd/opt/castd" /opt/castd
+fi
+
 # The baked dictation model (~640 MiB, image-packs/speech.Dockerfile), fetched at the revision and digests the
 # speech package pins. The script skips a file already there at its digest, so a reused trees context fetches nothing.
 if [ ! -f "$out/.speech-models-complete" ]; then

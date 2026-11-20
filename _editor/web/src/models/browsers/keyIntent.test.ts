@@ -2,14 +2,27 @@
 // here is one half of that split, and what stays with the host matters as much as what's forwarded.
 import { type KeyIntent, keyIntent } from "./keyIntent";
 
+interface Held {
+    readonly ctrl?: boolean;
+    readonly meta?: boolean;
+    readonly shift?: boolean;
+    readonly alt?: boolean;
+    // The AltGraph modifier as an engine that reports it does (getModifierState), whatever ctrl and alt say.
+    readonly altGraph?: boolean;
+}
+
 // A keydown as the host reports it; only the fields the decision reads.
-const press = (key: string, held: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean } = {}): KeyboardEvent =>
+const press = (key: string, held: Held = {}, code?: string): KeyboardEvent =>
     ({
         key,
+        code,
         ctrlKey: held.ctrl === true,
         metaKey: held.meta === true,
         shiftKey: held.shift === true,
         altKey: held.alt === true,
+        isComposing: false,
+        keyCode: 0,
+        getModifierState: (name: string) => name === `AltGraph` && held.altGraph === true,
     }) as unknown as KeyboardEvent;
 
 describe("typing", () => {
@@ -113,7 +126,7 @@ describe("what the host keeps", () => {
     // These are lost either way: a remote page driven this way ignores window-level chords, so taking them only costs
     // the user their own browser.
     test("window shortcuts are not the page's to take", () => {
-        for (const key of [`n`, `p`, `s`]) {
+        for (const key of [`n`, `s`]) {
             expect(keyIntent(press(key, { ctrl: true }))).toEqual({ kind: `device` });
         }
         expect(keyIntent(press(`F11`))).toEqual({ kind: `device` });
@@ -122,9 +135,9 @@ describe("what the host keeps", () => {
     // Shift moves a letter chord into the browser's own territory (devtools, reopen tab, incognito); `i` sits in both
     // worlds (Ctrl+I italicizes, Ctrl+Shift+I opens devtools), and redo is the exception that stays on the page.
     test("shifted letter chords are the browser's, redo excepted", () => {
-        expect(keyIntent(press(`I`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
-        expect(keyIntent(press(`T`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
-        expect(keyIntent(press(`C`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`N`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`O`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`Q`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
         expect(keyIntent(press(`Z`, { ctrl: true, shift: true }))).toEqual({
             kind: `key`,
             frame: { type: `key`, key: `z`, ctrl: true, shift: true },
@@ -183,5 +196,132 @@ describe("keys from a Mac", () => {
     test("a letter Option typed is a character, and ⌘ is still the primary modifier", () => {
         expect(mac(`ą`, { alt: true }, `KeyA`)).toEqual({ kind: `text`, text: `ą` });
         expect(mac(`l`, { meta: true }, `KeyL`)).toEqual({ kind: `command`, command: `address` });
+    });
+});
+
+// AltGr is how most of Europe types: ą ę ś ł ż ó ń ć ź on a Polish layout, @ and € on a German one. Windows reports it
+// as Ctrl and Alt held together, which read as a chord and went to the host, so none of them typed anything.
+describe("AltGr", () => {
+    test("an AltGr letter on Windows is the character it types, not a Ctrl+Alt chord", () => {
+        for (const [letter, code] of [
+            [`ą`, `KeyA`],
+            [`ę`, `KeyE`],
+            [`ś`, `KeyS`],
+            [`ł`, `KeyL`],
+            [`ż`, `KeyZ`],
+            [`ó`, `KeyO`],
+            [`ń`, `KeyN`],
+            [`ć`, `KeyC`],
+            [`ź`, `KeyX`],
+        ] as const) {
+            expect(keyIntent(press(letter, { ctrl: true, alt: true, altGraph: true }, code), false)).toEqual({ kind: `text`, text: letter });
+        }
+    });
+
+    test("a capital AltGr letter keeps its Shift", () => {
+        expect(keyIntent(press(`Ą`, { ctrl: true, alt: true, shift: true, altGraph: true }, `KeyA`), false)).toEqual({ kind: `text`, text: `Ą` });
+    });
+
+    test("German AltGr symbols type, whether or not the engine reports AltGraph", () => {
+        expect(keyIntent(press(`@`, { ctrl: true, alt: true, altGraph: true }, `KeyQ`), false)).toEqual({ kind: `text`, text: `@` });
+        // The fallback for an engine without the modifier: the key types something other than its own letter.
+        expect(keyIntent(press(`€`, { ctrl: true, alt: true }, `KeyE`), false)).toEqual({ kind: `text`, text: `€` });
+        expect(keyIntent(press(`{`, { ctrl: true, alt: true }, `Digit7`), false)).toEqual({ kind: `text`, text: `{` });
+        expect(keyIntent(press(`ą`, { ctrl: true, alt: true }, `KeyA`), false)).toEqual({ kind: `text`, text: `ą` });
+    });
+
+    // Linux reports AltGr as the AltGraph modifier alone, with neither Ctrl nor Alt held.
+    test("AltGr on Linux types its character", () => {
+        expect(keyIntent(press(`ł`, { altGraph: true }, `KeyL`), false)).toEqual({ kind: `text`, text: `ł` });
+    });
+
+    test("a real Ctrl+Alt chord, which types its own key, is still the host's", () => {
+        expect(keyIntent(press(`a`, { ctrl: true, alt: true }, `KeyA`), false)).toEqual({ kind: `device` });
+        expect(keyIntent(press(`7`, { ctrl: true, alt: true }, `Digit7`), false)).toEqual({ kind: `device` });
+        expect(keyIntent(press(`a`, { ctrl: true, alt: true, altGraph: true }, `KeyA`), false)).toEqual({ kind: `device` });
+        expect(keyIntent(press(`Delete`, { ctrl: true, alt: true }, `Delete`), false)).toEqual({ kind: `device` });
+    });
+
+    test("Option on a Mac types its letter, Shift or not", () => {
+        expect(keyIntent(press(`ś`, { alt: true }, `KeyS`), true)).toEqual({ kind: `text`, text: `ś` });
+        expect(keyIntent(press(`Ś`, { alt: true, shift: true }, `KeyS`), true)).toEqual({ kind: `text`, text: `Ś` });
+    });
+});
+
+// An input method owns these keystrokes; what it commits arrives as text on the input sink, so the keydown must be left
+// alone (not prevented, not sent) or the IME never sees it.
+describe("input methods", () => {
+    // SAFETY: `press` builds every field the decision reads; this overrides two of them.
+    const composing = (key: string, over: Partial<KeyboardEvent>): KeyboardEvent => ({ ...press(key), ...over }) as KeyboardEvent;
+
+    test("an IME's Process key, an Android keyboard's Unidentified and a dead key are left to the input method", () => {
+        expect(keyIntent(press(`Process`), false)).toEqual({ kind: `device` });
+        expect(keyIntent(press(`Unidentified`), false)).toEqual({ kind: `device` });
+        expect(keyIntent(press(`Dead`), false)).toEqual({ kind: `device` });
+        expect(keyIntent(press(`Dead`, { alt: true }, `KeyE`), true)).toEqual({ kind: `device` });
+    });
+
+    // Enter confirms a candidate; sent on, it would also submit the remote form.
+    test("Enter that confirms a composition is the input method's, not the page's", () => {
+        expect(keyIntent(composing(`Enter`, { isComposing: true }), false)).toEqual({ kind: `device` });
+        // Safari ends the composition before this keydown, which only its keyCode still marks.
+        expect(keyIntent(composing(`Enter`, { keyCode: 229 }), false)).toEqual({ kind: `device` });
+    });
+
+    test("an emoji a keyboard sends in one keydown is one character", () => {
+        expect(keyIntent(press(`😀`), false)).toEqual({ kind: `text`, text: `😀` });
+    });
+});
+
+// The browser's own shortcuts: answered by the pane, never by the editor around it (Ctrl+P printed Intentic, Ctrl+−
+// zoomed it).
+describe("browser shortcuts", () => {
+    test("zoom chords zoom the page, on either platform and from the numpad", () => {
+        expect(keyIntent(press(`=`, { ctrl: true }, `Equal`), false)).toEqual({ kind: `command`, command: `zoomIn` });
+        expect(keyIntent(press(`+`, { ctrl: true, shift: true }, `Equal`), false)).toEqual({ kind: `command`, command: `zoomIn` });
+        expect(keyIntent(press(`+`, { ctrl: true }, `NumpadAdd`), false)).toEqual({ kind: `command`, command: `zoomIn` });
+        expect(keyIntent(press(`-`, { ctrl: true }, `Minus`), false)).toEqual({ kind: `command`, command: `zoomOut` });
+        expect(keyIntent(press(`0`, { ctrl: true }, `Digit0`), false)).toEqual({ kind: `command`, command: `zoomReset` });
+        expect(keyIntent(press(`=`, { meta: true }, `Equal`), true)).toEqual({ kind: `command`, command: `zoomIn` });
+        expect(keyIntent(press(`-`, { meta: true }, `Minus`), true)).toEqual({ kind: `command`, command: `zoomOut` });
+    });
+
+    test("print, bookmarks and reopening a closed tab are the browser's", () => {
+        expect(keyIntent(press(`p`, { ctrl: true }), false)).toEqual({ kind: `command`, command: `print` });
+        expect(keyIntent(press(`p`, { meta: true }), true)).toEqual({ kind: `command`, command: `print` });
+        expect(keyIntent(press(`d`, { ctrl: true }), false)).toEqual({ kind: `command`, command: `bookmark` });
+        expect(keyIntent(press(`d`, { meta: true }), true)).toEqual({ kind: `command`, command: `bookmark` });
+        // The bookmarks bar, shown or hidden, as Chrome's Ctrl+Shift+B and ⌘⇧B.
+        expect(keyIntent(press(`B`, { ctrl: true, shift: true }), false)).toEqual({ kind: `command`, command: `bookmarksBar` });
+        expect(keyIntent(press(`B`, { meta: true, shift: true }), true)).toEqual({ kind: `command`, command: `bookmarksBar` });
+        expect(keyIntent(press(`T`, { ctrl: true, shift: true }), false)).toEqual({ kind: `command`, command: `reopenTab` });
+        expect(keyIntent(press(`T`, { meta: true, shift: true }), true)).toEqual({ kind: `command`, command: `reopenTab` });
+    });
+
+    // ⌘H hides the app on a Mac, which is the person's, not the page's.
+    test("history and downloads are Ctrl+H and Ctrl+J on a PC, and ⌘H stays the Mac's", () => {
+        expect(keyIntent(press(`h`, { ctrl: true }), false)).toEqual({ kind: `command`, command: `history` });
+        expect(keyIntent(press(`j`, { ctrl: true }), false)).toEqual({ kind: `command`, command: `downloads` });
+        expect(keyIntent(press(`h`, { meta: true }), true)).toEqual({ kind: `device` });
+    });
+
+    // `i` sits in both worlds: Ctrl+I italicizes on the page, Ctrl+Shift+I opens the developer tools.
+    test("the developer tools and the page's source open by Chromium's own chords", () => {
+        expect(keyIntent(press(`F12`), false)).toEqual({ kind: `command`, command: `devtools` });
+        for (const letter of [`I`, `J`, `C`]) {
+            expect(keyIntent(press(letter, { ctrl: true, shift: true }), false)).toEqual({ kind: `command`, command: `devtools` });
+        }
+        expect(keyIntent(press(`i`, { ctrl: true }), false)).toEqual({ kind: `key`, frame: { type: `key`, key: `i`, ctrl: true } });
+        // Option makes ⌥I a dead key, so the physical key is what says which tool.
+        expect(keyIntent(press(`Dead`, { meta: true, alt: true }, `KeyI`), true)).toEqual({ kind: `command`, command: `devtools` });
+        expect(keyIntent(press(`ü`, { meta: true, alt: true }, `KeyU`), true)).toEqual({ kind: `command`, command: `viewSource` });
+        // Ctrl+U underlines in a rich-text editor, so on a PC it stays the page's.
+        expect(keyIntent(press(`u`, { ctrl: true }), false)).toEqual({ kind: `key`, frame: { type: `key`, key: `u`, ctrl: true } });
+    });
+
+    // On a Cyrillic layout Ctrl+T reports the letter it types there; Chromium reads its shortcuts off the physical key.
+    test("a chord on a non-Latin layout is read off the physical key", () => {
+        expect(keyIntent(press(`е`, { ctrl: true }, `KeyT`), false)).toEqual({ kind: `command`, command: `newTab` });
+        expect(keyIntent(press(`ф`, { ctrl: true }, `KeyA`), false)).toEqual({ kind: `key`, frame: { type: `key`, key: `a`, ctrl: true } });
     });
 });

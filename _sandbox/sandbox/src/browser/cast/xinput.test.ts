@@ -1,5 +1,5 @@
 import { chordOf } from "./live-view.js";
-import { xButton, xInputOver } from "./xinput.js";
+import { wheelNotches, xButton, xInputOver } from "./xinput.js";
 
 // Gestures become lines on a pipe to xdotool, which makes them forgeable text; the newline test matters most, since a
 // paste must never start a command. Driven through `xInputOver`, not `startXInput`, so this needs no child process or
@@ -37,6 +37,15 @@ describe("chordOf", () => {
         expect(chordOf({ key: "ArrowLeft" })).toBe("ArrowLeft");
     });
 
+    // xdotool reads `=` as no key at all; Chromium's zoom chords are sent to the display by keysym name.
+    test("the zoom chords' characters are spelled as keysyms", () => {
+        expect([chordOf({ key: "=", ctrl: true }), chordOf({ key: "-", ctrl: true }), chordOf({ key: "0", ctrl: true })]).toEqual([
+            "ctrl+equal",
+            "ctrl+minus",
+            "ctrl+0",
+        ]);
+    });
+
     test("modifiers ride in front, in the order xdotool spells them", () => {
         expect(chordOf({ key: "a", ctrl: true })).toBe("ctrl+a");
         expect(chordOf({ key: "End", shift: true })).toBe("shift+End");
@@ -70,6 +79,41 @@ describe("xInputOver", () => {
 
         expect(down).toEqual(["mousemove 10 20 mousedown 5 mouseup 5\n", "mousemove 10 20 mousedown 5 mouseup 5\n"]);
         expect(up).toEqual(["mousemove 10 20 mousedown 4 mouseup 4\n"]);
+    });
+
+    // A trackpad sends a few pixels at a time; each rounded to a notch on its own scrolled nothing at all.
+    test("small wheel deltas add up to a notch rather than being dropped", () => {
+        const lines = driven((input) => {
+            input.wheel(10, 20, 0, 20);
+            input.wheel(10, 20, 0, 20);
+            input.wheel(10, 20, 0, 20);
+            input.wheel(10, 20, 0, 50);
+        });
+
+        // 60 makes one notch with 7 over; 7 and 50 make a second.
+        expect(lines).toEqual(["mousemove 10 20 mousedown 5 mouseup 5\n", "mousemove 10 20 mousedown 5 mouseup 5\n"]);
+    });
+
+    test("wheelNotches carries what a delta leaves short of a notch, signed by direction", () => {
+        expect(wheelNotches(0, 60)).toEqual({ presses: 1, carry: 7 });
+        expect(wheelNotches(7, -60)).toEqual({ presses: -1, carry: 0 });
+        expect(wheelNotches(0, -20)).toEqual({ presses: 0, carry: -20 });
+        // Past the cap nothing is carried, or a fling would keep scrolling after it ended.
+        expect(wheelNotches(0, 100_000)).toEqual({ presses: 12, carry: 0 });
+    });
+
+    // A viewer gone mid-drag left the button down on the display, so the next viewer's every move dragged.
+    test("stopping lets go of every button still held, where the pointer last was", () => {
+        const lines = driven((input) => {
+            input.down(5, 6, 0);
+            input.down(7, 8, 2);
+            input.up(7, 8, 2);
+            input.move(9, 10);
+            input.stop();
+        });
+
+        expect(lines.at(-1)).toBe("mousemove 9 10 mouseup 1\n");
+        expect(lines.filter((command) => command.includes("mouseup"))).toHaveLength(2);
     });
 
     // Capped at WHEEL_MAX so a trackpad fling or a page reporting deltas in pages doesn't write hundreds of presses.

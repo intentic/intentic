@@ -3,6 +3,7 @@
 //! byte splice once the far side answers 101, whichever carrier brought it.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -21,6 +22,7 @@ use netd_wire::{
 use relay::body::{self, Body};
 use relay::{for_next_hop, host_of, is_upgrade, strip_hop_by_hop};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::UnixStream;
 use tokio::sync::watch;
 use tower_service::Service;
 
@@ -54,6 +56,10 @@ const TERMINAL_UPGRADES: &str = "a terminal opens as a WebSocket";
 
 const ONE_HOST: &str = "a request names one Host";
 
+const MEDIA_UPGRADES: &str = "a browser media socket opens as a WebSocket";
+
+const MEDIA_NAMES: &str = "a browser media socket names its session: [A-Za-z0-9_-]{1,64}";
+
 pub struct Netd {
     link: &'static Link,
     node: Pool<NodeConnector>,
@@ -65,6 +71,9 @@ pub struct Netd {
     refreshing: Mutex<HashSet<String>>,
     terminals: Arc<Terminals>,
     vitals: Arc<Vitals>,
+    /// Where each window's castd listens, `<session>.sock` (browser-wire's `BROWSER_MEDIA_SOCKET_DIR` for the
+    /// container's own netd).
+    cast_dir: PathBuf,
 }
 
 enum Destination {
@@ -90,10 +99,12 @@ impl Netd {
         config: watch::Receiver<Option<Arc<ListenConfig>>>,
         terminals: Arc<Terminals>,
         vitals: Arc<Vitals>,
+        cast_dir: PathBuf,
     ) -> Self {
         let node_connector = NodeConnector::new(node_socket);
         let upstream_connector = UpstreamConnector::new();
         Self {
+            cast_dir,
             link,
             node: connect::pool(node_connector.clone()),
             node_connector,
@@ -127,6 +138,17 @@ impl Netd {
         // Answered before anything waits for Node: it is how a caller tells a busy or restarting Node from a dead box.
         if vitals::serves(request.uri().path()) && self.target(listener, &host) == Target::Node {
             return self.vitals.respond(request.method(), request.headers());
+        }
+        // A window's media socket is its castd's, never Node's: relayed before anything waits for Node, so a picture
+        // keeps flowing while the daemon restarts, and kept off Node's event loop, which is what castd is for.
+        if self.target(listener, &host) == Target::Node
+            && let Some(asked) = route::media(request.uri().path())
+        {
+            let session = match asked {
+                route::Media::Session(session) => Some(session.to_owned()),
+                route::Media::BadName => None,
+            };
+            return self.media(session, request).await;
         }
         // The owner's guard is checked before Node is asked anything, so a visitor without a pass costs Node nothing
         // but the page a navigation is shown.
@@ -230,6 +252,37 @@ impl Netd {
             .serve_connection(TokioIo::new(stream), service)
             .with_upgrades()
             .await;
+    }
+
+    // The media socket's upgrade, relayed to `<cast dir>/<session>.sock` as the HTTP/1.1 it arrived as (castd checks the
+    // token, netd only carries it), then spliced. Only an upgrade: castd's control routes (`/health`, `/screenshot`, …)
+    // are Node's to ask on the socket itself, and a path under the media route never names one.
+    async fn media(&self, session: Option<String>, request: Request<Incoming>) -> Response<Body> {
+        let Some(session) = session else {
+            return plain(StatusCode::NOT_FOUND, MEDIA_NAMES);
+        };
+        if !is_upgrade(request.headers(), request.version()) {
+            return plain(StatusCode::UPGRADE_REQUIRED, MEDIA_UPGRADES);
+        }
+        let socket = self.cast_dir.join(format!("{session}.sock"));
+        let io = match UnixStream::connect(&socket).await {
+            Ok(stream) => Io::Unix {
+                inner: TokioIo::new(stream),
+            },
+            Err(error) => {
+                tracing::debug!(%error, session = %session, "no media daemon answered");
+                return bad_gateway(&format!(
+                    "no media daemon is serving the browser session {session}"
+                ));
+            }
+        };
+        let (mut parts, incoming) = request.into_parts();
+        for_next_hop(&mut parts.headers, true);
+        parts.version = Version::HTTP_11;
+        let outbound = in_origin_form(Request::from_parts(parts, body::incoming(incoming)));
+        relay::exchange(io, outbound)
+            .await
+            .unwrap_or_else(|error| bad_gateway(&error.to_string()))
     }
 
     async fn terminal(self: &Arc<Self>, mut request: Request<Incoming>) -> Response<Body> {

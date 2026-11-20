@@ -3,6 +3,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { pollUntil, SingleFlight } from "@intentic/base/async";
 import { spawnAs } from "../../workload/workload-class.js";
+import { castdAvailable } from "../media/castd.js";
 
 // A virtual X display per browser, not shared, since the picture now comes from the display itself (videocast.ts,
 // xinput.ts): sharing would overlap windows and share one cursor across browsers. Cheap (Xvfb, ~16 MB), bounded by
@@ -12,6 +13,10 @@ import { spawnAs } from "../../workload/workload-class.js";
 // changing shape, which Xvfb cannot do.
 export const DISPLAY_WIDTH = 2560;
 export const DISPLAY_HEIGHT = 1600;
+// The screen where castd serves the display: the largest a viewer's box × pixel ratio may make it, since RandR on Xvfb
+// only ever shrinks the screen it started with (castd's screen.rs). A 1920×1200 pane at a ratio of 2.
+export const CAST_SCREEN_WIDTH = 3840;
+export const CAST_SCREEN_HEIGHT = 2400;
 // A browser window's size before any viewer has asked for one.
 export const WINDOW_WIDTH = 1280;
 export const WINDOW_HEIGHT = 880;
@@ -21,11 +26,15 @@ export const WINDOW_HEIGHT = 880;
 // the screen's keeps every <select> and context menu inside the viewport that is grabbed. And without the "Restore
 // pages?" bubble a profile asks for after any unclean exit (a daemon restart is one): it is drawn over the page, so it
 // is in the video but never in a still, and came and went as the picture switched between them.
-export const chromiumWindowArgs = (display: Display): string[] => [
-    `--window-position=${display.width - WINDOW_WIDTH},${display.height - WINDOW_HEIGHT}`,
-    `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`,
-    `--hide-crash-restore-bubble`,
-];
+//
+// Where castd serves the display, the window is fullscreen instead: no tab strip and no toolbar, so the screen is the
+// viewport and castd sizes the screen to the viewer (screen-fit.ts has what was measured). Tabs, popups, <select> and
+// context menus, autofill and dialogs are Chromium's as on any desktop; only the toolbar is gone, which the editor
+// draws. Not --kiosk, which drops the page's context menu, and no --window-size, which keeps the toolbar.
+export const chromiumWindowArgs = (display: Display): string[] =>
+    castdAvailable()
+        ? ["--start-fullscreen", "--hide-crash-restore-bubble"]
+        : [`--window-position=${display.width - WINDOW_WIDTH},${display.height - WINDOW_HEIGHT}`, `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`, `--hide-crash-restore-bubble`];
 
 // Display numbers climb from FIRST (:99, unchanged from before); LAST only backstops a runaway.
 const FIRST = 99;
@@ -65,6 +74,9 @@ const abstractPath = (number: number): string => `\0${socketPath(number)}`;
 const lockPath = (number: number): string => `/tmp/.X${number}-lock`;
 
 const XVFB_BINARY = "/usr/bin/Xvfb";
+// castd's Xvfb (the castd pack): the stock one with scroll axes on its XTEST pointer, so a trackpad scrolls a page as
+// smoothly as it would locally rather than in wheel notches. The stock one serves wherever it is absent.
+const CASTD_XVFB = "/opt/castd/bin/Xvfb";
 
 // A claim file beside the X socket names which key owns it, so a restarted daemon adopts its own display (browsers and
 // all) instead of leaking one per restart; an exit handler can't cover a SIGKILL or a container stop.
@@ -88,6 +100,9 @@ export interface DisplaySize {
 }
 
 const BROWSER_SIZE: DisplaySize = { width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
+
+// The screen a browser's display starts with: castd's larger one when castd will serve it.
+const browserSize = (): DisplaySize => (castdAvailable() ? { width: CAST_SCREEN_WIDTH, height: CAST_SCREEN_HEIGHT } : BROWSER_SIZE);
 
 const claimedSize = (number: number): DisplaySize => {
     const [width, height] = (claimLines(number)[1] ?? "").split("x").map(Number);
@@ -181,9 +196,11 @@ const start = async (key: string, size: DisplaySize): Promise<Display> => {
     rmSync(lockPath(number), { force: true });
     // Written before the spawn, so a claimed server is claimed from its first breath.
     writeFileSync(claimPath(number), `${key}\n${size.width}x${size.height}`, { mode: 0o600 });
-    // -nolisten tcp: local socket only. -ac: no X access control (single-tenant sandbox). In a process group of its own,
-    // since intentic-netd ends a crashed daemon's group with it, and this server is the next daemon's to adopt.
-    const child = spawnAs({ class: "service" }, "Xvfb", [`:${number}`, "-screen", "0", `${size.width}x${size.height}x24`, "-nolisten", "tcp", "-ac"], {
+    // -nolisten tcp: local socket only. -ac: no X access control (single-tenant sandbox). -shmem: the screen in a SysV
+    // segment castd reads in place instead of copying it out per frame (ffmpeg's x11grab reads it as before). In a
+    // process group of its own, since intentic-netd ends a crashed daemon's group with it, and this server is the next
+    // daemon's to adopt.
+    const child = spawnAs({ class: "service" }, existsSync(CASTD_XVFB) ? CASTD_XVFB : "Xvfb", [`:${number}`, "-screen", "0", `${size.width}x${size.height}x24`, "-nolisten", "tcp", "-ac", "-shmem"], {
         stdio: "ignore",
         detached: true,
     });
@@ -200,7 +217,7 @@ const start = async (key: string, size: DisplaySize): Promise<Display> => {
 // Ensures a display answers for `key`, idempotent and concurrency-safe: concurrent callers share one spawn, nothing
 // dead stays remembered as up. Same key always lands on the same display, login window and later tools alike. `size`
 // applies when a server is started; one already running keeps the size it has.
-export const ensureDisplay = async (key: string, size: DisplaySize = BROWSER_SIZE): Promise<Display> => {
+export const ensureDisplay = async (key: string, size: DisplaySize = browserSize()): Promise<Display> => {
     // Someone wants this display now, so a release asked for while it was held no longer stands; they release it later.
     deferred.delete(key);
     const existing = running.get(key);
@@ -252,6 +269,12 @@ export const releaseDisplay = (key: string): void => {
     }
     const server = running.get(key);
     running.delete(key);
+    // What serves the display goes before it, whoever started the server: castd, its sound (cast-window.ts).
+    if (server !== undefined) {
+        for (const listener of releaseListeners) {
+            listener(key, server.display);
+        }
+    }
     if (server?.child === undefined) {
         return;
     }
@@ -262,6 +285,14 @@ export const releaseDisplay = (key: string): void => {
     } catch {
         // already gone, which is the outcome asked for
     }
+};
+
+// Told of each display as it is released, before its server is stopped.
+const releaseListeners = new Set<(key: string, display: Display) => void>();
+
+export const onDisplayRelease = (listener: (key: string, display: Display) => void): (() => void) => {
+    releaseListeners.add(listener);
+    return () => releaseListeners.delete(listener);
 };
 
 // Keeps `key`'s display up until the returned release is called; the release is safe to call more than once.

@@ -18,6 +18,7 @@ import type { Principal } from "../auth/principal.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { browserSessionPage, closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
 import { openOwnBrowser } from "../browser/sessions/own-browser.js";
+import { createBrowserTabRoutes } from "../browser/tabs/browser-tabs.routes.js";
 import { desktopState } from "../desktop/agent-desktop.js";
 import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
 import type { Services } from "../composition.js";
@@ -544,6 +545,8 @@ export const createSystemRoutes = (services: Services) => {
                 .catch(() => undefined);
             return { ok: true };
         }),
+        // A tab's own menu and the strip's drag, beside the tabs they act on.
+        ...createBrowserTabRoutes(),
         // The sandbox's own desktop: whether it is up and how many windows it has, which never starts it.
         desktop: i.desktop.handler(() => desktopState()),
         // Subagents this sandbox's conversations started, from the roster, each caller told only of the ones started by

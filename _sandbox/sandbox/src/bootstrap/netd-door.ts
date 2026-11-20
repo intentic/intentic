@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { readFileSync, rmSync } from "node:fs";
-import { createServer as createHttpServer, type RequestListener } from "node:http";
+import { createServer as createHttpServer, type RequestListener, Server as HttpServer } from "node:http";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
 import {
     type Answer,
@@ -23,6 +23,9 @@ import { type LocalCertificate, readLocalCertificate, startLocalCertificateRenew
 import { publicRoot } from "../public/public-files.js";
 import { createPublicHandler } from "../public/public-serve.js";
 import { PeerDeflateServer } from "../http/peer-deflate.js";
+import { configureCastd, dropCastdViewers } from "../browser/media/castd.js";
+import { castRecordingsDir } from "../browser/media/recordings.js";
+import { withMediaRelay } from "../browser/media/media-relay.js";
 import type { PushSender } from "../push/push.js";
 import { claimHolder, type ContainerRole } from "../system/boot/container-owner.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
@@ -401,6 +404,16 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
     // Deflate is negotiated on peer links only (http/peer-deflate.ts).
     const sockets = new PeerDeflateServer() as unknown as WebSocketServerLike;
     const server = createAdaptorServer({ fetch: app.fetch, websocket: { server: sockets }, createServer: netdDoorServer(preview, logger) });
+    // A window's media socket, relayed to its castd when a netd older than the media route hands it here.
+    if (server instanceof HttpServer) {
+        withMediaRelay(server);
+    }
+    // castd writes recordings to the workspace's disk as it makes them, never the cast directory's tmpfs.
+    configureCastd({ log: (fields, message) => logger.info(fields, message), recordDir: castRecordingsDir(services.workspace.root) });
+    // A revoked member's media sockets are castd's, outside every transport registered here: each castd ends its viewers
+    // and refuses the tokens minted before now, and the viewers still entitled dial again with fresh ones.
+    const undrop = services.auth?.connections.onRevoke(() => void dropCastdViewers("a member's access was revoked"));
+    shutdown.push(() => undrop?.());
     rmSync(httpPath, { force: true });
     server.listen(httpPath);
     await once(server, "listening");

@@ -2,6 +2,7 @@ import type { Info } from "@intentic/sandbox-contract/schemas/system";
 import { closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../../browser";
 import { DESK_SANDBOX_NAME } from "../../fixture/desk";
 import { demoCommandSaid, demoDevices, demoEgressOwnerKeys, switchDemoPairings } from "../../fixture/devices";
+import { demoBrowsingHistory, demoForgetBrowsing, demoSearchSuggestions } from "../../fixture/browsing/history";
 import { inProcessSubagents } from "../../fixture/fleet";
 import { demoMetrics } from "../../fixture/metrics";
 import { demoDiskPressure, demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../../fixture/storage";
@@ -9,6 +10,7 @@ import { demoQuiet, deskEdition } from "../../mode";
 import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "../events";
 import { manifestProblems, repairManifest } from "./settingsManifests";
+import { withBrowserTools } from "./browserTools";
 import { closeRecordedBrowser, closeRecordedPage, recordedBrowsers } from "./recordedBrowsers";
 import { roster, STARTED_AT } from "../board/roster";
 import { killTerminal, terminalScrollback, terminalsList } from "./terminals";
@@ -49,7 +51,7 @@ export const systemDoors = {
         const mine = ownSession(now);
         return {
             sessions: [
-                ...(mine === undefined ? [] : [mine]),
+                ...(mine === undefined ? [] : [withBrowserTools(mine, now)]),
                 ...recordedBrowsers(now).map((session) =>
                     demoQuiet() && session.running ? { ...session, running: false, finishedAt: session.activityAt } : session,
                 ),
@@ -89,6 +91,11 @@ export const systemDoors = {
         closeOwnTab(pageId);
         return { ok: true };
     },
+    // Where the browsers have been, for the address bar's suggestions and the history page, and the engine's own
+    // suggestions, canned (fixture/browsing/history.ts).
+    browsingHistory: (input) => demoBrowsingHistory(input),
+    forgetBrowsingHistory: (input) => demoForgetBrowsing(input),
+    searchSuggestions: (input) => demoSearchSuggestions(input),
     // The sandbox's own desktop, drawn and streamed in the page (desktop.ts): up, with its windows.
     desktop: () => desktopState(),
     subagents: () => ({ sessions: deskEdition || demoQuiet() ? [] : inProcessSubagents(STARTED_AT) }),

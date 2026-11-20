@@ -34,6 +34,10 @@ import { listenerInboxDocument, workspaceInboxDocument } from "../automations/du
 import { heldWakesDocument, heldWakesOffWorkspaceStep } from "../automations/held-wakes-store.js";
 import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
 import { sendersDocument } from "../automations/senders-store.js";
+import { bookmarksDocument } from "../browser/bookmarks/bookmarks-store.js";
+import { browsingHistoryDocument } from "../browser/history/browsing-store.js";
+import { browserPermissionsDocument } from "../browser/permissions/permission-store.js";
+import { ownTabsDocument } from "../browser/tabs/own-tabs.js";
 import { browserPasskeysDocument } from "../browser/tools/passkeys.js";
 import { credentialPolicyDocument } from "../capabilities/broker/broker-policy.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
@@ -174,6 +178,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     heldWakesDocument,
     scheduleCoverageDocument,
     sendersDocument,
+    bookmarksDocument,
+    browsingHistoryDocument,
+    browserPermissionsDocument,
+    ownTabsDocument,
     browserPasskeysDocument,
     credentialPolicyDocument,
     capabilitiesDocument,
@@ -187,12 +195,12 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     choreProbesDocument,
     ciDocument,
     composerDraftsDocument,
-    projectDeliveriesDocument,
-    conversationRecordDocument,
-    definitionDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    projectDeliveriesDocument,
+    conversationRecordDocument,
+    definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -239,11 +247,11 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     ruleFiringsDocument,
     runnerIdentityDocument,
     safetyLogDocument,
-    autostartDocument,
-    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    autostartDocument,
+    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,

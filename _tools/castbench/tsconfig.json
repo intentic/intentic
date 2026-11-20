@@ -1,0 +1,15 @@
+/* Nothing is emitted: Bun runs these files as they are (`pnpm castbench`), since the legacy pipeline loads the daemon's own modules from source. */
+{
+    "compilerOptions": {
+        "types": ["node", "bun"],
+        "lib": ["ES2024", "DOM"],
+        "noEmit": true,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../base" }, { "path": "../constants" }, { "path": "../../_shared/sandbox-contract" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

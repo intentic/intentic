@@ -1,11 +1,15 @@
 import type { Page } from "playwright";
 import type { OpenBrowserResult } from "@intentic/sandbox-contract/schemas/terminal";
 import { chromiumWindowArgs, ensureDisplay, releaseDisplay } from "../cast/display.js";
-import { adoptBrowserSession, browserSessionBlankPage, browserSessionNewTab, browserSessionRunning } from "./browser-sessions.js";
+import { armDownloads, onDownloadsChanged } from "../downloads/browser-downloads.js";
+import { windowChanged } from "../state/window-feed.js";
+import { adoptBrowserSession, browserSessionBlankPage, browserSessionNewTab, browserSessionRunning, browserWindowRecord } from "./browser-sessions.js";
 import { browserFingerprint } from "./fingerprint.js";
+import { closingForgets, readOwnTabs, resumeOwnTabs } from "../tabs/own-tabs.js";
 import { launchOwnerBrowser } from "./owner-browser.js";
 import { launchSessionDir } from "./session-store.js";
 import { stealthInit } from "./stealth.js";
+import { writeTabHelper } from "../tabs/tab-helper.js";
 
 // The person's own browser window: the one the browser view opens when they type an address with nothing open, or press
 // + in a window that is not theirs to drive. Not an agent's: no tool call starts it, no turn owns it, and the idle
@@ -26,17 +30,37 @@ interface OwnBrowserDeps {
     readonly info?: (fields: Record<string, unknown>, message: string) => void;
 }
 
-// One start at a time: a second tab asked for while the window is still coming up waits for it rather than racing a
-// second Chromium onto the same profile.
-let starting: Promise<void> | undefined;
+// Its downloads are listed with it, as they arrive (downloads/browser-downloads.ts).
+onDownloadsChanged((profile) => {
+    const record = profile === OWN_BROWSER_SERVER ? browserWindowRecord(OWN_BROWSER_SESSION) : undefined;
+    if (record !== undefined) {
+        windowChanged(record);
+    }
+});
 
-const start = async (deps: OwnBrowserDeps): Promise<void> => {
+// One start at a time: a second tab asked for while the window is still coming up waits for it rather than racing a
+// second Chromium onto the same profile. Settles with the tab a restore put in front, when it reopened any.
+let starting: Promise<string | undefined> | undefined;
+
+// The tab helper's files, written for this launch; a window started without them works, without what they add.
+const helperFiles = async (deps: OwnBrowserDeps): Promise<string[]> => {
+    try {
+        return [await writeTabHelper(deps.root)];
+    } catch (error) {
+        deps.warn({ err: error }, "own browser: could not write its tab helper");
+        return [];
+    }
+};
+
+// Started with the tabs it had when it last ended without being closed, reopened in order (own-tabs.ts).
+const start = async (deps: OwnBrowserDeps): Promise<string | undefined> => {
     let playwright: typeof import("playwright");
     try {
         playwright = await import("playwright");
     } catch {
         throw new Error("the browser is not installed: rebuild the sandbox (Environment card) first");
     }
+    const saved = await readOwnTabs(deps.root);
     const display = await ensureDisplay(OWN_BROWSER_SERVER);
     try {
         // Leaves by the sandbox's own address, so it claims the sandbox's own place: no exit to agree with.
@@ -47,6 +71,7 @@ const start = async (deps: OwnBrowserDeps): Promise<void> => {
             display: display.name,
             fingerprint,
             windowArgs: chromiumWindowArgs(display),
+            extensions: await helperFiles(deps),
             log: deps.info,
         });
         // Patches residual server tells before the first navigation, as on every other window a person sees.
@@ -55,14 +80,17 @@ const start = async (deps: OwnBrowserDeps): Promise<void> => {
             name: OWN_BROWSER_SESSION,
             server: OWN_BROWSER_SERVER,
             context: owned.context,
-            shutdown: owned.close,
+            shutdown: closingForgets(deps, owned.close),
             port: Number(new URL(owned.endpoint).port),
         });
+        // Into the profile's own downloads folder, listed with the window, rather than wherever Chromium's default puts them.
+        await armDownloads({ context: owned.context, profile: OWN_BROWSER_SERVER, root: deps.root });
     } catch (err) {
         // Nothing is on the display now; a later open starts a fresh one.
         releaseDisplay(OWN_BROWSER_SERVER);
         throw err;
     }
+    return resumeOwnTabs(deps, OWN_BROWSER_SESSION, saved);
 };
 
 // Sends a tab on its way without waiting for the page to load: the window answers as soon as it can be watched, and the
@@ -74,9 +102,13 @@ const go = (page: Page, url: string | undefined, deps: OwnBrowserDeps): void => 
     void page.goto(url, { waitUntil: "commit" }).catch((err: unknown) => deps.warn({ err, url }, "own browser: navigation failed"));
 };
 
-/** Opens a tab in the person's own window, starting the window first if it isn't running. */
+/**
+ * Opens a tab in the person's own window, starting the window first if it isn't running. A start that reopened the
+ * window's kept tabs answers, for no address, the one it put in front; an address still gets a tab of its own.
+ */
 export const openOwnBrowser = async (deps: OwnBrowserDeps, url: string | undefined): Promise<OpenBrowserResult> => {
     let started = false;
+    let restored: string | undefined;
     if (!browserSessionRunning(OWN_BROWSER_SESSION)) {
         if (starting === undefined) {
             started = true;
@@ -84,10 +116,14 @@ export const openOwnBrowser = async (deps: OwnBrowserDeps, url: string | undefin
                 starting = undefined;
             });
         }
-        await starting;
+        restored = await starting;
     }
-    // The window a start just opened already has its blank tab; the first address belongs in it.
-    const blank = started ? browserSessionBlankPage(OWN_BROWSER_SESSION) : undefined;
+    if (started && restored !== undefined && (url === undefined || url === "")) {
+        return { name: OWN_BROWSER_SESSION, pageId: restored };
+    }
+    // The window a start just opened already has its blank tab; the first address belongs in it, unless a restore put a
+    // kept tab there.
+    const blank = started && restored === undefined ? browserSessionBlankPage(OWN_BROWSER_SESSION) : undefined;
     if (blank !== undefined) {
         go(blank.page, url, deps);
         return { name: OWN_BROWSER_SESSION, pageId: blank.id };

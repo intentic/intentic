@@ -1,6 +1,8 @@
 import type { Browser, BrowserContext, CDPSession, Dialog, Page } from "playwright";
 import type { NavigationState } from "../navigation/page-navigation.js";
+import type { ClosedTab } from "./closed-tabs.js";
 import type { FrontReader } from "./front-reader.js";
+import type { TabHelper, TabSound } from "../tabs/tab-helper.js";
 
 // What the daemon holds of one browser window and its tabs (browser-sessions.ts keeps them; window-summary.ts lists
 // them). Here rather than there so the summary, the feed and the front reader can share the shape without importing the
@@ -29,6 +31,15 @@ export interface PageRecord {
     // The page's own DevTools session (watchPageSession), once open: what its history is read through.
     cdp: CDPSession | undefined;
     history: PageHistory | undefined;
+    // Its CDP target id, read as its session opens: what Chromium's own tab list and the tab helper name it by
+    // (page-favicon.ts, tab-helper.ts).
+    targetId?: string | undefined;
+    // The icon address Chromium settled on for it, and that icon as the editor draws it (page-favicon.ts).
+    faviconUrl?: string | undefined;
+    favicon?: string | undefined;
+    // A tab brought back by a restore that has not loaded yet: it stands as about:blank, listed as where it was, and
+    // goes there the first time it is in front (browser-tabs.ts), as a browser restores its background tabs.
+    deferred?: { readonly url: string; readonly title?: string | undefined; readonly favicon?: string | undefined } | undefined;
 }
 
 // What the daemon knows about one browser; `context` is set only once the CDP attach lands. Most are an agent's; the
@@ -51,7 +62,8 @@ export interface BrowserSessionRecord {
     readonly passkeyStore: string | undefined;
     readonly startedAt: number;
     activityAt: number;
-    // Open pages, in open order, the order a browser's tab strip shows them.
+    // Open pages in the order the window's strip shows them: open order, until a tab is dragged elsewhere or reopened
+    // at the place it had (tab-order.ts). The order is the daemon's, since Chromium's own strip is never seen.
     readonly pages: Map<string, PageRecord>;
     nextPageId: number;
     // The tab in front, the one the window's picture shows; falls back as tabs close, undefined once none remain.
@@ -72,4 +84,15 @@ export interface BrowserSessionRecord {
     context: BrowserContext | undefined;
     // In-flight attach; a second tool call doesn't start another one, and the view route can await it.
     attaching: Promise<BrowserContext | undefined> | undefined;
+    // Tabs closed while the window ran, newest first: what Reopen closed tab brings back (closed-tabs.ts).
+    closed?: readonly ClosedTab[] | undefined;
+    // Chromium's own tab state, for a window that loads the tab helper (the person's own); absent elsewhere.
+    helper?: TabHelper | undefined;
+    // Whether each tab is playing sound and whether it is muted, as the helper last said, by CDP target id. A tab is
+    // given its own when the window is listed (window-summary.ts), so the report and the tab's id may arrive in either
+    // order (browser-tabs.ts, followSound).
+    sound?: ReadonlyMap<string, TabSound> | undefined;
+    // Rises with every tab a person picks: an answer of Chromium's about the tab in front that was asked for before the
+    // last pick is older than it, and is dropped rather than undoing the pick (browser-sessions.ts, readerFor).
+    picks?: number | undefined;
 }

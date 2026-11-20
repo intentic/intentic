@@ -50,6 +50,8 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     areas: [`areas.list`],
     // The automations extension's manifest names its own files by this.
     automations: [`automations.list`],
+    // A profile's bookmarks moving, from any window: the star, the bar and the manager read them.
+    bookmarks: [`bookmarks.list`],
     browsers: [`system.browsers`],
     capabilities: [`capabilities.list`],
     // The CI sweep's board, which the pipelines board, its rail badge and the CI trigger's delivery note all read.

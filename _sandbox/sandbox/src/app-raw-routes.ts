@@ -14,7 +14,10 @@ import { passkeyRawRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { controlTokenRawRoutes } from "./auth/tokens/control-tokens.routes.js";
 import { automationFireRawRoutes } from "./automations/fire.routes.js";
 import { browserViewRawRoutes } from "./browser/cast/browser-view.routes.js";
+import { browserDevtoolsRawRoutes } from "./browser/devtools/devtools.routes.js";
+import { browserDownloadsRawRoutes } from "./browser/downloads/downloads.routes.js";
 import { browserProfileRawRoutes } from "./browser/sessions/browser-profile.routes.js";
+import { browserUploadsRawRoutes } from "./browser/uploads/uploads.routes.js";
 import { mcpSignInRawRoutes } from "./capabilities/mcp-oauth/mcp-sign-in.routes.js";
 import { capabilityAskRawRoutes } from "./capabilities/offers/ask.routes.js";
 import { ciWebhookRawRoutes } from "./ci/webhook.routes.js";
@@ -73,7 +76,10 @@ export const appRawRoutes = (services: Services) =>
         controlTokenRawRoutes(services),
         automationFireRawRoutes(services),
         browserViewRawRoutes(services),
+        browserDevtoolsRawRoutes(services),
+        browserDownloadsRawRoutes(services),
         browserProfileRawRoutes(services),
+        browserUploadsRawRoutes(services),
         mcpSignInRawRoutes(services),
         capabilityAskRawRoutes(services),
         ciWebhookRawRoutes(services),

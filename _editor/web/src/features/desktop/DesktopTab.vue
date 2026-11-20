@@ -33,6 +33,12 @@ const view = useDesktopView(activeSandboxId, { window: windowId, visible: toRef(
 const stageEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLCanvasElement | null>(null);
 watch(canvasEl, (canvas) => view.attachCanvas(canvas));
+// castd's picture, where it carries the desktop: a canvas of its own, drawn by the media path's decode worker.
+const mediaEl = ref<HTMLCanvasElement | null>(null);
+watch(mediaEl, (canvas) => view.media?.attach(canvas));
+const pictureEl = computed(() => mediaEl.value ?? canvasEl.value);
+// castd sends the pointer's look rather than drawing it into the picture; the daemon's video has it drawn in.
+const cursor = computed(() => (view.kind.value === `media` && view.driving.value ? { cursor: view.media?.cursor.value ?? `default` } : undefined));
 
 // The sentence over the picture while there is none; undefined once frames flow.
 const message = computed<string | undefined>(() => {
@@ -96,7 +102,11 @@ const toggle = async (): Promise<void> => {
 // Pointer events rather than mouse events, for the capture: a drag released outside the picture still lets go of the
 // button on the desktop instead of leaving it held there.
 const pointer = (action: DesktopPointerAction, event: PointerEvent): void => {
-    if (!view.driving.value || canvasEl.value === null) {
+    if (action === `down`) {
+        // A press is a gesture: a copy made on the desktop is written, and its sound may start.
+        view.media?.gesture();
+    }
+    if (!view.driving.value || pictureEl.value === null) {
         return;
     }
     if (action === `down`) {
@@ -105,11 +115,11 @@ const pointer = (action: DesktopPointerAction, event: PointerEvent): void => {
         stageEl.value?.focus({ preventScroll: true });
         stageEl.value?.setPointerCapture(event.pointerId);
     }
-    view.onPointer(action, event, canvasEl.value);
+    view.onPointer(action, event, pictureEl.value);
 };
 const wheel = (event: WheelEvent): void => {
-    if (canvasEl.value !== null) {
-        view.onWheel(event, canvasEl.value);
+    if (pictureEl.value !== null) {
+        view.onWheel(event, pictureEl.value);
     }
 };
 
@@ -160,7 +170,8 @@ defineExpose({ driving: view.driving, toggle, focus: () => stageEl.value?.focus(
             @paste="view.onPaste"
             @contextmenu.prevent
         >
-            <canvas ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
+            <canvas v-if="view.kind.value === 'media'" ref="mediaEl" class="absolute inset-0 h-full w-full object-contain" :style="cursor" />
+            <canvas v-else ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
             <div v-if="message" class="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
                 <span class="max-w-md rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ messageLine }}</span>
             </div>

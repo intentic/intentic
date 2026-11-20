@@ -79,6 +79,11 @@ export const wheelCounter = (): ((pixels: number, at: number) => ZoomStep | unde
 /** Whether this window is one of the desktop app's: the workspace face and its floating panels, a folder's, the sandbox face. */
 const inDesktopWindow = (): boolean => desktopApp() !== undefined || localFace() !== undefined || sandboxFace();
 
+/** Whether the keystroke lands where the zoom keys zoom a page of its own: a live browser's keyboard (keyIntent.ts), as a
+ *  browser tab's would. */
+export const zoomsOwnPage = (target: EventTarget | null): boolean =>
+    target instanceof Element && target.closest(`[data-zooms-own-page]`) !== null;
+
 /** Installs the zoom keys and Ctrl+wheel in this window, if it is the desktop app's. Once per window, from main.ts. */
 export const installTextZoom = (): void => {
     if (!inDesktopWindow()) {
@@ -94,7 +99,7 @@ export const installTextZoom = (): void => {
         `keydown`,
         (event) => {
             const step = zoomStepOf(event, isMac);
-            if (step === undefined) {
+            if (step === undefined || zoomsOwnPage(event.target)) {
                 return;
             }
             event.preventDefault();

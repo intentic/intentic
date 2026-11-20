@@ -16,9 +16,25 @@ import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/bro
 import LiveTabStrip from "../../features/browsers/LiveTabStrip.vue";
 import LiveLauncher, { type LaunchGroup } from "./LiveLauncher.vue";
 import { initialOf, pageTabLook, type GroupMark, type StripGroup, type StripTab } from "../../features/browsers/stripTab";
-import { closeBrowser, closeBrowserPage, openBrowser, useBrowsersQuery } from "../../features/browsers/browsersQuery";
+import { closeBrowser, openBrowser, useBrowsersQuery } from "../../features/browsers/browsersQuery";
+import { useHeldOrder, useTabVerbs } from "../../features/browsers/tabVerbs";
 import type { BrowserCommand } from "../../models/browsers/keyIntent";
+import { useStageInput } from "../../features/browsers/stageInput";
+import LiveStageInput from "./LiveStageInput.vue";
+import LivePicture from "./LivePicture.vue";
+import LiveSound from "./LiveSound.vue";
+import StreamStats from "./StreamStats.vue";
+import StreamStatsItem from "./StreamStatsItem.vue";
+import { streamStatsShown } from "../../models/browsers/media/streamStats";
 import Omnibox from "../../features/browsers/Omnibox.vue";
+import BrowserLibrary from "../../features/browsers/history/BrowserLibrary.vue";
+import BookmarkStar from "../../features/browsers/bookmarks/BookmarkStar.vue";
+import BookmarksBar from "../../features/browsers/bookmarks/BookmarksBar.vue";
+import LibraryMenuItems from "../../features/browsers/bookmarks/LibraryMenuItems.vue";
+import { bookmarksBarShown, toggleBookmarksBar, usePageMarks } from "../../features/browsers/bookmarks/bookmarksBar";
+import { useHistoryOverlay } from "../../features/browsers/history/historyOverlay";
+import { otherTabs, type TabCandidate, useSearchEngine } from "../../features/browsers/omnibox/liveOmnibox";
+import LiveStartPage from "./LiveStartPage.vue";
 import { useBrowserView } from "../../features/browsers/useBrowserView";
 import { usePictureFit } from "../../features/browsers/pictureFit";
 import { agentTitle, agentTurnRunning } from "../../features/browsers/agentTurns";
@@ -36,6 +52,11 @@ import { useDesktopQuery } from "../../features/desktop/desktopQuery";
 import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useTier } from "../../client/sandbox/useTier";
 import { useT } from "@intentic/ui/i18n";
+import { useWindowTools } from "../../features/browsers/windowTools";
+import DownloadsButton from "../../features/browsers/downloads/DownloadsButton.vue";
+import PageAsks from "../../features/browsers/siteInfo/PageAsks.vue";
+import PageToolsMenu from "../../features/browsers/devtools/PageToolsMenu.vue";
+import DevToolsPanel from "../../features/browsers/devtools/DevToolsPanel.vue";
 
 // EVERYTHING LIVE THE SANDBOX SHOWS, AS TABS OF ONE BROWSER: the live apps its dev servers serve (framed straight from
 // them, not streamed), the windows of its own Chromium (streamed), its desktop and each window on that desktop
@@ -111,7 +132,9 @@ const selected = computed<string | undefined>(() => {
 const view = useBrowserView(selected, { visible: computed(() => seen.value && webInFront.value) });
 // The window as the newer of its two copies has it: the browsers list's, or the one its own socket sent.
 const current = computed(() => freshestWindow(windows.value.find((session) => session.name === selected.value), view.session.value));
-const pages = computed<readonly BrowserPage[]>(() => current.value?.pages ?? []);
+// Its pages in the strip's order, a tab just dragged already at its new place (tabVerbs.ts).
+const order = useHeldOrder();
+const pages = computed<readonly BrowserPage[]>(() => (current.value === undefined ? [] : order.ordered(current.value)));
 
 const showWindow = (name: string): void => showTab({ kind: `web`, session: name });
 
@@ -363,7 +386,7 @@ const stripIdOf = (session: string, pageId: string): string => `${PAGE}${session
 const pageEntries = computed(() =>
     stripWindows.value.flatMap((session) => {
         const group = labelled.value ? groupOf(session) : undefined;
-        return session.pages.map((page) => ({
+        return order.ordered(session).map((page) => ({
             session,
             page,
             tab: {
@@ -371,7 +394,9 @@ const pageEntries = computed(() =>
                 key: arrivedKeys.value.get(stripIdOf(session.name, page.id)),
                 label: pageLabel(page),
                 ...pageTabLook(page),
+                recording: session.recording !== undefined && page.active,
                 closable: usable(session),
+                movable: usable(session),
                 pinned: false,
                 group,
             } satisfies StripTab,
@@ -611,6 +636,21 @@ const addressKind = computed(() => (front.value.kind === `desktop` ? `screen` : 
 const omnibox = ref<{ focus: () => void } | undefined>();
 const focusAddress = (): void => omnibox.value?.focus();
 
+// Where a search goes, and the open tabs the address bar offers to switch to (omnibox/liveOmnibox.ts).
+const searchEngine = useSearchEngine();
+const switchableTabs = computed(() => otherTabs(pageEntries.value, { session: current.value?.name, page: activePage.value?.id }));
+const switchToTab = (tab: TabCandidate): void => {
+    const entry = entryOf(stripIdOf(tab.session, tab.pageId));
+    return entry === undefined ? undefined : pickStrip(entry.tab);
+};
+
+// A page picked from the library (Ctrl+H, the menu) or the bookmarks bar goes where Enter would, or to a new tab of yours.
+const goTo = (url: string, newTab: boolean): void => void (newTab ? openOwn(url) : submitAddress(url));
+const historyPage = useHistoryOverlay(goTo);
+// The bookmarks and site icons the address bars mark pages with, and the star Ctrl+D presses (bookmarks/).
+const marks = usePageMarks(windows);
+const star = ref<{ toggle: () => Promise<void> } | undefined>();
+
 // ===== Opening =====
 
 // Opening in the person's own window: the window starts on the first call, and every call answers which tab it opened,
@@ -717,19 +757,6 @@ const openTab = (): void => {
     void openOwn();
 };
 
-// A tab closed in a window not in front: over the roster's own call, since only the window in front has a socket open.
-// The last tab of the person's own window takes the window with it, as it does in front.
-const closeElsewhere = (session: BrowserSession, page: BrowserPage): void => {
-    if (!usable(session)) {
-        return;
-    }
-    if (session.own === true && session.pages.length === 1) {
-        void closeBrowser(session.name);
-        return;
-    }
-    void closeBrowserPage(session.name, page.id);
-};
-
 // The ports the shell already holds, for telling a typed localhost address that is one of the sandbox's own apps.
 const { offered } = usePorts();
 
@@ -771,26 +798,9 @@ const submitAddress = (text: string): void => {
     void openOwn(url);
 };
 
-// Closing the tab in front puts its neighbour in front (the one after it, else the one before), as a browser does. The
-// last tab of the person's own window takes the window with it, which is what closing a browser's last tab does.
-const closeTab = (page: BrowserPage): void => {
-    const here = current.value;
-    if (here === undefined || !interactive.value) {
-        return;
-    }
-    if (here.own === true && pages.value.length === 1) {
-        void closeBrowser(here.name);
-        return;
-    }
-    if (page.id === activePage.value?.id) {
-        const at = pages.value.findIndex((listed) => listed.id === page.id);
-        const neighbour = pages.value[at + 1] ?? pages.value[at - 1];
-        if (neighbour !== undefined) {
-            pickPage(neighbour);
-        }
-    }
-    view.closeTab(page.id);
-};
+// What can be done to a tab (tabVerbs.ts): the closes, a closed one back, a move, a mute, and each tab's own menu.
+const verbs = useTabVerbs({ current, pages, activePage, interactive, usable, pickPage, closeInView: view.closeTab, awaitTab, entryOf, stripTabs, order });
+const { closeTab, closeElsewhere } = verbs;
 
 // ===== The launcher =====
 
@@ -857,17 +867,14 @@ const launch = (key: string): void => {
 
 // ===== The picture =====
 
-// Two picture surfaces: a video canvas with a still canvas over it, or an img for frames when there's no display to
-// grab. Pointer coordinates measure against whichever is painting (viewportCoords), not the stage around it; all
-// use `object-contain`.
-const frameEl = ref<HTMLElement | null>(null);
-const canvasEl = ref<HTMLCanvasElement | null>(null);
-const stillEl = ref<HTMLCanvasElement | null>(null);
+// The element painting the picture (LivePicture.vue): pointer coordinates measure against it (viewportCoords), not the
+// stage around it.
+const shownPicture = shallowRef<HTMLElement | undefined>();
+const pictureEl = computed(() => shownPicture.value);
 const stageEl = ref<HTMLElement | null>(null);
-// Whichever of the two is painting; every pointer handler measures against this instead of its own copy.
-const pictureEl = computed<HTMLElement | undefined>(() => canvasEl.value ?? frameEl.value ?? undefined);
-// The canvases mount/unmount with the picture kind; the decoder outlives them, so they're connected here.
-watch([canvasEl, stillEl], ([canvas, still]) => view.attachCanvases(canvas, still));
+// What the window does besides its pages: downloads, files and permissions its pages ask for, page tools (windowTools.ts).
+const tools = useWindowTools({ window: current, page: activePage, usable: interactive, stage: stageEl, geometry: () =>
+    pictureEl.value && { picture: pictureEl.value, width: view.viewWidth.value, height: view.viewHeight.value, scale: view.viewScale.value } });
 
 // Stepping in while an agent drives, and handing the window back to it. Escape is not an exit, keyIntent forwards it
 // to the page.
@@ -888,6 +895,7 @@ let hintTimer: number | undefined;
 const onStageDown = (event: MouseEvent): void => {
     if (interactive.value) {
         if (pictureEl.value !== undefined) {
+            stageInput.press(event);
             view.onMouseDown(event, pictureEl.value);
         }
         return;
@@ -900,6 +908,8 @@ const onStageDown = (event: MouseEvent): void => {
     hintTimer = window.setTimeout(() => (watchHint.value = false), HINT_MS);
 };
 
+// The stage as an input surface: the keyboard's hidden field, a finger, a pinch.
+const stageInput = useStageInput({ view, stage: stageEl, picture: pictureEl, interactive, onWatchTap: (event) => onStageDown(event) });
 const reload = (): void => {
     if (front.value.kind === `preview`) {
         frontPreview.value?.reload();
@@ -908,7 +918,8 @@ const reload = (): void => {
     view.reload();
 };
 
-// What the browser's own shortcuts do here: the tabs and the address bar are this pane's, the rest is the view's.
+// What the browser's own shortcuts do here: the tabs, the address bar and the bookmarks are this pane's, the rest is the
+// view's.
 const COMMANDS: Record<BrowserCommand, () => void> = {
     newTab: openTab,
     closeTab: () => {
@@ -923,6 +934,17 @@ const COMMANDS: Record<BrowserCommand, () => void> = {
     forward: view.forward,
     reload: view.reload,
     find: view.find,
+    zoomIn: () => view.zoomPage(`in`),
+    zoomOut: () => view.zoomPage(`out`),
+    zoomReset: () => view.zoomPage(`reset`),
+    print: () => void tools.page.print(),
+    reopenTab: verbs.reopenClosedTab,
+    history: historyPage.open,
+    downloads: () => (tools.downloads.open.value = !tools.downloads.open.value),
+    bookmark: () => void star.value?.toggle(),
+    bookmarksBar: toggleBookmarksBar,
+    devtools: tools.page.toggleDevtools,
+    viewSource: () => void tools.page.viewSource(),
 };
 const onCommand = (command: BrowserCommand): void => COMMANDS[command]();
 
@@ -940,24 +962,6 @@ const helpOpen = ref(true);
 const queuedHelp = computed(() => windows.value.filter((session) => session.help !== undefined && session.name !== selected.value));
 // Any window asking while a pin is in front: the window list's chip says so, since no card is on screen to.
 const helpBehind = computed(() => queuedHelp.value.length > 0 || (!webInFront.value && current.value?.help !== undefined));
-
-// A JavaScript dialog the page has open, held by the daemon until someone answers; the prompt's text starts as what
-// the page prefilled, and follows the dialog rather than the pane, so a second prompt doesn't inherit the first's.
-const dialog = computed(() => current.value?.dialog);
-const dialogText = ref(``);
-watch(
-    dialog,
-    (open) => {
-        dialogText.value = open?.defaultValue ?? ``;
-    },
-    { immediate: true },
-);
-const answerDialog = (accept: boolean): void => {
-    if (dialog.value === undefined) {
-        return;
-    }
-    view.answerDialog(accept, dialog.value.kind === `prompt` && accept ? dialogText.value : undefined);
-};
 
 const switcherOpen = ref(false);
 const switcherTrigger = ref<HTMLElement | undefined>();
@@ -1059,29 +1063,9 @@ watch(
 
 // ===== Sizes =====
 
-// The picture's box at the stage's top-left, and the page's own colour beside it while a new size is on its way.
-const { box: pictureBox, gap: gapStyle, measure: measurePicture } = usePictureFit(view, computed(() => webPhone.value !== undefined));
-
-// The stage's box is what the daemon sizes the page's viewport to, so the picture is the page at 1:1 rather than
-// scaled into whatever is left; measured via ResizeObserver, since the chrome's own text-scaled height is part of
-// what's left.
-let observer: ResizeObserver | undefined;
-watch(stageEl, (stage) => {
-    observer?.disconnect();
-    observer = undefined;
-    // Null, not undefined: the stage lives under `v-if="current"`, and Vue writes null into the ref the moment that
-    // element goes. `observe(null)` throws where the picture stops rather than where it is read.
-    if (stage === null) {
-        return;
-    }
-    observer = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-            measurePicture(entry.contentRect.width, entry.contentRect.height);
-            view.requestSize(entry.contentRect.width, entry.contentRect.height);
-        }
-    });
-    observer.observe(stage);
-});
+// The picture's box at the stage's top-left, and the page's own colour beside it while a new size is on its way; the
+// stage's box is what the daemon sizes the page's viewport to, so the picture is the page at 1:1 (pictureFit.ts).
+const { box: pictureBox, gap: gapStyle } = usePictureFit(view, computed(() => webPhone.value !== undefined), stageEl);
 
 // Read off the view's own width, not a viewport breakpoint, since this pane's width has nothing to do with the screen's
 // (a side panel, a window of its own). Only the account's name, the verbs' words and the phone's picker give way; tabs
@@ -1105,15 +1089,8 @@ const toolsEl = ref<HTMLElement | undefined>();
 
 // ===== The start page =====
 
-// The start page's own search box, which takes the keyboard as the view opens on nothing.
-const startField = ref<HTMLInputElement | undefined>();
-const startText = ref(``);
-const submitStart = (): void => {
-    const url = toUrl(startText.value);
-    if (url !== undefined) {
-        void openOwn(url);
-    }
-};
+// The start page (LiveStartPage.vue), whose search box takes the keyboard as the view opens on nothing.
+const startField = ref<{ focus: () => void } | undefined>();
 // Whenever the view lands on nothing open (on arrival, or once the last window closes), the keyboard goes to the
 // search box, the way a new browser window opens ready to type; not while parked, where nobody is looking.
 const onStart = computed(() => webInFront.value && current.value === undefined && !parked);
@@ -1132,7 +1109,6 @@ onMounted(() => {
     }
 });
 onBeforeUnmount(() => {
-    observer?.disconnect();
     rootObserver?.disconnect();
     window.clearTimeout(hintTimer);
     window.clearTimeout(pendingTimer);
@@ -1154,6 +1130,9 @@ const { floats } = useBrowsersFloating();
                 @pick-group="pickGroup"
                 @open="openLauncher"
                 @quick-open="openTab"
+                :menu-of="verbs.menuOf"
+                @mute="verbs.muteTab"
+                @move="verbs.moveTab"
             >
                 <template #end>
                     <template v-if="windowList.length > 1">
@@ -1190,6 +1169,7 @@ const { floats } = useBrowsersFloating();
                                     "
                                 >
                                     <span class="size-1.5 shrink-0 rounded-full" :class="dotOf(session)" />
+                                    <img v-if="activePageOf(session.pages, undefined)?.favicon" :src="activePageOf(session.pages, undefined)?.favicon" alt="" class="size-4 shrink-0" />
                                     <span class="min-w-0 flex-1">
                                         <span class="block truncate text-xs" :class="session.name === selected && webInFront ? 'text-link' : 'text-content'">{{
                                             windowName(session)
@@ -1264,10 +1244,18 @@ const { floats } = useBrowsersFloating();
                 :copy-label="t(`browsers.browsers.copyAddress`)"
                 :secure-label="t(`browsers.browsers.connectionSecure`)"
                 :insecure-label="t(`browsers.browsers.connectionNotSecure`)"
+                :engine="searchEngine"
+                :tabs="switchableTabs"
+                :marks="marks"
                 class="mx-1.5 flex-1"
+                :site-label="t(`browsers.tools.siteInfo`)"
+                @site="tools.site.show"
                 @submit="submitAddress"
+                @switch-tab="switchToTab"
                 @cancel="stageEl?.focus()"
-            />
+            >
+                <template #end><BookmarkStar ref="star" :page="webInFront ? activePage : undefined" /></template>
+            </Omnibox>
 
             <!-- The tab in front's own verbs: a live app's Start and Stop and its terminal, the desktop's hand on the wheel. -->
             <div ref="toolsEl" class="flex shrink-0 items-center gap-1 empty:hidden"></div>
@@ -1318,6 +1306,8 @@ const { floats } = useBrowsersFloating();
                 </template>
             </template>
 
+            <LiveSound v-if="webInFront && view.media?.sound.available.value" :sound="view.media.sound" />
+
             <!-- The phone frame, for what has a page layout to frame: the handset, once on, beside it. -->
             <template v-if="phoneable">
                 <Picker
@@ -1341,6 +1331,7 @@ const { floats } = useBrowsersFloating();
                 </button>
             </template>
 
+            <DownloadsButton v-if="webInFront && current?.downloads" :tools="tools.downloads" />
             <!-- The view's own menu: the rare verbs, kept off the toolbar. -->
             <button
                 ref="menuTrigger"
@@ -1367,6 +1358,7 @@ const { floats } = useBrowsersFloating();
                         <Icon name="plus" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 flex-1 truncate">{{ t(`browsers.browsers.newTab`) }}</span>
                     </button>
+                    <LibraryMenuItems :library="historyPage" @done="menuOpen = false" />
                     <!-- From an agent's window to your own: a switch when it is open, a start when it isn't. -->
                     <button
                         v-if="webInFront && current !== undefined && current.own !== true"
@@ -1402,6 +1394,7 @@ const { floats } = useBrowsersFloating();
                             :header="t(`preview.previewPanel.phone`)"
                         />
                     </div>
+                    <StreamStatsItem v-if="view.kind.value === 'media'" @picked="menuOpen = false" />
                     <button
                         type="button"
                         class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
@@ -1413,6 +1406,7 @@ const { floats } = useBrowsersFloating();
                         <Icon :name="floats ? `sign-in` : `external-link`" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 flex-1 truncate">{{ floats ? t(`browsers.window.dock`) : t(`browsers.window.popOut`) }}</span>
                     </button>
+                    <PageToolsMenu v-if="webInFront && current !== undefined && interactive" :tools="tools" @done="menuOpen = false" />
                     <template v-if="webInFront && current !== undefined">
                         <div class="mx-2 my-0.5 h-px bg-line" />
                         <button
@@ -1434,6 +1428,8 @@ const { floats } = useBrowsersFloating();
             </AnchoredOverlay>
         </div>
 
+        <BookmarksBar v-if="bookmarksBarShown" @open="goTo" />
+
         <!-- What is in front. Every pin's body stays mounted behind it, so an app keeps its state and a desktop its socket. -->
         <div class="relative min-h-0 flex-1">
             <!-- The web window: whatever the stage's box is, the daemon sizes the viewport to it, unless a phone sets it. -->
@@ -1442,39 +1438,26 @@ const { floats } = useBrowsersFloating();
                     v-if="current"
                     ref="stageEl"
                     tabindex="0"
-                    class="absolute inset-0 flex select-none outline-none"
-                    :style="view.kind.value === 'video' ? { cursor: interactive ? view.cursor.value : 'default' } : undefined"
+                    class="absolute inset-0 flex touch-none select-none outline-none"
+                    :style="view.kind.value === 'video' || view.kind.value === 'media' ? { cursor: interactive ? view.cursor.value : 'default' } : undefined"
+                    v-on="stageInput.listeners"
                     @mousemove="pictureEl && view.onMouseMove($event, pictureEl)"
                     @mousedown="onStageDown"
                     @mouseup="pictureEl && view.onMouseUp($event, pictureEl)"
                     @wheel="pictureEl && view.onWheel($event, pictureEl)"
-                    @keydown="view.onKeyDown($event, onCommand)"
-                    @paste="view.onPaste"
+                    @keydown.self="view.onKeyDown($event, onCommand)"
                     @contextmenu.prevent
                 >
+                    <LiveStageInput :input="stageInput" :view="view" :interactive="interactive" :on-command="onCommand" />
                     <!-- Full bleed, or the page as a phone's own viewport inside a drawn handset; the same picture either way. -->
                     <PreviewStage :phone="webPhone" :clip-gutter="false" backdrop="bg-terminal">
                         <template #default="{ frame }">
-                            <div :style="[frame, gapStyle]" class="relative">
-                                <!-- The page's viewport off the browser's own X display: video beneath, a sharp still of the settled page over it (videoSink); the same box, so a click aims the same on either. The box is the picture's own size at the top-left when full bleed (pictureFit.ts), the whole frame otherwise. -->
-                                <div v-if="view.kind.value === 'video'" class="absolute left-0 top-0" :class="pictureBox ? '' : 'h-full w-full'" :style="pictureBox">
-                                    <canvas ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
-                                    <canvas ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
-                                </div>
-                                <!-- Display-less browsers expose one compositor surface without a cursor. -->
-                                <img
-                                    v-else
-                                    v-show="view.frame.value"
-                                    ref="frameEl"
-                                    :src="view.frame.value"
-                                    :style="interactive ? { cursor: view.cursor.value } : undefined"
-                                    alt=""
-                                    draggable="false"
-                                    class="h-full w-full object-contain"
-                                />
+                            <div :ref="stageInput.bindZoom" :style="[frame, gapStyle, view.zoom.value]" class="relative">
+                                <LivePicture :view="view" :box="pictureBox" :interactive="interactive" @picture="shownPicture = $event" />
                             </div>
                         </template>
                     </PreviewStage>
+                    <StreamStats v-if="streamStatsShown && view.kind.value === 'media' && view.media" :media="view.media" />
                     <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                         <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.statusWithElapsed.value }}</span>
                     </div>
@@ -1491,37 +1474,18 @@ const { floats } = useBrowsersFloating();
                 </div>
 
                 <!-- Nothing open: a new tab's page, whose search box (like the address bar above it) starts the person's own window, and under it everything else this view can open. -->
-                <div v-else class="absolute inset-0 flex justify-center overflow-y-auto p-6">
-                    <div class="my-auto flex w-full max-w-xl flex-col items-center gap-5">
-                        <Icon name="browsers" class="text-3xl text-subtle" />
-                        <form class="ui-field-shell flex h-11 w-full items-center gap-3 rounded-full px-4" @submit.prevent="submitStart">
-                            <Icon name="search" class="shrink-0 text-xs text-subtle" />
-                            <!-- allow(substitutes): a browser's address field (a URL, or words to search the web for on Enter), not a filter over a list -->
-                            <input
-                                ref="startField"
-                                v-model="startText"
-                                type="text"
-                                spellcheck="false"
-                                autocomplete="off"
-                                autocapitalize="off"
-                                enterkeyhint="go"
-                                :disabled="opening"
-                                :placeholder="t(`browsers.browsers.addressPlaceholder`)"
-                                :aria-label="t(`browsers.browsers.addressPlaceholder`)"
-                                class="field-bare min-w-0 flex-1"
-                            />
-                            <Icon v-if="opening" name="spinner" spin class="shrink-0 text-xs text-muted" />
-                        </form>
-                        <p v-if="openError" class="flex flex-wrap items-center justify-center gap-x-2 text-center text-xs text-danger">
-                            {{ openError }}
-                            <button type="button" :class="ui.textButton({ flush: true })" @click="openOwn(lastOpen)">{{ t(`ui.action.tryAgain`) }}</button>
-                        </p>
-                        <p v-else class="max-w-md text-center text-2xs text-muted">
-                            {{ opening ? t(`browsers.browsers.starting`) : t(`browsers.browsers.startCaption`) }}
-                        </p>
-                        <LiveLauncher :groups="startGroups" variant="page" class="mt-2" @pick="launch" />
-                    </div>
-                </div>
+                <LiveStartPage
+                    v-else
+                    ref="startField"
+                    :opening="opening"
+                    :open-error="openError"
+                    :engine="searchEngine"
+                    :marks="marks"
+                    :groups="startGroups"
+                    @submit="openOwn"
+                    @retry="openOwn(lastOpen)"
+                    @launch="launch"
+                />
 
                 <!-- A window with every tab closed (an agent's; yours closes with its last tab): the one thing to do in it. -->
                 <div v-if="current && pages.length === 0" class="absolute inset-0 z-[1] flex items-center justify-center bg-card">
@@ -1537,12 +1501,7 @@ const { floats } = useBrowsersFloating();
 
                 <!-- A blank tab of your own, from the press of + until an address commits in it: the start page's quiet
                      face with nothing to type into but the address bar, which has the keyboard. -->
-                <div v-if="current && newTabPage" class="absolute inset-0 z-[1] flex justify-center overflow-y-auto bg-card p-6">
-                    <div class="my-auto flex w-full max-w-xl flex-col items-center gap-5">
-                        <Icon name="browsers" class="text-3xl text-subtle" />
-                        <LiveLauncher v-if="startGroups.length > 0" :groups="startGroups" variant="page" class="mt-2" @pick="launch" />
-                    </div>
-                </div>
+                <LiveStartPage v-if="current && newTabPage" quiet :groups="startGroups" class="z-[1] bg-card" @launch="launch" />
 
                 <!-- Your own window starting from another one: it comes up behind this. A tab added to it once it runs says so on the strip instead. -->
                 <div
@@ -1563,6 +1522,8 @@ const { floats } = useBrowsersFloating();
                     </div>
                 </div>
 
+                <!-- What the page asks of the person: a dialog, a permission, files; and the padlock's site info. -->
+                <PageAsks v-if="current" :tools="tools" :dialog="current.dialog" @dialog="view.answerDialog" />
                 <!-- While stepped in, the page rings: a keystroke now lands in the agent's way. -->
                 <div v-if="steppedIn" class="pointer-events-none absolute inset-0 z-[2] ring-2 ring-inset ring-primary-500" />
 
@@ -1582,34 +1543,6 @@ const { floats } = useBrowsersFloating();
                         </div>
                     </div>
                 </Transition>
-
-                <!-- A dialog the page opened, held by the daemon: answered here or by the agent, whichever first. Centred like the browser's own would be. -->
-                <div v-if="dialog !== undefined" class="absolute inset-0 z-20 flex items-start justify-center bg-canvas/40 p-6">
-                    <div class="flex w-full max-w-md flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-lg">
-                        <div class="text-xs font-medium text-content">
-                            {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.leavePage`) : t(`browsers.browsers.pageSays`) }}
-                        </div>
-                        <div v-if="dialog.kind !== `beforeunload`" class="whitespace-pre-wrap break-words text-xs text-content">
-                            {{ dialog.message }}
-                        </div>
-                        <input
-                            v-if="dialog.kind === `prompt`"
-                            v-model="dialogText"
-                            type="text"
-                            class="ui-field-box ui-field-sm w-full"
-                            @keydown.enter.prevent="answerDialog(true)"
-                            @keydown.esc.prevent="answerDialog(false)"
-                        />
-                        <div class="flex justify-end gap-2">
-                            <Button v-if="dialog.kind !== `alert`" size="small" tier="quiet" @click="answerDialog(false)">
-                                {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`ui.action.cancel`) }}
-                            </Button>
-                            <Button tier="accent" size="small" @click="answerDialog(true)">
-                                {{ dialog.kind === `beforeunload` ? t(`ui.action.leave`) : t(`browsers.browsers.ok`) }}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Cards over the picture, not above it; the stack itself takes no pointer events, so the page stays clickable around them. -->
                 <div
@@ -1708,6 +1641,15 @@ const { floats } = useBrowsersFloating();
                 </div>
             </div>
 
+            <!-- The history page, over whatever tab is in front until a page is picked or it is closed. -->
+            <BrowserLibrary
+                v-if="historyPage.shown.value"
+                v-model:mode="historyPage.mode.value"
+                class="absolute inset-0 z-30"
+                @open="historyPage.pick"
+                @close="historyPage.close"
+            />
+
             <!-- The live apps, each its own frame, kept behind the one in front. -->
             <div v-for="pin in previewPins" v-show="isFront(pin)" :key="tabKey(pin)" class="absolute inset-0">
                 <PreviewTab
@@ -1729,5 +1671,6 @@ const { floats } = useBrowsersFloating();
                 <DesktopTab :window="pin.kind === `app` ? pin.id : undefined" :active="live(pin)" :tools-to="toolsEl" @close="unpinTab(pin)" />
             </div>
         </div>
+        <DevToolsPanel v-if="webInFront" :tools="tools.page" :title="activePage?.title" />
     </div>
 </template>

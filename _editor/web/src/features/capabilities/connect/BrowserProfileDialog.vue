@@ -6,6 +6,7 @@ import { useOperation } from "../../../workbench/operations/operations";
 import { keyFrames, keyIntent, type BrowserCommand, type KeyFrame } from "../../../models/browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../../models/browsers/pointerFrame";
 import { selectionCopy } from "../../../models/browsers/selectionCopy";
+import { mediaKey, mediaPointer, mediaScroll } from "../../../models/browsers/media/mediaHands";
 import { type ScreencastMessage, useScreencast } from "../../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../../client/sandbox/streams/wsTicket";
 import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
@@ -13,9 +14,11 @@ import { useBusySince, useProgress } from "../../../components/progress/useProgr
 import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input
-// replayed via XTEST and CDP). `capability` picks which connection's browser to open, since a site may be connected
-// more than once; `label` names the account. `login` opens sign-in; `browse` reopens the same signed-in profile. The
-// socket is a live one (liveSocket.ts): pinged, and redialled after a drop, which reopens the same profile.
+// replayed via XTEST and CDP; or, where castd serves its display, the picture and input on castd's media socket, the
+// save and the history verbs still on this one). `capability` picks which connection's browser to open, since a site
+// may be connected more than once; `label` names the account. `login` opens sign-in; `browse` reopens the same
+// signed-in profile. The socket is a live one (liveSocket.ts): pinged, and redialled after a drop, which reopens the
+// same profile.
 //
 // SAVING IS THE PROFILE'S, NOT THE WINDOW'S. "I'm done" asks the daemon to flush the profile and waits for its `saved`;
 // closing the window or leaving the page in that wait used to cut the socket first, so nobody learnt whether the sign-in
@@ -40,6 +43,8 @@ const surface = ref<HTMLElement>();
 // Null, not undefined, once the dialog's content has unmounted: that is what Vue writes to a template ref.
 const canvasEl = ref<HTMLCanvasElement | null>(null);
 const stillEl = ref<HTMLCanvasElement | null>(null);
+// castd's picture, drawn by the media path's decode worker on a canvas of its own.
+const mediaEl = ref<HTMLCanvasElement | null>(null);
 // Keystrokes go to the display while Chromium's find bar has them.
 let rawKeys = false;
 let observer: ResizeObserver | undefined;
@@ -134,6 +139,8 @@ const CLOSE_REFUSED = 1008;
 const cast = useScreencast({
     mint: () => wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode }),
     pointer: pointerFrame,
+    media: true,
+    onMediaDrop: () => restart(),
     outlivesScope: true,
     // What arrives on a socket a save holds only answers the save.
     detached: () => gone,
@@ -178,8 +185,12 @@ const cast = useScreencast({
     },
 });
 const { live, video } = cast;
-// Canvases mount with the dialog; the decoder outlives them, so the two are wired together here.
+// Canvases mount with the dialog; the decoders outlive them, so the two are wired together here.
 watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas, still));
+watch(mediaEl, (canvas) => cast.media?.attach(canvas));
+// castd's socket while it carries the picture: input goes there, in its own vocabulary.
+const mediaLive = (): boolean => cast.media?.live.value === true;
+const pictureCursor = computed(() => (cast.kind.value === `media` ? (cast.media?.cursor.value ?? `default`) : cursor.value));
 
 // The box inside the surface's border, where the canvases are, so the viewport is exactly what the modal shows
 // rather than scaled into it: the border box is two pixels larger each way, which resampled every pixel of the picture.
@@ -243,8 +254,22 @@ onBeforeUnmount(() => {
 // aim at.
 // Moves are throttled to one display frame (useScreencast), so a drag isn't traced at network-call granularity.
 const sendPointer = (action: PointerAction, event: MouseEvent): void => {
-    const canvas = canvasEl.value;
+    const canvas = mediaEl.value ?? canvasEl.value;
     if (canvas === null) {
+        return;
+    }
+    if (mediaLive()) {
+        const width = cast.width.value;
+        const height = cast.height.value;
+        const message =
+            event instanceof WheelEvent
+                ? mediaScroll(event, canvas, width, height)
+                : action === `wheel`
+                  ? undefined
+                  : mediaPointer(action, event, canvas, width, height);
+        if (message !== undefined) {
+            cast.media?.send(message);
+        }
         return;
     }
     const frame = cast.pointerAt(action, event, canvas);
@@ -256,6 +281,8 @@ const sendPointer = (action: PointerAction, event: MouseEvent): void => {
 const onMouseMove = (event: MouseEvent): void => sendPointer("move", event);
 const onMouseDown = (event: MouseEvent): void => {
     surface.value?.focus();
+    // A press is a gesture: a copy made in the window is written to this clipboard.
+    cast.media?.gesture();
     // A click puts the keyboard back on the page, wherever the find bar left it.
     rawKeys = false;
     sendPointer("down", event);
@@ -267,6 +294,8 @@ const onWheel = (event: WheelEvent): void => sendPointer("wheel", event);
 const onCommand = (command: BrowserCommand): void => {
     if (command === "back" || command === "forward" || command === "reload") {
         sendMsg({ type: command });
+    } else if (command === "find" && mediaLive()) {
+        cast.media?.send({ type: "key", key: "f", ctrl: true });
     } else if (command === "find") {
         sendMsg({ type: "key", key: "f", ctrl: true, raw: true });
         rawKeys = true;
@@ -287,8 +316,12 @@ const onKeyDown = (event: KeyboardEvent): void => {
         return;
     }
     event.preventDefault();
+    const typed = intent.kind === "command" || !mediaLive() ? undefined : mediaKey(event);
     if (intent.kind === "command") {
         onCommand(intent.command);
+    } else if (typed !== undefined) {
+        // castd types DOM key names on the display, and a copy there comes back on its own (mediaPicture's clipboard).
+        cast.media?.send(typed);
     } else if (intent.kind === "text") {
         sendMsg(rawKeys ? { type: "text", text: intent.text, raw: true } : { type: "text", text: intent.text });
     } else if (intent.kind === "key") {
@@ -306,7 +339,11 @@ const onPaste = (event: ClipboardEvent): void => {
         return;
     }
     event.preventDefault();
-    sendMsg({ type: "text", text });
+    if (mediaLive()) {
+        cast.media?.send({ type: "text", text });
+    } else {
+        sendMsg({ type: "text", text });
+    }
 };
 
 const cancel = (): void => {
@@ -378,7 +415,7 @@ const finish = async (): Promise<void> => {
                 ref="surface"
                 tabindex="0"
                 class="relative mx-auto h-[calc(var(--height-panel-lg)-5rem)] w-full select-none overflow-hidden rounded-lg border border-line bg-canvas outline-none"
-                :style="{ cursor }"
+                :style="{ cursor: pictureCursor }"
                 @mousemove="onMouseMove"
                 @mousedown="onMouseDown"
                 @mouseup="onMouseUp"
@@ -388,8 +425,11 @@ const finish = async (): Promise<void> => {
                 @contextmenu.prevent
             >
                 <!-- Video beneath, the sharp still of the settled page above it (videoSink); both the same box so a click aims the same. -->
-                <canvas v-show="painting" ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
-                <canvas v-show="painting" ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+                <canvas v-if="cast.kind.value === `media`" v-show="painting" ref="mediaEl" class="absolute inset-0 h-full w-full object-contain" />
+                <template v-else>
+                    <canvas v-show="painting" ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
+                    <canvas v-show="painting" ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+                </template>
                 <!-- A spinner only while it is still starting: beside "Couldn't start the browser" it promised a wait that was over. -->
                 <div v-if="!painting" class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-muted">
                     <p v-if="status === `error`" class="flex items-center gap-2">
