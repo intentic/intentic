@@ -132,7 +132,19 @@ export const demoCapabilities = (): CapabilitySummary[] => [
         id: `ada-pc`,
         kind: `device`,
         status: { state: `active` },
-        config: { platform: `windows`, shell: `on`, sandboxes: `on`, write: `off`, screen: `off`, control: `off`, destructive: `off` },
+        // People may see its screen and open terminals there, but not drive it: the Devices page shows both states.
+        config: {
+            platform: `windows`,
+            shell: `on`,
+            sandboxes: `on`,
+            write: `off`,
+            screen: `off`,
+            control: `off`,
+            destructive: `off`,
+            remoteView: `on`,
+            remoteControl: `off`,
+            remoteTerminal: `on`,
+        },
         secrets: [],
     },
     // The brand's identity and the X account born in its browser, which Owen's role carries: the map threads the three.

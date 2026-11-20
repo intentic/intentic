@@ -12,6 +12,12 @@ export const boardRoute = (): RouteLocationRaw => ({ path: here(page.devices()),
 
 export const deviceRoute = (key: string): RouteLocationRaw => ({ path: here(page.devices()), query: { device: key } });
 
+/** One machine's screen, full page: the machine, the connection whose screen it is, and the monitor when one was picked. */
+export const screenRoute = (key: string, connection: string, monitor?: string): RouteLocationRaw => ({
+    path: here(page.devices()),
+    query: monitor === undefined ? { device: key, screen: connection } : { device: key, screen: connection, monitor },
+});
+
 // The selected machine's key as the URL carries it. An array is what vue-router hands back for a repeated
 // param (`?device=a&device=b`), which names no single machine.
 export const selectedKey = (value: LocationQueryValue | LocationQueryValue[] | undefined): string | undefined =>

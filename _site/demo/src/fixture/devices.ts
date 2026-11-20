@@ -295,7 +295,7 @@ const allDevices = (now: number): Device[] => [
             wslDistros: [`archlinux`],
             engine: ENGINE,
             links: demoLinks(now),
-            features: [`egress`],
+            features: [`egress`, `remote`],
         },
         sandboxes: sandboxes(),
         report: {
@@ -331,7 +331,7 @@ const allDevices = (now: number): Device[] => [
             roots: [`/home/ada`],
             wsl: { distro: `archlinux` },
             engine: ENGINE,
-            features: [`egress`],
+            features: [`egress`, `remote`],
         },
         sandboxes: sandboxes(),
         report: {

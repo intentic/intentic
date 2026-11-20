@@ -25,6 +25,8 @@ export const KINDS = {
     agent: { icon: `sparkles`, work: true, logs: false, counted: (count: number) => t(`terminal.terminalMeta.agentShells`, { count }, count) },
     job: { icon: `bolt`, work: true, logs: false, counted: (count: number) => t(`terminal.terminalMeta.jobs`, { count }, count) },
     process: { icon: `cog`, work: false, logs: true, counted: undefined },
+    // Not counted on the rail, which counts this sandbox's own sessions; it lives on the computer it names.
+    device: { icon: `desktop`, work: false, logs: false, counted: undefined },
 } as const satisfies Record<TerminalKind, { icon: IconName; work: boolean; logs: boolean; counted: ((count: number) => string) | undefined }>;
 
 export const isWork = <T extends { readonly kind: TerminalKind }>(tab: T): tab is T & { readonly kind: `agent` | `job` } => KINDS[tab.kind].work;

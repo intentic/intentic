@@ -1966,6 +1966,16 @@
       "to": "_shared/sandbox-contract"
     },
     {
+      "dev": false,
+      "from": "_tools/castbench",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_tools/castbench",
+      "to": "_tools/constants"
+    },
+    {
       "dev": true,
       "from": "_tools/castbench",
       "to": "_tools/testing"
@@ -2815,7 +2825,7 @@
           "what": "and src/device/intenticOs/ThisComputer.vue — Intentic OS: this computer's network, sound, screens, keyboard and drives as ic os reports them, the changes the This computer cards make, and the thread that watches the drives."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 160,
@@ -2824,7 +2834,7 @@
       "name": "@intentic/desktop-app",
       "oneLiner": "The Tauri app for Windows and Linux that opens on the hosted workspace's Home from the first launch, opens the editor on a folder of the user's own computer with no account, runs sandboxes on that…",
       "readmeRev": "0635a6adc5ada32536ad23b7ae3061780c6ca616",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794568665000
     },
@@ -3017,18 +3027,17 @@
           "what": "the <Button> tiers and how each maps onto PrimeVue."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/ui",
       "files": 254,
       "hasTests": false,
-      "loc": 31730,
+      "loc": 31802,
       "name": "@intentic/ui",
       "oneLiner": "The design system every editor surface mounts, holding the Vue components, composables, icons, theme tokens, translations and the product's one markdown engine.",
-      "readmeRev": "98d679daa29fb8c495b254689a4380726244b169",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795090185000
+      "readmeRev": "3534852565fe07edc739df88465887216b49c4b0",
+      "stale": false,
+      "updatedAt": 1795173773000
     },
     {
       "anchors": [
@@ -3057,18 +3066,17 @@
           "what": "the persistent shell, split by form factor."
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 3396,
+      "files": 3522,
       "hasTests": true,
-      "loc": 477649,
+      "loc": 493441,
       "name": "@intentic/web",
       "oneLiner": "The Vue app the user works in, with files, chat, terminals and agents, talking to the platform for the account and straight to the sandbox daemon for everything else.",
-      "readmeRev": "790451ced52868a02877ed726943aa8840d79895",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795115196000
+      "readmeRev": "86bf3e041239ffd4a6876852d9afa9897997ce90",
+      "stale": false,
+      "updatedAt": 1795181121000
     },
     {
       "anchors": [
@@ -4276,6 +4284,44 @@
       "updatedAt": 1795012866000
     },
     {
+      "anchors": [
+        {
+          "path": "_sandbox/castd/src/media.rs",
+          "what": "one viewer's media socket: the protocol's messages in and out."
+        },
+        {
+          "path": "_sandbox/castd/src/video.rs",
+          "what": "damage-driven capture, x264, paint-over, the per-viewer send and skip."
+        },
+        {
+          "path": "_sandbox/castd/src/encoder.rs",
+          "what": "the encoder seam: x264 or the GPU's NVENC, --encoder and its self-test."
+        },
+        {
+          "path": "_sandbox/castd/src/input.rs",
+          "what": "XTEST keys, text, buttons and scrolling, per viewer."
+        },
+        {
+          "path": "_sandbox/castd/src/token.rs",
+          "what": "the media token's format, with its test vector."
+        },
+        {
+          "path": "_sandbox/castd/build.Dockerfile",
+          "what": "the image recipe: patched x264, patched Xvfb, castd, under /opt/castd."
+        }
+      ],
+      "behind": 0,
+      "component": "sandbox",
+      "dir": "_sandbox/castd",
+      "files": 38,
+      "hasTests": true,
+      "loc": 14871,
+      "oneLiner": "One browser window's media daemon: a Rust process per X display that captures the screen with XDamage and MIT-SHM, encodes it with x264, and serves picture, sound, pointer, keys and clipboard on a…",
+      "readmeRev": "86bf3e041239ffd4a6876852d9afa9897997ce90",
+      "stale": false,
+      "updatedAt": 1795181121000
+    },
+    {
       "anchors": [],
       "behind": 0,
       "component": "sandbox",
@@ -4481,17 +4527,16 @@
           "what": "ic image prefetch and the cache connect loads; src/fetch.rs"
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/ic",
-      "files": 133,
+      "files": 134,
       "hasTests": false,
-      "loc": 84666,
+      "loc": 85305,
       "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, gets Docker there first, and takes Intentic off it again.",
-      "readmeRev": "448b334a436b7278fc3d80c51226a3b047e63c80",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1794996028000
+      "readmeRev": "5bc2cc5e81608acac7e4f0e3b2ac44078c0ceef3",
+      "stale": false,
+      "updatedAt": 1795132015000
     },
     {
       "anchors": [
@@ -4648,6 +4693,10 @@
           "what": "where the tunnel stands for Node and the vitals, and"
         },
         {
+          "path": "_sandbox/netd/crates/netd/src/devices.rs",
+          "what": "connected computers' uplinks: who may dial, one yamux"
+        },
+        {
           "path": "_sandbox/netd/crates/netd/src/term/mod.rs",
           "what": "a terminal socket from Node's plan to its close."
         },
@@ -4664,17 +4713,16 @@
           "what": "the real binary on real ports: routing, preview relay, TLS, upgrades."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/netd",
       "files": 0,
       "hasTests": false,
       "loc": 0,
       "oneLiner": "The sandbox's network daemon, named the Unix way (like sshd): a Rust binary that owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and keeps the daemon…",
-      "readmeRev": "84628abeb1fa6a7ae3e52f4dbb32eb176e9d027e",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795037700000
+      "readmeRev": "86bf3e041239ffd4a6876852d9afa9897997ce90",
+      "stale": false,
+      "updatedAt": 1795181121000
     },
     {
       "anchors": [
@@ -4691,14 +4739,14 @@
           "what": "where netd answers the vitals this crate shapes."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "dir": "_sandbox/netd/crates/browser-wire",
       "files": 1,
       "hasTests": false,
-      "loc": 1070,
+      "loc": 1361,
       "oneLiner": "Everything a browser sees of a sandbox's netd and of the edge in front of it outside the daemon's oRPC contract: the terminal socket, the browser view socket, netd's vitals, the WebTransport path…",
       "readmeRev": "84628abeb1fa6a7ae3e52f4dbb32eb176e9d027e",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1795037700000
     },
@@ -4737,18 +4785,22 @@
           "what": "dials the edge and serves a stream per request."
         },
         {
+          "path": "_sandbox/netd/crates/netd/src/devices.rs",
+          "what": "connected computers' uplinks, which their screens and terminals are carried down."
+        },
+        {
           "path": "_sandbox/netd/crates/netd/tests/routes.rs",
           "what": "the real binary on real ports: routing, preview relay, TLS, upgrades."
         }
       ],
-      "behind": 1,
+      "behind": 3,
       "dir": "_sandbox/netd/crates/netd",
-      "files": 37,
+      "files": 39,
       "hasTests": true,
-      "loc": 17385,
+      "loc": 18961,
       "oneLiner": "The binary of the sandbox's network daemon: it owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and runs Node as its child across restarts.",
       "readmeRev": "3d84510395f4ba1364ef75ec60b9c8d04cf10899",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794828393000
     },
@@ -4771,7 +4823,7 @@
       "dir": "_sandbox/netd/crates/netd-wire",
       "files": 1,
       "hasTests": false,
-      "loc": 752,
+      "loc": 818,
       "oneLiner": "The control socket between intentic-netd and the Node daemon: length-prefixed JSON frames over one Unix socket, with netd owning every socket and byte and Node making every decision about them.",
       "readmeRev": "3b22a8b9e928475013f891963a1b8a72c0cc9354",
       "reason": "4 commits have touched this package since its README was written",
@@ -4979,18 +5031,17 @@
           "what": "provider and harness adapter selection."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 3601,
+      "files": 3697,
       "hasTests": true,
-      "loc": 584259,
+      "loc": 597087,
       "name": "@intentic/sandbox",
       "oneLiner": "The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.",
-      "readmeRev": "062a18699bf536af8de8cb4e9bb02f9d933712ba",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795119931000
+      "readmeRev": "86bf3e041239ffd4a6876852d9afa9897997ce90",
+      "stale": false,
+      "updatedAt": 1795181121000
     },
     {
       "anchors": [
@@ -5617,16 +5668,16 @@
           "what": "a narrow entry point, one of several that keep small bundles off the barrel."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
-      "files": 517,
+      "files": 524,
       "hasTests": true,
-      "loc": 72999,
+      "loc": 74144,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire contract between the editor and the sandbox daemon: every route, its schemas and its access policy, as one oRPC contract both ends compile against.",
       "readmeRev": "790451ced52868a02877ed726943aa8840d79895",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1795115196000
     },
@@ -5867,16 +5918,16 @@
           "what": "the account's sandboxes as live state, written by the platform and the machines alike."
         }
       ],
-      "behind": 24,
+      "behind": 26,
       "component": "site",
       "dir": "_site/demo",
-      "files": 293,
+      "files": 299,
       "hasTests": false,
-      "loc": 32590,
+      "loc": 33089,
       "name": "@intentic/demo",
       "oneLiner": "The interactive demo at intentic.dev/demo/: the real editor built from @intentic/web source, with its network replaced by an in-browser world of the platform, the sandbox daemons and the services…",
       "readmeRev": "5e3b2bbed2cc2f643dabfba51c44724f0d3c9b25",
-      "reason": "24 commits have touched this package since its README was written",
+      "reason": "26 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794071365000
     },
@@ -6072,14 +6123,14 @@
       "behind": 0,
       "component": "tools",
       "dir": "_tools/castbench",
-      "files": 30,
+      "files": 32,
       "hasTests": true,
-      "loc": 3701,
+      "loc": 4012,
       "name": "@intentic/castbench",
       "oneLiner": "End-to-end benchmark of the in-editor browser's stream: what a page costs to encode, how soon its pixels are decoded, and how fast a keystroke comes back, for today's ffmpeg pipeline and for castd,…",
-      "readmeRev": "",
+      "readmeRev": "330e2941cf5492e785c1b2947d741644274eac7b",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1795163273000
     },
     {
       "anchors": [
@@ -6610,7 +6661,7 @@
       "updatedAt": 1792927378000
     }
   ],
-  "generatedAt": 1795133927489,
+  "generatedAt": 1795185170601,
   "orphans": [],
   "repo": "intentic",
   "undocumented": []

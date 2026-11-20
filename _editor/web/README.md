@@ -256,7 +256,13 @@ flowchart LR
   hello sends the window back to its own socket's picture. Where castd's hello offers one and the socket is not on the
   loopback shortcut, a peer connection straight to castd (`mediaRtc.ts`, WebRTC DataChannels signalled on the media
   socket) carries the stream and the person's input beside the socket, which stays as control and fallback; the worker
-  believes pictures only from the carrier castd said its latest hello on.
+  believes pictures only from the carrier castd said its latest hello on. The owner's connected computers are reached
+  the same two ways (2026-11-20, `models/sandbox/devices/remote/`): the sandbox's `remote.*` procedures hand out a
+  computer's screen or a terminal on it as a socket path and a short-lived token, renewed before it lapses and handed to
+  the open socket (`{type: "token"}`). The screen is that same media path, its peer gathering with the STUN servers the
+  sandbox names so it goes direct across NATs, drawn full page on the Devices view (`?screen=`, keys sent as physical
+  keys, Keyboard Lock in full screen); a terminal is a tab of the terminal panel dialled through its own door
+  (`models/terminal/terminalDoor.ts`), kept per sandbox in this browser so a reload reattaches it.
 - **Unsent words are the sandbox's.** What a composer holds (words, finished files, the model picked) is the
   conversation's draft, kept by the sandbox per person (`agents.drafts`), so every window and device opens the same
   composer and the board shows a draft card for words typed on another device. This browser keeps one optimistic copy

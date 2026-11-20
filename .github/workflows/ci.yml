@@ -1087,6 +1087,17 @@ jobs:
         run: cargo xwin check --manifest-path _devices/win-launcher/Cargo.toml --target x86_64-pc-windows-msvc
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --manifest-path _devices/win-launcher/Cargo.toml
+      # intentic-remoted, people's terminals on a connected computer. Its tests run the built binary against a fake
+      # sandbox uplink with real shells on real pseudo-terminals; the Windows half (ConPTY, wsl.exe) is `xwin check`
+      # here and run on a Windows PC by hand (its README).
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (remoted)" -- cargo fmt --manifest-path _devices/remoted/Cargo.toml --all --check
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (remoted)" --keep-status -- cargo clippy --manifest-path _devices/remoted/Cargo.toml --all-targets
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo xwin check --manifest-path _devices/remoted/Cargo.toml --all-targets --target x86_64-pc-windows-msvc
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo test --manifest-path _devices/remoted/Cargo.toml
 
   # The tunnel's two Rust ends. The sandbox's netd (_sandbox/netd) owns every port and the ingress tunnel and
   # supervises the daemon; the edge (_platform/ingress) holds the tunnels and routes browsers down them, building the
@@ -1160,20 +1171,23 @@ jobs:
       # suite that needs netd, and this is the one job that has it, so it runs here as the `netd` lane
       # (requires(…, { lane: "netd" }) fails here without the binary and stands down in every other job). The debug
       # bin links against what `cargo test` above already compiled; the install is the warm store every job uses.
+      # remote-terminal-netd also needs intentic-remoted (_devices/remoted), which shares netd's tunnel crate: a person's
+      # terminal on a connected computer, end to end through this netd, that remoted and a real shell.
       - id: netd-build
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo build --locked -p intentic-netd
+        run: cargo build --locked -p intentic-netd && cargo build --locked --manifest-path ../../_devices/remoted/Cargo.toml
       - id: setup
         if: ${{ !cancelled() && steps.netd-build.outcome == 'success' }}
         uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
       - if: ${{ !cancelled() && steps.netd-build.outcome == 'success' && steps.setup.outcome == 'success' }}
-        run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-netd.integration.test.ts
+        run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-netd.integration.test.ts src/hosts/remote/remote-terminal-netd.integration.test.ts
         working-directory: .
         env:
           INTENTIC_CI_LANE: netd
           INTENTIC_NETD_BINARY: ${{ env.CARGO_TARGET_DIR }}/debug/intentic-netd
+          INTENTIC_REMOTED_BINARY: ${{ env.CARGO_TARGET_DIR }}/debug/intentic-remoted
 
   # On-demand desktop_smoke builds release-style Linux artifacts, inspects bundle contents, then installs/launches on bare Debian.
   # Windows archives are inspected here; separate Windows jobs execute them. Real sandbox setup remains nightly.

@@ -6,9 +6,9 @@
 use browser_wire::{
     BrowserMediaClientMessage as C, BrowserMediaServerMessage as S, ClipboardContent, KeyAction,
 };
-use castd::client::{MediaClient, Received};
-use castd::header::{FLAG_CLIP, FLAG_KEY, KIND_LOSSLESS, KIND_VIDEO};
-use castd::token::{Claims, now_ms, sign};
+use cast_core::client::{MediaClient, Received};
+use cast_core::header::{FLAG_CLIP, FLAG_KEY, KIND_LOSSLESS, KIND_VIDEO};
+use cast_core::token::{Claims, now_ms, sign};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -814,7 +814,7 @@ async fn castd_streams_types_pastes_and_idles_on_a_real_chromium() {
 /// changed is drawn by video and then copied. A viewer that asks but is not local, or is local and does not ask, gets the
 /// stream as before.
 async fn a_local_viewer_gets_exact_pictures(sock: &str, socket: &Path, token: &str) {
-    use castd::media::Reach;
+    use cast_core::media::Reach;
     const WITHIN: Duration = Duration::from_secs(5);
     let mut v = MediaClient::connect_as(
         sock,
@@ -839,7 +839,7 @@ async fn a_local_viewer_gets_exact_pictures(sock: &str, socket: &Path, token: &s
         }
         other => panic!("expected a hello, got {other:?}"),
     };
-    let whole = castd::capture::Rect { x: 0, y: 0, w, h };
+    let whole = cast_core::geometry::Rect { x: 0, y: 0, w, h };
     // The starting keyframe is drawn whole, then the still screen comes exact.
     let mut first_clip = None;
     let mut copy = None;
@@ -946,7 +946,7 @@ async fn a_local_viewer_gets_exact_pictures(sock: &str, socket: &Path, token: &s
             None => break,
         }
     }
-    let area = |r: &castd::capture::Rect| u64::from(r.w) * u64::from(r.h);
+    let area = |r: &cast_core::geometry::Rect| u64::from(r.w) * u64::from(r.h);
     assert!(!clips.is_empty(), "the keystroke was drawn");
     assert!(
         clips.iter().all(|r| area(r) * 4 <= area(&whole)),
@@ -994,7 +994,7 @@ async fn a_local_viewer_gets_exact_pictures(sock: &str, socket: &Path, token: &s
 /// `media` channel once it opens and sends the pictures there from a keyframe on, takes input typed on `input`, and when
 /// the viewer lets go of the peer brings the stream back to the socket with `rtcClosed`, a `hello` and a keyframe.
 async fn peer_carries_the_stream_and_hands_it_back(sock: &str, token: &str) {
-    use castd::rtc::viewer::{Arrived, RtcViewer};
+    use cast_core::rtc::viewer::{Arrived, RtcViewer};
     let mut v = Viewer {
         c: MediaClient::connect(sock, "itest", token)
             .await
@@ -1045,7 +1045,7 @@ async fn peer_carries_the_stream_and_hands_it_back(sock: &str, token: &str) {
             match peer.recv(Duration::from_millis(20)).await {
                 Some(Arrived::Text(text)) if text.contains(r#""type":"hello""#) => hello = true,
                 Some(Arrived::Media(bytes, _)) if bytes[0] == KIND_VIDEO => {
-                    let header = castd::header::Header::read(&bytes).unwrap();
+                    let header = cast_core::header::Header::read(&bytes).unwrap();
                     assert!(hello, "a picture on the peer before its hello");
                     peer.send(
                         &serde_json::to_string(&C::Ack {
@@ -1082,7 +1082,7 @@ async fn peer_carries_the_stream_and_hands_it_back(sock: &str, token: &str) {
             if let Some(Arrived::Media(bytes, _)) = peer.recv(Duration::from_millis(20)).await
                 && bytes[0] == KIND_VIDEO
             {
-                let header = castd::header::Header::read(&bytes).unwrap();
+                let header = cast_core::header::Header::read(&bytes).unwrap();
                 peer.send(
                     &serde_json::to_string(&C::Ack {
                         id: header.id,

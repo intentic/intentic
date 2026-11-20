@@ -1,0 +1,71 @@
+# castd's streaming engine without its platform: the media socket, the hub viewers share one encoder through, the rate
+# controller, paint-over, tokens, peer connections, recording, and the traits a platform's capture, input and sound
+# implement. Nothing of X11, and nothing GPL unless asked for: x264 is the `x264` feature.
+[package]
+name = "cast-core"
+edition = "2024"
+version = "0.1.0"
+publish = false
+# The capture, encoder, flow control, input and recording code is voxl's (MIT, see ../../LICENSE and README.md).
+license = "MIT"
+
+[features]
+default = ["libyuv"]
+# BGRX to I420 with libyuv (pkg-config or the default library path). Without it a portable converter in Rust does the
+# same arithmetic, slower.
+libyuv = ["dep:pkg-config"]
+# The software H.264 encoder. Links libx264, which is GPL-2.0: a binary built with it is distributed under the GPL.
+x264 = ["dep:bindgen", "dep:pkg-config"]
+# NVIDIA's encoder on CUDA (Linux): built against the ffnvcodec headers, links nothing; the driver is opened at runtime.
+nvenc = ["dep:libloading", "dep:bindgen", "dep:pkg-config"]
+# openh264 (Cisco's, BSD-2-Clause, built from source by openh264-sys2): a software encoder with no GPL in it, the floor
+# a Windows build falls back to where no hardware encoder passes its self-test.
+openh264 = ["dep:openh264-sys2"]
+# Opus for the sound an AudioSource captures, without libopus: opus1 (libopus 1.6 in Rust, BSD-3-Clause), for a build
+# that has no libopus to link (Windows). `opus` wins where both are on.
+opus1 = ["dep:opus1"]
+# Opus for the sound an AudioSource captures (links libopus).
+opus = ["dep:pkg-config"]
+# A PulseAudio source (Linux; links libpulse-simple), and Opus to encode it.
+pulse = ["opus"]
+
+[dependencies]
+browser-wire = { path = "../../../netd/crates/browser-wire" }
+axum = { version = "0.8", default-features = false, features = ["ws", "http1", "tokio", "query"] }
+base64 = "0.22"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hmac = "0.12"
+# One HTTP/1.1 connection over any byte stream (server::serve_connection): a Unix socket, TCP, a yamux stream.
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
+libloading = { version = "0.8", optional = true }
+openh264-sys2 = { version = "0.9", optional = true, default-features = false, features = ["source"] }
+opus1 = { version = "0.3", optional = true }
+log = "0.4"
+parking_lot = "0.12"
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+# Sans-IO WebRTC for a viewer's peer connection (src/rtc): pure Rust, rust-crypto rather than the default aws-lc-rs,
+# which needs cmake and a C toolchain.
+str0m = { version = "0.25", default-features = false, features = ["rust-crypto"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "io-util"] }
+tokio-tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
+
+[target.'cfg(unix)'.dependencies]
+# The wake pipe and poll (wake.rs), and a thread's CPU clock.
+nix = { version = "0.31", features = ["fs", "poll", "time"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# The wake event and WaitForMultipleObjects (wake.rs), and a thread's CPU times.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Security"] }
+
+[build-dependencies]
+bindgen = { version = "0.72", optional = true }
+pkg-config = { version = "0.3", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "io-util"] }

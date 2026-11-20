@@ -1589,6 +1589,19 @@
       "title": "BrowserViewServerMessage"
     }
   },
+  "device": {
+    "closeCodes": {
+      "displaced": 4001,
+      "withdrawn": 4003
+    },
+    "header": "x-intentic-device",
+    "mediaPath": "/system/device-media",
+    "mediaUpstream": "/media",
+    "socketDir": "/run/intentic/devices",
+    "terminalPath": "/system/device-terminal",
+    "terminalUpstream": "/terminal",
+    "uplinkPath": "/system/device-uplink"
+  },
   "edge": {
     "verdictHeader": "x-intentic-edge",
     "verdicts": {
@@ -1684,6 +1697,23 @@
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A fresher token for the socket, as a media socket takes one (`BrowserMediaClientMessage`'s `token`): a connected\ncomputer's terminal ([`DEVICE_TERMINAL_PATH`]) checks its token at the upgrade and keeps the socket open\n[`MEDIA_TOKEN_GRACE_SECONDS`] past the newest one's expiry. The sandbox's own terminal is opened with a ticket and\nignores it (2026-11-20).",
+          "properties": {
+            "token": {
+              "type": "string"
+            },
+            "type": {
+              "const": "token",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "token"
           ],
           "type": "object"
         }

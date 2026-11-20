@@ -27,7 +27,7 @@ const describedOs = (device: Device): string | undefined => {
 
 // What the platform slug is worth saying on its own: the last resort, since every machine of an OS answers it
 // identically.
-const platformName = (device: Device): string | undefined =>
+export const platformName = (device: Device): string | undefined =>
     device.platform === undefined ? undefined : (PLATFORM_NAMES[device.platform] ?? device.platform);
 
 // The OS label at row length. A WSL distro says so here, in the loudest ink the row has, rather than down in the

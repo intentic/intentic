@@ -112,6 +112,7 @@
                 "_devices/local-agent",
                 "_devices/local-files",
                 "_devices/machine",
+                "_devices/remoted",
                 "_devices/webext",
                 "_devices/win-launcher"
             ]

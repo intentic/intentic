@@ -204,7 +204,7 @@ test("a docker that is not there, one stopped before it finished, and a failed r
     );
 });
 
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" };
+const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" };
 const shell: DeviceScopes = { ...off, shell: "on" };
 
 test("the listing needs 'Run commands', and answers the contract's JSON with the stacks root", async () => {

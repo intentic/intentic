@@ -14,6 +14,7 @@ import { calling } from "./indicator.js";
 import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { ScopeError } from "./policy.js";
+import { machineRemote } from "./remote/remote.js";
 import { stageArtifact } from "./tools/programs/artifacts.js";
 import { copyFile } from "./tools/copy/file-copy.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
@@ -328,7 +329,13 @@ export const createHostRouter = (runtime: HostRuntime) => {
         setScopes: os.setScopes.handler(({ input }) => {
             const { scopes, unknown } = readGrant(input);
             runtime.setScopes(scopes);
-            runtime.log(`permissions updated: commands ${scopes.shell}, writes ${scopes.write}, screen ${scopes.screen}`);
+            runtime.log(
+                `permissions updated: commands ${scopes.shell}, writes ${scopes.write}, screen ${scopes.screen}; people may view ${scopes.remoteView}, control ${scopes.remoteControl}, open terminals ${scopes.remoteTerminal}`,
+            );
+            // People's switches reach remoted at once, without waiting for its next remoteStart (remote/remote.ts).
+            void machineRemote(runtime.log)
+                .scopesChanged(runtime.sandboxUrl, scopes)
+                .catch((cause: unknown) => runtime.log(`${runtime.sandboxUrl}: could not pass people's switches on to remoted (${errorMessage(cause)})`));
             const news = unknown.filter((name) => !unknownSaid.has(name));
             if (news.length > 0) {
                 for (const name of news) {
@@ -388,5 +395,15 @@ export const createHostRouter = (runtime: HostRuntime) => {
         ...keyringProcedures(os, keyring),
         stageArtifact: os.stageArtifact.handler(async ({ input }) => await stageOverLink(runtime, input)),
         copyFile: os.copyFile.handler(async ({ input }) => await copyOverLink(runtime, input)),
+        // PEOPLE'S REMOTE DESKTOP AND TERMINALS (remote/remote.ts): this link's uplink in intentic-remoted, started or
+        // dropped. Behind the link's own three people switches, read as this call arrives; not tools, so no agent can
+        // call them, and audited without the token or the key.
+        remoteStart: os.remoteStart.handler(
+            async ({ input }) => await machineRemote(runtime.log).start({ sandboxUrl: runtime.sandboxUrl, scopes: runtime.scopes(), log: runtime.log }, input),
+        ),
+        remoteStop: os.remoteStop.handler(async () => {
+            await machineRemote(runtime.log).stop({ sandboxUrl: runtime.sandboxUrl, log: runtime.log });
+            return { ok: true as const };
+        }),
     });
 };

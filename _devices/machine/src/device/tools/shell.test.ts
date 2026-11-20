@@ -22,7 +22,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "off",
     sandboxes: "off",
-    destructive: "off", programs: "off",
+    destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off",
     roots: "/tmp",
     ...overrides,
 });
@@ -168,6 +168,9 @@ const withSandboxes = (sandboxes: DeviceScopes["sandboxes"]): DeviceScopes => ({
     sandboxes,
     destructive: "off",
     programs: "off",
+    remoteView: "off",
+    remoteControl: "off",
+    remoteTerminal: "off",
 });
 
 const REFUSALS = [

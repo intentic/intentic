@@ -14,6 +14,10 @@ import { createDeviceRuns, type DeviceRuns } from "./runs/device-runs.js";
 import { createRunBuilds, type RunBuilds } from "./runs/run-builds.js";
 import { HOST_PEER, type HostAnnounced, type HostClient, type HostHub, type HostStore } from "./host-peer.js";
 import { hostDeviceReach, type HostDeviceReach } from "./self-host.js";
+import { createRemoteAccess, type RemoteAccess } from "./remote/remote-access.js";
+import { hubRemoteLink } from "./remote/remote-device.js";
+import { fileRemoteKeys } from "./remote/remote-keys.js";
+import { remotedControl, socketOf } from "./remote/remoted-control.js";
 
 // The owner's computers: the device door, its hub and reach, and desktop sync's pairings and fleet.
 export interface HostsSlice {
@@ -38,6 +42,8 @@ export interface HostsSlice {
     readonly deviceRuns: DeviceRuns;
     // A run's build holding lands into the repository it compiles, and the lands since a run was built (run-builds.ts).
     readonly runBuilds: RunBuilds;
+    // A person's remote screen and terminals on these computers, served by each one's remoted (remote/remote-access.ts).
+    readonly remoteAccess: RemoteAccess;
 }
 
 export const hostsSlice = defineSlice<HostsSlice>({
@@ -52,6 +58,17 @@ export const hostsSlice = defineSlice<HostsSlice>({
         deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
         runGrants: createRunGrants(),
         runBuilds: createRunBuilds(),
+        remoteAccess: createRemoteAccess({
+            link: hubRemoteLink(
+                () => whole().hostHub,
+                () => whole().capabilities.list(),
+            ),
+            keys: fileRemoteKeys(),
+            control: (uplinkId) => remotedControl(socketOf(uplinkId)),
+            iceServers: async () => (await whole().sandboxSettings.get()).remoteIceServers,
+            audit: (event) => whole().audit.record(event),
+            logger,
+        }),
         deviceRuns: createDeviceRuns({
             call: (device, tool, args, timeoutMs) => callTool(whole(), device, tool, { ...args }, AbortSignal.timeout(timeoutMs)),
             tunnels: () => whole().deviceTunnels,

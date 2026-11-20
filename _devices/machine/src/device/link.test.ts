@@ -46,7 +46,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on", programs: "off",
+    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off",
     ...overrides,
 });
 
@@ -102,7 +102,7 @@ test("a pushed grant takes effect on the machine", async () => {
         screen: "on",
         control: "off",
         sandboxes: "off",
-        destructive: "off", programs: "off",
+        destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off",
     });
 });
 
@@ -119,7 +119,7 @@ test("a grant carrying a switch this agent does not know is taken, with that swi
     const { client, logged, scopesNow } = connectedPair();
     const pushed = { shell: "off", write: "off", screen: "on", control: "off", network: "on" } as const;
     expect(await client.setScopes(pushed)).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off" });
+    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" });
     await client.setScopes(pushed);
     expect(logged.filter((line) => line.includes("does not know"))).toEqual([
         "https://sandbox.example.dev: the permissions it pushed include network, which this agent does not know; they stay off here until the agent is updated.",
@@ -188,6 +188,24 @@ test("concurrent calls do not cross: the link owns correlation now", async () =>
 test("a notification round-trips as an empty answer rather than an error", async () => {
     const { client } = connectedPair();
     expect(await client.mcp({ jsonrpc: "2.0", method: "notifications/initialized" })).toBeUndefined();
+});
+
+// People's remote access, behind the link's own three switches (remote/remote.ts): with all three off the call is refused
+// over the wire as FORBIDDEN, the code the sandbox reads as switches, naming each, before remoted is looked for.
+test("remoteStart with every people switch off is refused as FORBIDDEN, naming the three switches", async () => {
+    const { client } = connectedPair(scopes({ screen: "on", control: "on", shell: "on" }));
+    const started = client.remoteStart({ device: "rog", uplinkToken: "secret-token", mediaKey: "k".repeat(43) });
+    await expect(started).rejects.toBeInstanceOf(ORPCError);
+    await expect(started).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message:
+            'Refused: "Let people see the screen", "Let people use the mouse and keyboard" and "Let people open terminals" are all switched off for this device. Turn one on in its capability card to let people reach it.',
+    });
+});
+
+test("remoteStart with a media key that is not 32 bytes of base64url is refused before it reaches the machine", async () => {
+    const { client } = connectedPair(scopes({ remoteTerminal: "on" }));
+    await expect(client.remoteStart({ device: "rog", uplinkToken: "secret-token", mediaKey: "too-short" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 });
 
 test("ping answers, which is what the daemon's heartbeat rides on", async () => {

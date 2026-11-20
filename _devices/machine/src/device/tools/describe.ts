@@ -8,6 +8,7 @@ import {
     DEVICE_FEATURE_PROGRAMS,
     DEVICE_FEATURE_PROJECT_DELIVERY,
     DEVICE_FEATURE_REACH_NETWORK,
+    DEVICE_FEATURE_REMOTE,
     DEVICE_FEATURE_STACKS,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
@@ -24,6 +25,7 @@ import { readUpkeepSummary } from "../../upkeep/reconcile.js";
 import { readIntenticOs } from "./os/os.js";
 import { NO_DESKTOP_YET, runningBeforeSignIn } from "../session.js";
 import { keyringAdvertised } from "../../keyring/feature.js";
+import { remotedAdvertised } from "../remote/remoted-binary.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -114,7 +116,8 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         // the agent's own (the loopback catch, landed work delivered into an attached folder, a `devices reach` tunnel to
         // a host on this machine's network, a file copied to or from a path, the compose stack tools) always, since this
         // build answers them: a machine without Docker answers the stack tools with Docker's own error. The keyring only
-        // while one is installed here and answers (keyring/feature.ts).
+        // while one is installed here and answers (keyring/feature.ts); people's remote access only where an
+        // intentic-remoted can be had (remote/remoted-binary.ts).
         features: [
             ...features,
             DEVICE_FEATURE_LOOPBACK_CATCH,
@@ -124,6 +127,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
             DEVICE_FEATURE_FILE_COPY,
             DEVICE_FEATURE_STACKS,
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
+            ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE] : []),
         ],
     };
     // Why that list is short, when the ic under it could not be brought up to date.

@@ -4,11 +4,13 @@ One browser window's media daemon: a Rust process per X display that captures th
 
 ## Key files
 
-- [src/media.rs](src/media.rs) — one viewer's media socket: the protocol's messages in and out.
-- [src/video.rs](src/video.rs) — damage-driven capture, x264, paint-over, the per-viewer send and skip.
-- [src/encoder.rs](src/encoder.rs) — the encoder seam: x264 or the GPU's NVENC, `--encoder` and its self-test.
-- [src/input.rs](src/input.rs) — XTEST keys, text, buttons and scrolling, per viewer.
-- [src/token.rs](src/token.rs) — the media token's format, with its test vector.
+- [src/main.rs](src/main.rs) — the binary: cast-core's pipeline and server wired to cast-x11's display.
+- [crates/cast-core/src/media.rs](crates/cast-core/src/media.rs) — one viewer's media socket: the protocol's messages in
+  and out.
+- [crates/cast-core/src/video.rs](crates/cast-core/src/video.rs) — damage-driven capture, the encoders, paint-over,
+  the per-viewer send and skip.
+- [crates/cast-core/src/capture.rs](crates/cast-core/src/capture.rs) — what a platform implements for the picture.
+- [crates/cast-x11/src/input.rs](crates/cast-x11/src/input.rs) — XTEST keys, text, buttons and scrolling, per viewer.
 - [build.Dockerfile](build.Dockerfile) — the image recipe: patched x264, patched Xvfb, castd, under /opt/castd.
 
 ## Where it sits
@@ -27,6 +29,25 @@ flowchart LR
     castd -->|"XDamage, MIT-SHM / -shmem framebuffer"| xvfb["Xvfb + Chromium"]
     castd -->|"XTEST, CLIPBOARD, RandR"| xvfb
 ```
+
+## The workspace
+
+castd's workspace is four crates, so a device daemon (`_devices/remoted`) can stream a person's own screen with the same
+engine on Windows and Linux:
+
+- **[cast-core](crates/cast-core)**, the engine with no platform: the media socket and the control endpoints (served
+  on any byte stream, not only a Unix socket), the hub every viewer shares one encoder through, the rate controller,
+  paint-over, tokens, peer connections, recording and `/wait`, x264 and NVENC behind features, and the traits a
+  platform implements: a screen source (frames and damage), an input sink and a sound source. It builds for Windows
+  (`x86_64-pc-windows-msvc`) and links nothing GPL unless asked for.
+- **[cast-x11](crates/cast-x11)**, the X11 platform: XDamage and MIT-SHM capture, RandR with window fitting, XTEST
+  input with DOM keys mapped to keysyms, the cursor and the clipboard. It reads Xvfb's `-shmem` framebuffer in place
+  and a real X server (a person's `:0`) with MIT-SHM GetImage.
+- **[cast-win](crates/cast-win)**, the Windows platform: DXGI Desktop Duplication kept on the GPU, NVENC and Media
+  Foundation's hardware encoders reading the captured textures in place, openh264 in software, SendInput, the
+  clipboard, the pointer's shape and WASAPI loopback. Empty on any other target; remoted's Windows build links it.
+- **castd**, this package: the command line ([src/config.rs](src/config.rs)), the binary that wires the two together,
+  and `castd-bench`. Same flags, same socket, same image tree as before the split (2026-11-20).
 
 ## The media socket
 
@@ -75,7 +96,7 @@ A sandbox on the owner's own machine is watched over that machine's loopback, wh
 to work around (2026-11-20: 0.39 ms round trip and 1.1-1.4 GB/s from Windows into a container on WSL2, against a
 30 Mbit/s ceiling). netd marks a media upgrade that arrived on the sandbox's loopback port (browser-wire's
 `MEDIA_LISTENER_HEADER`, which it strips from everything else), its `hello` says `local: true`, and castd does three
-things for it that no remote viewer gets ([src/exact.rs](src/exact.rs)).
+things for it that no remote viewer gets ([exact.rs](crates/cast-core/src/exact.rs)).
 
 - **The local profile.** While a local viewer drives (`rate::steering`), motion is encoded at `--local-crf` (18, not 24)
   under `--local-max-kbps` (200 Mbit/s, not 30), and the rate starts at that ceiling instead of climbing from 8 Mbit/s;
@@ -105,13 +126,13 @@ things for it that no remote viewer gets ([src/exact.rs](src/exact.rs)).
 
 A viewer on the sandbox's own network can reach castd without the edge: a public https page cannot open the plain
 `ws://` a LAN address needs, and no public certificate names one, so castd also answers a WebRTC peer connection
-([src/rtc](src/rtc/mod.rs), str0m) beside the media socket, which signals it and stays open as control and fallback.
+([rtc](crates/cast-core/src/rtc/mod.rs), str0m) beside the media socket, which signals it and stays open as control and fallback.
 
 - **One UDP port, ICE-lite.** `--rtc-udp ADDR` binds one port for every viewer of this castd, and `--rtc-candidates`
   names where a viewer reaches it (the host's LAN addresses and the port as published; a bare IP takes the bound port,
   and port 0 the one bound). castd answers with those host candidates only and never sends to an address that did not
   check it first, so it needs no STUN server. A datagram goes to the peer whose ICE ufrag its binding request names
-  ([src/rtc/stun.rs](src/rtc/stun.rs)), later ones from that address follow. Behind a port publish castd sees its own
+  ([stun.rs](crates/cast-core/src/rtc/stun.rs)), later ones from that address follow. Behind a port publish castd sees its own
   address, not the one the viewer sent to, so str0m is told the first candidate of the source's family. With the
   flags, `hello` says `rtc: true`.
 - **Signalling on the media socket**: the viewer's `rtcOffer` (its SDP, with browser-wire's `RTC_CHANNELS` and no
@@ -136,6 +157,9 @@ A viewer on the sandbox's own network can reach castd without the edge: a public
   with a keyframe on loss, which turns every lost packet into a keyframe burst. Measured on this sandbox's host with
   castbench `--peer` over loopback UDP: keystroke to glyph 4.6-5.1 ms at p50 against 4.5-5.5 on the socket, drawn to
   decoded the same; through a UDP relay in another container standing in for a port publish, 5.1 ms.
+- (2026-11-20) Full ICE is in cast-core for a device daemon on a computer behind a NAT ([rtc](crates/cast-core/src/rtc/mod.rs),
+  `Ice::Full`: STUN-learned server-reflexive candidates, the viewer's trickled candidates, checks sent both ways).
+  castd stays ICE-lite, its default, for the reasons above.
 
 ## The token
 
@@ -180,7 +204,9 @@ phone), `POST /crop?x=&y=&w=&h=` (move a `--crop` castd's region without a resta
 castd is a Cargo workspace of its own, so netd builds without x264. It needs
 `libx264-dev libyuv-dev libopus-dev libpulse-dev libffmpeg-nvenc-dev pkg-config clang libclang-dev` to build and
 [image/runtime-packages.txt](image/runtime-packages.txt) to run; `--no-default-features` leaves out the `audio`
-feature (Opus and PulseAudio) and the `nvenc` feature (NVENC's headers; nothing NVIDIA's is ever linked).
+feature (Opus and PulseAudio) and the `nvenc` feature (NVENC's headers; nothing NVIDIA's is ever linked). castd's
+[build.rs](build.rs) only sets the binaries' rpath; cast-core's links the libraries its features name. cast-core alone
+builds for Windows with `cargo xwin build -p cast-core --target x86_64-pc-windows-msvc --no-default-features`.
 
 Patches to x264 and Xvfb make castd faster and sharper, and castd works without them:
 
@@ -208,9 +234,11 @@ for, since RandR can only shrink it.
 
 ## Tests and the bench
 
-`cargo test` runs the unit tests (token test vector, key names, header layout, the steering policy, scroll carry, crop
-clipping, MP4, STUN routing, chunking, a local viewer's clips and copy pacing), [tests/rtc.rs](tests/rtc.rs) (a str0m viewer against castd's peer port: ICE,
-DTLS, SCTP and the three channels over loopback UDP, no X needed) and [tests/integration.rs](tests/integration.rs),
+`cargo test --workspace` runs the unit tests (token test vector, key names, header layout, the steering policy, scroll
+carry, crop clipping, MP4, STUN routing, chunking, a local viewer's clips and copy pacing), cast-core's tests that need
+no X ([rtc.rs](crates/cast-core/tests/rtc.rs): a str0m viewer against castd's peer port, ICE, DTLS, SCTP and the three
+channels over loopback UDP; the pipeline on a painted in-memory screen; the router on an in-memory stream), cast-x11's
+capture against an Xvfb of its own in each of its three read paths, and [tests/integration.rs](tests/integration.rs),
 which also moves a viewer's stream onto a peer connection and back and holds a local viewer's exact copy against the
 screen: Xvfb `-shmem`, Chromium in kiosk mode on
 [tests/fixtures/page.html](tests/fixtures/page.html), and castd, driven as a viewer over the Unix socket. It stands
@@ -250,7 +278,7 @@ the daemon asks. `auto` takes NVENC when the driver is there and passes castd's 
 deltas that come straight back, a rate change that adds no keyframe, an IDR on demand), else x264, and says why in the
 log; `nvenc` must pass or castd refuses to start. `/geometry` and `/stats` name the encoder in use. A size NVENC will
 not open at (or a session it cannot get: a GeForce allows a few at once) falls back to x264 for that picture.
-[src/nvenc.rs](src/nvenc.rs) drives the NVENC API directly, the driver's libraries opened at runtime, because FFmpeg's
+[nvenc.rs](crates/cast-core/src/nvenc.rs) drives the NVENC API directly, the driver's libraries opened at runtime, because FFmpeg's
 `h264_nvenc` resets the encoder and forces an IDR on every bitrate change, and castd's controller changes it several
 times a second on a short link. Rate control is a quality floor under the cap: VBR aiming at the controller's cap,
 the QP held at or above castd's CRF, inside the same 1.25-frame VBV x264 gets; paint-over is that floor lowered to
@@ -309,8 +337,9 @@ to arrival on the loopback (7.3 to 14.9 ms), and a local viewer's latency is wha
 
 castd's capture, conversion, encoder, paint-over, flow control, RandR, input, cursor and clipboard, sound, MP4 and
 wait code is [voxl](https://github.com/tembo/voxl)'s (Tembo, MIT, v0.4.0 at commit 21f194f; [LICENSE](LICENSE)), cut
-to Linux. Left out: the macOS and Windows backends, voxl's web client and its esbuild step, HTTP login, TLS and basic
+to Linux; cast-core and cast-x11 carry it, under the same licence. Left out: the macOS and Windows backends, voxl's web client and its esbuild step, HTTP login, TLS and basic
 auth, the files panel, the microphone, and rounded corners. castd's own: the Unix socket and browser-wire's protocol,
 tokens, DOM key names, per-viewer input, the steering bitrate policy and lag skipping, `--crop`, window fitting, pins,
-HTML and PRIMARY on the clipboard, and peer connections ([str0m](https://github.com/algesten/str0m), MIT or
-Apache-2.0). castd links x264, which is GPL-2.0, so a castd binary is distributed under the GPL.
+HTML and PRIMARY on the clipboard, peer connections ([str0m](https://github.com/algesten/str0m), MIT or
+Apache-2.0), and the platform traits. castd links x264, which is GPL-2.0, so a castd binary is distributed under the
+GPL; cast-core links it only with its `x264` feature.

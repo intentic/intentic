@@ -1,0 +1,61 @@
+# intentic-remoted: a person's terminals (and, from phase 2, screens) on one of the owner's computers, served over one
+# uplink per linked sandbox. A workspace of its own: it ships beside intentic-machine on Windows and Linux, and builds
+# for windows-msvc with cargo-xwin, so nothing of netd's or castd's Linux-only build may reach it.
+[workspace]
+
+[package]
+name = "intentic-remoted"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+name = "remoted"
+path = "src/lib.rs"
+
+[[bin]]
+name = "intentic-remoted"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+# The terminal socket's messages, the device paths and close codes: one definition with the editor and netd.
+browser-wire = { path = "../../_sandbox/netd/crates/browser-wire" }
+bytes = "1"
+env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
+flate2 = "1"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hmac = "0.12"
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+log = "0.4"
+# ConPTY on Windows, openpty on Unix (wezterm's, MIT).
+portable-pty = "0.9"
+# ring, not the default aws-lc-rs: aws-lc needs cmake and NASM under cargo-xwin, ring builds with the C compiler alone.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "io-util", "io-std", "signal", "process", "fs"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+tokio-util = { version = "0.7", features = ["io"] }
+# The uplink's carrier, exactly the ingress tunnel's: its WebSocket pump and its yamux session (netd opens, we accept).
+tunnel = { path = "../../_sandbox/netd/crates/tunnel" }
+# Each terminal's screen as a terminal would hold it, for the snapshot a viewer joining or catching up is drawn from.
+vt100 = "0.16"
+webpki-roots = "1"
+
+[dev-dependencies]
+hyper = { version = "1", features = ["client", "http1"] }
+tokio = { version = "1", features = ["full", "test-util"] }
+
+# Downloaded beside the agent on every computer that turns people's access on: strip and LTO like ic's.
+[profile.release]
+strip = true
+lto = "thin"

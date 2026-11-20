@@ -23,7 +23,7 @@ afterAll(() => {
 });
 
 const SANDBOX = "https://sandbox-abc123.example.dev";
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" };
+const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" };
 const programs: DeviceScopes = { ...off, programs: "on" };
 const noScreen = (): Desktop => {
     throw new Error("no desktop in this suite");

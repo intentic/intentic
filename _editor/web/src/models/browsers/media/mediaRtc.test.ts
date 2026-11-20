@@ -4,7 +4,7 @@
 // own word), each time without the picture waiting on it.
 import type { BrowserMediaClientMessage } from "@intentic/sandbox-contract/browser-wire";
 import { MEDIA_HEADER_LEN, RTC_MESSAGE_MAX } from "@intentic/sandbox-contract/browser-wire";
-import { type ChannelLike, DISCONNECTED_MS, mediaRtc, OPEN_WITHIN_MS, type PeerLike } from "./mediaRtc";
+import { type ChannelLike, DISCONNECTED_MS, GATHER_WITHIN_MS, mediaRtc, OPEN_WITHIN_MS, type PeerLike } from "./mediaRtc";
 
 class FakeChannel implements ChannelLike {
     binaryType: BinaryType = `blob`;
@@ -239,4 +239,66 @@ it("lets go without telling castd what castd said itself, and when a channel the
     other.channel(`input`).fire(`close`);
     expect(second.rtc.state()).toBe(`off`);
     expect(second.signalled.at(-1)).toEqual({ type: `rtcClose` });
+});
+
+// A peer that gathers its candidates as a browser's does: the SDP grows a candidate line once STUN has answered.
+class GatheringPeer extends FakePeer {
+    iceGatheringState = `gathering`;
+    onicegatheringstatechange: (() => void) | null = null;
+    complete(): void {
+        this.iceGatheringState = `complete`;
+        this.localDescription = { sdp: `v=0 offer\na=candidate:srflx` };
+        this.onicegatheringstatechange?.();
+    }
+}
+
+const gatheringHarness = (iceServers: readonly RTCIceServer[]) => {
+    const peers: GatheringPeer[] = [];
+    const signalled: BrowserMediaClientMessage[] = [];
+    const timers: { run: () => void; ms: number; cancelled: boolean }[] = [];
+    const rtc = mediaRtc({
+        signal: (message) => signalled.push(message),
+        arrived: () => undefined,
+        carrying: () => undefined,
+        wanted: () => true,
+        iceServers: () => iceServers,
+        peer: () => {
+            const peer = new GatheringPeer();
+            peers.push(peer);
+            return peer;
+        },
+        later: (run, ms) => {
+            const timer = { run, ms, cancelled: false };
+            timers.push(timer);
+            return () => (timer.cancelled = true);
+        },
+    });
+    return { rtc, peers, signalled, timers };
+};
+
+it("with ICE servers, offers only once its candidates are gathered, so a computer behind a NAT can answer", async () => {
+    const { rtc, peers, signalled, timers } = gatheringHarness([{ urls: [`stun:stun.example:3478`] }]);
+    rtc.hello(true);
+    await settle();
+    expect(signalled).toEqual([]);
+    peers[0]!.complete();
+    await settle();
+    expect(signalled).toEqual([{ type: `rtcOffer`, sdp: `v=0 offer\na=candidate:srflx` }]);
+    expect(timers.find((timer) => timer.ms === GATHER_WITHIN_MS)?.cancelled).toBe(true);
+});
+
+it("with ICE servers that never answer, offers what it has at the gathering deadline", async () => {
+    const { rtc, signalled, timers } = gatheringHarness([{ urls: [`stun:silent.example:3478`] }]);
+    rtc.hello(true);
+    await settle();
+    timers.find((timer) => timer.ms === GATHER_WITHIN_MS)!.run();
+    await settle();
+    expect(signalled).toEqual([{ type: `rtcOffer`, sdp: `v=0 offer` }]);
+});
+
+it("without ICE servers, offers at once as it always has on castd's own network", async () => {
+    const { rtc, signalled } = gatheringHarness([]);
+    rtc.hello(true);
+    await settle();
+    expect(signalled).toEqual([{ type: `rtcOffer`, sdp: `v=0 offer` }]);
 });

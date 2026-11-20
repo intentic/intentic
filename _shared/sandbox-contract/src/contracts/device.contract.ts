@@ -9,6 +9,7 @@ import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
 import { DialLoopbackSchema, StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
 import { CopyFileResultSchema, CopyFileSchema } from "../schemas/device-files.js";
+import { RemoteStartInputSchema, RemoteStartResultSchema } from "../schemas/device-remote.js";
 import {
     KeyringCaptureItemSchema,
     KeyringCaptureResultSchema,
@@ -98,4 +99,12 @@ export const deviceContract = {
     // The owner's phone, paired with this computer's keyring and filling its autofill, carried by this sandbox.
     keyringPhonePair: oc.input(KeyringPhoneKeysSchema).output(KeyringPhonePairResultSchema),
     keyringPhoneFill: oc.input(SignedKeyringPhoneFillSchema).output(KeyringPhoneFillResultSchema),
+    // People's remote desktop and terminals on this computer (2026-11-20, schemas/device-remote.ts), served by
+    // intentic-remoted, which the machine starts and keeps. Only the daemon calls these, never a tool, and only on an agent
+    // advertising `remote`. `remoteStart` hands over this link's uplink token and media key and answers once remoted's
+    // uplink to this sandbox is up; the machine refuses it (FORBIDDEN, naming the switches) while "Let people see the
+    // screen", "Let people use the mouse and keyboard" and "Let people open terminals" are all off on this link.
+    // `remoteStop` drops this link's uplink, and remoted with it when no other link holds one.
+    remoteStart: oc.input(RemoteStartInputSchema).output(RemoteStartResultSchema),
+    remoteStop: oc.output(OkSchema),
 };

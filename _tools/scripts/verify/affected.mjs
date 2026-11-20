@@ -74,9 +74,11 @@ for (const name of imagePayload) {
 }
 note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", ")}`);
 
-// ic two Rust crates (_sandbox/ic, _devices/win-launcher), not workspace packages.
+// ic the device-side Rust crates (_sandbox/ic, _devices/win-launcher, _devices/remoted), not workspace packages, and the
+// netd crates and relay remoted builds by path.
 // netd the tunnel's two Rust ends (_sandbox/netd, _platform/ingress), with the contract files they generate or read,
-// and the daemon's end of netd's socket (src/netd, src/git/feed), whose suite netd-check runs on the binary.
+// and the daemon's end of netd's socket (src/netd, src/git/feed, src/hosts/remote), whose suites netd-check runs on
+// the binary, the remote terminal's beside intentic-remoted (_devices/remoted), which it builds for that.
 // shims _site/site/public/scripts holds the connect/recreate one-liners bundled into the installer.
 // recipes Dockerfiles and feature packs: the image's own contents, invisible to pnpm.
 // assembly the shell scripts that build, verify and publish the artifacts.
@@ -89,8 +91,8 @@ note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", "
 const LOOSE = {
     desktop:
         /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(desktop\/|build\/build-ic\.sh|build\/build-intentic-engine\.sh|lib\/desktop-artifacts\.sh)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
-    ic: /^(_sandbox\/ic\/|_devices\/win-launcher\/|_site\/site\/public\/scripts\/)/,
-    netd: /^(_sandbox\/netd\/|_sandbox\/sandbox\/src\/(netd|git\/feed)\/|_platform\/ingress\/|_shared\/relay\/|_shared\/sandbox-contract\/src\/(netd\/|ids\/hostnames\.fixture\.json|protocol\/ingress-contract\.(fixture\.json|ts))|\.github\/workflows\/ci\.yml)/,
+    ic: /^(_sandbox\/ic\/|_devices\/(win-launcher|remoted)\/|_sandbox\/netd\/crates\/(tunnel|browser-wire)\/|_shared\/relay\/|_site\/site\/public\/scripts\/)/,
+    netd: /^(_sandbox\/netd\/|_sandbox\/sandbox\/src\/(netd|git\/feed|hosts\/remote)\/|_devices\/remoted\/|_platform\/ingress\/|_shared\/relay\/|_shared\/sandbox-contract\/src\/(netd\/|ids\/hostnames\.fixture\.json|protocol\/ingress-contract\.(fixture\.json|ts))|\.github\/workflows\/ci\.yml)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/netd\/|_shared\/relay\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     platform: /^(_tools\/scripts\/platform\/|_sandbox\/netd\/crates\/(tunnel|browser-wire)\/|_shared\/relay\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     // The tier's own spec and harness live in @intentic/e2e, which nothing of the face depends on.

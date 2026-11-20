@@ -1,0 +1,55 @@
+# The Windows platform for cast-core: DXGI Desktop Duplication, NVENC on D3D11 and Media Foundation's hardware encoders
+# fed straight from the GPU, SendInput, the clipboard, the pointer's shape and WASAPI loopback. Built for
+# x86_64-pc-windows-msvc (cargo-xwin from Linux); on any other target it is an empty crate, so castd's workspace still
+# builds and tests on Linux.
+[package]
+name = "cast-win"
+edition = "2024"
+version = "0.1.0"
+publish = false
+# Its input and loopback code started from voxl's Windows backend (MIT, see ../../LICENSE and README.md).
+license = "MIT"
+
+[target.'cfg(windows)'.dependencies]
+# openh264 (BSD) is the software encoder every Windows computer has; x264 is never linked here.
+cast-core = { path = "../cast-core", default-features = false, features = ["openh264"] }
+browser-wire = { path = "../../../netd/crates/browser-wire" }
+log = "0.4"
+parking_lot = "0.12"
+png = "0.18"
+windows-core = "0.62"
+windows = { version = "0.62", features = [
+    "Win32_Devices_Display",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_MediaFoundation",
+    "Win32_Media_Multimedia",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Power",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+axum = { version = "0.8", default-features = false, features = ["ws", "http1", "tokio", "query"] }
+env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }

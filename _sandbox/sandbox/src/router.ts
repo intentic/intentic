@@ -32,6 +32,7 @@ import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
+import { createRemoteRoutes } from "./hosts/remote/remote.routes.js";
 import { createBrowsingSystemRoutes } from "./browser/history/browsing.routes.js";
 import { createBookmarksRoutes } from "./browser/bookmarks/bookmarks.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
@@ -148,6 +149,13 @@ const storageRoutes = (services: Services) => {
     return createStorageRoutes(services, (storeDir) => pruneStore(storeDir, services.logger), storageBuildOutputs(reaper), storageCheckouts(services, reaper));
 };
 
+// What reaches into the owner's computers: a network disk through one (netdisk/), and a person's remote screen and
+// terminals on one (hosts/remote/).
+const computerRoutes = (services: Services) => ({
+    netdisk: createNetdiskRoutes(services),
+    remote: createRemoteRoutes(services),
+});
+
 export const createRouter = (services: Services): SandboxRouter => ({
     accessProfiles: createAccessProfilesRoutes(services),
     accounts: createAccountsRoutes(services),
@@ -246,5 +254,5 @@ export const createRouter = (services: Services): SandboxRouter => ({
     vpn: createVpnRoutes(services),
     offload: createOffloadRoutes(services),
     exit: createExitRoutes(services),
-    netdisk: createNetdiskRoutes(services),
+    ...computerRoutes(services),
 });

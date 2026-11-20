@@ -7,7 +7,7 @@ import { dialLoopback, hostDialFailure, tunnelSocketUrl } from "./device-tunnel.
 // This machine's end of a `devices reach` tunnel: allowed by either switch that already reaches its loopback, said
 // plainly when nothing listens on the port, and aimed at the daemon the link dialled.
 
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" };
+const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" };
 const ticket = "a".repeat(48);
 
 test("the tunnel route is the link's own daemon, over ws or wss as the link is", () => {

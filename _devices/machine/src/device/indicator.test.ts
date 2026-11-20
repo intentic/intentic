@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
-import { type Caller, createIndicator, IDLE_MS, PAUSE_HOTKEY } from "./indicator.js";
+import { type Caller, createIndicator, IDLE_MS, PAUSE_HOTKEY, peopleSentence, type PersonOnScreen } from "./indicator.js";
 import { ScopeError } from "./policy.js";
 import { fakeIndicatorDeps } from "./device-testing.js";
 
@@ -184,4 +184,61 @@ test("with no notice to open, actions go through and nothing is left counting do
     expect(fake.helpers).toEqual([]);
     await advanceTimersByTimeAsync(IDLE_MS);
     expect(jest.getTimerCount()).toBe(0);
+});
+
+// --- people connected through intentic-remoted (remote/remote.ts) ----------------------------------------------------------
+
+const person = (kind: PersonOnScreen["kind"], host = "alpha.example.dev"): PersonOnScreen => ({ kind, sandboxUrl: `https://${host}` });
+
+test("the notice names what the people connected do, the screen this person sits at first", () => {
+    expect(peopleSentence([])).toBeUndefined();
+    expect(peopleSentence([person("terminal")])).toBe("A person is in a terminal on this computer");
+    expect(peopleSentence([person("terminal"), person("view")])).toBe("A person is viewing this computer");
+    expect(peopleSentence([person("view"), person("control"), person("terminal")])).toBe("A person is using the mouse and keyboard");
+    expect(peopleSentence([person("view"), person("view", "beta.example.dev"), person("terminal")])).toBe("People are viewing this computer");
+});
+
+test("people connected put the notice up under their sandbox, with the keys that pause them, and their leaving takes it down", async () => {
+    const fake = fakeIndicatorDeps();
+    const indicator = createIndicator(fake.deps);
+    await indicator.people([person("terminal", "beta.example.dev")], (message) => void said.push(message));
+    expect(fake.helpers[0]?.shown).toEqual([`A person is in a terminal on this computer · beta.example.dev · ${PAUSE_HOTKEY} pauses`]);
+
+    await indicator.people([person("terminal", "beta.example.dev"), person("control", "beta.example.dev")], (message) => void said.push(message));
+    expect(fake.helpers[0]?.shown.at(-1)).toBe(`A person is using the mouse and keyboard · beta.example.dev · ${PAUSE_HOTKEY} pauses`);
+
+    await indicator.people([], (message) => void said.push(message));
+    expect(fake.helpers.map((helper) => helper.closed)).toEqual([true]);
+});
+
+test("an agent driving while people are connected is named first, under the agent's sandbox, and the notice stays for the people", async () => {
+    const fake = fakeIndicatorDeps();
+    const indicator = createIndicator(fake.deps);
+    await indicator.people([person("view", "beta.example.dev")], (message) => void said.push(message));
+    await indicator.control(ALPHA);
+    expect(fake.helpers[0]?.shown.at(-1)).toBe(
+        `Intentic agent is controlling this computer · A person is viewing this computer · alpha.example.dev · ${PAUSE_HOTKEY} pauses`,
+    );
+
+    await advanceTimersByTimeAsync(IDLE_MS);
+    expect(fake.helpers[0]?.closed).toBe(false);
+    expect(fake.helpers[0]?.shown.at(-1)).toBe(`A person is viewing this computer · beta.example.dev · ${PAUSE_HOTKEY} pauses`);
+});
+
+test("the hotkey pauses people as it pauses agents, on the notice, on disk and in the person's log", async () => {
+    const fake = fakeIndicatorDeps();
+    const indicator = createIndicator(fake.deps);
+    await indicator.people([person("control")], (message) => void said.push(message));
+
+    fake.helpers[0]?.events.hotkey();
+    expect(fake.helpers[0]?.shown.at(-1)).toBe(`A person is using the mouse and keyboard (input paused) · alpha.example.dev · ${PAUSE_HOTKEY} resumes`);
+    await waitFor(() => expect(fake.saved()).toBe(true));
+    expect(said).toEqual([`paused by the person at this computer (${PAUSE_HOTKEY})`]);
+});
+
+test("a pause read back at start is shown to the people's notice from its first line", async () => {
+    const fake = fakeIndicatorDeps({ paused: true });
+    const indicator = createIndicator(fake.deps);
+    await indicator.people([person("view")], (message) => void said.push(message));
+    expect(fake.helpers[0]?.shown).toEqual([`A person is viewing this computer (input paused) · alpha.example.dev · ${PAUSE_HOTKEY} resumes`]);
 });

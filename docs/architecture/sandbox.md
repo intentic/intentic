@@ -418,6 +418,23 @@ the media socket there. Three planes: castd for media, the daemon's CDP control 
   xsettingsd and `fonts-noto-cjk`. (2026-11-19: a builder stage cannot live in a pack, which is a fragment spliced into
   one stage and into overlays; netd's way, built outside and copied from the trees context, is the repository's.)
 
+### The owner's computers: remote screens and terminals
+
+A person's screen and terminals on one of the owner's connected computers (2026-11-20) take the same shape, one hop
+longer. The computer's `intentic-remoted` (`_devices/remoted`) is the castd of this plane: it serves the media
+socket's protocol for each monitor and the sandbox terminal's for each shell, and it dials the sandbox's netd itself
+(`/system/device-uplink`, one WebSocket carrying yamux), so the editor's socket at `/system/device-media/<device>/…`
+or `/system/device-terminal/<device>/…` is carried browser → netd → that uplink → remoted (netd's README). The daemon
+decides and mints, and never touches a frame or a keystroke ([`remote-access.ts`](../../_sandbox/sandbox/src/hosts/remote/remote-access.ts)):
+who may (Full access only: a live screen shows whatever the owner has open), starting remoted through the
+machine agent on the first open, the uplink token netd admits remoted by (registered as its SHA-256), and the
+castd-format token each socket opens with, `s` naming `media/<session>` or `terminal/<session>`. Each of a computer's
+connections is served by its own agent's remoted: a WSL distro with an agent of its own gets native Linux shells from a
+Linux remoted beside it, and the screen is the Windows side's alone
+([`remote-environments.ts`](../../_sandbox/sandbox/src/hosts/remote/remote-environments.ts)). A screen's peer
+connection gathers STUN candidates at both ends, from the `remoteIceServers` setting, for a direct path when the
+network allows one; otherwise the picture rides the uplink.
+
 ## Priority and memory
 
 - Every process the daemon starts for a purpose gets a workload class from whoever started it, never from its command line ([`workload-class.ts`](../../_sandbox/sandbox/src/workload/workload-class.ts)). The class sets its niceness, its IO class and its `oom_score_adj`, and children inherit all three, so the whole tree carries it. When memory runs out, the kernel takes, in order (netd's memory guard, below, weighs the same tiers against each process's size): builds a heavy-command rule matched (800), agent commands and dependency installs (600), services, gateways, backends and panels, the owner's browser with its display and screen video among them (500), then agent runtimes, 100 plus 100 per spawn level, so a child goes before its parent. The daemon and whatever it starts without a class stay at 0. All of these run in the `workload` cgroup leaf, and the daemon in a leaf of its own, which a kill at the workload leaf's bound cannot reach and the guard never kills in.

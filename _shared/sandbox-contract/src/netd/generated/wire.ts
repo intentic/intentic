@@ -11,6 +11,15 @@ member?: string, } | { "answer": "pong" };
  */
 export type Certificate = { certificate: string, privateKey: string, };
 
+/**
+ * A registered device's uplink as netd holds it.
+ */
+export type DeviceUplinkState = { device: string, 
+/**
+ * Its remoted's uplink is up, and the daemon's socket for it (`<DEVICE_SOCKET_DIR>/<device>.sock`) answers.
+ */
+connected: boolean, };
+
 export type Endpoint = { host: string, port: number, };
 
 /**
@@ -22,7 +31,7 @@ export type FromNode = { "kind": "hello", build: string, pid: number, generation
  * run it (2026-11-11). netd dials nothing until Node sends a tunnel again, and tells Node `Superseded` rather than
  * a plain "off". A netd older than it reads the frame as a bare stand-down, which stops dialling all the same.
  */
-superseded?: string, } | { "kind": "ask", id: number, question: NetdQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, };
+superseded?: string, } | { "kind": "ask", id: number, question: NetdQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, } | { "kind": "deviceUplink", device: string, tokenSha256: string, } | { "kind": "deviceWithdraw", device: string, };
 
 /**
  * Every port netd binds, as Node's config names them; an absent one is not bound.
@@ -114,7 +123,7 @@ export type TerminalPlan = { "plan": "session", name: string, createIn?: string,
 /**
  * Everything netd sends Node.
  */
-export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: NetdAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, } | { "kind": "hiddenLine", session: string, prompt: string, value: string, };
+export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: NetdAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, } | { "kind": "hiddenLine", session: string, prompt: string, value: string, } | { "kind": "deviceUplinks", uplinks: Array<DeviceUplinkState>, };
 
 /**
  * The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces

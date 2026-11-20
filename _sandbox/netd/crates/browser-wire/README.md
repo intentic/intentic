@@ -8,6 +8,12 @@ Everything a browser sees of a sandbox's netd and of the edge in front of it out
   terminal. Its messages are here already, so the daemon and the editor read one definition: every client message,
   every server message, and the tag byte each picture starts with. Its `state` carries one browser window whole, as
   the contract's `BrowserSession` with its `seq`, which this crate passes through without reading.
+- A connected computer's screen and terminals (2026-11-20) are the media socket's and the terminal's own protocols at
+  other paths: `/system/device-media/<device>/<session>` and `/system/device-terminal/<device>/<session>`, which netd
+  carries down the uplink the computer's `intentic-remoted` dials at `/system/device-uplink`. The paths, the uplink's
+  header and close codes, and the socket directory Node reaches remoted through are here, so netd, remoted and the
+  editor read one definition. A terminal socket takes a fresher `token` as a media socket does; netd's own terminal,
+  opened with a ticket, ignores it.
 - Standalone rather than a member of netd's workspace, like [tunnel](../tunnel), because the edge builds it by path
   from its own workspace.
 - The editor reads the same types in TypeScript. `cargo test -p browser-wire` writes them, with a manifest the

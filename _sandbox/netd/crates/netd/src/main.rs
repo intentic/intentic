@@ -3,6 +3,7 @@
 
 mod cgroup;
 mod connect;
+mod devices;
 mod fallback;
 mod feed;
 mod guard;
@@ -33,6 +34,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{Mutex, mpsc, watch};
 use tracing_subscriber::EnvFilter;
 
+use crate::devices::Devices;
 use crate::feed::Feed;
 use crate::link::{Link, Pushed};
 use crate::listen::Listeners;
@@ -167,6 +169,19 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     } else {
         run_dir.join("cast")
     };
+    // Each connected computer's remoted, served to the daemon where browser-wire says; a test's netd beside its run
+    // directory. What netd says about them goes to whichever Node holds the link.
+    let devices_dir = if own {
+        PathBuf::from(browser_wire::DEVICE_SOCKET_DIR)
+    } else {
+        run_dir.join("devices")
+    };
+    let devices = Arc::new(Devices::new(
+        devices_dir,
+        Arc::new(move |message| {
+            let _ = link.tell(message);
+        }),
+    ));
     let netd = Arc::new(Netd::new(
         link,
         http.clone(),
@@ -174,6 +189,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         terminals.clone(),
         vitals,
         cast_dir,
+        devices.clone(),
     ));
     let certificates = Arc::new(CertificateSlot::default());
     let mut listeners = Listeners::new(netd.clone(), certificates.clone());
@@ -253,11 +269,14 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
                 }
                 Pushed::Hello => {
                     applying.lock().await.report_again();
+                    devices.report_again();
                     if let Some(feed) = &feed {
                         feed.reset();
                     }
                 }
                 Pushed::Revoke(member) => terminals.revoke(member.as_deref()),
+                Pushed::DeviceUplink { device, digest } => devices.register(device, digest),
+                Pushed::DeviceWithdraw(device) => devices.withdraw(&device),
                 Pushed::Watch(checkout) => {
                     if let Some(feed) = feed.clone() {
                         tokio::task::spawn_blocking(move || feed.watch(&checkout));

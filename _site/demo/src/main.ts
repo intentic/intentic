@@ -19,6 +19,7 @@ import { installElementAddresses } from "./world/elements";
 import { withPreviewSites } from "./daemon/workspace/previewSites";
 import { coverage } from "./unserved";
 import { showRailHint } from "./railHint";
+import { deviceTerminalSocket } from "./deviceTerminal";
 
 // Everything that must be true before the real app's entry runs. Transports and credentials must be in place first,
 // hence the dynamic import at the bottom. Credentials are seeded into the real localStorage `sandboxSession` reads,
@@ -70,7 +71,7 @@ const answering = withPreviewSites(withFloors(withSeals(withOutage(withReads(wit
 const handlers = { platform, daemon: answering, sandboxAt: sandboxAddress };
 installFetch(handlers);
 installXhr(handlers);
-installWebSocket((url) => SOCKETS.get(url.pathname), sandboxSocket);
+installWebSocket((url) => SOCKETS.get(url.pathname) ?? deviceTerminalSocket(url), sandboxSocket);
 installWebTransport();
 // What the editor hands an element rather than fetching (a media source, a download, a preview's frame), answered from the
 // same handlers through the demo's element worker (world/elements.ts).

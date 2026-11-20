@@ -3,6 +3,7 @@ import { Page } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import SandboxDevices from "./SandboxDevices.vue";
+import DeviceScreenPage from "./remote/DeviceScreenPage.vue";
 import { selectedKey } from "../../../models/sandbox/devices/deviceLinks";
 
 // The Devices view: what is on the other end of this sandbox, as a page of its own on the rail, the way Devices is
@@ -14,10 +15,13 @@ import { selectedKey } from "../../../models/sandbox/devices/deviceLinks";
 // one machine's page is a column of rows and keeps the reading width.
 const route = useRoute();
 const width = computed(() => (selectedKey(route.query[`device`]) === undefined ? `wide` : `content`));
+// A machine's screen takes the whole view, edge to edge, rather than a column of the page (remote/DeviceScreenPage.vue).
+const screen = computed(() => selectedKey(route.query[`screen`]) !== undefined);
 </script>
 
 <template>
-    <Page :width="width">
+    <DeviceScreenPage v-if="screen" />
+    <Page v-else :width="width">
         <SandboxDevices />
     </Page>
 </template>

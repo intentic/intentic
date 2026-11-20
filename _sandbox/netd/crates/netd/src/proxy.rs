@@ -27,6 +27,7 @@ use tokio::sync::watch;
 use tower_service::Service;
 
 use crate::connect::{self, Io, NodeConnector, Pool, UpstreamConnector};
+use crate::devices::Devices;
 use crate::guard::{self, Verdict};
 use crate::link::Link;
 use crate::route::{self, Listener, Target};
@@ -60,6 +61,11 @@ const MEDIA_UPGRADES: &str = "a browser media socket opens as a WebSocket";
 
 const MEDIA_NAMES: &str = "a browser media socket names its session: [A-Za-z0-9_-]{1,64}";
 
+const DEVICE_UPGRADES: &str = "a device's screen or terminal opens as a WebSocket";
+
+const DEVICE_NAMES: &str =
+    "a device's screen or terminal names its device and session: [A-Za-z0-9_-]{1,64} each";
+
 pub struct Netd {
     link: &'static Link,
     node: Pool<NodeConnector>,
@@ -74,6 +80,8 @@ pub struct Netd {
     /// Where each window's castd listens, `<session>.sock` (browser-wire's `BROWSER_MEDIA_SOCKET_DIR` for the
     /// container's own netd).
     cast_dir: PathBuf,
+    /// Connected computers' uplinks, which their screens and terminals are carried down (`devices.rs`).
+    devices: Arc<Devices>,
 }
 
 enum Destination {
@@ -100,11 +108,13 @@ impl Netd {
         terminals: Arc<Terminals>,
         vitals: Arc<Vitals>,
         cast_dir: PathBuf,
+        devices: Arc<Devices>,
     ) -> Self {
         let node_connector = NodeConnector::new(node_socket);
         let upstream_connector = UpstreamConnector::new();
         Self {
             cast_dir,
+            devices,
             link,
             node: connect::pool(node_connector.clone()),
             node_connector,
@@ -149,6 +159,24 @@ impl Netd {
                 route::Media::BadName => None,
             };
             return self.media(session, listener, request).await;
+        }
+        // A connected computer's uplink, and a person's screen or terminal carried down one: never Node's, so they keep
+        // flowing while the daemon restarts, as a window's media socket does.
+        if self.target(listener, &host) == Target::Node {
+            if route::is_device_uplink(request.uri().path()) {
+                return self.devices.uplink(request);
+            }
+            if let Some(asked) = route::device_view(request.uri().path()) {
+                let named = match asked {
+                    route::DeviceView::Session {
+                        route,
+                        device,
+                        session,
+                    } => Some((route, device.to_owned(), session.to_owned())),
+                    route::DeviceView::BadName => None,
+                };
+                return self.device_view(named, listener, request).await;
+            }
         }
         // The owner's guard is checked before Node is asked anything, so a visitor without a pass costs Node nothing
         // but the page a navigation is shown.
@@ -295,6 +323,60 @@ impl Netd {
         parts.version = Version::HTTP_11;
         let outbound = in_origin_form(Request::from_parts(parts, body::incoming(incoming)));
         relay::exchange(io, outbound)
+            .await
+            .unwrap_or_else(|error| bad_gateway(&error.to_string()))
+    }
+
+    // A person's screen or terminal on a connected computer, opened as a stream down its uplink and relayed there as
+    // the HTTP/1.1 upgrade it arrived as, with the path rewritten to remoted's (`/media/<session>`, `/terminal/<session>`)
+    // and the query, which carries the token remoted checks, kept. One that arrived on the loopback port says so, as a
+    // window's media socket does: the viewer runs on the computer the sandbox runs on.
+    async fn device_view(
+        &self,
+        named: Option<(route::DeviceRoute, String, String)>,
+        listener: Listener,
+        request: Request<Incoming>,
+    ) -> Response<Body> {
+        let Some((route, device, session)) = named else {
+            return plain(StatusCode::NOT_FOUND, DEVICE_NAMES);
+        };
+        if !is_upgrade(request.headers(), request.version()) {
+            return plain(StatusCode::UPGRADE_REQUIRED, DEVICE_UPGRADES);
+        }
+        let Some(opener) = self.devices.opener(&device) else {
+            return bad_gateway(&format!(
+                "the device {device} has no uplink: its remote access is not running"
+            ));
+        };
+        let stream = match opener.open().await {
+            Ok(stream) => stream,
+            Err(error) => {
+                tracing::debug!(%error, %device, "the device's uplink opened no stream");
+                return bad_gateway(&format!(
+                    "the device {device}'s uplink did not open a stream"
+                ));
+            }
+        };
+        let (mut parts, incoming) = request.into_parts();
+        let target = match parts.uri.query() {
+            Some(query) => format!("{}/{session}?{query}", route.upstream()),
+            None => format!("{}/{session}", route.upstream()),
+        };
+        parts.uri = match target.parse() {
+            Ok(uri) => uri,
+            Err(_) => return plain(StatusCode::BAD_REQUEST, DEVICE_NAMES),
+        };
+        for_next_hop(&mut parts.headers, true);
+        // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
+        if matches!(listener, Listener::Loopback { .. }) {
+            parts.headers.insert(
+                NetdHeader::Listener.name(),
+                HeaderValue::from_static(LOOPBACK_LISTENER),
+            );
+        }
+        parts.version = Version::HTTP_11;
+        let outbound = Request::from_parts(parts, body::incoming(incoming));
+        relay::exchange(TokioIo::new(stream), outbound)
             .await
             .unwrap_or_else(|error| bad_gateway(&error.to_string()))
     }

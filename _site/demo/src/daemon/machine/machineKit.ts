@@ -43,6 +43,8 @@ export interface ClientFrame {
     readonly y?: number;
     readonly text?: string;
     readonly key?: string;
+    // A terminal's typing (`{type: "input", data}`).
+    readonly data?: string;
 }
 
 /** The frame a `client` event carries, or an empty one for a binary frame or one that is not JSON. */

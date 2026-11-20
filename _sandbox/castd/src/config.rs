@@ -1,6 +1,6 @@
 //! castd's command line.
 
-use crate::capture::Rect;
+use cast_core::geometry::Rect;
 use std::collections::HashMap;
 
 pub const USAGE: &str = "\
@@ -92,7 +92,7 @@ pub struct Config {
     pub record_dir: Option<String>,
     /// Tokens minted before this (ms since the epoch) open nothing.
     pub not_before: u64,
-    pub encoder: crate::encoder::Request,
+    pub encoder: cast_core::encoder::Request,
 }
 
 /// Whether a session name is one browser-wire allows: `[A-Za-z0-9_-]{1,64}`.
@@ -300,7 +300,7 @@ impl Config {
             not_before: num(&m, "not-before", 0)?,
             // x264 unless asked: the GPU is the owner's, shared with whatever else they run, and a window must not
             // take it by accident (software-rendering.ts says the same for the browser's own rendering).
-            encoder: crate::encoder::Request::parse(
+            encoder: cast_core::encoder::Request::parse(
                 m.get("encoder").map_or("x264", String::as_str),
             )?,
         })

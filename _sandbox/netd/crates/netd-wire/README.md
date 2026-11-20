@@ -7,6 +7,10 @@ The control socket between intentic-netd and the Node daemon: length-prefixed JS
   `_shared/sandbox-contract/src/netd/generated/`. Edit the Rust, never the generated file.
 - Either side may ask the other a question: an `Ask` with an id, answered by an `Answer` or a `Refused` with the same
   id, which the asker waits a fixed patience for. Everything else is told and never answered.
+- Node registers each connected computer's uplink by device and the SHA-256 of its token (`DeviceUplink`), and
+  withdraws it (`DeviceWithdraw`); netd reports every registered device and whether its uplink is up
+  (`DeviceUplinks`), on each change and after each hello. Node sends a registration only to a netd that has reported,
+  since an older netd closes the link on a frame kind it does not know, and an older Node ignores the report.
 - Also names the environment netd hands the daemon it starts: where to dial this socket, where to serve HTTP, the
   netd instance and which start of the daemon this is.
 - A browser never sees any of it. What a browser sees of netd is [browser-wire](../browser-wire).

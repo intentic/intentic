@@ -144,7 +144,7 @@ export type SelectMenu = { options: Array<SelectEntry>, selected: number, rect: 
 /**
  * What the browser sends on a terminal socket, each a JSON text message.
  */
-export type TerminalClientMessage = { "type": "input", data: string, } | { "type": "resize", cols: number, rows: number, } | { "type": "away" } | { "type": "ping" };
+export type TerminalClientMessage = { "type": "input", data: string, } | { "type": "resize", cols: number, rows: number, } | { "type": "away" } | { "type": "ping" } | { "type": "token", token: string, };
 
 /**
  * What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.

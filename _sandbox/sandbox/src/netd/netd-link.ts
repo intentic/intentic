@@ -38,6 +38,10 @@ export type TunnelReport = Extract<ToNode, { readonly kind: "tunnel" }>;
 // netd's report of a password typed at a hidden prompt: the session, the question it answered and the value, once.
 export type HiddenLineReport = Extract<ToNode, { readonly kind: "hiddenLine" }>;
 
+// Every connected computer's uplink netd holds a registration for, and whether it is up: told whole on each change and
+// after each hello, and never by a netd older than device uplinks.
+export type DeviceUplinksReport = Extract<ToNode, { readonly kind: "deviceUplinks" }>;
+
 export interface NetdLinkOptions {
     readonly path: string;
     // Answers netd's questions; a throw goes back as a refusal carrying its message.
@@ -46,6 +50,8 @@ export interface NetdLinkOptions {
     // A line the person typed with echo off in one of the editor's terminals (terminal-capture.ts takes it from here).
     // Absent: such a line is dropped where it lands.
     readonly onHiddenLine?: (line: HiddenLineReport) => void;
+    // Where the computers' uplinks stand (hosts/remote/netd-uplinks.ts). Absent: the report is dropped where it lands.
+    readonly onDeviceUplinks?: (report: DeviceUplinksReport) => void;
     readonly onClose: () => void;
     // What went wrong on the link that is not a question's own refusal: a frame that would not parse (skipped, the rest
     // still read), a length past the cap or a socket error (the link is then dropped, and `onClose` follows).
@@ -150,6 +156,9 @@ export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> =
                 return;
             case "hiddenLine":
                 options.onHiddenLine?.(message);
+                return;
+            case "deviceUplinks":
+                options.onDeviceUplinks?.(message);
                 return;
             case "answer":
                 settle(message.id, message.answer);

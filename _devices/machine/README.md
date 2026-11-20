@@ -1201,6 +1201,55 @@ where the agent is root. This agent decides whether a change asked from the edit
   sandboxes" can send the first one for a slug on this machine. A pin that looks wrong is reset here and pinned again
   from the editor.
 
+### People's remote access (intentic-remoted)
+
+(2026-11-20) A person in a sandbox's editor, never an agent, can see this computer's screen, use its mouse and keyboard,
+or open a terminal on it. One daemon per environment serves them, [intentic-remoted](../remoted): it dials each linked
+sandbox's `/system/device-uplink` and carries the view and the terminals over that uplink. An agent in a WSL distro runs
+its own Linux remoted, so that distro's terminals are native shells there; the sandbox shows the screen on the Windows
+side's connection only. The agent starts it only while
+some link wants it, and enforces the switches ([`device/remote/`](src/device/remote)).
+
+- **The switches.** Three per link, apart from the agents' own and all off by default: "Let people see the screen"
+  (`remoteView`), "Let people use the mouse and keyboard" (`remoteControl`) and "Let people open terminals"
+  (`remoteTerminal`). Each link's uplink allows what that link's grant says. A grant pushed with one of them changed
+  rewrites the uplink's `allow` at once, and remoted re-reads its config within half a second, so terminals that stay
+  allowed are not cut; all three off drops the uplink.
+- **The procedures.** `remoteStart({ device, uplinkToken, mediaKey })` and `remoteStop()`, called by the daemon alone and
+  only on an agent advertising `remote`. `remoteStart` is refused as `FORBIDDEN`, naming the three switches, while all
+  three are off, and as `PRECONDITION_FAILED`, saying why, when no remoted can be had. Otherwise it writes the link's
+  uplink under the next `generation`, starts remoted if it is not running, waits up to 10 s for its status to show the
+  uplink `up` at that generation (not an `up` left from its last start), and answers remoted's version, what is allowed, the monitors and the environments. Past 10 s it answers
+  `GATEWAY_TIMEOUT` with remoted's own last error for the uplink, which keeps dialling. `remoteStop` drops the link's
+  uplink. Both are audited, never with the token or the key.
+- **The binary.** `bin/intentic-remoted`, the asset `intentic-remoted-<os>-<arch>` of the agent's own release (published
+  for windows-amd64, linux-amd64 and linux-arm64), checked against the release's signed `SHA256SUMS` as the launcher
+  and the keyring are. It is fetched on the first `remoteStart` that needs it, and again when the one in `bin/` answers
+  `version` with another release than the agent's. A from-source agent never downloads: it takes
+  `_devices/remoted/target/release/intentic-remoted` from its checkout. `INTENTIC_REMOTED_BIN` overrides both. The
+  agent advertises `remote` only where one can be had: the override, one in `bin/`, or a published platform.
+- **The files.** `remoted.json` (0600, written whole by rename) holds `paused`, `notBefore` and one uplink per link:
+  `id` (the link's sandbox URL), `url` (that sandbox's daemon as the link's own socket resolves it, loopback when it
+  runs here), `device`, `uplinkToken`, `mediaKey`, `allow` and `generation`. An uplink not `up` for 30 s has its address
+  resolved again, and rewritten if it moved. remoted prints a status line on stdout whenever anything in it changes, and
+  the agent keeps the latest as `remoted-status.json`.
+- **The supervisor** ([`remote/remoted.ts`](src/device/remote/remoted.ts)) runs `intentic-remoted run --config <path>
+  --parent-stdin`, its stdin a pipe the agent holds, so it never outlives the agent; its stderr lines land in the
+  agent's log as `remoted: …`. An exit nobody asked for is logged with its code and last line, and it is started again
+  after 1 s, doubling to a minute, back to 1 s after a run that held a minute. Once no uplink is left (a `remoteStop`,
+  every switch off, the link removed or revoked) its stdin is closed, and it is killed 3 s later if it is still there.
+  An agent starting takes up the uplinks `remoted.json` held for links that still exist and still allow something, and
+  drops the rest.
+- **The person at the computer.** On Windows, while anyone is connected, the agents' notice stays up and says so,
+  naming the foremost kind: someone using the mouse and keyboard, else viewing, else in a terminal. (2026-11-20: ranked by
+  the screen the person sits at, since a terminal shows whoever is connected nothing of it.) `Ctrl+Alt+Shift+P` pauses
+  people's input as it pauses the agents', through the same `paused` file, which `remoted.json`'s `paused` follows.
+  `intentic-machine remote end` sets `notBefore` to now, which drops everyone connected and refuses every way in handed
+  out before it; `intentic-machine remote status [--json]` prints the latest status. People coming and going are audited
+  (`remote-person`).
+- **Before sign-in** remoted runs as it does after it, so terminals work; nothing is promised of the screen, and no
+  notice is put up.
+
 ### Uninstall
 
 `intentic-machine uninstall [--purge] [--delete-data]` ([`src/uninstall/`](src/uninstall/)). `ic uninstall` is the one
@@ -1244,7 +1293,7 @@ person who runs it alone, and either way it never downloads anything.
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `remote`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
 - [src/uninstall/purge.ts](src/uninstall/purge.ts) — `uninstall --purge`: the steps in `steps.ts`, the distros in `distros.ts`, the files in `sweep.ts`, every decision pure in `plan.ts`.
 - [src/resident/resident.ts](src/resident/resident.ts) — the resident process that holds links, pairings and WSL distros; `supervision.ts` beside it starts and stops it through whatever restarts this environment's agent.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.

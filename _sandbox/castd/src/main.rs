@@ -1,7 +1,9 @@
 //! The castd binary: one process per X display (or per window region of one), serving that picture on a Unix socket.
+//! cast-core's pipeline and server, cast-x11's capture, input, cursor and clipboard.
 
+use cast_core::{encoder, hub, input, record, server, video};
+use cast_x11::screen;
 use castd::config::{Config, USAGE};
-use castd::{audio_format, encoder, hub, input, record, screen, server, video};
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,7 +25,7 @@ fn main() {
     };
     #[cfg(feature = "nvenc")]
     if cfg.encoder != encoder::Request::Only(encoder::Backend::X264) {
-        castd::nvenc::reexec_with_wsl_libs();
+        cast_core::nvenc::reexec_with_wsl_libs();
     }
     // A panic in a viewer's task ends that task alone (tokio catches it); in one of the media threads it would leave the
     // window frozen behind a live socket, so castd ends and the daemon starts another.
@@ -35,7 +37,7 @@ fn main() {
         if ["capture", "encode", "input", "desktop", "audio"].contains(&name)
             || name.starts_with("enc-")
         {
-            castd::exit(1);
+            cast_core::exit(1);
         }
     }));
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -56,7 +58,7 @@ async fn run(cfg: Config) {
     // A drop the daemon asked of the castd before this one still stands: tokens minted before it stay dead.
     hub.not_before
         .store(cfg.not_before, std::sync::atomic::Ordering::Relaxed);
-    let screen = if cfg.crop.is_some() {
+    let randr = if cfg.crop.is_some() {
         None
     } else {
         match screen::Screen::open(cfg.display.as_deref(), cfg.max_size) {
@@ -68,7 +70,6 @@ async fn run(cfg: Config) {
         }
     };
     let vcfg = video::VideoConfig {
-        display: cfg.display.clone(),
         crop: cfg.crop,
         fps: cfg.fps,
         preset: cfg.preset.clone(),
@@ -88,36 +89,40 @@ async fn run(cfg: Config) {
         stripes: cfg.stripes,
         adaptive_threads: cfg.adaptive_threads,
         coalesce: Duration::from_micros(cfg.coalesce_us),
-        encoder: pick_encoder(cfg.encoder),
+        encoder: encoder::Encoders::with_x264_fallback(pick_encoder(cfg.encoder)),
     };
-    if let Err(e) = video::spawn(vcfg, hub.clone(), screen) {
+    let source = cast_x11::X11Screen::new(cfg.display.clone(), randr);
+    if let Err(e) = video::spawn(vcfg, hub.clone(), Box::new(source)) {
         fail(&format!("video: {e}"));
     }
-    let clipboard = match castd::desktop::spawn(cfg.display.clone(), hub.clone()) {
+    let clipboard = match cast_x11::desktop::spawn(cfg.display.clone(), hub.clone()) {
         Ok(h) => Some(h),
         Err(e) => {
             log::error!("cursor and clipboard unavailable: {e}");
             None
         }
     };
-    match input::spawn(
+    match cast_x11::input::spawn(
         cfg.display.clone(),
         &cfg.session,
         clipboard,
         cfg.scroll_px_per_notch,
         hub.clone(),
     ) {
-        Ok(tx) => *hub.input.lock() = Some(tx),
+        Ok(input) => *hub.input.lock() = Some(input),
         Err(e) => log::error!("input unavailable: {e}"),
     }
     #[cfg(feature = "audio")]
     if let Some(source) = cfg.audio_source.clone() {
-        castd::audio::spawn(source, cfg.audio_bitrate, hub.clone());
+        match cast_core::pulse::Pulse::new(source) {
+            Ok(pulse) => cast_core::audio::spawn(pulse, cfg.audio_bitrate, hub.clone()),
+            Err(e) => log::error!("{e}"),
+        }
     }
     // A peer port that cannot be bound leaves the socket as every viewer's way in, which it always is anyway.
     if let Some(bind) = cfg.rtc_udp {
-        match castd::rtc::start(bind, cfg.rtc_candidates.clone()).await {
-            Ok(candidates) if castd::rtc::offered() => {
+        match cast_core::rtc::start(bind, cfg.rtc_candidates.clone()).await {
+            Ok(candidates) if cast_core::rtc::offered() => {
                 log::info!("taking peer connections on udp {bind}, reached at {candidates:?}")
             }
             Ok(_) => log::warn!(
@@ -138,7 +143,7 @@ async fn run(cfg: Config) {
         ),
     };
     let listener = bind(&cfg);
-    castd::set_socket_path(&cfg.socket);
+    cast_core::remove_on_exit(&cfg.socket);
     log::info!(
         "castd serving session {} of display {} on {}",
         cfg.session,
@@ -156,16 +161,27 @@ async fn run(cfg: Config) {
         };
         tokio::select! { _ = term.recv() => {}, _ = int.recv() => {} }
         log::info!("shutting down");
-        if let Some(tx) = shutdown_hub.input.lock().as_ref() {
-            let _ = tx.send(input::InputEvent::Shutdown);
+        if let Some(input) = shutdown_hub.input.lock().as_ref() {
+            input.send(input::InputEvent::Shutdown);
         }
         // The input thread releases held keys and restores the keymap; give it a moment.
         tokio::time::sleep(Duration::from_millis(100)).await;
-        castd::exit(0);
+        cast_core::exit(0);
     });
     if let Err(e) = axum::serve(listener, server::router(app)).await {
         log::error!("serving: {e}");
-        castd::exit(1);
+        cast_core::exit(1);
+    }
+}
+
+/// The sound's format for `hello`, when castd captures sound: Opus, 48 kHz stereo. None without the `audio` feature.
+fn audio_format(capturing: bool) -> Option<browser_wire::MediaAudio> {
+    #[cfg(feature = "audio")]
+    return capturing.then(cast_core::audio::format);
+    #[cfg(not(feature = "audio"))]
+    {
+        let _ = capturing;
+        None
     }
 }
 
@@ -173,7 +189,7 @@ async fn run(cfg: Config) {
 fn pick_encoder(request: encoder::Request) -> encoder::Backend {
     let picked = encoder::select(request, encoder::Backend::hardware(), |b| {
         let t = std::time::Instant::now();
-        let result = encoder::self_test(b);
+        let result = encoder::self_test(&b);
         log::info!(
             "{} self-test: {} ({} ms)",
             b.name(),
@@ -196,7 +212,7 @@ fn pick_encoder(request: encoder::Request) -> encoder::Backend {
 
 fn fail(msg: &str) -> ! {
     log::error!("{msg}");
-    castd::exit(1)
+    cast_core::exit(1)
 }
 
 /// Binds the socket, replacing a stale one a dead castd left, with the permissions `--socket-mode` gives.

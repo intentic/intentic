@@ -268,6 +268,23 @@ flowchart LR
   512 MiB at most), it travels into the machine's staging the way `devices push` does (`hosts/runs/device-staging.ts`), and
   the machine brings it up with `--build`. These handlers hold no bearer gate, since the board's backend calls with its
   extension token, admitted by the routes its manifest declares; a person still meets their maintainer floor.
+- (2026-11-20) A person's remote screen and terminals on the owner's computers (`hosts/remote/`, the `remote.*`
+  procedures under `/system/devices/{device}/remote…`). The computer's `intentic-remoted` serves both and dials the
+  sandbox's netd itself, so no picture or keystroke crosses this daemon: it decides who may (Full access only, the owner
+  or a maintainer; a member below it is refused, since a live screen shows whatever the owner has open), starts remoted
+  through the machine agent on the first open (`remoteStart`, in `remote-device.ts`, the one module that speaks to the
+  agent about it), registers the uplink's
+  token digest with netd (`netd-uplinks.ts`), asks remoted's control routes on the socket netd serves per device
+  (`remoted-control.ts`), and mints castd-format tokens naming `media/<session>` or `terminal/<session>` under a key
+  per device. The uplink token and that key live in `/run/intentic/remote/<device>.json` (0600), so a restarted daemon
+  keeps the uplink netd held across the restart and the tokens it handed out. Every open and close is in the audit log
+  (`device.remote.*`), a revocation drops every remoted's viewers as it drops castd's, and a computer that goes away
+  has its uplink withdrawn within 30 s. The STUN servers a screen's peer connection uses are the setting
+  `remoteIceServers` (Cloudflare's public STUN by default). Each connection is served by its own agent's remoted
+  (`remote-environments.ts`): a WSL distro with an agent of its own opens native Linux shells through its own Linux
+  remoted and shows no screen, the screen being the Windows side's; remoted's own `native` reads as the PC's name for the
+  environment (`wsl:<distro>` there), and the Windows side leaves out and refuses a distro that has its own connection.
+  `remote-terminal-netd.integration.test.ts` runs a terminal end to end on the real netd and remoted.
 - A device or desktop sync joins with a command that carries a short code, never a token
   (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends
   it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry. Codes live

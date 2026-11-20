@@ -36,6 +36,8 @@ export interface MediaPicture {
     readonly pictured: Ref<boolean>;
     readonly cursor: Ref<string>;
     readonly stats: Ref<MediaStats | undefined>;
+    // What carries the stream now: the media socket (through the sandbox), or a peer connection straight to its server.
+    readonly carrier: Ref<`socket` | `peer`>;
     readonly sound: MediaSound;
     // Why no picture will ever come (this browser cannot decode castd's stream).
     readonly failed: Ref<string | undefined>;
@@ -70,6 +72,8 @@ export interface MediaPictureOptions {
     // peer connection could be any shorter than the socket's way (not on the loopback shortcut). Neither by default.
     readonly webTransport?: () => boolean;
     readonly peerWanted?: () => boolean;
+    // The STUN servers a peer gathers with, for a server behind its own NAT (a connected computer's remoted).
+    readonly iceServers?: () => readonly RTCIceServer[] | undefined;
     // This browser cannot decode castd's stream, in the decoder's words: no picture will come on this path.
     readonly onFailed?: (message: string) => void;
     // Seams for a test: the worker, the clipboard's, the peer connection, and the display's refresh rate.
@@ -88,6 +92,7 @@ const pictureRefs = () => {
         pictured: ref(false),
         cursor: ref(`default`),
         stats: shallowRef<MediaStats | undefined>(),
+        carrier: ref<`socket` | `peer`>(`socket`),
         failed: ref<string | undefined>(),
     };
     let edge: string | undefined;
@@ -103,6 +108,7 @@ const pictureRefs = () => {
             refs.painted.value = undefined;
             refs.pictured.value = false;
             refs.cursor.value = `default`;
+            refs.carrier.value = `socket`;
             refs.failed.value = undefined;
             edge = undefined;
         },
@@ -243,7 +249,7 @@ export const mediaPicture = (options: MediaPictureOptions): MediaPicture => {
             options.onDrop?.();
         },
     });
-    const peer = peerPath(options, parts, socket, onText);
+    const peer = peerPath(options, parts, socket, onText, (open) => (state.refs.carrier.value = open ? `peer` : `socket`));
     const reader = workerReader(state, sound, {
         socket,
         peerSend: peer.peerSend,
@@ -303,7 +309,13 @@ export const mediaPicture = (options: MediaPictureOptions): MediaPicture => {
 // The peer connection beside the socket (mediaRtc.ts), wired to the page and the worker: what arrives on it reaches both
 // as the socket's own messages do, the viewer's messages go on it while it is open, and castd's word about it (from
 // either carrier) goes to it.
-const peerPath = (options: MediaPictureOptions, parts: ReturnType<typeof workerParts>, socket: MediaSocket, onText: (data: string) => void) => {
+const peerPath = (
+    options: MediaPictureOptions,
+    parts: ReturnType<typeof workerParts>,
+    socket: MediaSocket,
+    onText: (data: string) => void,
+    carried: (open: boolean) => void,
+) => {
     const rtc = mediaRtc({
         signal: (message) => socket.live.send(message),
         arrived: (data) => {
@@ -315,8 +327,12 @@ const peerPath = (options: MediaPictureOptions, parts: ReturnType<typeof workerP
                 parts.post({ type: `peerData`, data });
             }
         },
-        carrying: (open) => parts.post({ type: `peer`, open }),
+        carrying: (open) => {
+            carried(open);
+            parts.post({ type: `peer`, open });
+        },
         wanted: options.peerWanted ?? (() => false),
+        iceServers: options.iceServers,
         peer: options.peer,
     });
     return {

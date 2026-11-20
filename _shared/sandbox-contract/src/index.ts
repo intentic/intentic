@@ -40,6 +40,7 @@ import { privacyContract } from "./contracts/privacy.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
+import { remoteContract } from "./contracts/remote.contract.js";
 import { rolesContract } from "./contracts/roles.contract.js";
 import { runsContract } from "./contracts/runs.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
@@ -100,6 +101,7 @@ export const sandboxContract: {
     providers: typeof providersContract;
     public: typeof publicContract;
     push: typeof pushContract;
+    remote: typeof remoteContract;
     roles: typeof rolesContract;
     runs: typeof runsContract;
     safety: typeof safetyContract;
@@ -154,6 +156,7 @@ export const sandboxContract: {
     providers: providersContract,
     public: publicContract,
     push: pushContract,
+    remote: remoteContract,
     roles: rolesContract,
     runs: runsContract,
     safety: safetyContract,

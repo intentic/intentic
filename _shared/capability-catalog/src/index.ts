@@ -216,6 +216,38 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         ],
         hint: "A program built in the sandbox (a Windows .exe, an app folder) is copied to this computer and started, watched and stopped by the agent. It runs as you, with your files and network.",
     },
+    // (2026-11-20) People's remote access, served by intentic-remoted on the computer: switches of their own, apart from
+    // the agents' above, since what an agent may do and what a person at another screen may do are different grants.
+    {
+        key: "remoteView",
+        label: "Let people see the screen",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "A person in this sandbox's editor, never an agent, watches this computer's screen live.",
+    },
+    {
+        key: "remoteControl",
+        label: "Let people use the mouse and keyboard",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "From that view, a person moves the mouse and types on this computer. On Windows a notice says so, and Ctrl+Alt+Shift+P there pauses them.",
+    },
+    {
+        key: "remoteTerminal",
+        label: "Let people open terminals",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "A person in this sandbox's editor opens a shell on this computer, running as you.",
+    },
     {
         key: "roots",
         label: "Folders it may touch",

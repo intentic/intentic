@@ -17,6 +17,9 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     sandboxes: "on",
     destructive: "off",
     programs: "off",
+    remoteView: "off",
+    remoteControl: "off",
+    remoteTerminal: "off",
     ...overrides,
 });
 

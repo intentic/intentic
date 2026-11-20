@@ -100,7 +100,7 @@ upload_one() {
 }
 
 pids=()
-for f in _devices/machine/dist-bin/* _devices/keyring/dist-bin/* _devices/win-launcher/dist-bin/* _sandbox/ic/dist-bin/* _editor/desktop-app/dist-bin/*; do
+for f in _devices/machine/dist-bin/* _devices/keyring/dist-bin/* _devices/win-launcher/dist-bin/* _devices/remoted/dist-bin/* _sandbox/ic/dist-bin/* _editor/desktop-app/dist-bin/*; do
   upload_one "$f" &
   pids+=("$!")
 done

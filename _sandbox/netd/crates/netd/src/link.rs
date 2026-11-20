@@ -36,6 +36,13 @@ pub enum Pushed {
     Revoke(Option<String>),
     Watch(netd_wire::WatchedCheckout),
     Unwatch(String),
+    /// A device's remoted may hold an uplink presenting the token with this SHA-256 (hex).
+    DeviceUplink {
+        device: String,
+        digest: String,
+    },
+    /// The device's uplink is withdrawn.
+    DeviceWithdraw(String),
     /// A question Node asked; whoever applies it answers with `Link::answer` and this id.
     Asked {
         id: u32,
@@ -495,6 +502,18 @@ impl Link {
             }
             FromNode::Unwatch { dir } => {
                 let _ = self.pushed.send(Pushed::Unwatch(dir));
+            }
+            FromNode::DeviceUplink {
+                device,
+                token_sha256,
+            } => {
+                let _ = self.pushed.send(Pushed::DeviceUplink {
+                    device,
+                    digest: token_sha256,
+                });
+            }
+            FromNode::DeviceWithdraw { device } => {
+                let _ = self.pushed.send(Pushed::DeviceWithdraw(device));
             }
             FromNode::Ask { id, question } => {
                 let _ = self.pushed.send(Pushed::Asked { id, question });

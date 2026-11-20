@@ -10,6 +10,9 @@ import { inputMessages, mediaJoiner } from "./mediaRtcWire";
 // ICE never connects, or the connection fails later, the peer is closed, castd is told (`rtcClose`), and castd brings
 // the stream back to the socket with a `hello`. Nothing about the picture waits on any of it.
 //
+// A connected computer's remoted speaks the same protocol from behind its own NAT, so its viewer hands the peer the STUN
+// servers the sandbox named (`iceServers`) and offers only once its own reflexive candidates are in the offer.
+//
 // The peer lives on the page: Chrome has no RTCPeerConnection in a worker, so what arrives on it is handed to the decode
 // worker as the socket's own messages are, one postMessage later.
 
@@ -32,6 +35,9 @@ export interface PeerLike {
     setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void>;
     addEventListener(type: `connectionstatechange`, listener: () => void): void;
     close(): void;
+    // Where the offer waits for its candidates (a peer given ICE servers): RTCPeerConnection's own, absent on a fake.
+    readonly iceGatheringState?: string;
+    onicegatheringstatechange?: ((event: Event) => void) | null;
 }
 
 export interface MediaRtcOptions {
@@ -43,6 +49,10 @@ export interface MediaRtcOptions {
     readonly carrying: (on: boolean) => void;
     // Whether a peer could be any shorter than the way the socket already takes: false on the loopback shortcut.
     readonly wanted: () => boolean;
+    // The STUN (and TURN) servers a peer gathers its candidates with, for a far end that is not on this network (a
+    // connected computer behind its own NAT). Given, the offer waits for its candidates (GATHER_WITHIN_MS at most) and
+    // carries them; absent, castd's own candidates are the way, as on a sandbox's LAN.
+    readonly iceServers?: () => readonly RTCIceServer[] | undefined;
     // Seams for a test: the connection, and the clock its deadlines run on.
     readonly peer?: () => PeerLike | undefined;
     readonly later?: (run: () => void, ms: number) => () => void;
@@ -70,7 +80,29 @@ export const OPEN_WITHIN_MS = 10_000;
 // Chrome takes some 30 s more to call it `failed`, a stall nobody should watch.
 export const DISCONNECTED_MS = 3000;
 
-const browserPeer = (): PeerLike | undefined => (`RTCPeerConnection` in globalThis ? new RTCPeerConnection({ iceServers: [] }) : undefined);
+// How long an offer made with ICE servers waits for its candidates before it goes with what it has: a STUN answer takes
+// one round trip, and a server that never answers must not hold the peer past its own deadline.
+export const GATHER_WITHIN_MS = 1500;
+
+const browserPeer = (iceServers: readonly RTCIceServer[] = []): PeerLike | undefined =>
+    `RTCPeerConnection` in globalThis ? new RTCPeerConnection({ iceServers: [...iceServers] }) : undefined;
+
+// The offer's candidates, gathered: done at once where the peer cannot say (a fake) or has finished, else on its word
+// or at the deadline.
+const gathered = (peer: PeerLike, later: (run: () => void, ms: number) => () => void): Promise<void> =>
+    new Promise((resolve) => {
+        if (peer.iceGatheringState === undefined || peer.iceGatheringState === `complete`) {
+            resolve();
+            return;
+        }
+        const cancel = later(resolve, GATHER_WITHIN_MS);
+        peer.onicegatheringstatechange = () => {
+            if (peer.iceGatheringState === `complete`) {
+                cancel();
+                resolve();
+            }
+        };
+    });
 
 const timeout = (run: () => void, ms: number): (() => void) => {
     const timer = setTimeout(run, ms);
@@ -208,6 +240,9 @@ export const mediaRtc = (options: MediaRtcOptions): MediaRtc => {
         watchConnection(peer, ours(giveUp), later);
         try {
             await peer.setLocalDescription(await peer.createOffer());
+            if ((options.iceServers?.()?.length ?? 0) > 0) {
+                await gathered(peer, later);
+            }
         } catch {
             // allow(silent-catch): a browser that cannot make an offer keeps the socket, which is every viewer's way in.
             ours(() => {
@@ -227,7 +262,7 @@ export const mediaRtc = (options: MediaRtcOptions): MediaRtc => {
             if (!offered || state !== `off` || spent || !options.wanted()) {
                 return;
             }
-            const peer = (options.peer ?? browserPeer)();
+            const peer = options.peer === undefined ? browserPeer(options.iceServers?.()) : options.peer();
             spent = peer === undefined;
             if (peer !== undefined) {
                 void start(peer);

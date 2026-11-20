@@ -11,7 +11,7 @@ import { appStatus, appStop, startApp } from "./programs.js";
 // folder is a temp one.
 
 const SANDBOX = "https://sandbox-0a1b2c3d4e5f.example.dev";
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" };
+const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" };
 // The default card: "Run commands" on, "Run destructive commands" off.
 const shellOnly: DeviceScopes = { ...off, shell: "on", roots: process.env["HOME"] ?? "/tmp" };
 const programs: DeviceScopes = { ...off, programs: "on" };

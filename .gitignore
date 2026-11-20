@@ -18,6 +18,8 @@
 # Every shape each stored document has had: history, committed like a lock file. The checks against it
 # (state-shapes.ts) are derived from it before every typecheck, and not committed.
 !_sandbox/sandbox/src/store/generated
+# cast-win's NVENC bindings are checked in: made once by bindgen from ffnvcodec's header, never at build time.
+!_sandbox/castd/crates/cast-win/src/generated
 _sandbox/sandbox/src/store/generated/state-shapes.ts
 **/out-tsc
 **/.astro
@@ -44,13 +46,14 @@ _editor/desktop-app/src-tauri/staged-scripts
 # The local files sidecar compiled for each target (_tools/scripts/desktop/stage-local-files.sh).
 _editor/desktop-app/src-tauri/binaries
 _site/site/public/desktop
-# ic (the host-side CLI), the sandbox netd and the Windows launcher stub: their Rust build trees.
+# ic (the host-side CLI), the sandbox netd, the Windows launcher stub and remoted: their Rust build trees.
 _sandbox/ic/target
 _sandbox/netd/target
 _sandbox/castd/target
 _platform/ingress/target
 _shared/relay/target
 _devices/win-launcher/target
+_devices/remoted/target
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json

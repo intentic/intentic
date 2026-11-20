@@ -534,6 +534,8 @@ async fn read<R, E>(
             Ok(TerminalClientMessage::Ping) => {
                 let _ = replies.send(text(&TerminalServerMessage::Pong));
             }
+            // A connected computer's terminal's token; this one was opened with a ticket.
+            Ok(TerminalClientMessage::Token { .. }) => {}
             Err(_) => {}
         }
     }

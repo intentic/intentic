@@ -6,8 +6,8 @@
 //! (default 60), turning direction every `--flip-s` seconds (default 2) so a finite page keeps moving.
 
 use browser_wire::{BrowserMediaClientMessage, BrowserMediaServerMessage};
-use castd::client::{MediaClient, Received};
-use castd::header::{FLAG_CLIP, FLAG_KEY, FLAG_REFINE, KIND_AUDIO, KIND_LOSSLESS, KIND_VIDEO};
+use cast_core::client::{MediaClient, Received};
+use cast_core::header::{FLAG_CLIP, FLAG_KEY, FLAG_REFINE, KIND_AUDIO, KIND_LOSSLESS, KIND_VIDEO};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -81,19 +81,19 @@ async fn run(a: &HashMap<String, String>) -> Result<serde_json::Value, String> {
         (Some(t), _) => t.clone(),
         (None, Some(path)) => {
             let key = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
-            castd::token::sign(
+            cast_core::token::sign(
                 &key,
-                &castd::token::Claims {
+                &cast_core::token::Claims {
                     s: session.clone(),
-                    exp: castd::token::now_ms() + 3_600_000,
+                    exp: cast_core::token::now_ms() + 3_600_000,
                     ro: a.contains_key("read-only"),
-                    iat: castd::token::now_ms(),
+                    iat: cast_core::token::now_ms(),
                 },
             )
         }
         (None, None) => return Err("--key-file or --token is required".into()),
     };
-    let reach = castd::media::Reach {
+    let reach = cast_core::media::Reach {
         local: a.contains_key("local"),
         lossless: a.contains_key("lossless"),
     };

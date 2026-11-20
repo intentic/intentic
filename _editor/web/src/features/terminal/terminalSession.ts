@@ -14,6 +14,7 @@ import { transportFor } from "../../client/transport/webTransport";
 import { liveSocket, type LiveSocket } from "../../client/session/liveSocket";
 import { socketAddress } from "../../client/sandbox/streams/wsTicket";
 import { type ChannelEvents, readsDeflate, socketChannel, type TerminalChannel } from "./channel/terminalChannel";
+import { type TerminalAddress, type TerminalDoor, TerminalGone, type TerminalParams } from "../../models/terminal/terminalDoor";
 import { StreamSocket } from "../../client/transport/streamSocket";
 import { editKeyBytes, optionIsMeta } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./links/terminalFileLinks";
@@ -61,6 +62,8 @@ export type TerminalSession = TerminalSizing & {
     down: boolean;
     // Whether the daemon was last told this viewport is out of sight (terminalPresence.ts); unset until first told.
     away?: boolean;
+    // Where the socket dials; undefined is the sandbox's own terminal route.
+    readonly door: TerminalDoor | undefined;
 };
 
 // Ctrl/Cmd+click (or any tap on a coarse pointer) opens a link, from the linkifier's trusted mouseup. A sandbox
@@ -106,7 +109,6 @@ const attachRenderer = (s: TerminalSession): void => {
 // What the daemon plans the attach from: the session, its grid and its directory; whether the viewport is out of sight,
 // so a hidden tab's attach never shrinks the pane under the window being read (terminalPresence.ts); and, where this
 // browser can read them, deflated pane bytes (channel/terminalChannel.ts). An older netd ignores both asks.
-type TerminalParams = { session: string; cols: string; rows: string; cwd?: string; away?: `1`; deflate?: `1` };
 const terminalParams = (s: Omit<TerminalSession, "live">): TerminalParams => {
     const params: TerminalParams = { session: s.name, cols: String(s.requestedGrid.cols), rows: String(s.requestedGrid.rows) };
     if (s.cwd !== undefined) {
@@ -122,12 +124,19 @@ const terminalParams = (s: Omit<TerminalSession, "live">): TerminalParams => {
 };
 
 // A WebSocket on a stream of the edge's WebTransport session where it is declared and ready, else the browser's own.
-const openChannel = (base: string, query: string, events: ChannelEvents): TerminalChannel => {
+const openChannel = (address: TerminalAddress, events: ChannelEvents): TerminalChannel => {
+    const { base, path, query } = address;
     const transport = transportFor(base, webTransportDeclared());
     if (transport === undefined) {
-        return socketChannel(new WebSocket(`${base.replace(/^http/, `ws`)}${TERMINAL_PATH}?${query}`), events);
+        return socketChannel(new WebSocket(`${base.replace(/^http/, `ws`)}${path}?${query}`), events);
     }
-    return socketChannel(new StreamSocket(transport.createBidirectionalStream(), { host: new URL(base).host, path: TERMINAL_PATH, query }), events);
+    return socketChannel(new StreamSocket(transport.createBidirectionalStream(), { host: new URL(base).host, path, query }), events);
+};
+
+// The sandbox's own terminal route, with the one-shot ticket its upgrade presents.
+const sandboxAddress = async (params: TerminalParams): Promise<TerminalAddress | undefined> => {
+    const address = await socketAddress(params);
+    return address === undefined ? undefined : { ...address, path: TERMINAL_PATH };
 };
 
 // The session's live channel: minted, leased against the shared `attach` stream budget (over budget it still connects,
@@ -142,11 +151,17 @@ const sessionSocket = (s: Omit<TerminalSession, "live">): LiveSocket<TerminalCli
             s.term.writeln(line);
         }
     };
-    const live = liveSocket<{ base: string; query: string }, TerminalClientMessage>({
-        mint: () => socketAddress(terminalParams(s)),
+    // Session over: never reconnects, since `-A` would recreate it and a missing session would fail-loop.
+    const ended = (): void => {
+        s.closing = true;
+        live.end();
+        s.onExit(s.name);
+    };
+    const live = liveSocket<TerminalAddress, TerminalClientMessage>({
+        mint: () => (s.door ?? { address: sandboxAddress }).address(terminalParams(s)),
         lease: () => acquireStreamSlot(`attach`),
         open: (address, link) =>
-            openChannel(address.base, address.query, {
+            openChannel(address, {
                 open: link.opened,
                 // Any bytes from the server prove liveness, parseable or not.
                 heard: link.heard,
@@ -164,15 +179,16 @@ const sessionSocket = (s: Omit<TerminalSession, "live">): LiveSocket<TerminalCli
                         applyTerminalGrid(s, message);
                     }
                     if (message.type === `exit`) {
-                        // Session ended; never reconnects, since `-A` would recreate it and a missing session would fail-loop.
-                        s.closing = true;
-                        live.end();
-                        s.onExit(s.name);
+                        ended();
                     }
                 },
                 closed: link.closed,
             }),
         onMintFailed: (error) => {
+            if (error instanceof TerminalGone) {
+                ended();
+                return;
+            }
             // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
             console.warn(`terminal ${s.name}: authorizing the socket failed`, error);
             down(`\r\n\x1b[31m${t(`terminal.terminalSession.authFailed`, { reason: errorMessage(error) })}\x1b[0m`);
@@ -182,6 +198,7 @@ const sessionSocket = (s: Omit<TerminalSession, "live">): LiveSocket<TerminalCli
         onOpen: () => {
             resetTerminalGrid(s);
             s.down = false;
+            s.door?.opened?.((message) => live.send(message));
             // Messages are dropped until open; report the viewport now so a mid-handshake resize or hide is not lost.
             live.send(presenceReport(s));
         },
@@ -354,13 +371,15 @@ const bindShellKeys = (term: Terminal): void => {
 };
 
 // Builds one session's xterm, host, and channel; the host stays out of the DOM until mountTerminalSession. `readOnly`
-// makes it a log view with no stdin; `spawnWithin` sizes the attach grid.
+// makes it a log view with no stdin; `spawnWithin` sizes the attach grid; `door` dials somewhere other than the
+// sandbox's own tmux.
 export const createTerminalSession = (
     name: string,
     onExit: (name: string) => void,
     readOnly = false,
     spawnWithin?: HTMLElement,
     cwd?: string,
+    door?: TerminalDoor,
 ): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
@@ -426,6 +445,7 @@ export const createTerminalSession = (
         onExit,
         closing: false,
         down: false,
+        door,
     };
     // The same object, so the socket's handlers and every holder of the session see one state.
     const s: TerminalSession = Object.assign(state, { live: sessionSocket(state) });
@@ -509,6 +529,7 @@ export const parkTerminalSession = (s: TerminalSession): void => {
 export const disposeTerminalSession = (s: TerminalSession): void => {
     s.closing = true;
     s.live.dispose();
+    s.door?.dispose?.();
     window.clearTimeout(s.resizeSettle);
     s.unobserve?.();
     detachRenderer(s);

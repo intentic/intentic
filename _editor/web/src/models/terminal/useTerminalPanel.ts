@@ -1,6 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { useLayout } from "../../workbench/window/useLayout";
 import { killTerminal, listTerminals } from "./terminalsQuery";
+import { closeDeviceTerminal, deviceDoorFor, deviceTerminalTabs, forgetDeviceTerminal, isDeviceTab } from "./deviceTerminals";
 import type { TerminalTabsSource } from "../../features/terminal/useTerminal";
 import { uuid } from "../../lib/uuid";
 
@@ -8,18 +9,26 @@ import { uuid } from "../../lib/uuid";
 // agree. A live command's output belongs in a terminal, never a dialog or `<pre>`; a dialog only tracks state and
 // offers actions. A frozen transcript record or a settled failure message is text: nothing more is coming.
 
+// Beside them, the shells on the owner's connected computers this browser has open (deviceTerminals.ts): listed after
+// the sandbox's own, dialled through their own door, and closed on their computer when their tab is.
 export const globalTerminalSource: TerminalTabsSource = {
-    list: listTerminals,
+    list: async () => [...(await listTerminals()), ...deviceTerminalTabs()],
     create: () => `web-${uuid().slice(0, 8)}`,
     // Logged only: the tab's already gone from the strip, and there is no error surface beyond that; the shared list
     // puts a refused kill's row back (killTerminal).
     kill: async (name) => {
+        if (isDeviceTab(name)) {
+            await closeDeviceTerminal(name);
+            return;
+        }
         try {
             await killTerminal(name);
         } catch (error) {
             console.error(`terminal ${name}: kill failed`, error);
         }
     },
+    door: deviceDoorFor,
+    ended: forgetDeviceTerminal,
 };
 
 // What a surface asks the panel to open, and what it may say while the tab is on its way. A flow knows what it started;

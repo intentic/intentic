@@ -16,6 +16,7 @@ import { connect, type MarkedLink, reachedOverLoopback } from "../device/connect
 import { hostedSlugs, keeperOn, startKeeper } from "../device/sandbox-rounds/keeper.js";
 import { startProbationWatch } from "../device/sandbox-rounds/probation-watch.js";
 import { startEgressFollower } from "../device/egress/follower.js";
+import { machineRemote } from "../device/remote/remote.js";
 import { readChannelSlugs } from "../device/sandbox-rounds/swap-records.js";
 import { fleet } from "../device/tools/sandboxes.js";
 import { takeOverCommandLedger } from "../device/tools/command-ledger.js";
@@ -366,6 +367,8 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
         }
         // Its supervisor no longer takes them down with it (KillMode=process): this agent's own commands end here.
         await stopRunningCommands();
+        // remoted leaves by itself once this process's end closes its stdin; asked first, it says so in the log.
+        await machineRemote(log).shutdown();
         await trial.clean();
         await release();
         const { reason, detail } = reasonForCode(code);
@@ -417,6 +420,10 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
         return undefined;
     });
     if (now !== undefined) {
+        // Before any link dials: remoted's uplinks follow the links, and the first pass takes up what it held last run.
+        await machineRemote(log)
+            .keepLinks(now.links)
+            .catch((cause: unknown) => log(`remoted: could not bring its uplinks in line with the links (${errorMessage(cause)})`));
         reconcileLinks(runtime.connections, now.links, (link) => connect(link, MACHINE_VERSION, log), log);
         const held = runtime.children?.held() ?? [];
         runtime.children?.reconcile(now.children);

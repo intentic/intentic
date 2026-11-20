@@ -82,6 +82,66 @@ pub fn media(path: &str) -> Option<Media<'_>> {
     })
 }
 
+/// Which of a connected computer's remote routes a request names: its screen's media socket or a terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceRoute {
+    Media,
+    Terminal,
+}
+
+impl DeviceRoute {
+    /// The path remoted serves it under, the session after it.
+    pub fn upstream(self) -> &'static str {
+        match self {
+            Self::Media => browser_wire::DEVICE_MEDIA_UPSTREAM,
+            Self::Terminal => browser_wire::DEVICE_TERMINAL_UPSTREAM,
+        }
+    }
+}
+
+/// What a request under a device route asks for: one device's session, or nothing it could name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceView<'a> {
+    Session {
+        route: DeviceRoute,
+        device: &'a str,
+        session: &'a str,
+    },
+    BadName,
+}
+
+/// `/system/device-media/<device>/<session>` or `/system/device-terminal/<device>/<session>`, each name
+/// `[A-Za-z0-9_-]{1,64}`: the device names a socket file and the session a path on remoted, so nothing else passes.
+pub fn device_view(path: &str) -> Option<DeviceView<'_>> {
+    let (route, rest) = [
+        (DeviceRoute::Media, browser_wire::DEVICE_MEDIA_PATH),
+        (DeviceRoute::Terminal, browser_wire::DEVICE_TERMINAL_PATH),
+    ]
+    .into_iter()
+    .find_map(|(route, prefix)| Some((route, path.strip_prefix(prefix)?)))?;
+    if rest.is_empty() {
+        return Some(DeviceView::BadName);
+    }
+    let named = rest.strip_prefix('/')?;
+    Some(match named.split_once('/') {
+        Some((device, session))
+            if crate::devices::is_name(device) && crate::devices::is_name(session) =>
+        {
+            DeviceView::Session {
+                route,
+                device,
+                session,
+            }
+        }
+        _ => DeviceView::BadName,
+    })
+}
+
+/// A connected computer's remoted dialling its uplink: the exact path, nothing under it.
+pub fn is_device_uplink(path: &str) -> bool {
+    path == browser_wire::DEVICE_UPLINK_PATH
+}
+
 pub fn target(listener: Listener, host: &str, sandbox_id: Option<&str>) -> Target {
     match listener {
         Listener::Daemon | Listener::Loopback { tls: true } => Target::Node,
@@ -187,6 +247,46 @@ mod tests {
         assert_eq!(media("/system/browser-mediax/a"), None);
         assert_eq!(media("/system/browser-view"), None);
         assert_eq!(media("/"), None);
+    }
+
+    #[test]
+    fn a_device_path_names_one_device_and_session_or_none() {
+        assert_eq!(
+            device_view("/system/device-media/rog/screen-1"),
+            Some(DeviceView::Session {
+                route: DeviceRoute::Media,
+                device: "rog",
+                session: "screen-1"
+            })
+        );
+        assert_eq!(
+            device_view("/system/device-terminal/radarsu-server/t-Ab_9"),
+            Some(DeviceView::Session {
+                route: DeviceRoute::Terminal,
+                device: "radarsu-server",
+                session: "t-Ab_9"
+            })
+        );
+        for bad in [
+            "/system/device-media",
+            "/system/device-media/",
+            "/system/device-media/rog",
+            "/system/device-media/rog/",
+            "/system/device-media/rog/a/b",
+            "/system/device-media/../screen-1",
+            "/system/device-terminal/rog/a.b",
+            "/system/device-terminal/rog::wsl:arch/t-1",
+            &format!("/system/device-terminal/rog/{}", "a".repeat(65)),
+        ] {
+            assert_eq!(device_view(bad), Some(DeviceView::BadName), "{bad}");
+        }
+        assert_eq!(device_view("/system/device-mediax/rog/s"), None);
+        assert_eq!(device_view("/system/device-uplink"), None);
+        assert_eq!(DeviceRoute::Media.upstream(), "/media");
+        assert_eq!(DeviceRoute::Terminal.upstream(), "/terminal");
+        assert!(is_device_uplink("/system/device-uplink"));
+        assert!(!is_device_uplink("/system/device-uplink/"));
+        assert!(!is_device_uplink("/system/device-uplinks"));
     }
 
     #[test]

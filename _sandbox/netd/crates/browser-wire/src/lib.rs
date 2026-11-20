@@ -178,6 +178,11 @@ pub enum TerminalClientMessage {
     /// 90 s without a frame. netd answers `pong`, sends a WebSocket ping only to a client silent for 45 s, and closes
     /// one silent for 90.
     Ping,
+    /// A fresher token for the socket, as a media socket takes one (`BrowserMediaClientMessage`'s `token`): a connected
+    /// computer's terminal ([`DEVICE_TERMINAL_PATH`]) checks its token at the upgrade and keeps the socket open
+    /// [`MEDIA_TOKEN_GRACE_SECONDS`] past the newest one's expiry. The sandbox's own terminal is opened with a ticket and
+    /// ignores it (2026-11-20).
+    Token { token: String },
 }
 
 /// What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.
@@ -588,6 +593,53 @@ pub const MEDIA_TOKEN_GRACE_SECONDS: u64 = 600;
 /// [`MEDIA_TOKEN_GRACE_SECONDS`] ago.
 pub const MEDIA_CLOSE_CODES: [(&str, u16); 2] = [("dropped", 4001), ("expired", 4002)];
 
+/// Where a person's viewer opens a connected computer's screen, on the sandbox's address:
+/// `/system/device-media/<device>/<session>?token=…`, both names `[A-Za-z0-9_-]{1,64}` (2026-11-20). The protocol is the
+/// media socket's, message for message ([`BrowserMediaClientMessage`], [`BrowserMediaServerMessage`], the header, the
+/// DataChannels, the close codes); only the far end differs. netd carries the upgrade down that computer's uplink
+/// ([`DEVICE_UPLINK_PATH`]) to its `intentic-remoted` with the path rewritten to [`DEVICE_MEDIA_UPSTREAM`]`/<session>`,
+/// then splices it, as it splices a window's media socket to castd. A screen's session is `screen-<monitor id>`.
+pub const DEVICE_MEDIA_PATH: &str = "/system/device-media";
+
+/// Where a person's terminal on a connected computer opens: `/system/device-terminal/<device>/<session>?token=…`, the
+/// names as [`DEVICE_MEDIA_PATH`]'s. The protocol is the sandbox terminal's ([`TerminalClientMessage`],
+/// [`TerminalServerMessage`], its `deflate` query), served by that computer's `intentic-remoted` at
+/// [`DEVICE_TERMINAL_UPSTREAM`]`/<session>`. A terminal's session is the `t-<random>` its open named, and it can be
+/// attached again for as long as that remoted runs.
+pub const DEVICE_TERMINAL_PATH: &str = "/system/device-terminal";
+
+/// Where a connected computer's `intentic-remoted` dials the sandbox: a WebSocket upgrade carrying
+/// `authorization: Bearer <uplink token>` and [`DEVICE_HEADER`], whose binary messages then carry one yamux session.
+/// netd opens a stream per viewer and per call of the daemon's, each one HTTP/1.1 connection remoted serves; remoted
+/// opens none. netd takes it on any listener and from the tunnel, only for a token the daemon registered for that
+/// device, and the newest uplink of a device replaces the one before it.
+pub const DEVICE_UPLINK_PATH: &str = "/system/device-uplink";
+
+/// The device an uplink is for, on its upgrade: the name the daemon handed that computer's remoted when it started it,
+/// `[A-Za-z0-9_-]{1,64}`. The token decides; a header naming another device than the token's is refused.
+pub const DEVICE_HEADER: &str = "x-intentic-device";
+
+/// The path remoted serves a screen's media socket under, the session after it: what netd rewrites
+/// [`DEVICE_MEDIA_PATH`]`/<device>` to, the query kept.
+pub const DEVICE_MEDIA_UPSTREAM: &str = "/media";
+
+/// The path remoted serves a terminal under, the session after it: what netd rewrites
+/// [`DEVICE_TERMINAL_PATH`]`/<device>` to, the query kept.
+pub const DEVICE_TERMINAL_UPSTREAM: &str = "/terminal";
+
+/// Where the container's netd serves each connected device's remoted to the daemon: `<dir>/<device>.sock`, owner-only,
+/// each connection one stream down the device's uplink. The daemon asks remoted's control routes there (`/health`,
+/// `/info`, `/terminals`, `/viewers/drop`, `/stats`) as it asks castd's on castd's socket.
+pub const DEVICE_SOCKET_DIR: &str = "/run/intentic/devices";
+
+/// The close code of a device's uplink a newer uplink of the same device replaced, as the tunnel's displaced carrier
+/// (the tunnel crate's `DISPLACED_CODE`).
+pub const DEVICE_UPLINK_DISPLACED: u16 = 4001;
+
+/// The close code of a device's uplink the daemon withdrew (the device's remote switches went off, or it was
+/// disconnected): remoted stops dialling until it is started again.
+pub const DEVICE_UPLINK_WITHDRAWN: u16 = 4003;
+
 /// Whether a key event presses, releases, or does both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
@@ -889,6 +941,19 @@ mod tests {
                 "closeCodes": MEDIA_CLOSE_CODES.iter().map(|(name, code)| (name.to_string(), serde_json::json!(code))).collect::<serde_json::Map<_, _>>(),
                 "client": schema::<BrowserMediaClientMessage>(),
                 "server": schema::<BrowserMediaServerMessage>(),
+            },
+            "device": {
+                "mediaPath": DEVICE_MEDIA_PATH,
+                "terminalPath": DEVICE_TERMINAL_PATH,
+                "uplinkPath": DEVICE_UPLINK_PATH,
+                "header": DEVICE_HEADER,
+                "mediaUpstream": DEVICE_MEDIA_UPSTREAM,
+                "terminalUpstream": DEVICE_TERMINAL_UPSTREAM,
+                "socketDir": DEVICE_SOCKET_DIR,
+                "closeCodes": {
+                    "displaced": DEVICE_UPLINK_DISPLACED,
+                    "withdrawn": DEVICE_UPLINK_WITHDRAWN,
+                },
             },
             "terminal": {
                 "path": TERMINAL_PATH,

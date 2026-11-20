@@ -35,6 +35,7 @@ import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceOpOutcome from "./runners/DeviceOpOutcome.vue";
 import DeviceVerbLog from "./runners/DeviceVerbLog.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
+import DeviceRemote from "./remote/DeviceRemote.vue";
 import DeviceUpdateProgress from "./runners/DeviceUpdateProgress.vue";
 import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
 import SyncSwitchMenu from "./sync/SyncSwitchMenu.vue";
@@ -376,6 +377,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
             </Row>
         </RowGroup>
 
+        <DeviceRemote :machine="machine" />
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
         <!-- A section, not a group: each sandbox is a card on its own surface. -->
@@ -604,7 +606,6 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     </template>
                 </DeviceDetail>
             </div>
-
         </Section>
 
         <!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to.

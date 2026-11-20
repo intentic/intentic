@@ -32,7 +32,7 @@ const link: HostLink = {
     sandboxUrl: PUBLIC,
     id: `my-pc`,
     token: `iht_test`,
-    scopes: { shell: `off`, write: `off`, screen: `off`, control: `off`, sandboxes: `off`, destructive: `off`, programs: `off` },
+    scopes: { shell: `off`, write: `off`, screen: `off`, control: `off`, sandboxes: `off`, destructive: `off`, programs: `off`, remoteView: `off`, remoteControl: `off`, remoteTerminal: `off` },
 };
 
 // Enough of the WebSocket surface for the connection and the oRPC handler it upgrades into; `opens`/`drops`

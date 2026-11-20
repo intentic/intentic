@@ -368,6 +368,32 @@ pub enum FromNode {
     Unwatch {
         dir: String,
     },
+    /// Lets a connected computer's `intentic-remoted` hold an uplink (browser-wire's `DEVICE_UPLINK_PATH`) for
+    /// `device`, presenting the token whose SHA-256 is `token_sha256` (lowercase hex of the token's UTF-8 bytes). A
+    /// registration replaces the device's earlier one, and an uplink that presented the earlier token is closed; the same
+    /// token again changes nothing (2026-11-20). Send only to a netd that told `DeviceUplinks`: an older one closes the
+    /// link on a kind it does not know.
+    DeviceUplink {
+        device: String,
+        #[serde(rename = "tokenSha256")]
+        token_sha256: String,
+    },
+    /// Withdraws `device`'s registration: its uplink is closed with browser-wire's `DEVICE_UPLINK_WITHDRAWN`, its socket
+    /// for the daemon removed, and a later dial refused.
+    DeviceWithdraw {
+        device: String,
+    },
+}
+
+/// A registered device's uplink as netd holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "wire.ts")]
+pub struct DeviceUplinkState {
+    pub device: String,
+    /// Its remoted's uplink is up, and the daemon's socket for it (`<DEVICE_SOCKET_DIR>/<device>.sock`) answers.
+    pub connected: bool,
 }
 
 /// Why netd stopped dialling the ingress at its usual pace, past an ordinary drop it redials at once.
@@ -425,6 +451,14 @@ pub enum ToNode {
         session: String,
         prompt: String,
         value: String,
+    },
+    /// Every device registered with `FromNode::DeviceUplink` and whether its uplink is up, told whole on every change
+    /// and again to each Node that says hello (2026-11-20). Registrations outlive a Node restart, as terminals and media
+    /// sockets do, so a Node hearing this after its hello learns what an earlier one left registered. It is also how a
+    /// Node knows this netd carries device uplinks at all: an older netd never tells it, and a Node sends no
+    /// registration to a netd that has not. An older Node ignores it.
+    DeviceUplinks {
+        uplinks: Vec<DeviceUplinkState>,
     },
 }
 
@@ -726,6 +760,38 @@ mod tests {
             !serde_json::to_string(&older)
                 .unwrap()
                 .contains("previewGuard")
+        );
+    }
+
+    // A registration names its device and its token's digest, never the token; the report lists every registered device.
+    #[test]
+    fn a_device_uplink_is_registered_by_digest_and_reported_whole() {
+        let registered: FromNode =
+            serde_json::from_str(r#"{"kind":"deviceUplink","device":"rog","tokenSha256":"ab12"}"#)
+                .unwrap();
+        assert_eq!(
+            registered,
+            FromNode::DeviceUplink {
+                device: "rog".into(),
+                token_sha256: "ab12".into()
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&FromNode::DeviceWithdraw {
+                device: "rog".into()
+            })
+            .unwrap(),
+            r#"{"kind":"deviceWithdraw","device":"rog"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ToNode::DeviceUplinks {
+                uplinks: vec![DeviceUplinkState {
+                    device: "rog".into(),
+                    connected: true
+                }]
+            })
+            .unwrap(),
+            r#"{"kind":"deviceUplinks","uplinks":[{"device":"rog","connected":true}]}"#
         );
     }
 

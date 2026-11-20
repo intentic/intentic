@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { repoRoot } from "../../constants/src/node.mjs";
 
 /** What publish-github.sh attaches to the Release (and the attestation covers), one flat namespace of asset names. */
-export const RELEASE_DIRS = ["_devices/machine/dist-bin", "_devices/keyring/dist-bin", "_devices/win-launcher/dist-bin", "_sandbox/ic/dist-bin", "_editor/desktop-app/dist-bin"];
+export const RELEASE_DIRS = ["_devices/machine/dist-bin", "_devices/keyring/dist-bin", "_devices/win-launcher/dist-bin", "_devices/remoted/dist-bin", "_sandbox/ic/dist-bin", "_editor/desktop-app/dist-bin"];
 export const SUMS = "SHA256SUMS";
 export const SIGNATURE = "SHA256SUMS.sig";
 const DESKTOP_APP = "_editor/desktop-app";

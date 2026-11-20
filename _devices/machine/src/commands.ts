@@ -5,6 +5,7 @@ import { buildCommand, machineUi } from "./cli-ui.js";
 import { runLogPath } from "./config.js";
 import { deviceCommands } from "./device/commands.js";
 import { egressRoutes } from "./device/egress/trust-command.js";
+import { remoteRoutes } from "./device/remote/commands.js";
 import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
 import { keyringCommands } from "./keyring/commands.js";
@@ -153,6 +154,8 @@ export const commands = buildRouteMap({
         sandbox: sandboxRoutes,
         // The passkeys this machine pinned for loosening a sandbox's egress fence (device/egress/).
         egress: egressRoutes,
+        // People's remote desktop and terminals (device/remote/): who is connected, and the person here ending it.
+        remote: remoteRoutes,
         environment: environmentRoutes,
         run,
         "before-sign-in": beforeSignInCommand,

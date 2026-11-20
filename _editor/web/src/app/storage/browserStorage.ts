@@ -87,6 +87,8 @@ export const justSetUpKey = sandboxKeys(`intentic.justSetUp.`);
 export const capacityRailKey = sandboxKeys(`intentic.capacityRail.`);
 // The board's last roster heard, per sandbox, painted before the stream answers (models/fleet/useAgents-registry.ts).
 export const rosterKey = sandboxKeys(`intentic.roster.`);
+// The terminals on the owner's connected computers this browser has open as tabs, per sandbox (models/terminal/deviceTerminals.ts).
+export const deviceTerminalsKey = sandboxKeys(`intentic.deviceTerminals.`);
 
 // The transcript mirror (models/conversations/transcript/transcriptCache.ts): up to its last few hundred messages per
 // conversation, in IndexedDB, one database per account (accountDatabases.ts). Deleted with that account; a window holding

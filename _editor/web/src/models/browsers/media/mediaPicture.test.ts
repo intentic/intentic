@@ -312,6 +312,8 @@ it("dials on the edge's WebTransport where it was declared, and offers castd a p
         }
     }
     expect(fake.posted).toContainEqual({ type: `peer`, open: true });
+    // The page can say what carries the picture now (a remote screen's connection badge).
+    expect(picture.carrier.value).toBe(`peer`);
     // What castd says on the peer reaches the worker, and the page reads its JSON as it reads the socket's.
     for (const listener of channels.get(`media`)!.listeners.get(`message`) ?? []) {
         listener({ data: JSON.stringify({ type: `cursor`, cursor: { css: `text` } }) });
@@ -325,6 +327,7 @@ it("dials on the edge's WebTransport where it was declared, and offers castd a p
     // castd let go of the peer: the socket carries everything again, the worker's next message included.
     fake.castd({ type: `rtcClosed`, reason: `ICE disconnected` });
     expect(fake.posted.at(-1)).toEqual({ type: `peer`, open: false });
+    expect(picture.carrier.value).toBe(`socket`);
     fake.say({ type: `peerSend`, message: { type: `ack`, id: 4 } });
     expect(fake.sent().at(-1)).toEqual({ type: `ack`, id: 4 });
 });

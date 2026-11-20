@@ -108,3 +108,22 @@ export const MEDIA_TOKEN_GRACE_SECONDS = 600;
 // desktop's control handed back), and castd refuses every token minted before it. `expired`: the socket's newest token
 // expired more than MEDIA_TOKEN_GRACE_SECONDS ago.
 export const MEDIA_CLOSE_CODES = { dropped: 4001, expired: 4002 } as const;
+
+// A person's remote screen and terminals on a connected computer (2026-11-20), on the sandbox's address with the device
+// and the session after the path (`${DEVICE_MEDIA_PATH}/<device>/<session>?token=…`, both `[A-Za-z0-9_-]{1,64}`). The
+// media socket's and the terminal's own protocols, served by that computer's `intentic-remoted`, which netd reaches down
+// the uplink remoted dials (`DEVICE_UPLINK_PATH`). The daemon's `devices.remote.*` hands out each path with its token.
+export const DEVICE_MEDIA_PATH = "/system/device-media";
+export const DEVICE_TERMINAL_PATH = "/system/device-terminal";
+export const DEVICE_UPLINK_PATH = "/system/device-uplink";
+
+// The device an uplink is for, on its upgrade; the token decides, and a header naming another device is refused.
+export const DEVICE_HEADER = "x-intentic-device";
+
+// Where netd serves each connected device's remoted to the daemon, `<dir>/<device>.sock`: each connection one stream
+// down that device's uplink, for remoted's control routes.
+export const DEVICE_SOCKET_DIR = "/run/intentic/devices";
+
+// The codes netd closes a device's uplink with: `displaced`, a newer uplink of the same device replaced it; `withdrawn`,
+// the daemon withdrew the device's registration.
+export const DEVICE_UPLINK_CLOSE_CODES = { displaced: 4001, withdrawn: 4003 } as const;

@@ -19,8 +19,8 @@ use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use netd_wire::{
-    Answer, FromNode, LENGTH_BYTES, NetdAnswer, NetdQuestion, Page, PreviewRoute, Question,
-    TerminalPlan, ToNode, frame,
+    Answer, DeviceUplinkState, FromNode, LENGTH_BYTES, NetdAnswer, NetdQuestion, Page,
+    PreviewRoute, Question, TerminalPlan, ToNode, frame,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::unix::OwnedWriteHalf;
@@ -109,6 +109,8 @@ pub struct Harness {
     pub tunnel: watch::Receiver<Option<bool>>,
     /// Every tunnel report netd sent, newest last.
     pub reports: watch::Receiver<Vec<ToNode>>,
+    /// The device uplinks netd last reported (`ToNode::DeviceUplinks`), and how many reports it sent.
+    pub devices: watch::Receiver<(usize, Vec<DeviceUplinkState>)>,
     synced: Mutex<mpsc::UnboundedReceiver<(u32, Vec<Option<u64>>)>>,
     _netd: Child,
 }
@@ -153,6 +155,7 @@ impl Harness {
         let writer = Arc::new(Mutex::new(writer));
         let (tunnel_sender, tunnel) = watch::channel(None);
         let (reports_sender, reports) = watch::channel(Vec::new());
+        let (devices_sender, devices) = watch::channel((0, Vec::new()));
         let (synced_sender, synced) = mpsc::unbounded_channel();
         let answering = writer.clone();
         tokio::spawn(async move {
@@ -227,6 +230,12 @@ impl Harness {
                     }
                     // A password typed at a hidden prompt: no test here types one.
                     ToNode::HiddenLine { .. } => {}
+                    ToNode::DeviceUplinks { uplinks } => {
+                        devices_sender.send_modify(|(told, held)| {
+                            *told += 1;
+                            *held = uplinks;
+                        });
+                    }
                 }
             }
         });
@@ -235,6 +244,7 @@ impl Harness {
             socket: writer,
             tunnel,
             reports,
+            devices,
             synced: Mutex::new(synced),
             _netd: netd,
         }

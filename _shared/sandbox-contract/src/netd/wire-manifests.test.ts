@@ -7,6 +7,12 @@ import {
     BROWSER_MEDIA_PATH,
     BROWSER_MEDIA_SOCKET_DIR,
     BROWSER_VIEW_PATH,
+    DEVICE_HEADER,
+    DEVICE_MEDIA_PATH,
+    DEVICE_SOCKET_DIR,
+    DEVICE_TERMINAL_PATH,
+    DEVICE_UPLINK_CLOSE_CODES,
+    DEVICE_UPLINK_PATH,
     EDGE_TRANSPORTS,
     MEDIA_CLIP_LEN,
     MEDIA_CLOSE_CODES,
@@ -59,6 +65,14 @@ const browser = manifest("browser-wire") as {
         rtcChannels: Record<string, { ordered: boolean; maxRetransmits: number | null }>;
         rtcMessageMax: number;
         tokenGraceSeconds: number;
+        closeCodes: Record<string, number>;
+    };
+    device: {
+        mediaPath: string;
+        terminalPath: string;
+        uplinkPath: string;
+        header: string;
+        socketDir: string;
         closeCodes: Record<string, number>;
     };
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
@@ -128,6 +142,23 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
         expect<Record<string, number>>(MEDIA_CLOSE_CODES).toEqual(browser.browserMedia.closeCodes);
         expect<Record<string, { ordered: boolean; maxRetransmits: number | null }>>(RTC_CHANNELS).toEqual(browser.browserMedia.rtcChannels);
         expect(RTC_MESSAGE_MAX).toBe(browser.browserMedia.rtcMessageMax);
+    });
+
+    it("opens a connected computer's screen, terminal and uplink where browser-wire says", () => {
+        expect({
+            media: DEVICE_MEDIA_PATH,
+            terminal: DEVICE_TERMINAL_PATH,
+            uplink: DEVICE_UPLINK_PATH,
+            header: DEVICE_HEADER,
+            socketDir: DEVICE_SOCKET_DIR,
+        }).toEqual({
+            media: browser.device.mediaPath,
+            terminal: browser.device.terminalPath,
+            uplink: browser.device.uplinkPath,
+            header: browser.device.header,
+            socketDir: browser.device.socketDir,
+        });
+        expect<Record<string, number>>(DEVICE_UPLINK_CLOSE_CODES).toEqual(browser.device.closeCodes);
     });
 
     it("finds netd's vitals where browser-wire says it answers them, in the states it names", () => {

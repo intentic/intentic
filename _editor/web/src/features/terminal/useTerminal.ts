@@ -15,6 +15,7 @@ import {
     tellTerminalPresence,
     type TerminalSession,
 } from "./terminalSession";
+import type { TerminalDoor } from "../../models/terminal/terminalDoor";
 import { usePoll } from "@intentic/ui/async";
 import { useTextSize } from "@intentic/ui/text-size";
 import { useTheme } from "@intentic/ui/theme";
@@ -35,8 +36,8 @@ export interface TerminalTab {
     readonly running: boolean;
     // Epoch ms of last output, 0 meaning unknown (not 1970); feeds the inactive sweep and the work popover's dates.
     readonly activityAt: number;
-    // shell (numbered), panel (dev server), agent (Bash), job (daemon flow), process (background service).
-    readonly kind: "shell" | "panel" | "agent" | "job" | "process";
+    // shell (numbered), panel (dev server), agent (Bash), job (daemon flow), process (background service), device (remote).
+    readonly kind: "shell" | "panel" | "agent" | "job" | "process" | "device";
     // Present when this session is a declared extension process, addressing its /extensions start/stop routes.
     readonly extensionId?: string;
     readonly processName?: string;
@@ -49,11 +50,10 @@ export interface TerminalTabsSource {
     readonly create?: () => string;
     // Resolves once the shared list has settled; never rejects, since a failed kill is the source's to reconcile.
     readonly kill?: (name: string) => Promise<void>;
+    // Where a tab dials when it is not the sandbox's own tmux (models/terminal/deviceTerminals.ts), and its end.
+    readonly door?: (tab: TerminalTab) => TerminalDoor | undefined;
+    readonly ended?: (name: string) => void;
 }
-
-// A process tab is a read-only log view: stdin off. The container sizes the PTY at birth, even hidden.
-const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined, cwd?: string): TerminalSession =>
-    createTerminalSession(tab.name, onExit, KINDS[tab.kind].logs, spawnWithin, cwd);
 
 // Shared session cache, one xterm+socket per name; disposed only when a session deliberately ends, or with the
 // sandbox: a switch drops every cached socket. Sessions themselves keep running; reattaching replays their history.
@@ -183,7 +183,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         return done.map((tab) => revealed.delete(tab.name)).includes(true);
     };
 
-    // Derive sessions from the full tab so a cache hit cannot ignore the daemon's pane kind.
+    // Derive sessions from the full tab so a cache hit cannot ignore the daemon's pane kind (a process's is a log view).
     const sessionOf = (tab: TerminalTab, cwd?: string): TerminalSession => {
         const cached = cache.value.get(tab.name);
         if (cached !== undefined) {
@@ -191,7 +191,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             cached.onExit = endSession;
             return cached;
         }
-        const session = createPane(tab, endSession, container, cwd);
+        const session = createTerminalSession(tab.name, endSession, KINDS[tab.kind].logs, container, cwd, source.door?.(tab));
         cache.value.set(tab.name, session);
         return session;
     };
@@ -435,6 +435,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         // This name is spent either way; a lingering claim would keep it in the shared list and the rail's count.
         dropPendingTerminal(name);
+        source.ended?.(name);
         const session = cache.value.get(name);
         if (session !== undefined) {
             disposeTerminalSession(session);
@@ -491,8 +492,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         mount(name);
     };
 
-    // Relists so a newly-appeared session shows up as a tab without mounting it; refresh() keeps the current active
-    // tab.
+    // Relists so a newly-appeared session shows up as a tab without mounting it; refresh() keeps the active tab.
     const surface = async (): Promise<void> => {
         await refresh();
     };

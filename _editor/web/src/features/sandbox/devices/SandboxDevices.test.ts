@@ -546,7 +546,8 @@ const openRowMenu = async (el: HTMLElement, name: string): Promise<void> => {
 };
 
 // The list's own tick boxes: the one over the list first, then one per row.
-const boxes = (el: HTMLElement): HTMLInputElement[] => [...el.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]`)];
+// The selection's tick boxes, not the page's switches (remote access's, drawn as checkbox inputs with the switch role).
+const boxes = (el: HTMLElement): HTMLInputElement[] => [...el.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]:not([role="switch"])`)];
 
 // Every switch granted: the state the verb tests below assume; without it the row states the missing grant
 // instead.

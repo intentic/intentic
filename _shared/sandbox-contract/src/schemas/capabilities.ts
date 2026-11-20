@@ -183,6 +183,15 @@ export const DeviceScopesSchema = z.object({
     // agent's supervision (app_start). Narrower than `shell` in what it reaches and wider in what it trusts: the program
     // is the sandbox's, not one already on the machine.
     programs: hostScope.default("off"),
+    // (2026-11-20) PEOPLE'S remote access, from the editor, served by intentic-remoted on the machine
+    // (schemas/device-remote.ts). Three switches of their own, independent of the agents' `screen`, `control` and
+    // `shell`: what an agent may do and what a person at another screen may do are different grants. All default off.
+    // Let people see the screen: a live view of this computer's desktop.
+    remoteView: hostScope.default("off"),
+    // Let people use the mouse and keyboard: input from that view. The person at the computer can pause it.
+    remoteControl: hostScope.default("off"),
+    // Let people open terminals: a shell on this computer, in any of its environments.
+    remoteTerminal: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });

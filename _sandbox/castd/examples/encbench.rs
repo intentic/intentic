@@ -10,7 +10,8 @@
 //! CRF 16 the way video.rs's paint-over does (`set_rate` with the sharper CRF, the same picture again), printing each
 //! frame's size and whether it was a keyframe: the refine passes must carry bits and none may be a keyframe.
 
-use castd::encoder::{self, Backend, EncoderConfig, Planes};
+use cast_core::encoder::{self, Backend, EncoderConfig, Planes};
+use cast_core::frame::Picture;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -128,13 +129,13 @@ fn main() {
                 info.fill(1);
             }
         }
-        let planes = Planes {
+        let planes = Picture::I420(Planes {
             y: &y,
             u: &u,
             v: &v,
             stride_y: w,
             stride_uv: w / 2,
-        };
+        });
         out.clear();
         let hint = (scene != "scroll" && n > 0).then_some(&mut info[..]);
         let (t0, c0) = (Instant::now(), cpu_ms());
@@ -196,13 +197,13 @@ fn paintover(backend: Backend, cfg: &EncoderConfig) {
         })
         .collect();
     let (u, v) = (vec![128u8; w * h / 4], vec![128u8; w * h / 4]);
-    let planes = Planes {
+    let planes = Picture::I420(Planes {
         y: &y,
         u: &u,
         v: &v,
         stride_y: w,
         stride_uv: w / 2,
-    };
+    });
     let mut frames = Vec::new();
     for n in 0..8 {
         // Frames 0-3 at CRF 32 (the motion quality), 4-6 the paint-over at CRF 16, 7 back at 32.

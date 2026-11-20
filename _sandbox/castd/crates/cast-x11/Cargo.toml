@@ -1,0 +1,16 @@
+# The X11 platform for cast-core: what castd captures, types into and resizes on an X display. Linux only.
+[package]
+name = "cast-x11"
+edition = "2024"
+version = "0.1.0"
+publish = false
+# The capture, RandR, input, cursor and clipboard code is voxl's (MIT, see ../../LICENSE and README.md).
+license = "MIT"
+
+[dependencies]
+cast-core = { path = "../cast-core", default-features = false }
+browser-wire = { path = "../../../netd/crates/browser-wire" }
+libc = "0.2"
+log = "0.4"
+nix = { version = "0.31", features = ["fs", "poll"] }
+x11rb = { version = "0.13", features = ["shm", "damage", "xfixes", "xtest", "xinput", "randr"] }

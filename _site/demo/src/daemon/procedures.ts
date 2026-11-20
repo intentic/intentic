@@ -37,6 +37,7 @@ import { privacyDoors } from "./account/privacy.handler";
 import { providersDoors } from "./account/providers.handler";
 import { publicDoors } from "./extensions/public.handler";
 import { pushDoors } from "./machine/push.handler";
+import { remoteDoors } from "./machine/remote.handler";
 import { runsDoors } from "./board/runs.handler";
 import { safetyDoors } from "./account/safety.handler";
 import { sessionsDoors } from "./board/sessions.handler";
@@ -101,6 +102,8 @@ export const procedures = {
     pages: pagesDoors,
     public: publicDoors,
     push: pushDoors,
+    // A person's screen and terminals on the owner's PC (machine/remote.handler.ts).
+    remote: remoteDoors,
     share: shareDoors,
     // Private conversations: who reads whose, and the ways into one (seal/seal.handler.ts).
     seal: sealDoors,

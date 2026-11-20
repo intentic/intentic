@@ -18,6 +18,7 @@ import { ZoneSchema } from "../time/zone.js";
 import { DEFAULT_SEARCH_ENGINE, RecordAgentBrowsingSchema, SearchEngineSchema } from "./browsing.js";
 import { DEFAULT_SANDBOX_MODE, SandboxModeSchema } from "./sandbox-mode.js";
 import { VoiceSettingsSchema } from "./voice.js";
+import { remoteIceServersSetting } from "./remote-access.js";
 import {
     AiNoticeSchema,
     AuditSettingsSchema,
@@ -469,6 +470,7 @@ export const SandboxSettingsSchema = z.object({
     outagePolicy: RetryPolicySchema.default("wait").describe(
         "What happens to a turn the model provider's own failure killed. `wait` holds it for a press. `retry` re-runs it on the shared per-provider breaker, backing off between attempts. The sandbox-wide default; any one conversation can say otherwise. Worth `retry` for a sandbox whose work mostly happens with nobody in the room.",
     ),
+    remoteIceServers: remoteIceServersSetting,
     // A vendor loop's hard cap on one turn; half an hour ended two Gemini children mid-work as failures (2026-10-17).
     turnCapMinutes: z.number().int().min(5).max(1440).default(30).describe(
         "The longest one turn may run on a loop the sandbox drives itself (OpenCode, an ACP agent, Pi, Muse) before it is ended, in minutes, however busy it keeps. A subagent's turn that reaches it is carried on in a fresh turn of the same session rather than ended as a failure. The Claude Code and Codex loops have no such cap.",

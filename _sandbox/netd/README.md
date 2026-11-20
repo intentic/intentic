@@ -80,6 +80,24 @@ flowchart LR
   is how castd knows its viewer runs on this computer and gives it the local profile and exact pictures (2026-11-20). No castd listening is netd's own 502 naming the session. A test's netd looks in
   `cast/` beside its run directory. (Rejected: relaying through Node, which the daemon does only behind a netd older
   than this route, `browser/media/media-relay.ts`.)
+- A connected computer's screen and terminals are carried here too, and served there (2026-11-20, `devices.rs`). The
+  computer's `intentic-remoted` dials `GET /system/device-uplink` (browser-wire's `DEVICE_UPLINK_PATH`) on the daemon's
+  host, from any listener or the tunnel, with `authorization: Bearer <uplink token>` and `x-intentic-device`, and the
+  WebSocket then carries one yamux session: the tunnel crate's own, its ends swapped, so here netd opens a stream per
+  exchange and pings, and remoted answers each stream as one HTTP/1.1 connection. netd takes a dial only for a token
+  whose SHA-256 Node registered for that device (`FromNode::DeviceUplink`; 401 otherwise, 403 for a header naming
+  another device), keeps the newest uplink per device (the one before it closed with `DEVICE_UPLINK_DISPLACED`, 4001),
+  and closes it with `DEVICE_UPLINK_WITHDRAWN` (4003) when Node withdraws the device (`FromNode::DeviceWithdraw`) or
+  registers another token. A person's viewer at `/system/device-media/<device>/<session>` or
+  `/system/device-terminal/<device>/<session>` (both names `[A-Za-z0-9_-]{1,64}`, else 404; an upgrade, else 426) goes
+  down a new stream with its path rewritten to remoted's `/media/<session>` or `/terminal/<session>`, its query (the
+  token remoted checks) kept and `x-intentic-listener: loopback` added as for a window's media socket, then spliced; no
+  uplink for that device is netd's own 502 naming it. Node calls remoted's control routes on
+  `/run/intentic/devices/<device>.sock` (browser-wire's `DEVICE_SOCKET_DIR`, 0600, `devices/` beside a test netd's run
+  directory), each connection one stream down the uplink. Registrations outlive a Node restart, as terminals do, and
+  netd tells every Node that says hello which devices it holds and whether each uplink is up
+  (`ToNode::DeviceUplinks`); a Node registers nothing with a netd that never told it, since an older netd closes the
+  link on a frame kind it does not know.
 - In the editor's own sessions (`web-…`, never an agent's) netd also notices a password typed at a hidden prompt (2026-10-19,
   `term/hidden.rs`): output that stopped on a password-ish question, then keystrokes while the pane's tty has echo off
   (asked of the tty with `tcgetattr`). The line is edited as the tty does and told to Node once (`ToNode::HiddenLine`),
@@ -221,6 +239,8 @@ flowchart LR
 - [crates/netd/src/tunnel.rs](crates/netd/src/tunnel.rs) — the ingress tunnel: grant, then a stream per request.
 - [crates/netd/src/standing.rs](crates/netd/src/standing.rs) — where the tunnel stands for Node and the vitals, and
   each carrier's redial pace.
+- [crates/netd/src/devices.rs](crates/netd/src/devices.rs) — connected computers' uplinks: who may dial, one yamux
+  session each, and the socket Node reaches remoted on.
 - [crates/netd/src/term/mod.rs](crates/netd/src/term/mod.rs) — a terminal socket from Node's plan to its close.
 - [crates/netd/src/term/hidden.rs](crates/netd/src/term/hidden.rs) — a password typed at a hidden prompt in an editor terminal: the line edited as the tty does and told to Node once (`ToNode::HiddenLine`), for Passwords.
 - [crates/netd-wire/src/lib.rs](crates/netd-wire/src/lib.rs) — the control socket's frames, their only definition.

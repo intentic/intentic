@@ -8,12 +8,14 @@ flowchart LR
         launch["win-launcher<br/>starts it at logon"] --> machine["machine<br/>intentic-machine"]
         machine --> libs["browser<br/>desktop-automation<br/>local-agent"]
         machine -->|"local pipe<br/>relays, reads nothing"| keyring["keyring<br/>intentic-keyring"]
+        machine -->|"starts while people may reach it<br/>config file, status lines"| remoted["remoted<br/>intentic-remoted"]
         acp["acp-bridge<br/>in Zed · JetBrains"] --> libs
         webext["webext<br/>in the user's Chrome"]
         android["android<br/>Intentic Device on the user's phone or watch"]
     end
     machine -->|"outbound WebSocket<br/>device tools"| daemon["Sandbox daemon"]
     machine -->|"Mutagen over SSH tunnel<br/>folder and ports"| daemon
+    remoted -->|"outbound WebSocket, yamux<br/>people's terminals"| daemon
     webext -->|"outbound WebSocket<br/>page tools"| daemon
     acp -->|"HTTPS, control token<br/>agent turns"| daemon
     android -->|"outbound WebSocket, JSON-RPC<br/>phone tools"| daemon
@@ -22,6 +24,7 @@ flowchart LR
 | Package | Role |
 | --- | --- |
 | [machine](machine) | The device agent: sandbox tools, folder sync and port mirroring. |
+| [remoted](remoted) | `intentic-remoted`: people's terminals (and, next, screens) on this computer, served to the editor over an uplink to each sandbox. |
 | [keyring](keyring) | `intentic-keyring`: the password vault beside the machine, typing and releasing secrets for a sandbox without its agent holding them. |
 | [acp-bridge](acp-bridge) | `intentic-acp`: drive sandbox agents from Zed, JetBrains or any ACP editor. |
 | [webext](webext) | Chrome extension letting the agent work in the user's signed-in browser. |

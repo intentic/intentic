@@ -458,6 +458,10 @@ jobs:
       # in the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
       # console window on the desktop at every boot. The xwin toolchain ic-build uses; ~200 KB.
       - run: bash _tools/scripts/build/build-win-launcher.sh windows-x64
+      # intentic-remoted, people's terminals (and screens) on a connected computer: the machine agent downloads its own
+      # release's copy the first time a sandbox turns remote access on, checked against the same signed SHA256SUMS. The
+      # zigbuild and xwin toolchains ic-build uses; stamped, since the agent replaces a remoted of another version.
+      - run: bash _tools/scripts/build/build-remoted.sh --version "$RELEASE_VERSION" linux-x64 linux-arm64 windows-x64
       - run: bash _tools/scripts/desktop/build-desktop.sh "$RELEASE_VERSION" --linux-only
       # …and prove those exact bytes install and run before anything ships them: installs the .deb and the
       # AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open intentic:// at it.
@@ -473,6 +477,7 @@ jobs:
             _devices/machine/dist-bin
             _devices/keyring/dist-bin
             _devices/win-launcher/dist-bin
+            _devices/remoted/dist-bin
             _sandbox/ic/dist-bin
             _editor/desktop-app/dist-bin
           if-no-files-found: error
@@ -688,6 +693,7 @@ jobs:
             _devices/machine/dist-bin/*
             _devices/keyring/dist-bin/*
             _devices/win-launcher/dist-bin/*
+            _devices/remoted/dist-bin/*
             _sandbox/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*
 

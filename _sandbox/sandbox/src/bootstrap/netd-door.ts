@@ -16,6 +16,7 @@ import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contr
 import type { Logger } from "pino";
 import { createApp } from "../app.js";
 import { connectNetd, type NetdAsks, type NetdLink, type TunnelReport } from "../netd/netd-link.js";
+import { netdUplinks } from "../hosts/remote/netd-uplinks.js";
 import { netdCheckoutFeed, useCheckoutFeed } from "../git/feed/checkout-feed.js";
 import { answerPreview, isHandedBackPreview, PREVIEW_PROBE_PATH, type PreviewDeps, previewRoute } from "../panels/preview-routes.js";
 import { type ReachPosture, reachPosture, tunnelUrl } from "../system/listeners/reach-posture.js";
@@ -378,6 +379,8 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
         onTunnel: tunnelReports(logger, services.pushSender),
         // A password the person typed at a hidden prompt in an editor terminal: Passwords may keep it (terminal-capture.ts).
         onHiddenLine: ({ session, prompt, value }) => hiddenLines.entered(session, prompt, value),
+        // Where the computers' uplinks stand, for remote access (hosts/remote/), which registers them with netd.
+        onDeviceUplinks: (report) => services.remoteAccess.heard(report),
         onFault: (error) => logger.warn({ err: error }, "netd link: fault on the control socket"),
         // The link closing unasked: netd dropped it (a frame it could not read) or is going away. Either way this daemon
         // cannot serve without it, and exits for a fresh start; netd going down takes no notice of the code.
@@ -392,6 +395,8 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
         stopping = true;
         link.close();
     });
+    services.remoteAccess.useNetd(netdUplinks((message) => link.tell(message)));
+    shutdown.push(() => services.remoteAccess.useNetd(undefined));
     // Status reads keyed on netd's change counts from here on (git/feed/checkout-feed.ts).
     useCheckoutFeed(netdCheckoutFeed(link));
     shutdown.push(() => useCheckoutFeed(undefined));
@@ -412,7 +417,10 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
     configureCastd({ log: (fields, message) => logger.info(fields, message), recordDir: castRecordingsDir(services.workspace.root) });
     // A revoked member's media sockets are castd's, outside every transport registered here: each castd ends its viewers
     // and refuses the tokens minted before now, and the viewers still entitled dial again with fresh ones.
-    const undrop = services.auth?.connections.onRevoke(() => void dropCastdViewers("a member's access was revoked"));
+    const undrop = services.auth?.connections.onRevoke(() => {
+        void dropCastdViewers("a member's access was revoked");
+        void services.remoteAccess.dropViewers("a member's access was revoked");
+    });
     shutdown.push(() => undrop?.());
     rmSync(httpPath, { force: true });
     server.listen(httpPath);

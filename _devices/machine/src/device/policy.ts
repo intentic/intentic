@@ -76,22 +76,26 @@ export const assertPath = async (
     return real;
 };
 
+// Every switch by the label its capability card shows, which is how a refusal names it.
+export type SwitchName = Exclude<keyof DeviceScopes, "roots">;
+export const SWITCH_LABELS = {
+    shell: "Run commands",
+    write: "Create and change files",
+    screen: "See the screen",
+    control: "Use the mouse and keyboard",
+    sandboxes: "Manage sandboxes on this device",
+    destructive: "Run destructive commands",
+    programs: "Run programs this sandbox sends",
+    // People's, never an agent's (remote/remote.ts): no tool asks for these, and remoteStart reads all three at once.
+    remoteView: "Let people see the screen",
+    remoteControl: "Let people use the mouse and keyboard",
+    remoteTerminal: "Let people open terminals",
+} as const satisfies Record<SwitchName, string>;
+
 // Throws unless the named switch is on. One message shape for all of them, naming the card's own label.
-export const assertScope = (
-    scopes: DeviceScopes,
-    scope: "shell" | "write" | "screen" | "control" | "sandboxes" | "destructive" | "programs",
-): void => {
+export const assertScope = (scopes: DeviceScopes, scope: SwitchName): void => {
     if (scopes[scope] === "on") {
         return;
     }
-    const label = {
-        shell: "Run commands",
-        write: "Create and change files",
-        screen: "See the screen",
-        control: "Use the mouse and keyboard",
-        sandboxes: "Manage sandboxes on this device",
-        destructive: "Run destructive commands",
-        programs: "Run programs this sandbox sends",
-    }[scope];
-    throw new ScopeError(`Refused: "${label}" is switched off for this device. Turn it on in its capability card to allow this.`);
+    throw new ScopeError(`Refused: "${SWITCH_LABELS[scope]}" is switched off for this device. Turn it on in its capability card to allow this.`);
 };

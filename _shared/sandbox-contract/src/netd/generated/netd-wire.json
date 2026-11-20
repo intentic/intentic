@@ -693,6 +693,44 @@
           "dir"
         ],
         "type": "object"
+      },
+      {
+        "description": "Lets a connected computer's `intentic-remoted` hold an uplink (browser-wire's `DEVICE_UPLINK_PATH`) for\n`device`, presenting the token whose SHA-256 is `token_sha256` (lowercase hex of the token's UTF-8 bytes). A\nregistration replaces the device's earlier one, and an uplink that presented the earlier token is closed; the same\ntoken again changes nothing (2026-11-20). Send only to a netd that told `DeviceUplinks`: an older one closes the\nlink on a kind it does not know.",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "deviceUplink",
+            "type": "string"
+          },
+          "tokenSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "device",
+          "tokenSha256"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Withdraws `device`'s registration: its uplink is closed with browser-wire's `DEVICE_UPLINK_WITHDRAWN`, its socket\nfor the daemon removed, and a later dial refused.",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "deviceWithdraw",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "device"
+        ],
+        "type": "object"
       }
     ],
     "title": "FromNode"
@@ -704,6 +742,23 @@
   ],
   "toNode": {
     "$defs": {
+      "DeviceUplinkState": {
+        "description": "A registered device's uplink as netd holds it.",
+        "properties": {
+          "connected": {
+            "description": "Its remoted's uplink is up, and the daemon's socket for it (`<DEVICE_SOCKET_DIR>/<device>.sock`) answers.",
+            "type": "boolean"
+          },
+          "device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device",
+          "connected"
+        ],
+        "type": "object"
+      },
       "NetdAnswer": {
         "oneOf": [
           {
@@ -965,6 +1020,26 @@
           "session",
           "prompt",
           "value"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Every device registered with `FromNode::DeviceUplink` and whether its uplink is up, told whole on every change\nand again to each Node that says hello (2026-11-20). Registrations outlive a Node restart, as terminals and media\nsockets do, so a Node hearing this after its hello learns what an earlier one left registered. It is also how a\nNode knows this netd carries device uplinks at all: an older netd never tells it, and a Node sends no\nregistration to a netd that has not. An older Node ignores it.",
+        "properties": {
+          "kind": {
+            "const": "deviceUplinks",
+            "type": "string"
+          },
+          "uplinks": {
+            "items": {
+              "$ref": "#/$defs/DeviceUplinkState"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "uplinks"
         ],
         "type": "object"
       }
