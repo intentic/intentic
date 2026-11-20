@@ -251,9 +251,13 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 
 Browser storage has one door, `@intentic/ui/storage` (`lib/browserStorage.ts`), for the kit and the editor alike:
 reads and writes that never throw (site data off, a full quota), JSON read back through a schema so another build's
-value reads as absent, and every key declared in its scope. A `deviceKey` (theme, language, layout, a rail's last
-pick) survives sign-out; an `accountKey`, `accountKeys` family or `sandboxKeys` family, and anything registered with
-`onAccountCleared`, goes with `clearAccountStorage`.
+value reads as absent, and every key declared in its scope. No setting is the browser's: every preference
+(`definePreference`, every key under `ui-`) and every `settingKey` or `settingKeys` family (a rail's last pick, a
+board's folds) is the signed-in account's, kept in its partition and kept there across sign-out; only
+`clearAccountStorage(id, { settings: true })`, for a deleted account, removes them. A `deviceKey` is a fact about the
+browser that nobody chose (which account it points at, which link brought it) and outranks the `ui-` namespace. An
+`accountKey`, `accountKeys` family or `sandboxKeys` family, and anything registered with `onAccountCleared`, goes
+with `clearAccountStorage`.
 
 A browser can be signed in to several accounts, so each account's keys sit in a partition of their own,
 `intentic@<accountId>/<key>`. Callers read and write the same names as before. The partition a page opens is read from

@@ -1,5 +1,5 @@
-import { isProfile, type Profile, PROFILE_STORAGE_KEY, PROFILES, type SandboxMode } from "@intentic/constants";
-import { storedPreference } from "@intentic/ui/preference";
+import { isProfile, type Profile, PROFILES, type SandboxMode } from "@intentic/constants";
+import { PROFILE_KEY, storedValue } from "./storage/browserStorage";
 
 // Which profile brought this browser here, written by index.html's pre-paint script from the link the reader followed
 // and never changed afterwards. It decides nothing by itself (@intentic/constants profile.ts): all that is left of it is
@@ -7,7 +7,8 @@ import { storedPreference } from "@intentic/ui/preference";
 
 /** The arriving profile, or undefined for a reader who came with no opinion. `default` is an opinion: the app's own. */
 export const arrivingProfile = (): Profile | undefined => {
-    const stored = storedPreference(PROFILE_STORAGE_KEY);
+    // The browser's, not a setting: declared so in app/storage/browserStorage.ts.
+    const stored = storedValue(PROFILE_KEY) ?? null;
     return isProfile(stored) ? stored : undefined;
 };
 

@@ -34,11 +34,18 @@
             // the editor does (dark wears sanctum, light the plain look).
             (function () {
                 var PAIRS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"], silver: ["dark", "silver"] };
+                // A setting is the signed-in account's, in its drawer (_editor/ui/src/lib/browserStorage.ts); one still kept for the
+                // whole browser is read until the editor moves it in.
+                function setting(name) {
+                    var who = localStorage.getItem("intentic.signedInAs");
+                    var own = who ? localStorage.getItem("intentic@" + (/^[\w-]+$/.test(who) ? who : encodeURIComponent(who)) + "/" + name) : null;
+                    return own !== null ? own : localStorage.getItem(name);
+                }
                 var scheme = null;
                 var skin = null;
                 try {
-                    scheme = localStorage.getItem("ui-color-scheme");
-                    skin = localStorage.getItem("ui-skin");
+                    scheme = setting("ui-color-scheme");
+                    skin = setting("ui-skin");
                 } catch (e) {}
                 var given = window.__INTENTIC_LOOK__;
                 if (typeof given === "string" && Object.prototype.hasOwnProperty.call(PAIRS, given)) {
@@ -642,9 +649,16 @@
                         face: "Usar los sandboxes de este equipo",
                     },
                 };
+                // A setting is the signed-in account's, in its drawer (_editor/ui/src/lib/browserStorage.ts); one still kept for the
+                // whole browser is read until the editor moves it in.
+                function setting(name) {
+                    var who = localStorage.getItem("intentic.signedInAs");
+                    var own = who ? localStorage.getItem("intentic@" + (/^[\w-]+$/.test(who) ? who : encodeURIComponent(who)) + "/" + name) : null;
+                    return own !== null ? own : localStorage.getItem(name);
+                }
                 var stored = null;
                 try {
-                    stored = localStorage.getItem("ui-locale");
+                    stored = setting("ui-locale");
                 } catch (e) {}
                 var lang = words[stored] ? stored : (navigator.language || "en").slice(0, 2).toLowerCase();
                 var t = words[lang] || words.en;

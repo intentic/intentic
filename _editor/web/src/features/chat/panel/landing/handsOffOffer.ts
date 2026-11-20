@@ -15,7 +15,6 @@ const DismissedSchema = z.array(z.string());
 // allow(module-state): the sandboxes this account was told "not now" for here, shared by every window through the preference channel
 export const offerDismissed: Ref<readonly string[]> = definePreference<readonly string[]>({
     key: HANDS_OFF_DISMISSED_KEY,
-    scope: `account`,
     // An unreadable list asks again rather than half-remembering.
     read: (raw) => (raw === null ? [] : (parseJsonWith(raw, DismissedSchema) ?? [])),
     write: (ids) => (ids.length === 0 ? null : JSON.stringify(ids)),

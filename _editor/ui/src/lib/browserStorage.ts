@@ -2,6 +2,12 @@
 // deviceKey survives sign-out; accountKey/accountKeys and sandboxKeys (<prefix><sandboxId>) are cleared on sign-out.
 // Non-storage state (IndexedDB mirrors, module caches) registers with onAccountCleared; clearAccountStorage clears it too.
 //
+// EVERY SETTING IS THE ACCOUNT'S (settingKey/settingKeys, and every key under `ui-`, the preferences' namespace): kept in
+// the signed-in account's drawer, so two accounts on one browser never share a toggle, and kept there across sign-out,
+// so signing back in finds them as they were. Only deleting the account removes them (`clearAccountStorage` with
+// `settings`). A key under `ui-` that is a fact about the browser rather than anyone's choice is declared with
+// deviceKey, which outranks the namespace.
+//
 // EACH ACCOUNT HAS A DRAWER OF ITS OWN. A browser can be signed in to several accounts at once, one of them active, and a
 // page is drawn for exactly one of them for its whole life (the editor's lib/accounts/accountBoundary.ts). An account key
 // is stored inside that account's partition, `intentic@<accountId>/<key>`, so switching to another account and back
@@ -79,7 +85,20 @@ const rawKeys = (which: StorageArea): readonly string[] => {
     }
 };
 
-export const storedValue = (key: string, which: StorageArea = `local`): string | undefined => rawValue(physicalKey(key), which);
+export const storedValue = (key: string, which: StorageArea = `local`): string | undefined => {
+    if (isSettingKey(key)) {
+        adoptBrowserValue(key, which);
+    }
+    return rawValue(physicalKey(key), which);
+};
+
+// A setting written into an open drawer leaves no browser-wide copy behind (one kept from before settings were the
+// account's, or chosen signed out): read later, after this one was removed, it would come back as the account's.
+const dropBrowserCopy = (key: string, which: StorageArea): void => {
+    if (accountPartition() !== undefined && isSettingKey(key)) {
+        rawRemove(key, which);
+    }
+};
 
 /** Keeps nothing where storage is off or full, or for an account key once this page's account has gone (`sealAccountWrites`). */
 export const storeValue = (key: string, value: string, which: StorageArea = `local`): void => {
@@ -87,9 +106,13 @@ export const storeValue = (key: string, value: string, which: StorageArea = `loc
         return;
     }
     rawStore(physicalKey(key), value, which);
+    dropBrowserCopy(key, which);
 };
 
-export const removeStoredValue = (key: string, which: StorageArea = `local`): void => rawRemove(physicalKey(key), which);
+export const removeStoredValue = (key: string, which: StorageArea = `local`): void => {
+    rawRemove(physicalKey(key), which);
+    dropBrowserCopy(key, which);
+};
 
 /** The keys under `prefix` this page can reach: the device's, and the open account's by the names they were stored under. */
 export const storedKeys = (prefix: string, which: StorageArea = `local`): readonly string[] => {
@@ -150,9 +173,37 @@ const accountExact = new Set<string>();
 const accountPrefixes = new Set<string>();
 // allow(module-state): what the account left outside storage keys, each told to forget it
 const accountClearers = new Set<AccountClearer>();
+// allow(module-state): the browser's own keys, declared once each at import; they outrank the settings' namespace
+const deviceExact = new Set<string>();
+// allow(module-state): the account's settings, by exact name and by prefix: in its drawer, and kept across sign-out
+const settingExact = new Set<string>();
+const settingPrefixes = new Set<string>();
 
-/** A key that belongs to this browser rather than to whoever is signed in; it is kept across sign-out. */
-export const deviceKey = (name: string): string => name;
+/** Where preferences live (@intentic/ui/preference): every key under it is a setting, the signed-in account's own. */
+export const SETTINGS_PREFIX = `ui-`;
+settingPrefixes.add(SETTINGS_PREFIX);
+
+/**
+ * A key that belongs to this browser rather than to whoever is signed in; it is kept across sign-out. Never a setting a
+ * person chose: those are the account's (settingKey). Declared before anything reads it, since a `ui-` name is a
+ * setting until this says otherwise.
+ */
+export const deviceKey = (name: string): string => {
+    deviceExact.add(name);
+    return name;
+};
+
+/** One setting the signed-in account chose: kept in its drawer across sign-out, and gone only with the account. */
+export const settingKey = (name: string): string => {
+    settingExact.add(name);
+    return name;
+};
+
+/** A family of settings, `<prefix><parts joined by .>`, each the signed-in account's as settingKey's is. */
+export const settingKeys = (prefix: string): ((...parts: readonly string[]) => string) => {
+    settingPrefixes.add(prefix);
+    return (...parts) => `${prefix}${parts.join(`.`)}`;
+};
 
 /** One key the signed-in account owns; sign-out removes it. */
 export const accountKey = (name: string): string => {
@@ -172,8 +223,13 @@ export const sandboxKeys = (prefix: string): ((sandboxId: string) => string) => 
     return (sandboxId) => keyOf(sandboxId);
 };
 
-/** Whether sign-out removes this key. */
-export const isAccountKey = (key: string): boolean => accountExact.has(key) || [...accountPrefixes].some((prefix) => key.startsWith(prefix));
+/** Whether this key is a setting: the account's, but kept across sign-out. A key declared the account's to forget is not one. */
+export const isSettingKey = (key: string): boolean =>
+    !deviceExact.has(key) && !accountExact.has(key) && (settingExact.has(key) || [...settingPrefixes].some((prefix) => key.startsWith(prefix)));
+
+/** Whether this key is the signed-in account's, kept in its drawer: everything it may forget at sign-out, and its settings. */
+export const isAccountKey = (key: string): boolean =>
+    !deviceExact.has(key) && (accountExact.has(key) || [...accountPrefixes].some((prefix) => key.startsWith(prefix)) || isSettingKey(key));
 
 /** Something the account left outside a storage key (an IndexedDB mirror, an in-memory copy); returns its removal. */
 export const onAccountCleared = (clear: AccountClearer): (() => void) => {
@@ -289,20 +345,20 @@ export const storedName = (stored: string): string | undefined => {
  * account's in a later release): its value moves in unless the drawer already holds one, and the browser-wide copy goes
  * either way, being nobody's now. Nothing to do with no drawer open, where an account key is stored under its own name.
  */
-export const adoptBrowserValue = (key: string): void => {
+export const adoptBrowserValue = (key: string, which: StorageArea = `local`): void => {
     const open = accountPartition();
     if (open === undefined || sealed || !isAccountKey(key)) {
         return;
     }
-    const value = rawValue(key, `local`);
+    const value = rawValue(key, which);
     if (value === undefined) {
         return;
     }
     const inDrawer = `${partitionPrefix(open)}${key}`;
-    if (rawValue(inDrawer, `local`) === undefined) {
-        rawStore(inDrawer, value, `local`);
+    if (rawValue(inDrawer, which) === undefined) {
+        rawStore(inDrawer, value, which);
     }
-    rawRemove(key, `local`);
+    rawRemove(key, which);
 };
 
 // Runs every clearer on its own: one that throws or rejects leaves the rest to run.
@@ -310,25 +366,49 @@ const runClearers = async (account: string | undefined): Promise<void> => {
     await Promise.allSettled([...accountClearers].map(async (clear) => clear(account)));
 };
 
+// The name a stored key goes by, whichever drawer holds it.
+const nameOf = (stored: string): string => {
+    if (!stored.startsWith(PARTITION_MARK)) {
+        return stored;
+    }
+    const slash = stored.indexOf(`/`);
+    return slash === -1 ? stored : stored.slice(slash + 1);
+};
+
+/** What a clear forgets: everything the account left (`settings: true`, the account is gone), or all but its settings. */
+export interface ClearOptions {
+    readonly settings?: boolean;
+}
+
+// Whether a clear takes this stored key: a setting stays unless the account itself is going.
+const cleared = (stored: string, { settings = false }: ClearOptions): boolean => settings || !isSettingKey(nameOf(stored));
+
 /**
  * Removes one account's keys from both storage areas (the open account's by default) with any no drawer holds, and runs
  * every registered clearer for it, each on its own: one that throws or rejects leaves the rest to run. Device keys and
- * other accounts' drawers stay.
+ * other accounts' drawers stay, and so do the account's settings unless `settings` says the account itself is going.
  */
-export const clearAccountStorage = async (account: string | undefined = accountPartition()): Promise<void> => {
+export const clearAccountStorage = async (account: string | undefined = accountPartition(), options: ClearOptions = {}): Promise<void> => {
     for (const which of [`local`, `session`] as const) {
-        for (const key of [...(account === undefined ? [] : drawerKeys(account, which)), ...unadopted(which)]) {
+        // What no drawer holds is nobody's: its settings (chosen signed out) wait for the next account in either way.
+        const keys = [...(account === undefined ? [] : drawerKeys(account, which).filter((key) => cleared(key, options))), ...unadopted(which).filter((key) => cleared(key, {}))];
+        for (const key of keys) {
             rawRemove(key, which);
         }
     }
     await runClearers(account);
 };
 
-/** Removes every account's keys, every drawer and every clearer's copy: the browser keeps only what is the device's. */
+/**
+ * Removes every account's keys, every drawer and every clearer's copy: the browser keeps only what is the device's, and
+ * each account's settings, in its own drawer for when it signs in again.
+ */
 export const clearEveryAccountStorage = async (): Promise<void> => {
     for (const which of [`local`, `session`] as const) {
         for (const key of rawKeys(which).filter((name) => name.startsWith(PARTITION_MARK) || isAccountKey(name))) {
-            rawRemove(key, which);
+            if (cleared(key, {})) {
+                rawRemove(key, which);
+            }
         }
     }
     await runClearers(undefined);

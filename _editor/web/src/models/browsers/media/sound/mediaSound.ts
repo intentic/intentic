@@ -1,7 +1,7 @@
 /* oxlint-disable unicorn/require-post-message-target-origin -- a MessagePort has no target origin */
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { z } from "zod";
-import { deviceKey, storedJson, storeJson } from "../../../../app/storage/browserStorage";
+import { settingKey, storedJson, storeJson } from "../../../../app/storage/browserStorage";
 import type { AudioReport } from "./audioRing";
 import { PROCESSOR_NAME, type ToProcessor, workletSource } from "./audioWorklet";
 import type { MediaHello } from "../mediaMessages";
@@ -35,7 +35,8 @@ export interface SoundSeams {
     readonly feed: (port: MessagePort | undefined) => void;
 }
 
-const MUTED_KEY = deviceKey(`intentic.browsers.mutedWindows`);
+// Which windows the reader muted: the account's setting, never another account's on this browser.
+const MUTED_KEY = settingKey(`intentic.browsers.mutedWindows`);
 // Windows come and go; the newest this many mutes are remembered.
 const MUTED_KEEP = 200;
 const MutedSchema = z.array(z.string());

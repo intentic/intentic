@@ -1,7 +1,7 @@
 import { computed, inject, ref, watch, type WritableComputedRef } from "vue";
 import { routeLocationKey } from "vue-router";
 import { z } from "zod";
-import { deviceKey, storedJson, storeJson } from "@intentic/ui/storage";
+import { settingKey, storedJson, storeJson } from "@intentic/ui/storage";
 
 // How much of one Tools section is drawn: `simple` is its switches and one line of what each bought, `advanced` adds
 // the tuning behind them (measurement tables, comparison groups, per-cleaner and per-kind rows). One choice per section,
@@ -10,8 +10,8 @@ import { deviceKey, storedJson, storeJson } from "@intentic/ui/storage";
 
 export type DetailLevel = `simple` | `advanced`;
 
-// A fact about this browser's reader, not the account's: kept across sign-out like the theme.
-const KEY = deviceKey(`intentic:agent-tools-detail`);
+// The account's setting, kept across sign-out like the theme (@intentic/ui/storage).
+const KEY = settingKey(`intentic:agent-tools-detail`);
 
 // A stored map this build cannot read is dropped whole: the worst it costs is Simple again.
 const StoredSchema = z.record(z.string(), z.enum([`simple`, `advanced`]));

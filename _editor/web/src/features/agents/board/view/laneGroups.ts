@@ -1,4 +1,4 @@
-import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
+import { settingKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { computed, type Ref, shallowRef } from "vue";
 import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
 import { ACTIVE_PHASES, activeGroups, type ActivePhase, type ActiveReading, ownReading } from "../../../../models/fleet/board/activePhase";
@@ -39,9 +39,9 @@ export interface LaneGroup {
     readonly goesAt: number;
 }
 
-// WHICH GROUPS ARE FOLDED: this browser's, like a layout, and the same on every visit, as a folded tray stays folded.
-// One set for every board in the window.
-const KEY = deviceKey(`intentic.board.activeFolds`);
+// WHICH GROUPS ARE FOLDED: the account's setting (@intentic/ui/storage), and the same on every visit, as a folded tray
+// stays folded. One set for every board in the window.
+const KEY = settingKey(`intentic.board.activeFolds`);
 
 const isPhase = (value: string): value is ActivePhase => ACTIVE_PHASES.some((phase) => phase === value);
 

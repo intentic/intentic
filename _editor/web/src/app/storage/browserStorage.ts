@@ -1,4 +1,5 @@
-import { accountKey, accountKeys, deviceKey, onAccountCleared, sandboxKeys } from "@intentic/ui/storage";
+import { PROFILE_STORAGE_KEY } from "@intentic/constants";
+import { accountKey, accountKeys, deviceKey, onAccountCleared, sandboxKeys, settingKey } from "@intentic/ui/storage";
 import { deleteAccountDatabases } from "./accountDatabases";
 
 // The kit's one door to browser storage (`@intentic/ui/storage`: safe reads and writes, JSON through a schema, the
@@ -14,6 +15,7 @@ export {
     clearEveryAccountStorage,
     deviceKey,
     isAccountKey,
+    isSettingKey,
     onAccountCleared,
     type OpenedPartition,
     openAccountPartition,
@@ -26,9 +28,15 @@ export {
     storedKeys,
     type StoredSchema,
     storedValue,
+    settingKey,
     storeJson,
     storeValue,
 } from "@intentic/ui/storage";
+
+// Every `ui-*` key is a setting, the signed-in account's own (@intentic/ui/storage), save this one: which link brought
+// this browser (@intentic/constants profile.ts), written before any module runs by index.html, a fact about the browser
+// that nobody chose. Declared here, which every page loads before it opens a drawer, so no drawer ever takes it.
+export const PROFILE_KEY = deviceKey(PROFILE_STORAGE_KEY);
 
 // The credentials each account proves itself to its sandboxes with, in its own drawer: the daemon session minted for
 // it, per sandbox (client/session/sandboxSession.ts), and the Google ID token it last signed in to them with, per web
@@ -60,15 +68,11 @@ export const commitMessageKey = sandboxKeys(`intentic.commitMessage.`);
 export const commitDraftPaceKey = accountKey(`intentic.commitDraftPace`);
 // Whether this device has offered the account the preferences it holds (app/accountPreferences.ts); sign-out forgets it.
 export const PREFERENCES_OFFERED_KEY = accountKey(`intentic.preferencesOffered`);
-// Whose choice each look and reading preference this browser holds is, by preference (app/accountPreferences.ts). The
-// device's, as the preferences themselves are: they outlive a sign-out, and the next account in must still be able to
-// tell the last one's choices from its own.
-export const PREFERENCES_WORN_FOR_KEY = deviceKey(`intentic.preferencesWornFor`);
 // The reader's own order of the account's sandboxes (models/home/sandboxOrder.ts) and the sandboxes they told the
 // hands-off offer "not now" (features/chat/panel/landing/handsOffOffer.ts): ids of the account's sandboxes, which another
-// account on this browser has no business arranging or answering for.
-export const SANDBOX_ORDER_KEY = accountKey(`ui-sandbox-order`);
-export const HANDS_OFF_DISMISSED_KEY = accountKey(`ui-hands-off-offer-dismissed`);
+// account on this browser has no business arranging or answering for. Settings, so a sign-out keeps them for it.
+export const SANDBOX_ORDER_KEY = settingKey(`ui-sandbox-order`);
+export const HANDS_OFF_DISMISSED_KEY = settingKey(`ui-hands-off-offer-dismissed`);
 // The page the installed app last showed (router/recentRoute.ts), which names the account's sandbox: the next account in
 // is not reopened on it.
 export const LAST_ROUTE_KEY = accountKey(`intentic.lastRoute`);

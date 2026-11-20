@@ -8,15 +8,19 @@ import { useGoogleIdentity } from "./useGoogleIdentity";
 
 // WHAT AN ACCOUNT LEAVES IN THIS BROWSER, FORGOTTEN: what a signed-out account, a session that ended, or a deleted one
 // takes with it. One account's own (its drawer, its caches, its credentials: `{ account }`, the open one's by default), or
-// every account's (`every`): signing out of all of them. A device preference (theme, language, layout) stays either way,
-// as does what another account still signed in here holds. The account boundary decides which account a page is for
+// every account's (`every`): signing out of all of them. The account's settings (theme, language, layout, every toggle)
+// stay in its drawer for when it signs in again, unless the account itself is gone (`settings: true`); what another
+// account still signed in here holds stays either way. The account boundary decides which account a page is for
 // (lib/accounts/accountBoundary.ts); this only clears.
 
 const { clearCredential } = useGoogleIdentity();
 const { clearSessions } = useSandboxSession();
 
-/** Which accounts' traces go: one account's (the open one's when none is named), or every account's. */
-export type Forgotten = { readonly account?: string } | `every`;
+/**
+ * Which accounts' traces go: one account's (the open one's when none is named), or every account's. `settings` takes the
+ * account's settings too, for an account that no longer exists.
+ */
+export type Forgotten = { readonly account?: string; readonly settings?: boolean } | `every`;
 
 export const forgetAccountTraces = async (which: Forgotten = {}): Promise<void> => {
     const every = which === `every`;
@@ -37,7 +41,7 @@ export const forgetAccountTraces = async (which: Forgotten = {}): Promise<void> 
     await Promise.all([
         clearPersistedQueries(every ? `every` : which),
         clearImprints(),
-        every ? clearEveryAccountStorage() : clearAccountStorage(which.account),
+        every ? clearEveryAccountStorage() : clearAccountStorage(which.account, { settings: which.settings === true }),
         bundles,
     ]);
     // Module state that belongs to one sandbox (the open tabs, the roster, set-aside drafts, extensions' badges) is

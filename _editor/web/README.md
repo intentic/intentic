@@ -237,7 +237,8 @@ flowchart LR
   which the query cache does not, and a sign-out clears both, along with everything else the account left in this
   browser: the keys `app/storage/browserStorage.ts` declares as the account's (open chat tabs, the copy of unsent drafts, recent prompts,
   question and commit drafts, which sandbox was open), the transcript mirror in IndexedDB, and the sandbox scope's
-  module state. Device preferences (theme, language, layout) stay. One `/events` stream per active sandbox
+  module state. The account's settings (theme, language, layout, every toggle) stay in its own partition for when it
+  signs in again; deleting the account removes them too. One `/events` stream per active sandbox
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
   in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
   frames missed while disconnected. Terminals, the browser view and the desktop view (the sandbox's own screen, or one

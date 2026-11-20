@@ -18,7 +18,6 @@ const StoredOrderSchema = z.array(z.string());
 // allow(module-state): one order per account on this browser, shared by every window through the preference channel
 export const sandboxOrder: Ref<readonly string[]> = definePreference<readonly string[]>({
     key: SANDBOX_ORDER_KEY,
-    scope: `account`,
     // An unreadable payload is no arrangement: the default order rather than a half-parsed one.
     read: (raw) => (raw === null ? [] : (parseJsonWith(raw, StoredOrderSchema) ?? [])),
     write: (ids) => (ids.length === 0 ? null : JSON.stringify(ids)),

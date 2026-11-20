@@ -1,3 +1,4 @@
+import { settingKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { copyInSharedWorkspace, requireUploadScope, sharedUploadRoute } from "./uploadScope";
 import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
@@ -236,25 +237,17 @@ const setStatus = (item: QueueFile, status: FileStatus): void => {
 // Projects detected in the drop, offered for install; dirs are workspace-root-relative already.
 const setupProjects = sandboxRef<readonly ProjectSetup[]>(() => []);
 
-const INSTALL_PREF_KEY = `intentic.install-on-import`;
+// The account's setting (@intentic/ui/storage), never another account's on this browser.
+const INSTALL_PREF_KEY = settingKey(`intentic.install-on-import`);
 // Sticky default rather than a separate "always" toggle; the last choice predicts better than a fixed one, and
 // a wrong "yes" is a cancellable install while a wrong "no" silently leaves the workspace unset up.
-const readInstallPreference = (): boolean => {
-    try {
-        return localStorage.getItem(INSTALL_PREF_KEY) !== `never`;
-    } catch {
-        return true;
-    }
-};
-// allow(module-state): a preference persisted per browser, the same whichever sandbox is open
+const readInstallPreference = (): boolean => storedValue(INSTALL_PREF_KEY) !== `never`;
+// allow(module-state): a preference persisted for the account, the same whichever sandbox is open
 const installAfterUpload = ref(readInstallPreference());
 const setInstallAfterUpload = (enabled: boolean): void => {
     installAfterUpload.value = enabled;
-    try {
-        localStorage.setItem(INSTALL_PREF_KEY, enabled ? `always` : `never`);
-    } catch {
-        // Storage unavailable (private mode); the choice still holds for this session.
-    }
+    // Storage unavailable (private mode) keeps nothing; the choice still holds for this session.
+    storeValue(INSTALL_PREF_KEY, enabled ? `always` : `never`);
 };
 
 // What the daemon actually queued (the client's list is only a guess); installSettled gates dismissal.

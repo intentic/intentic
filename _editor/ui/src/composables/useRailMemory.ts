@@ -1,5 +1,5 @@
 import { computed, type Ref, watch, type WritableComputedRef } from "vue";
-import { deviceKey, storedValue, storeValue } from "../lib/browserStorage";
+import { settingKeys, storedValue, storeValue } from "../lib/browserStorage";
 
 // Remembers a narrowing rail's last choice in localStorage and puts it back whenever the view stands on its bare
 // address: a rail tile always links there, so without this every return (and every click on the tile of the view
@@ -9,8 +9,9 @@ import { deviceKey, storedValue, storeValue } from "../lib/browserStorage";
 // "all", which is how a deliberately widened scope stays wide instead of the tile pulling last week's repo back.
 // A URL that names a choice (a pick, a shared link, Back) is remembered too; the URL going bare by itself is not.
 
-// This browser's, like a layout: signing out keeps it.
-const keyOf = (id: string): string => deviceKey(`intentic.rail.${id}`);
+// The account's setting (browserStorage.ts), like every layout choice: signing out keeps it for the account.
+const railKey = settingKeys(`intentic.rail.`);
+const keyOf = (id: string): string => railKey(id);
 
 // `` and undefined both mean unnarrowed (a Picker has no undefined to offer).
 const isEmpty = (value: string | undefined): value is `` | undefined => value === undefined || value === ``;

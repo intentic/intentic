@@ -1,12 +1,12 @@
 import { ref, watch, type Ref } from "vue";
-import { accountKey, adoptBrowserValue, deviceKey, removeStoredValue, storedName, storedValue, storeValue } from "../lib/browserStorage";
+import { adoptBrowserValue, removeStoredValue, settingKey, storedName, storedValue, storeValue } from "../lib/browserStorage";
 
 // A preference is shared by every window, not one window's: without this, a popped-out panel's own document never
 // learns of a change made elsewhere. Changes travel via BroadcastChannel and the browser's `storage`
 // event (which also catches non-preference writes, e.g. a self-heal clear); a preference is live only
-// in windows that import its module. A preference is this device's (`deviceKey`) unless declared the account's: a
-// device one outlives sign-out and every account on this browser shares it; an account one is the signed-in account's
-// own (its drawer, browserStorage.ts) and goes with it.
+// in windows that import its module. Every preference is the signed-in account's own (`settingKey`, its drawer in
+// browserStorage.ts): another account on this browser never sees or overwrites it, and it waits in that drawer across
+// sign-out for the account to come back. None is the browser's: a browser-wide toggle made every account on it share one.
 
 export interface PreferenceOptions<T> {
 /** The localStorage key; preferences live under `ui-`, namespaced away from a window's own view state (`intentic.*`). */
@@ -17,12 +17,6 @@ export interface PreferenceOptions<T> {
     readonly write: (value: T) => string | null;
 /** The DOM side, if any (an attribute on <html>, custom properties); run at load and on every change, in whichever window it happened. */
     readonly apply?: (value: T) => void;
-    /**
-     * `device` (the default): this browser's, whoever is signed in. `account`: the signed-in account's own, so another
-     * account on this browser never inherits it, and signing out forgets it. Account for a choice that names the
-     * account's own things (its sandboxes, its models), which another person here must neither see nor overwrite.
-     */
-    readonly scope?: `device` | `account`;
 }
 
 const stored = (key: string): string | null => storedValue(key) ?? null;
@@ -171,12 +165,10 @@ export const holdPreferenceWrites = (): (() => void) => {
 };
 
 /** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
-export const definePreference = <T>({ key: name, read, write, apply, scope = `device` }: PreferenceOptions<T>): Ref<T> => {
-    const key = scope === `account` ? accountKey(name) : deviceKey(name);
-    if (scope === `account`) {
-        // Kept for the whole browser before it was the account's: the account open now takes it.
-        adoptBrowserValue(key);
-    }
+export const definePreference = <T>({ key: name, read, write, apply }: PreferenceOptions<T>): Ref<T> => {
+    const key = settingKey(name);
+    // Kept for the whole browser before it was the account's: the account open now takes it.
+    adoptBrowserValue(key);
     const state = ref(read(stored(key))) as Ref<T>;
     apply?.(state.value);
 
@@ -224,7 +216,7 @@ export const definePreference = <T>({ key: name, read, write, apply, scope = `de
     return state;
 };
 
-/** Read one stored preference string without holding it: what this device keeps, whether or not this window declared it. */
+/** Read one stored preference string without holding it: what the signed-in account keeps here, whether or not this window declared it. */
 export const storedPreference = (key: string): string | null => stored(key);
 
 // The three shapes nearly every preference takes, so what a stored string means is said once.

@@ -13,12 +13,10 @@ export const ACCOUNT_PREFERENCE_KEYS: readonly string[] = [
     `ui-changes-largest-first`,
     `ui-chat-show-tool-calls`,
     `ui-agents-live-metrics`,
-    // What the file tree lists (workbench/window/useLayout.ts): left device-wide, every account on a browser shared one
-    // set of filters, and switching accounts meant flipping them back each time.
+    // What the file tree lists, and how a diff and a file read (workbench/window/useLayout.ts).
     `ui-workspace-show-ignored`,
     `ui-workspace-hide-tests`,
     `ui-workspace-hide-technical`,
-    // How a diff and a file read (useLayout.ts again), for the same reason.
     `ui-diff-open`,
     `ui-diff-layout`,
     `ui-diff-prose`,

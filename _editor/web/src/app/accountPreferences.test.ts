@@ -5,7 +5,7 @@
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync, freshImport, realYield } from "@intentic/testing/bun";
 import { ACCOUNT_PREFERENCE_NAME, ACCOUNT_PREFERENCES_MAX, type AccountPreferences, type AccountPreferencesPatch } from "@intentic/api-contract";
-import { boolPreference, definePreference, receivePreferenceChange } from "@intentic/ui/preference";
+import { boolPreference, definePreference, receivePreferenceChange, storedPreference } from "@intentic/ui/preference";
 import { openAccountPartition, resetAccountPartitionForTests } from "@intentic/ui/storage";
 import { ORPCError } from "@orpc/client";
 import { type Ref, ref } from "vue";
@@ -83,13 +83,25 @@ const keeping = (held: Readonly<Record<string, string>> = {}): Kept => {
 // Every window started by a test, signed out once it ends: their listeners stay, and must hear nothing of the next one.
 const accounts: Ref<{ id: string } | null>[] = [];
 
+// Every preference this window holds, by key.
+const HELD = [`ui-color-scheme`, `ui-skin`, `ui-text-size`, `ui-agents-live-metrics`, `ui-audience`, `ui-locale`, `ui-workspace-hide-tests`];
+
+// A page moving to another account (or to nobody) is a full navigation (lib/accounts/accountBoundary.ts): it opens that
+// drawer and every preference reads again from it, as a fresh load would.
+const reloadAs = (id: string | undefined): void => {
+    openAccountPartition(id);
+    for (const key of HELD) {
+        receivePreferenceChange({ key, raw: storedPreference(key) });
+    }
+};
+
 // One window's sync, fresh, signed in as `id` (null: nobody), with its first read answered.
 const start = async (kept: Kept, id: string | null = `account-1`): Promise<Ref<{ id: string } | null>> => {
     const account = ref(id === null ? null : { id });
     accounts.push(account);
-    // The page opens the account's own drawer first (lib/accounts/accountBoundary.ts), so what it keeps is its own.
+    // The page opens the account's own drawer first, so what it keeps is its own.
     if (id !== null) {
-        openAccountPartition(id);
+        reloadAs(id);
     }
     const { startAccountPreferences } = await freshImport<typeof import("./accountPreferences")>("./accountPreferences", import.meta.url);
     startAccountPreferences(account, kept);
@@ -130,8 +142,8 @@ test(`the account's preferences are worn wherever this device holds others, and 
 
     expect(scheme.value).toBe(`dark`);
     expect(gauges.value).toBe(`off`);
-    expect(localStorage.getItem(`ui-color-scheme`)).toBe(`dark`);
-    expect(localStorage.getItem(`ui-agents-live-metrics`)).toBe(`off`);
+    expect(storedPreference(`ui-color-scheme`)).toBe(`dark`);
+    expect(storedPreference(`ui-agents-live-metrics`)).toBe(`off`);
     expect(kept.writes).toBe(0);
 });
 
@@ -151,7 +163,7 @@ test(`a device meeting the account first offers what the account lacks in one pa
     await start(kept);
 
     expect(kept.patches).toEqual([{ "ui-wallpaper": `valley`, "ui-locale": `pl`, "ui-agents-live-metrics": `off` }]);
-    expect(localStorage.getItem(`ui-text-size`)).toBe(`large`);
+    expect(storedPreference(`ui-text-size`)).toBe(`large`);
 });
 
 test(`only the first meeting offers, so what the account has forgotten since stays forgotten`, async () => {
@@ -168,7 +180,7 @@ test(`only the first meeting offers, so what the account has forgotten since sta
     expect(kept.reads).toBe(2);
     expect(kept.patches).toHaveLength(1);
     // This device's own stands, as the platform's contract says of a preference it no longer keeps.
-    expect(localStorage.getItem(`ui-agents-live-metrics`)).toBe(`off`);
+    expect(storedPreference(`ui-agents-live-metrics`)).toBe(`off`);
 });
 
 test(`another account's choices are not worn by the next one in, nor offered to it`, async () => {
@@ -186,7 +198,7 @@ test(`another account's choices are not worn by the next one in, nor offered to 
     await start(second, `account-2`);
 
     expect(locale.value).toBe(`en`);
-    expect(localStorage.getItem(`ui-locale`)).toBeNull();
+    expect(storedPreference(`ui-locale`)).toBeNull();
     expect(textSize.value).toBe(`compact`);
     expect(second.writes).toBe(0);
     expect(Object.fromEntries(second.values)).toEqual({ "ui-text-size": `compact` });
@@ -237,6 +249,7 @@ test(`a choice made signed out is nobody's, and the next account in takes it`, a
     const first = keeping({ "ui-locale": `pl`, "ui-agents-live-metrics": `off` });
     const one = await start(first, `account-1`);
     one.value = null;
+    reloadAs(undefined);
     await realYield();
 
     // On the sign-in page, before anyone is in.
@@ -306,7 +319,7 @@ test(`a patch that fails leaves the choice standing, is said once, and goes up w
 
     expect(kept.patches).toEqual([{ "ui-color-scheme": `dark`, "ui-text-size": `large` }]);
     expect(scheme.value).toBe(`dark`);
-    expect(localStorage.getItem(`ui-color-scheme`)).toBe(`dark`);
+    expect(storedPreference(`ui-color-scheme`)).toBe(`dark`);
 });
 
 test(`coming back to the window reads the account again, at most every few minutes`, async () => {
@@ -364,8 +377,8 @@ test(`inside the Android app the look stays the app's: neither worn from the acc
     const kept = keeping({ "ui-color-scheme": `dark`, "ui-text-size": `large` });
     await start(kept);
 
-    expect(localStorage.getItem(`ui-color-scheme`)).toBe(`light`);
-    expect(localStorage.getItem(`ui-text-size`)).toBe(`large`);
+    expect(storedPreference(`ui-color-scheme`)).toBe(`light`);
+    expect(storedPreference(`ui-text-size`)).toBe(`large`);
     expect(kept.patches).toEqual([{ "ui-wallpaper": `valley` }]);
 
     scheme.value = `dark`;

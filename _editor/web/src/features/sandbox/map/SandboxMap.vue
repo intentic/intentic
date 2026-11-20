@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Await, SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
+import { settingKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { identityHue } from "../../../lib/identityHue";
@@ -96,9 +96,9 @@ const look = computed(() => ({
 const roleName = (id: string): string => map.value.roles.find((card) => card.ref === id)?.label ?? id;
 
 // Compact first: the drawing reads at a glance, and every block opens where its detail is wanted. The reader's choice is
-// kept on this device, as a view preference rather than anything about the sandbox.
+// the account's setting (@intentic/ui/storage), a view preference rather than anything about the sandbox.
 type MapView = `compact` | `detailed`;
-const VIEW_KEY = deviceKey(`intentic.sandboxMap.view`);
+const VIEW_KEY = settingKey(`intentic.sandboxMap.view`);
 const view = shallowRef<MapView>(storedValue(VIEW_KEY) === `detailed` ? `detailed` : `compact`);
 const setView = (next: MapView): void => {
     view.value = next;

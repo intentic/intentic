@@ -4,7 +4,7 @@ import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { ref, watch } from "vue";
 import FolderPicker from "../../sandbox/devices/FolderPicker.vue";
-import { deviceKey, removeStoredValue, storedValue, storeValue } from "../../../app/storage/browserStorage";
+import { removeStoredValue, settingKey, storedValue, storeValue } from "../../../app/storage/browserStorage";
 import type { DownloadTools } from "./useDownloadTools";
 import { downloadLine } from "./downloadWords";
 
@@ -14,8 +14,8 @@ import { downloadLine } from "./downloadWords";
 const { tools } = defineProps<{ tools: DownloadTools }>();
 const t = useT();
 
-// This computer's choice, like a browser's own download folder.
-const FOLDER_KEY = deviceKey(`intentic.browsers.downloadFolder`);
+// The account's setting (app/storage/browserStorage.ts), like a browser's own download folder.
+const FOLDER_KEY = settingKey(`intentic.browsers.downloadFolder`);
 const kept = storedValue(FOLDER_KEY);
 const folder = ref<string[]>(kept === undefined || kept === `` ? [] : [kept]);
 watch(folder, ([picked]) => (picked === undefined ? removeStoredValue(FOLDER_KEY) : storeValue(FOLDER_KEY, picked)));

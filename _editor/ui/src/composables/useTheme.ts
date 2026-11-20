@@ -1,5 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../lib/themeColor.js";
+import { storeValue } from "../lib/browserStorage";
 import { definePreference } from "./preference.js";
 
 export type ColorScheme = "light" | "dark";
@@ -95,12 +96,10 @@ const accent: Ref<string> = definePreference<string>({
 const setAccent = (hex: string): void => {
     const value = normalizeAccent(hex);
     accent.value = value;
-    // Anti-flash cache; only the window that picked the colour refreshes it (pure function of the stored hex).
-    try {
-        localStorage.setItem(ACCENT_VARS_KEY, themeCss(value));
-    } catch {
-        // Storage may be unavailable (private mode); the colour still applies, it just flashes on next boot.
-    }
+    // Anti-flash cache, in the account's drawer beside the accent itself; only the window that picked the colour refreshes
+    // it (pure function of the stored hex). Storage may be unavailable (private mode): the colour still applies, it just
+    // flashes on next boot.
+    storeValue(ACCENT_VARS_KEY, themeCss(value));
 };
 
 export function useTheme() {

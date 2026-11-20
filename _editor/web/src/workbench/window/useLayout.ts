@@ -136,9 +136,10 @@ const HOME_ARRANGE_KEY = `ui-home-arrange`;
 
 // Shell-layout state: chat position/width, sidebar width/collapse, terminal open state; app-local since these are
 // layout concepts, not @intentic/ui primitives. Everything below is a preference shared across every window except
-// `terminalOpen`, which is per-window, per-sandbox state held via windowStore.ts. Sizes and positions are this device's
-// (a width that suits one screen is wrong on another); what the tree lists and how a diff or file reads follows the
-// signed-in account, so each account on one browser keeps its own: those keys are in app/accountPreferenceKeys.ts.
+// `terminalOpen`, which is per-window, per-sandbox state held via windowStore.ts. Every one is the signed-in account's
+// (@intentic/ui/preference), so each account on one browser keeps its own. What the tree lists and how a diff or file
+// reads also follows the account to other devices (app/accountPreferenceKeys.ts); sizes and positions do not, since a
+// width that suits one screen is wrong on another.
 
 // Clamped to a floor and ~95% of the viewport, sliver reserved for the workspace, after subtracting the icon rail's
 // width (the chat column sits beside it) and converting from screen pixels.

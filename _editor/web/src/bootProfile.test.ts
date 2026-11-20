@@ -234,6 +234,18 @@ describe(`the light the first frame is painted in`, () => {
         expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [SKIN]: `none` } }, `dark`))).toEqual({ mode: `dark`, skin: undefined });
         expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [SKIN]: `sanctum` } }, `light`))).toEqual({ mode: undefined, skin: `sanctum` });
     });
+
+    // Every setting is the signed-in account's (_editor/ui/src/lib/browserStorage.ts): the page paints in the look of the
+    // account the browser points at, never another's on the same browser, and a look still kept for the whole browser
+    // only where that account has none of its own.
+    it(`wears the look of the account this browser is signed in as`, () => {
+        const twoAccounts = { "intentic.signedInAs": `acc-b`, [`intentic@acc-a/${SCHEME}`]: `dark`, [`intentic@acc-b/${SCHEME}`]: `light` };
+        expect(looks(boot(`https://app.intentic.dev/`, { stored: twoAccounts }, `dark`))).toEqual({ mode: undefined, skin: undefined });
+        expect(looks(boot(`https://app.intentic.dev/`, { stored: { "intentic.signedInAs": `acc-b`, [SCHEME]: `dark` } }, `light`))).toEqual({
+            mode: `dark`,
+            skin: `sanctum`,
+        });
+    });
 });
 
 // THE ANDROID APP'S WEBVIEW wears the app's look over the one stored here, from the first frame, and writes nothing. The

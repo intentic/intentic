@@ -52,6 +52,15 @@
 <!-- Remember an arriving profile, then restore saved display preferences — all before first paint. -->
         <script>
             try {
+                // EVERY SETTING IS THE SIGNED-IN ACCOUNT'S, kept in its drawer as `intentic@<account>/<name>` for the account this
+                // browser points at (`intentic.signedInAs`; _editor/ui/src/lib/browserStorage.ts). One still kept for the whole
+                // browser (from before settings were the account's, or chosen signed out) is read until the editor moves it in.
+                var signedInAs = localStorage.getItem("intentic.signedInAs");
+                var drawer = signedInAs ? "intentic@" + (/^[\w-]+$/.test(signedInAs) ? signedInAs : encodeURIComponent(signedInAs)) + "/" : "";
+                var setting = function (name) {
+                    var own = localStorage.getItem(drawer + name);
+                    return own === null && drawer ? localStorage.getItem(name) : own;
+                };
                 // WHO ARRIVED. A link from intentic.dev names the profile the reader was reading in, and the name is
                 // all this keeps, for the answer preselected when this reader makes a sandbox (src/app/useProfile.ts).
                 // The look is the reader's own and the words follow the sandbox, so since 2026-11 a link writes
@@ -70,9 +79,9 @@
                     url.searchParams.delete("profile");
                     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
                 }
-                var accentVars = localStorage.getItem("ui-accent-vars");
+                var accentVars = setting("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
-                var uiTextSize = localStorage.getItem("ui-text-size");
+                var uiTextSize = setting("ui-text-size");
                 // Every rung of the ladder but Compact, which is the stylesheet's own (useTextSize.ts TEXT_SIZES).
                 var UI_TEXT_SIZES = ["90", "default", "large", "135", "150", "175", "200"];
                 if (UI_TEXT_SIZES.indexOf(uiTextSize) !== -1) document.documentElement.setAttribute("data-text-size", uiTextSize);
@@ -83,7 +92,7 @@
                 // _editor/ui/src/i18n/locales.ts runs this same rule a module later, and src/bootLocale.test.ts
                 // fails if the two ever part.
                 var UI_LOCALES = ["en", "de", "es", "fr", "pl"];
-                var uiLocale = localStorage.getItem("ui-locale");
+                var uiLocale = setting("ui-locale");
                 if (UI_LOCALES.indexOf(uiLocale) === -1) {
                     uiLocale = "en";
                     var offered = navigator.languages || [navigator.language];
@@ -138,8 +147,8 @@
                             if (kept !== null && kept !== (owns.call(seeded, LOOK_KEYS[k]) ? seeded[LOOK_KEYS[k]] : null)) chosen = true;
                         }
                         if (!chosen) {
-                            localStorage.setItem("ui-color-scheme", EMBED_LOOKS[appLook][0]);
-                            localStorage.setItem("ui-skin", EMBED_LOOKS[appLook][1]);
+                            localStorage.setItem(drawer + "ui-color-scheme", EMBED_LOOKS[appLook][0]);
+                            localStorage.setItem(drawer + "ui-skin", EMBED_LOOKS[appLook][1]);
                         }
                     }
                 } catch (e) {}
@@ -149,14 +158,14 @@
                 // browser that will not say reads as light. useTheme runs this same rule a module later, which is
                 // why the two can never disagree; without it here, useTheme arrives after the stylesheet has
                 // already painted one canvas under a reader who is owed the other.
-                var uiScheme = handed ? handed[0] : localStorage.getItem("ui-color-scheme");
+                var uiScheme = handed ? handed[0] : setting("ui-color-scheme");
                 var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
                 if (dark) document.documentElement.setAttribute("data-mode", "dark");
                 else document.documentElement.removeAttribute("data-mode");
                 // A skin repaints every surface in the app, so arriving late means a white flash of the normal
                 // look before the deep one lands — the worst flash of the three. Sanctum is the app's DARK look
                 // and has no daylight dress, so an unpinned skin follows the scheme. See src/skins/README.md.
-                var uiSkin = handed ? handed[1] : localStorage.getItem("ui-skin");
+                var uiSkin = handed ? handed[1] : setting("ui-skin");
                 var wornSkin = uiSkin === "sanctum" || uiSkin === "silver" ? uiSkin : uiSkin !== "none" && dark ? "sanctum" : null;
                 if (wornSkin) document.documentElement.setAttribute("data-skin", wornSkin);
                 else document.documentElement.removeAttribute("data-skin");

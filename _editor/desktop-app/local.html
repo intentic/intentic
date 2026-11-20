@@ -10,6 +10,15 @@
              window paints one look and useTheme corrects it a moment later. -->
         <script>
             try {
+                // EVERY SETTING IS THE SIGNED-IN ACCOUNT'S, kept in its drawer as `intentic@<account>/<name>` for the account this
+                // browser points at (`intentic.signedInAs`; _editor/ui/src/lib/browserStorage.ts). One still kept for the whole
+                // browser (from before settings were the account's, or chosen signed out) is read until the editor moves it in.
+                var signedInAs = localStorage.getItem("intentic.signedInAs");
+                var drawer = signedInAs ? "intentic@" + (/^[\w-]+$/.test(signedInAs) ? signedInAs : encodeURIComponent(signedInAs)) + "/" : "";
+                var setting = function (name) {
+                    var own = localStorage.getItem(drawer + name);
+                    return own === null && drawer ? localStorage.getItem(name) : own;
+                };
                 // The preferences the workspace keeps with the account, as the app last heard them (windows/prefs.rs),
                 // written over this origin's own before anything below reads them, unless a page of this origin has
                 // taken that handover or a later one (the web's desktopPreferences.ts, which wears later ones as they
@@ -19,19 +28,19 @@
                     for (var carriedKey in carried.values) {
                         var carriedRaw = carried.values[carriedKey];
                         if (!Object.prototype.hasOwnProperty.call(carried.values, carriedKey) || !/^ui-[a-z0-9-]+$/.test(carriedKey)) continue;
-                        if (carriedRaw === null) localStorage.removeItem(carriedKey);
-                        else if (typeof carriedRaw === "string") localStorage.setItem(carriedKey, carriedRaw);
+                        if (carriedRaw === null) localStorage.removeItem(drawer + carriedKey);
+                        else if (typeof carriedRaw === "string") localStorage.setItem(drawer + carriedKey, carriedRaw);
                     }
                     localStorage.setItem("intentic.prefs-version", String(carried.version));
                 }
-                var accentVars = localStorage.getItem("ui-accent-vars");
+                var accentVars = setting("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
-                var uiTextSize = localStorage.getItem("ui-text-size");
+                var uiTextSize = setting("ui-text-size");
                 // Every rung of the ladder but Compact, which is the stylesheet's own (useTextSize.ts TEXT_SIZES).
                 var UI_TEXT_SIZES = ["90", "default", "large", "135", "150", "175", "200"];
                 if (UI_TEXT_SIZES.indexOf(uiTextSize) !== -1) document.documentElement.setAttribute("data-text-size", uiTextSize);
                 var UI_LOCALES = ["en", "de", "es", "fr", "pl"];
-                var uiLocale = localStorage.getItem("ui-locale");
+                var uiLocale = setting("ui-locale");
                 if (UI_LOCALES.indexOf(uiLocale) === -1) {
                     uiLocale = "en";
                     var offered = navigator.languages || [navigator.language];
@@ -49,14 +58,14 @@
                 // another origin, and a look chosen there was nothing here.
                 var LOOK_PAIRS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"], silver: ["dark", "silver"] };
                 var appLook = window.__INTENTIC_LOOK__;
-                if (typeof appLook === "string" && Object.prototype.hasOwnProperty.call(LOOK_PAIRS, appLook) && localStorage.getItem("ui-color-scheme") === null && localStorage.getItem("ui-skin") === null) {
-                    localStorage.setItem("ui-color-scheme", LOOK_PAIRS[appLook][0]);
-                    localStorage.setItem("ui-skin", LOOK_PAIRS[appLook][1]);
+                if (typeof appLook === "string" && Object.prototype.hasOwnProperty.call(LOOK_PAIRS, appLook) && setting("ui-color-scheme") === null && setting("ui-skin") === null) {
+                    localStorage.setItem(drawer + "ui-color-scheme", LOOK_PAIRS[appLook][0]);
+                    localStorage.setItem(drawer + "ui-skin", LOOK_PAIRS[appLook][1]);
                 }
-                var uiScheme = localStorage.getItem("ui-color-scheme");
+                var uiScheme = setting("ui-color-scheme");
                 var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
                 if (dark) document.documentElement.setAttribute("data-mode", "dark");
-                var uiSkin = localStorage.getItem("ui-skin");
+                var uiSkin = setting("ui-skin");
                 var wornSkin = uiSkin === "sanctum" || uiSkin === "silver" ? uiSkin : uiSkin !== "none" && dark ? "sanctum" : null;
                 if (wornSkin) document.documentElement.setAttribute("data-skin", wornSkin);
             } catch (e) {}

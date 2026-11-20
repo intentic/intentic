@@ -9,7 +9,9 @@ import {
     googleCredentialKey,
     HANDS_OFF_DISMISSED_KEY,
     isAccountKey,
+    isSettingKey,
     LAST_ROUTE_KEY,
+    PROFILE_KEY,
     onAccountCleared,
     openAccountPartition,
     resetAccountPartitionForTests,
@@ -200,8 +202,8 @@ describe("clearing", () => {
     });
 });
 
-describe("a preference that is the account's", () => {
-    const text = (key: string) => definePreference<string>({ key, read: (raw) => raw ?? ``, write: (value) => value, scope: `account` });
+describe("a preference, which is always the account's", () => {
+    const text = (key: string) => definePreference<string>({ key, read: (raw) => raw ?? ``, write: (value) => value });
 
     it("is kept in the open account's drawer, so another account on this browser starts without it", () => {
         openAccountPartition(`acc-a`);
@@ -235,9 +237,45 @@ describe("a preference that is the account's", () => {
     });
 });
 
+describe("a setting, which no browser holds for everyone", () => {
+    it("is the account's under the preferences' namespace, whoever declared it, and the browser's only where declared so", () => {
+        expect([isSettingKey(`ui-never-declared`), isAccountKey(`ui-never-declared`)]).toEqual([true, true]);
+        expect([isSettingKey(PROFILE_KEY), isAccountKey(PROFILE_KEY), isSettingKey(THEME)]).toEqual([false, false, false]);
+    });
+
+    it("read by name, takes what the whole browser kept before, and a write leaves no browser-wide copy to come back", () => {
+        localStorage.setItem(`ui-workspace-hide-tests`, `1`);
+        openAccountPartition(`acc-a`);
+
+        expect(storedValue(`ui-workspace-hide-tests`)).toBe(`1`);
+        expect(localStorage.getItem(`intentic@acc-a/ui-workspace-hide-tests`)).toBe(`1`);
+        expect(localStorage.getItem(`ui-workspace-hide-tests`)).toBeNull();
+
+        openAccountPartition(`acc-b`);
+        expect(storedValue(`ui-workspace-hide-tests`)).toBeUndefined();
+    });
+
+    it("outlives the account signing out, in its drawer, and goes only with the account", async () => {
+        openAccountPartition(`acc-a`);
+        storeValue(`ui-workspace-hide-tests`, `1`);
+        storeValue(chatTabsKey(`sbx-1`), `a`);
+
+        await clearAccountStorage();
+        expect([storedValue(`ui-workspace-hide-tests`), storedValue(chatTabsKey(`sbx-1`))]).toEqual([`1`, undefined]);
+
+        await clearEveryAccountStorage();
+        expect(storedValue(`ui-workspace-hide-tests`)).toBe(`1`);
+
+        await clearAccountStorage(`acc-a`, { settings: true });
+        expect(storedValue(`ui-workspace-hide-tests`)).toBeUndefined();
+    });
+});
+
 // What one account chose or arranged here that another on this browser once inherited: the model a new chat opens on, the
 // order of its sandboxes, its "not now" answers, the page the app reopens on.
 it("keeps every choice that names the account's own things in its drawer", () => {
     const keys = [...Object.values(TURN_DEFAULT_KEYS), SANDBOX_ORDER_KEY, HANDS_OFF_DISMISSED_KEY, LAST_ROUTE_KEY, sharedAccessKey(`sbx-1`)];
     expect(keys.filter((key) => !isAccountKey(key))).toEqual([]);
+    // The choices among them outlive a sign-out, as every setting does.
+    expect([...Object.values(TURN_DEFAULT_KEYS), SANDBOX_ORDER_KEY, HANDS_OFF_DISMISSED_KEY].filter((key) => !isSettingKey(key))).toEqual([]);
 });

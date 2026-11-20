@@ -368,7 +368,8 @@ const deleteAccount = async (sandboxes: readonly SandboxSummary[], options: { re
         forgetAccount(user.value.email);
     }
     leaving = true;
-    await forgetAccountTraces();
+    // Gone, so nothing waits in its drawer for it to sign in again: its settings go with the rest.
+    await forgetAccountTraces({ settings: true });
     if (options.continuing === true) {
         return;
     }
