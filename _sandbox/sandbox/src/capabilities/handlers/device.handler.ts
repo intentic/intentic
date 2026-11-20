@@ -47,6 +47,9 @@ const DEVICE: PeerHandlerSpec<DeviceConfig> = {
         sandboxes: host.sandboxes,
         destructive: host.destructive,
         programs: host.programs,
+        remoteView: host.remoteView,
+        remoteControl: host.remoteControl,
+        remoteTerminal: host.remoteTerminal,
         ...(host.roots !== undefined ? { roots: host.roots } : {}),
     }),
 };

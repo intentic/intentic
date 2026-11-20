@@ -37,6 +37,7 @@ import { providersSamples } from "./providers.samples.ts";
 import { publicSamples } from "./public.samples.ts";
 import { pushSamples } from "./push.samples.ts";
 import { runsSamples } from "./runs.samples.ts";
+import { remoteSamples } from "./remote.samples.ts";
 import { safetySamples } from "./safety.samples.ts";
 import { secretsSamples } from "./secrets.samples.ts";
 import { servicesSamples } from "./services.samples.ts";
@@ -74,6 +75,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         compliance: complianceSamples(context),
         privacy: privacySamples(context),
         vpn: vpnSamples(context),
+        remote: remoteSamples(context),
         offload: offloadSamples(context),
         runs: runsSamples(context),
         ci: ciSamples(context),

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { DEVICE_MEDIA_PATH, DEVICE_TERMINAL_PATH } from "@intentic/sandbox-contract/browser-wire";
 import type { AuditActor, AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
 import type {
-    RemoteAllow,
+    RemoteAccessAllow as RemoteAllow,
     RemoteIceServer,
     RemoteOpenTerminalInput,
     RemoteScreen,

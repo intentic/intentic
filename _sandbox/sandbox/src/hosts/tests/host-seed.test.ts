@@ -13,6 +13,9 @@ test("a device connected by setup may manage sandboxes and do nothing else", () 
         sandboxes: "on",
         destructive: "off",
         programs: "off",
+        remoteView: "off",
+        remoteControl: "off",
+        remoteTerminal: "off",
     });
 });
 
@@ -20,7 +23,7 @@ test("a device connected by setup may manage sandboxes and do nothing else", () 
 // clean it up again. Nothing beyond the containers is granted: that is the line this test holds.
 test("setup grants the fleet and nothing that reaches the machine itself", () => {
     expect(SETUP_HOST_SCOPES.sandboxes).toBe("on");
-    for (const scope of ["shell", "write", "screen", "control", "destructive"] as const) {
+    for (const scope of ["shell", "write", "screen", "control", "destructive", "remoteView", "remoteControl", "remoteTerminal"] as const) {
         expect(SETUP_HOST_SCOPES[scope]).toBe("off");
     }
 });

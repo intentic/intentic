@@ -2799,6 +2799,30 @@
                         "on": "Dozwolone"
                     }
                 },
+                "remoteControl": {
+                    "hint": "Z tego podglądu osoba porusza myszą i pisze na tym komputerze. W Windows pojawia się o tym komunikat, a Ctrl+Alt+Shift+P wstrzymuje jej działania.",
+                    "label": "Pozwól ludziom używać myszy i klawiatury",
+                    "options": {
+                        "off": "Zablokowane",
+                        "on": "Dozwolone"
+                    }
+                },
+                "remoteTerminal": {
+                    "hint": "Osoba w edytorze tego sandboxa otwiera powłokę na tym komputerze, działającą jako ty.",
+                    "label": "Pozwól ludziom otwierać terminale",
+                    "options": {
+                        "off": "Zablokowane",
+                        "on": "Dozwolone"
+                    }
+                },
+                "remoteView": {
+                    "hint": "Osoba w edytorze tego sandboxa, nigdy agent, ogląda ekran tego komputera na żywo.",
+                    "label": "Pozwól ludziom widzieć ekran",
+                    "options": {
+                        "off": "Zablokowane",
+                        "on": "Dozwolone"
+                    }
+                },
                 "roots": {
                     "label": "Foldery, do których ma dostęp",
                     "placeholder": "Jeden folder w każdym wierszu. Zostaw puste, aby użyć folderu domowego."

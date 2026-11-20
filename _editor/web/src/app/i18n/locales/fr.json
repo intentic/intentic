@@ -2799,6 +2799,30 @@
                         "on": "Autorisé"
                     }
                 },
+                "remoteControl": {
+                    "hint": "Depuis cette vue, une personne déplace la souris et tape sur cet ordinateur. Sous Windows, un avis l'indique, et Ctrl+Alt+Maj+P y met ses actions en pause.",
+                    "label": "Laisser des personnes utiliser la souris et le clavier",
+                    "options": {
+                        "off": "Bloqué",
+                        "on": "Autorisé"
+                    }
+                },
+                "remoteTerminal": {
+                    "hint": "Une personne dans l'éditeur de cette sandbox ouvre un shell sur cet ordinateur, exécuté en votre nom.",
+                    "label": "Laisser des personnes ouvrir des terminaux",
+                    "options": {
+                        "off": "Bloqué",
+                        "on": "Autorisé"
+                    }
+                },
+                "remoteView": {
+                    "hint": "Une personne dans l'éditeur de cette sandbox, jamais un agent, regarde l'écran de cet ordinateur en direct.",
+                    "label": "Laisser des personnes voir l'écran",
+                    "options": {
+                        "off": "Bloqué",
+                        "on": "Autorisé"
+                    }
+                },
                 "roots": {
                     "label": "Dossiers auxquels il peut toucher",
                     "placeholder": "Un dossier par ligne. Laissez vide pour votre dossier personnel."

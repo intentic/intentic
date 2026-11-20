@@ -16,7 +16,7 @@ const DeviceKeySchema = z.string().min(1).max(200).describe("The device's connec
 export const RemoteDeviceInputSchema = z.object({ device: DeviceKeySchema });
 
 // Which of the computer's switches allow what, as the computer itself says (or its card, before remoted has run).
-export const RemoteAllowSchema = z.object({
+export const RemoteAccessAllowSchema = z.object({
     // Watch the screen.
     view: z.boolean(),
     // Drive the pointer and keys.
@@ -24,10 +24,10 @@ export const RemoteAllowSchema = z.object({
     // Open terminals.
     terminal: z.boolean(),
 });
-export type RemoteAllow = z.infer<typeof RemoteAllowSchema>;
+export type RemoteAccessAllow = z.infer<typeof RemoteAccessAllowSchema>;
 
 // One monitor of the computer, in its own desktop's pixels.
-export const RemoteMonitorSchema = z.object({
+export const RemoteAccessMonitorSchema = z.object({
     id: z.string(),
     name: z.string(),
     x: z.number(),
@@ -37,7 +37,7 @@ export const RemoteMonitorSchema = z.object({
     scale: z.number(),
     primary: z.boolean(),
 });
-export type RemoteMonitor = z.infer<typeof RemoteMonitorSchema>;
+export type RemoteAccessMonitor = z.infer<typeof RemoteAccessMonitorSchema>;
 
 // One terminal remoted holds, which any entitled viewer can attach to again while remoted runs.
 export const RemoteTerminalSchema = z.object({
@@ -56,9 +56,9 @@ export const RemoteStatusSchema = z.object({
     // Whether a screen or a terminal can be opened now; `reason` says why not, in words for the person.
     available: z.boolean(),
     reason: z.string().optional(),
-    allow: RemoteAllowSchema,
+    allow: RemoteAccessAllowSchema,
     // Empty until remoted has run once since the device connected.
-    monitors: z.array(RemoteMonitorSchema),
+    monitors: z.array(RemoteAccessMonitorSchema),
     // The environments a terminal can open in.
     environments: z.array(z.string()),
     terminals: z.array(RemoteTerminalSchema),
