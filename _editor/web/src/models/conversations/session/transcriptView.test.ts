@@ -76,7 +76,7 @@ describe(`rewindTo`, () => {
             `first`,
             `done`,
             `Switched to Haiku`,
-            `Went back to here, 2 messages dropped and the files restored to this point.`,
+            `Went back: 2 messages dropped, files restored.`,
         ]);
         expect(host.session.value).toBeUndefined();
         expect(host.error.value).toBeNull();
@@ -180,7 +180,7 @@ describe(`an edit`, () => {
         expect(view.editing.value).toMatchObject({ id: 1 });
 
         expect(await view.submitEdit(`first, better`)).toBe(true);
-        expect(texts()).toEqual([`Edited this message, 5 messages dropped and the files restored to this point.`]);
+        expect(texts()).toEqual([`Edited: 5 later messages dropped, files restored.`]);
         expect(view.editing.value).toBeUndefined();
         expect(host.turn.say.mock.calls).toEqual([[`first, better`, [], undefined]]);
     });

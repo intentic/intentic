@@ -44,7 +44,7 @@ describe("keep-warm economics", () => {
 describe("the receipt a kept conversation's turn leaves", () => {
     test("says it picked up warm, and for how long it was kept", () => {
         expect(keptWarmLine({ readTokens: 251_000, writtenTokens: 3_000, kept: { forMs: 3 * HOUR + 12 * MINUTE, refreshes: 4 } })).toBe(
-            "Picked up warm: 251k tokens read from the cache, kept warm for 3h 12m with 4 refreshes.",
+            "Picked up warm: 251k tokens from cache, kept 3h 12m (4 refreshes).",
         );
     });
 

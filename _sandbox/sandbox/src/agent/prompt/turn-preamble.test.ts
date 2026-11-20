@@ -238,7 +238,7 @@ describe("the envelope of a prompt as the daemon composes it", () => {
 
     test("without a handoff the re-run note is the envelope's own, whichever side of the preamble it sits", () => {
         const queued = withResumeNote("ship the parser", RESUME_NOTES.restart);
-        const restart = { kind: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.", reason: "restart" } as const;
+        const restart = { kind: "notice", text: "Sandbox back; picked up where it left off. Its background jobs ended.", reason: "restart" } as const;
         const expected = { spoken: "ship the parser", queued, attachments: [`${WORKSPACE_ROOT}/a.png`], resume: restart };
         const sent = withAttachmentNote(queued, [`${WORKSPACE_ROOT}/a.png`]);
         expect(parsePromptEnvelope(composeWirePrompt([spawning], sent))).toEqual({ ...expected, notes: [spawning] });

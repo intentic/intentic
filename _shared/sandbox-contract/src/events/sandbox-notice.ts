@@ -10,6 +10,8 @@ export type WorktreeSyncCause = z.infer<typeof WorktreeSyncCauseSchema>;
 // The sandbox's own notice rows (a land, a hold, a renewal, a stop), as a code and the facts they were worded from. The
 // row's `text` stays the English sentence, which older apps, stored transcripts and agents reading their own history
 // go on reading; `noticeCode` beside it is what lets an app say the same thing in the reader's language and words.
+// Every sentence fits one row of a half-width chat, about 80 characters with its facts filled in (2026-11-20: a
+// three-line rebase notice). What it would add beyond that belongs in the agent's prompt or behind a press, not here.
 
 // On the wire a code is any string and its facts a flat record: a transcript page carrying a code newer than its reader
 // still parses, and that reader draws `text`. The codes this build writes, with their facts typed, are

@@ -27,8 +27,8 @@ const failedRow = (event: ErrorFrame): FailureRow => ({
 const undeliveredRow = (said: FailureSaid, unattended: boolean): FailureRow => ({
     role: "notice",
     text: unattended
-        ? `${said.message} Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.`
-        : `${said.message} Your message was not delivered: it is held for you to send again.`,
+        ? `${said.message} Nothing ran; this run started on its own.`
+        : `${said.message} Not delivered: held for you to send again.`,
     noticeCode: noticeCode({ code: "undelivered", params: { ...said, unattended: unattended || undefined } }),
 });
 
@@ -40,8 +40,8 @@ const stoppedPartwayRow = (said: FailureSaid, switchModel: boolean): FailureRow 
     const row: FailureRow = {
         role: "notice",
         text: switchModel
-            ? `${said.message} The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here.`
-            : `${said.message} The run stopped partway. The changes it made so far are kept: send a message to pick up from here.`,
+            ? `${said.message} Stopped partway, changes kept: continue with another model.`
+            : `${said.message} Stopped partway, changes kept: send a message to go on.`,
         noticeCode: noticeCode({ code: "stoppedPartway", params: { ...said, switchModel: switchModel || undefined } }),
     };
     if (switchModel) {
@@ -65,8 +65,8 @@ const heldRow = (event: ErrorFrame): FailureRow => {
         return {
             role: "notice",
             text: memory
-                ? `${event.message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.`
-                : `${event.message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
+                ? `${event.message} Nothing ran; send the message above anyway to start it.`
+                : `${event.message} Nothing ran; the message above is kept to send again.`,
             noticeAction: memory ? memoryPress(event) : "sendAgain",
             sandboxHeld: true,
             noticeCode: noticeCode({ code: "kept", params: { ...said, memory: memory || undefined } }),
@@ -77,7 +77,7 @@ const heldRow = (event: ErrorFrame): FailureRow => {
     }
     return {
         role: "notice",
-        text: `${event.message} Your message is held: send it again to start anyway.`,
+        text: `${event.message} Message held: send again to start anyway.`,
         noticeAction: memoryPress(event),
         noticeCode: noticeCode({ code: "memoryHeld", params: said }),
     };
@@ -85,9 +85,8 @@ const heldRow = (event: ErrorFrame): FailureRow => {
 
 // What an armed credential renewal promises, and what its row says instead once a later failure in the same run took
 // that promise back (TranscriptFold.withdrawRenewal).
-export const RENEWING = "The credential is being renewed and this turn continues automatically.";
-export const RENEWAL_WITHDRAWN =
-    "The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.";
+export const RENEWING = "Renewing the credential; the turn continues by itself.";
+export const RENEWAL_WITHDRAWN = "The renewal didn't resume the turn: press Continue to pick it up.";
 
 // What a laddered wall's automatic re-runs are doing, said on the failure's own row so the count stays in the record.
 const retryClause = (event: ErrorFrame): { text: string; code: NoticeCode } | undefined => {
@@ -98,13 +97,13 @@ const retryClause = (event: ErrorFrame): { text: string; code: NoticeCode } | un
     const said = failureOf(event);
     if (event.autoResume === "scheduled") {
         return {
-            text: `Retrying by itself: attempt ${retries.made + 1} of ${retries.max}.`,
+            text: `Retrying: attempt ${retries.made + 1} of ${retries.max}.`,
             code: noticeCode({ code: "retrying", params: { ...said, attempt: retries.made + 1, of: retries.max } }),
         };
     }
     return retries.made >= retries.max
         ? {
-              text: `Retried ${retries.made} of ${retries.max} times by itself; nothing more is sent automatically.`,
+              text: `Retried ${retries.made} of ${retries.max} times; no more retries.`,
               code: noticeCode({ code: "retried", params: { ...said, made: retries.made, of: retries.max } }),
           }
         : undefined;
@@ -121,7 +120,7 @@ export const errorRow = (event: ErrorFrame, ran: boolean): FailureRow => {
         return retry === undefined
             ? {
                   role: "notice",
-                  text: `${message} Nothing is retrying it, so the turn is waiting here.`,
+                  text: `${message} Not retrying; the turn waits here.`,
                   noticeCode: noticeCode({ code: "outageWaiting", params: said }),
               }
             : { role: "notice", text: `${message} ${retry.text}`, noticeCode: retry.code };
@@ -136,7 +135,7 @@ export const errorRow = (event: ErrorFrame, ran: boolean): FailureRow => {
               }
             : {
                   role: "notice",
-                  text: `${message} Reconnect the account to pick this conversation back up.`,
+                  text: `${message} Reconnect the account to continue.`,
                   noticeCode: noticeCode({ code: "reconnect", params: said }),
               };
     }

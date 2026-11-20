@@ -50,10 +50,9 @@ const LAND_WORDS = {
         intoParentClash: (count) => t(`chat.sandboxNotice.developer.intoParentClash`, { count }, count),
         rebased: (count) => t(`chat.sandboxNotice.developer.rebased`, { count }, count),
         rebasedBetweenTools: (count, base) =>
-            sentences(
-                t(`chat.sandboxNotice.developer.rebasedBetweenTools`, { count }, count),
-                base === undefined ? undefined : t(`chat.sandboxNotice.developer.diffAgainst`, { base }),
-            ),
+            base === undefined
+                ? t(`chat.sandboxNotice.developer.rebasedBetweenTools`, { count }, count)
+                : t(`chat.sandboxNotice.developer.rebasedBetweenToolsOn`, { count, base }, count),
         rebaseBlocked: (repos) => t(`chat.sandboxNotice.developer.rebaseBlocked`, { repos }),
     },
     maker: {
@@ -254,7 +253,7 @@ const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace
         case `keptWarm`:
             return t(`chat.sandboxNotice.keptWarm`, notice.params, notice.params.refreshes);
         case `keptCold`:
-            return t(`chat.sandboxNotice.keptCold`, notice.params, notice.params.refreshes);
+            return t(`chat.sandboxNotice.keptCold`, notice.params);
         case `installing`:
             return installingLine(notice);
         case `accountMoved`:
@@ -277,11 +276,12 @@ const startingLine = (notice: StartingNotice, audience: Audience): string => {
         }
         case `contextTrim`: {
             const { window, omitted, base } = notice.params;
-            return sentences(
+            // Clauses of one sentence, each catalog entry carrying its own joining punctuation (context-trim.ts).
+            return [
                 omitted === undefined ? t(`chat.sandboxNotice.contextTrim`, { window }) : t(`chat.sandboxNotice.contextTrimOmitted`, { window, omitted }),
-                base ? t(`chat.sandboxNotice.contextTrimBase`) : undefined,
+                base ? t(`chat.sandboxNotice.contextTrimBase`) : ``,
                 t(`chat.sandboxNotice.contextTrimKept`),
-            );
+            ].join(``);
         }
     }
 };

@@ -2638,7 +2638,7 @@ describe(`Conversation`, () => {
                     .map(({ text, noticeWait }) => ({ text, noticeWait }));
             expect(notices()).toEqual([
                 {
-                    text: `401 revoked. The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.`,
+                    text: `401 revoked. The renewal didn't resume the turn: press Continue to pick it up.`,
                     noticeWait: undefined,
                 },
                 { text: `Claude Code returned an error result: 401`, noticeWait: undefined },
@@ -3141,9 +3141,7 @@ describe(`Conversation`, () => {
             fast: false,
         });
 
-        expect(conversation.error.value).toBe(
-            `invalid attachment path: ../../etc/passwd Your message is back in the composer: send it again once that's sorted.`,
-        );
+        expect(conversation.error.value).toBe(`invalid attachment path: ../../etc/passwd Your message is back in the composer.`);
         expect(conversation.draft.value).toBe(`redesign the settings page`);
         // Out of the transcript entirely: nothing about this send is part of the conversation, here or daemon-side.
         expect(conversation.transcript.messages.value).toEqual([]);
@@ -3482,7 +3480,7 @@ describe(`the transcript's clock`, () => {
         // Everything from the rewound message on is gone and the session drops; the notice is the only place that says
         // so, including that the workspace moved too.
         expect(conversation.transcript.messages.value).toEqual([
-            expect.objectContaining({ role: `notice`, text: `Went back to here, 2 messages dropped and the files restored to this point.` }),
+            expect.objectContaining({ role: `notice`, text: `Went back: 2 messages dropped, files restored.` }),
         ]);
         expect(conversation.session.value).toBeUndefined();
     });
@@ -3606,7 +3604,7 @@ describe(`Conversation editing a sent message`, () => {
         // prompt.
         expect(conversation.transcript.messages.value[0]).toMatchObject({
             role: `notice`,
-            text: `Edited this message, 2 messages dropped and the files restored to this point.`,
+            text: `Edited: 2 later messages dropped, files restored.`,
         });
         expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `user`, text: `first` });
     });
@@ -3654,7 +3652,7 @@ describe(`Conversation editing a sent message`, () => {
         expect(conversation.transcript.editing.value).toBeUndefined();
         // And it is the REWIND's own sentence, not the edit's: nobody edited anything here.
         expect(conversation.transcript.messages.value[0]).toMatchObject({
-            text: `Went back to here, 2 messages dropped and the files restored to this point.`,
+            text: `Went back: 2 messages dropped, files restored.`,
         });
     });
 });

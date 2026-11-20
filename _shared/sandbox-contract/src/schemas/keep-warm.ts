@@ -115,10 +115,9 @@ export const keptWarmLine = (opening: PromptCacheOpening): string | undefined =>
         return undefined;
     }
     const { tokens, span, refreshes } = notice.params;
-    const held = `kept warm for ${span} with ${refreshes} ${refreshes === 1 ? "refresh" : "refreshes"}`;
     return notice.code === "keptWarm"
-        ? `Picked up warm: ${tokens} tokens read from the cache, ${held}.`
-        : `Picked up cold despite being ${held}: ${tokens} tokens sent again, because this turn's prompt no longer matched the cache.`;
+        ? `Picked up warm: ${tokens} tokens from cache, kept ${span} (${refreshes} ${refreshes === 1 ? "refresh" : "refreshes"}).`
+        : `Picked up cold after ${span} kept warm: ${tokens} tokens resent, the prompt changed.`;
 };
 
 // A turn's prefix, part by part, so two turns that should share a cache can say which part stopped matching.

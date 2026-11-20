@@ -205,7 +205,7 @@ describe(`a resume the sandbox promised`, () => {
         expect(host.reattach).toHaveBeenCalledTimes(8);
         expect(failures.credentialRenewal.value).toBeUndefined();
         expect(notices).toEqual([
-            `This turn didn't continue by itself after its sign-in was refused, so it stopped where it was. Sending again picks the conversation back up.`,
+            `Sign-in was refused and the turn stopped. Send again to pick it up.`,
         ]);
         // No account is marked from here: the list the sandbox answers with is what lights the banner, or not.
         expect(providerAccounts.value[`claude`]).toEqual([{ id: `acct-1`, label: `Claude`, connectedAt: 0 }]);

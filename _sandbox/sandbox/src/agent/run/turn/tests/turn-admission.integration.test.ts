@@ -213,7 +213,7 @@ test.each(domainRefusals)("a senderless sandbox message is kept with its attachm
     expect(rows).toEqual([
         { role: "user", text: turn.prompt, sentAt: run.startedAt, attachments: ["repair.txt"], messageId: "repair", speaker: { kind: "sandbox" }, run: run.id, rowId: expect.any(String) },
         {
-            role: "notice", text: `${message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
+            role: "notice", text: `${message} Nothing ran; the message above is kept to send again.`,
             noticeAction: "sendAgain", sandboxHeld: true,
             noticeCode: { code: "kept", params: { message, error: "agent-domain-refused" } }, openedAt: expect.any(Number), run: run.id, rowId: expect.any(String),
         },

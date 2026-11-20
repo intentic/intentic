@@ -28,7 +28,7 @@ export const contextTrimNotice = ({ window, omitted, base }: ContextTrim): Extra
 // The closing clause is load-bearing: without it the row reads as "my AGENTS.md may not have arrived".
 export const contextTrimLine = (trim: ContextTrim): string => {
     const { window, omitted, base } = contextTrimNotice(trim).params;
-    const swapped = base ? ` The agent's own base instructions were swapped for a short paragraph, too.` : ``;
-    const left = omitted === undefined ? `` : ` — left out: ${omitted}`;
-    return `Sent thin for this model's ${window} window${left}.${swapped}` + ` Your workspace rules, this turn's role and where its files live still rode.`;
+    const swapped = base ? `; base prompt shortened` : ``;
+    const left = omitted === undefined ? `` : `, without ${omitted}`;
+    return `Sent thin for the ${window} window${left}${swapped}; workspace rules kept.`;
 };

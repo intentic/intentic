@@ -1006,7 +1006,7 @@ test("a resumed restart keeps the user's message on the record, under the re-run
     const rows = await fileTranscriptRecord(root).read("rs-kept");
     expect(rows.map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "user", text: "finish the report" },
-        { role: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off." },
+        { role: "notice", text: "Sandbox back; picked up where it left off. Its background jobs ended." },
         { role: "assistant", text: "report done" },
     ]);
     expect(rows[0]).toMatchObject({ sentAt: 10_000, messageId: "m-report" });
@@ -1229,7 +1229,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
         { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         {
             role: "notice",
-            text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
+            text: `The sandbox restarted mid-turn; its background jobs ended. Continue picks it up.`,
             noticeCode: { code: "restartInterrupted" },
         },
     ]));
@@ -1361,7 +1361,7 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
         { role: "assistant", text: "two chapters in, on s-partial since 10000" },
         {
             role: "notice",
-            text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
+            text: `The sandbox restarted mid-turn; its background jobs ended. Continue picks it up.`,
             noticeCode: { code: "restartInterrupted" },
         },
     ]));
@@ -1409,9 +1409,9 @@ test("a re-run cut by a second restart records its notice, not its repeated prom
     await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
     expect((await fileTranscriptRecord(root).read("rs-again")).map(({ role, text }) => ({ role, text }))).toEqual([
-        { role: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off." },
+        { role: "notice", text: "Sandbox back; picked up where it left off. Its background jobs ended." },
         { role: "assistant", text: "chapter three" },
-        { role: "notice", text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}` },
+        { role: "notice", text: `The sandbox restarted mid-turn; its background jobs ended. Continue picks it up.` },
     ]);
 });
 

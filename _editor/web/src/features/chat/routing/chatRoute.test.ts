@@ -152,7 +152,7 @@ test("both questions open: one call asks for both, and nothing is read until the
     expect(chat.selection.account.value).toBe(`work`);
     expect(chat.selection.autoPicked.value).toBe(true);
     expect(verdict()).toBe(
-        `Acting as social. The message reads like social's work. Read the opening message as work for Opus 5. Every turn after this one stays on it until you change it. Read by ${JUDGE_LABEL}.`,
+        `Acting as social. The message reads like social's work. Read the opening message as work for Opus 5. It stays until you change it. Read by ${JUDGE_LABEL}.`,
     );
 });
 
@@ -170,7 +170,7 @@ test("a role that brings its own model answers the model question itself, and th
     expect(chat.selection.account.value).toBeUndefined();
     expect(chat.selection.autoPicked.value).toBe(false);
     expect(verdict()).toBe(
-        `Acting as Backend. The message reads like Backend's work. Backend brings its own model, so this chat runs on that instead. Read by ${JUDGE_LABEL}.`,
+        `Acting as Backend. The message reads like Backend's work. Backend runs on its own model. Read by ${JUDGE_LABEL}.`,
     );
 });
 
@@ -180,10 +180,10 @@ test("auto model on, role matching off: only the model is asked for", async () =
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await route(chat).beforeSend(WORK, false);
     expect(sent()).toMatchObject({ model: true, role: false });
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Choosing which model this chat runs on`), `upcoming`, { noticeWait: `chatRoute` });
+    expect(notice).toHaveBeenCalledWith(`Picking this chat's model…`, `upcoming`, { noticeWait: `chatRoute` });
     expect(chat.selection.actsAs.value).toBeUndefined();
     expect(verdict()).toBe(
-        `Read the opening message as work for Opus 5. Every turn after this one stays on it until you change it. Read by ${JUDGE_LABEL}.`,
+        `Read the opening message as work for Opus 5. It stays until you change it. Read by ${JUDGE_LABEL}.`,
     );
 });
 
@@ -192,7 +192,7 @@ test("role matching on, auto model off: only the role is asked for, and Auto is 
     answer({ role: { id: `backend`, reason: `The message reads like Backend's work.` } });
     await route(chat).beforeSend(WORK, false);
     expect(sent()).toMatchObject({ model: false, role: true });
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading which role this chat belongs to`), `upcoming`, { noticeWait: `chatRoute` });
+    expect(notice).toHaveBeenCalledWith(`Picking this chat's role…`, `upcoming`, { noticeWait: `chatRoute` });
     expect(chat.selection.actsAs.value).toBe(`backend`);
     // Nothing to disarm: Auto was never armed here, and the next new chat's default is not this reading's business.
     expect(setAuto).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ test("the chat says the reading is running, and the row settles in place", async
     routeChat.mockReturnValueOnce(new Promise<ChatRoute>((done) => (resolve = done)));
     const wait = route(chat).beforeSend(WORK, false);
 
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading what this chat opens on`), `upcoming`, { noticeWait: `chatRoute` });
+    expect(notice).toHaveBeenCalledWith(`Picking this chat's role and model…`, `upcoming`, { noticeWait: `chatRoute` });
     expect(chatRouteWait(chat)).toMatchObject({ since: expect.any(Number) });
 
     resolve({
@@ -298,7 +298,7 @@ test("a hand on either control while the reading ran is the last word", async ()
     expect(wearModel).not.toHaveBeenCalled();
     expect(chat.selection.actsAs.value).toBeUndefined();
     expect(verdict()).toBe(
-        `social matched, but this chat was pointed somewhere by hand first, so nothing moved. Read the opening message as work for Opus 5. Read by ${JUDGE_LABEL}.`,
+        `social matched, but this chat was already set by hand. Read the opening message as work for Opus 5. Read by ${JUDGE_LABEL}.`,
     );
 });
 
@@ -319,14 +319,14 @@ test("a send is not held past the wait, and each half says what the chat keeps i
     await pending;
     expect(wearModel).not.toHaveBeenCalled();
     expect(chatRouteWait(chat)).toBeUndefined();
-    expect(verdict()).toBe(`Couldn't read what this chat opens on in time, so it stays open to everything and runs on the model it already had.`);
+    expect(verdict()).toBe(`Couldn't pick a role or model in time; nothing changed.`);
 
     settings.value = { ...settings.value, roleRouting: false };
     const alone = chatWith();
     const second = route(alone).beforeSend(WORK, false);
     await advanceTimersByTimeAsync(SEND_WAIT_MS + 1);
     await second;
-    expect(verdict()).toBe(`Couldn't choose a model for this chat in time, so it runs on the one it already had.`);
+    expect(verdict()).toBe(`Couldn't pick a model in time; it stays on the current one.`);
 });
 
 test("a failed call reads as no answer rather than an error", async () => {

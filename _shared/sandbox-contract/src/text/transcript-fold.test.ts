@@ -15,7 +15,7 @@ const SENT_AT = 1_767_225_600_000;
 const openingOf = (prompt: string): TranscriptRow[] => [userRow(prompt, SENT_AT, [])];
 const foldOf = (prompt: string, events: readonly AgentEvent[]): TranscriptRow[] => foldTurn(openingOf(prompt), events);
 // What an armed credential renewal's row promises.
-const RENEWING_TEXT = "The credential is being renewed and this turn continues automatically.";
+const RENEWING_TEXT = "Renewing the credential; the turn continues by itself.";
 // The same row as a code, which an app words in its reader's language (sandbox-notice.ts).
 const RENEWING_CODE = { code: "renewing", params: { message: "Token refused.", error: "claude-token-refused" } };
 
@@ -347,13 +347,13 @@ describe("foldTurn", () => {
         // the chat card's, asked once (ChatContinueStrip), not a second switch on a transcript line.
         expect(foldOf("hi", outage).at(-1)).toEqual({
             role: "notice",
-            text: "Anthropic is down. Retrying by itself: attempt 2 of 6.",
+            text: "Anthropic is down. Retrying: attempt 2 of 6.",
             noticeCode: { code: "retrying", params: { message: "Anthropic is down.", error: "provider-outage", attempt: 2, of: 6 } },
         });
         const renewal: AgentEvent[] = [{ kind: "error", code: "claude-token-refused", message: "Token refused.", autoResume: "scheduled" }];
         expect(foldOf("hi", renewal).at(-1)).toEqual({
             role: "notice",
-            text: "Token refused. The credential is being renewed and this turn continues automatically.",
+            text: "Token refused. Renewing the credential; the turn continues by itself.",
             noticeWait: "credentialRenewal",
             noticeCode: RENEWING_CODE,
         });
@@ -370,7 +370,7 @@ describe("foldTurn", () => {
         // The code moves with the words, so an app wording the row itself says the stop too, not the old promise.
         const withdrawn: TranscriptRow = {
             role: "notice",
-            text: "Token refused. The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.",
+            text: "Token refused. The renewal didn't resume the turn: press Continue to pick it up.",
             noticeCode: { code: "renewalWithdrawn", params: { message: "Token refused.", error: "claude-token-refused" } },
         };
         // The live window hears the rewrite as a patch on the row it already drew, then the stop's own row.
@@ -398,13 +398,13 @@ describe("foldTurn", () => {
         const booked: AgentEvent[] = [{ kind: "error", message: timedOut, autoResume: "scheduled", nextAt: 1, retries: { made: 1, max: 3 } }];
         expect(foldOf("hi", booked).at(-1)).toEqual({
             role: "notice",
-            text: `${timedOut} Retrying by itself: attempt 2 of 3.`,
+            text: `${timedOut} Retrying: attempt 2 of 3.`,
             noticeCode: { code: "retrying", params: { message: timedOut, attempt: 2, of: 3 } },
         });
         const spent: AgentEvent[] = [{ kind: "error", message: timedOut, autoResume: "available", retries: { made: 3, max: 3 } }];
         expect(foldOf("hi", spent).at(-1)).toEqual({
             role: "notice",
-            text: `${timedOut} Retried 3 of 3 times by itself; nothing more is sent automatically.`,
+            text: `${timedOut} Retried 3 of 3 times; no more retries.`,
             noticeCode: { code: "retried", params: { message: timedOut, made: 3, of: 3 } },
         });
         // An outage nobody armed says so, instead of promising the breaker's retry.
@@ -420,7 +420,7 @@ describe("foldTurn", () => {
         ];
         expect(foldOf("hi", unarmed).at(-1)).toEqual({
             role: "notice",
-            text: "Anthropic is down. Nothing is retrying it, so the turn is waiting here.",
+            text: "Anthropic is down. Not retrying; the turn waits here.",
             noticeCode: { code: "outageWaiting", params: { message: "Anthropic is down.", error: "provider-outage" } },
         });
     });
@@ -431,13 +431,13 @@ describe("foldTurn", () => {
             const sync = cause === undefined ? { commits: 1, blocked: [] } : { commits: 1, blocked: [], cause };
             return { kind: "worktree", branch: "agent/x", base: "abc1234", sync };
         };
-        const waited = "Your workspace moved on while this agent waited, its branch was rebased onto your latest 1 commit.";
+        const waited = "Rebased onto your latest 1 commit while this agent waited.";
         expect(foldOf("go", [frame()]).at(-1)?.text).toBe(waited);
         expect(foldOf("go", [frame("turn-open")]).at(-1)?.text).toBe(waited);
         expect(foldOf("go", [frame("answer")]).at(-1)?.text).toBe(waited);
         expect(foldOf("go", [frame("between-tools")]).at(-1)).toEqual({
             role: "notice",
-            text: "The main line moved on during this turn: its 1 newer commit was rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched. `git diff abc1234` shows this agent's own changes on top of the new base.",
+            text: "Rebased mid-turn onto 1 new commit, none of its files touched (base abc1234).",
             noticeCode: { code: "synced", params: { commits: 1, cause: "between-tools", base: "abc1234" } },
         });
     });
@@ -452,21 +452,21 @@ describe("foldTurn", () => {
         expect(foldOf("go", events).slice(1)).toEqual([
             {
                 role: "notice",
-                text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 2 commits.",
+                text: "Rebased onto your latest 2 commits while this agent waited.",
                 noticeCode: { code: "synced", params: { commits: 2 } },
             },
             { role: "assistant", text: "on it" },
             { role: "notice", text: "Context compacted to free up space.", noticeCode: { code: "compacted" } },
             {
                 role: "notice",
-                text: "Changes landed in your workspace: review them in the Changes panel. Installing 1 dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.",
+                text: "Landed in your workspace. Installing 1 changed dependency, then checks.",
                 noticeAction: "depsInstall",
                 noticeCode: { code: "landed", params: { deps: 1 } },
             },
         ]);
         expect(foldOf("go", [{ kind: "landed", landed: true, held: true }]).at(-1)).toEqual({
             role: "notice",
-            text: "Finished: the work is on this agent's branch, ready to land from its review.",
+            text: "Finished: ready to land from this agent's review.",
             noticeCode: { code: "landHeld" },
         });
     });
@@ -492,25 +492,25 @@ describe("foldTurn", () => {
     it("says where an agent's own install writes, naming its projects", () => {
         expect(foldOf("go", [{ kind: "install", reach: "own-copy", projects: ["video"] }]).at(-1)).toEqual({
             role: "notice",
-            text: "Installing packages in video/ into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.",
+            text: "Installing packages in video/ into this conversation's own copy.",
             noticeCode: { code: "installing", params: { ownCopy: true, projects: "video/" } },
         });
         expect(foldOf("go", [{ kind: "install", reach: "main-tree", projects: [""] }]).at(-1)).toEqual({
             role: "notice",
-            text: "Installing packages in the workspace root in the main tree, one install at a time.",
+            text: "Installing packages in the workspace root in the main tree.",
             noticeCode: { code: "installing", params: { ownCopy: false, root: true } },
         });
         // The workspace root is named first, and counts toward the three named.
         expect(foldOf("go", [{ kind: "install", reach: "main-tree", projects: ["a", "", "b", "c", "d"] }]).at(-1)).toEqual({
             role: "notice",
-            text: "Installing packages in the workspace root, a/, b/ and 2 more in the main tree, one install at a time.",
+            text: "Installing packages in the workspace root, a/, b/ and 2 more in the main tree.",
             noticeCode: { code: "installing", params: { ownCopy: false, root: true, projects: "a/, b/", more: 2 } },
         });
         expect(foldOf("go", [{ kind: "install", reach: "main-tree", projects: ["a", "b", "c", "d", "e"] }]).at(-1)?.text).toBe(
-            "Installing packages in a/, b/, c/ and 2 more in the main tree, one install at a time.",
+            "Installing packages in a/, b/, c/ and 2 more in the main tree.",
         );
         expect(foldOf("go", [{ kind: "install", reach: "own-copy", projects: [] }]).at(-1)?.text).toBe(
-            "Installing packages into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.",
+            "Installing packages into this conversation's own copy.",
         );
     });
 
@@ -519,7 +519,7 @@ describe("foldTurn", () => {
     it("says a land's dependency install is on its way, not waiting for other agents", () => {
         expect(foldOf("go", [{ kind: "landed", landed: true, deps: { missing: 3, started: [], deferred: true } }]).at(-1)).toEqual({
             role: "notice",
-            text: "Changes landed in your workspace: review them in the Changes panel. 3 dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
+            text: "Landed in your workspace. 3 changed dependencies queued to install.",
             noticeCode: { code: "landed", params: { deps: 3, queued: true } },
         });
     });
@@ -527,7 +527,7 @@ describe("foldTurn", () => {
     // A home's land is named on its row, so the commit its card files under that name is told on the same row.
     it("names a home's land on its row", () => {
         expect(foldOf("go", [{ kind: "landed", landed: true, land: "land-1" }]).at(-1)).toMatchObject({
-            text: "Landed in your workspace and committed.",
+            text: "Landed and committed.",
             noticeCode: { code: "landed", params: { land: "land-1" } },
         });
     });
@@ -536,7 +536,7 @@ describe("foldTurn", () => {
     it("marks a home's fresh session with a row of its own", () => {
         expect(foldOf("go", [{ kind: "fresh_start", why: "budget", from: 182_000, summarized: true, model: "haiku" }]).at(-1)).toEqual({
             role: "notice",
-            text: "This chat's memory was full at about 182k tokens, so it went on in a fresh session, opened with a summary of the conversation written by haiku and its latest messages.",
+            text: "Memory full at ~182k tokens: fresh session, from a summary by haiku.",
             noticeCode: { code: "freshStart", params: { why: "budget", from: "182k", model: "haiku", summarized: true } },
         });
     });
@@ -546,12 +546,12 @@ describe("foldTurn", () => {
     it("marks a turn's switch with a row of its own, coded for the reader's language", () => {
         expect(foldOf("go", [{ kind: "switched", segment: "provider", provider: "codex", model: "gpt-5-codex", loop: "Codex", fresh: true }]).at(-1)).toEqual({
             role: "notice",
-            text: "Switched to Codex: this message started a fresh session, with the conversation so far carried over.",
+            text: "Switched to Codex: fresh session, conversation carried over.",
             noticeCode: { code: "switched", params: { segment: "provider", provider: "codex", model: "gpt-5-codex", loop: "Codex", fresh: true } },
         });
         expect(foldOf("go", [{ kind: "switched", segment: "model", provider: "claude", model: "claude-sonnet-5", fresh: false }]).at(-1)).toEqual({
             role: "notice",
-            text: "Switched to Claude Sonnet 5: same session, so the model re-reads the conversation once.",
+            text: "Switched to Claude Sonnet 5: same session, re-read once.",
             noticeCode: { code: "switched", params: { segment: "model", provider: "claude", model: "claude-sonnet-5", fresh: false } },
         });
     });
@@ -561,13 +561,13 @@ describe("foldTurn", () => {
     it("says a child's work went into its parent's checkout, or was held off it by a clash", () => {
         expect(foldOf("go", [{ kind: "landed", landed: true, into: "p1" }]).at(-1)).toEqual({
             role: "notice",
-            text: "Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.",
+            text: "Changes went into the parent agent's checkout; they land with it.",
             noticeCode: { code: "intoParent" },
         });
         const clash: AgentEvent = { kind: "landed", landed: false, into: "p1", conflicts: [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }] };
         expect(foldOf("go", [clash]).at(-1)).toEqual({
             role: "notice",
-            text: "1 file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.",
+            text: "1 file clashes with the parent agent's edits; the parent was told.",
             noticeCode: { code: "intoParentClash", params: { files: 1 } },
         });
     });
@@ -582,7 +582,7 @@ describe("foldTurn", () => {
         expect(foldOf("go", [blocked]).slice(1)).toEqual([
             {
                 role: "notice",
-                text: "Couldn't rebase onto your workspace in intentic: the turn is running from the older base, so its land may need a resolve.",
+                text: "Couldn't rebase in intentic; its land may need a resolve.",
                 noticeCode: { code: "synced", params: { commits: 0, blocked: "intentic" } },
             },
         ]);
@@ -591,7 +591,7 @@ describe("foldTurn", () => {
         expect(foldOf(resolve, [mixed]).slice(1)).toEqual([
             {
                 role: "notice",
-                text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 3 commits.",
+                text: "Rebased onto your latest 3 commits while this agent waited.",
                 noticeCode: { code: "synced", params: { commits: 3 } },
             },
         ]);
@@ -1026,7 +1026,7 @@ describe(`a refusal that ran nothing`, () => {
 
         it(`tells the reader that sending again starts it, and offers both presses when there is a ceiling to raise`, () => {
             const row = foldOf(`land it`, [lowMemory]).at(-1);
-            expect(row?.text).toBe(`${lowMemory.message} Your message is held: send it again to start anyway.`);
+            expect(row?.text).toBe(`${lowMemory.message} Message held: send again to start anyway.`);
             expect(row?.noticeAction).toBe(`sandboxMemory`);
         });
 
@@ -1034,7 +1034,7 @@ describe(`a refusal that ran nothing`, () => {
             const { memory: _stalled, ...noReading } = lowMemory;
             const row = foldOf(`land it`, [noReading]).at(-1);
             expect(row?.noticeAction).toBe(`sendAnyway`);
-            expect(row?.text).toContain(`send it again to start anyway`);
+            expect(row?.text).toContain(`send again to start anyway`);
         });
 
         it(`offers nothing on a background turn, which has no message to send`, () => {
@@ -1120,7 +1120,7 @@ describe(`a refusal that ran nothing`, () => {
             expect(fold.rows.map((row) => row.role)).toEqual([`user`, `assistant`, `notice`]);
             expect(fold.rows.at(-1)).toEqual({
                 role: `notice`,
-                text: `${SPENT.message} The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here.`,
+                text: `${SPENT.message} Stopped partway, changes kept: continue with another model.`,
                 noticeAction: `switchModel`,
                 noticeCode: { code: `stoppedPartway`, params: { message: SPENT.message, error: `trial-exhausted`, switchModel: true } },
             });
@@ -1132,7 +1132,7 @@ describe(`a refusal that ran nothing`, () => {
             const disk = { kind: `error`, code: `sandbox-disk-low`, message: `The sandbox's disk is full.` } as const satisfies AgentEvent;
             expect(foldOf(`change the heading`, [...EDITED, disk]).at(-1)).toEqual({
                 role: `notice`,
-                text: `${disk.message} The run stopped partway. The changes it made so far are kept: send a message to pick up from here.`,
+                text: `${disk.message} Stopped partway, changes kept: send a message to go on.`,
                 noticeCode: { code: `stoppedPartway`, params: { message: disk.message, error: `sandbox-disk-low` } },
             });
         });
@@ -1141,7 +1141,7 @@ describe(`a refusal that ran nothing`, () => {
             expect(foldOf(`change the heading`, [SPENT])).toEqual([
                 {
                     role: `notice`,
-                    text: `${SPENT.message} Your message was not delivered: it is held for you to send again.`,
+                    text: `${SPENT.message} Not delivered: held for you to send again.`,
                     noticeCode: { code: `undelivered`, params: { message: SPENT.message, error: `trial-exhausted` } },
                 },
             ]);
@@ -1164,7 +1164,7 @@ describe(`a refusal that ran nothing`, () => {
 
         it(`offers to send it again, as the sandbox's to run rather than the composer's`, () => {
             const row = foldOf(`land it`, [kept]).at(-1);
-            expect(row?.text).toBe(`${REFUSED.message} Nothing has run yet: the message above is kept here to send again once that is sorted.`);
+            expect(row?.text).toBe(`${REFUSED.message} Nothing ran; the message above is kept to send again.`);
             expect(row).toMatchObject({ noticeAction: `sendAgain`, sandboxHeld: true });
         });
 
@@ -1178,7 +1178,7 @@ describe(`a refusal that ran nothing`, () => {
                 held: { ran: false },
             } as const satisfies AgentEvent;
             const row = foldOf(`land it`, [lowMemory]).at(-1);
-            expect(row?.text).toBe(`${lowMemory.message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.`);
+            expect(row?.text).toBe(`${lowMemory.message} Nothing ran; send the message above anyway to start it.`);
             expect(row).toMatchObject({ noticeAction: `sandboxMemory`, sandboxHeld: true });
         });
     });
@@ -1215,7 +1215,7 @@ describe(`the code beside a notice's words`, () => {
     it(`names each land outcome, with the counts and repos its sentence was worded from`, () => {
         expect(lastOf([{ kind: `landed`, landed: true }])).toEqual({
             role: `notice`,
-            text: `Changes landed in your workspace: review them in the Changes panel.`,
+            text: `Landed in your workspace.`,
             noticeCode: { code: `landed` },
         });
         expect(lastOf([{ kind: `landed`, landed: true, deps: { missing: 2, started: [], deferred: true } }])?.noticeCode).toEqual({
@@ -1228,7 +1228,7 @@ describe(`the code beside a notice's words`, () => {
         ];
         expect(lastOf([{ kind: `landed`, landed: false, conflicts }])).toEqual({
             role: `notice`,
-            text: `3 file(s) couldn't land automatically in root, web. Open the agent's review to see what blocked them and land from there.`,
+            text: `3 files couldn't land in root, web: resolve in the agent's review.`,
             noticeCode: { code: `landConflict`, params: { files: 3, repos: `root, web` } },
         });
     });
@@ -1264,7 +1264,7 @@ describe(`the code beside a notice's words`, () => {
         });
         expect(lastOf([{ kind: `error`, code: `claude-token-refused`, message: `Token refused.` }])).toEqual({
             role: `notice`,
-            text: `Token refused. Reconnect the account to pick this conversation back up.`,
+            text: `Token refused. Reconnect the account to continue.`,
             noticeCode: { code: `reconnect`, params: { message: `Token refused.`, error: `claude-token-refused` } },
         });
     });
@@ -1471,7 +1471,7 @@ describe("transcriptIncidents", () => {
     it("words the move with both accounts' names, and codes it", () => {
         expect(moved).toEqual({
             role: "notice",
-            text: "Ran on radarsu@gmail.com: the Work account's plan or organization does not allow it.",
+            text: "Ran on radarsu@gmail.com: Work's plan or organization doesn't allow it.",
             noticeCode: { code: "accountMoved", params: { why: "refused", from: "Work", to: "radarsu@gmail.com", said: ORG_OFF } },
         });
         expect(sandboxNoticeOf(accountMovedRow({ why: "cold", from: "Work", to: "Home" }))).toEqual({ code: "accountMoved", params: { why: "cold", from: "Work", to: "Home" } });

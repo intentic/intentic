@@ -5,28 +5,28 @@ import { type Switched, switchedLine, switchedNotice } from "./switched.js";
 describe("switchedLine", () => {
     it("names the provider, account or loop a fresh session started on", () => {
         expect(switchedLine({ segment: "provider", provider: "codex", model: "gpt-5-codex", fresh: true })).toBe(
-            "Switched to Codex: this message started a fresh session, with the conversation so far carried over.",
+            "Switched to Codex: fresh session, conversation carried over.",
         );
         expect(switchedLine({ segment: "account", provider: "claude", account: "Work", fresh: true })).toBe(
-            "Switched to the Work account: this message started a fresh session, with the conversation so far carried over.",
+            "Switched to the Work account: fresh session, conversation carried over.",
         );
         expect(switchedLine({ segment: "loop", provider: "kimi", loop: "Claude Code", fresh: true })).toBe(
-            "Switched to running through Claude Code: this message started a fresh session, with the conversation so far carried over.",
+            "Switched to running through Claude Code: fresh session, conversation carried over.",
         );
     });
 
     it("says an account it has no name for as another of the provider's, never as the provider it was already on", () => {
         expect(switchedLine({ segment: "account", provider: "claude", fresh: true })).toBe(
-            "Switched to another Claude account: this message started a fresh session, with the conversation so far carried over.",
+            "Switched to another Claude account: fresh session, conversation carried over.",
         );
     });
 
     it("says a model switch kept the session, or that it opened a fresh one where there was none to keep", () => {
         expect(switchedLine({ segment: "model", provider: "claude", model: "claude-sonnet-5", fresh: false })).toBe(
-            "Switched to Claude Sonnet 5: same session, so the model re-reads the conversation once.",
+            "Switched to Claude Sonnet 5: same session, re-read once.",
         );
         expect(switchedLine({ segment: "model", provider: "claude", model: "claude-sonnet-5", fresh: true })).toBe(
-            "Switched to Claude Sonnet 5: this message started a fresh session, with the conversation so far carried over.",
+            "Switched to Claude Sonnet 5: fresh session, conversation carried over.",
         );
     });
 });

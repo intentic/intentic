@@ -27,16 +27,16 @@ describe("suggestHandoff", () => {
 describe("handedOffLine", () => {
     it("names what the continuing session started from beside what carrying would have re-read", () => {
         expect(handedOffLine({ mode: "trim", tokens: 112_400, from: 431_000, cleared: 180 })).toBe(
-            "Continued in a trimmed copy of the session (about 112k tokens instead of 431k): 180 older tool outputs cleared, every message and tool call kept.",
+            "Continued trimmed to ~112k tokens from 431k: 180 old tool outputs cleared.",
         );
         expect(handedOffLine({ mode: "summary", model: "claude-haiku-5-5", from: 431_000 })).toBe(
-            "Continued in a fresh session opened with a summary of the conversation written by claude-haiku-5-5.",
+            "Continued in a fresh session from a summary by claude-haiku-5-5.",
         );
-        expect(handedOffLine({ mode: "carry", tokens: 431_000 })).toBe("Continued in the same session, re-reading all of it (about 431k tokens).");
+        expect(handedOffLine({ mode: "carry", tokens: 431_000 })).toBe("Continued in the same session, re-reading ~431k tokens.");
     });
 
     it("says plainly when the way picked could not be built", () => {
-        expect(handedOffLine({ mode: "trim", fellBack: true })).toBe("Could not trim the session for the hand-off, so it was carried whole.");
+        expect(handedOffLine({ mode: "trim", fellBack: true })).toBe("Couldn't trim the session, so it was carried whole.");
         expect(handedOffNotice({ mode: "summary", fellBack: true })).toStrictEqual({ code: "handedOff", params: { mode: "summary", fellBack: true } });
     });
 });
@@ -44,12 +44,10 @@ describe("handedOffLine", () => {
 describe("a home's fresh start", () => {
     it("says why the chat started over and what the fresh session opened with", () => {
         expect(freshStartLine({ why: "cold", from: 90_000, summarized: false })).toBe(
-            "This chat had been idle long enough that re-reading it at about 90k tokens would cost more than starting over, so it went on in a fresh session, opened with its latest messages and the work in hand.",
+            "Idle too long to re-read at ~90k tokens: fresh session, from its recent messages.",
         );
-        expect(freshStartLine({ why: "asked", summarized: true })).toBe(
-            "Started fresh, as you asked, opened with a summary of the conversation and its latest messages.",
-        );
-        expect(freshStartLine({ why: "cleared", summarized: false })).toBe("History cleared: started fresh, opened with its latest messages and the work in hand.");
+        expect(freshStartLine({ why: "asked", summarized: true })).toBe("Started fresh, as you asked, from a summary.");
+        expect(freshStartLine({ why: "cleared", summarized: false })).toBe("History cleared: started fresh, from its recent messages.");
     });
 
     it("carries only the facts it has", () => {
@@ -67,5 +65,5 @@ describe("a home's fresh start", () => {
 test("a failed summary carries its reason into both the notice and readable line", () => {
     const event = { mode: "summary", fellBack: true, reason: "Every summary model is out of allowance" } as const;
     expect(handedOffNotice(event)).toEqual({ code: "handedOff", params: event });
-    expect(handedOffLine(event)).toBe("Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead. Reason: Every summary model is out of allowance");
+    expect(handedOffLine(event)).toBe("Couldn't write a summary; started fresh from recent messages. Reason: Every summary model is out of allowance");
 });

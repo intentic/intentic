@@ -98,30 +98,24 @@ export type ResumeDisclosure =
 const notice = (reason: ResumeNoticeReason, text: string): ResumeDisclosure => ({ kind: "notice", text, reason });
 
 const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
-    auth: notice("auth", "Claude sign-in renewed, this turn picked up where it left off."),
-    outage: notice("outage", "The model provider came back, this turn picked up where it left off."),
+    auth: notice("auth", "Sign-in renewed; picked up where it left off."),
+    outage: notice("outage", "The provider came back; picked up where it left off."),
     // Says what a restart costs a turn, since the turn re-runs as if nothing changed and finds its servers gone.
-    restart: notice(
-        "restart",
-        "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.",
-    ),
-    stopped: notice("stopped", "Sent again after the turn stopped short, picking up where it left off."),
+    restart: notice("restart", "Sandbox back; picked up where it left off. Its background jobs ended."),
+    stopped: notice("stopped", "Sent again after the turn stopped short."),
     // Said as the owner would say it, as `restart` is: what ran out, that it came back by itself once there was room, and
     // what it lost on the way, in the words a person uses for what a turn leaves running.
-    memory: notice(
-        "memory",
-        "Sent again once memory freed up, after the sandbox ran out of memory and stopped this turn; background commands and dev servers it started have ended.",
-    ),
+    memory: notice("memory", "Sent again once memory freed up; its background jobs ended."),
     // None of these four auto-resumed, a person pressed Continue; `switched`/`carried` name the differing account.
-    limit: notice("limit", "Sent again after the allowance ran out mid-turn, picking up where it left off."),
-    switched: notice("switched", "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session."),
-    carried: notice("carried", "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it."),
-    trimmed: notice("trimmed", "Sent again after the allowance ran out, in a copy of the session with older tool output cleared."),
-    summarized: notice("summarized", "Sent again after the allowance ran out, in a fresh session opened with a summary of the conversation."),
+    limit: notice("limit", "Sent again after the allowance ran out mid-turn."),
+    switched: notice("switched", "Sent again on the switched account, in a fresh session."),
+    carried: notice("carried", "Sent again on the switched account, same session."),
+    trimmed: notice("trimmed", "Sent again after the allowance ran out, old tool output cleared."),
+    summarized: notice("summarized", "Sent again after the allowance ran out, from a summary."),
     refused: notice("refused", "Sent again after the allowance refused it: nothing had run."),
     door: notice("door", "Sent again: the first attempt was turned away before anything ran."),
-    overflow: notice("overflow", "Sent again in a fresh session after the last one outgrew the model's context window."),
-    flagged: notice("flagged", "Sent again after the model's safeguards stopped it, without the stopped response."),
+    overflow: notice("overflow", "Sent again in a fresh session: the last outgrew the context window."),
+    flagged: notice("flagged", "Sent again without the response the safeguards stopped."),
     continued: notice("continued", "Carried on from where the last turn stopped."),
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };

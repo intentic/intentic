@@ -13,10 +13,8 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
         return ``;
     }
     // `missing` counts versions the turn bumped as well as names it added, so the sentence names both.
-    const what = `${deps.missing} ${deps.missing === 1 ? `dependency` : `dependencies`} it added or changed`;
-    return deps.deferred
-        ? ` ${what} ${deps.missing === 1 ? `is` : `are`} being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.`
-        : ` Installing ${what}; the project's checks run when that finishes, and the outcome lands in Activity.`;
+    const what = `${deps.missing} changed ${deps.missing === 1 ? `dependency` : `dependencies`}`;
+    return deps.deferred ? ` ${what} queued to install.` : ` Installing ${what}, then checks.`;
 };
 
 // Said as an agent's own install starts: where it writes and what outlasts it. Names up to three projects, the workspace
@@ -35,8 +33,8 @@ export const installRow = (event: { readonly reach: "own-copy" | "main-tree"; re
     return {
         role: "notice",
         text: ownCopy
-            ? `Installing packages${where} into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.`
-            : `Installing packages${where} in the main tree, one install at a time.`,
+            ? `Installing packages${where} into this conversation's own copy.`
+            : `Installing packages${where} in the main tree.`,
         noticeCode: noticeCode({
             code: "installing",
             params: {
@@ -61,17 +59,14 @@ export interface SyncFacts {
 }
 export const syncLine = (sync: SyncFacts, base?: string): string => {
     const plural = sync.commits === 1 ? `` : `s`;
-    const onto = base === undefined || base === `` ? `` : ` \`git diff ${base}\` shows this agent's own changes on top of the new base.`;
+    const onto = base === undefined || base === `` ? `` : ` (base ${base})`;
     const moved =
         sync.commits === 0
             ? undefined
             : sync.cause === `between-tools`
-              ? `The main line moved on during this turn: its ${sync.commits} newer commit${plural} ${sync.commits === 1 ? `was` : `were`} rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched.${onto}`
-              : `Your workspace moved on while this agent waited, its branch was rebased onto your latest ${sync.commits} commit${plural}.`;
-    const blocked =
-        sync.blocked.length > 0
-            ? `Couldn't rebase onto your workspace in ${sync.blocked.join(`, `)}: the turn is running from the older base, so its land may need a resolve.`
-            : undefined;
+              ? `Rebased mid-turn onto ${sync.commits} new commit${plural}, none of its files touched${onto}.`
+              : `Rebased onto your latest ${sync.commits} commit${plural} while this agent waited.`;
+    const blocked = sync.blocked.length > 0 ? `Couldn't rebase in ${sync.blocked.join(`, `)}; its land may need a resolve.` : undefined;
     return [moved, blocked].filter((line) => line !== undefined).join(` `);
 };
 
@@ -80,14 +75,14 @@ const intoParentRow = (event: Extract<AgentEvent, { kind: "landed" }>): Transcri
     if (event.landed) {
         return {
             role: "notice",
-            text: `Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.`,
+            text: `Changes went into the parent agent's checkout; they land with it.`,
             noticeCode: noticeCode({ code: "intoParent" }),
         };
     }
     const files = (event.conflicts ?? []).flatMap((conflict) => conflict.paths).length;
     return {
         role: "notice",
-        text: `${files} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.`,
+        text: `${files} ${files === 1 ? `file clashes` : `files clash`} with the parent agent's edits; the parent was told.`,
         noticeCode: noticeCode({ code: "intoParentClash", params: { files } }),
     };
 };
@@ -99,7 +94,7 @@ export const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): Trans
         return intoParentRow(event);
     }
     if (event.held === true) {
-        return { role: "notice", text: `Finished: the work is on this agent's branch, ready to land from its review.`, noticeCode: noticeCode({ code: "landHeld" }) };
+        return { role: "notice", text: `Finished: ready to land from this agent's review.`, noticeCode: noticeCode({ code: "landHeld" }) };
     }
     if (!event.landed) {
         // Per-file cause (your edits, a moved main line, a binary) is spelled out in the review, not named here.
@@ -108,7 +103,7 @@ export const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): Trans
         const repos = conflicts.map((conflict) => conflict.repo).join(`, `);
         return {
             role: "notice",
-            text: `${files} file(s) couldn't land automatically in ${repos}. Open the agent's review to see what blocked them and land from there.`,
+            text: `${files} ${files === 1 ? `file` : `files`} couldn't land in ${repos}: resolve in the agent's review.`,
             noticeCode: noticeCode({ code: "landConflict", params: { files, repos } }),
         };
     }
@@ -117,7 +112,7 @@ export const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): Trans
     const row: TranscriptRow = {
         role: "notice",
         // A home's land (the only one named) is committed too, by nobody pressing anything: said, not left to the Changes panel.
-        text: `${event.land === undefined ? "Changes landed in your workspace: review them in the Changes panel." : "Landed in your workspace and committed."}${dependencyLine(event.deps)}`,
+        text: `${event.land === undefined ? "Landed in your workspace." : "Landed and committed."}${dependencyLine(event.deps)}`,
         noticeCode: noticeCode({
             code: "landed",
             params: deps === undefined && event.land === undefined ? undefined : { deps: deps?.missing, queued: deps?.deferred || undefined, land: event.land },

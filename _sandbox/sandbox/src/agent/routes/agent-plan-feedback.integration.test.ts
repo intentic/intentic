@@ -92,7 +92,7 @@ test.each([false, true])("keeps plan feedback through auth recovery and a usage 
         { role: "assistant", text: "" },
         { role: "notice", text: "Kept planning." },
         { role: "user", text: feedback },
-        { role: "notice", text: "OAuth token revoked. The credential is being renewed and this turn continues automatically." },
+        { role: "notice", text: "OAuth token revoked. Renewing the credential; the turn continues by itself." },
     ]);
     // The plan is its own card row; rejecting it keeps the card as well as the feedback that followed.
     expect(rows[2]?.plan).toEqual({ requestId, text: "1. Ship the fix", status: "rejected" });
@@ -105,7 +105,7 @@ test.each([false, true])("keeps plan feedback through auth recovery and a usage 
     await waitFor(() => expect(attempt).toBe(2), SETTLES);
     const retry = attachedRows(await collect(await client.agent.attach({ conversationId })));
     expect(retry.map(({ role, text }) => ({ role, text }))).toEqual([
-        { role: "notice", text: "Claude sign-in renewed, this turn picked up where it left off." },
+        { role: "notice", text: "Sign-in renewed; picked up where it left off." },
         { role: "notice", text: "Claude usage limit reached." },
     ]);
     await waitFor(() => expect(saved.at(-1)?.text).toBe("Claude usage limit reached."), SETTLES);

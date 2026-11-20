@@ -14,8 +14,8 @@ const STARTING_KINDS: ReadonlySet<AgentEvent["kind"]> = new Set<StartingFrame["k
 // The sandbox's one repair of a conversation's view of the workspace, made before the model was asked anything.
 const repairedLine = (layers: number): string =>
     layers === 0
-        ? "This conversation's copy of the workspace failed to come up, and was set up again."
-        : `This conversation's copy of the workspace failed to come up, so its installed dependencies (${String(layers)} ${layers === 1 ? "layer" : "layers"}) were set aside and it was set up again. Install them again if the work needs them.`;
+        ? "This conversation's workspace copy failed to start, so it was rebuilt."
+        : `Workspace copy rebuilt; ${String(layers)} dependency ${layers === 1 ? "layer" : "layers"} set aside, reinstall if needed.`;
 
 /** Whether the frame is one of those notices. */
 export const isStartingFrame = (event: AgentEvent): event is StartingFrame => STARTING_KINDS.has(event.kind);
@@ -41,11 +41,11 @@ export type AccountMoved = Extract<SandboxNotice, { code: "accountMoved" }>["par
 
 // Each names both accounts, since "moved" alone leaves the reader to work out from where and to where.
 const MOVED_LINES = {
-    refused: ({ from, to }) => `Ran on ${to}: the ${from} account's plan or organization does not allow it.`,
+    refused: ({ from, to }) => `Ran on ${to}: ${from}'s plan or organization doesn't allow it.`,
     // Says how to overrule it: the records can be wrong (a limit reset, a plan upgraded), and a pick of the account wins.
-    spent: ({ from, to }) => `Ran on ${to}: the records say ${from} has used up its allowance. To run on ${from} anyway, pick it in the composer.`,
-    reach: ({ from, to }) => `Ran on ${to}: the people this conversation works for may not use the ${from} account.`,
-    cold: ({ from, to }) => `Moved from ${from} to ${to}, which has more room left: the cache had expired, so moving cost nothing.`,
+    spent: ({ from, to }) => `Ran on ${to}: ${from} looks used up; pick it in the composer to override.`,
+    reach: ({ from, to }) => `Ran on ${to}: this conversation's people may not use ${from}.`,
+    cold: ({ from, to }) => `Moved from ${from} to ${to}: more room, and the cache had expired.`,
 } as const satisfies Readonly<Record<AccountMoved["why"], (move: AccountMoved) => string>>;
 
 /** The row a turn moved to another account opens with, so the reader learns where it ran and why without asking. */

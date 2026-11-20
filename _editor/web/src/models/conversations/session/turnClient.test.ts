@@ -264,7 +264,7 @@ describe(`a run's lifecycle`, () => {
         expect(host.draft.value).toBe(`tidy the docs\n\ntyped since`);
         expect(host.attachments.value).toEqual([{ id: expect.any(String), name: FILE.name, path: FILE.path, status: `done`, progress: 100 }]);
         expect(host.transcript.messages.value).toEqual([]);
-        expect(host.error.value).toBe(`${REFUSAL} Your message is back in the composer: send it again once that's sorted.`);
+        expect(host.error.value).toBe(`${REFUSAL} Your message is back in the composer.`);
     });
 
     // An older sandbox refused a message to a busy conversation in English; the reader gets it in their own language.

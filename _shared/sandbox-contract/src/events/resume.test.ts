@@ -60,7 +60,7 @@ test("a prompt that is not a resume discloses nothing", () => {
 test("a re-run after the window overflowed discloses as its own notice", () => {
     expect(resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.overflow))).toEqual({
         kind: "notice",
-        text: "Sent again in a fresh session after the last one outgrew the model's context window.",
+        text: "Sent again in a fresh session: the last outgrew the context window.",
         reason: "overflow",
     });
 });
@@ -70,7 +70,7 @@ test("a re-run's notice row names its reason beside its words", () => {
     const disclosure = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.restart));
     expect(disclosure?.kind === "notice" ? resumeNoticeRow(disclosure) : undefined).toEqual({
         role: "notice",
-        text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.",
+        text: "Sandbox back; picked up where it left off. Its background jobs ended.",
         noticeCode: { code: "resumed", params: { reason: "restart" } },
     });
 });
@@ -119,7 +119,7 @@ test("a turn re-run after a memory kill is told why, what it lost, and not to re
     expect(prompt).toContain(found);
     expect(withoutResumeNote(prompt)).toBe("ship the parser");
     const disclosure = resumeDisclosure(prompt);
-    expect(disclosure).toEqual({ kind: "notice", text: expect.stringContaining("ran out of memory"), reason: "memory" });
+    expect(disclosure).toEqual({ kind: "notice", text: "Sent again once memory freed up; its background jobs ended.", reason: "memory" });
     // Filed under its own reason, which this build's notice vocabulary reads back, so a reader words it as a memory kill
     // rather than as a turn that stopped short.
     const row = disclosure?.kind === "notice" ? resumeNoticeRow(disclosure) : undefined;

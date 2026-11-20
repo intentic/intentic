@@ -623,7 +623,7 @@ const SUPPORT_CARD: AgentTranscript = {
             role: `assistant`,
             text: `Added \`SweepSummaryCard\` under \`web/src/support/\`: three counts from the sweep's own record, and a pill that turns green once nothing needs a person. It reads the same record the sweep writes, so it can't drift from it.`,
         },
-        { role: `notice`, text: `Finished: the work is on this agent's branch, ready to land from its review.` },
+        { role: `notice`, text: `Finished: ready to land from this agent's review.` },
     ],
 };
 

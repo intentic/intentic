@@ -3579,48 +3579,48 @@
             "planApproved": "Plan approuvé.",
             "keptPlanning": "Planification poursuivie.",
             "watching": "Surveille {note}, vérifié toutes les {every}.",
-            "restartInterrupted": "Le sandbox a redémarré avant la fin de ce tour. Continuer le reprend depuis le worktree enregistré.",
+            "restartInterrupted": "Le sandbox a redémarré en plein tour ; ses tâches de fond sont terminées. Continuer le reprend.",
             "scheduledContinue": "Une reprise planifiée il y a {waited} est partie d’elle-même.",
-            "depsInstalling": "Installation de {count} dépendance ajoutée ou modifiée ; les vérifications du projet s'exécutent ensuite, et le résultat arrive dans Activité. | Installation de {count} dépendances ajoutées ou modifiées ; les vérifications du projet s'exécutent ensuite, et le résultat arrive dans Activité.",
-            "depsQueued": "{count} dépendance ajoutée ou modifiée est en cours d'installation dans votre arborescence : l'installation attend la fin de toute autre installation, apparaît dans Terminaux de travail, et son résultat arrive dans Activité. | {count} dépendances ajoutées ou modifiées sont en cours d'installation dans votre arborescence : l'installation attend la fin de toute autre installation, apparaît dans Terminaux de travail, et son résultat arrive dans Activité.",
-            "retrying": "{message} Nouvelle tentative automatique : essai {attempt} sur {of}.",
-            "retried": "{message} Réessayé automatiquement {made} fois sur {of} ; plus rien n'est envoyé automatiquement.",
-            "outageWaiting": "{message} Rien ne le réessaie : le tour attend donc ici.",
-            "renewing": "{message} L'identifiant est en cours de renouvellement et ce tour continue automatiquement.",
-            "renewalWithdrawn": "{message} L'identifiant était en cours de renouvellement, mais le tour s'est arrêté avant de pouvoir continuer : il ne reprendra pas de lui-même, appuyez donc sur Continuer pour le reprendre.",
-            "reconnect": "{message} Reconnectez le compte pour reprendre cette conversation.",
-            "undelivered": "{message} Votre message n'a pas été remis : il est conservé pour que vous le renvoyiez.",
-            "undeliveredUnattended": "{message} Rien ne s'est exécuté et rien n'est conservé : cette exécution a démarré d'elle-même, il n'y a donc aucun message en attente de renvoi.",
-            "kept": "{message} Rien ne s'est encore exécuté : le message ci-dessus est conservé ici pour être renvoyé une fois le problème réglé.",
-            "keptMemory": "{message} Rien ne s'est encore exécuté : le message ci-dessus est conservé ici, et l'envoyer quand même le démarre.",
-            "memoryHeld": "{message} Votre message est retenu : renvoyez-le pour démarrer quand même.",
+            "depsInstalling": "Installation de {count} dépendance modifiée, puis vérifications. | Installation de {count} dépendances modifiées, puis vérifications.",
+            "depsQueued": "{count} dépendance modifiée en attente d'installation. | {count} dépendances modifiées en attente d'installation.",
+            "retrying": "{message} Nouvel essai : tentative {attempt} sur {of}.",
+            "retried": "{message} Réessayé {made} fois sur {of} ; plus de nouvel essai.",
+            "outageWaiting": "{message} Pas de nouvel essai ; le tour attend ici.",
+            "renewing": "{message} Renouvellement de l'identifiant ; le tour reprend tout seul.",
+            "renewalWithdrawn": "{message} Le renouvellement n'a pas repris le tour : appuyez sur Continuer.",
+            "reconnect": "{message} Reconnectez le compte pour continuer.",
+            "undelivered": "{message} Non remis : gardé pour que vous le renvoyiez.",
+            "undeliveredUnattended": "{message} Rien n'a tourné ; cette exécution a démarré seule.",
+            "kept": "{message} Rien n'a tourné ; le message ci-dessus est gardé pour être renvoyé.",
+            "keptMemory": "{message} Rien n'a tourné ; envoyez quand même le message ci-dessus pour démarrer.",
+            "memoryHeld": "{message} Message retenu : renvoyez-le pour démarrer quand même.",
             "agentBusy": "Cet agent exécute déjà un tour, attendez qu'il se termine.",
             "memoryLow": "La mémoire du sandbox est faible.",
             "memoryLowShare": "La mémoire du sandbox est faible ({share}).",
             "turnRunning": "Un tour est déjà en cours dans cette conversation.",
-            "refusedBack": "{reason} Votre message est de retour dans le compositeur : renvoyez-le une fois le problème réglé.",
+            "refusedBack": "{reason} Votre message est revenu dans la zone de saisie.",
             "resumed": {
-                "auth": "Connexion Claude renouvelée, ce tour a repris là où il s'était arrêté.",
-                "outage": "Le fournisseur du modèle est revenu, ce tour a repris là où il s'était arrêté.",
-                "restart": "Le sandbox est revenu ; les commandes en arrière-plan et serveurs de dev lancés par ce tour se sont terminés ; ce tour a repris là où il s'était arrêté.",
-                "stopped": "Renvoyé après l'arrêt prématuré du tour, en reprenant là où il s'était arrêté.",
-                "memory": "Renvoyé une fois la mémoire libérée, après que le sandbox a manqué de mémoire et arrêté ce tour ; les commandes en arrière-plan et serveurs de dev qu'il avait lancés se sont terminés.",
-                "limit": "Renvoyé après l'épuisement du quota en cours de tour, en reprenant là où il s'était arrêté.",
-                "switched": "Renvoyé sur le compte choisi après l'épuisement du quota en cours de tour, dans une nouvelle session.",
-                "carried": "Renvoyé sur le compte choisi après l'épuisement du quota en cours de tour, en emportant la session.",
+                "auth": "Connexion renouvelée ; repris là où il s'était arrêté.",
+                "outage": "Le fournisseur est revenu ; repris là où il s'était arrêté.",
+                "restart": "Sandbox de retour ; repris là où il s'était arrêté. Ses tâches de fond sont terminées.",
+                "stopped": "Renvoyé après l'arrêt prématuré du tour.",
+                "memory": "Renvoyé une fois la mémoire libérée ; ses tâches de fond sont terminées.",
+                "limit": "Renvoyé après épuisement du quota en plein tour.",
+                "switched": "Renvoyé sur le compte changé, dans une nouvelle session.",
+                "carried": "Renvoyé sur le compte changé, même session.",
                 "refused": "Renvoyé après le refus du quota : rien ne s'était exécuté.",
                 "door": "Renvoyé : la première tentative a été refusée avant que quoi que ce soit ne s'exécute.",
-                "overflow": "Renvoyé dans une nouvelle session, la précédente ayant dépassé la fenêtre de contexte du modèle.",
-                "flagged": "Renvoyé après l'arrêt par les garde-fous du modèle, sans la réponse interrompue.",
+                "overflow": "Renvoyé dans une nouvelle session : l'ancienne dépassait la fenêtre de contexte.",
+                "flagged": "Renvoyé sans la réponse arrêtée par les garde-fous.",
                 "continued": "Repris là où le dernier tour s'était arrêté.",
-                "trimmed": "Renvoyé après l'épuisement du quota, dans une copie de la session dont les anciennes sorties d'outils ont été effacées.",
-                "summarized": "Renvoyé après l'épuisement du quota, dans une nouvelle session ouverte avec un résumé de la conversation."
+                "trimmed": "Renvoyé après épuisement du quota, anciennes sorties d'outils effacées.",
+                "summarized": "Renvoyé après épuisement du quota, à partir d'un résumé."
             },
             "watchWake": {
                 "met": "{note} — la surveillance s'est déclenchée après {elapsed}.",
                 "timeout": "{note} — la surveillance a abandonné après {elapsed}.",
-                "broken": "{note} — la surveillance s'est arrêtée après {elapsed} : sa vérification ne peut plus s'exécuter.",
-                "restartExpired": "{note} — la surveillance s'est arrêtée au redémarrage du sandbox, après {elapsed}."
+                "broken": "{note} — la surveillance s'est arrêtée après {elapsed} : sa vérification ne peut pas tourner.",
+                "restartExpired": "{note} — la surveillance a pris fin au redémarrage du sandbox, après {elapsed}."
             },
             "needWake": {
                 "met": "{title} : fait, et l'agent continue.",
@@ -3639,69 +3639,69 @@
                 "childFailedOn": "Le sous-agent {from} a échoué sur {machine}."
             },
             "developer": {
-                "landed": "Modifications intégrées dans votre espace de travail : relisez-les dans le panneau Changements.",
-                "landHeld": "Terminé : le travail est sur la branche de cet agent, prêt à être intégré depuis sa revue.",
-                "landConflict": "{count} fichier n'a pas pu s'intégrer automatiquement dans {repos}. Ouvrez la revue de l'agent pour voir ce qui l'a bloqué et intégrez depuis là. | {count} fichiers n'ont pas pu s'intégrer automatiquement dans {repos}. Ouvrez la revue de l'agent pour voir ce qui les a bloqués et intégrez depuis là.",
-                "intoParent": "Les modifications sont allées dans la copie de l'agent parent, comme celles de ses sous-agents internes : elles atteignent votre espace de travail avec son intégration.",
-                "intoParentClash": "{count} fichier entre en conflit avec les propres modifications de l'agent parent : rien n'a donc été écrit dans sa copie. Le parent a été informé et peut récupérer les modifications pour résoudre. | {count} fichiers entrent en conflit avec les propres modifications de l'agent parent : rien n'a donc été écrit dans sa copie. Le parent a été informé et peut récupérer les modifications pour résoudre.",
-                "rebased": "Votre espace de travail a avancé pendant que cet agent attendait : sa branche a été rebasée sur votre dernier commit ({count}). | Votre espace de travail a avancé pendant que cet agent attendait : sa branche a été rebasée sur vos {count} derniers commits.",
-                "rebasedBetweenTools": "La ligne principale a avancé pendant ce tour : son {count} commit plus récent a été rebasé sous la branche de cet agent entre deux de ses appels d'outils. Aucun des fichiers modifiés par cet agent n'a été touché. | La ligne principale a avancé pendant ce tour : ses {count} commits plus récents ont été rebasés sous la branche de cet agent entre deux de ses appels d'outils. Aucun des fichiers modifiés par cet agent n'a été touché.",
-                "diffAgainst": "`git diff {base}` montre les propres modifications de cet agent sur la nouvelle base.",
-                "rebaseBlocked": "Impossible de rebaser sur votre espace de travail dans {repos} : le tour s'exécute depuis l'ancienne base, son intégration pourra donc nécessiter une résolution.",
-                "homeLanded": "Intégré dans votre espace de travail et committé."
+                "landed": "Intégré dans votre espace de travail.",
+                "landHeld": "Terminé : prêt à être intégré depuis la revue de cet agent.",
+                "landConflict": "{count} fichier n'a pas pu s'intégrer dans {repos} : résolvez dans la revue de l'agent. | {count} fichiers n'ont pas pu s'intégrer dans {repos} : résolvez dans la revue de l'agent.",
+                "intoParent": "Modifications envoyées dans la copie de l'agent parent ; elles s'intègrent avec lui.",
+                "intoParentClash": "{count} fichier entre en conflit avec l'agent parent ; il a été informé. | {count} fichiers entrent en conflit avec l'agent parent ; il a été informé.",
+                "rebased": "Rebasé sur votre dernier commit ({count}) pendant que cet agent attendait. | Rebasé sur vos {count} derniers commits pendant que cet agent attendait.",
+                "rebasedBetweenTools": "Rebasé en plein tour sur {count} nouveau commit, aucun de ses fichiers touché. | Rebasé en plein tour sur {count} nouveaux commits, aucun de ses fichiers touché.",
+                "rebasedBetweenToolsOn": "Rebasé en plein tour sur {count} nouveau commit, aucun de ses fichiers touché (base {base}). | Rebasé en plein tour sur {count} nouveaux commits, aucun de ses fichiers touché (base {base}).",
+                "rebaseBlocked": "Rebase impossible dans {repos} ; son intégration pourra demander une résolution.",
+                "homeLanded": "Intégré et committé."
             },
             "maker": {
-                "landed": "Les modifications ont été acceptées dans vos fichiers : voyez-les dans Ce qui a changé.",
-                "landHeld": "Terminé : le travail est dans le brouillon de cet assistant, prêt à être accepté une fois que vous l'aurez regardé.",
-                "landConflict": "{count} fichier n'a pas pu être accepté automatiquement dans {repos}. Ouvrez les modifications de l'assistant pour voir ce qui l'a bloqué et acceptez depuis là. | {count} fichiers n'ont pas pu être acceptés automatiquement dans {repos}. Ouvrez les modifications de l'assistant pour voir ce qui les a bloqués et acceptez depuis là.",
-                "intoParent": "Les modifications sont allées dans le brouillon de l'assistant parent, comme celles de ses assistants : elles atteignent vos fichiers quand vous acceptez le travail de cet assistant.",
-                "intoParentClash": "{count} fichier entre en conflit avec les propres modifications de l'assistant parent : rien n'a donc été écrit dans son brouillon. Le parent a été informé et peut récupérer les modifications pour arranger cela. | {count} fichiers entrent en conflit avec les propres modifications de l'assistant parent : rien n'a donc été écrit dans son brouillon. Le parent a été informé et peut récupérer les modifications pour arranger cela.",
-                "rebased": "Vos fichiers ont évolué pendant que cet assistant attendait : son brouillon a donc été mis à jour avec votre dernière modification ({count}). | Vos fichiers ont évolué pendant que cet assistant attendait : son brouillon a donc été mis à jour avec vos {count} dernières modifications.",
-                "rebasedBetweenTools": "Vos fichiers ont évolué pendant ce tour : {count} modification plus récente a été intégrée au brouillon de cet assistant entre deux de ses étapes. Aucun des fichiers qu'il a modifiés n'a été touché. | Vos fichiers ont évolué pendant ce tour : {count} modifications plus récentes ont été intégrées au brouillon de cet assistant entre deux de ses étapes. Aucun des fichiers qu'il a modifiés n'a été touché.",
-                "rebaseBlocked": "Impossible de mettre le brouillon à jour avec vos fichiers dans {repos} : l'assistant travaille sur une version plus ancienne, accepter son travail pourra donc nécessiter une correction d'abord.",
-                "homeLanded": "Les modifications ont été acceptées dans vos fichiers et enregistrées comme une version."
+                "landed": "Accepté dans vos fichiers.",
+                "landHeld": "Terminé : le brouillon est prêt à être accepté après relecture.",
+                "landConflict": "{count} fichier n'a pas pu être accepté dans {repos} : voyez les modifications de l'assistant. | {count} fichiers n'ont pas pu être acceptés dans {repos} : voyez les modifications de l'assistant.",
+                "intoParent": "Modifications envoyées dans le brouillon de l'assistant parent ; elles arrivent avec lui.",
+                "intoParentClash": "{count} fichier entre en conflit avec l'assistant parent ; il a été informé. | {count} fichiers entrent en conflit avec l'assistant parent ; il a été informé.",
+                "rebased": "Le brouillon a rattrapé votre dernière modification ({count}) pendant qu'il attendait. | Le brouillon a rattrapé vos {count} dernières modifications pendant qu'il attendait.",
+                "rebasedBetweenTools": "Le brouillon a rattrapé {count} modification récente en plein tour ; ses fichiers intacts. | Le brouillon a rattrapé {count} modifications récentes en plein tour ; ses fichiers intacts.",
+                "rebaseBlocked": "Impossible de mettre à jour le brouillon dans {repos} ; l'accepter pourra demander une correction.",
+                "homeLanded": "Accepté dans vos fichiers et enregistré comme version."
             },
-            "keptWarm": "Repris à chaud : {tokens} tokens lus depuis le cache, gardé chaud pendant {span} avec {refreshes} rafraîchissement. | Repris à chaud : {tokens} tokens lus depuis le cache, gardé chaud pendant {span} avec {refreshes} rafraîchissements.",
-            "keptCold": "Repris à froid bien que gardé chaud pendant {span} avec {refreshes} rafraîchissement : {tokens} tokens renvoyés, car le prompt de ce tour ne correspondait plus au cache. | Repris à froid bien que gardé chaud pendant {span} avec {refreshes} rafraîchissements : {tokens} tokens renvoyés, car le prompt de ce tour ne correspondait plus au cache.",
-            "contextTrim": "Envoyé allégé pour la fenêtre de {window} de ce modèle.",
-            "contextTrimOmitted": "Envoyé allégé pour la fenêtre de {window} de ce modèle — omis : {omitted}.",
-            "contextTrimBase": "Les instructions de base de l'agent ont aussi été remplacées par un court paragraphe.",
-            "contextTrimKept": "Les règles de votre espace de travail, le rôle de ce tour et l'emplacement de ses fichiers ont été conservés.",
-            "installingOwn": "Installation de paquets dans la copie propre à cette conversation. Le manifeste et le lockfile sont intégrés avec le travail, et la revue liste ce qui est ajouté.",
-            "installingOwnIn": "Installation de paquets dans {where}, dans la copie propre à cette conversation. Le manifeste et le lockfile sont intégrés avec le travail, et la revue liste ce qui est ajouté.",
-            "installingMain": "Installation de paquets dans l'arborescence principale, une installation à la fois.",
-            "installingMainIn": "Installation de paquets dans {where}, dans l'arborescence principale, une installation à la fois.",
+            "keptWarm": "Repris à chaud : {tokens} tokens depuis le cache, gardé {span} ({refreshes} rafraîchissement). | Repris à chaud : {tokens} tokens depuis le cache, gardé {span} ({refreshes} rafraîchissements).",
+            "keptCold": "Repris à froid après {span} gardé chaud : {tokens} tokens renvoyés, le prompt a changé.",
+            "contextTrim": "Envoyé allégé pour la fenêtre de {window}",
+            "contextTrimOmitted": "Envoyé allégé pour la fenêtre de {window}, sans {omitted}",
+            "contextTrimBase": " ; prompt de base raccourci",
+            "contextTrimKept": " ; règles de l'espace de travail conservées.",
+            "installingOwn": "Installation de paquets dans la copie propre de cette conversation.",
+            "installingOwnIn": "Installation de paquets dans {where}, dans la copie propre de cette conversation.",
+            "installingMain": "Installation de paquets dans l'arborescence principale.",
+            "installingMainIn": "Installation de paquets dans {where}, dans l'arborescence principale.",
             "installRoot": "la racine de l'espace de travail",
             "installMore": "{named} et {more} autres",
             "handedOff": {
                 "carry": "Poursuivi dans la même session, en la relisant entièrement.",
-                "carrySized": "Poursuivi dans la même session, en la relisant entièrement (environ {tokens} tokens).",
-                "trim": "Poursuivi dans une copie allégée de la session : {cleared} ancienne sortie d'outil effacée, tous les messages et appels d'outils conservés. | Poursuivi dans une copie allégée de la session : {cleared} anciennes sorties d'outils effacées, tous les messages et appels d'outils conservés.",
-                "trimSized": "Poursuivi dans une copie allégée de la session (environ {tokens} tokens) : {cleared} ancienne sortie d'outil effacée, tous les messages et appels d'outils conservés. | Poursuivi dans une copie allégée de la session (environ {tokens} tokens) : {cleared} anciennes sorties d'outils effacées, tous les messages et appels d'outils conservés.",
-                "trimFrom": "Poursuivi dans une copie allégée de la session (environ {tokens} tokens au lieu de {from}) : {cleared} ancienne sortie d'outil effacée, tous les messages et appels d'outils conservés. | Poursuivi dans une copie allégée de la session (environ {tokens} tokens au lieu de {from}) : {cleared} anciennes sorties d'outils effacées, tous les messages et appels d'outils conservés.",
-                "summary": "Poursuivi dans une nouvelle session ouverte avec un résumé de la conversation.",
-                "summaryBy": "Poursuivi dans une nouvelle session ouverte avec un résumé de la conversation rédigé par {model}.",
+                "carrySized": "Poursuivi dans la même session, en relisant ~{tokens} tokens.",
+                "trim": "Poursuivi allégé : {cleared} ancienne sortie d'outil effacée. | Poursuivi allégé : {cleared} anciennes sorties d'outils effacées.",
+                "trimSized": "Poursuivi allégé à ~{tokens} tokens : {cleared} ancienne sortie d'outil effacée. | Poursuivi allégé à ~{tokens} tokens : {cleared} anciennes sorties d'outils effacées.",
+                "trimFrom": "Allégé de {from} à ~{tokens} tokens : {cleared} ancienne sortie d'outil effacée. | Allégé de {from} à ~{tokens} tokens : {cleared} anciennes sorties d'outils effacées.",
+                "summary": "Poursuivi dans une nouvelle session à partir d'un résumé.",
+                "summaryBy": "Poursuivi dans une nouvelle session à partir d'un résumé par {model}.",
                 "reason": "Raison : {reason}",
-                "trimFellBack": "Impossible d'alléger la session pour la passation : elle a donc été transmise en entier.",
-                "summaryFellBack": "Impossible de rédiger un résumé pour la passation : la nouvelle session s'est donc ouverte avec la conversation récente et l'état du travail à la place."
+                "trimFellBack": "Impossible d'alléger la session, elle a donc été reprise en entier.",
+                "summaryFellBack": "Impossible d'écrire un résumé ; nouvelle session à partir des messages récents."
             },
-            "stoppedPartway": "{message} L'exécution s'est arrêtée en cours de route. Les modifications déjà faites sont conservées : envoyez un message pour reprendre à partir d'ici.",
-            "stoppedPartwaySwitch": "{message} L'exécution s'est arrêtée en cours de route. Les modifications déjà faites sont conservées : continuez avec un autre modèle pour reprendre à partir d'ici.",
+            "stoppedPartway": "{message} Arrêté en cours, modifications conservées : envoyez un message pour continuer.",
+            "stoppedPartwaySwitch": "{message} Arrêté en cours, modifications conservées : continuez avec un autre modèle.",
             "freshStart": {
-                "budget": "La mémoire de ce chat était pleine, il a donc continué dans une nouvelle session",
-                "budgetFrom": "La mémoire de ce chat était pleine à environ {from} tokens, il a donc continué dans une nouvelle session",
-                "cold": "Ce chat était inactif depuis assez longtemps pour que le relire coûte plus cher que de repartir de zéro, il a donc continué dans une nouvelle session",
-                "coldFrom": "Ce chat était inactif depuis assez longtemps pour que le relire, à environ {from} tokens, coûte plus cher que de repartir de zéro, il a donc continué dans une nouvelle session",
+                "budget": "Mémoire pleine : nouvelle session",
+                "budgetFrom": "Mémoire pleine à ~{from} tokens : nouvelle session",
+                "cold": "Inactif trop longtemps pour relire : nouvelle session",
+                "coldFrom": "Inactif trop longtemps pour relire ~{from} tokens : nouvelle session",
                 "asked": "Reparti de zéro, comme vous l'avez demandé",
                 "cleared": "Historique effacé : reparti de zéro",
-                "summary": ", en partant d'un résumé de la conversation et de ses derniers messages.",
-                "summaryBy": ", en partant d'un résumé de la conversation rédigé par {model} et de ses derniers messages.",
-                "recent": ", en partant de ses derniers messages et du travail en cours.",
+                "summary": ", à partir d'un résumé.",
+                "summaryBy": ", à partir d'un résumé par {model}.",
+                "recent": ", à partir de ses messages récents.",
                 "plain": {
-                    "budget": "La mémoire de ce chat était pleine, il a donc continué avec une mémoire neuve",
-                    "cold": "Ce chat était resté calme un moment, il a donc continué avec une mémoire neuve",
-                    "summary": ", en partant d'un résumé de la conversation et de ses derniers messages.",
-                    "recent": ", en partant de ses derniers messages et du travail en cours."
+                    "budget": "Mémoire pleine, il est donc reparti de zéro",
+                    "cold": "Calme depuis un moment, il est donc reparti de zéro",
+                    "summary": ", à partir d'un résumé.",
+                    "recent": ", à partir de ses derniers messages."
                 }
             },
             "switched": {
@@ -3712,17 +3712,17 @@
                 "anotherLoop": "Passage à une autre boucle",
                 "model": "Passage à {model}",
                 "anotherModel": "Passage à un autre modèle",
-                "fresh": " : ce message a ouvert une nouvelle session avec la conversation jusqu'ici.",
-                "same": " : même session, donc le modèle relit la conversation une fois."
+                "fresh": " : nouvelle session, conversation reprise.",
+                "same": " : même session, relue une fois."
             },
             "accountMoved": {
-                "refused": "Exécuté sur {to} : le forfait ou l’organisation du compte {from} ne le permet pas.",
-                "spent": "Exécuté sur {to} : d’après les relevés, {from} a épuisé son quota. Pour l’exécuter quand même sur {from}, choisissez-le dans le compositeur.",
-                "reach": "Exécuté sur {to} : les personnes pour qui travaille cette conversation ne peuvent pas utiliser le compte {from}.",
-                "cold": "Déplacé de {from} vers {to}, qui a plus de marge : le cache avait expiré, le déplacement n’a donc rien coûté."
+                "refused": "Exécuté sur {to} : l'offre ou l'organisation de {from} ne le permet pas.",
+                "spent": "Exécuté sur {to} : {from} semble épuisé ; choisissez-le dans la zone de saisie pour forcer.",
+                "reach": "Exécuté sur {to} : les personnes de cette conversation ne peuvent pas utiliser {from}.",
+                "cold": "Passé de {from} à {to} : plus de marge, et le cache avait expiré."
             },
-            "workspaceRepaired": "La copie de l'espace de travail de cette conversation n'a pas pu démarrer et a été remise en place.",
-            "workspaceRepairedLayers": "La copie de l'espace de travail de cette conversation n'a pas pu démarrer : ses dépendances installées ({count} couche) ont été mises de côté et elle a été remise en place. Réinstallez-les si le travail en a besoin. | La copie de l'espace de travail de cette conversation n'a pas pu démarrer : ses dépendances installées ({count} couches) ont été mises de côté et elle a été remise en place. Réinstallez-les si le travail en a besoin."
+            "workspaceRepaired": "La copie de l'espace de travail n'a pas démarré, elle a donc été reconstruite.",
+            "workspaceRepairedLayers": "Copie reconstruite ; {count} couche de dépendances mise de côté, réinstallez si besoin. | Copie reconstruite ; {count} couches de dépendances mises de côté, réinstallez si besoin."
         },
         "failure": {
             "access": "Le fournisseur a refusé ce compte : son forfait ou son organisation ne le permet pas.",
@@ -3746,7 +3746,7 @@
             "learnMore": "En savoir plus",
             "copyDetails": "Copier les détails",
             "copyValue": "Copier {name}",
-            "workspaceBroken": "La copie de l'espace de travail de cette conversation ne peut pas être mise en place, et renvoyer échouera de la même façon."
+            "workspaceBroken": "La copie de l'espace de travail ne peut pas être préparée ; renvoyer échouera pareil."
         },
         "chatJobRow": {
             "ended": "Arrêté après {elapsed}",
@@ -4660,7 +4660,7 @@
         "turnFailures": {
             "installNewerEngine": "Installez un moteur plus récent dans Sandbox ▸ Environnement ▸ Moteurs d'agents.",
             "installNewerEngineFloor": "Installez un moteur plus récent dans Sandbox ▸ Environnement ▸ Moteurs d'agents ({floor} ou ultérieur).",
-            "renewalDidNotResume": "Ce tour n'a pas repris automatiquement après le refus de son authentification et s'est arrêté là où il en était. Renvoyez pour reprendre la conversation.",
+            "renewalDidNotResume": "Connexion refusée, le tour s'est arrêté. Renvoyez pour le reprendre.",
             "signAgentIn": "Connectez cet agent depuis sa ligne sous Capacités (Se connecter)."
         },
         "turnBreak": {
@@ -4938,17 +4938,17 @@
         },
         "chatRoute": {
             "actingAs": "Agit en tant que {name}.",
-            "matchedButHeld": "{name} correspond, mais ce chat avait d'abord été orienté manuellement : rien n'a été déplacé.",
+            "matchedButHeld": "{name} correspondait, mais ce chat était déjà réglé à la main.",
             "noRoleMatched": "Aucun rôle ne correspond : ce chat agit donc en tant que Tous les comptes.",
-            "roleBringsModel": "{name} fournit son propre modèle, que ce chat utilise donc.",
+            "roleBringsModel": "{name} tourne sur son propre modèle.",
             "readBy": "Lu par {model}.",
-            "readingBoth": "Détermination du point de départ de ce chat : un appel choisit à la fois son rôle et son modèle.",
-            "readingModel": "Choix du modèle de ce chat : un appel à la liste de routage des nouveaux chats.",
-            "readingRole": "Détermination du rôle de ce chat : un appel à la liste de routage des nouveaux chats.",
-            "staysOnIt": "Chaque tour suivant conserve ce choix jusqu'à ce que vous le changiez.",
-            "timedOutBoth": "Impossible de déterminer à temps le point de départ de ce chat : il garde l'accès à tout et utilise le modèle qu'il avait déjà.",
-            "timedOutModel": "Impossible de choisir à temps un modèle pour ce chat : il utilise celui qu'il avait déjà.",
-            "timedOutRole": "Impossible de déterminer à temps le rôle de ce chat : il garde l'accès à tout."
+            "readingBoth": "Choix du rôle et du modèle de ce chat…",
+            "readingModel": "Choix du modèle de ce chat…",
+            "readingRole": "Choix du rôle de ce chat…",
+            "staysOnIt": "Cela reste jusqu'à ce que vous le changiez.",
+            "timedOutBoth": "Rôle et modèle non choisis à temps ; rien n'a changé.",
+            "timedOutModel": "Modèle non choisi à temps ; il reste sur l'actuel.",
+            "timedOutRole": "Rôle non choisi à temps ; il reste ouvert à tout."
         },
         "chatConnect": {
             "connectionNotStarted": "Impossible de démarrer la connexion à {provider} : votre sandbox est-il en ligne ?",
@@ -4981,15 +4981,15 @@
         },
         "composerSelection": {
             "resets": "se réinitialise {when}",
-            "switchedAccount": "Passage au compte {account} : la session suit, et sa prochaine réponse relit la conversation une fois sans cache.",
-            "switchedLoop": "Passage à une exécution via {loop} : votre prochain message ouvre une nouvelle session avec la conversation jusqu'ici.",
+            "switchedAccount": "Passé au compte {account} : même session, relue une fois.",
+            "switchedLoop": "Passé à l'exécution via {loop} : le prochain message ouvre une nouvelle session.",
             "switchedModel": "Passage à {model}",
-            "switchedProvider": "Passage à {provider} : votre prochain message ouvre une nouvelle session avec la conversation jusqu'ici.",
-            "waitingKeepTheirs": "Le message en attente utilisera à l'envoi automatique le modèle pour lequel il a été écrit ; l'envoyer maintenant utilise le nouveau choix. | Les {count} messages en attente utiliseront à l'envoi automatique le modèle pour lequel ils ont été écrits ; les envoyer maintenant utilise le nouveau choix.",
-            "waitingFollow": "Le message en attente y sera également envoyé. | Les {count} messages en attente y seront également envoyés."
+            "switchedProvider": "Passé à {provider} : le prochain message ouvre une nouvelle session.",
+            "waitingKeepTheirs": "Le message en attente garde son propre modèle. | Les {count} messages en attente gardent leur propre modèle.",
+            "waitingFollow": "Le message en attente y va aussi. | Les {count} messages en attente y vont aussi."
         },
         "transcriptView": {
-            "editedDropped": "Message modifié, {count} message supprimé et fichiers restaurés à ce point. | Message modifié, {count} messages supprimés et fichiers restaurés à ce point.",
+            "editedDropped": "Modifié : {count} message suivant retiré, fichiers restaurés. | Modifié : {count} messages suivants retirés, fichiers restaurés.",
             "messageGone": "Ce message ne fait plus partie de cette conversation.",
             "placeBusy": "Cet agent exécute un tour : attendez qu'il termine avant de parler en son nom.",
             "placeFailed": "Impossible de placer le message, {reason}",
@@ -4997,8 +4997,8 @@
             "rewindBusy": "Cet agent exécute un tour ; arrêtez-le avant de revenir en arrière.",
             "rewindGone": "Il n'est plus possible de revenir à ce message.",
             "rewindMovedOn": "Cette conversation a avancé depuis son ouverture : rechargez-la et réessayez.",
-            "wentBackDropped": "Retour à ce point, {count} message supprimé et fichiers restaurés à ce point. | Retour à ce point, {count} messages supprimés et fichiers restaurés à ce point.",
-            "workspaceRestored": "L'espace de travail a été restauré à un point antérieur ; les fichiers sous cette ligne ont changé."
+            "wentBackDropped": "Retour ici : {count} message retiré, fichiers restaurés. | Retour ici : {count} messages retirés, fichiers restaurés.",
+            "workspaceRestored": "L'espace de travail a été restauré à un point antérieur ; les fichiers ci-dessous ont changé."
         },
         "turnClient": {
             "chatFailed": "Échec du chat.",
@@ -5007,7 +5007,7 @@
             "sandboxNoAnswer": "Le sandbox n'a pas répondu."
         },
         "turnFacts": {
-            "worktreeUnenforced": "Ce sandbox ne peut pas isoler les tours d'agents au niveau du système de fichiers (il a été créé sans CAP_SYS_ADMIN). Le travail est redirigé vers {branch}, mais une commande construisant ses propres chemins peut toujours accéder à l'espace de travail partagé : recréez le sandbox pour rétablir une isolation complète."
+            "worktreeUnenforced": "Les tours ne sont pas totalement isolés (pas de CAP_SYS_ADMIN) ; recréez le sandbox pour corriger."
         },
         "chatPlanCard": {
             "proposedPlan": "Plan proposé",

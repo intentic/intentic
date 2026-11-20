@@ -3579,48 +3579,48 @@
             "planApproved": "Plan freigegeben.",
             "keptPlanning": "Weiter geplant.",
             "watching": "Beobachtet {note}, geprüft alle {every}.",
-            "restartInterrupted": "Die Sandbox wurde neu gestartet, bevor dieser Zug beendet war. „Fortsetzen“ macht im gespeicherten Worktree weiter.",
+            "restartInterrupted": "Die Sandbox wurde mitten im Zug neu gestartet; ihre Hintergrundjobs endeten. Fortsetzen nimmt ihn wieder auf.",
             "scheduledContinue": "Ein vor {waited} geplantes „Fortsetzen“ wurde von selbst gesendet.",
-            "depsInstalling": "{count} hinzugefügte oder geänderte Abhängigkeit wird installiert; die Prüfungen des Projekts laufen danach, und das Ergebnis erscheint unter Aktivität. | {count} hinzugefügte oder geänderte Abhängigkeiten werden installiert; die Prüfungen des Projekts laufen danach, und das Ergebnis erscheint unter Aktivität.",
-            "depsQueued": "{count} hinzugefügte oder geänderte Abhängigkeit wird in Ihrem Baum installiert: Die Installation wartet, bis jede andere Installation fertig ist, erscheint unter Arbeits-Terminals, und ihr Ergebnis erscheint unter Aktivität. | {count} hinzugefügte oder geänderte Abhängigkeiten werden in Ihrem Baum installiert: Die Installation wartet, bis jede andere Installation fertig ist, erscheint unter Arbeits-Terminals, und ihr Ergebnis erscheint unter Aktivität.",
-            "retrying": "{message} Wird automatisch wiederholt: Versuch {attempt} von {of}.",
-            "retried": "{message} {made} von {of} Mal automatisch wiederholt; es wird nichts mehr automatisch gesendet.",
-            "outageWaiting": "{message} Nichts wiederholt es, daher wartet der Zug hier.",
-            "renewing": "{message} Die Zugangsdaten werden erneuert, und dieser Zug geht automatisch weiter.",
-            "renewalWithdrawn": "{message} Die Zugangsdaten wurden gerade erneuert, aber der Zug hat angehalten, bevor er weitermachen konnte: Er läuft nicht von selbst weiter, drücken Sie also „Fortsetzen“, um ihn wieder aufzunehmen.",
-            "reconnect": "{message} Verbinden Sie das Konto erneut, um diese Unterhaltung wieder aufzunehmen.",
-            "undelivered": "{message} Ihre Nachricht wurde nicht zugestellt: Sie wird für Sie zum erneuten Senden aufbewahrt.",
-            "undeliveredUnattended": "{message} Nichts ist gelaufen, und nichts wird aufbewahrt: Dieser Lauf hat von selbst begonnen, daher wartet keine Nachricht auf erneutes Senden.",
-            "kept": "{message} Noch ist nichts gelaufen: Die Nachricht oben bleibt hier, um sie erneut zu senden, sobald das geklärt ist.",
-            "keptMemory": "{message} Noch ist nichts gelaufen: Die Nachricht oben bleibt hier, und wenn Sie sie trotzdem senden, startet sie.",
-            "memoryHeld": "{message} Ihre Nachricht wird zurückgehalten: Senden Sie sie erneut, um trotzdem zu starten.",
+            "depsInstalling": "{count} geänderte Abhängigkeit wird installiert, dann Prüfungen. | {count} geänderte Abhängigkeiten werden installiert, dann Prüfungen.",
+            "depsQueued": "{count} geänderte Abhängigkeit wartet auf Installation. | {count} geänderte Abhängigkeiten warten auf Installation.",
+            "retrying": "{message} Neuer Versuch: {attempt} von {of}.",
+            "retried": "{message} {made} von {of} Mal wiederholt; keine weiteren Versuche.",
+            "outageWaiting": "{message} Kein neuer Versuch; der Zug wartet hier.",
+            "renewing": "{message} Anmeldedaten werden erneuert; der Zug läuft von selbst weiter.",
+            "renewalWithdrawn": "{message} Die Erneuerung hat den Zug nicht fortgesetzt: Klicken Sie auf Fortsetzen.",
+            "reconnect": "{message} Verbinden Sie das Konto erneut, um fortzufahren.",
+            "undelivered": "{message} Nicht zugestellt: wartet darauf, dass Sie sie erneut senden.",
+            "undeliveredUnattended": "{message} Nichts lief; dieser Lauf startete von selbst.",
+            "kept": "{message} Nichts lief; die Nachricht oben bleibt zum erneuten Senden.",
+            "keptMemory": "{message} Nichts lief; senden Sie die Nachricht oben trotzdem, um zu starten.",
+            "memoryHeld": "{message} Nachricht zurückgehalten: erneut senden, um trotzdem zu starten.",
             "agentBusy": "Dieser Agent führt bereits einen Zug aus, warten Sie, bis er fertig ist.",
             "memoryLow": "Der Sandbox-Speicher ist knapp.",
             "memoryLowShare": "Der Sandbox-Speicher ist knapp ({share}).",
             "turnRunning": "In dieser Unterhaltung läuft bereits ein Zug.",
-            "refusedBack": "{reason} Ihre Nachricht ist wieder im Eingabefeld: Senden Sie sie erneut, sobald das geklärt ist.",
+            "refusedBack": "{reason} Ihre Nachricht ist wieder im Eingabefeld.",
             "resumed": {
-                "auth": "Claude-Anmeldung erneuert, dieser Zug hat dort weitergemacht, wo er aufgehört hatte.",
-                "outage": "Der Modellanbieter ist wieder da, dieser Zug hat dort weitergemacht, wo er aufgehört hatte.",
-                "restart": "Die Sandbox ist wieder da; Hintergrundbefehle und Dev-Server, die dieser Zug gestartet hatte, wurden beendet; dieser Zug hat dort weitergemacht, wo er aufgehört hatte.",
-                "stopped": "Erneut gesendet, nachdem der Zug vorzeitig angehalten hatte, macht dort weiter, wo er aufgehört hatte.",
-                "memory": "Erneut gesendet, sobald wieder Speicher frei war, nachdem der Sandbox der Speicher ausgegangen war und sie diesen Zug angehalten hatte; Hintergrundbefehle und Dev-Server, die er gestartet hatte, wurden beendet.",
-                "limit": "Erneut gesendet, nachdem das Kontingent mitten im Zug aufgebraucht war, macht dort weiter, wo er aufgehört hatte.",
-                "switched": "Auf dem gewechselten Konto in einer neuen Sitzung erneut gesendet, nachdem das Kontingent mitten im Zug aufgebraucht war.",
-                "carried": "Auf dem gewechselten Konto erneut gesendet, nachdem das Kontingent mitten im Zug aufgebraucht war, und die Sitzung wurde mitgenommen.",
+                "auth": "Anmeldung erneuert; dort weitergemacht, wo er aufhörte.",
+                "outage": "Der Anbieter ist zurück; dort weitergemacht, wo er aufhörte.",
+                "restart": "Sandbox zurück; dort weitergemacht, wo er aufhörte. Seine Hintergrundjobs endeten.",
+                "stopped": "Erneut gesendet, nachdem der Zug vorzeitig anhielt.",
+                "memory": "Erneut gesendet, als Speicher frei wurde; seine Hintergrundjobs endeten.",
+                "limit": "Erneut gesendet, nachdem das Kontingent mitten im Zug aufgebraucht war.",
+                "switched": "Erneut gesendet auf dem gewechselten Konto, in einer neuen Sitzung.",
+                "carried": "Erneut gesendet auf dem gewechselten Konto, gleiche Sitzung.",
                 "refused": "Erneut gesendet, nachdem das Kontingent es abgelehnt hatte: Es war noch nichts gelaufen.",
                 "door": "Erneut gesendet: Der erste Versuch wurde abgewiesen, bevor etwas lief.",
-                "overflow": "In einer neuen Sitzung erneut gesendet, nachdem die letzte über das Kontextfenster des Modells hinausgewachsen war.",
-                "flagged": "Erneut gesendet, nachdem die Schutzmechanismen des Modells es gestoppt hatten, ohne die gestoppte Antwort.",
+                "overflow": "In neuer Sitzung erneut gesendet: die alte sprengte das Kontextfenster.",
+                "flagged": "Erneut gesendet ohne die von den Schutzmechanismen gestoppte Antwort.",
                 "continued": "Dort weitergemacht, wo der letzte Zug angehalten hatte.",
-                "trimmed": "Erneut gesendet, nachdem das Kontingent aufgebraucht war, in einer Kopie der Sitzung mit gelöschter älterer Werkzeugausgabe.",
-                "summarized": "Erneut gesendet, nachdem das Kontingent aufgebraucht war, in einer neuen Sitzung, die mit einer Zusammenfassung der Unterhaltung beginnt."
+                "trimmed": "Nach aufgebrauchtem Kontingent erneut gesendet, alte Werkzeugausgaben gelöscht.",
+                "summarized": "Nach aufgebrauchtem Kontingent erneut gesendet, ab einer Zusammenfassung."
             },
             "watchWake": {
                 "met": "{note} — die Beobachtung hat nach {elapsed} ausgelöst.",
                 "timeout": "{note} — die Beobachtung hat nach {elapsed} aufgegeben.",
-                "broken": "{note} — die Beobachtung wurde nach {elapsed} gestoppt: Ihre Prüfung kann nicht mehr laufen.",
-                "restartExpired": "{note} — die Beobachtung wurde nach {elapsed} beim Neustart der Sandbox gestoppt."
+                "broken": "{note} — die Überwachung stoppte nach {elapsed}: ihre Prüfung läuft nicht.",
+                "restartExpired": "{note} — die Überwachung endete beim Neustart der Sandbox, nach {elapsed}."
             },
             "needWake": {
                 "met": "{title}: erledigt, und der Agent macht weiter.",
@@ -3639,69 +3639,69 @@
                 "childFailedOn": "Subagent {from} ist auf {machine} fehlgeschlagen."
             },
             "developer": {
-                "landed": "Änderungen sind in Ihrem Workspace gelandet: Prüfen Sie sie im Bereich „Änderungen“.",
-                "landHeld": "Fertig: Die Arbeit liegt auf dem Branch dieses Agenten, bereit zum Landen aus seiner Prüfung.",
-                "landConflict": "{count} Datei konnte in {repos} nicht automatisch landen. Öffnen Sie die Prüfung des Agenten, um zu sehen, was sie blockiert hat, und landen Sie von dort. | {count} Dateien konnten in {repos} nicht automatisch landen. Öffnen Sie die Prüfung des Agenten, um zu sehen, was sie blockiert hat, und landen Sie von dort.",
-                "intoParent": "Die Änderungen gingen in den Checkout des übergeordneten Agenten, wie es die Änderungen seiner prozessinternen Subagenten tun: Sie erreichen Ihren Workspace, wenn er landet.",
-                "intoParentClash": "{count} Datei kollidiert mit den eigenen Änderungen des übergeordneten Agenten, daher wurde nichts in seinen Checkout geschrieben. Der übergeordnete Agent wurde informiert und kann die Änderungen zum Auflösen übernehmen. | {count} Dateien kollidieren mit den eigenen Änderungen des übergeordneten Agenten, daher wurde nichts in seinen Checkout geschrieben. Der übergeordnete Agent wurde informiert und kann die Änderungen zum Auflösen übernehmen.",
-                "rebased": "Ihr Workspace hat sich weiterbewegt, während dieser Agent wartete; sein Branch wurde auf Ihren neuesten {count} Commit rebased. | Ihr Workspace hat sich weiterbewegt, während dieser Agent wartete; sein Branch wurde auf Ihre neuesten {count} Commits rebased.",
-                "rebasedBetweenTools": "Die Hauptlinie hat sich während dieses Durchgangs weiterbewegt: ihr {count} neuerer Commit wurde zwischen zwei Werkzeugaufrufen unter den Branch dieses Agenten rebased. Keine der Dateien, die dieser Agent geändert hat, wurde berührt. | Die Hauptlinie hat sich während dieses Durchgangs weiterbewegt: ihre {count} neueren Commits wurden zwischen zwei Werkzeugaufrufen unter den Branch dieses Agenten rebased. Keine der Dateien, die dieser Agent geändert hat, wurde berührt.",
-                "diffAgainst": "`git diff {base}` zeigt die eigenen Änderungen dieses Agenten auf der neuen Basis.",
-                "rebaseBlocked": "Rebase auf Ihren Workspace in {repos} nicht möglich: Der Zug läuft von der älteren Basis aus, daher muss beim Landen eventuell etwas aufgelöst werden.",
-                "homeLanded": "In Ihrem Workspace gelandet und committet."
+                "landed": "In Ihrem Workspace gelandet.",
+                "landHeld": "Fertig: bereit zum Landen aus der Prüfung dieses Agenten.",
+                "landConflict": "{count} Datei konnte in {repos} nicht landen: in der Prüfung des Agenten lösen. | {count} Dateien konnten in {repos} nicht landen: in der Prüfung des Agenten lösen.",
+                "intoParent": "Änderungen gingen in die Kopie des übergeordneten Agenten; sie landen mit ihm.",
+                "intoParentClash": "{count} Datei kollidiert mit Änderungen des übergeordneten Agenten; er weiß Bescheid. | {count} Dateien kollidieren mit Änderungen des übergeordneten Agenten; er weiß Bescheid.",
+                "rebased": "Auf Ihren neuesten {count} Commit rebased, während dieser Agent wartete. | Auf Ihre neuesten {count} Commits rebased, während dieser Agent wartete.",
+                "rebasedBetweenTools": "Mitten im Zug auf {count} neuen Commit rebased, keine seiner Dateien berührt. | Mitten im Zug auf {count} neue Commits rebased, keine seiner Dateien berührt.",
+                "rebasedBetweenToolsOn": "Mitten im Zug auf {count} neuen Commit rebased, keine seiner Dateien berührt (Basis {base}). | Mitten im Zug auf {count} neue Commits rebased, keine seiner Dateien berührt (Basis {base}).",
+                "rebaseBlocked": "Rebase in {repos} nicht möglich; das Landen braucht evtl. eine Konfliktlösung.",
+                "homeLanded": "Gelandet und committet."
             },
             "maker": {
-                "landed": "Die Änderungen wurden in Ihre Dateien übernommen: Sie sehen sie unter „Was sich geändert hat“.",
-                "landHeld": "Fertig: Die Arbeit liegt im Entwurf dieses Assistenten, bereit zur Übernahme, sobald Sie sie angesehen haben.",
-                "landConflict": "{count} Datei konnte in {repos} nicht automatisch übernommen werden. Öffnen Sie die Änderungen des Assistenten, um zu sehen, was sie blockiert hat, und übernehmen Sie von dort. | {count} Dateien konnten in {repos} nicht automatisch übernommen werden. Öffnen Sie die Änderungen des Assistenten, um zu sehen, was sie blockiert hat, und übernehmen Sie von dort.",
-                "intoParent": "Die Änderungen gingen in den Entwurf des übergeordneten Assistenten, wie es die Änderungen seiner Helfer tun: Sie erreichen Ihre Dateien, wenn Sie die Arbeit dieses Assistenten übernehmen.",
-                "intoParentClash": "{count} Datei kollidiert mit den eigenen Änderungen des übergeordneten Assistenten, daher wurde nichts in seinen Entwurf geschrieben. Der übergeordnete Assistent wurde informiert und kann die Änderungen übernehmen, um das zu klären. | {count} Dateien kollidieren mit den eigenen Änderungen des übergeordneten Assistenten, daher wurde nichts in seinen Entwurf geschrieben. Der übergeordnete Assistent wurde informiert und kann die Änderungen übernehmen, um das zu klären.",
-                "rebased": "Ihre Dateien haben sich weiterentwickelt, während dieser Assistent wartete, daher wurde sein Entwurf auf Ihre neueste {count} Änderung aktualisiert. | Ihre Dateien haben sich weiterentwickelt, während dieser Assistent wartete, daher wurde sein Entwurf auf Ihre neuesten {count} Änderungen aktualisiert.",
-                "rebasedBetweenTools": "Ihre Dateien haben sich während dieses Durchgangs weiterentwickelt: {count} neuere Änderung wurde zwischen zwei Schritten in den Entwurf dieses Assistenten übernommen. Keine der Dateien, die er geändert hat, wurde berührt. | Ihre Dateien haben sich während dieses Durchgangs weiterentwickelt: {count} neuere Änderungen wurden zwischen zwei Schritten in den Entwurf dieses Assistenten übernommen. Keine der Dateien, die er geändert hat, wurde berührt.",
-                "rebaseBlocked": "Der Entwurf konnte in {repos} nicht auf den Stand Ihrer Dateien gebracht werden: Der Assistent arbeitet mit einer älteren Version, daher muss vor der Übernahme seiner Arbeit eventuell erst etwas korrigiert werden.",
-                "homeLanded": "Die Änderungen wurden in Ihre Dateien übernommen und als Version gesichert."
+                "landed": "In Ihre Dateien übernommen.",
+                "landHeld": "Fertig: der Entwurf ist bereit zur Übernahme, sobald Sie ihn angesehen haben.",
+                "landConflict": "{count} Datei konnte in {repos} nicht übernommen werden: siehe Änderungen des Assistenten. | {count} Dateien konnten in {repos} nicht übernommen werden: siehe Änderungen des Assistenten.",
+                "intoParent": "Änderungen gingen in den Entwurf des übergeordneten Assistenten; sie kommen mit ihm.",
+                "intoParentClash": "{count} Datei kollidiert mit Änderungen des übergeordneten Assistenten; er weiß es. | {count} Dateien kollidieren mit Änderungen des übergeordneten Assistenten; er weiß es.",
+                "rebased": "Der Entwurf holte Ihre neueste {count} Änderung ein, während er wartete. | Der Entwurf holte Ihre neuesten {count} Änderungen ein, während er wartete.",
+                "rebasedBetweenTools": "Der Entwurf holte mitten im Zug {count} neuere Änderung ein; seine Dateien unberührt. | Der Entwurf holte mitten im Zug {count} neuere Änderungen ein; seine Dateien unberührt.",
+                "rebaseBlocked": "Entwurf in {repos} nicht aktualisierbar; die Übernahme braucht evtl. eine Korrektur.",
+                "homeLanded": "In Ihre Dateien übernommen und als Version gespeichert."
             },
-            "keptWarm": "Warm aufgenommen: {tokens} Tokens aus dem Cache gelesen, {span} warm gehalten mit {refreshes} Auffrischung. | Warm aufgenommen: {tokens} Tokens aus dem Cache gelesen, {span} warm gehalten mit {refreshes} Auffrischungen.",
-            "keptCold": "Kalt aufgenommen, obwohl {span} mit {refreshes} Auffrischung warm gehalten: {tokens} Tokens erneut gesendet, weil der Prompt dieses Zugs nicht mehr zum Cache passte. | Kalt aufgenommen, obwohl {span} mit {refreshes} Auffrischungen warm gehalten: {tokens} Tokens erneut gesendet, weil der Prompt dieses Zugs nicht mehr zum Cache passte.",
-            "contextTrim": "Schlank gesendet für das {window}-Fenster dieses Modells.",
-            "contextTrimOmitted": "Schlank gesendet für das {window}-Fenster dieses Modells — weggelassen: {omitted}.",
-            "contextTrimBase": "Auch die eigenen Basisanweisungen des Agenten wurden durch einen kurzen Absatz ersetzt.",
-            "contextTrimKept": "Ihre Workspace-Regeln, die Rolle dieses Zugs und der Ort seiner Dateien wurden weiterhin mitgesendet.",
-            "installingOwn": "Pakete werden in die eigene Kopie dieser Unterhaltung installiert. Manifest und Lockfile landen mit der Arbeit, und die Prüfung listet auf, was hinzukommt.",
-            "installingOwnIn": "Pakete werden in {where} in die eigene Kopie dieser Unterhaltung installiert. Manifest und Lockfile landen mit der Arbeit, und die Prüfung listet auf, was hinzukommt.",
-            "installingMain": "Pakete werden im Hauptbaum installiert, eine Installation nach der anderen.",
-            "installingMainIn": "Pakete werden in {where} im Hauptbaum installiert, eine Installation nach der anderen.",
+            "keptWarm": "Warm aufgenommen: {tokens} Tokens aus dem Cache, {span} gehalten ({refreshes} Auffrischung). | Warm aufgenommen: {tokens} Tokens aus dem Cache, {span} gehalten ({refreshes} Auffrischungen).",
+            "keptCold": "Kalt aufgenommen nach {span} warm halten: {tokens} Tokens neu gesendet, der Prompt änderte sich.",
+            "contextTrim": "Schlank gesendet für das {window}-Fenster",
+            "contextTrimOmitted": "Schlank gesendet für das {window}-Fenster, ohne {omitted}",
+            "contextTrimBase": "; Basis-Prompt gekürzt",
+            "contextTrimKept": "; Workspace-Regeln behalten.",
+            "installingOwn": "Pakete werden in die eigene Kopie dieser Unterhaltung installiert.",
+            "installingOwnIn": "Pakete werden in {where} in die eigene Kopie dieser Unterhaltung installiert.",
+            "installingMain": "Pakete werden im Hauptbaum installiert.",
+            "installingMainIn": "Pakete werden in {where} im Hauptbaum installiert.",
             "installRoot": "das Workspace-Stammverzeichnis",
             "installMore": "{named} und {more} weitere",
             "handedOff": {
                 "carry": "In derselben Sitzung fortgesetzt, alles wird neu eingelesen.",
-                "carrySized": "In derselben Sitzung fortgesetzt, alles wird neu eingelesen (etwa {tokens} Tokens).",
-                "trim": "In einer gekürzten Kopie der Sitzung fortgesetzt: {cleared} ältere Werkzeugausgabe gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten. | In einer gekürzten Kopie der Sitzung fortgesetzt: {cleared} ältere Werkzeugausgaben gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten.",
-                "trimSized": "In einer gekürzten Kopie der Sitzung fortgesetzt (etwa {tokens} Tokens): {cleared} ältere Werkzeugausgabe gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten. | In einer gekürzten Kopie der Sitzung fortgesetzt (etwa {tokens} Tokens): {cleared} ältere Werkzeugausgaben gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten.",
-                "trimFrom": "In einer gekürzten Kopie der Sitzung fortgesetzt (etwa {tokens} Tokens statt {from}): {cleared} ältere Werkzeugausgabe gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten. | In einer gekürzten Kopie der Sitzung fortgesetzt (etwa {tokens} Tokens statt {from}): {cleared} ältere Werkzeugausgaben gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten.",
-                "summary": "In einer neuen Sitzung fortgesetzt, die mit einer Zusammenfassung der Unterhaltung beginnt.",
-                "summaryBy": "In einer neuen Sitzung fortgesetzt, die mit einer von {model} geschriebenen Zusammenfassung der Unterhaltung beginnt.",
+                "carrySized": "In derselben Sitzung fortgesetzt, ~{tokens} Tokens neu eingelesen.",
+                "trim": "Gekürzt fortgesetzt: {cleared} alte Werkzeugausgabe gelöscht. | Gekürzt fortgesetzt: {cleared} alte Werkzeugausgaben gelöscht.",
+                "trimSized": "Auf ~{tokens} Tokens gekürzt fortgesetzt: {cleared} alte Werkzeugausgabe gelöscht. | Auf ~{tokens} Tokens gekürzt fortgesetzt: {cleared} alte Werkzeugausgaben gelöscht.",
+                "trimFrom": "Von {from} auf ~{tokens} Tokens gekürzt: {cleared} alte Werkzeugausgabe gelöscht. | Von {from} auf ~{tokens} Tokens gekürzt: {cleared} alte Werkzeugausgaben gelöscht.",
+                "summary": "In neuer Sitzung ab einer Zusammenfassung fortgesetzt.",
+                "summaryBy": "In neuer Sitzung ab einer Zusammenfassung von {model} fortgesetzt.",
                 "reason": "Grund: {reason}",
-                "trimFellBack": "Die Sitzung konnte für die Übergabe nicht gekürzt werden, daher wurde sie vollständig mitgenommen.",
-                "summaryFellBack": "Für die Übergabe konnte keine Zusammenfassung geschrieben werden, daher beginnt die neue Sitzung stattdessen mit der jüngsten Unterhaltung und dem aktuellen Stand der Arbeit."
+                "trimFellBack": "Sitzung ließ sich nicht kürzen, daher vollständig mitgenommen.",
+                "summaryFellBack": "Keine Zusammenfassung möglich; neu gestartet ab den jüngsten Nachrichten."
             },
-            "stoppedPartway": "{message} Der Lauf hat mittendrin angehalten. Die bisherigen Änderungen bleiben erhalten: Senden Sie eine Nachricht, um hier weiterzumachen.",
-            "stoppedPartwaySwitch": "{message} Der Lauf hat mittendrin angehalten. Die bisherigen Änderungen bleiben erhalten: Fahren Sie mit einem anderen Modell fort, um hier weiterzumachen.",
+            "stoppedPartway": "{message} Mittendrin angehalten, Änderungen bleiben: Nachricht senden zum Weitermachen.",
+            "stoppedPartwaySwitch": "{message} Mittendrin angehalten, Änderungen bleiben: mit anderem Modell fortfahren.",
             "freshStart": {
-                "budget": "Das Gedächtnis dieses Chats war voll, also ging es in einer neuen Sitzung weiter",
-                "budgetFrom": "Das Gedächtnis dieses Chats war bei etwa {from} Tokens voll, also ging es in einer neuen Sitzung weiter",
-                "cold": "Dieser Chat lag so lange still, dass ihn neu einzulesen mehr gekostet hätte als ein Neuanfang, also ging es in einer neuen Sitzung weiter",
-                "coldFrom": "Dieser Chat lag so lange still, dass ihn mit etwa {from} Tokens neu einzulesen mehr gekostet hätte als ein Neuanfang, also ging es in einer neuen Sitzung weiter",
+                "budget": "Gedächtnis voll: neue Sitzung",
+                "budgetFrom": "Gedächtnis voll bei ~{from} Tokens: neue Sitzung",
+                "cold": "Zu lange still zum Neueinlesen: neue Sitzung",
+                "coldFrom": "Zu lange still zum Neueinlesen von ~{from} Tokens: neue Sitzung",
                 "asked": "Neu begonnen, wie Sie es wollten",
                 "cleared": "Verlauf gelöscht: neu begonnen",
-                "summary": ", ausgehend von einer Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
-                "summaryBy": ", ausgehend von einer von {model} geschriebenen Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
-                "recent": ", ausgehend von den neuesten Nachrichten und der laufenden Arbeit.",
+                "summary": ", ab einer Zusammenfassung.",
+                "summaryBy": ", ab einer Zusammenfassung von {model}.",
+                "recent": ", ab den jüngsten Nachrichten.",
                 "plain": {
-                    "budget": "Das Gedächtnis dieses Chats war voll, also ging es mit einem frischen weiter",
-                    "cold": "Dieser Chat war eine Weile still, also ging es mit einem frischen Gedächtnis weiter",
-                    "summary": ", ausgehend von einer Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
-                    "recent": ", ausgehend von den neuesten Nachrichten und der laufenden Arbeit."
+                    "budget": "Gedächtnis voll, also neu angefangen",
+                    "cold": "Eine Weile still, also neu angefangen",
+                    "summary": ", ab einer Zusammenfassung.",
+                    "recent": ", ab den neuesten Nachrichten."
                 }
             },
             "switched": {
@@ -3712,17 +3712,17 @@
                 "anotherLoop": "Zu einer anderen Schleife gewechselt",
                 "model": "Zu {model} gewechselt",
                 "anotherModel": "Zu einem anderen Modell gewechselt",
-                "fresh": ": Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.",
-                "same": ": Dieselbe Sitzung, daher liest das Modell die Unterhaltung einmal neu."
+                "fresh": ": neue Sitzung, Unterhaltung übernommen.",
+                "same": ": gleiche Sitzung, einmal neu eingelesen."
             },
             "accountMoved": {
-                "refused": "Lief auf {to}: Tarif oder Organisation des Kontos {from} lassen es nicht zu.",
-                "spent": "Lief auf {to}: Laut den Aufzeichnungen hat {from} sein Kontingent aufgebraucht. Um trotzdem auf {from} zu laufen, wählen Sie es im Eingabefeld aus.",
-                "reach": "Lief auf {to}: Die Personen, für die diese Unterhaltung arbeitet, dürfen das Konto {from} nicht nutzen.",
-                "cold": "Von {from} zu {to} gewechselt, das mehr Spielraum hat: Der Cache war abgelaufen, der Wechsel hat also nichts gekostet."
+                "refused": "Lief auf {to}: Tarif oder Organisation von {from} lassen es nicht zu.",
+                "spent": "Lief auf {to}: {from} scheint aufgebraucht; im Eingabefeld wählen, um es zu erzwingen.",
+                "reach": "Lief auf {to}: die Personen dieser Unterhaltung dürfen {from} nicht nutzen.",
+                "cold": "Von {from} zu {to} gewechselt: mehr Spielraum, und der Cache war abgelaufen."
             },
-            "workspaceRepaired": "Die Kopie des Workspace für diese Unterhaltung ließ sich nicht starten und wurde neu eingerichtet.",
-            "workspaceRepairedLayers": "Die Kopie des Workspace für diese Unterhaltung ließ sich nicht starten, daher wurden ihre installierten Abhängigkeiten ({count} Schicht) beiseitegelegt und sie wurde neu eingerichtet. Installieren Sie sie erneut, wenn die Arbeit sie braucht. | Die Kopie des Workspace für diese Unterhaltung ließ sich nicht starten, daher wurden ihre installierten Abhängigkeiten ({count} Schichten) beiseitegelegt und sie wurde neu eingerichtet. Installieren Sie sie erneut, wenn die Arbeit sie braucht."
+            "workspaceRepaired": "Die Workspace-Kopie dieser Unterhaltung startete nicht und wurde neu aufgebaut.",
+            "workspaceRepairedLayers": "Workspace-Kopie neu aufgebaut; {count} Abhängigkeitsschicht beiseitegelegt, bei Bedarf neu installieren. | Workspace-Kopie neu aufgebaut; {count} Abhängigkeitsschichten beiseitegelegt, bei Bedarf neu installieren."
         },
         "failure": {
             "access": "Der Anbieter hat dieses Konto abgelehnt: Sein Tarif oder seine Organisation erlaubt es nicht.",
@@ -3746,7 +3746,7 @@
             "learnMore": "Mehr erfahren",
             "copyDetails": "Details kopieren",
             "copyValue": "{name} kopieren",
-            "workspaceBroken": "Die Kopie des Workspace für diese Unterhaltung lässt sich nicht einrichten, und erneutes Senden schlägt genauso fehl."
+            "workspaceBroken": "Die Workspace-Kopie lässt sich nicht einrichten; erneutes Senden scheitert genauso."
         },
         "chatJobRow": {
             "ended": "Beendet nach {elapsed}",
@@ -4660,7 +4660,7 @@
         "turnFailures": {
             "installNewerEngine": "Installieren Sie eine neuere Engine unter Sandbox ▸ Umgebung ▸ Agenten-Engines.",
             "installNewerEngineFloor": "Installieren Sie eine neuere Engine unter Sandbox ▸ Umgebung ▸ Agenten-Engines ({floor} oder neuer).",
-            "renewalDidNotResume": "Dieser Zug ist nach der abgelehnten Anmeldung nicht von selbst weitergelaufen und hat deshalb dort angehalten, wo er war. Erneutes Senden nimmt die Unterhaltung wieder auf.",
+            "renewalDidNotResume": "Anmeldung abgelehnt, der Zug hielt an. Erneut senden, um ihn aufzunehmen.",
             "signAgentIn": "Melden Sie diesen Agenten in seiner Zeile unter Fähigkeiten an (Anmelden)."
         },
         "turnBreak": {
@@ -4938,17 +4938,17 @@
         },
         "chatRoute": {
             "actingAs": "Handelt als {name}.",
-            "matchedButHeld": "{name} passte, aber dieser Chat wurde zuvor von Hand zugewiesen, daher hat sich nichts geändert.",
+            "matchedButHeld": "{name} passte, aber dieser Chat war schon von Hand gesetzt.",
             "noRoleMatched": "Keine Rolle passte, daher handelt dieser Chat als Alle Konten.",
-            "roleBringsModel": "{name} bringt ein eigenes Modell mit, daher läuft dieser Chat stattdessen darauf.",
+            "roleBringsModel": "{name} läuft auf seinem eigenen Modell.",
             "readBy": "Gelesen von {model}.",
-            "readingBoth": "Es wird gelesen, worauf dieser Chat startet: ein Aufruf, der Rolle und Modell zugleich wählt.",
-            "readingModel": "Es wird gewählt, auf welchem Modell dieser Chat läuft: ein Aufruf auf der Routing-Liste für neue Chats.",
-            "readingRole": "Es wird gelesen, zu welcher Rolle dieser Chat gehört: ein Aufruf auf der Routing-Liste für neue Chats.",
-            "staysOnIt": "Jeder Zug danach bleibt dabei, bis Sie es ändern.",
-            "timedOutBoth": "Konnte nicht rechtzeitig lesen, worauf dieser Chat startet, daher bleibt er für alles offen und läuft auf dem Modell, das er schon hatte.",
-            "timedOutModel": "Konnte nicht rechtzeitig ein Modell für diesen Chat wählen, daher läuft er auf dem, das er schon hatte.",
-            "timedOutRole": "Konnte nicht rechtzeitig lesen, zu welcher Rolle dieser Chat gehört, daher bleibt er für alles offen."
+            "readingBoth": "Rolle und Modell dieses Chats werden gewählt…",
+            "readingModel": "Modell dieses Chats wird gewählt…",
+            "readingRole": "Rolle dieses Chats wird gewählt…",
+            "staysOnIt": "Es bleibt dabei, bis Sie es ändern.",
+            "timedOutBoth": "Rolle und Modell nicht rechtzeitig gewählt; nichts geändert.",
+            "timedOutModel": "Kein Modell rechtzeitig gewählt; es bleibt beim aktuellen.",
+            "timedOutRole": "Keine Rolle rechtzeitig gewählt; er bleibt für alles offen."
         },
         "chatConnect": {
             "connectionNotStarted": "Die Verbindung zu {provider} konnte nicht gestartet werden: Ist Ihre Sandbox online?",
@@ -4981,15 +4981,15 @@
         },
         "composerSelection": {
             "resets": "wird {when} zurückgesetzt",
-            "switchedAccount": "Zum Konto {account} gewechselt: Die Sitzung kommt mit, und ihre nächste Antwort liest die Unterhaltung einmal ohne Cache neu.",
-            "switchedLoop": "Zur Ausführung über {loop} gewechselt: Ihre nächste Nachricht startet eine neue Sitzung, in die die bisherige Unterhaltung übernommen wird.",
+            "switchedAccount": "Zum Konto {account} gewechselt: gleiche Sitzung, einmal neu eingelesen.",
+            "switchedLoop": "Zur Ausführung über {loop} gewechselt: nächste Nachricht startet eine neue Sitzung.",
             "switchedModel": "Zu {model} gewechselt",
-            "switchedProvider": "Zu {provider} gewechselt: Ihre nächste Nachricht startet eine neue Sitzung, in die die bisherige Unterhaltung übernommen wird.",
-            "waitingKeepTheirs": "Die bereits wartende Nachricht läuft auf dem Modell, für das sie geschrieben wurde, wenn sie von selbst losgeht; wenn Sie sie jetzt senden, läuft sie auf der neuen Wahl. | Die {count} bereits wartenden Nachrichten laufen auf dem Modell, für das sie geschrieben wurden, wenn sie von selbst losgehen; wenn Sie sie jetzt senden, laufen sie auf der neuen Wahl.",
-            "waitingFollow": "Die bereits wartende Nachricht geht ebenfalls dorthin. | Die {count} bereits wartenden Nachrichten gehen ebenfalls dorthin."
+            "switchedProvider": "Zu {provider} gewechselt: nächste Nachricht startet eine neue Sitzung.",
+            "waitingKeepTheirs": "Die wartende Nachricht behält ihr eigenes Modell. | Die {count} wartenden Nachrichten behalten ihr eigenes Modell.",
+            "waitingFollow": "Die wartende Nachricht geht mit. | Die {count} wartenden Nachrichten gehen mit."
         },
         "transcriptView": {
-            "editedDropped": "Diese Nachricht bearbeitet, {count} Nachricht verworfen und die Dateien auf diesen Stand zurückgesetzt. | Diese Nachricht bearbeitet, {count} Nachrichten verworfen und die Dateien auf diesen Stand zurückgesetzt.",
+            "editedDropped": "Bearbeitet: {count} spätere Nachricht verworfen, Dateien zurückgesetzt. | Bearbeitet: {count} spätere Nachrichten verworfen, Dateien zurückgesetzt.",
             "messageGone": "Diese Nachricht ist nicht mehr in dieser Unterhaltung.",
             "placeBusy": "Dieser Agent führt gerade einen Zug aus: Warten Sie, bis er fertig ist, bevor Sie als er sprechen.",
             "placeFailed": "Die Nachricht konnte nicht eingefügt werden, {reason}",
@@ -4997,8 +4997,8 @@
             "rewindBusy": "Dieser Agent führt gerade einen Zug aus, stoppen Sie ihn, bevor Sie zurückgehen.",
             "rewindGone": "Zu dieser Nachricht kann nicht mehr zurückgegangen werden.",
             "rewindMovedOn": "Diese Unterhaltung hat sich seit dem Öffnen weiterentwickelt: Laden Sie sie neu und versuchen Sie es erneut.",
-            "wentBackDropped": "Hierher zurückgegangen, {count} Nachricht verworfen und die Dateien auf diesen Stand zurückgesetzt. | Hierher zurückgegangen, {count} Nachrichten verworfen und die Dateien auf diesen Stand zurückgesetzt.",
-            "workspaceRestored": "Der Workspace wurde auf einen früheren Stand zurückgesetzt, die Dateien unterhalb dieser Linie haben sich geändert."
+            "wentBackDropped": "Zurückgegangen: {count} Nachricht verworfen, Dateien zurückgesetzt. | Zurückgegangen: {count} Nachrichten verworfen, Dateien zurückgesetzt.",
+            "workspaceRestored": "Der Workspace wurde auf einen früheren Stand zurückgesetzt; Dateien unten geändert."
         },
         "turnClient": {
             "chatFailed": "Chat fehlgeschlagen.",
@@ -5007,7 +5007,7 @@
             "sandboxNoAnswer": "Die Sandbox hat nicht geantwortet."
         },
         "turnFacts": {
-            "worktreeUnenforced": "Diese Sandbox kann Agentenzüge nicht auf Dateisystemebene isolieren (sie wurde ohne CAP_SYS_ADMIN erstellt). Die Arbeit wird nach {branch} umgeleitet, aber ein Befehl, der seine eigenen Pfade baut, kann den gemeinsamen Workspace trotzdem erreichen: Erstellen Sie die Sandbox neu, um die volle Isolation wiederherzustellen."
+            "worktreeUnenforced": "Züge sind nicht voll isoliert (kein CAP_SYS_ADMIN); Sandbox neu erstellen, um das zu beheben."
         },
         "chatPlanCard": {
             "proposedPlan": "Vorgeschlagener Plan",

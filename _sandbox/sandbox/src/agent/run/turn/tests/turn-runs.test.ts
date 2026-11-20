@@ -821,7 +821,7 @@ describe(`turn runs`, () => {
         expect(run.ranNothing).toBe(true);
         expect(run.rows).toEqual([{
             role: "notice",
-            text: `${message} Your message was not delivered: it is held for you to send again.`,
+            text: `${message} Not delivered: held for you to send again.`,
             noticeCode: { code: "undelivered", params: { message, error: "agent-domain-refused" } },
             openedAt: AT,
             run: run.id,

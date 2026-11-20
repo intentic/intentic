@@ -379,7 +379,7 @@ test("a re-run in the provider's store reads as the interruption, not as the mes
     ]);
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "notice", "assistant"]);
-    expect(messages[2]?.text).toMatch(/Claude/i);
+    expect(messages[2]?.text).toMatch(/sign-in renewed/i);
 });
 
 // The store's own stamp on a message, as the SDK hands it back: ISO text, epoch ms here.
@@ -492,7 +492,7 @@ test("a switched re-run inside a handoff envelope restores as its notice, not as
     expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000)).toEqual([
         {
             role: "notice",
-            text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session.",
+            text: "Sent again on the switched account, in a fresh session.",
             noticeCode: { code: "resumed", params: { reason: "switched" } },
         },
         { role: "assistant", text: "Picking the port back up." },

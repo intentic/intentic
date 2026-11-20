@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { needWakePrompt } from "@intentic/sandbox-contract/events/need-wake";
 import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { RESTART_LOSSES, RESUME_NOTES, type ResumeReason, resumeDisclosure, resumeNoticeRow, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { RESUME_NOTES, type ResumeReason, resumeDisclosure, resumeNoticeRow, withResumeNote } from "@intentic/sandbox-contract/events/resume";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import { foldTurn, userRow } from "@intentic/sandbox-contract/transcript-fold";
@@ -112,7 +112,7 @@ const DAEMON: readonly TranscriptRow[] = [
     },
     {
         role: `notice`,
-        text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
+        text: `The sandbox restarted mid-turn; its background jobs ended. Continue picks it up.`,
         noticeCode: noticeCode({ code: `restartInterrupted` }),
     },
     {
@@ -173,11 +173,11 @@ describe(`a sandbox notice, as the chat says it`, () => {
     it(`says the land outcomes in a maker's words: accept and draft, never land and branch`, () => {
         const landing = FOLDED.filter((row) => row.noticeCode?.code === `landed` || row.noticeCode?.code === `landHeld` || row.noticeCode?.code === `landConflict`);
         expect(landing.map((row) => noticeLine(row, `maker`))).toEqual([
-            `The changes were accepted into your files: see them in What changed.`,
-            `The changes were accepted into your files: see them in What changed. Installing 1 dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.`,
-            `The changes were accepted into your files: see them in What changed. 3 dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.`,
-            `Finished: the work is in this assistant's draft, ready to accept once you've looked at it.`,
-            `3 files couldn't be accepted automatically in root, web. Open the assistant's changes to see what blocked them and accept from there.`,
+            `Accepted into your files.`,
+            `Accepted into your files. Installing 1 changed dependency, then checks.`,
+            `Accepted into your files. 3 changed dependencies queued to install.`,
+            `Finished: the draft is ready to accept once you've looked.`,
+            `3 files couldn't be accepted in root, web: see the assistant's changes.`,
         ]);
     });
 
@@ -185,10 +185,10 @@ describe(`a sandbox notice, as the chat says it`, () => {
     it(`says a catch-up between two tool calls as one the agent never waited for, naming the base to a developer only`, () => {
         const between = FOLDED.find((row) => row.noticeCode?.code === `synced` && row.noticeCode.params?.[`cause`] === `between-tools`);
         expect(between === undefined ? undefined : noticeLine(between, `developer`)).toBe(
-            "The main line moved on during this turn: its 2 newer commits were rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched. `git diff abc1234` shows this agent's own changes on top of the new base.",
+            `Rebased mid-turn onto 2 new commits, none of its files touched (base abc1234).`,
         );
         expect(between === undefined ? undefined : noticeLine(between, `maker`)).toBe(
-            `Your files moved on during this turn: 2 newer changes were brought into this assistant's draft between two of its steps. None of the files it changed were touched.`,
+            `The draft caught up with 2 newer changes mid-turn; its files untouched.`,
         );
     });
 
@@ -197,25 +197,23 @@ describe(`a sandbox notice, as the chat says it`, () => {
             ...turn([{ kind: `landed`, landed: true, land: `land-1` }]),
             ...turn([{ kind: `landed`, landed: true, land: `land-2`, deps: { missing: 1, started: [`deps-1`], deferred: false } }]),
         ];
-        expect(noticeLine(plain!, `developer`, { home: true })).toBe(`Landed in your workspace and committed.`);
-        expect(noticeLine(plain!, `maker`, { home: true })).toBe(`The changes were accepted into your files and saved as a version.`);
-        expect(noticeLine(withDeps!, `developer`, { home: true })).toBe(
-            `Landed in your workspace and committed. Installing 1 dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.`,
-        );
+        expect(noticeLine(plain!, `developer`, { home: true })).toBe(`Landed and committed.`);
+        expect(noticeLine(plain!, `maker`, { home: true })).toBe(`Accepted into your files and saved as a version.`);
+        expect(noticeLine(withDeps!, `developer`, { home: true })).toBe(`Landed and committed. Installing 1 changed dependency, then checks.`);
         // Only a home's land is named, so the row reads the same drawn anywhere, and as the sandbox's own sentence.
         expect(noticeLine(plain!, `developer`)).toBe(plain!.text);
-        expect(plain!.text).toBe(`Landed in your workspace and committed.`);
+        expect(plain!.text).toBe(`Landed and committed.`);
     });
 
     it(`says where a home's memory starts over in a maker's words: no token counts, no model names`, () => {
         const fresh = FOLDED.filter((row) => row.noticeCode?.code === `freshStart`);
         expect(fresh.map((row) => noticeLine(row, `maker`))).toEqual([
-            `This chat's memory was full, so it carried on with a fresh one, picking up from a summary of the conversation and its latest messages.`,
-            `This chat's memory was full, so it carried on with a fresh one, picking up from a summary of the conversation and its latest messages.`,
-            `This chat had been quiet for a while, so it carried on with a fresh memory, picking up from its latest messages and the work in hand.`,
-            `This chat had been quiet for a while, so it carried on with a fresh memory, picking up from a summary of the conversation and its latest messages.`,
-            `Started fresh, as you asked, picking up from a summary of the conversation and its latest messages.`,
-            `History cleared: started fresh, picking up from its latest messages and the work in hand.`,
+            `Memory full, so it started fresh, from a summary.`,
+            `Memory full, so it started fresh, from a summary.`,
+            `Quiet for a while, so it started fresh, from its latest messages.`,
+            `Quiet for a while, so it started fresh, from a summary.`,
+            `Started fresh, as you asked, from a summary.`,
+            `History cleared: started fresh, from its latest messages.`,
         ]);
     });
 
@@ -224,52 +222,50 @@ describe(`a sandbox notice, as the chat says it`, () => {
         const line = (row: TranscriptRow | undefined): string | undefined => (row === undefined ? undefined : noticeLine(row, `developer`));
         const coded = (code: string): TranscriptRow | undefined => FOLDED.find((row) => row.noticeCode?.code === code);
 
-        expect(line(coded(`landHeld`))).toBe(`Gotowe: praca jest na gałęzi tego agenta, gotowa do scalenia z jego przeglądu.`);
-        expect(line(coded(`landConflict`))).toBe(
-            `Nie udało się automatycznie scalić 3 plików w root, web. Otwórz przegląd agenta, żeby zobaczyć, co je zablokowało, i scal stamtąd.`,
-        );
+        expect(line(coded(`landHeld`))).toBe(`Gotowe: do scalenia z przeglądu tego agenta.`);
+        expect(line(coded(`landConflict`))).toBe(`Nie udało się scalić 3 plików w root, web: rozwiąż w przeglądzie agenta.`);
         expect(line(FOLDED.find((row) => row.noticeCode?.code === `synced` && row.noticeCode.params?.[`blocked`] !== undefined))).toBe(
-            `Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie 3 commity. Nie udało się przenieść gałęzi na Twoją przestrzeń roboczą w web, api: tura działa na starszej bazie, więc jej scalenie może wymagać rozwiązania konfliktów.`,
+            `Przeniesiono na Twoje ostatnie 3 commity, gdy ten agent czekał. Nie udało się przenieść gałęzi w web, api; scalenie może wymagać rozwiązania konfliktów.`,
         );
-        expect(line(coded(`retrying`))).toBe(`Dostawca nie odpowiedział. Ponawia sam: próba 2 z 6.`);
+        expect(line(coded(`retrying`))).toBe(`Dostawca nie odpowiedział. Ponawia: próba 2 z 6.`);
         expect(line(FOLDED.find((row) => row.noticeCode?.code === `installing` && row.noticeCode.params?.[`more`] !== undefined))).toBe(
-            `Trwa instalacja pakietów w katalogu głównym przestrzeni roboczej, a/, b/ i jeszcze 2 w głównym drzewie, po jednej instalacji naraz.`,
+            `Instalacja pakietów w katalogu głównym przestrzeni roboczej, a/, b/ i jeszcze 2 w głównym drzewie.`,
         );
         expect(line(coded(`renewalWithdrawn`))).toBe(
-            `Dostawca nie akceptuje już logowania tego konta. Dane logowania były odnawiane, ale tura zatrzymała się, zanim mogła ruszyć dalej: sama się nie wznowi, więc naciśnij Kontynuuj, żeby ją podjąć.`,
+            `Dostawca nie akceptuje już logowania tego konta. Odnowienie nie wznowiło tury: naciśnij Kontynuuj, żeby ją podjąć.`,
         );
         expect(line(coded(`undelivered`))).toBe(
-            `This model accepts 16,384 tokens. Twoja wiadomość nie została dostarczona: czeka, aż wyślesz ją ponownie.`,
+            `This model accepts 16,384 tokens. Nie dostarczono: czeka, aż wyślesz ją ponownie.`,
         );
         const partway = FOLDED.filter((row) => row.noticeCode?.code === `stoppedPartway`).map(line);
         expect(partway).toEqual([
-            `Limit użycia tego konta został wyczerpany. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca.`,
-            `The disk is full. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: wyślij wiadomość, żeby podjąć pracę od tego miejsca.`,
+            `Limit użycia tego konta został wyczerpany. Zatrzymano w połowie, zmiany zostały: kontynuuj z innym modelem.`,
+            `The disk is full. Zatrzymano w połowie, zmiany zostały: wyślij wiadomość, żeby kontynuować.`,
         ]);
         // A failure the sandbox worded itself, and this build knows, is said in Polish whole; one nobody named, as such.
         expect(line(FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `agent-busy`))).toBe(`Ten agent już wykonuje turę, poczekaj, aż skończy.`);
         expect(line(coded(`failed`))).toBe(`Agent zatrzymał się na błędzie, którego ta aplikacja nie rozpoznaje.`);
         expect(DAEMON.map(line).slice(0, 3)).toEqual([`Pytanie odrzucone.`, `Plan zatwierdzony.`, `Planowanie trwa dalej.`]);
         expect(line(RESUMED.find((row) => row.noticeCode?.params?.[`reason`] === `restart`))).toBe(
-            `Sandbox znów działa; polecenia w tle i serwery deweloperskie uruchomione w tej turze zostały zatrzymane; ta tura wróciła tam, gdzie przerwała.`,
+            `Sandbox znów działa; tura wróciła tam, gdzie przerwała. Jej zadania w tle się zakończyły.`,
         );
         expect(UNSPOKEN.slice(0, 1).map(line)).toEqual([`CI run 316 — obserwacja zadziałała po 43m.`]);
         expect(line(UNSPOKEN.at(-2))).toBe(`Podagent „Port the parser” skończył.`);
-        expect(noticeLine(coded(`landed`)!, `maker`)).toBe(`Zmiany zostały przyjęte do Twoich plików: zobacz je w „Co się zmieniło”.`);
+        expect(noticeLine(coded(`landed`)!, `maker`)).toBe(`Przyjęto do Twoich plików.`);
         expect(line(coded(`freshStart`))).toBe(
-            `Pamięć tego czatu była pełna przy około 182k tokenów, więc kontynuował w nowej sesji, zaczynając od streszczenia rozmowy napisanego przez claude-haiku-5-5 i jej najnowszych wiadomości.`,
+            `Pamięć pełna przy ~182k tokenów: nowa sesja, od streszczenia napisanego przez claude-haiku-5-5.`,
         );
         // A turn already running, as an older sandbox refused a message and as this one refuses a re-run.
         expect(refusalWords(`a turn is already running for this conversation`)).toBe(`W tej rozmowie trwa już tura.`);
         expect(refusalWords(`a turn is already running in that conversation`)).toBe(`W tej rozmowie trwa już tura.`);
         expect(refusalWords(`The free allowance is spent.`)).toBe(`The free allowance is spent.`);
         // A kept-warm pick-up and a thin send, with the figures as the sandbox wrote them and Polish's three plurals.
-        expect(line(coded(`keptWarm`))).toBe(`Wznowiono na ciepło: 305k tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez 2h 5m (1 odświeżenie).`);
+        expect(line(coded(`keptWarm`))).toBe(`Wznowiono na ciepło: 305k tokenów z pamięci podręcznej podtrzymywanej 2h 5m (1 odświeżenie).`);
         expect(line(coded(`keptCold`))).toBe(
-            `Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez 7m (3 odświeżenia): 310k tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej.`,
+            `Wznowiono na zimno po 7m podtrzymywania: 310k tokenów wysłano ponownie, prompt się zmienił.`,
         );
         expect(line(coded(`contextTrim`))).toBe(
-            `Wysłano w wersji odchudzonej, bo okno tego modelu ma 16k. Pominięto: Working in this sandbox, Skills. Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem. Reguły Twojej przestrzeni roboczej, rola tej tury i miejsce jej plików i tak zostały wysłane.`,
+            `Wysłano odchudzone dla okna 16k, bez: Working in this sandbox, Skills; skrócono podstawowy prompt; reguły przestrzeni roboczej zachowane.`,
         );
         await setLocale(`en`);
     });
@@ -278,21 +274,21 @@ describe(`a sandbox notice, as the chat says it`, () => {
     it(`says a turn's switch in German, by the part that changed and whether the session went with it`, async () => {
         const switched = FOLDED.filter((row) => row.noticeCode?.code === `switched`);
         expect(switched.map((row) => row.text)).toEqual([
-            `Switched to Codex: this message started a fresh session, with the conversation so far carried over.`,
-            `Switched to the Work account: this message started a fresh session, with the conversation so far carried over.`,
-            `Switched to another ChatGPT account: this message started a fresh session, with the conversation so far carried over.`,
-            `Switched to running through OpenCode: this message started a fresh session, with the conversation so far carried over.`,
-            `Switched to Claude Sonnet 5: same session, so the model re-reads the conversation once.`,
-            `Switched to Claude Sonnet 5: this message started a fresh session, with the conversation so far carried over.`,
+            `Switched to Codex: fresh session, conversation carried over.`,
+            `Switched to the Work account: fresh session, conversation carried over.`,
+            `Switched to another ChatGPT account: fresh session, conversation carried over.`,
+            `Switched to running through OpenCode: fresh session, conversation carried over.`,
+            `Switched to Claude Sonnet 5: same session, re-read once.`,
+            `Switched to Claude Sonnet 5: fresh session, conversation carried over.`,
         ]);
         await setLocale(`de`);
         expect(switched.map((row) => noticeLine(row, `developer`))).toEqual([
-            `Zu Codex gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
-            `Zum Konto Work gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
-            `Zu einem anderen ChatGPT-Konto gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
-            `Zur Ausführung über OpenCode gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
-            `Zu Claude Sonnet 5 gewechselt: Dieselbe Sitzung, daher liest das Modell die Unterhaltung einmal neu.`,
-            `Zu Claude Sonnet 5 gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
+            `Zu Codex gewechselt: neue Sitzung, Unterhaltung übernommen.`,
+            `Zum Konto Work gewechselt: neue Sitzung, Unterhaltung übernommen.`,
+            `Zu einem anderen ChatGPT-Konto gewechselt: neue Sitzung, Unterhaltung übernommen.`,
+            `Zur Ausführung über OpenCode gewechselt: neue Sitzung, Unterhaltung übernommen.`,
+            `Zu Claude Sonnet 5 gewechselt: gleiche Sitzung, einmal neu eingelesen.`,
+            `Zu Claude Sonnet 5 gewechselt: neue Sitzung, Unterhaltung übernommen.`,
         ]);
         await setLocale(`en`);
     });
@@ -301,15 +297,15 @@ describe(`a sandbox notice, as the chat says it`, () => {
     it(`says a repaired copy of the workspace by the layers it set aside, in Polish with its three plurals`, async () => {
         const repaired = FOLDED.filter((row) => row.noticeCode?.code === `workspaceRepaired`);
         expect(repaired.map((row) => noticeLine(row, `developer`))).toEqual([
-            `This conversation's copy of the workspace failed to come up, and was set up again.`,
-            `This conversation's copy of the workspace failed to come up, so its installed dependencies (1 layer) were set aside and it was set up again. Install them again if the work needs them.`,
-            `This conversation's copy of the workspace failed to come up, so its installed dependencies (3 layers) were set aside and it was set up again. Install them again if the work needs them.`,
+            `This conversation's workspace copy failed to start, so it was rebuilt.`,
+            `Workspace copy rebuilt; 1 dependency layer set aside, reinstall if needed.`,
+            `Workspace copy rebuilt; 3 dependency layers set aside, reinstall if needed.`,
         ]);
         await setLocale(`pl`);
         expect(repaired.map((row) => noticeLine(row, `developer`))).toEqual([
-            `Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc przygotowano ją od nowa.`,
-            `Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności (1 warstwa) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje.`,
-            `Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności (3 warstwy) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje.`,
+            `Kopia przestrzeni roboczej tej rozmowy nie ruszyła, więc ją odbudowano.`,
+            `Kopię odbudowano; odłożono 1 warstwę zależności, zainstaluj ponownie w razie potrzeby.`,
+            `Kopię odbudowano; odłożono 3 warstwy zależności, zainstaluj ponownie w razie potrzeby.`,
         ]);
         await setLocale(`en`);
     });
@@ -318,7 +314,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
     it(`says a broken copy of the workspace in this build's line, the holder's error behind the row's details`, () => {
         const broken = FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `workspace-broken`)!;
         expect(noticeLine(broken, `developer`)).toBe(
-            `This conversation's copy of the workspace can't be set up, and sending again will fail the same way. Nothing has run yet: the message above is kept here to send again once that is sorted.`,
+            `The workspace copy can't be set up; sending again fails the same way. Nothing ran; the message above is kept to send again.`,
         );
         expect(noticeFailure(broken)?.said).toBe(BROKEN);
     });
@@ -335,11 +331,11 @@ describe(`a sandbox notice, as the chat says it`, () => {
             },
         ]);
         expect(noticeLine(held!, `developer`)).toBe(
-            `Sandbox memory is low (15.9/16.0 GiB). Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.`,
+            `Sandbox memory is low (15.9/16.0 GiB). Nothing ran; this run started on its own.`,
         );
         await setLocale(`pl`);
         expect(noticeLine(held!, `developer`)).toBe(
-            `Pamięć sandboxa się kończy (15,9/16,0 GiB). Nic się nie uruchomiło i nic nie czeka: ten przebieg ruszył sam, więc nie ma wiadomości do ponownego wysłania.`,
+            `Pamięć sandboxa się kończy (15,9/16,0 GiB). Nic nie ruszyło; ten przebieg zaczął się sam.`,
         );
         await setLocale(`en`);
     });
@@ -349,7 +345,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
     it(`leads a provider's words with their kind's line, and keeps them whole as the row's details`, () => {
         const said = `API Error: 500 Internal server error. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.`;
         const [retrying] = turn([{ kind: `error`, code: `provider-outage`, message: said, autoResume: `scheduled`, retries: { made: 1, max: 6 } }]);
-        expect(noticeLine(retrying!, `developer`)).toBe(`The provider failed to answer. Retrying by itself: attempt 2 of 6.`);
+        expect(noticeLine(retrying!, `developer`)).toBe(`The provider failed to answer. Retrying: attempt 2 of 6.`);
         expect(noticeFailure(retrying!)).toEqual({ line: `The provider failed to answer.`, said, ends: true });
         // A failure the sandbox worded itself is its own line, with nothing behind it to open.
         expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `agent-busy`)!)?.said).toBeUndefined();

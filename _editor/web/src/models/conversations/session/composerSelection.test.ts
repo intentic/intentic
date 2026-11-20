@@ -22,13 +22,13 @@ import { type TranscriptHost, TranscriptView } from "./transcriptView";
 
 // The provider as the picker heads it and the placeholder says it ("Ask Codex…"), never the account tab's "ChatGPT".
 const providerName = providerLabel;
-const CARRIED = `your next message starts a fresh session with the conversation so far carried over.`;
+const CARRIED = `next message starts a fresh session.`;
 // An account switch keeps the session (the daemon's switchAccount carries it): only a loop or provider switch starts over.
-const SESSION_COMES = `the session comes along, and its next reply re-reads the conversation once without the cache.`;
+const SESSION_COMES = `same session, re-read once.`;
 const FRESH = (name: string | undefined): string => `Switched to ${name}: ${CARRIED}`;
-const WAITING_ONE = `The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick.`;
-const FOLLOW_ONE = `The message already waiting goes there too.`;
-const FOLLOW_TWO = `The 2 messages already waiting go there too.`;
+const WAITING_ONE = `The waiting message keeps its own model.`;
+const FOLLOW_ONE = `The waiting message goes too.`;
+const FOLLOW_TWO = `The 2 waiting messages go too.`;
 
 // The session a first turn on Claude minted, on account `a1`.
 const CLAUDE_SESSION: SessionRef = { id: `s-1`, provider: `claude`, account: `a1`, harness: `native` };

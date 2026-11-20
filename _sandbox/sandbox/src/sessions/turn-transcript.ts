@@ -6,7 +6,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { editorContextPointer, type TranscriptEditorContext } from "@intentic/sandbox-contract/events/prompt-origins";
 import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { RESTART_LOSSES, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
+import { resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
 import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { within } from "@intentic/base/async";
@@ -249,7 +249,7 @@ const keptRuns = async (services: Pick<Services, "config" | "logger">, conversat
 };
 
 // Message a died-under turn's record ends with, kept beside the write it closes.
-export const RESTART_INTERRUPTED = `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`;
+export const RESTART_INTERRUPTED = `The sandbox restarted mid-turn; its background jobs ended. Continue picks it up.`;
 
 // Recovers what an interrupted turn wrote from the provider's own session store, the only place it exists once a turn
 // never settles to disk. The opening row is restamped to the turn's start so its clock matches every other row's.

@@ -111,22 +111,21 @@ export const handedOffNotice = (event: HandedOff): Extract<SandboxNotice, { code
 export const handedOffLine = (event: HandedOff): string => {
     if (event.fellBack === true) {
         const line = event.mode === "trim"
-            ? "Could not trim the session for the hand-off, so it was carried whole."
-            : "Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead.";
+            ? "Couldn't trim the session, so it was carried whole."
+            : "Couldn't write a summary; started fresh from recent messages.";
         return event.reason === undefined ? line : `${line} Reason: ${event.reason}`;
     }
     const tokens = event.tokens === undefined ? undefined : tokensLabel(event.tokens);
     switch (event.mode) {
         case "carry":
-            return `Continued in the same session, re-reading all of it${tokens === undefined ? "" : ` (about ${tokens} tokens)`}.`;
+            return tokens === undefined ? "Continued in the same session, re-reading all of it." : `Continued in the same session, re-reading ~${tokens} tokens.`;
         case "trim": {
             const cleared = event.cleared ?? 0;
-            const size =
-                tokens === undefined ? "" : event.from === undefined ? ` (about ${tokens} tokens)` : ` (about ${tokens} tokens instead of ${tokensLabel(event.from)})`;
-            return `Continued in a trimmed copy of the session${size}: ${cleared} older tool output${cleared === 1 ? "" : "s"} cleared, every message and tool call kept.`;
+            const size = tokens === undefined ? "" : ` to ~${tokens} tokens${event.from === undefined ? "" : ` from ${tokensLabel(event.from)}`}`;
+            return `Continued trimmed${size}: ${cleared} old tool output${cleared === 1 ? "" : "s"} cleared.`;
         }
         case "summary":
-            return `Continued in a fresh session opened with a summary of the conversation${event.model === undefined ? "" : ` written by ${event.model}`}.`;
+            return `Continued in a fresh session from a summary${event.model === undefined ? "" : ` by ${event.model}`}.`;
     }
 };
 
@@ -164,17 +163,17 @@ export const freshStartNotice = (event: FreshStart): Extract<SandboxNotice, { co
 
 /** The transcript's line for a fresh session, in the English the record keeps. */
 export const freshStartLine = (event: FreshStart): string => {
-    const from = event.from === undefined ? "" : ` at about ${tokensLabel(event.from)} tokens`;
+    const from = event.from === undefined ? "" : ` at ~${tokensLabel(event.from)} tokens`;
     const why =
         event.why === "budget"
-            ? `This chat's memory was full${from}, so it went on in a fresh session`
+            ? `Memory full${from}: fresh session`
             : event.why === "cold"
-              ? `This chat had been idle long enough that re-reading it${from} would cost more than starting over, so it went on in a fresh session`
+              ? `Idle too long to re-read${from}: fresh session`
               : event.why === "asked"
                 ? "Started fresh, as you asked"
                 : "History cleared: started fresh";
     const carried = event.summarized
-        ? `, opened with a summary of the conversation${event.model === undefined ? "" : ` written by ${event.model}`} and its latest messages.`
-        : ", opened with its latest messages and the work in hand.";
+        ? `, from a summary${event.model === undefined ? "" : ` by ${event.model}`}.`
+        : ", from its recent messages.";
     return `${why}${carried}`;
 };

@@ -68,5 +68,5 @@ const switchedTo = (event: Switched): string => {
 /** The transcript's line for a turn that switched what it runs on, in the English the record keeps. */
 export const switchedLine = (event: Switched): string =>
     `${switchedTo(event)}: ${
-        event.fresh ? "this message started a fresh session, with the conversation so far carried over." : "same session, so the model re-reads the conversation once."
+        event.fresh ? "fresh session, conversation carried over." : "same session, re-read once."
     }`;

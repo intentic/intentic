@@ -296,8 +296,8 @@ const messages: TranscriptRow[] = [
     // Refused twice, then run on another account: one row, where it ran and why, both attempts behind its press.
     ...refusalIncident(Date.now() - 2 * HOUR),
     { ...accountMovedRow({ why: `refused`, from: `Claude Pro`, to: `Claude Max`, said: SEAT_OFF }), openedAt: Date.now() - 2 * HOUR },
-    { role: `notice`, text: `Switched to Claude: your next message starts a fresh session with the conversation so far carried over.` },
-    { role: `notice`, text: `Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it.` },
+    { role: `notice`, text: `Switched to Claude: next message starts a fresh session.` },
+    { role: `notice`, text: `Sent again on the switched account, same session.` },
     { role: `notice`, text: `Continued in the same session, re-reading all of it.` },
     { role: `notice`, text: `Context is 81% full; older tool output will be trimmed first.`, agentNotice: { level: `warning`, source: `context-guard` } },
     { role: `notice`, text: `The hook "pre-commit" exited 1: lint found 2 problems.`, agentNotice: { level: `error` } },
@@ -598,7 +598,7 @@ const messages: TranscriptRow[] = [
         text: ANSWER_MARKDOWN,
         todos: todos(4, -1),
     },
-    { role: `notice`, text: `Finished: the work is on this agent's branch, ready to land from its review.` },
+    { role: `notice`, text: `Finished: ready to land from this agent's review.` },
     { role: `user`, text: `Continue`, sentAt: Date.now() - 20 * 60_000 },
     {
         role: `assistant`,
@@ -689,7 +689,7 @@ const MOVED_TO = `acc_claude_demo`;
 
 const accessWallMessages = (): TranscriptRow[] => [
     ...[unspokenPromptRow(peerMessagePrompt({ from: `stout-raven-owob`, title: `Investigate chat 502 errors`, message: `Can you check the 502s on /chat?` }))].flatMap((row) => row ?? []),
-    { role: `notice`, text: `Your workspace moved on while this agent waited, its branch was rebased onto your latest 53 commits.`, noticeCode: { code: `synced`, params: { commits: 53 } } },
+    { role: `notice`, text: `Rebased onto your latest 53 commits while this agent waited.`, noticeCode: { code: `synced`, params: { commits: 53 } } },
     ...(seatsOff
         ? refusalIncident(Date.now()).slice(0, 3)
         : [...refusalIncident(Date.now()), accountMovedRow({ why: `refused`, from: `Claude Pro`, to: `Claude Max`, said: SEAT_OFF })]),
