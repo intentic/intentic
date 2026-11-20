@@ -5514,6 +5514,7 @@
             "measured": "zmierzono {measuredAt}",
             "missing": "niezgłaszane od {since}, pokazano ostatnią wartość",
             "resets": "reset {resetsAt}",
+            "runsOut": "w tym tempie skończy się {when}",
             "uncovered": "Brak zgłoszonego przydziału dla {models}: nie wiadomo, ile im zostało."
         },
         "vpnConnections": {
@@ -8040,7 +8041,10 @@
             "unread": "nieodczytane",
             "unusable": "Niedostępne",
             "viewAccounts": "Zobacz konta",
-            "waitsOn": "Czeka na"
+            "waitsOn": "Czeka na",
+            "aheadOfPace": "Szybciej niż tempo",
+            "runsOut": "Skończy się",
+            "resetsLabel": "Reset"
         },
         "repoCheckRow": {
             "partlyPaused": "Częściowo wstrzymane: {count} nowe lub zmienione sprawdzenie czeka na ciebie. Włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} nowe lub zmienione sprawdzenia czekają na ciebie. Włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} nowych lub zmienionych sprawdzeń czeka na ciebie. Włącz ponownie, żeby je przyjąć.",

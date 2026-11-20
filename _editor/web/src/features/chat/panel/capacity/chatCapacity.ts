@@ -1,3 +1,4 @@
+import { poolPace, type PoolPace } from "../../../../models/providers/capacity/usagePace";
 import type { AccountFix } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { PlanLimitsHeld } from "@intentic/sandbox-contract/contracts/usage.contract";
@@ -47,6 +48,8 @@ export interface CapacityLane {
     readonly within: string | undefined;
     // A holding allowance is spent, so this one's room can't be used until that reopens.
     readonly capped: boolean;
+    // Where an even spend would have it by now (usagePace.ts); none for a held lane, which can't be spent at any pace.
+    readonly pace: PoolPace | undefined;
 }
 
 /** One offer as the rail draws it: a name, plus one bar per allowance the plan publishes. */
@@ -222,6 +225,7 @@ const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] => {
         depth,
         within: parent?.pool.label,
         capped,
+        pace: capped ? undefined : poolPace(pool),
     }));
 };
 

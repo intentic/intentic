@@ -1,5 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { formatAge, formatRemaining, formatReset, type PlanHeadroom, type PlanLimitPool } from "./usageStatus";
+import { poolPace } from "./capacity/usagePace";
 
 // The words a plan-limit reading is read out in, beside its meters: when each pool moves, and the whole reading as one
 // sentence for a screen reader.
@@ -23,8 +24,11 @@ export const usageDetail = (headroom: PlanHeadroom): string =>
     [
         ...headroom.pools.map(
             (pool) => {
-                const note = poolResetNote(pool);
-                return `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${note === undefined ? `` : ` (${note})`}`;
+                const runsOutAt = poolPace(pool)?.runsOutAt;
+                const notes = [runsOutAt === undefined ? undefined : t(`common.usageRing.runsOut`, { when: formatReset(runsOutAt) }), poolResetNote(pool)]
+                    .filter((note) => note !== undefined)
+                    .join(`, `);
+                return `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${notes === `` ? `` : ` (${notes})`}`;
             },
         ),
         ...(headroom.uncovered.length > 0 ? [t(`common.usageRing.uncovered`, { models: headroom.uncovered.join(`, `) })] : []),

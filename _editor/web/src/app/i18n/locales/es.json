@@ -5514,6 +5514,7 @@
             "measured": "medido {measuredAt}",
             "missing": "sin informar desde {since}, se muestra la última cifra",
             "resets": "se reinicia {resetsAt}",
+            "runsOut": "a este ritmo se agota {when}",
             "uncovered": "No se informa ninguna asignación para {models}: se desconoce cuánto les queda."
         },
         "vpnConnections": {
@@ -8610,7 +8611,10 @@
             "unread": "sin leer",
             "unusable": "No utilizable",
             "viewAccounts": "Ver cuentas",
-            "waitsOn": "Espera a"
+            "waitsOn": "Espera a",
+            "aheadOfPace": "Por encima del ritmo",
+            "runsOut": "Se agota",
+            "resetsLabel": "Se reinicia"
         },
         "repoCheckRow": {
             "partlyPaused": "Pausada en parte: {count} comprobación nueva o cambiada te espera. Vuelve a activarla para aceptarla. | Pausada en parte: {count} comprobaciones nuevas o cambiadas te esperan. Vuelve a activarla para aceptarlas.",

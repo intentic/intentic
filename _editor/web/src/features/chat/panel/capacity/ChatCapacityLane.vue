@@ -3,6 +3,7 @@ import { useT } from "@intentic/ui/i18n";
 import { useReducedMotion } from "@intentic/ui/motion";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { CapacityLane, CapacityRow } from "./chatCapacity";
+import PaceMark from "../../../../parts/providers/PaceMark.vue";
 import { meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../../../../models/providers/usageStatus";
 
 // One lane of the capacity rail: its axis label, its bar and its figure, as three cells of the parent's grid.
@@ -117,19 +118,23 @@ const reset = computed(() => (props.lane.capped ? undefined : laneReset(props.la
          track instead, since an empty neutral track reads as "no reading". A nested lane draws thinner,
          since the lane holding it is the headline; and turns neutral when that one is spent, since its
          room can't be used until the holder reopens (green would claim room that isn't spendable). -->
-    <span
-        class="relative block overflow-hidden rounded-full transition-colors duration-500 motion-reduce:transition-none"
-        :class="[meterTrack(shown), lane.depth > 0 ? `h-0.5` : `h-1`]"
-    >
-        <!-- What the last re-read took, left behind for a moment before it drains to the new length. -->
+    <span class="relative block">
         <span
-            v-if="trail > fill + 0.1"
-            class="ui-meter-fill absolute inset-y-0 left-0 block rounded-full opacity-35"
-            :class="tone"
-            :style="{ width: `${trail}%`, ...tint }"
-            data-meter-trail
-        />
-        <span class="ui-meter-fill relative block h-full rounded-full" :class="tone" :style="{ width: `${fill}%`, ...tint }" />
+            class="relative block overflow-hidden rounded-full transition-colors duration-500 motion-reduce:transition-none"
+            :class="[meterTrack(shown), lane.depth > 0 ? `h-0.5` : `h-1`]"
+        >
+            <!-- What the last re-read took, left behind for a moment before it drains to the new length. -->
+            <span
+                v-if="trail > fill + 0.1"
+                class="ui-meter-fill absolute inset-y-0 left-0 block rounded-full opacity-35"
+                :class="tone"
+                :style="{ width: `${trail}%`, ...tint }"
+                data-meter-trail
+            />
+            <span class="ui-meter-fill relative block h-full rounded-full" :class="tone" :style="{ width: `${fill}%`, ...tint }" />
+        </span>
+        <!-- Where an even spend would have the fill by now: past it is room to spare, short of it is spending ahead. -->
+        <PaceMark :pace="lane.pace" />
     </span>
     <!-- The figure never truncates; the reset after it does, before it can squeeze the bar (the rail's grid floors it). -->
     <div class="flex min-w-0 items-baseline justify-end gap-1 whitespace-nowrap text-right">

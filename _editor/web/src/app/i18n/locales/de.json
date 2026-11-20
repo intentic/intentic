@@ -5514,6 +5514,7 @@
             "measured": "gemessen {measuredAt}",
             "missing": "seit {since} nicht mehr gemeldet, letzter Wert angezeigt",
             "resets": "setzt sich zurück {resetsAt}",
+            "runsOut": "bei diesem Tempo leer {when}",
             "uncovered": "Kein Kontingent gemeldet für {models}: wie viel bleibt, ist unbekannt."
         },
         "vpnConnections": {
@@ -8610,7 +8611,10 @@
             "unread": "nicht gelesen",
             "unusable": "Nicht nutzbar",
             "viewAccounts": "Konten ansehen",
-            "waitsOn": "Wartet auf"
+            "waitsOn": "Wartet auf",
+            "aheadOfPace": "Über dem Tempo",
+            "runsOut": "Leer",
+            "resetsLabel": "Zurückgesetzt"
         },
         "repoCheckRow": {
             "partlyPaused": "Teilweise pausiert: {count} neue oder geänderte Prüfung wartet auf Sie. Schalten Sie wieder ein, um sie anzunehmen. | Teilweise pausiert: {count} neue oder geänderte Prüfungen warten auf Sie. Schalten Sie wieder ein, um sie anzunehmen.",

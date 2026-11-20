@@ -21,6 +21,7 @@ import {
     PLAN_LIMIT_BANDS,
     type PlanLimitAttention,
     type PlanLimitGroup,
+    type PlanLimitPool,
     planLimitBandLabel,
     planLimitBandTint,
     planLimitBandTone,
@@ -32,6 +33,8 @@ import {
     usageTone,
 } from "../../../models/providers/usageStatus";
 import { poolResetNote } from "../../../models/providers/usageNotes";
+import { poolPace } from "../../../models/providers/capacity/usagePace";
+import PaceMark from "../../../parts/providers/PaceMark.vue";
 import { useT } from "@intentic/ui/i18n";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 
@@ -125,6 +128,25 @@ const groupState = (group: PlanLimitGroup): string => {
 
 // An account's pools as a tree: the 5-hour session drawn under the week it spends into, not beside it as a peer.
 const nestedPools = (row: PlanLimitRow) => nestPools(row.pools, (pool) => pool);
+
+// A pool's bar says, on hover, what its look alone can't: that its room waits on a spent holder, or that the rate so far
+// empties it before it resets (the pace tick shows it is ahead; this says by when).
+const poolTip = (pool: PlanLimitPool, holder: PlanLimitPool | undefined): Tip | undefined => {
+    if (holder !== undefined) {
+        return { title: t(`sandbox.planLimitsPanel.unusable`), rows: [{ label: t(`sandbox.planLimitsPanel.waitsOn`), value: holder.label }] };
+    }
+    const runsOutAt = poolPace(pool)?.runsOutAt;
+    return runsOutAt === undefined || pool.resetsAt === undefined
+        ? undefined
+        : {
+              title: t(`sandbox.planLimitsPanel.aheadOfPace`),
+              tone: `warning`,
+              rows: [
+                  { label: t(`sandbox.planLimitsPanel.runsOut`), value: formatReset(runsOutAt) },
+                  { label: t(`sandbox.planLimitsPanel.resetsLabel`), value: formatReset(pool.resetsAt) },
+              ],
+          };
+};
 
 const barTooltip = (row: PlanLimitRow): string =>
     row.percent === undefined
@@ -439,22 +461,19 @@ const roster = computed(() => {
                                                      it can't be mistaken for one with no reading. A nested pool draws thinner, the one holding
                                                      it being the headline, and fades while that one is spent: its room waits on the holder. -->
                                                 <div
-                                                    v-tooltip.top="
-                                                        capped && parent !== undefined
-                                                            ? {
-                                                                  title: t(`sandbox.planLimitsPanel.unusable`),
-                                                                  rows: [{ label: t(`sandbox.planLimitsPanel.waitsOn`), value: parent.label }],
-                                                              }
-                                                            : undefined
-                                                    "
-                                                    class="order-last min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
-                                                    :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`, capped ? `opacity-40` : ``]"
+                                                    v-tooltip.top="poolTip(pool, capped ? parent : undefined)"
+                                                    class="relative order-last min-w-0 flex-1 basis-full @xl:order-none @xl:basis-0"
+                                                    :class="capped ? `opacity-40` : ``"
                                                 >
-                                                    <div
-                                                        class="ui-meter-fill ui-grow-x h-full rounded-full"
-                                                        :class="usageTone(pool.percent)"
-                                                        :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent), '--ui-grow-i': poolIndex }"
-                                                    />
+                                                    <div class="overflow-hidden rounded-full" :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`]">
+                                                        <div
+                                                            class="ui-meter-fill ui-grow-x h-full rounded-full"
+                                                            :class="usageTone(pool.percent)"
+                                                            :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent), '--ui-grow-i': poolIndex }"
+                                                        />
+                                                    </div>
+                                                    <!-- Where an even spend would have the fill by now: past it is room to spare, short of it is spending ahead. -->
+                                                    <PaceMark :pace="capped ? undefined : poolPace(pool)" />
                                                 </div>
                                                 <span
                                                     class="w-16 shrink-0 text-right text-2xs tabular-nums"

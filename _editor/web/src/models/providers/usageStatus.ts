@@ -120,6 +120,8 @@ export interface PlanLimitPool {
     // The provider's own name, untranslated (UsageWindow.label): what poolPeriod and poolScope read, since their period
     // words are English and the translated label ("Tygodniowo · Fable") would read as no period at all.
     readonly name?: string | undefined;
+    // How long its window runs, where the provider's answer said (UsageWindow.periodSeconds); else read off its words.
+    readonly periodSeconds?: number | undefined;
     // Unrounded: any utilization below the spent line still has room.
     readonly percent: number;
     readonly resetsAt: number | undefined;
@@ -140,6 +142,7 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         kind: window.kind,
         label: usageWindowLabel(window),
         name: window.label,
+        periodSeconds: window.periodSeconds,
         percent: window.utilization,
         resetsAt: window.resetsAt,
         gates: window.gates,
@@ -155,8 +158,8 @@ export type PoolPeriod = WindowPeriod;
 
 /** Window length behind a pool, and the short token a narrow column names it by. A model's or surface's own pool is a
  * weekly slice (usageWindowLabel names it so), though neither its key nor its name says so. */
-export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `name`>): PoolPeriod | undefined =>
-    windowPeriod({ kind: pool.kind, label: pool.name }) ??
+export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `name` | `periodSeconds`>): PoolPeriod | undefined =>
+    windowPeriod({ kind: pool.kind, label: pool.name, periodSeconds: pool.periodSeconds }) ??
     (SCOPED_KINDS.some((prefix) => pool.kind.startsWith(prefix)) ? { seconds: 7 * 86_400, short: `wk` } : undefined);
 
 // Words that name only the period, not scope; used to strip them so poolScope can find a pool's actual name.

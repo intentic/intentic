@@ -4,6 +4,7 @@ import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vu
 import {
     formatAge,
     formatRemaining,
+    formatReset,
     meterFill,
     meterTint,
     meterTrack,
@@ -13,6 +14,8 @@ import {
     usageTone,
 } from "../../../models/providers/usageStatus";
 import { poolResetNote, usageDetail } from "../../../models/providers/usageNotes";
+import { poolPace, type PoolPace } from "../../../models/providers/capacity/usagePace";
+import PaceMark from "../../../parts/providers/PaceMark.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Usage meter and breakdown panel, shared by the composer chip, model picker and Agent tab rows. Plan usage is
@@ -46,6 +49,11 @@ const heldBy = (pool: PlanLimitPool | undefined): PlanLimitPool | undefined => {
     }
     return holder;
 };
+
+// Each pool's pace against its window (usagePace.ts); none for a held pool, whose room can't be spent at any pace.
+const paces = computed<ReadonlyMap<string, PoolPace | undefined>>(
+    () => new Map(nested.value.map((entry) => [entry.item.kind, entry.capped ? undefined : poolPace(entry.item)])),
+);
 
 // Account-wide pools in display order, then the binding one if it is a slice; a measured reading with every pool
 // reset draws one full bar, since no bars at all is what unmeasured looks like.
@@ -189,14 +197,22 @@ onBeforeUnmount(hide);
                             </span>
                         </div>
                         <!-- The fill is what is left; a spent pool tints its empty track, so it can't read as no reading at all.
-                             A nested pool draws thinner, since the pool holding it is the headline. -->
-                        <div class="overflow-hidden rounded-full" :class="[meterTrack(pool.percent), depth > 0 ? `ml-3 h-1` : `h-1.5`]">
-                            <div
-                                class="ui-meter-fill h-full rounded-full"
-                                :class="held ? `text-subtle` : usageTone(pool.percent)"
-                                :style="{ width: `${meterFill(pool.percent)}%`, ...(held ? {} : meterTint(pool.percent)) }"
-                            />
+                             A nested pool draws thinner, since the pool holding it is the headline. The tick is where an even
+                             spend would have the fill by now: fill past it is room to spare, short of it is spending ahead. -->
+                        <div class="relative" :class="depth > 0 ? `ml-3` : ``">
+                            <div class="overflow-hidden rounded-full" :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`]">
+                                <div
+                                    class="ui-meter-fill h-full rounded-full"
+                                    :class="held ? `text-subtle` : usageTone(pool.percent)"
+                                    :style="{ width: `${meterFill(pool.percent)}%`, ...(held ? {} : meterTint(pool.percent)) }"
+                                />
+                            </div>
+                            <PaceMark :pace="paces.get(pool.kind)" />
                         </div>
+                        <!-- Said before the reset, when the rate so far would empty it first: the one pace a reader must act on. -->
+                        <span v-if="paces.get(pool.kind)?.runsOutAt !== undefined" class="text-2xs text-warning" :class="depth > 0 ? `ml-3` : ``">{{
+                            t(`common.usageRing.runsOut`, { when: formatReset(paces.get(pool.kind)?.runsOutAt ?? 0) })
+                        }}</span>
                         <!-- Held: when the holder reopens is the only reset that matters, and it's printed on the holder already. -->
                         <span v-if="held && heldBy(parent) !== undefined" class="text-2xs text-subtle" :class="depth > 0 ? `ml-3` : ``">{{
                             t(`common.usageRing.heldUntil`, { pool: heldBy(parent)?.label })

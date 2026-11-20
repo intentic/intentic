@@ -5514,6 +5514,7 @@
             "measured": "measured {measuredAt}",
             "missing": "no longer reported since {since}, last figure shown",
             "resets": "resets {resetsAt}",
+            "runsOut": "runs out {when} at this pace",
             "uncovered": "No allowance reported for {models}: what they have left is unknown."
         },
         "vpnConnections": {
@@ -8610,7 +8611,10 @@
             "unread": "unread",
             "unusable": "Unusable",
             "viewAccounts": "View accounts",
-            "waitsOn": "Waits on"
+            "waitsOn": "Waits on",
+            "aheadOfPace": "Ahead of pace",
+            "runsOut": "Runs out",
+            "resetsLabel": "Resets"
         },
         "repoCheckRow": {
             "partlyPaused": "Partly paused: {count} new or changed check waits for you. Switch on again to accept it. | Partly paused: {count} new or changed checks wait for you. Switch on again to accept them.",

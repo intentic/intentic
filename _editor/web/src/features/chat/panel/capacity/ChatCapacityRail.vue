@@ -83,6 +83,8 @@ useRowReveal(column, {
 // A nested lane says which allowance holds it, and that its room waits on that one when the holder is spent.
 const laneDetail = (lane: CapacityLane, row: CapacityRow): string =>
     `${lane.label} ${formatRemaining(lane.percent, row.stale)}${
+        lane.pace?.runsOutAt === undefined ? `` : `, ${t(`common.usageRing.runsOut`, { when: formatReset(lane.pace.runsOutAt) })}`
+    }${
         lane.resetsAt === undefined ? `` : ` (${t(`chat.chatCapacityRail.resets`, { when: formatReset(lane.resetsAt) })})`
     }${
         lane.within === undefined
