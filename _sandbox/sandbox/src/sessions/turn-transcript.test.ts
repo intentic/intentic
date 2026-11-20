@@ -68,7 +68,7 @@ describe("openingRows", () => {
         const prompt = withResumeNote("ship the parser", RESUME_NOTES.auth);
         const events: AgentEvent[] = [{ kind: "delta", text: "picking back up" }];
         expect(foldTurn(openingRows({ prompt }, "/work", SENT_AT), events)).toEqual([
-            { role: "notice", text: expect.stringContaining("sign-in renewed"), noticeCode: { code: "resumed", params: { reason: "auth" } } },
+            { role: "notice", text: expect.stringContaining("Sign-in renewed"), noticeCode: { code: "resumed", params: { reason: "auth" } } },
             { role: "assistant", text: "picking back up" },
         ]);
     });
@@ -91,7 +91,7 @@ describe("openingRows", () => {
         const prompt = withResumeNote("/work is where it lives", RESUME_NOTES.restart);
         const [notice] = openingRows({ prompt }, "/work", SENT_AT);
         expect(notice?.role).toBe("notice");
-        expect(notice?.text).toContain("sandbox");
+        expect(notice?.text).toContain("Sandbox back");
         expect(notice?.text).not.toContain("/work is where it lives");
         const authNotice = openingRows({ prompt: withResumeNote("x", RESUME_NOTES.auth) }, "/work", SENT_AT)[0]?.text;
         expect(notice?.text).not.toBe(authNotice);

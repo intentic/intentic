@@ -1894,7 +1894,7 @@ describe(`a sandbox notice with a code`, () => {
     const held: ChatMessage = {
         id: 21,
         role: `notice`,
-        text: `Finished: the work is on this agent's branch, ready to land from its review.`,
+        text: `Finished: ready to land from this agent's review.`,
         noticeCode: { code: `landHeld` },
     };
 
@@ -1904,15 +1904,15 @@ describe(`a sandbox notice with a code`, () => {
     });
 
     it(`draws it in the reader's language, and in a maker's words`, async () => {
-        expect(mount(held).textContent).toContain(`Finished: the work is on this agent's branch, ready to land from its review.`);
+        expect(mount(held).textContent).toContain(`Finished: ready to land from this agent's review.`);
         app?.unmount();
 
         await setLocale(`pl`);
-        expect(mount(held).textContent).toContain(`Gotowe: praca jest na gałęzi tego agenta, gotowa do scalenia z jego przeglądu.`);
+        expect(mount(held).textContent).toContain(`Gotowe: do scalenia z przeglądu tego agenta.`);
         app?.unmount();
 
         useAudience().setAudience(`maker`);
-        expect(mount(held).textContent).toContain(`Gotowe: praca jest w szkicu tego asystenta, gotowa do przyjęcia, gdy ją obejrzysz.`);
+        expect(mount(held).textContent).toContain(`Gotowe: szkic czeka na przyjęcie, gdy go obejrzysz.`);
     });
 
     // An older sandbox sends no code, and a newer one may send a code this app has never heard of.
@@ -2071,7 +2071,7 @@ describe(`a row standing for a refusal incident`, () => {
 
     it(`says where the turn ran and why, naming both accounts, under the move's own glyph and no warning`, () => {
         const element = mount(moved, { incident: twice });
-        expect(element.textContent).toContain(`Ran on radarsu@gmail.com: the Work account's plan or organization does not allow it.`);
+        expect(element.textContent).toContain(`Ran on radarsu@gmail.com: Work's plan or organization doesn't allow it.`);
         expect(element.textContent).not.toContain(`Nothing has run yet`);
         expect(iconsOf(element)).toEqual([`arrow-right`]);
         expect(element.querySelector(`.text-warning`)).toBeNull();

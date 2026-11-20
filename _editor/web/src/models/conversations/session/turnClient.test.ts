@@ -277,7 +277,7 @@ describe(`a run's lifecycle`, () => {
         try {
             await client.send(`tidy the docs`, SETTINGS);
             expect(host.draft.value).toBe(`tidy the docs`);
-            expect(host.error.value).toBe(`W tej rozmowie trwa już tura. Twoja wiadomość wróciła do pola wpisywania: wyślij ją ponownie, gdy to się wyjaśni.`);
+            expect(host.error.value).toBe(`W tej rozmowie trwa już tura. Twoja wiadomość wróciła do pola wpisywania.`);
         } finally {
             await setLocale(`en`);
         }

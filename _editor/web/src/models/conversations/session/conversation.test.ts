@@ -2196,7 +2196,7 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({ reason: `stopped`, nextAt: nextAt * 1_000, retries: { made: 1, max: 3 }, held: { ran: true } });
         expect(conversation.transcript.messages.value.at(-1)).toMatchObject({
             role: `notice`,
-            text: `Google turn timed out waiting for OpenCode. Retrying by itself: attempt 2 of 3.`,
+            text: `Google turn timed out waiting for OpenCode. Retrying: attempt 2 of 3.`,
         });
     });
 
@@ -2536,7 +2536,7 @@ describe(`Conversation`, () => {
 
         const notice = conversation.transcript.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
-        expect(notice.text).toContain(`being renewed`);
+        expect(notice.text).toContain(`Renewing the credential`);
         // The notice names which wait it describes (`noticeWait`), and the conversation tracks that the wait is on.
         expect(notice.noticeWait).toBe(`credentialRenewal`);
         expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
@@ -2572,9 +2572,9 @@ describe(`Conversation`, () => {
             expect(conversation.failures.credentialRenewal.value).toBeUndefined();
             expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
                 { role: `user`, text: `refactor the store` },
-                { role: `notice`, text: expect.stringContaining(`being renewed`) },
+                { role: `notice`, text: expect.stringContaining(`Renewing the credential`) },
                 // The resumed run opens on the daemon's line for the restart, never on the words again.
-                { role: `notice`, text: expect.stringContaining(`sign-in renewed`) },
+                { role: `notice`, text: expect.stringContaining(`Sign-in renewed`) },
                 { role: `assistant`, text: `Picking it back up.` },
             ]);
         } finally {
@@ -2926,7 +2926,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
-            { role: `notice`, text: expect.stringContaining(`sign-in renewed`) },
+            { role: `notice`, text: expect.stringContaining(`Sign-in renewed`) },
             { role: `assistant`, text: `Picking it back up.` },
         ]);
     });
@@ -2971,7 +2971,7 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
             { role: `assistant`, text: `Got as far as the reducer.` },
-            { role: `notice`, text: expect.stringContaining(`sandbox came back`) },
+            { role: `notice`, text: expect.stringContaining(`Sandbox back`) },
             { role: `assistant`, text: `Picking it back up.` },
         ]);
     });
