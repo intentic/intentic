@@ -8,6 +8,7 @@ mod badge;
 mod bindings;
 mod cli_path;
 mod commands;
+mod device_pair;
 mod drop_copy;
 mod engine;
 mod engine_keeper;

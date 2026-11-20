@@ -37,6 +37,7 @@ let optionsRead = false;
 // does, the dialog says where it went, and can open it again (browserHandoff.ts).
 const handoff = useBrowserHandoff();
 const waiting = handoff.waiting;
+const waitingLong = handoff.waitingLong;
 const continueInBrowser = (): void => {
     const current = ask.value;
     if (current !== undefined) {
@@ -159,6 +160,10 @@ watch(
                                     <span>{{ t(`auth.signInDialog.waitingTitle`) }}</span>
                                 </p>
                                 <p class="handoff-detail">{{ t(`auth.signInDialog.waitingDetail`) }}</p>
+                                <!-- A wait that has run long may never end by itself: the emailed code below is the way on. -->
+                                <p v-if="waitingLong && options.email" class="handoff-detail handoff-long" data-testid="sign-in-waiting-long">
+                                    {{ t(`auth.signInDialog.waitingLong`) }}
+                                </p>
                                 <button type="button" :class="ui.textButton({ size: `sm` }, `handoff-again mx-auto`)" @click="continueInBrowser">
                                     <Icon name="external-link" />
                                     <span>{{ t(`auth.words.openBrowserAgain`) }}</span>
@@ -268,6 +273,10 @@ watch(
     line-height: 1.5;
     color: var(--ink-subtle);
     text-wrap: balance;
+}
+/* Said in the plate's own ink: it is the one line that changes what the reader should do. */
+.handoff-long {
+    color: var(--ink);
 }
 .handoff-again {
     margin-top: 0.15rem;

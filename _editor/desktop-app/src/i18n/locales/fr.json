@@ -47,6 +47,7 @@
         "pcSetupChecking": "Vérification de ce dont ce PC a besoin…",
         "setUpThisPc": "Préparer ce PC",
         "pcSetupAdminDeclined": "Windows n'a pas obtenu l'autorisation d'administrateur, rien n'a donc changé. Préparez à nouveau ce PC et choisissez « Oui » quand Windows le demande.",
+        "pcSetupAdminAgain": "Windows a de nouveau refusé l'autorisation d'administrateur, rien n'a donc changé. Cette étape modifie Windows lui-même, et seul un administrateur de ce PC peut l'autoriser : demandez-lui de choisir « Oui » avec son mot de passe quand Windows le demande. Ou lancez votre sandbox sur une machine que nous hébergeons, qui n'a besoin de rien de ce PC.",
         "pcSetupFailed": "La préparation de ce PC s'est arrêtée avant la fin."
     },
     "closeConfirm": {

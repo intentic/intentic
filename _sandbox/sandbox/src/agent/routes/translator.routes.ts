@@ -6,7 +6,7 @@ import type { TranslatorStatus } from "@intentic/sandbox-contract/schemas/provid
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
-import { type ArmedCatch, armLoopbackCatch, loopbackRedirectOf, loopbackWatchers } from "../providers/accounts/loopback-bridge.js";
+import { type ArmedCatch, armLoopbackCatch, liveCatchersOf, loopbackRedirectOf, loopbackWatchers } from "../providers/accounts/loopback-bridge.js";
 import { usageKey } from "../providers/translator.js";
 import { logPins } from "../providers/translator-prefixes.js";
 
@@ -125,8 +125,11 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
                     : { status: "error" as const, error: failed };
             if (status.status !== "wait") {
                 unwatch(input.state);
+                return status;
             }
-            return status;
+            // A watch this attempt started with, re-read: a card stops promising the sign-in finishes by itself once
+            // nobody of the owner's is listening for the landing any more.
+            return { ...status, ...liveCatchersOf(watches.get(input.state)?.caught) };
         }),
         complete: i.complete.handler(async ({ input }) => {
             await upstream(complete(input));

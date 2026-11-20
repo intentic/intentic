@@ -1192,7 +1192,6 @@
             "pickAccountForSandbox": "Wählen Sie das Google-Konto, zu dem Ihre Sandbox gehört.",
             "sandboxOpensForGoogle": "Eine Sandbox öffnet sich für das Google-Konto, daher müssen beide dasselbe sein.",
             "signedIn": "Angemeldet",
-            "signInAgainFromApp": "Um sich erneut anzumelden, starten Sie in der Intentic-App.",
             "signingIn": "Anmeldung als",
             "twoAccountsHere": "Dieser Browser ist bei Google und bei Intentic als zwei verschiedene Personen angemeldet.",
             "useDifferentGoogle": "Ein anderes Google-Konto verwenden",
@@ -1221,7 +1220,8 @@
             "ledeNeeded": "Dafür brauchst du dein Konto. Melde dich an, und es öffnet sich genau hier.",
             "ledeLapsed": "Deine Sitzung ist abgelaufen. Melde dich erneut an und mach dort weiter, wo du warst.",
             "waitingTitle": "Warte auf Google in deinem Browser",
-            "waitingDetail": "Schließ die Anmeldung im geöffneten Tab ab. Dieses Fenster macht danach von selbst weiter."
+            "waitingDetail": "Schließ die Anmeldung im geöffneten Tab ab. Dieses Fenster macht danach von selbst weiter.",
+            "waitingLong": "Dauert es länger? Dein Browser hat die App vielleicht nicht geöffnet. Melde dich stattdessen unten mit einem Code per E-Mail an."
         },
         "login": {
             "acceptableUsePolicy": "Richtlinie zur akzeptablen Nutzung",
@@ -1747,7 +1747,10 @@
         "hostConnectDialog": {
             "callsItself": "Dieser Rechner nennt sich",
             "codeInCommandWorks": "Dieses Fenster aktualisiert sich von selbst, sobald sich das Gerät verbindet.",
+            "connectThisComputer": "Diesen Computer verbinden",
+            "connectThisComputerNote": "Die App führt den Befehl unten für dich aus. Auf einem anderen Rechner führe ihn dort aus.",
             "connectedAgentWorkOn": "ist verbunden. Der Agent kann ab seinem nächsten Zug damit arbeiten.",
+            "connectingThisComputer": "Dieser Computer wird verbunden … Wenn er nicht innerhalb einer Minute verbunden ist, führe den Befehl unten aus.",
             "couldNotRename": "Dieser Name konnte nicht übernommen werden.",
             "inside": "in",
             "nameIt": "{name} nennen",

@@ -514,12 +514,13 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
             <Icon name="times" class="text-2xs" />
         </button>
         <!-- One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not measured back into it. -->
-        <!-- The gap below the composer is outside the scroller, so clipping keeps it clear without an opaque strip over the transcript; a phone's is the footer's side inset. -->
+        <!-- The gap below the composer is the footer's own padding, inside the scroller: a margin outside it cut the composer's shadow off flat at the card's
+             edge. On a desktop it runs 8px on under the status bar (ChatPaneStatus's `-mt-2`), since the shadow reaches ~22px down. -->
         <!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
             class="chat-scroller flex flex-1 flex-col"
-            :class="[strip ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing, 'mb-3': !strip && !mobile, 'mb-2': !strip && mobile }]"
+            :class="[strip ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <!-- The scratch pad withholds the turns, so no message component mounts and the scroller shrinks to the composer. -->
@@ -535,7 +536,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     ref="footer"
                     data-lane-floor
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] flex-col gap-2"
-                    :class="strip ? 'chat-footer-strip' : 'px-2 pt-3'"
+                    :class="strip ? 'chat-footer-strip' : ['px-2 pt-3', mobile ? 'pb-2' : connected ? 'pb-5' : 'pb-3']"
                 >
                     <!-- The composer stands whatever this chat can send with (no model: ChatPaneNotices), unless the reader cannot drive. -->
                     <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>

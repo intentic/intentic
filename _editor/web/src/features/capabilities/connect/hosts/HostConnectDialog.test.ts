@@ -26,17 +26,26 @@ jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices: computed(() => fleet.value), readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
 }));
 
+// The desktop app, as the page sees it: whether this build pairs a device itself, and the links handed to it.
+const appPairs = ref(false);
+const opened: string[] = [];
+jest.mock(`../../../../app/environments/desktop`, () => ({
+    desktopPairsDevices: () => appPairs.value,
+    desktopDevicePairLink: (url: string, pair: string) => `intentic://device-pair?${new URLSearchParams({ url, pair }).toString()}`,
+    openDesktopLink: (link: string) => opened.push(link),
+}));
+
 const { default: HostConnectDialog } = await import("./HostConnectDialog.vue");
 const { scriptSource } = await import("../../../../app/environments/scriptCommand");
 
 // Dialog content isn't under the mount point (PrimeVue teleports to body). `visible` starts false and flips, since
 // minting hangs off that transition, as on the tile.
-const mount = (id = `my-desktop`, unnamed = false): { open: () => void } => {
+const mount = (id = `my-desktop`, unnamed = false, platform = `linux`): { open: () => void } => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const visible = ref(false);
     const app = createApp({
-        render: () => h(HostConnectDialog, { visible: visible.value, id, platform: `linux`, permissions: `run commands`, unnamed, onRenamed }),
+        render: () => h(HostConnectDialog, { visible: visible.value, id, platform, permissions: `run commands`, unnamed, onRenamed }),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -161,4 +170,38 @@ it(`leaves a machine the owner named alone`, async () => {
     await waitFor(() => expect(document.body.textContent).toContain(`is connected`));
     expect(document.body.textContent).not.toContain(`This machine calls itself`);
     roster.value = [];
+});
+
+// Inside the desktop app on a computer of the device's own kind, the app runs the pairing itself: one press, the command
+// kept for another machine. The test browser reads as Linux, so a Linux device is "this computer's kind".
+describe(`in the desktop app`, () => {
+    afterEach(() => {
+        appPairs.value = false;
+        opened.length = 0;
+    });
+
+    it(`connects this computer with one press, handing the app the sandbox and the pairing it minted`, async () => {
+        document.body.innerHTML = ``;
+        appPairs.value = true;
+        mount(`my-desktop`).open();
+        await waitFor(() => expect(pill(`Connect this computer`)).toBeInstanceOf(HTMLButtonElement));
+        expect(document.body.textContent, `the command for another machine went away`).toContain(`PAIR_TOKEN='pair-token'`);
+        pill(`Connect this computer`).click();
+        expect(opened).toEqual([`intentic://device-pair?url=https%3A%2F%2Fsandbox-abc.intentic.dev&pair=pair-token`]);
+        await waitFor(() => expect(document.body.textContent).toContain(`Connecting this computer`));
+    });
+
+    it(`offers no press for a device of another kind, or in an app that cannot pair one`, async () => {
+        document.body.innerHTML = ``;
+        appPairs.value = true;
+        mount(`office-pc`, false, `windows`).open();
+        await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN`));
+        expect(pill(`Connect this computer`)).toBeUndefined();
+
+        document.body.innerHTML = ``;
+        appPairs.value = false;
+        mount(`my-desktop`).open();
+        await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
+        expect(pill(`Connect this computer`)).toBeUndefined();
+    });
 });

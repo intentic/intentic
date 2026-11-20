@@ -768,6 +768,31 @@ fn ic_trash_empty() -> Option<bool> {
 }
 
 /// The recreate shim with `ic`'s own verb behind the shim's switch for it: `recreate.sh <slug> --restart` /
+/// ic's exit when sandboxes are being moved between engines on this PC (its main.rs guard), which recreate.ps1/.sh pass
+/// through from every `ic sandbox` verb they run: nothing was changed, and the same press works once the move is over.
+const EXIT_MOVING: i32 = 3;
+
+/// What a sandbox verb run through recreate.ps1/.sh answers when it did not finish. _(2026-11-20) An update pressed while
+/// the installer's move was still copying came back as "recreate.ps1 exited with status 3", in 3 s with no step: a
+/// refusal that changed nothing, read as a failure with no word of why._ Pure.
+pub fn sandbox_verb_failure(file: &str, code: Option<i32>) -> String {
+    match code {
+        Some(EXIT_MOVING) => "Nothing was changed: this PC's sandboxes are being moved to another engine right now. Try again once the move has finished.".to_string(),
+        Some(code) => format!("{file} exited with status {code}"),
+        None => format!("{file} was terminated"),
+    }
+}
+
+/// [`scripts::run`] for a sandbox verb: a refusal ic made because a move is running is said as one ([`sandbox_verb_failure`]).
+fn run_sandbox_verb(app: &AppHandle, id: &str, run: ScriptRun) -> Result<(), String> {
+    let file = run.file;
+    let ended = scripts::run_heard(app, id, run, None, None)?;
+    if ended.success {
+        return Ok(());
+    }
+    Err(sandbox_verb_failure(file, ended.code.filter(|_| !ended.timed_out)))
+}
+
 /// `recreate.ps1 -Slug … -Restart`. The shim fetches this build's own `ic` first, as it does for every recreate, so
 /// the verb is one this app knows `ic` has. Named on PowerShell, positional on sh, for [`setup_script`]'s reason.
 fn ic_verb_script(
@@ -828,7 +853,7 @@ pub fn power_script(
 pub async fn sandbox_power(app: AppHandle, slug: String, action: String) -> CommandResult<()> {
     let run = power_script(&slug, &action, Host::current(), VERSION)?;
     let id = format!("power:{slug}");
-    tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
+    tauri::async_runtime::spawn_blocking(move || run_sandbox_verb(&app, &id, run))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -880,7 +905,7 @@ pub async fn sandbox_recreate(
 ) -> CommandResult<()> {
     let run = recreate_script(&slug, hash.as_deref(), rollback, Host::current(), VERSION);
     let id = format!("recreate:{slug}");
-    tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
+    tauri::async_runtime::spawn_blocking(move || run_sandbox_verb(&app, &id, run))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -968,7 +993,7 @@ pub async fn sandbox_shape(
 ) -> CommandResult<()> {
     let run = shape_script(&slug, shape.as_ref(), &when, Host::current(), VERSION)?;
     let id = format!("recreate:{slug}");
-    tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
+    tauri::async_runtime::spawn_blocking(move || run_sandbox_verb(&app, &id, run))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -989,7 +1014,7 @@ pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
     let run = remove_script(&slug, Host::current(), VERSION);
     let id = format!("remove:{slug}");
     let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || scripts::run(&handle, &id, run))
+    tauri::async_runtime::spawn_blocking(move || run_sandbox_verb(&handle, &id, run))
         .await
         .map_err(|error| error.to_string())??;
     let sandbox_id = crate::project::sandbox_id_of_slug(&app, &slug);
@@ -1241,6 +1266,20 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sandbox_verb_refused_for_a_move_says_so_and_any_other_exit_names_its_status() {
+        assert!(sandbox_verb_failure("recreate.ps1", Some(3)).contains("being moved to another engine"));
+        assert_eq!(
+            sandbox_verb_failure("recreate.ps1", Some(1)),
+            "recreate.ps1 exited with status 1"
+        );
+        assert_eq!(
+            sandbox_verb_failure("recreate.sh", None),
+            "recreate.sh was terminated"
+        );
+    }
+
 
     /* `shutdown` documents that any `/t` above 0 implies `/f`: a forced restart closes the reader's unsaved work. */
     #[test]

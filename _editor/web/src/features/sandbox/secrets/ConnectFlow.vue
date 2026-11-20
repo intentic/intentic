@@ -132,6 +132,17 @@ const bringItBack = (): void => {
     pasteInstead.value = true;
     connectSent.value = true;
 };
+// Still watched this long after the trip, the landing may never reach the watcher (another machine's browser, a port the
+// browser could not reach): the field comes forward rather than staying behind "Signing in elsewhere?", and the watch
+// carries on beside it. A watcher gone altogether ends the wait at once instead (keepWatchers, useChat-connect.ts).
+const WATCH_PATIENCE_MS = 30_000;
+let patience: ReturnType<typeof setTimeout> | undefined;
+const waitingOnWatch = computed(() => watching.value && connectSent.value && !pasteInstead.value);
+watch(waitingOnWatch, (waiting) => {
+    clearTimeout(patience);
+    patience = waiting ? setTimeout(bringItBack, WATCH_PATIENCE_MS) : undefined;
+}, { immediate: true });
+onUnmounted(() => clearTimeout(patience));
 
 // The picture of the dead-end page is reference, not an instruction, so it stays folded until asked for: at full
 // size it outweighs the real button ten to one and wears the emphasis ring, which is why it got clicked. On a roomy

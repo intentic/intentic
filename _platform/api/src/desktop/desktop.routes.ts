@@ -56,6 +56,17 @@ export const desktopRoutes = {
         return row.idToken === null ? { ott } : { ott, idToken: decryptSecret(context.config, row.idToken) };
     }),
 
+    // Sessionless, like redeem: the caller proves the attempt by its verifier, and gets back only the row's id, which
+    // is worth nothing without that same verifier at redeem. The newest unexpired row wins (a browser that sent twice).
+    pending: os.desktop.pending.handler(async ({ input, context }) => {
+        const row = await context.prisma.desktopHandoff.findFirst({
+            where: { challenge: challengeOf(input.verifier), expiresAt: { gt: new Date() } },
+            orderBy: { createdAt: `desc` },
+            select: { id: true },
+        });
+        return row === null ? {} : { handoff: row.id };
+    }),
+
     // Best-effort refresh of the on-file Google ID token, tried before Google's own button; never a 500.
     googleIdToken: os.desktop.googleIdToken.handler(async ({ context }) => {
         const user = requireUser(context);

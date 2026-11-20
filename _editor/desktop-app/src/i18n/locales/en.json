@@ -47,6 +47,7 @@
         "pcSetupChecking": "Checking what this PC needs…",
         "setUpThisPc": "Set up this PC",
         "pcSetupAdminDeclined": "Windows didn't get administrator permission, so nothing changed. Set up this PC again and choose Yes when Windows asks.",
+        "pcSetupAdminAgain": "Windows refused administrator permission again, so nothing changed. This step changes Windows itself, and only an administrator of this PC can allow it: ask one to choose Yes when Windows asks, with their password. Or run your sandbox on a machine we host, which needs nothing from this PC.",
         "pcSetupFailed": "This PC's setup stopped before it was done."
     },
     "closeConfirm": {

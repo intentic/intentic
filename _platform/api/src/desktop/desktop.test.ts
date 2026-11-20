@@ -157,3 +157,26 @@ describe(`desktop handoff`, () => {
         expect(remove).not.toHaveBeenCalled();
     });
 });
+
+// The app's own road when its intentic://auth link never arrives: it asks by its verifier whether the browser parked a
+// hand-off for its attempt, and gets back only the row's id, which redeem still needs the same verifier to spend.
+describe(`desktop pending`, () => {
+    it(`finds the newest unexpired hand-off for the verifier's challenge, without a session and without spending it`, async () => {
+        const findFirst = jest.fn().mockResolvedValue({ id: `h2` });
+        const remove = jest.fn();
+        const ctx = context({ prisma: fakePrisma({ desktopHandoff: { findFirst, deleteMany: remove } }), user: null });
+
+        await expect(call(desktopRoutes.pending, { verifier }, { context: ctx })).resolves.toEqual({ handoff: `h2` });
+        const query = findFirst.mock.calls[0]?.[0];
+        expect(query?.where?.challenge).toBe(challenge);
+        expect(query?.where?.expiresAt?.gt).toBeInstanceOf(Date);
+        expect(query?.orderBy).toEqual({ createdAt: `desc` });
+        expect(query?.select).toEqual({ id: true });
+        expect(remove).not.toHaveBeenCalled();
+    });
+
+    it(`says nothing is parked yet`, async () => {
+        const ctx = context({ prisma: fakePrisma({ desktopHandoff: { findFirst: jest.fn().mockResolvedValue(null) } }), user: null });
+        await expect(call(desktopRoutes.pending, { verifier }, { context: ctx })).resolves.toEqual({});
+    });
+});

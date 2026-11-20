@@ -349,7 +349,28 @@ it(`says a restored tab's hand-off is done, and starts nothing again`, async () 
     expect(googleIdToken).toHaveBeenCalledTimes(1);
     expect(getIdToken).not.toHaveBeenCalled();
     expect(el.textContent).toContain(`Done: this sign-in already reached the app. You can close this tab.`);
-    expect(el.textContent).not.toContain(`Send it again`);
+
+    // The same page opened again by the app's press can be one whose sign-in never reached it (a browser that refused to
+    // launch the app without a click): sending again is a press away, and only on that press.
+    const again = [...el.querySelectorAll(`button`)].filter((button) => button.textContent?.includes(`Send it again`));
+    expect(again).toHaveLength(1);
+    again[0]?.click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(handoff).toHaveBeenCalledTimes(2);
+});
+
+// A lost link shows as the gap between what the browser sent and what the app counted (redeemHandoff.ts): each send
+// says whether the page held a click, which is what Chrome asks of every launch after its first.
+it(`counts each send with whether the page held a click`, async () => {
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+    await mount();
+    await nextTick();
+
+    const sent = track.mock.calls.filter(([event]) => event === `desktop_handoff_sent`);
+    expect(sent).toHaveLength(1);
+    // Nothing but the count and the click: no address, no id.
+    expect(sent[0]?.[1]).toEqual({ sends: expect.any(Number), user_activation: undefined });
 });
 
 it(`still runs a hand-off the app asked for since`, async () => {

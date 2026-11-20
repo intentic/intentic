@@ -40,6 +40,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The recovery panel's button: `ic sandbox fix`, run and drawn on This device (fix.rs). A link while one
         // runs brings that run forward instead of starting a second.
         Some(Link::Fix(args)) => crate::fix::requested(app, args),
+        // A device's card pairing this very computer with nothing to paste (device_pair.rs): run out of sight, since
+        // the card watches the device come online and keeps its command for a run that fails.
+        Some(Link::DevicePair(args)) => crate::device_pair::requested(app, args),
         // The page asked the platform to wake its sandbox: one asleep on this computer is started now rather than on
         // the keeper's next poll (sandbox_wakes.rs). Nothing is shown; the page draws the wake itself.
         Some(Link::SandboxWakes) => crate::sandbox_wakes::requested(),

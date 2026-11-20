@@ -47,6 +47,7 @@
         "pcSetupChecking": "Comprobando lo que necesita este PC…",
         "setUpThisPc": "Preparar este PC",
         "pcSetupAdminDeclined": "Windows no obtuvo permiso de administrador, así que no ha cambiado nada. Vuelve a preparar este PC y elige «Sí» cuando Windows lo pregunte.",
+        "pcSetupAdminAgain": "Windows volvió a denegar el permiso de administrador, así que nada cambió. Este paso cambia el propio Windows y solo un administrador de este PC puede permitirlo: pídele que elija «Sí» con su contraseña cuando Windows pregunte. O ejecuta tu sandbox en una máquina que alojamos nosotros, que no necesita nada de este PC.",
         "pcSetupFailed": "La preparación de este PC se detuvo antes de terminar."
     },
     "closeConfirm": {

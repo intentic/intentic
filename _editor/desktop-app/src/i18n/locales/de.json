@@ -47,6 +47,7 @@
         "pcSetupChecking": "Es wird geprüft, was dieser PC braucht…",
         "setUpThisPc": "Diesen PC einrichten",
         "pcSetupAdminDeclined": "Windows hat keine Administratorberechtigung erhalten, daher hat sich nichts geändert. Richten Sie diesen PC erneut ein und wählen Sie „Ja“, wenn Windows fragt.",
+        "pcSetupAdminAgain": "Windows hat die Administratorberechtigung erneut verweigert, daher hat sich nichts geändert. Dieser Schritt ändert Windows selbst, und nur ein Administrator dieses PCs kann ihn erlauben: Bitte ihn, mit seinem Passwort „Ja“ zu wählen, wenn Windows fragt. Oder führe deine Sandbox auf einem von uns gehosteten Rechner aus, der nichts von diesem PC braucht.",
         "pcSetupFailed": "Die Einrichtung dieses PCs ist vor dem Abschluss stehen geblieben."
     },
     "closeConfirm": {

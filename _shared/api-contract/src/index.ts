@@ -235,6 +235,13 @@ export const desktopContract = {
         .route({ method: "POST", path: "/desktop/redeem" })
         .input(z.object({ handoff: z.string().min(1), verifier: z.string().min(43).max(128) }))
         .output(z.object({ ott: z.string(), idToken: z.string().optional() })),
+    // The app's own road to a sign-in its `intentic://auth` link never brought (a browser that refused to launch the
+    // app without a fresh click, a link that reached a process not waiting): it asks, by the verifier only it holds,
+    // whether the browser parked a hand-off for its attempt. Sessionless, and it spends nothing: `redeem` still does.
+    pending: oc
+        .route({ method: "POST", path: "/desktop/pending" })
+        .input(z.object({ verifier: z.string().min(43).max(128) }))
+        .output(z.object({ handoff: z.string().optional() })),
 
     // The Google ID token this platform already holds, so the desktop hand-off need not ask Google again.
     googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),

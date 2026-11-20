@@ -5,7 +5,8 @@ import { ref } from "vue";
 import { track } from "../analytics";
 import { sandboxLogs, sandboxPower, sandboxRecreate, sandboxRemove, sandboxResize, takePendingRecreate } from "../desktop";
 import { answering, clearProcess, processOf, reportProcess } from "../processes";
-import { linesOf, running, runOutcome, start } from "./runs";
+import { runReason, stopBlock } from "./installTelemetry";
+import { eventsOf, linesOf, running, runOutcome, type RunOutcome, start } from "./runs";
 
 // WHAT THIS DEVICE DOES TO ITS SANDBOXES: the verbs the kit draws on each row (SandboxVerbs), done here by the app's own
 // scripts through `ic`, where the workspace's Devices tab sends the same verbs to the machine agent over its socket.
@@ -49,6 +50,14 @@ const onRow = async (slug: string, verb: SandboxVerb, run: string, action: () =>
     return failure;
 };
 
+// How a recreate went, as the funnel hears it: the run's outcome and, when it failed, why in its own scrubbed words
+// (installTelemetry.ts `runReason`), so a failure inside ic is no longer only an exit code (2026-11-20).
+const finished = (run: string, failure: string | undefined, startedAt: number): RunOutcome & { readonly reason?: string } => {
+    const outcome = runOutcome(run, failure === undefined, startedAt);
+    const reason = failure === undefined ? undefined : runReason(eventsOf(run));
+    return reason === undefined ? outcome : { ...outcome, reason };
+};
+
 // `source` distinguishes a click here from the workspace's Update or Environment card handing it over.
 const recreate = async (slug: string, hash: string | undefined, rollback: boolean, source: `manager` | `link`): Promise<void> => {
     const startedAt = Date.now();
@@ -58,9 +67,12 @@ const recreate = async (slug: string, hash: string | undefined, rollback: boolea
     // A process on both faces' rails while it runs and once it has ended, whoever asked (deviceProcesses.ts says why).
     // Its `step` names the swap (processReport.ts `RECREATE_MODES`), so both rails draw an update as one, not as a rebuild.
     reportProcess({ ...processOf(`recreate`, slug, `running`), subject: slug, step: mode });
-    const failure = await onRow(slug, rollback ? `rollback` : `update`, `recreate:${slug}`, () => sandboxRecreate(slug, hash, rollback));
-    track(`desktop_recreate_finished`, { mode, source, ...runOutcome(`recreate:${slug}`, failure === undefined, startedAt) });
-    reportProcess({ ...processOf(`recreate`, slug, failure === undefined ? `done` : `failed`), subject: slug, step: mode, failure, actions: [`dismiss`] });
+    const run = `recreate:${slug}`;
+    const failure = await onRow(slug, rollback ? `rollback` : `update`, run, () => sandboxRecreate(slug, hash, rollback));
+    track(`desktop_recreate_finished`, { mode, source, ...finished(run, failure, startedAt) });
+    // What ic said stopped it, not the script's "exited with status 1", which is all the workspace showed (2026-11-20).
+    const said = failure === undefined ? undefined : (stopBlock(eventsOf(run)) ?? failure);
+    reportProcess({ ...processOf(`recreate`, slug, failure === undefined ? `done` : `failed`), subject: slug, step: mode, failure: said, actions: [`dismiss`] });
 };
 
 /** A recreate's tile put away, from either face (useDevice.ts starts it in the main window, which runs them). */
@@ -74,7 +86,7 @@ const resize = async (slug: string, form: ResourcesForm | undefined, when: `now`
     const mode = when === `now` ? `reshape` : `save-shape`;
     track(`desktop_recreate_started`, { mode, source: `manager` });
     const failure = await onRow(slug, `resources`, RUN_OF.resources(slug), () => sandboxResize(slug, form, when));
-    track(`desktop_recreate_finished`, { mode, source: `manager`, ...runOutcome(RUN_OF.resources(slug), failure === undefined, startedAt) });
+    track(`desktop_recreate_finished`, { mode, source: `manager`, ...finished(RUN_OF.resources(slug), failure, startedAt) });
 };
 
 // Apply restarts onto the form's share now; Save has ic keep it for the next restart (none: forget what is saved). The

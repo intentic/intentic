@@ -6,7 +6,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { idTokenClaims } from "../../client/auth/googleToken";
 import { hasFedCm, useGooglePress } from "./googlePress";
-import { handoffSpent, markHandoffSpent } from "./handoffSpent";
+import { countHandoffSent, handoffSpent, markHandoffSpent } from "./handoffSpent";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
 import { emailOnly } from "../../client/auth/signInMethods";
@@ -175,6 +175,7 @@ const hand = async (): Promise<void> => {
         const { handoff } = await apiClient.desktop.handoff(idToken === undefined ? { challenge: link.challenge } : { idToken, challenge: link.challenge });
         stage.value = `done`;
         markHandoffSpent(link.state);
+        countHandoffSent();
         globalThis.location.href = desktopAuthLink(handoff, link.state, arrivingProfile());
     };
     working.value = true;
@@ -391,9 +392,8 @@ onMounted(() => {
                         <AppBrand shape="mark" class="entry-seal-mark" />
                     </div>
                     <p class="gate-say" role="status">{{ spent ? t(`auth.desktopAuth.alreadyHandedOver`) : t(`auth.desktopAuth.closeTab`) }}</p>
-                    <p v-if="spent" class="gate-aside">{{ t(`auth.desktopAuth.signInAgainFromApp`) }}</p>
-                    <p v-else class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p>
-                    <div v-if="!spent" class="gate-actions">
+                    <p class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p><!-- spent too: Chrome may have refused its link without a click -->
+                    <div class="gate-actions">
                         <Button :label="t(`auth.words.sendItAgain`)" tier="boring" :loading="working" @click="hand" />
                     </div>
                 </template>

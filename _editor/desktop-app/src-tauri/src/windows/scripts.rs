@@ -19,6 +19,7 @@ pub(super) const BROWSER_ARGS: &str = concat!(
 /// Advertises desktop/window capabilities without exposing IPC; handoffs use intercepted intentic:// links.
 /// installId is a non-secret analytics id; update seeds pages loaded after the download event. frameless requests page-drawn controls.
 /// Gate projectSync and sandboxWakes links on build support to avoid unsafe older behavior; notices enables native notifications/badges.
+/// devicePair says this build connects this computer to a sandbox as a device from a card's button (device_pair.rs).
 /// processes says this build keeps one list of its processes for both faces and takes answers to them from the page
 /// (processes.rs): the page listens for it and answers a run where it is drawn, never sending the reader to This computer.
 /// loopbackUngated describes browser behavior, not permission. wake is true only for the microphone-enabled workspace window.
@@ -36,7 +37,7 @@ pub(super) fn workspace_init_script(
         None => "null".to_string(),
     };
     format!(
-        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, processes: true, machineFace: {machine_face} }}); }} }})();",
+        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, processes: true, devicePair: true, machineFace: {machine_face} }}); }} }})();",
         launch_id_script(),
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
@@ -188,6 +189,14 @@ mod tests {
     fn the_page_is_told_this_build_wakes_a_sleeping_sandbox_at_once() {
         let script = workspace_init_script("install-1", None, false, false);
         assert!(script.contains("sandboxWakes: true"), "{script}");
+    }
+
+    /// A device's card offers "Connect this computer" only where the app runs `intentic://device-pair` (device_pair.rs):
+    /// an older one would drop the link and leave the reader pressing a button that does nothing.
+    #[test]
+    fn the_page_is_told_this_build_pairs_a_device_itself() {
+        let script = workspace_init_script("install-1", None, false, false);
+        assert!(script.contains("devicePair: true"), "{script}");
     }
 
     /// The page follows and answers the app's processes only where the app says it keeps them (processes.rs): an older

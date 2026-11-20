@@ -71,7 +71,9 @@ flowchart LR
   and a hosted machine also gets it in its environment as `PLATFORM_IDENTITY_KEY`. Whether an assertion opens anything
   is the daemon's decision ([topology.md](../../docs/architecture/topology.md#trust-model)).
 - The desktop handoff (`src/desktop`) carries a Google ID token for a Google account and none for an email account,
-  whose webview asks for identity assertions with the session the one-time token gives it.
+  whose webview asks for identity assertions with the session the one-time token gives it. The app finds a parked
+  hand-off its deep link never brought by asking `desktop.pending` with its verifier (sessionless; it returns only the
+  row's id, which `redeem` still needs that verifier to spend).
 - The free hosted machine, the trial and the Repair agent need a Google sign-in linked to the account
   (`src/sandbox/hosted/free-lane.ts`). `hostedOffer` answers `needsGoogle` to an email-only account with no paid slot,
   and a refused call carries the reason `google-required`, so the editor can offer linking Google, buying a machine, or

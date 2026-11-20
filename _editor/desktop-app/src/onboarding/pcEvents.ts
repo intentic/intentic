@@ -140,9 +140,15 @@ export interface SetupMemory {
     readonly resumedTold: boolean;
     /** The quiet stretch (its `quietSince`) already told. */
     readonly quietTold: number | undefined;
+    /**
+     * Windows' permission refused this many times in a row, by setups that ended on nothing else: kept across the runs in
+     * between, so the funnel tells the eleventh refusal from the first (2026-11-20) and the card stops offering the same
+     * press with nothing new to say (PcSetupCard.vue).
+     */
+    readonly adminRefusals: number;
 }
 
-export const NO_SETUP: SetupMemory = { resumedTold: false, quietTold: undefined };
+export const NO_SETUP: SetupMemory = { resumedTold: false, quietTold: undefined, adminRefusals: 0 };
 
 type RunningSetup = Extract<OnboardingSetup, { readonly state: `running` }>;
 
@@ -169,17 +175,20 @@ const runningEvents = (raw: RunningSetup, memory: SetupMemory, now: number): Tol
     return {
         tracked,
         memory: {
+            ...memory,
             resumedTold: memory.resumedTold || resumed,
             quietTold: quiet ? raw.quietSince : memory.quietTold,
         },
     };
 };
 
-/** The event for an outcome the setup has just reached. `minutes` is the check's estimate. */
-const outcomeEvent = (raw: OnboardingSetup, previous: OnboardingSetup, minutes: number | undefined): Tracked | undefined => {
+/** The event for an outcome the setup has just reached. `minutes` is the check's estimate; `refusals` counts this one. */
+const outcomeEvent = (raw: OnboardingSetup, previous: OnboardingSetup, minutes: number | undefined, refusals: number): Tracked | undefined => {
     switch (raw.state) {
         case `waiting`:
-            return [`onboarding_setup`, { action: { admin: `adminRefused`, restart: `restartAsked`, signOut: `signOutAsked` }[raw.for] }];
+            return raw.for === `admin`
+                ? [`onboarding_setup`, { action: `adminRefused`, repeat: refusals }]
+                : [`onboarding_setup`, { action: { restart: `restartAsked`, signOut: `signOutAsked` }[raw.for] }];
         case `ready`:
             return [`onboarding_setup`, { action: `ready`, minutes }];
         case `failed`: {
@@ -194,17 +203,12 @@ const outcomeEvent = (raw: OnboardingSetup, previous: OnboardingSetup, minutes: 
     }
 };
 
-/** The PC setup's events for a snapshot. `minutes` is the check's estimate; `now` is ms since the epoch. */
-export const setupEvents = (
-    raw: OnboardingSetup,
-    previous: OnboardingSetup,
-    memory: SetupMemory,
-    context: { readonly minutes: number | undefined; readonly now: number },
-): Told<SetupMemory> => {
-    // A run that is over is forgotten: the next one is told afresh.
-    const running = raw.state === `running` ? runningEvents(raw, memory, context.now) : { tracked: [], memory: NO_SETUP };
-    const outcome = raw.state === previous.state ? undefined : outcomeEvent(raw, previous, context.minutes);
-    return { tracked: outcome === undefined ? running.tracked : [...running.tracked, outcome], memory: running.memory };
+/** Windows' refusals in a row once `raw` is told: one more on a refusal entered, none once a setup ends any other way. */
+const refusalsAfter = (raw: OnboardingSetup, entered: boolean, before: number): number => {
+    if (raw.state === `waiting` && raw.for === `admin`) {
+        return entered ? before + 1 : before;
+    }
+    return raw.state === `running` || raw.state === `idle` ? before : 0;
 };
 
 /** A setup the last run of the app left running with no outcome, told once (onboarding.rs reads its ledger at launch). */
@@ -212,3 +216,22 @@ export const orphanedEvent = (orphaned: OnboardingSnapshot[`orphaned`], now: num
     orphaned === undefined
         ? undefined
         : [`onboarding_setup`, { action: `orphaned`, step: orphaned.step, minutes: minutesSince(orphaned.startedAt, now) }];
+
+/** The PC setup's events for a snapshot. `minutes` is the check's estimate; `now` is ms since the epoch. */
+export const setupEvents = (
+    raw: OnboardingSetup,
+    previous: OnboardingSetup,
+    memory: SetupMemory,
+    context: { readonly minutes: number | undefined; readonly now: number },
+): Told<SetupMemory> => {
+    // A run that is over is forgotten: the next one is told afresh. Only Windows' refusals are counted across runs.
+    const running = raw.state === `running` ? runningEvents(raw, memory, context.now) : { tracked: [], memory: NO_SETUP };
+    const entered = raw.state !== previous.state;
+    const adminRefusals = refusalsAfter(raw, entered, memory.adminRefusals);
+    const outcome = entered ? outcomeEvent(raw, previous, context.minutes, adminRefusals) : undefined;
+    return {
+        tracked: outcome === undefined ? running.tracked : [...running.tracked, outcome],
+        memory: { ...running.memory, adminRefusals },
+    };
+};
+

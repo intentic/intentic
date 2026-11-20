@@ -591,6 +591,12 @@ Invoke-IntenticScript {
     # caller that passed two by mistake: read-only verbs first, and -Remove after every other named mode.
     # -Versions and -Watch forward what follows them verbatim (ic's --json), as recreate.sh does.
     $rest = @($ReshapeArgs | Where-Object { $_ })
+    # The handover, as a step of its own for a reader with no screen: from here what fails is ic's, so the desktop app's
+    # `failedStep` says `running-ic` rather than blaming the download before it, as every failed rebuild did until
+    # 2026-11-20. Never before JSON a program parses (-List, --json), and never on a screen, where ic draws its own.
+    if ($IntenticKit.Mode -eq 'plain' -and -not $List -and $rest -notcontains '--json') {
+        Write-IntenticStep 'running-ic' 'handing over to ic...' ''
+    }
     if ($List) {
         & $Ic sandbox list --json
     } elseif ($Versions) {

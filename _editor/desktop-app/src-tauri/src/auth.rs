@@ -25,12 +25,24 @@ struct PendingAttempt {
     started_at: Instant,
 }
 
-/// The sign-in currently in flight, if any. Repeated starts inside its three-minute lifetime REUSE it:
+/// The sign-ins in flight, newest last. Repeated starts inside the newest one's three-minute reuse window REUSE it:
 /// one click cannot replace the state/verifier another browser tab is already returning with.
+///
+/// THE OLDER ONES STAY ANSWERABLE (2026-11-20). One attempt was kept, and a hand-off was taken only inside three
+/// minutes: a fresh Windows install pressed Google at 21:34, finished in the browser at 21:45, and the link that
+/// reached the app was "an auth handoff this app did not ask for". Every press after that minted a new attempt and
+/// dropped the one a tab was still finishing. Now each attempt is answerable for [`ANSWER_TTL`], whichever of the
+/// reader's tabs comes back first; the first answer ends them all.
 #[derive(Default)]
-pub struct PendingAuth(Mutex<Option<PendingAttempt>>);
+pub struct PendingAuth(Mutex<Vec<PendingAttempt>>);
 
+/// How long a press re-opens the same page rather than a fresh one.
 const ATTEMPT_TTL: Duration = Duration::from_secs(3 * 60);
+/// How long an attempt's answer is still taken: a first sign-in in a browser can take a reader many minutes (a new
+/// Google account, a phone's second factor). The verifier is this process's alone, so nothing else can use the window.
+const ANSWER_TTL: Duration = Duration::from_secs(30 * 60);
+/// At most this many attempts are kept answerable; a reader pressing more than this has the newest ones live.
+const KEEP_ATTEMPTS: usize = 4;
 
 impl PendingAuth {
     /// The page a click should re-open, when an attempt asking for the same thing is still in flight — `None`
@@ -42,7 +54,7 @@ impl PendingAuth {
         self.0
             .lock()
             .unwrap()
-            .as_ref()
+            .last()
             .filter(|attempt| {
                 attempt.started_at.elapsed() < ATTEMPT_TTL
                     && attempt.switch_account == switch_account
@@ -54,9 +66,62 @@ impl PendingAuth {
     /// press in the workspace ask for the same page; only the way back differs, so this is the one thing a reused
     /// attempt takes from the press that reused it.
     fn came_from(&self, asked_in: Option<String>) {
-        if let Some(attempt) = self.0.lock().unwrap().as_mut() {
+        if let Some(attempt) = self.0.lock().unwrap().last_mut() {
             attempt.asked_in = asked_in;
         }
+    }
+
+    /// A fresh attempt, kept beside the recent ones still answerable.
+    fn add(&self, attempt: PendingAttempt) {
+        let mut attempts = self.0.lock().unwrap();
+        attempts.retain(|kept| kept.started_at.elapsed() < ANSWER_TTL);
+        attempts.push(attempt);
+        let over = attempts.len().saturating_sub(KEEP_ATTEMPTS);
+        attempts.drain(..over);
+    }
+
+    /// The attempt an answer names, when it is still answerable; taking it ends every other one, since the reader is
+    /// signed in now and any other tab's answer would only sign them in again.
+    fn take(&self, state: &str) -> Option<PendingAttempt> {
+        let mut attempts = self.0.lock().unwrap();
+        let at = attempts.iter().position(|attempt| {
+            attempt.state == state && attempt.started_at.elapsed() < ANSWER_TTL
+        })?;
+        let taken = attempts.swap_remove(at);
+        attempts.clear();
+        Some(taken)
+    }
+
+    /// Each attempt still answerable, as (state, verifier): what the app asks the platform about while it waits.
+    fn answerable(&self) -> Vec<(String, String)> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|attempt| attempt.started_at.elapsed() < ANSWER_TTL)
+            .map(|attempt| (attempt.state.clone(), attempt.verifier.clone()))
+            .collect()
+    }
+
+    /// The newest attempt's page, whatever its age: the tile's "open it again".
+    fn newest_url(&self) -> Option<String> {
+        self.0
+            .lock()
+            .unwrap()
+            .last()
+            .map(|attempt| attempt.url.clone())
+    }
+
+    /// One attempt gone, the others left answerable: a page the browser never opened.
+    fn forget(&self, state: &str) {
+        self.0
+            .lock()
+            .unwrap()
+            .retain(|attempt| attempt.state != state);
+    }
+
+    fn clear(&self) {
+        self.0.lock().unwrap().clear();
     }
 }
 
@@ -72,21 +137,12 @@ fn report_waiting(app: &AppHandle) {
     crate::processes::report(app, report);
 }
 
-/// The tile goes once the attempt can no longer come back: answered, called off, or past its lifetime.
-fn clear_after_ttl(app: &AppHandle, state: String) {
+/// The tile goes once no attempt can come back: answered, called off, or past its lifetime.
+fn clear_after_ttl(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(ATTEMPT_TTL);
-        let gone = app
-            .state::<PendingAuth>()
-            .0
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_none_or(|attempt| {
-                attempt.state != state || attempt.started_at.elapsed() >= ATTEMPT_TTL
-            });
-        if gone {
+        std::thread::sleep(ANSWER_TTL);
+        if app.state::<PendingAuth>().answerable().is_empty() {
             crate::processes::clear(&app, SIGN_IN);
         }
     });
@@ -95,29 +151,20 @@ fn clear_after_ttl(app: &AppHandle, state: String) {
 /// The reader's answer on the sign-in's tile: the browser's page again, or the attempt called off.
 pub fn act(app: &AppHandle, act: &str) {
     match act {
-        "sign-in-again" => {
-            let pending = app.state::<PendingAuth>();
-            let again = pending
-                .0
-                .lock()
-                .unwrap()
-                .as_ref()
-                .map(|attempt| attempt.url.clone());
-            match again {
-                Some(url) => {
-                    if let Err(error) = open_browser(app, &url) {
-                        eprintln!("{error}");
-                    }
-                }
-                None => {
-                    if let Err(error) = start(app, false, None) {
-                        eprintln!("{error}");
-                    }
+        "sign-in-again" => match app.state::<PendingAuth>().newest_url() {
+            Some(url) => {
+                if let Err(error) = open_browser(app, &url) {
+                    eprintln!("{error}");
                 }
             }
-        }
+            None => {
+                if let Err(error) = start(app, false, None) {
+                    eprintln!("{error}");
+                }
+            }
+        },
         "cancel" | "dismiss" => {
-            *app.state::<PendingAuth>().0.lock().unwrap() = None;
+            app.state::<PendingAuth>().clear();
             crate::processes::clear(app, SIGN_IN);
         }
         _ => {}
@@ -142,7 +189,6 @@ pub fn start(
         report_waiting(app);
         return open_browser(app, &url);
     }
-    let mut slot = pending.0.lock().unwrap();
     let state = uuid::Uuid::new_v4().to_string();
     let verifier = format!(
         "{}{}",
@@ -157,7 +203,7 @@ pub fn start(
         "{}/desktop-auth?state={state}&challenge={challenge}{switch}",
         base.trim_end_matches('/')
     );
-    *slot = Some(PendingAttempt {
+    pending.add(PendingAttempt {
         state: state.clone(),
         verifier,
         url: url.clone(),
@@ -165,29 +211,149 @@ pub fn start(
         asked_in,
         started_at: Instant::now(),
     });
-    drop(slot);
     let opened = open_browser(app, &url);
     if opened.is_err() {
-        *pending.0.lock().unwrap() = None;
+        pending.forget(&state);
         return opened;
     }
     report_waiting(app);
-    clear_after_ttl(app, state);
+    clear_after_ttl(app);
+    watch_platform(app);
     opened
 }
 
+/// How the browser's answer reached this process, carried to the page (`via=` on its completion) so a link the browser
+/// never launched shows in the sign-in's own analytics instead of as a reader stuck on "waiting".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Via {
+    /// The `intentic://auth` link, as designed.
+    Link,
+    /// The platform, asked by this process while it waited: the link was lost.
+    Platform,
+}
+
+/// The browser's `intentic://auth` link.
 pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
-    let pending = app.state::<PendingAuth>();
-    let mut slot = pending.0.lock().unwrap();
-    let matches = slot.as_ref().is_some_and(|attempt| {
-        attempt.started_at.elapsed() < ATTEMPT_TTL && attempt.state == args.state
-    });
-    if !matches {
+    let Some(attempt) = app.state::<PendingAuth>().take(&args.state) else {
         eprintln!("dropped an auth handoff this app did not ask for");
         return;
+    };
+    finish(
+        app,
+        attempt,
+        &args.handoff,
+        args.profile.as_deref(),
+        Via::Link,
+    );
+}
+
+/* THE LINK IS NOT THE ONLY ROAD BACK (2026-11-20). Chrome launches an app's protocol without a fresh click once, and
+ * then refuses every later launch ("a user gesture is required") until the reader clicks a page again: the hand-off
+ * page navigates to `intentic://auth` by itself, so a reader who signed in, came back, and pressed sign-in again was
+ * signed in in the browser five times over while the app went on waiting, with nothing on either side saying why.
+ * So while an attempt waits, this process also asks the platform, by the verifier only it holds, whether the browser
+ * parked a hand-off for it (`/desktop/pending`), and finishes the same way the link does when it finds one. */
+const POLL_EVERY: Duration = Duration::from_secs(3);
+static POLLING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// What the platform said about one attempt.
+#[derive(Debug, PartialEq, Eq)]
+enum Parked {
+    /// The browser parked this hand-off for it.
+    Handoff(String),
+    /// Nothing yet, or no answer: asked again next round.
+    Nothing,
+    /// A platform from before the question: not asked again by this process.
+    Unasked,
+}
+
+/// The platform's answer, read. Pure.
+fn parked_of(status: u16, body: &str) -> Parked {
+    if status == 404 {
+        return Parked::Unasked;
     }
-    let attempt = slot.take().unwrap();
-    drop(slot);
+    if !(200..300).contains(&status) {
+        return Parked::Nothing;
+    }
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|answer| answer.get("handoff")?.as_str().map(str::to_string))
+        .filter(|handoff| !handoff.is_empty())
+        .map_or(Parked::Nothing, Parked::Handoff)
+}
+
+async fn ask_platform(platform: &str, verifier: &str) -> Parked {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .user_agent(format!("intentic-desktop/{}", crate::commands::VERSION))
+        .build()
+    else {
+        return Parked::Nothing;
+    };
+    let url = format!("{}/rpc/desktop/pending", platform.trim_end_matches('/'));
+    let Ok(answer) = client
+        .post(&url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(serde_json::json!({ "verifier": verifier }).to_string())
+        .send()
+        .await
+    else {
+        return Parked::Nothing;
+    };
+    let status = answer.status().as_u16();
+    let body = answer.text().await.unwrap_or_default();
+    parked_of(status, &body)
+}
+
+/// One watcher per process, running while any attempt is answerable.
+fn watch_platform(app: &AppHandle) {
+    if POLLING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(POLL_EVERY);
+        let pending = app.state::<PendingAuth>();
+        let attempts = pending.answerable();
+        if attempts.is_empty() {
+            POLLING.store(false, std::sync::atomic::Ordering::SeqCst);
+            // An attempt added between the read and the store found the flag still up: this watcher keeps it.
+            if pending.answerable().is_empty()
+                || POLLING.swap(true, std::sync::atomic::Ordering::SeqCst)
+            {
+                return;
+            }
+            continue;
+        }
+        let platform = app.state::<crate::state::AppState>().platform_url();
+        for (state, verifier) in attempts {
+            match tauri::async_runtime::block_on(ask_platform(&platform, &verifier)) {
+                Parked::Handoff(handoff) => {
+                    if let Some(attempt) = pending.take(&state) {
+                        finish(&app, attempt, &handoff, None, Via::Platform);
+                    }
+                    break;
+                }
+                Parked::Nothing => {}
+                Parked::Unasked => {
+                    // The flag stays up: nothing in this process asks this platform again.
+                    return;
+                }
+            }
+        }
+    });
+}
+
+fn finish(
+    app: &AppHandle,
+    attempt: PendingAttempt,
+    handoff: &str,
+    profile: Option<&str>,
+    via: Via,
+) {
     crate::processes::clear(app, SIGN_IN);
     // An account now exists for this install to go back to: Home says so, and the tray offers the workspace.
     app.state::<crate::state::AppState>()
@@ -197,16 +363,17 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     // once, and its sandbox is made once the workspace says who signed in (folder_setup.rs).
     crate::folder_setup::signed_in(app);
     let path = complete_path(
-        &args.handoff,
+        handoff,
         &attempt.verifier,
-        args.profile.as_deref(),
+        profile,
         attempt.asked_in.is_some(),
+        via,
     );
     // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
     // be drawn in that light from here on rather than waiting for the page to announce it. Unless the app has seen
     // the reader's look: the page adopts that one over the profile's (windows.rs `look_init_script`).
     let look = app.state::<crate::state::AppState>().ui_look();
-    if let Some(mode) = early_mode(args.profile.as_deref(), look) {
+    if let Some(mode) = early_mode(profile, look) {
         crate::windows::mode::apply_mode(app, mode);
     }
     // Redeemed by the workspace's page where it stands, the frame left as the reader has it: on screen, its own sign-in
@@ -227,7 +394,15 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
 /// The sign-in gate (_tools/e2e/signin/desktop.ts, `e2e-signin` in ci.yml) plays this file's half of the sign-in
 /// in TypeScript, `start`'s page and this path included, since it runs the web app without Tauri: a change to
 /// either shape changes it there too, or the gate goes on proving a sign-in this app no longer does.
-fn complete_path(handoff: &str, verifier: &str, profile: Option<&str>, from_local: bool) -> String {
+///
+/// `via=platform` says the link never came and the app found the hand-off itself; the link's own shape is unchanged.
+fn complete_path(
+    handoff: &str,
+    verifier: &str,
+    profile: Option<&str>,
+    from_local: bool,
+    via: Via,
+) -> String {
     let mut path = format!("/desktop-auth/complete?handoff={handoff}&verifier={verifier}");
     if let Some(profile) = profile {
         path.push_str("&profile=");
@@ -235,6 +410,9 @@ fn complete_path(handoff: &str, verifier: &str, profile: Option<&str>, from_loca
     }
     if from_local {
         path.push_str("&back=agent");
+    }
+    if via == Via::Platform {
+        path.push_str("&via=platform");
     }
     path
 }
@@ -271,14 +449,18 @@ mod tests {
     }
 
     fn switching_attempt(age: Duration, url: &str, switch_account: bool) -> PendingAuth {
-        PendingAuth(Mutex::new(Some(PendingAttempt {
-            state: "state".into(),
-            verifier: "verifier".into(),
+        PendingAuth(Mutex::new(vec![made("state", age, url, switch_account)]))
+    }
+
+    fn made(state: &str, age: Duration, url: &str, switch_account: bool) -> PendingAttempt {
+        PendingAttempt {
+            state: state.into(),
+            verifier: format!("verifier-{state}"),
             url: url.into(),
             switch_account,
             asked_in: None,
             started_at: Instant::now() - age,
-        })))
+        }
     }
 
     fn origin_of(pending: &PendingAuth) -> Option<Option<String>> {
@@ -286,7 +468,7 @@ mod tests {
             .0
             .lock()
             .unwrap()
-            .as_ref()
+            .last()
             .map(|attempt| attempt.asked_in.clone())
     }
 
@@ -338,11 +520,11 @@ mod tests {
     #[test]
     fn a_sign_in_begun_in_a_local_window_asks_the_page_to_send_the_reader_back() {
         assert_eq!(
-            complete_path("h", "v", None, true),
+            complete_path("h", "v", None, true, Via::Link),
             "/desktop-auth/complete?handoff=h&verifier=v&back=agent"
         );
         assert_eq!(
-            complete_path("h", "v", Some("desk"), true),
+            complete_path("h", "v", Some("desk"), true, Via::Link),
             "/desktop-auth/complete?handoff=h&verifier=v&profile=desk&back=agent"
         );
     }
@@ -367,11 +549,11 @@ mod tests {
     #[test]
     fn the_profile_rides_the_completion_and_names_the_light_the_app_draws_in() {
         assert_eq!(
-            complete_path("h", "v", None, false),
+            complete_path("h", "v", None, false, Via::Link),
             "/desktop-auth/complete?handoff=h&verifier=v"
         );
         assert_eq!(
-            complete_path("h", "v", Some("desk"), false),
+            complete_path("h", "v", Some("desk"), false, Via::Link),
             "/desktop-auth/complete?handoff=h&verifier=v&profile=desk"
         );
         assert_eq!(
@@ -399,6 +581,122 @@ mod tests {
             None
         );
         assert_eq!(early_mode(None, None), None);
+    }
+
+    /* THE FRESH-INSTALL SIGN-IN (2026-11-20): Google finished in the browser eleven minutes after the press, and the
+     * link that reached the app was dropped as one it never asked for. */
+    #[test]
+    fn a_sign_in_finished_long_after_the_press_is_still_taken() {
+        let pending = attempt(Duration::from_secs(11 * 60), "https://old");
+        assert_eq!(
+            pending.live_url(false),
+            None,
+            "a press now opens a fresh page"
+        );
+        let taken = pending
+            .take("state")
+            .expect("an eleven-minute-old attempt is still answerable");
+        assert_eq!(taken.verifier, "verifier-state");
+        assert!(pending.answerable().is_empty(), "taken once only");
+    }
+
+    #[test]
+    fn an_answer_past_its_lifetime_or_for_another_app_is_dropped() {
+        let pending = attempt(ANSWER_TTL + Duration::from_secs(1), "https://old");
+        assert!(pending.take("state").is_none());
+        assert!(pending.answerable().is_empty());
+        assert!(attempt(Duration::from_secs(5), "https://a")
+            .take("other")
+            .is_none());
+    }
+
+    /* A press after the first attempt's reuse window used to replace it, so the tab still finishing that attempt came
+     * back to an app that had forgotten it. Both stay answerable; whichever answers first ends both. */
+    #[test]
+    fn a_newer_attempt_keeps_the_older_answerable_and_the_first_answer_ends_both() {
+        let pending = PendingAuth::default();
+        pending.add(made(
+            "first",
+            Duration::from_secs(5 * 60),
+            "https://first",
+            false,
+        ));
+        pending.add(made(
+            "second",
+            Duration::from_secs(5),
+            "https://second",
+            false,
+        ));
+        assert_eq!(pending.live_url(false).as_deref(), Some("https://second"));
+        assert_eq!(
+            pending.answerable(),
+            vec![
+                ("first".to_string(), "verifier-first".to_string()),
+                ("second".to_string(), "verifier-second".to_string())
+            ]
+        );
+        assert_eq!(
+            pending.take("first").map(|attempt| attempt.url),
+            Some("https://first".into())
+        );
+        assert!(
+            pending.take("second").is_none(),
+            "signed in already: the other tab's answer is not taken"
+        );
+    }
+
+    #[test]
+    fn only_the_newest_attempts_are_kept() {
+        let pending = PendingAuth::default();
+        pending.add(made(
+            "expired",
+            ANSWER_TTL + Duration::from_secs(1),
+            "https://x",
+            false,
+        ));
+        for n in 0..(KEEP_ATTEMPTS + 2) {
+            pending.add(made(
+                &format!("s{n}"),
+                Duration::from_secs(1),
+                "https://x",
+                false,
+            ));
+        }
+        let states: Vec<String> = pending
+            .answerable()
+            .into_iter()
+            .map(|(state, _)| state)
+            .collect();
+        assert_eq!(states.len(), KEEP_ATTEMPTS);
+        assert_eq!(
+            states.last().map(String::as_str),
+            Some(format!("s{}", KEEP_ATTEMPTS + 1).as_str())
+        );
+        assert!(!states.contains(&"expired".to_string()));
+    }
+
+    /// The platform's answer to "did the browser park a hand-off for this attempt": an id, nothing yet, or a platform
+    /// that does not know the question (an older one), which is not asked again.
+    #[test]
+    fn the_platforms_answer_names_the_parked_handoff() {
+        assert_eq!(
+            parked_of(200, r#"{"handoff":"h1"}"#),
+            Parked::Handoff("h1".into())
+        );
+        assert_eq!(parked_of(200, "{}"), Parked::Nothing);
+        assert_eq!(parked_of(200, r#"{"handoff":""}"#), Parked::Nothing);
+        assert_eq!(parked_of(200, "not json"), Parked::Nothing);
+        assert_eq!(parked_of(502, ""), Parked::Nothing);
+        assert_eq!(parked_of(404, ""), Parked::Unasked);
+    }
+
+    /// A hand-off the app found on the platform says so on the page's completion, which counts it.
+    #[test]
+    fn a_handoff_found_on_the_platform_says_so_on_the_completion() {
+        assert_eq!(
+            complete_path("h", "v", None, false, Via::Platform),
+            "/desktop-auth/complete?handoff=h&verifier=v&via=platform"
+        );
     }
 
     #[test]

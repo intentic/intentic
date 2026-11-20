@@ -538,6 +538,18 @@ ic_from_checkout
 ic_fetch
 kit_suspend
 
+# The handover, as a step of its own for a reader with no screen: from here what fails is ic's, so the desktop app's
+# `failedStep` says `running-ic` rather than blaming the download before it, as every failed rebuild did until
+# 2026-11-20. Never before JSON a program parses (`list`, and `--json` on `versions` and `watch`), and never on a
+# screen, where ic draws its own.
+hand_over() {
+    case " $* " in
+        *" list "* | *" --json "*) ;;
+        *) [ "$kit_mode" != plain ] || kit_step running-ic "handing over to ic…" "" ;;
+    esac
+    exec "$IC" "$@"
+}
+
 # ---- map the historical argument shapes onto ic verbs ----
 # Mode by argument shape, so every pasted one-liner keeps working: the Environment card's rebuild command
 # passes <slug> <sha256>, the Sandbox card's update command passes <slug> alone. The flags are
@@ -545,58 +557,58 @@ kit_suspend
 case "${1:-}" in
     --dev)
         shift
-        exec "$IC" sandbox dev "$@"
+        hand_over sandbox dev "$@"
         ;;
     # The desktop app's listing when the ic on this machine is older than the app: this fetch brings it level.
-    --list) exec "$IC" sandbox list --json ;;
+    --list) hand_over sandbox list --json ;;
     "")
-        exec "$IC" sandbox update
+        hand_over sandbox update
         ;;
     *)
         slug="$1"
         shift
         case "${1:-}" in
-            "") exec "$IC" sandbox update "$slug" ;;
-            --rollback) exec "$IC" sandbox rollback "$slug" ;;
+            "") hand_over sandbox update "$slug" ;;
+            --rollback) hand_over sandbox rollback "$slug" ;;
             # An older version than the one before the last update, among those this machine kept (--versions).
             --rollback-to)
                 shift
                 [ -n "${1:-}" ] || kit_stop "Nothing was rolled back." "--rollback-to needs the version or image to go back to." "sh recreate.sh $slug --rollback-to 1.200.0" 2
-                exec "$IC" sandbox rollback "$slug" --to "$1"
+                hand_over sandbox rollback "$slug" --to "$1"
                 ;;
             # ic's own flags (--json) forwarded verbatim, as for --reshape: these two also answer programs.
             --versions | --watch)
                 verb="${1#--}"
                 shift
-                exec "$IC" sandbox "$verb" "$slug" "$@"
+                hand_over sandbox "$verb" "$slug" "$@"
                 ;;
-            --backup | --doctor) exec "$IC" sandbox "${1#--}" "$slug" ;;
+            --backup | --doctor) hand_over sandbox "${1#--}" "$slug" ;;
             # Into ic's trash, never deleted on the spot: /work and /history stay recoverable for a week
             # (`ic sandbox restore`). -y because whoever runs this has already been asked (the desktop app's Remove).
-            --remove) exec "$IC" sandbox remove "$slug" -y ;;
+            --remove) hand_over sandbox remove "$slug" -y ;;
             # Download and build the next update without applying it — the sandbox keeps running, and the
             # update that follows is a restart rather than a wait.
-            --prepare) exec "$IC" sandbox prepare "$slug" ;;
+            --prepare) hand_over sandbox prepare "$slug" ;;
             # Everything after --reshape is ic's own flag surface (--memory, --cpus, --privileged, --gpus),
             # forwarded verbatim: the desktop app builds this shape, and ic is where it is validated.
             --reshape)
                 shift
-                exec "$IC" sandbox reshape "$slug" "$@"
+                hand_over sandbox reshape "$slug" "$@"
                 ;;
             # ic's own `shape` surface (the four fields and --when, or --forget), forwarded verbatim like --reshape.
             --shape)
                 shift
-                exec "$IC" sandbox shape "$slug" "$@"
+                hand_over sandbox shape "$slug" "$@"
                 ;;
             # Power through ic, so a start or restart applies the shape saved for the next restart.
-            --start | --stop | --restart) exec "$IC" sandbox "${1#--}" "$slug" ;;
+            --start | --stop | --restart) hand_over sandbox "${1#--}" "$slug" ;;
             --channel)
                 shift
                 [ -n "${1:-}" ] || kit_stop "Nothing was updated." "--channel needs the release channel to move onto." "sh recreate.sh $slug --channel stable" 2
-                exec "$IC" sandbox update "$slug" --channel "$1"
+                hand_over sandbox update "$slug" --channel "$1"
                 ;;
             --*) kit_stop "Nothing was changed." "$1 is not an option this script knows." "" 2 ;;
-            *) exec "$IC" sandbox rebuild "$slug" "$1" ;;
+            *) hand_over sandbox rebuild "$slug" "$1" ;;
         esac
         ;;
 esac

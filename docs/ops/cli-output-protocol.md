@@ -217,6 +217,10 @@ A question nobody can answer is a stop, not a cancel. The run exits `1` with `pr
 Line by line, for a reader with no screen:
 
 - `intentic: [<phase>] <sentence>` on stdout is a step. The desktop app moves its checklist cursor on these, and the phase ids are pinned by `_shared/sandbox-run/src/setup-progress.fixture.json`.
+  One more is outside the setup plan: `recreate.sh` and `recreate.ps1` print `[running-ic]` as they hand over to `ic`
+  (never in front of `list` or `--json` output), so the desktop app's `desktop_recreate_finished` names `running-ic`
+  as its `failedStep` when `ic` itself failed, and `fetching-ic` only when the download did (2026-11-20). Its `reason`
+  is the run's last error line, scrubbed as `desktop_install_finished`'s is.
 - `intentic: <text>` is narration under the running step; an indented line is a progress reading.
 - `intentic-requirement: {json}` and `intentic-requirement-state: {json}` come from `ic`'s Windows setup. The different prefix keeps a requirement from reading as a phase. Two rows can be `running` at once: the Docker Desktop download moves its own row while WSL2 is being turned on. The agent bootstrap (`scripts-kit/agent-fetch.ps1`) prints one more, `security-software` with action `user`, when an antivirus refuses `intentic-machine.exe`: besides the usual words it carries `detail` (a note of at most 600 characters for whoever manages the antivirus), `product`, `path`, `folder`, `version` and `sha256`, all as ASCII JSON. The desktop app holds it as one process for the computer, whichever run printed it.
 - `intentic-prefetch: {"state","done","total"}` comes from `ic image prefetch`, about every two seconds: `state` is `fetching`, `ready`, `elsewhere` (another prefetch holds the cache), `skipped` (Docker Desktop is installed and nothing was half-fetched, so Docker pulls it) or `failed`; `done` and `total` are bytes.

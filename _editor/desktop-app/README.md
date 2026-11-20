@@ -342,6 +342,15 @@ flowchart LR
   setting the sandbox up again as the way to update it, and nothing retries. While it runs, the rail's Devices
   tile spins for a reader who went back to their files. `ic` posts every run to the platform itself; the app never
   talks to the platform about it.
+- **Connecting this computer to a sandbox as a device, from a card.** A device's connect dialog in the workspace
+  (`HostConnectDialog.vue`), opened on a computer of the same kind as the app runs on, offers "Connect this computer"
+  beside its command, and sends `intentic://device-pair?url=…&pair=…` with the sandbox's address and the single-use
+  pairing it just minted. The app runs the bundled `device.sh` / `device.ps1` with those two values as `SANDBOX_URL`
+  and `PAIR_TOKEN`, out of sight, one run at a time (`src-tauri/src/device_pair.rs`); the dialog watches the device come
+  online and keeps the command for a run that fails. Heard only from the app's own windows, with both values held to
+  their shape, for the reason `sync` is. A build that hears it says `devicePair: true` on `__INTENTIC_DESKTOP__`.
+  _(2026-11-20) A reader in the app on her own Windows PC pressed Reconnect on its card six times in one evening and
+  met only a PowerShell line to copy each time._
 - **Waking a sandbox asleep on this computer at once.** A page that finds its sandbox asleep asks the platform to
   wake it, and the machine agent here collects such requests on its own poll, every fifteen seconds while anything
   sleeps. The workspace page then sends `intentic://sandbox-wakes`, and the app runs `ic sandbox wakes --json
@@ -438,7 +447,12 @@ flowchart LR
   while the app runs does nothing. The row's tick is read back from the registry or the file after every press.
 - **Google's sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The
   credential returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`)
-  and opens the workspace at `/desktop-auth/complete`, in the main window's place. The workspace never shows a sign-in
+  and opens the workspace at `/desktop-auth/complete`, in the main window's place. That link can be lost: Chrome
+  launches an app's protocol without a fresh click only once, then refuses silently until the reader clicks a page. So
+  while an attempt waits (each one answerable for 30 minutes, the last four kept, the first answer ending them all) the
+  app also asks the platform every three seconds, by its verifier, whether the browser parked a hand-off for it
+  (`/desktop/pending`, `auth.rs` `watch_platform`), and finishes the same way with `via=platform` on the completion,
+  which the page counts as `desktop_signin_arrived`. The workspace never shows a sign-in
   screen of its own (2026-10-26): wherever it would have gone to `/login` (Home's Sign in, Add sandbox signed out, a page
   that needs an account, a session that lapsed), it asks in a dialog over the view it is on, and a completion that
   reaches a page already showing something is redeemed in that dialog, so the reader stays on that view (the web's

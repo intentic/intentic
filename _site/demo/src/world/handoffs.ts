@@ -35,3 +35,15 @@ export const redeemHandoff = async (handoff: string, verifier: string): Promise<
     const ott = `demo-ott-${crypto.randomUUID()}`;
     return row.idToken === undefined ? { ott } : { ott, idToken: row.idToken };
 };
+
+/** desktop.pending: the newest live row parked for this verifier's challenge, without spending it; undefined for none. */
+export const pendingHandoff = async (verifier: string): Promise<string | undefined> => {
+    const challenge = await challengeOf(verifier);
+    let found: string | undefined;
+    for (const [id, row] of parked) {
+        if (row.challenge === challenge && row.expiresAt >= Date.now()) {
+            found = id;
+        }
+    }
+    return found;
+};

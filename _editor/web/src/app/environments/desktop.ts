@@ -40,6 +40,9 @@ interface DesktopWebview {
      * processes.rs; processReport.ts): a run that asks the reader something is answered on the page it is drawn on. An
      * older one moves the reader to This computer for that, so the page offers that press only then. */
     processes?: boolean;
+    /* THIS BUILD CONNECTS THIS COMPUTER TO A SANDBOX AS A DEVICE FROM A CARD'S BUTTON (`intentic://device-pair`, the app's
+     * device_pair.rs). An older one drops the link, so the card offers only the command to paste. */
+    devicePair?: boolean;
 }
 
 declare global {
@@ -490,6 +493,15 @@ export const desktopFixLink = (slug: string, code?: string): string => {
     }
     return `intentic://fix?${params.toString()}`;
 };
+
+// Whether this app runs a device's pairing on this computer itself (`intentic://device-pair`); false in a browser and in
+// a build from before it.
+export const desktopPairsDevices = (): boolean => desktopApp()?.devicePair === true;
+
+// Connects THIS computer to the sandbox at `url` as a device, with the single-use pairing a device's card just minted:
+// the card's one-liner, run by the app with nothing to paste. The app hears it only from its own window.
+export const desktopDevicePairLink = (url: string, pair: string): string =>
+    `intentic://device-pair?${new URLSearchParams({ url, pair }).toString()}`;
 
 /** Opens Repair in the desktop app's main window (`intentic://repair`, repair/mod.rs). */
 export const desktopRepairLink = (options?: { slug?: string; from?: string; reason?: string }): string => {

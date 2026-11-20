@@ -74,8 +74,13 @@ const PREPARE_SUMMARY: &str = "intentic-prepare-summary: ";
 
 /// `ic docker prepare` stopped after the reader closed or ignored Windows' permission prompt (`prepare/mod.rs` → `Fail` → exit 1).
 const EXIT_PREPARE_FAILED: i32 = 1;
-#[cfg_attr(not(windows), allow(dead_code))]
-const EXIT_NEEDS_CONSENT: i32 = 3;
+/// ic's exit when a move between engines is running on this PC (its main.rs guard): nothing was changed. The same number
+/// is `ic docker prepare`'s "needs consent", which this app never meets: its setup always passes `--yes`. _(2026-11-20) Read
+/// as Windows' permission refused, it answered eleven presses in a row with "choose Yes when Windows asks" while the
+/// installer's own move was still copying, and no prompt was ever shown._
+const EXIT_BUSY_MOVING: i32 = 3;
+/// What the page says of a setup refused by [`EXIT_BUSY_MOVING`].
+const BUSY_MOVING_REASON: &str = "Nothing was changed: this PC's sandboxes are being moved to the intentic engine right now (a setup started earlier is still copying them). Wait for that move to finish, then set up this PC again.";
 #[cfg_attr(not(windows), allow(dead_code))]
 const EXIT_NEEDS_RESTART: i32 = 4;
 
@@ -1900,11 +1905,10 @@ pub fn setup_outcome(code: Option<i32>, summary: Option<&Value>, reason: String)
             check_state: None,
         };
     }
-    if code == Some(EXIT_NEEDS_CONSENT) {
+    if code == Some(EXIT_BUSY_MOVING) {
         return SetupApply {
-            setup: Setup::Waiting {
-                for_: "admin".into(),
-                restart_at: None,
+            setup: Setup::Failed {
+                reason: BUSY_MOVING_REASON.into(),
             },
             check_state: None,
         };
@@ -2170,6 +2174,25 @@ intentic-prepare-summary: {\"state\":\"needsSetup\",\"met\":[{\"id\":\"disk-spac
                 restart_at: None,
             }
         );
+    }
+
+    #[test]
+    fn setup_outcome_on_exit_three_is_a_move_running_not_windows_permission() {
+        // `ic docker prepare --yes` never stops for consent: its 3 is main.rs's guard while sandboxes are being moved.
+        let summary: Value = serde_json::from_str(r#"{"state":"needsSetup"}"#).unwrap();
+        for summary in [None, Some(&summary)] {
+            let apply = setup_outcome(
+                Some(EXIT_BUSY_MOVING),
+                summary,
+                "Nothing was changed: sandboxes are being moved between engines on this device.".into(),
+            );
+            assert_eq!(
+                apply.setup,
+                Setup::Failed {
+                    reason: BUSY_MOVING_REASON.into()
+                }
+            );
+        }
     }
 
     #[test]

@@ -62,6 +62,10 @@ export interface ArmedCatch {
     readonly catchers: readonly SignInCatcher[];
     // A candidate may have a taken port or disconnect: only a listening acknowledgement confirms this attempt.
     readonly ready: Promise<readonly SignInCatcher[]>;
+    // Who is still watching now: confirmed by `ready` and not dropped since. A device whose link to this daemon broke, or
+    // whose agent restarted, stops listening on the port; the card reads this through the attempt's status so it stops
+    // promising the sign-in finishes by itself and offers the paste instead. Empty once disarmed.
+    readonly live: () => readonly SignInCatcher[];
     // Stops every watch. Idempotent; a door calls it on cancel, on a paste that finished first, and on expiry.
     readonly disarm: () => void;
 }
@@ -137,7 +141,7 @@ export const loopbackWatchers = (deps: LoopbackBridgeDeps): SignInCatcher[] => c
 export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarget, deliver: (url: string) => Promise<void>): ArmedCatch => {
     const catchers = catchersOf(deps);
     if (catchers.length === 0) {
-        return { catchers: [], ready: Promise.resolve([]), disarm: () => {} };
+        return { catchers: [], ready: Promise.resolve([]), live: () => [], disarm: () => {} };
     }
     const abort = new AbortController();
     const disarm = (): void => abort.abort();
@@ -154,6 +158,8 @@ export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarge
         title: target.title,
     };
     let delivered = false;
+    // Each catcher from its `listening` until its stream ends, whichever way it ends.
+    const watching = new Set<SignInCatcher>();
     const land = async (catcher: SignInCatcher, url: string): Promise<void> => {
         if (!sameState(target.state, landingState(target, url))) {
             log.warn({ catcher: catcher.label }, "loopback bridge: a landing without this attempt's state was ignored");
@@ -176,6 +182,7 @@ export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarge
     ): Promise<boolean> => {
         switch (event.type) {
             case "listening":
+                watching.add(catcher);
                 listening(catcher);
                 return true;
             case "busy":
@@ -200,6 +207,7 @@ export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarge
                 log.info({ catcher: catcher.label, err: errorMessage(error) }, "loopback bridge: a catcher dropped");
             }
         } finally {
+            watching.delete(catcher);
             listening(undefined);
         }
     };
@@ -222,8 +230,18 @@ export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarge
             return started.promise;
         }),
     ).then((confirmed) => confirmed.filter((catcher): catcher is SignInCatcher => catcher !== undefined));
-    return { catchers: catchers.map(({ catcher }) => catcher), ready, disarm };
+    return {
+        catchers: catchers.map(({ catcher }) => catcher),
+        ready,
+        live: () => (abort.signal.aborted ? [] : [...watching]),
+        disarm,
+    };
 };
+
+// What an attempt's `wait` status says about who still watches it: nothing for an attempt nobody was asked to watch, and
+// otherwise the live list, empty once every watcher has gone, which is the card's cue to stop waiting and ask for the paste.
+export const liveCatchersOf = (armed: ArmedCatch | undefined): { readonly catchers?: SignInCatcher[] } =>
+    armed === undefined || armed.catchers.length === 0 ? {} : { catchers: [...armed.live()] };
 
 // Where an authorize URL sends the browser, when that is a loopback address: its `redirect_uri`, read off the URL the
 // vendor (or the translator on its behalf) built, so a flow whose redirect this daemon never chose can still be

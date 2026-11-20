@@ -3,6 +3,7 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import type { LocationQuery } from "vue-router";
 import { z } from "zod";
+import { track } from "../../app/analytics";
 import { environment } from "../../app/environments/environment";
 import { useAuth } from "../../client/auth/useAuth";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
@@ -22,18 +23,42 @@ export interface DesktopHandoff {
     readonly verifier: string;
     /** `back=agent`: the sign-in began on a folder of this computer, which gets the reader back once it is done. */
     readonly backToFolder: boolean;
+    /** How it reached the app: its `intentic://auth` link, or (`via=platform`) the app asking the platform for it because
+     *  the link never came (auth.rs `watch_platform`). */
+    readonly via: HandoffVia;
 }
 
-const HandoffQuerySchema = z.object({ handoff: z.string().min(1), verifier: z.string().min(1), back: z.string().optional() });
+export type HandoffVia = `link` | `platform`;
+
+const HandoffQuerySchema = z.object({ handoff: z.string().min(1), verifier: z.string().min(1), back: z.string().optional(), via: z.string().optional() });
 
 /** The hand-off a completion's query carries; undefined for one missing either half, which no redemption can take. */
 export const readDesktopHandoff = (query: LocationQuery): DesktopHandoff | undefined => {
     const parsed = HandoffQuerySchema.safeParse(query);
-    return parsed.success ? { handoff: parsed.data.handoff, verifier: parsed.data.verifier, backToFolder: parsed.data.back === `agent` } : undefined;
+    return parsed.success
+        ? {
+              handoff: parsed.data.handoff,
+              verifier: parsed.data.verifier,
+              backToFolder: parsed.data.back === `agent`,
+              via: parsed.data.via === `platform` ? `platform` : `link`,
+          }
+        : undefined;
+};
+
+/* A LOST LINK, COUNTED (2026-11-20). A fresh Windows install's browser signed in five times while the app sat on
+   "waiting": the browser counted `signin_completed` and nothing on the app's side said a hand-off ever arrived. Each
+   redemption now says how its hand-off came (`via`: the link, or the platform when the link was lost) and whether it
+   signed this webview in, so lost links show as `via=platform` and a refused one as `ok=false`. No address, no ids. */
+const counted = (taken: DesktopHandoff | undefined, refused: NoticeModel | undefined): NoticeModel | undefined => {
+    track(`desktop_signin_arrived`, { via: taken?.via ?? `link`, ok: refused === undefined });
+    return refused;
 };
 
 /** Undefined once this webview is signed in; otherwise why not, in the reader's words. */
-export const redeemDesktopHandoff = async (taken: DesktopHandoff | undefined): Promise<NoticeModel | undefined> => {
+export const redeemDesktopHandoff = async (taken: DesktopHandoff | undefined): Promise<NoticeModel | undefined> =>
+    counted(taken, await redeem(taken));
+
+const redeem = async (taken: DesktopHandoff | undefined): Promise<NoticeModel | undefined> => {
     if (taken === undefined) {
         return noticeOf(t(`auth.desktopAuthComplete.linkIncomplete`));
     }

@@ -1192,7 +1192,6 @@
             "pickAccountForSandbox": "Choisissez le compte Google auquel appartient votre sandbox.",
             "sandboxOpensForGoogle": "Un sandbox s'ouvre pour le compte Google : ces deux comptes doivent donc être le même.",
             "signedIn": "Connecté",
-            "signInAgainFromApp": "Pour vous reconnecter, partez de l'application Intentic.",
             "signingIn": "Connexion en tant que",
             "twoAccountsHere": "Ce navigateur est connecté à Google et à Intentic sous deux identités différentes.",
             "useDifferentGoogle": "Utiliser un autre compte Google",
@@ -1221,7 +1220,8 @@
             "ledeNeeded": "Il faut votre compte pour cela. Connectez-vous et cela s’ouvre ici même.",
             "ledeLapsed": "Votre session a expiré. Reconnectez-vous et reprenez là où vous en étiez.",
             "waitingTitle": "En attente de Google dans votre navigateur",
-            "waitingDetail": "Terminez dans l’onglet qui s’est ouvert. Cette fenêtre reprend d’elle-même une fois que c’est fait."
+            "waitingDetail": "Terminez dans l’onglet qui s’est ouvert. Cette fenêtre reprend d’elle-même une fois que c’est fait.",
+            "waitingLong": "Ça prend du temps ? Votre navigateur n'a peut-être pas ouvert l'application. Connectez-vous plutôt ci-dessous avec un code reçu par e-mail."
         },
         "login": {
             "acceptableUsePolicy": "Politique d'usage acceptable",
@@ -1747,7 +1747,10 @@
         "hostConnectDialog": {
             "callsItself": "Cette machine se nomme",
             "codeInCommandWorks": "Cette fenêtre se met à jour d'elle-même quand l'appareil se connecte.",
+            "connectThisComputer": "Connecter cet ordinateur",
+            "connectThisComputerNote": "L'application exécute la commande ci-dessous pour vous. Sur une autre machine, exécutez-la là-bas.",
             "connectedAgentWorkOn": "est connecté. L'agent peut travailler dessus dès son prochain tour.",
+            "connectingThisComputer": "Connexion de cet ordinateur… S'il n'est pas connecté d'ici une minute, exécutez la commande ci-dessous.",
             "couldNotRename": "Impossible de prendre ce nom.",
             "inside": "dans",
             "nameIt": "La nommer {name}",

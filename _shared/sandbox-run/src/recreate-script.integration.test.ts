@@ -35,7 +35,8 @@ const shimArgs = (...args: string[]): { status: number; out: string; err: string
     }
 };
 
-const argv = (result: { out: string }): string[] => result.out.split("\n").filter((line) => line !== "");
+// What the stand-in ic was handed: its lines, without the shim's handover step before them (tested on its own below).
+const argv = (result: { out: string }): string[] => result.out.split("\n").filter((line) => line !== "" && !line.startsWith("intentic: ["));
 
 test("every one-liner shape the platform ever handed out maps onto its ic verb", () => {
     // The Environment card's rebuild command: <slug> <sha256>.
@@ -109,4 +110,14 @@ test("--channel needs a tag and an unknown flag is refused rather than read as a
 // What stdout carries is the handover's own: the kit's lines before it go nowhere a reader of `--list --json` parses.
 test("the shim prints nothing of its own on stdout before it hands over", () => {
     expect(shimArgs("--list").out).toBe("sandbox\nlist\n--json\n");
+});
+
+// The handover is a step of its own, so a failure after it is ic's and the desktop app's `failedStep` says so instead
+// of blaming the download before it (runs.ts; every failed rebuild read `fetching-ic` until 2026-11-20). Never in front
+// of JSON a program parses.
+test("the shim marks the handover to ic as its own step, except before JSON", () => {
+    const hash = "a".repeat(64);
+    expect(shimArgs("abc123", hash).out).toBe(`intentic: [running-ic] handing over to ic…\nsandbox\nrebuild\nabc123\n${hash}\n`);
+    expect(shimArgs("abc123", "--versions", "--json").out).toBe("sandbox\nversions\nabc123\n--json\n");
+    expect(shimArgs("abc123", "--watch", "--json").out).toBe("sandbox\nwatch\nabc123\n--json\n");
 });

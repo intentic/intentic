@@ -1,4 +1,4 @@
-import { parkHandoff, redeemHandoff } from "../world/handoffs";
+import { parkHandoff, pendingHandoff, redeemHandoff } from "../world/handoffs";
 import { demoIdToken } from "../world/identity";
 import { type PlatformRouter, refusePlatform } from "./serve";
 
@@ -9,6 +9,11 @@ import { type PlatformRouter, refusePlatform } from "./serve";
 export const desktopAnswers = {
     handoff: ({ idToken, challenge }) => ({ handoff: parkHandoff(challenge, idToken) }),
     redeem: async ({ handoff, verifier }) => (await redeemHandoff(handoff, verifier)) ?? refusePlatform(`This sign-in link has already been used or expired.`, 404),
+    // The app asking, while it waits, whether the browser parked a hand-off its link never brought.
+    pending: async ({ verifier }) => {
+        const handoff = await pendingHandoff(verifier);
+        return handoff === undefined ? {} : { handoff };
+    },
     // The demo account signed in with Google (world/identity.ts), so the platform holds a fresh token for it.
     googleIdToken: () => ({ idToken: demoIdToken(``) }),
 } satisfies NonNullable<PlatformRouter[`desktop`]>;

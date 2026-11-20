@@ -734,6 +734,8 @@ pub enum Link {
     },
     Recreate(RecreateArgs),
     Fix(FixArgs),
+    /// `intentic://device-pair?url=…&pair=…`: this computer connected to a sandbox as a device (device_pair.rs).
+    DevicePair(crate::device_pair::DevicePairArgs),
     Sync(SyncArgs),
     /// `intentic://signin[?switch=1]` — the SPA's login screen asking to be signed in the way this app can be:
     /// in the user's real browser. `switch` is the one thing it carries, because it is the one thing the page
@@ -1069,6 +1071,11 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             }))
         }
         "fix" => None,
+        // App-window only, like `sync`: both values are the sender's, and the run starts the moment it lands.
+        "device-pair" if source.is_app() => {
+            crate::device_pair::args_of(get("url"), get("pair")).map(Link::DevicePair)
+        }
+        "device-pair" => None,
         "sandbox-wakes" => source.is_app().then_some(Link::SandboxWakes),
         "machine-face"
             if matches!(
@@ -1408,6 +1415,25 @@ mod tests {
             assert_eq!(parse_link(link, Source::External), None, "{link}");
             assert_eq!(parse_link(link, FILES), None, "{link}");
         }
+    }
+
+    /// A device pairing from a device's card in the app's own window; from outside the app or a local window, nothing.
+    #[test]
+    fn a_device_pair_link_is_heard_only_from_the_apps_own_windows() {
+        let link = "intentic://device-pair?url=https%3A%2F%2Fsandbox-3f2a9c1d7e4b.sbx.intentic.dev&pair=pK3_x9-Qa7Zr2LmN4tYv";
+        assert_eq!(
+            parse_link(link, APP),
+            Some(Link::DevicePair(crate::device_pair::DevicePairArgs {
+                url: "https://sandbox-3f2a9c1d7e4b.sbx.intentic.dev".into(),
+                pair: "pK3_x9-Qa7Zr2LmN4tYv".into(),
+            }))
+        );
+        assert_eq!(parse_link(link, Source::External), None);
+        assert_eq!(parse_link(link, FILES), None);
+        assert_eq!(
+            parse_link("intentic://device-pair?url=https%3A%2F%2Fx.test", APP),
+            None
+        );
     }
 
     /// A collection of this computer's wake requests runs `ic` the moment it lands, so only the app's own windows may

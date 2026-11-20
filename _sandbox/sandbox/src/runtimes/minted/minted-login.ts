@@ -3,7 +3,7 @@ import type { LoginStatus } from "@intentic/sandbox-contract/schemas/providers/p
 import { type MintedProvider, type MintedVariant, mintedVariant } from "@intentic/sandbox-contract/models/provider-specs";
 import type { SignInCatcher } from "@intentic/sandbox-contract/schemas/loopback-catch";
 import type { Logger } from "pino";
-import { armLoopbackCatch, type LoopbackBridgeDeps, type LoopbackTarget } from "../../agent/providers/accounts/loopback-bridge.js";
+import { type ArmedCatch, armLoopbackCatch, liveCatchersOf, type LoopbackBridgeDeps, type LoopbackTarget } from "../../agent/providers/accounts/loopback-bridge.js";
 import type { MintedStore } from "./minted-credentials.js";
 
 // Sign-in flow shared by every minted provider: the vendor's token isn't an inference credential, so a driver's real
@@ -63,6 +63,8 @@ interface PendingLogin {
     // Fail the wait outright, for an address that carried the vendor's error instead of a grant: the card says so
     // immediately rather than spinning until the deadline.
     readonly fail: (message: string) => void;
+    // The watch on the owner's machines for a redirect flow's landing, read by status for who still watches.
+    readonly caught: ArmedCatch | undefined;
 }
 
 // Every sign-in this daemon is waiting on, by handshake id, in memory on purpose: a restart correctly drops any attempt
@@ -137,7 +139,6 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
         fetchImpl: deps.fetchImpl ?? fetch,
     });
     const expiresAt = attempt.expiresAt > Date.now() ? attempt.expiresAt : Date.now() + DEFAULT_LOGIN_WINDOW_MS;
-    pending.set(handshake, { provider: deps.provider, variant, state: attempt.state, abort, expiresAt, deliver, fail });
     const timer = setTimeout(() => abort.abort(), Math.max(1_000, expiresAt - Date.now()));
     timer.unref();
     // The landing, caught on the owner's machine, goes through exactly the paste's own door (state check included).
@@ -147,6 +148,7 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
             : armLoopbackCatch(deps.bridge, { id: handshake, ...attempt.loopback, state: attempt.state, expiresAt, title: variant.label }, async (url) =>
                   completeMintedLogin({ provider: deps.provider, handshake, redirectUrl: url }),
               );
+    pending.set(handshake, { provider: deps.provider, variant, state: attempt.state, abort, expiresAt, deliver, fail, caught });
     abort.signal.addEventListener("abort", () => caught?.disarm(), { once: true });
 
     void attempt
@@ -192,7 +194,7 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
 export const mintedLoginStatus = (provider: MintedProvider, handshake: string): LoginStatus => {
     const entry = pending.get(handshake);
     if (entry !== undefined && entry.provider === provider) {
-        return { status: "wait" };
+        return { status: "wait", ...liveCatchersOf(entry.caught) };
     }
     const outcome = outcomes.get(handshake);
     return outcome !== undefined && outcome.provider === provider

@@ -10,9 +10,11 @@ import {
     pullReportDue,
     runEnding,
     runFacts,
+    runReason,
     scrubReason,
     secondsBetween,
     stepLeft,
+    stopBlock,
     type RequirementClocks,
 } from "./installTelemetry";
 
@@ -163,6 +165,44 @@ describe(`why a run failed`, () => {
         expect(long).toHaveLength(300);
         expect(long.endsWith(`…`)).toBe(true);
         expect(scrubReason(`one\n  two`, {})).toBe(`one two`);
+    });
+});
+
+/* A RECREATE THAT FAILED INSIDE ic: recreate.ps1 fetched ic, handed over, and ic stopped (2026-11-20, whose workspace
+read only "recreate.ps1 exited with status 1" and whose event blamed the download). */
+describe(`why a recreate failed`, () => {
+    const recreate: RunEvent[] = [
+        step(`fetching-ic`),
+        said(`intentic: installed ic 1.429.0 from the copy the desktop app carries.`, `stdout`),
+        step(`running-ic`),
+        said(`error: Nothing changed: no approved environment could be read from the sandbox.`),
+        said(`   problem: Docker said: Error response from daemon: Could not find the file /work/.intentic/local/environment.approved.Dockerfile`),
+        said(`   fix:     approve the proposal on the Environment card first, or fix what Docker reported.`),
+        said(`intentic: something after the block`, `stdout`),
+        { kind: `exit`, run: `setup`, code: 1, ok: false },
+    ];
+
+    it(`shows the workspace ic's stop block, headline and what to do, not the script's exit status`, () => {
+        expect(stopBlock(recreate)).toBe(
+            [
+                `Nothing changed: no approved environment could be read from the sandbox.`,
+                `problem: Docker said: Error response from daemon: Could not find the file /work/.intentic/local/environment.approved.Dockerfile`,
+                `fix:     approve the proposal on the Environment card first, or fix what Docker reported.`,
+            ].join(`\n`),
+        );
+        // No stop block: the last thing said on stderr; nothing said, nothing to show.
+        expect(stopBlock([said(`thread 'main' panicked at src/main.rs:1:1`)])).toBe(`thread 'main' panicked at src/main.rs:1:1`);
+        expect(stopBlock([said(`all good`, `stdout`)])).toBeUndefined();
+        // Never longer than a process report carries (the workspace drops a longer one whole).
+        expect(stopBlock([said(`error: ${`x`.repeat(700)}`)])).toHaveLength(600);
+    });
+
+    it(`tells the funnel the headline, without the account its log path names`, () => {
+        expect(runReason(recreate)).toBe(`error: Nothing changed: no approved environment could be read from the sandbox.`);
+        expect(runReason([said(`error: could not write C:\\Users\\Ann\\AppData\\Local\\Temp\\x for Ann`)])).toBe(
+            `error: could not write ~\\AppData\\Local\\Temp\\x for <user>`,
+        );
+        expect(runReason([said(`fine`, `stdout`)])).toBeUndefined();
     });
 });
 

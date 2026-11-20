@@ -28,6 +28,7 @@ import { accountFacts, accountState } from "../../providers/usageStatus";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { SignInTab } from "./signInTab";
+import { keepWatchers } from "./signInWatchers";
 
 // In-flight subscription login, identified by the translator's own attempt state.
 // `catchers` are the owner's devices and browsers watching where a redirect lands, so it finishes without the paste;
@@ -138,7 +139,11 @@ const pollTranslator = async (target: KeyedProvider, state: string, until: numbe
     const outcome = await pollFor(
         async () => {
             const result = await sandboxRpc.translator.status({ provider: target, state }, { signal });
-            return result.status === `wait` ? undefined : result;
+            if (result.status === `wait`) {
+                keepWatchers(result.catchers, translatorConnectFlow, (flow) => flow.state === state);
+                return undefined;
+            }
+            return result;
         },
         // A failed read is a blip (sandbox or translator); the handshake asks again, bounded by its deadline.
         { intervalMs: SIGN_IN_POLL_MS, until, signal, delayFirst: true, retryOnError: true },
@@ -368,7 +373,11 @@ const pollNativeStatus = async (target: AgentProvider, handshake: string, until:
         async () => {
             // SAFETY: a native flow is only ever started by startConnect, through the accounts door, for a native provider.
             const result = await sandboxRpc.accounts.status({ provider: target as NativeProvider, handshake }, { signal });
-            return result.status === `wait` ? undefined : result;
+            if (result.status === `wait`) {
+                keepWatchers(result.catchers, nativeConnectFlow, (flow) => flow.handshake === handshake);
+                return undefined;
+            }
+            return result;
         },
         // A failed read is a blip (sandbox or translator); the handshake asks again, bounded by its deadline.
         { intervalMs: SIGN_IN_POLL_MS, until, signal, delayFirst: true, retryOnError: true },

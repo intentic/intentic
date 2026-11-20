@@ -47,6 +47,10 @@ let launched = false;
 let lastCheckKey = ``;
 let prefetchMemory: PrefetchMemory = NO_PREFETCH;
 let setupMemory: SetupMemory = NO_SETUP;
+const refusals = shallowRef(0);
+
+/** Windows' permission refused this many times in a row (pcEvents.ts `adminRefusals`): the card says more from the second. */
+export const adminRefusals: Readonly<Ref<number>> = refusals;
 
 // The row in this app's words; else, for a row ic names that this app has no words for yet (a newer ic), ic's own title;
 // the id only when ic sent neither. Before 2026-10-12 ic's title was dropped on the way (onboarding.rs `CheckRow`), and a
@@ -174,6 +178,7 @@ const apply = (snapshot: OnboardingSnapshot): void => {
     }
     const told = setupEvents(snapshot.setup, rawSetup.value, setupMemory, { minutes: raw?.minutes, now });
     setupMemory = told.memory;
+    refusals.value = told.memory.adminRefusals;
     send(told.tracked);
     rawSetup.value = snapshot.setup;
     const orphaned = orphanedEvent(snapshot.orphaned, now);

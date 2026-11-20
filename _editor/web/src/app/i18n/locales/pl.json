@@ -1192,7 +1192,6 @@
             "pickAccountForSandbox": "Wybierz konto Google, do którego należy Twój sandbox.",
             "sandboxOpensForGoogle": "Sandbox otwiera się dla konta Google, więc oba konta muszą należeć do tej samej osoby.",
             "signedIn": "Zalogowano",
-            "signInAgainFromApp": "Żeby zalogować się ponownie, zacznij w aplikacji Intentic.",
             "signingIn": "Logowanie jako",
             "twoAccountsHere": "Ta przeglądarka jest zalogowana do Google i do Intentic jako dwie różne osoby.",
             "useDifferentGoogle": "Użyj innego konta Google",
@@ -1221,7 +1220,8 @@
             "ledeNeeded": "To wymaga Twojego konta. Zaloguj się, a otworzy się właśnie tutaj.",
             "ledeLapsed": "Twoja sesja wygasła. Zaloguj się ponownie, by kontynuować w tym samym miejscu.",
             "waitingTitle": "Czekamy na Google w przeglądarce",
-            "waitingDetail": "Dokończ w otwartej karcie. To okno samo przejdzie dalej, gdy skończysz."
+            "waitingDetail": "Dokończ w otwartej karcie. To okno samo przejdzie dalej, gdy skończysz.",
+            "waitingLong": "Trwa to długo? Przeglądarka mogła nie otworzyć aplikacji. Zaloguj się kodem z e-maila poniżej."
         },
         "login": {
             "acceptableUsePolicy": "Zasady dopuszczalnego użytkowania",
@@ -1743,7 +1743,10 @@
         "hostConnectDialog": {
             "callsItself": "Ta maszyna nazywa siebie",
             "codeInCommandWorks": "To okno odświeży się samo, gdy urządzenie się połączy.",
+            "connectThisComputer": "Połącz ten komputer",
+            "connectThisComputerNote": "Aplikacja uruchomi poniższe polecenie za Ciebie. Na innym komputerze uruchom je tam.",
             "connectedAgentWorkOn": "jest podłączone. Agent może na nim pracować od następnej tury.",
+            "connectingThisComputer": "Łączenie tego komputera… Jeśli nie połączy się w ciągu minuty, uruchom poniższe polecenie.",
             "couldNotRename": "Nie udało się przyjąć tej nazwy.",
             "inside": "wewnątrz",
             "nameIt": "Nazwij ją {name}",

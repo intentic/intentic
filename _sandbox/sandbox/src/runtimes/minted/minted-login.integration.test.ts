@@ -388,7 +388,7 @@ test("a mainland sign-in watched on the owner's device finishes from the caught 
     });
     expect(started.catchers).toEqual([{ kind: "device", label: "rog" }]);
     expect(rog.asked).toMatchObject([{ host: "127.0.0.1", port: 8317, path: "/callback" }]);
-    expect(mintedLoginStatus("zai", started.handshake)).toEqual({ status: "wait" });
+    expect(mintedLoginStatus("zai", started.handshake)).toEqual({ status: "wait", catchers: [{ kind: "device", label: "rog" }] });
 
     rog.push({ type: "landed", url: `http://127.0.0.1:8317/callback?authCode=caught&state=${started.state}` });
     await advanceTimersByTimeAsync(100);

@@ -12,6 +12,8 @@ export interface FakeCatcher {
     readonly asked: LoopbackCatch[];
     readonly aborted: () => boolean;
     readonly push: (event: LoopbackCatchEvent) => void;
+    // The peer going away mid-watch (its link to the daemon dropped, its agent restarted): the stream breaks off.
+    readonly drop: () => void;
     readonly catchLoopback: (spec: LoopbackCatch, options: { readonly signal: AbortSignal }) => Promise<AsyncIterable<LoopbackCatchEvent>>;
 }
 
@@ -20,6 +22,7 @@ export const fakeCatcher = (initial: readonly LoopbackCatchEvent[] = [{ type: "l
     const queue: LoopbackCatchEvent[] = [...initial];
     let wake: (() => void) | undefined;
     let signal: AbortSignal | undefined;
+    let dropped = false;
     const nudge = (): void => {
         const resume = wake;
         wake = undefined;
@@ -35,6 +38,9 @@ export const fakeCatcher = (initial: readonly LoopbackCatchEvent[] = [{ type: "l
             if (signal?.aborted === true) {
                 return;
             }
+            if (dropped) {
+                throw new Error("the peer disconnected");
+            }
             await new Promise<void>((resolve) => (wake = resolve));
         }
     }
@@ -43,6 +49,10 @@ export const fakeCatcher = (initial: readonly LoopbackCatchEvent[] = [{ type: "l
         aborted: () => signal?.aborted === true,
         push: (event) => {
             queue.push(event);
+            nudge();
+        },
+        drop: () => {
+            dropped = true;
             nudge();
         },
         catchLoopback: async (spec, options) => {

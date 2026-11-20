@@ -5,7 +5,7 @@ import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract/schem
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { forgetAccountState, sameAccount, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
-import { type ArmedCatch, armLoopbackCatch } from "../../agent/providers/accounts/loopback-bridge.js";
+import { type ArmedCatch, armLoopbackCatch, liveCatchersOf } from "../../agent/providers/accounts/loopback-bridge.js";
 import {
     authorizeUrlFor,
     buildAuthorizeUrl,
@@ -194,7 +194,7 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
         status: (handshake) => {
             const attempt = pending.get(handshake);
             if (attempt !== undefined && attempt.expiresAt > Date.now()) {
-                return { status: "wait" };
+                return { status: "wait", ...liveCatchersOf(attempt.caught) };
             }
             return outcomes.get(handshake)?.status ?? { status: "error", error: "That sign-in has expired or was never started here: start it again." };
         },

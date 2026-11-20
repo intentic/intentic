@@ -1,7 +1,7 @@
 import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../../composition.js";
 import { forgetAccountState, sameAccount, signInIdentity } from "../../../agent/providers/accounts/account-identity.js";
-import { type ArmedCatch, armLoopbackCatch, loopbackWatchers } from "../../../agent/providers/accounts/loopback-bridge.js";
+import { type ArmedCatch, armLoopbackCatch, liveCatchersOf, loopbackWatchers } from "../../../agent/providers/accounts/loopback-bridge.js";
 import type { AccountDoor } from "../../../agent/providers/provider-module.js";
 import { devinAgentId, ensureDevinCli } from "../devin-cli.js";
 import { toAccount } from "./devin-credentials.js";
@@ -110,7 +110,7 @@ export const devinAccountDoor = (services: DevinAccountDeps): AccountDoor => {
         complete: async ({ handshake, code, redirectUrl, label }) => finish(handshake, redirectUrl?.trim() || code?.trim() || "", label ?? ""),
         status: (handshake) => {
             if (devinLoginOpen(handshake)) {
-                return { status: "wait" };
+                return { status: "wait", ...liveCatchersOf(caught.get(handshake)) };
             }
             return (
                 outcomes.get(handshake)?.status ?? { status: "error", error: "That sign-in has expired or was never started here: start it again." }

@@ -370,6 +370,37 @@ it(`a watched sign-in still takes the address back from a browser nothing watche
     expect(completeConnect).toHaveBeenCalledWith(`http://localhost:54321/callback?code=abc&state=st-c`);
 });
 
+it(`a watcher that went away stops the wait and asks for the address at once`, async () => {
+    connectSent.value = true;
+    const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
+    expect(host.textContent).toContain(`Waiting for the sign-in on rog`);
+    // The attempt's status said nobody watches any more (keepWatchers): the device's link dropped.
+    nativeConnectFlow.value = { ...WATCHED_CLAUDE, catchers: [] };
+    await nextTick();
+    expect(host.textContent).not.toContain(`Waiting for the sign-in on rog`);
+    const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`);
+    expect(field, `no paste field once nobody catches the landing`).not.toBeNull();
+    expect(field!.placeholder).toContain(`address`);
+});
+
+it(`a watched sign-in still waiting half a minute after the trip brings the field forward by itself`, async () => {
+    jest.useFakeTimers();
+    try {
+        const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
+        // Nothing counts down before the reader has gone.
+        await advanceTimersByTimeAsync(60_000);
+        expect(host.querySelector(`input[name="connectCode"]`)).toBeNull();
+        host.querySelector(`a`)!.click();
+        await nextTick();
+        await advanceTimersByTimeAsync(29_000);
+        expect(host.querySelector(`input[name="connectCode"]`), `the field came forward before the patience ran out`).toBeNull();
+        await advanceTimersByTimeAsync(1_000);
+        expect(host.querySelector(`input[name="connectCode"]`), `still only behind "Signing in elsewhere?" after 30 s`).not.toBeNull();
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
 it(`draws the dead-end page at the address the provider was really sent to`, async () => {
     const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
     [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Signing in elsewhere`))!.click();

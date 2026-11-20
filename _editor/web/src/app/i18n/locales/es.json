@@ -1192,7 +1192,6 @@
             "pickAccountForSandbox": "Elige la cuenta de Google a la que pertenece tu sandbox.",
             "sandboxOpensForGoogle": "Un sandbox se abre para la cuenta de Google, así que ambas tienen que ser la misma.",
             "signedIn": "Sesión iniciada",
-            "signInAgainFromApp": "Para volver a iniciar sesión, empieza desde la app de Intentic.",
             "signingIn": "Iniciando sesión como",
             "twoAccountsHere": "Este navegador tiene la sesión iniciada en Google y en Intentic como dos personas distintas.",
             "useDifferentGoogle": "Usar otra cuenta de Google",
@@ -1221,7 +1220,8 @@
             "ledeNeeded": "Eso necesita tu cuenta. Inicia sesión y se abrirá aquí mismo.",
             "ledeLapsed": "Tu sesión terminó. Vuelve a iniciar sesión y sigue donde lo dejaste.",
             "waitingTitle": "Esperando a Google en tu navegador",
-            "waitingDetail": "Termina en la pestaña que se abrió. Esta ventana sigue sola cuando acabes."
+            "waitingDetail": "Termina en la pestaña que se abrió. Esta ventana sigue sola cuando acabes.",
+            "waitingLong": "¿Tarda demasiado? Puede que tu navegador no haya abierto la app. Inicia sesión abajo con un código por correo."
         },
         "login": {
             "acceptableUsePolicy": "Política de uso aceptable",
@@ -1747,7 +1747,10 @@
         "hostConnectDialog": {
             "callsItself": "Esta máquina se llama a sí misma",
             "codeInCommandWorks": "Esta ventana se actualiza sola cuando el dispositivo se conecta.",
+            "connectThisComputer": "Conectar este equipo",
+            "connectThisComputerNote": "La aplicación ejecuta el comando de abajo por ti. En otra máquina, ejecútalo allí.",
             "connectedAgentWorkOn": "está conectado. El agente puede trabajar con él desde su próximo turno.",
+            "connectingThisComputer": "Conectando este equipo… Si no se conecta en un minuto, ejecuta el comando de abajo.",
             "couldNotRename": "No se pudo tomar ese nombre.",
             "inside": "dentro de",
             "nameIt": "Llamarla {name}",

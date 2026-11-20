@@ -318,7 +318,7 @@ test("Claude: with a device watching, the sign-in redirects to loopback and fini
         const redirect = new URL(started.url).searchParams.get("redirect_uri");
         expect(redirect).toBe(`http://localhost:${rog.asked[0]?.port}/callback`);
         expect(rog.asked[0]?.port).toBeGreaterThanOrEqual(49_152);
-        expect(claude.status!(started.handshake)).toEqual({ status: "wait" });
+        expect(claude.status!(started.handshake)).toEqual({ status: "wait", catchers: [{ kind: "device", label: "rog" }] });
         // A pasted address from some other attempt is refused before it reaches Anthropic.
         await expect(claude.complete!({ handshake: started.handshake, redirectUrl: `${redirect}?code=x&state=other` })).rejects.toThrow(/different sign-in/);
 
@@ -335,6 +335,30 @@ test("Claude: with a device watching, the sign-in redirects to loopback and fini
         await expect(claude.complete!({ handshake: started.handshake, redirectUrl: `${redirect}?code=caught-code&state=${started.handshake}` })).rejects.toThrow(
             /start the connection again/,
         );
+    } finally {
+        exchange.mockRestore();
+    }
+});
+
+// The device that promised to catch the landing goes away mid-sign-in (its link to the sandbox dropped, its agent
+// restarted on a Windows PC): the attempt says nobody watches any more, so the card stops waiting on it and asks for the
+// address, and that address, pasted, still finishes the very attempt the device was watching.
+test("Claude: a watcher that drops is said on the attempt's status, and the dead-end address pasted still finishes it", async () => {
+    const accounts = new Map<string, StoredAccount>();
+    const rog = fakeCatcher();
+    const claude = door(memoryStore(accounts), [], new Map(), [], { forgets: 0 }, catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: rog } }).hostHub);
+    const exchange = jest
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(JSON.stringify({ access_token: "tok-pasted", refresh_token: "r", expires_in: 3600 })));
+    try {
+        const started = await claude.start(undefined);
+        expect(started.catchers).toEqual([{ kind: "device", label: "rog" }]);
+        rog.drop();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(claude.status!(started.handshake), "a gone device still read as watching").toEqual({ status: "wait", catchers: [] });
+        const redirect = new URL(started.url).searchParams.get("redirect_uri");
+        await claude.complete!({ handshake: started.handshake, redirectUrl: `${redirect}?code=pasted-code&state=${started.handshake}` });
+        expect(accounts.size).toBe(1);
     } finally {
         exchange.mockRestore();
     }

@@ -820,6 +820,8 @@ model DesktopHandoff {
     expiresAt DateTime
     createdAt DateTime @default(now())
 
+    // The desktop app polls by its attempt's challenge while it waits (desktop.routes.ts `pending`).
+    @@index([challenge])
     @@map("desktop_handoff")
 }
 

@@ -107,6 +107,37 @@ test("disarming stops every watch, and a busy catcher leaves the others watching
     expect(rog.aborted()).toBe(true);
 });
 
+test("who still watches follows each peer: one that drops leaves the list, and a disarmed watch has nobody", async () => {
+    const rog = fakeCatcher();
+    const brave = fakeCatcher();
+    const armed = armLoopbackCatch(
+        depsOf({ rog: { facts: CAN_CATCH, catcher: rog } }, { brave: { facts: BROWSER, catcher: brave } }),
+        TARGET,
+        async () => {},
+    );
+    await armed.ready;
+    expect(armed.live()).toEqual([
+        { kind: "device", label: "rog" },
+        { kind: "browser", label: "Brave 154 on Windows" },
+    ]);
+    rog.drop();
+    await settle();
+    expect(armed.live(), "a device whose link dropped still counted as watching").toEqual([{ kind: "browser", label: "Brave 154 on Windows" }]);
+    brave.drop();
+    await settle();
+    expect(armed.live()).toEqual([]);
+    armed.disarm();
+    expect(armed.live()).toEqual([]);
+});
+
+test("a peer that never said it listens is never counted as watching", async () => {
+    const rog = fakeCatcher([{ type: "busy", reason: "port 54321 is already taken on this machine" }]);
+    const armed = armLoopbackCatch(depsOf({ rog: { facts: CAN_CATCH, catcher: rog } }), TARGET, async () => {});
+    expect(await armed.ready).toEqual([]);
+    expect(armed.live()).toEqual([]);
+    armed.disarm();
+});
+
 test("a failed finish is logged, not thrown out of the watch", async () => {
     const rog = fakeCatcher();
     armLoopbackCatch(depsOf({ rog: { facts: CAN_CATCH, catcher: rog } }), TARGET, async () => {

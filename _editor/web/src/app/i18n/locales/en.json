@@ -1192,7 +1192,6 @@
             "pickAccountForSandbox": "Pick the Google account your sandbox belongs to.",
             "sandboxOpensForGoogle": "A sandbox opens for the Google account, so these have to be the same one.",
             "signedIn": "Signed in",
-            "signInAgainFromApp": "To sign in again, start from the Intentic app.",
             "signingIn": "Signing in as",
             "twoAccountsHere": "This browser is signed in to Google and to Intentic as two different people.",
             "useDifferentGoogle": "Use a different Google account",
@@ -1221,7 +1220,8 @@
             "ledeNeeded": "That needs your account. Sign in and it opens right here.",
             "ledeLapsed": "Your session ended. Sign in again and carry on where you were.",
             "waitingTitle": "Waiting for Google in your browser",
-            "waitingDetail": "Finish in the tab it opened. This window carries on by itself once you're done."
+            "waitingDetail": "Finish in the tab it opened. This window carries on by itself once you're done.",
+            "waitingLong": "Taking a while? Your browser may not have opened the app. Sign in with an emailed code below instead."
         },
         "login": {
             "acceptableUsePolicy": "Acceptable Use Policy",
@@ -1747,7 +1747,10 @@
         "hostConnectDialog": {
             "callsItself": "This machine calls itself",
             "codeInCommandWorks": "This window updates by itself when the device connects.",
+            "connectThisComputer": "Connect this computer",
+            "connectThisComputerNote": "The app runs the command below for you. On another machine, run it there.",
             "connectedAgentWorkOn": "is connected. The agent can work on it from its next turn.",
+            "connectingThisComputer": "Connecting this computer… If it isn't connected within a minute, run the command below.",
             "couldNotRename": "Could not take that name.",
             "inside": "inside",
             "nameIt": "Name it {name}",

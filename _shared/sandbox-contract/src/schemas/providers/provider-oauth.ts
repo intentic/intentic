@@ -123,8 +123,16 @@ export const LoginCompletedSchema = z.object({
 });
 // One attempt's standing, for a card to watch the attempt itself rather than the account list: a list that already
 // held an account says nothing about whether this sign-in, adding another, has landed.
+// Who is still watching for where the browser lands, re-read on every status: a device whose link dropped, or whose
+// agent restarted, stops listening, and a card still promising "finishes by itself" would wait on nobody.
+const LiveCatchersSchema = z
+    .array(SignInCatcherSchema)
+    .optional()
+    .describe(
+        "Who is still watching for where the browser lands, for an attempt that started with somebody watching. Empty means every watcher has gone (a device disconnected, a browser closed): the sign-in will not finish by itself any more, and the address the browser landed on has to be handed back. Absent for an attempt nobody watched.",
+    );
 export const LoginStatusSchema = z.discriminatedUnion("status", [
-    z.object({ status: z.literal("wait") }),
+    z.object({ status: z.literal("wait"), catchers: LiveCatchersSchema }),
     z.object({
         status: z.literal("ok"),
         account: OauthAccountSchema.optional().describe("The account it connected. Absent where the row lands in the account list a little later."),
@@ -154,7 +162,7 @@ export const TranslatorStartSchema = z.object({
         ),
 });
 export const TranslatorStatusSchema = z.discriminatedUnion("status", [
-    z.object({ status: z.literal("wait") }),
+    z.object({ status: z.literal("wait"), catchers: LiveCatchersSchema }),
     z.object({ status: z.literal("ok") }),
     z.object({ status: z.literal("error"), error: z.string().min(1) }),
 ]);

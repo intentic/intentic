@@ -205,10 +205,11 @@ const balanceChip = computed(() => {
 </script>
 
 <template>
-    <!-- Keep the composer above the mobile keyboard inset. -->
+    <!-- Keep the composer above the mobile keyboard inset. On a desktop the row stands 8px up over the end of the composer's
+         footer (ChatPane's `pb-5`), above it and with no ground of its own, so the composer's shadow fades out behind it. -->
     <div
         class="mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] items-center gap-2 px-3 text-2xs text-subtle"
-        :class="{ 'pb-2': !mobile || block !== undefined || homeDoor }"
+        :class="{ 'pb-2': !mobile || block !== undefined || homeDoor, 'relative z-20 -mt-2': !mobile }"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
         <!-- No tool-calls switch here: on a narrow pane it was the one thing holding this strip a full row tall under the

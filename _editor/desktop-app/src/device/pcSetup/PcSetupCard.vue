@@ -8,6 +8,7 @@ import { type LocalCheckRow, type LocalFirstTask, localHost, type LocalRestartWh
 import { computed, ref, watch } from "vue";
 import { firstTaskTakeDraft, signIn } from "../../desktop";
 import { draft } from "../../onboarding/firstTask";
+import { adminRefusals } from "../../onboarding/pc";
 import { signedIn } from "../roster";
 import FirstTaskComposer from "./FirstTaskComposer.vue";
 import PcPrefetch from "./PcPrefetch.vue";
@@ -471,7 +472,21 @@ const retryTask = (): Promise<void> =>
                     </div>
                 </template>
 
-                <!-- Windows' permission prompt was closed or answered No: nothing changed, and the same press asks again. -->
+                <!-- Windows' permission prompt was closed or answered No: nothing changed, and the same press asks again. From
+                     the second refusal in a row (2026-11-20: eleven presses, eleven refusals, on an account that may not be an
+                     administrator at all) it says who can allow it, and a machine we host is the press in front. -->
+                <template v-else-if="phase === `admin` && adminRefusals >= 2">
+                    <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.app.pcSetupAdminAgain`) }}</p>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <Button tier="accent" size="small" :label="t(`desktop.pcSetup.cloud`)" :disabled="busy !== undefined" @click="useCloud">
+                            <template #icon><Icon name="cloud" /></template>
+                        </Button>
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="busy !== undefined" @click="startSetup(false)">
+                            <Icon name="shield" class="shrink-0" />
+                            <span>{{ t(`desktop.app.setUpThisPc`) }}</span>
+                        </button>
+                    </div>
+                </template>
                 <template v-else-if="phase === `admin`">
                     <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.app.pcSetupAdminDeclined`) }}</p>
                     <Button tier="accent" class="self-start" size="small" :label="t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">

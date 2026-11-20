@@ -173,6 +173,48 @@ export const failureLine = (events: readonly RunEvent[]): string | undefined => 
     );
 };
 
+// The lines of a stop block under its headline (ic's ui.rs `explain`, the scripts' Stop-Intentic): what went wrong and
+// what to do about it.
+const STOP_DETAIL = /^(?:problem|fix):/;
+// The most a process report's `failure` carries: the workspace drops a longer one whole (processReport.ts `text(600)`).
+const STOP_BLOCK_CHARS = 600;
+const capped = (text: string): string => (text.length > STOP_BLOCK_CHARS ? `${text.slice(0, STOP_BLOCK_CHARS - 1)}…` : text);
+
+/**
+ * Why a failed run failed, for the person who ran it: its last stop block, the headline without its `error:` and the
+ * `problem:` and `fix:` lines under it, else its last stderr line; none when it said none. What the workspace shows in
+ * place of the bare "exited with status 1" (sandboxes.ts), so it is not scrubbed: it goes to the owner's own sandbox.
+ */
+export const stopBlock = (events: readonly RunEvent[]): string | undefined => {
+    const lines = events.flatMap((event) => (event.kind === `line` ? [event.text.trim()] : []));
+    const at = lines.findLastIndex((line) => ERROR_LINE.test(line));
+    if (at === -1) {
+        const said = failureLine(events);
+        return said === undefined ? undefined : capped(said);
+    }
+    const detail: string[] = [];
+    for (const line of lines.slice(at + 1)) {
+        if (!STOP_DETAIL.test(line)) {
+            break;
+        }
+        detail.push(line);
+    }
+    return capped([lines[at]?.replace(/^error:\s*/i, ``) ?? ``, ...detail].join(`\n`));
+};
+
+/**
+ * Why a failed run failed, as an event may carry it: its failure line, scrubbed (`scrubReason`) of the home folder and
+ * the account named in any profile path it mentions (an ic stop names its log, under the home folder).
+ */
+export const runReason = (events: readonly RunEvent[]): string | undefined => {
+    const said = failureLine(events);
+    if (said === undefined) {
+        return undefined;
+    }
+    const reason = scrubReason(said, { home: said.match(ANY_HOME)?.[0] });
+    return reason === `` ? undefined : reason;
+};
+
 /** This account's home folder, read off a path inside it (the run's transcript, `~/.intentic/logs/…`). */
 export const homeOf = (path: string | undefined): string | undefined => {
     const at = path?.search(/[\\/]\.intentic[\\/]/) ?? -1;

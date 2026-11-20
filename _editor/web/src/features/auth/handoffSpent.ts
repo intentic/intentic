@@ -1,5 +1,6 @@
 import type { LocationQuery } from "vue-router";
 import { z } from "zod";
+import { track } from "../../app/analytics";
 
 // A finished desktop sign-in hand-off, remembered in this browser by the app's nonce (`state`), so a tab restored hours
 // later (a browser reopening with its tabs) says it is done instead of signing in again for an app that stopped
@@ -53,4 +54,16 @@ const HandoffQuerySchema = z.object({ state: z.string(), challenge: z.string() }
 export const mintsOnArrival = (query: LocationQuery, now: number = Date.now()): boolean => {
     const handoff = HandoffQuerySchema.safeParse(query);
     return handoff.success && !handoffSpent(handoff.data.state, now);
+};
+
+// Chrome launches the app without a fresh click once, then refuses every later launch until the reader clicks a page
+// again, silently. Each send says whether its tab held a click (undefined where the browser does not say) and how many
+// this tab made; the app counts what arrived (`desktop_signin_arrived`), so a lost link is the gap between the two.
+// allow(module-state): this tab's own count of sends, which a reload starts over
+let sends = 0;
+export const countHandoffSent = (): void => {
+    sends += 1;
+    // SAFETY: `userActivation` is optional on purpose, read only when the browser has it.
+    const activation = (globalThis.navigator as { userActivation?: { isActive: boolean } } | undefined)?.userActivation;
+    track(`desktop_handoff_sent`, { user_activation: activation?.isActive, sends });
 };

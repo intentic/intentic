@@ -658,7 +658,12 @@ flowchart LR
     keep using its named pipe. The relay could end a tar stream early despite docker exiting successfully
     (2026-10-26, nightly 40291565927). A mounted encryption key must still be a host file: a missing key or a directory is
     refused before any sandbox is stopped, and must be restored from the original key. The PC switches only once all
-    are across; any failure puts every sandbox back as it was. The old copies stay for 7 days in
+    are across; any failure puts every sandbox back as it was. Each volume and placeholder a move creates on the target is
+    recorded in `moves.json` (`made`) before it is created and forgotten once the move finishes or its undo removed it, so
+    what a move cut off or an undo the engine refused leaves behind is the next move's to replace; a same-named volume
+    with no record is replaced only when it is empty, and refused otherwise (2026-11-20). Long silent steps (sizing and
+    hashing a volume, the reshape) keep the move's heartbeat fresh, so no other `ic` reads a move still working as dead.
+    The old copies stay for 7 days in
     `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
     removes them; no listing names one as a sandbox (`ic sandbox list` skips `<name>.moved`), and a `docker system
     prune` on that engine can take one sooner, since it is a stopped container. Sandboxes kept by a WSL-side `ic` stay

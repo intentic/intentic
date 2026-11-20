@@ -6,6 +6,7 @@ import { useDevices } from "../../../../models/sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../../models/sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../../../app/environments/scriptCommand";
+import { desktopDevicePairLink, desktopPairsDevices, openDesktopLink } from "../../../../app/environments/desktop";
 import RunCommand from "../../../../components/RunCommand.vue";
 import { cleanName } from "../../../../models/capabilities/form";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
@@ -120,6 +121,27 @@ const command = computed(() => {
     const bash = bashCommand(`deviceSh`, `env SANDBOX_URL='${url}' PAIR_TOKEN='${pairToken.value}' `, ``);
     return fromPowerShell.value ? `wsl -d ${distro.value} --exec sh -c "${bash}"` : bash;
 });
+// INSIDE THE DESKTOP APP, ON A COMPUTER OF THE DEVICE'S OWN KIND, the app runs this very pairing itself
+// (`intentic://device-pair`), so the reader whose computer's connection dropped presses once instead of copying a line
+// into PowerShell; the command stays below for a reader at another machine. (2026-11-20: a reader in the app on her own
+// Windows PC pressed Reconnect on its card six times in one evening and met only the command each time.) A WSL
+// distro's line run from PowerShell is left to the command: the app pairs the side it runs on.
+const appOnWindows = (): boolean => /windows/i.test(navigator.userAgent);
+const pairsHere = computed(
+    () => desktopPairsDevices() && !fromPowerShell.value && (props.platform === `windows`) === appOnWindows() && pairToken.value !== undefined,
+);
+// Pressed for this pairing; a fresh one (the dialog reopened, Renew) offers the press again.
+const pairedHereWith = ref<string>();
+const pairingHere = computed(() => pairedHereWith.value !== undefined && pairedHereWith.value === pairToken.value);
+const pairHere = (): void => {
+    const url = daemonUrl.value ?? ``;
+    const token = pairToken.value;
+    if (url === `` || token === undefined) {
+        return;
+    }
+    pairedHereWith.value = token;
+    openDesktopLink(desktopDevicePairLink(url, token));
+};
 const shell = computed(() => (props.platform === `windows` || fromPowerShell.value ? `PowerShell` : t(`capabilities.hostConnectDialog.aTerminal`)));
 
 // Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching.
@@ -201,6 +223,20 @@ watch(online, (isOnline) => {
                         <span>{{ t(`capabilities.hostConnectDialog.inside`) }}</span>
                         <SegmentedControl v-model="distro" :options="distroOptions" size="xs" />
                     </template>
+                </div>
+                <div v-if="pairsHere" class="flex flex-wrap items-center gap-2">
+                    <Button
+                        tier="accent"
+                        size="small"
+                        :label="t(`capabilities.hostConnectDialog.connectThisComputer`)"
+                        :loading="pairingHere"
+                        @click="pairHere"
+                    >
+                        <template #icon><Icon name="desktop" /></template>
+                    </Button>
+                    <span class="text-xs text-subtle">{{
+                        pairingHere ? t(`capabilities.hostConnectDialog.connectingThisComputer`) : t(`capabilities.hostConnectDialog.connectThisComputerNote`)
+                    }}</span>
                 </div>
                 <RunCommand
                     :command="command"

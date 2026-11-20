@@ -194,6 +194,13 @@ describe(`the PC setup's events`, () => {
         expect(actions(told)).toEqual([`adminRefused`]);
     });
 
+    it(`counts Windows' refusals in a row across the runs between them, and starts again once a setup ends otherwise`, () => {
+        const refused: OnboardingSetup = { state: `waiting`, for: `admin` };
+        const pressed: OnboardingSetup = { state: `running`, percent: 0 };
+        const told = playSetup([pressed, refused, pressed, refused, pressed, refused, { state: `failed`, reason: `x` }, pressed, refused]);
+        expect(told.filter(([, properties]) => properties[`action`] === `adminRefused`).map(([, properties]) => properties[`repeat`])).toEqual([1, 2, 3, 1]);
+    });
+
     it(`tells a setup gone quiet once, with where it was, and again for a later quiet stretch`, () => {
         const quiet = NOW / 1000 - 21 * 60;
         const stalled: OnboardingSetup = { state: `running`, percent: 38, step: `Turning on WSL`, quietSince: quiet };

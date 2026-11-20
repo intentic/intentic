@@ -50,6 +50,60 @@ pub struct Journal {
     pub moving: Option<Moving>,
     #[serde(default)]
     pub moved: Vec<Moved>,
+    /// What moves made on the engine they carry to and have not yet finished or undone: [`Made`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub made: Vec<Made>,
+}
+
+/* WHAT A MOVE MAKES ON THE OTHER ENGINE, WRITTEN DOWN BEFORE IT IS MADE (2026-11-20). A move cut off mid-copy (the installer
+ * quit with its ic still copying, an undo whose `volume rm` the engine refused) left `intentic-history-<slug>` on our engine
+ * with no word of whose it was, and every move after refused it as somebody else's ("remove or rename it"), which nobody
+ * at that PC could do. Each volume and container a move creates on the target is recorded here first, and the record goes
+ * once the move finishes (they are the live ones then) or its undo has removed them: a record still here names a copy of
+ * what the source still has, which the next move may replace. */
+
+/// One volume or container a move made on the engine `on` for `slug`: a copy, never the only one.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Made {
+    pub slug: String,
+    /// The engine it was made on (a [`Kind`] id).
+    pub on: String,
+    pub name: String,
+    /// A container rather than a volume.
+    #[serde(default)]
+    pub container: bool,
+}
+
+/// Whether a move left `name` on `on` for `slug` without finishing or undoing it. Pure.
+fn made_by_a_move(journal: &Journal, slug: &str, on: &str, name: &str) -> bool {
+    journal
+        .made
+        .iter()
+        .any(|made| made.slug == slug && made.on == on && made.name == name)
+}
+
+/// `name` written down as made on `on` for `slug`, once.
+fn note_made(slug: &str, on: Kind, name: &str, container: bool) -> Result<()> {
+    update_journal(|journal| {
+        if !made_by_a_move(journal, slug, on.id(), name) {
+            journal.made.push(Made {
+                slug: slug.to_string(),
+                on: on.id().to_string(),
+                name: name.to_string(),
+                container,
+            });
+        }
+    })
+}
+
+/// The records of what was made on `on` for `slug`: of `names` only, or all of them with `None`. Pure.
+fn forget_made(journal: &mut Journal, slug: &str, on: &str, names: Option<&[String]>) {
+    journal.made.retain(|made| {
+        !(made.slug == slug
+            && made.on == on
+            && names.is_none_or(|names| names.contains(&made.name)))
+    });
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -286,7 +340,7 @@ pub fn run(args: Args) -> Result<()> {
             ),
         );
         for carry in carried.iter().rev() {
-            undo(carry, &source, &target, &log);
+            undo(carry, &source, &target, to, &log);
         }
         let _ = update_journal(|journal| journal.moving = None);
         drop(locks);
@@ -305,6 +359,8 @@ pub fn run(args: Args) -> Result<()> {
     update_journal(|journal| {
         journal.moving = None;
         for carry in &carried {
+            // What it made on the target is the sandbox now, no longer a copy to clear away.
+            forget_made(journal, &carry.slug, to.id(), None);
             // A move back makes the copies the earlier move left on this engine the live ones again, and the record of
             // them is over.
             for earlier in journal.moved.iter_mut() {
@@ -854,8 +910,8 @@ fn move_one(
     // The volumes, each checked against the original after the copy.
     let helper = &sandbox.images[0];
     for (volume, docker_data) in &sandbox.volumes {
-        prepare_volume(source, target, to, slug, volume, carry)?;
-        let total = volume_bytes(source, volume, helper).unwrap_or(0);
+        prepare_volume(source, target, to, slug, volume, helper, carry)?;
+        let total = beating(|| volume_bytes(source, volume, helper)).unwrap_or(0);
         say(slug, "volume", json!({ "volume": volume, "total": total }));
         copy_volume(
             source,
@@ -867,8 +923,8 @@ fn move_one(
             total,
             log,
         )?;
-        let theirs = manifest(source, volume, helper, *docker_data)?;
-        let ours = manifest(target, volume, helper, *docker_data)?;
+        let theirs = beating(|| manifest(source, volume, helper, *docker_data))?;
+        let ours = beating(|| manifest(target, volume, helper, *docker_data))?;
         if theirs != ours {
             bail!(
                 "the copy of {volume} does not match the original ({} files there, {} here).",
@@ -885,6 +941,8 @@ fn move_one(
     ensure_network_on(target, slug)?;
     let placeholder = placeholder_args(&sandbox.inspect, &sandbox.container, &sandbox.images[0]);
     let refs: Vec<&str> = placeholder.iter().map(String::as_str).collect();
+    note_made(slug, to, &sandbox.container, true)?;
+    note_made(slug, to, &sandbox::parked_of(slug), true)?;
     run_on(target, &refs, Duration::from_secs(120))?;
     carry.created_containers.push(sandbox.container.clone());
     carry.created_containers.push(sandbox::parked_of(slug));
@@ -893,13 +951,15 @@ fn move_one(
     // The placeholder carries no bind, so the reshape finds no key mounted on it: handed the key the sandbox had as the
     // operator's file, it mounts that one, by the same door it mounts its own (at_rest.rs `Source::Given`).
     let key = mounted_key_file(&sandbox.inspect)?;
-    let made = with_key_file(key.as_deref(), || {
-        with_engine(target, || {
-            crate::sandbox::recreate::run(
-                crate::sandbox::recreate::Mode::Reshape(crate::shape::Ask::default()),
-                Some(slug.clone()),
-                crate::sandbox::recreate::Preflight::Skip,
-            )
+    let made = beating(|| {
+        with_key_file(key.as_deref(), || {
+            with_engine(target, || {
+                crate::sandbox::recreate::run(
+                    crate::sandbox::recreate::Mode::Reshape(crate::shape::Ask::default()),
+                    Some(slug.clone()),
+                    crate::sandbox::recreate::Preflight::Skip,
+                )
+            })
         })
     });
     made.map_err(|Fail(reason)| {
@@ -932,14 +992,31 @@ fn move_one(
 
 /// Put a sandbox back as it was on the source: what the target got is removed, and the source's copies take their
 /// names back and run again if they ran. Best effort, and said when a step fails.
-fn undo(carry: &Carried, source: &Target, target: &Target, log: &Log) {
+fn undo(carry: &Carried, source: &Target, target: &Target, to: Kind, log: &Log) {
     log.section(&format!("undoing {}", carry.slug));
+    // Removed only when the engine says so: what it refused stays recorded as made ([`Made`]), for the next move to replace.
+    let mut gone: Vec<String> = Vec::new();
+    let mut removed = |args: &[&str], name: &str| {
+        let ran = docker::capture_on(target, args, docker::READ_LIMIT);
+        if ran
+            .as_ref()
+            .is_ok_and(|ran| ran.code == Some(0) && !ran.timed_out)
+        {
+            gone.push(name.to_string());
+        } else {
+            let why = ran.map_or_else(|Fail(why)| why, |ran| ran.stderr.trim().to_string());
+            log.line(&format!(
+                "could not remove {name} from the other engine: {why}"
+            ));
+        }
+    };
     for container in carry.created_containers.iter().rev() {
-        let _ = docker::capture_on(target, &["rm", "-f", container], docker::READ_LIMIT);
+        removed(&["rm", "-f", container], container);
     }
     for volume in &carry.created_volumes {
-        let _ = docker::capture_on(target, &["volume", "rm", "-f", volume], docker::READ_LIMIT);
+        removed(&["volume", "rm", "-f", volume], volume);
     }
+    let _ = update_journal(|journal| forget_made(journal, &carry.slug, to.id(), Some(&gone)));
     for (name, moved) in &carry.renamed {
         if let Err(Fail(reason)) = run_on(source, &["rename", moved, name], docker::READ_LIMIT) {
             crate::ui::warn(&format!("could not give {name} its name back: {reason}"));
@@ -959,29 +1036,35 @@ fn undo(carry: &Carried, source: &Target, target: &Target, log: &Log) {
     ui::note(&format!("{} is back as it was.", carry.slug));
 }
 
-/// A volume of the same name on the target is one an earlier move left there, which this move supersedes (removed with
-/// its stopped container), or somebody else's, which it refuses to touch.
+/// A volume of the same name on the target is one an earlier move left there (a copy it kept, or one it made and never
+/// finished: [`Made`]), which this move supersedes, or an empty one, which holds nothing to lose; anything else is
+/// somebody else's, which it refuses to touch.
 fn prepare_volume(
     source: &Target,
     target: &Target,
     to: Kind,
     slug: &str,
     volume: &str,
+    helper: &str,
     carry: &mut Carried,
 ) -> Result<()> {
     let exists = docker::capture_on(target, &["volume", "inspect", volume], docker::READ_LIMIT)
         .is_ok_and(|ran| ran.code == Some(0));
+    let journal = load_journal();
     // Only a copy an earlier move left on THIS engine: the journal names each by the engine it stayed on.
-    let left_by_us = load_journal().moved.iter().any(|moved| {
+    let left_by_us = journal.moved.iter().any(|moved| {
         !moved.removed
             && moved.slug == slug
             && moved.from == to.id()
             && moved.volumes.iter().any(|v| v == volume)
-    });
-    match volume_action(exists, left_by_us) {
+    }) || made_by_a_move(&journal, slug, to.id(), volume);
+    let empty = (exists && !left_by_us)
+        .then(|| volume_empty(target, volume, helper))
+        .flatten();
+    match volume_action(exists, left_by_us, empty) {
         VolumeAction::Create => {}
         VolumeAction::Replace => {
-            for moved in load_journal()
+            for moved in journal
                 .moved
                 .iter()
                 .filter(|moved| moved.slug == slug && !moved.removed && moved.from == to.id())
@@ -990,13 +1073,62 @@ fn prepare_volume(
                     let _ = docker::capture_on(target, &["rm", "-f", container], docker::READ_LIMIT);
                 }
             }
+            clear_leftovers(target, &journal, slug, to);
             run_on(target, &["volume", "rm", volume], docker::READ_LIMIT)?;
         }
-        VolumeAction::Refuse => bail!("a volume named {volume} already exists on the other engine and no earlier move left it there — remove or rename it, then try again."),
+        VolumeAction::Adopt => run_on(target, &["volume", "rm", volume], docker::READ_LIMIT)?,
+        VolumeAction::Refuse => bail!("a volume named {volume} already exists on the other engine, holds files, and no earlier move left it there — remove or rename it, then try again."),
     }
+    note_made(slug, to, volume, false)?;
     create_like(source, target, volume)?;
     carry.created_volumes.push(volume.to_string());
     Ok(())
+}
+
+/// What a move for `slug` cut off before its undo left running or standing on the target and holding its volumes: its
+/// copy helpers, and the containers it recorded as made. Best effort: `volume rm` after it says what still holds one.
+fn clear_leftovers(target: &Target, journal: &Journal, slug: &str, to: Kind) {
+    let mut names = vec![helper_name(slug, "write"), helper_name(slug, "read")];
+    names.extend(
+        journal
+            .made
+            .iter()
+            .filter(|made| made.container && made.slug == slug && made.on == to.id())
+            .map(|made| made.name.clone()),
+    );
+    for name in names {
+        let _ = docker::capture_on(target, &["rm", "-f", &name], docker::READ_LIMIT);
+    }
+}
+
+/// Whether `volume` on `on` holds nothing at all; None when that could not be read.
+fn volume_empty(on: &Target, volume: &str, helper: &str) -> Option<bool> {
+    let mount = format!("{volume}:/v:ro");
+    let ran = docker::capture_on(
+        on,
+        &[
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--log-driver",
+            "none",
+            "-v",
+            &mount,
+            "--entrypoint",
+            "find",
+            helper,
+            "/v",
+            "-mindepth",
+            "1",
+            "-print",
+            "-quit",
+        ],
+        Duration::from_secs(120),
+    )
+    .ok()
+    .filter(|ran| ran.code == Some(0) && !ran.timed_out)?;
+    Some(ran.stdout.trim().is_empty())
 }
 
 /// `volume` made on `target` with the labels it has on `source` (compose finds its own volumes by them).
@@ -1267,15 +1399,24 @@ pub fn copy(args: CopyArgs) -> Result<()> {
 #[derive(Debug, PartialEq, Eq)]
 enum VolumeAction {
     Create,
+    /// A copy a move left there: removed with what it left beside it, then made again.
     Replace,
+    /// Nobody's record, and nothing in it: made again, with nothing lost.
+    Adopt,
     Refuse,
 }
 
-fn volume_action(exists_on_target: bool, left_by_an_earlier_move: bool) -> VolumeAction {
-    match (exists_on_target, left_by_an_earlier_move) {
-        (false, _) => VolumeAction::Create,
-        (true, true) => VolumeAction::Replace,
-        (true, false) => VolumeAction::Refuse,
+/// `empty`: whether a volume no move left there holds nothing (None when that could not be read, which refuses). Pure.
+fn volume_action(
+    exists_on_target: bool,
+    left_by_an_earlier_move: bool,
+    empty: Option<bool>,
+) -> VolumeAction {
+    match (exists_on_target, left_by_an_earlier_move, empty) {
+        (false, _, _) => VolumeAction::Create,
+        (true, true, _) => VolumeAction::Replace,
+        (true, false, Some(true)) => VolumeAction::Adopt,
+        (true, false, _) => VolumeAction::Refuse,
     }
 }
 
@@ -2134,6 +2275,39 @@ fn with_engine<T>(on: &Target, work: impl FnOnce() -> Result<T>) -> Result<T> {
     done
 }
 
+/// How often a move says it is alive while it waits on one long step that prints nothing.
+const BEAT_EVERY: Duration = Duration::from_secs(60);
+
+/// `work`, with the move's heartbeat kept fresh while it runs. For the steps that are silent yet bounded by their own
+/// limits (listing and hashing a volume's files, up to 30 minutes; sizing it; the reshape on the other engine). _(2026-11-20)
+/// Their heartbeat came only between steps, so one longer than [`STALE_HEARTBEAT_MS`] read as a move whose ic had died, and
+/// every other ic run, a second move included, went ahead beside a move still copying._
+fn beating<T>(work: impl FnOnce() -> T) -> T {
+    beating_with(BEAT_EVERY, heartbeat, work)
+}
+
+fn beating_with<T>(every: Duration, beat: fn(), work: impl FnOnce() -> T) -> T {
+    let done = Arc::new(AtomicBool::new(false));
+    let pulse = {
+        let done = Arc::clone(&done);
+        std::thread::spawn(move || {
+            let tick = every.min(Duration::from_secs(1));
+            let mut since = Instant::now();
+            while !done.load(Ordering::SeqCst) {
+                std::thread::sleep(tick);
+                if since.elapsed() >= every && !done.load(Ordering::SeqCst) {
+                    since = Instant::now();
+                    beat();
+                }
+            }
+        })
+    };
+    let answer = work();
+    done.store(true, Ordering::SeqCst);
+    let _ = pulse.join();
+    answer
+}
+
 fn heartbeat() {
     let _ = update_journal(|journal| {
         if let Some(moving) = journal.moving.as_mut() {
@@ -2424,6 +2598,7 @@ mod tests {
                 gone.removed = true;
                 gone
             }],
+            made: Vec::new(),
         };
         let due: Vec<String> = expired(&journal, 200).into_iter().map(|m| m.slug).collect();
         assert_eq!(due, vec!["a".to_string()]);
@@ -2435,6 +2610,7 @@ mod tests {
         let journal = Journal {
             moving: None,
             moved: vec![moved("a", 10, 100)],
+            made: Vec::new(),
         };
         let summary = summary_of(&journal, 20).unwrap();
         assert_eq!(summary["moving"], false);
@@ -2444,11 +2620,116 @@ mod tests {
     }
 
     #[test]
-    fn a_volume_already_there_is_replaced_only_when_an_earlier_move_left_it() {
-        assert_eq!(volume_action(false, false), VolumeAction::Create);
-        assert_eq!(volume_action(false, true), VolumeAction::Create);
-        assert_eq!(volume_action(true, true), VolumeAction::Replace);
-        assert_eq!(volume_action(true, false), VolumeAction::Refuse);
+    fn a_volume_already_there_is_replaced_only_when_an_earlier_move_left_it_or_it_is_empty() {
+        for empty in [None, Some(true), Some(false)] {
+            assert_eq!(volume_action(false, false, empty), VolumeAction::Create);
+            assert_eq!(volume_action(false, true, empty), VolumeAction::Create);
+            assert_eq!(volume_action(true, true, empty), VolumeAction::Replace);
+        }
+        assert_eq!(volume_action(true, false, Some(true)), VolumeAction::Adopt);
+        // Files nobody's record accounts for, or a look inside that failed: never removed.
+        assert_eq!(
+            volume_action(true, false, Some(false)),
+            VolumeAction::Refuse
+        );
+        assert_eq!(volume_action(true, false, None), VolumeAction::Refuse);
+    }
+
+    fn made(slug: &str, name: &str, container: bool) -> Made {
+        Made {
+            slug: slug.into(),
+            on: "intentic".into(),
+            name: name.into(),
+            container,
+        }
+    }
+
+    #[test]
+    fn what_a_cut_off_move_made_is_known_by_its_slug_engine_and_name() {
+        // 2026-11-20: a move cut off mid-copy left intentic-history-<slug> on the intentic engine with no record.
+        let journal = Journal {
+            made: vec![made("e695", "intentic-history-e695", false)],
+            ..Journal::default()
+        };
+        assert!(made_by_a_move(
+            &journal,
+            "e695",
+            "intentic",
+            "intentic-history-e695"
+        ));
+        assert!(!made_by_a_move(
+            &journal,
+            "e695",
+            "dockerDesktop",
+            "intentic-history-e695"
+        ));
+        assert!(!made_by_a_move(
+            &journal,
+            "other",
+            "intentic",
+            "intentic-history-e695"
+        ));
+        assert!(!made_by_a_move(
+            &journal,
+            "e695",
+            "intentic",
+            "intentic-workspace-e695"
+        ));
+    }
+
+    #[test]
+    fn an_undo_forgets_only_what_it_removed_and_a_finished_move_forgets_all_it_made() {
+        let mut journal = Journal {
+            made: vec![
+                made("a", "intentic-history-a", false),
+                made("a", "intentic-workspace-a", false),
+                made("a", "intentic-sandbox-a", true),
+                made("b", "intentic-history-b", false),
+            ],
+            ..Journal::default()
+        };
+        forget_made(
+            &mut journal,
+            "a",
+            "intentic",
+            Some(&[
+                "intentic-workspace-a".to_string(),
+                "intentic-sandbox-a".to_string(),
+            ]),
+        );
+        let names: Vec<&str> = journal.made.iter().map(|made| made.name.as_str()).collect();
+        assert_eq!(names, vec!["intentic-history-a", "intentic-history-b"]);
+        forget_made(&mut journal, "a", "dockerDesktop", None);
+        assert_eq!(journal.made.len(), 2);
+        forget_made(&mut journal, "a", "intentic", None);
+        let names: Vec<&str> = journal.made.iter().map(|made| made.name.as_str()).collect();
+        assert_eq!(names, vec!["intentic-history-b"]);
+    }
+
+    #[test]
+    fn a_journal_written_before_made_existed_still_reads_and_one_with_none_writes_none() {
+        let old = r#"{"moving":null,"moved":[]}"#;
+        let journal: Journal = serde_json::from_str(old).unwrap();
+        assert!(journal.made.is_empty());
+        assert!(!serde_json::to_string(&journal).unwrap().contains("made"));
+    }
+
+    static BEATS: AtomicU64 = AtomicU64::new(0);
+    fn count_beat() {
+        BEATS.fetch_add(1, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn a_long_silent_step_keeps_the_heartbeat_fresh_and_stops_beating_when_it_ends() {
+        let answer = beating_with(Duration::from_millis(20), count_beat, || {
+            std::thread::sleep(Duration::from_millis(150));
+            7
+        });
+        assert_eq!(answer, 7);
+        let beats = BEATS.load(Ordering::SeqCst);
+        assert!(beats >= 3, "beat {beats} times in 150 ms at one per 20 ms");
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(BEATS.load(Ordering::SeqCst), beats);
     }
 
     fn inspect() -> Value {
@@ -2552,6 +2833,7 @@ mod tests {
                 heartbeat: 2,
             }),
             moved: vec![moved("a", 1, 2)],
+            made: vec![made("a", "intentic-history-a", false)],
         };
         let text = serde_json::to_string(&journal).unwrap();
         assert!(text.contains("\"removeAfter\""));

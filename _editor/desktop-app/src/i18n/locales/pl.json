@@ -47,6 +47,7 @@
         "pcSetupChecking": "Sprawdzanie, czego potrzebuje ten komputer…",
         "setUpThisPc": "Skonfiguruj ten komputer",
         "pcSetupAdminDeclined": "Windows nie otrzymał uprawnień administratora, więc nic się nie zmieniło. Skonfiguruj komputer ponownie i wybierz „Tak”, gdy Windows zapyta.",
+        "pcSetupAdminAgain": "Windows ponownie odmówił uprawnień administratora, więc nic się nie zmieniło. Ten krok zmienia sam Windows i może na niego pozwolić tylko administrator tego komputera: poproś go, by wybrał „Tak”, gdy Windows zapyta, i podał swoje hasło. Możesz też uruchomić sandbox na naszej maszynie, która niczego od tego komputera nie potrzebuje.",
         "pcSetupFailed": "Konfiguracja tego komputera zatrzymała się przed końcem."
     },
     "closeConfirm": {
