@@ -58,6 +58,9 @@ test("no module outside the store opens a file without the document that describ
 // Caches kept outside a runtime, each an answer the daemon fetches or measures again whenever the file is gone or
 // unreadable.
 const CACHES_OUTSIDE_RUNTIMES = [
+    // The models a provider refused on a translator credential, taken off its list for days; lost, the next refusal
+    // records it again.
+    "agent/providers/translator-models.ts",
     // The browser MCP's tool list, probed from the backend again whenever the file is gone or not a list.
     "browser/tools/browser-schema-cache.ts",
     // What the ChatGPT kit remembers per browser (a project's address, a chat's): lost, it is looked up in the sidebar.

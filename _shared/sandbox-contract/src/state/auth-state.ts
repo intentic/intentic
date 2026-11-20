@@ -91,6 +91,9 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     { path: "gemini/models.json", portability: "derived" },
     // Each custom endpoint's last discovered model list, fetched again from the endpoint.
     { path: "endpoints/", portability: "derived" },
+    // Models the provider refused on a translator credential as off its plan (agent/providers/translator-models.ts):
+    // a cache that expires in days, and the target learns its own from its first refusal.
+    { path: "translator-refused-models.json", portability: "derived" },
     // Values a computer released for one use each, for masking only; never outlive the process handed them.
     { path: "keyring-released.json", portability: "derived" },
     // The shell script and socket OpenCode runs commands through, written at boot.

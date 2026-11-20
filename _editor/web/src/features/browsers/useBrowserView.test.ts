@@ -691,7 +691,7 @@ test("where castd serves the window, its picture and the person's input move to 
     await waitFor(() => expect(FakeWorker.made[0]?.posted.some((message) => message.type === `dial`)).toBe(true));
     const worker = FakeWorker.made[0]!;
     const dial = worker.posted.find((message) => message.type === `dial`);
-    expect(dial).toMatchObject({ url: `wss://sandbox.test/system/browser-media/cast-1?token=t.m` });
+    expect(dial).toMatchObject({ url: `wss://sandbox.test/system/browser-media/cast-1?token=t.m&lossless=1` });
     const id = dial?.type === `dial` ? dial.socket : 0;
     worker.say({ type: `open`, socket: id });
     worker.say({ type: `text`, socket: id, data: JSON.stringify({ type: `hello`, width: 1280, height: 800, scale: 1, codec: `avc1.42c033`, readOnly: false }) });
