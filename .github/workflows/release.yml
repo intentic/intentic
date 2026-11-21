@@ -506,7 +506,13 @@ jobs:
   # without one would fail after the GitHub release already went out), and the attestations.
   publish:
     needs: [plan, windows-verify, sandbox-arm64, images-amd64, linux-build, ic-build-more]
-    if: ${{ needs.windows-verify.result == 'success' && needs.sandbox-arm64.result == 'success' && needs.images-amd64.result == 'success' && needs.linux-build.result == 'success' && needs.ic-build-more.result == 'success' }}
+    # THE ONE WAY PAST windows-verify: the repository variable RELEASE_SKIP_WINDOWS_VERIFY set to EXACTLY the version
+    # being released lets this job publish though windows-verify failed (it must have run: skipped means no Windows
+    # build to ship). It exists for a Windows machine nobody can reach (a locked session no job can unlock,
+    # 2026-11-21), not for a candidate that failed its smoke. Pinned to one version so a forgotten variable never waves
+    # a later release through; delete it once that version is out. `!cancelled()` because a failed need otherwise
+    # skips this job before the expression is read.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.windows-verify.result == 'success' || (needs.windows-verify.result == 'failure' && needs.plan.outputs.version != '' && vars.RELEASE_SKIP_WINDOWS_VERIFY == needs.plan.outputs.version)) && needs.sandbox-arm64.result == 'success' && needs.images-amd64.result == 'success' && needs.linux-build.result == 'success' && needs.ic-build-more.result == 'success' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       # Still ci-desktop rather than ci-base: the assemble step re-runs verify-desktop-bundle.sh over the
