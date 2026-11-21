@@ -446,7 +446,9 @@ describe(`what the rail says about what it is not offering`, () => {
 
 describe(`a pool nobody picks among`, () => {
     // Many routed sign-ins are one offer to a reader who cannot act on any of them individually.
-    it(`stands a routed provider's whole pool in for by its roomiest reading`, () => {
+    // Before 2026-11-21 the pool's one row was its roomiest account's, so a day spent across thirty sign-ins still read
+    // 100% left while any one of them was untouched. The row is the pool's total: the spent account counts too.
+    it(`stands a routed provider's whole pool in for by what all its accounts have used together`, () => {
         translatorAccounts.value = {
             ...NO_ROUTED,
             gemini: [google(1, 44), google(2, 4), google(3, 100), google(4, 30), google(5, 12)],
@@ -455,8 +457,47 @@ describe(`a pool nobody picks among`, () => {
         const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.pooled).toBe(true);
         expect(entry?.rows).toHaveLength(1);
-        expect(entry?.rows[0]).toMatchObject({ label: undefined, percent: 4 });
+        expect(entry?.rows[0]).toMatchObject({ label: undefined, identity: undefined, percent: 38 });
+        expect(entry?.rows[0]?.lanes.map((lane) => [lane.kind, lane.percent, lane.pace])).toEqual([[`seven_day`, 38, undefined]]);
         expect([entry?.ready, entry?.total, entry?.hidden]).toEqual([4, 5, 0]);
+    });
+
+    it(`sums each family's allowance on its own, so one untouched account no longer reads as the whole pool unused`, () => {
+        const families = (index: number, gemini: number, claudeUse: number, resetsAt = after(86_400)): TranslatorAccount => ({
+            name: `gemini-${index}`,
+            label: `radarsuspam${index}@gmail.com`,
+            usage: {
+                measuredAt: NOW - 60_000,
+                windows: [
+                    { kind: `gemini`, label: `Weekly · Gemini models`, utilization: gemini, resetsAt, gates: { models: [`gemini-3-pro`] } },
+                    { kind: `claude`, label: `Weekly · Claude and GPT-OSS`, utilization: claudeUse, resetsAt: after(400_000), gates: { models: [`claude-sonnet-4-6`] } },
+                ],
+            },
+        });
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            gemini: [families(1, 0, 100), families(2, 60, 100, after(3_600)), families(3, 0, 100), families(4, 20, 0)],
+        };
+
+        const lanes = chatCapacity([], NOW).providers[0]?.rows[0]?.lanes ?? [];
+        expect(Object.fromEntries(lanes.map((lane) => [lane.kind, lane.percent]))).toEqual({ gemini: 20, claude: 75 });
+        // The soonest reset that hands spent room back, not an untouched account's.
+        expect(lanes.find((lane) => lane.kind === `gemini`)?.resetsAt).toBe(after(3_600));
+    });
+
+    it(`leaves a credential that needs a person and an account with no reading out of the pool's figure`, () => {
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            gemini: [
+                google(1, 40),
+                google(2, 0),
+                { name: `gemini-3`, label: `unread@gmail.com` },
+                { ...google(4, 100), cooling: { reason: NO_PROJECT } },
+            ],
+        };
+
+        const [entry] = chatCapacity([], NOW).providers;
+        expect(entry?.rows[0]?.percent).toBe(20);
     });
 
     it(`caps a choosable list at three rows and counts the rest`, () => {

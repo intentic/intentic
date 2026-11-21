@@ -201,7 +201,7 @@ const ambiguousLabels = (rows: readonly PlanLimitRow[]): ReadonlySet<string> => 
 const untouchedSlice = (pool: PlanLimitPool, metersAll: boolean): boolean =>
     metersAll && pool.gates !== `all` && Math.round(remainingPercent(pool.percent)) >= 100;
 
-const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] => {
+const capacityLanes = (row: PlanLimitRow, paced = true): readonly CapacityLane[] => {
     const metersAll = row.pools.some((pool) => pool.gates === `all`);
     const sorted = row.pools
         .filter((pool) => pool.gates !== `none` && !untouchedSlice(pool, metersAll))
@@ -225,20 +225,52 @@ const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] => {
         depth,
         within: parent?.pool.label,
         capped,
-        pace: capped ? undefined : poolPace(pool),
+        pace: capped || !paced ? undefined : poolPace(pool),
     }));
+};
+
+// A pool's allowances as one: each window's use is the mean of what its accounts have used of it, so thirty fresh
+// sign-ins and one spent read as about 3% gone, never as the roomiest one's 100% left nor the tightest one's 0%. Every
+// account the provider counts goes in, spent ones too: they are part of the total the turns spend. A credential that
+// needs a person sits outside `total`, so it sits outside the figure; an account with no reading says nothing and is
+// left out rather than counted as unused. A window resets account by account, so the date carried is the soonest one
+// that hands spent room back.
+const pooledPools = (rows: readonly PlanLimitRow[]): readonly PlanLimitPool[] => {
+    const byKind = new Map<string, PlanLimitPool[]>();
+    for (const pool of rows.filter((row) => !needsAPerson(row)).flatMap((row) => row.pools)) {
+        byKind.set(pool.kind, [...(byKind.get(pool.kind) ?? []), pool]);
+    }
+    return [...byKind.values()].flatMap(([first, ...rest]) => {
+        if (first === undefined) {
+            return [];
+        }
+        const all = [first, ...rest];
+        const resets = (all.some((pool) => pool.percent > 0) ? all.filter((pool) => pool.percent > 0) : all).flatMap((pool) =>
+            pool.resetsAt === undefined ? [] : [pool.resetsAt],
+        );
+        return [
+            {
+                ...first,
+                percent: all.reduce((sum, pool) => sum + pool.percent, 0) / all.length,
+                resetsAt: resets.length === 0 ? undefined : Math.min(...resets),
+                rounded: all.some((pool) => pool.rounded === true),
+                lapsedAt: undefined,
+                missingSince: undefined,
+            },
+        ];
+    });
 };
 
 // A credential no turn runs on until someone acts: named by what it is missing, never dated by a figure.
 const needsAPerson = (row: PlanLimitRow): boolean => row.state.kind === `blocked` && row.state.fix !== `wait`;
 
-const capacityRow = (row: PlanLimitRow, label: string | undefined, mine: boolean): CapacityRow => ({
+const capacityRow = (row: PlanLimitRow, label: string | undefined, mine: boolean, paced = true): CapacityRow => ({
     id: row.id,
     label,
     // Omitted when it matches the label already shown, to avoid repeating it on hover.
     identity: row.identity === label ? undefined : row.identity,
     percent: openPercent(row.pools),
-    lanes: capacityLanes(row),
+    lanes: capacityLanes(row, paced),
     // Which of two kinds of nothing to report: not read yet, or never publishes limits.
     note: row.readable ? t(`chat.chatCapacity.noReadingYet`) : t(`chat.chatCapacity.noPublishedLimits`),
     stale: row.stale,
@@ -252,20 +284,39 @@ const drawnRows = (ready: readonly PlanLimitRow[], own: PlanLimitRow | undefined
     return own === undefined || top.includes(own) ? top : [...top.slice(0, ROWS_PER_PROVIDER - 1), own];
 };
 
+// The one row a pool is drawn as: its accounts' allowances summed (pooledPools), a ceiling when any of them is a floor.
+// Undefined when no account in it has a reading, so the row says so rather than drawing a guess.
+const pooledRow = (group: PlanLimitGroup, ready: readonly PlanLimitRow[]): PlanLimitRow | undefined => {
+    const [lead] = ready;
+    if (lead === undefined) {
+        return undefined;
+    }
+    const read = group.rows.filter((row) => !needsAPerson(row) && row.pools.length > 0);
+    // A reading whose re-read keeps failing is a floor from before it stopped: averaged in, it would read the pool
+    // roomier only because it is old. It counts only when nothing else was read (as oldestMovableReading dates).
+    const movable = read.filter((row) => row.unread === undefined);
+    const counted = movable.length > 0 ? movable : read;
+    return counted.length === 0 ? lead : { ...lead, identity: undefined, pools: pooledPools(counted), stale: counted.some((row) => row.stale) };
+};
+
 const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[], mine: CapacityMine | undefined): CapacityProvider => {
     // A routed pool or a lone account is one row either way, since the heading already names what the bar measures.
     const pooled = ready[0]?.routed === true && group.rows.length > 1;
     const here = mine?.provider === group.provider;
     const own = here && mine.account !== undefined ? ready.find((row) => row.account === mine.account) : undefined;
-    // A pool's one row stands for every account in it, the chat's own among them.
-    const shown = pooled ? ready.slice(0, 1) : drawnRows(ready, own);
+    // A pool's one row stands for every account in it, the chat's own among them. Its pace is left undrawn: each
+    // account's window opened at its own instant, so no one clock reads the summed bar.
+    const pool = pooled ? pooledRow(group, ready) : undefined;
+    const shown = pool !== undefined ? [pool] : drawnRows(ready, own);
     const named = !pooled && group.rows.length > 1;
     const ambiguous = ambiguousLabels(group.rows);
     const blocked = attentionGroups(group.rows).reduce((count, entry) => count + entry.rows.length, 0);
     return {
         provider: group.provider,
         label: providerDisplayLabel(group.provider),
-        rows: shown.map((row) => capacityRow(row, named ? displayName(row, ambiguous) : undefined, own !== undefined && (pooled || row === own))),
+        rows: shown.map((row) =>
+            capacityRow(row, named ? displayName(row, ambiguous) : undefined, own !== undefined && (pooled || row === own), !pooled),
+        ),
         ready: ready.length,
         total: group.rows.length - blocked,
         blocked,
