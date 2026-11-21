@@ -1,5 +1,7 @@
 import { openForwardedPort } from "@intentic/ui";
 import { reportClient } from "../../app/clientDiagnostics";
+import { desktopApp } from "../../app/environments/desktop";
+import { useNotifications } from "../../workbench/notifications/notifications";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 
@@ -27,4 +29,22 @@ const listed = async (port: number): Promise<string | undefined> => {
     return ports.find((entry) => entry.port === port && entry.forwarded)?.previewUrl;
 };
 
-export const openLoopbackPreview = (link: { port: number; path: string }): void => openForwardedPort({ port: link.port, path: link.path, forward, listed });
+// The desktop app sends every `window.open` to the system browser, a blank held tab included (as `about:blank`, which
+// Windows answers with a Store prompt), so there the finished address is handed over instead and a failure is a toast.
+export const openLoopbackPreview = (link: { port: number; path: string }): void => {
+    if (desktopApp() === undefined) {
+        openForwardedPort({ port: link.port, path: link.path, forward, listed });
+        return;
+    }
+    const { warn } = useNotifications();
+    openForwardedPort({
+        port: link.port,
+        path: link.path,
+        forward,
+        listed,
+        onError: warn,
+        handOff: (url) => {
+            window.open(url);
+        },
+    });
+};

@@ -96,3 +96,24 @@ test("a list that cannot be read leaves the forward's own failure to report", as
     await settle();
     expect(tab.document.body.textContent).toBe(`port 5173 is a browser's DevTools port`);
 });
+
+// The desktop app hands every window.open to the system browser, a blank one too (Windows then offers a Store app for
+// `about:blank`), so a hand-off opens nothing on the click and gets the finished address instead.
+test("a hand-off opens no blank tab and is given the preview address once it serves", async () => {
+    const open = jest.fn(() => tab);
+    Object.defineProperty(globalThis, `open`, { value: open, configurable: true, writable: true });
+    const handOff = jest.fn();
+    openForwardedPort({ port: 5173, path: `/app`, forward: async () => PREVIEW, handOff });
+    await settle();
+    expect(open).not.toHaveBeenCalled();
+    expect(handOff).toHaveBeenCalledWith(`${PREVIEW}/app`);
+});
+
+test("a hand-off whose forward fails says so only through onError", async () => {
+    const handOff = jest.fn();
+    const onError = jest.fn();
+    openForwardedPort({ port: 5173, forward: async () => undefined, handOff, onError });
+    await settle();
+    expect(handOff).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(t(`ui.portPreview.noPublicHostname`));
+});

@@ -117,6 +117,10 @@ export interface ForwardedPortTab {
     readonly listed?: (port: number) => Promise<string | undefined>;
     // Optional extra place to show the error; the opened tab always shows it too.
     readonly onError?: (message: string) => void;
+    // Where no tab can be held on the click: the desktop app hands every `window.open` to the system browser, so a held
+    // blank tab reaches the OS as `about:blank` (Windows then offers a Store app for it) and leaves nothing to navigate.
+    // Given this, no tab is opened; the preview address goes here once it serves, and failures only reach `onError`.
+    readonly handOff?: (url: string) => void;
 }
 
 // A forward the daemon carried out can still fail here: its answer lost on the way back while the port is forwarded, so
@@ -147,13 +151,15 @@ const forwardOrListed = async (
 
 // Forwards a port, opening a tab synchronously within the click's user activation (a later open would hit a
 // popup blocker). `opener` is severed by hand, not via `noopener`, which would leave no handle to navigate.
-export const openForwardedPort = ({ port, path = "", forward, listed, onError }: ForwardedPortTab): void => {
-    const tab = window.open("", "_blank");
+export const openForwardedPort = ({ port, path = "", forward, listed, onError, handOff }: ForwardedPortTab): void => {
+    const tab = handOff === undefined ? window.open("", "_blank") : null;
     if (tab !== null) {
         tab.opener = null;
     }
     // The tab, if still open; a closed or blocked tab means nothing left to narrate to.
     const live = (): Window | undefined => (tab !== null && !tab.closed ? tab : undefined);
+    // Still worth carrying on: a held tab while it is open, a hand-off always.
+    const wanted = (): boolean => handOff !== undefined || live() !== undefined;
     const show = (text: string): void => {
         const showing = live();
         if (showing !== undefined) {
@@ -164,6 +170,16 @@ export const openForwardedPort = ({ port, path = "", forward, listed, onError }:
         show(message);
         onError?.(message);
     };
+    const arrive = (url: string): void => {
+        if (handOff !== undefined) {
+            handOff(url);
+            return;
+        }
+        const arrived = live();
+        if (arrived !== undefined) {
+            arrived.location.href = url;
+        }
+    };
     show(t(`ui.portPreview.forwarding`, { port }));
     void (async () => {
         try {
@@ -173,18 +189,13 @@ export const openForwardedPort = ({ port, path = "", forward, listed, onError }:
                 return;
             }
             show(t(`ui.portPreview.waitingFor`, { url: previewUrl }));
-            const probe = await probePreview(previewUrl, { stillWanted: () => live() !== undefined });
+            const probe = await probePreview(previewUrl, { stillWanted: wanted });
             if (probe.outcome === "unreachable") {
                 fail(t(`ui.portPreview.unreachable`, { url: previewUrl }));
-                return;
-            }
-            if (probe.outcome === "reached" && probe.state !== "serving") {
+            } else if (probe.outcome === "reached" && probe.state !== "serving") {
                 fail(t(`ui.portPreview.lapsed`, { port }));
-                return;
-            }
-            const arrived = live();
-            if (probe.outcome === "reached" && arrived !== undefined) {
-                arrived.location.href = `${previewUrl}${path}`;
+            } else if (probe.outcome === "reached") {
+                arrive(`${previewUrl}${path}`);
             }
         } catch (error) {
             fail(
