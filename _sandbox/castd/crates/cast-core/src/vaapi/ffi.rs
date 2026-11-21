@@ -4,7 +4,12 @@
 //! offsets that matter to what bindgen made of the same headers); bitfields are the `u32` they share, set through the
 //! helpers below.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals, dead_code)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    dead_code
+)]
 
 use std::ffi::{c_char, c_int, c_uint, c_void};
 
@@ -502,10 +507,12 @@ pub struct Va {
     pub vaTerminate: unsafe extern "C" fn(VADisplay) -> VAStatus,
     pub vaErrorStr: unsafe extern "C" fn(VAStatus) -> *const c_char,
     pub vaQueryVendorString: unsafe extern "C" fn(VADisplay) -> *const c_char,
-    pub vaSetInfoCallback:
-        Option<unsafe extern "C" fn(VADisplay, VAMessageCallback, *mut c_void) -> VAMessageCallback>,
-    pub vaSetErrorCallback:
-        Option<unsafe extern "C" fn(VADisplay, VAMessageCallback, *mut c_void) -> VAMessageCallback>,
+    pub vaSetInfoCallback: Option<
+        unsafe extern "C" fn(VADisplay, VAMessageCallback, *mut c_void) -> VAMessageCallback,
+    >,
+    pub vaSetErrorCallback: Option<
+        unsafe extern "C" fn(VADisplay, VAMessageCallback, *mut c_void) -> VAMessageCallback,
+    >,
     pub vaSetDriverName: Option<unsafe extern "C" fn(VADisplay, *const c_char) -> VAStatus>,
     pub vaMaxNumEntrypoints: unsafe extern "C" fn(VADisplay) -> c_int,
     pub vaQueryConfigEntrypoints:
@@ -686,21 +693,51 @@ mod tests {
         assert_eq!(size_of::<VAEncPackedHeaderParameterBuffer>(), 28);
         assert_eq!(size_of::<VAProcPipelineParameterBuffer>(), 224);
         assert_eq!(offset_of!(VAEncSequenceParameterBufferH264, seq_fields), 28);
-        assert_eq!(offset_of!(VAEncSequenceParameterBufferH264, offset_for_ref_frame), 44);
-        assert_eq!(offset_of!(VAEncSequenceParameterBufferH264, vui_fields), 1092);
-        assert_eq!(offset_of!(VAEncSequenceParameterBufferH264, time_scale), 1112);
+        assert_eq!(
+            offset_of!(VAEncSequenceParameterBufferH264, offset_for_ref_frame),
+            44
+        );
+        assert_eq!(
+            offset_of!(VAEncSequenceParameterBufferH264, vui_fields),
+            1092
+        );
+        assert_eq!(
+            offset_of!(VAEncSequenceParameterBufferH264, time_scale),
+            1112
+        );
         assert_eq!(offset_of!(VAEncPictureParameterBufferH264, coded_buf), 612);
         assert_eq!(offset_of!(VAEncPictureParameterBufferH264, frame_num), 620);
-        assert_eq!(offset_of!(VAEncPictureParameterBufferH264, pic_init_qp), 622);
+        assert_eq!(
+            offset_of!(VAEncPictureParameterBufferH264, pic_init_qp),
+            622
+        );
         assert_eq!(offset_of!(VAEncPictureParameterBufferH264, pic_fields), 628);
         assert_eq!(offset_of!(VAEncSliceParameterBufferH264, idr_pic_id), 14);
         assert_eq!(offset_of!(VAEncSliceParameterBufferH264, RefPicList0), 36);
-        assert_eq!(offset_of!(VAEncSliceParameterBufferH264, luma_weight_l0), 2344);
-        assert_eq!(offset_of!(VAEncSliceParameterBufferH264, cabac_init_idc), 3118);
-        assert_eq!(offset_of!(VAEncPackedHeaderParameterBuffer, has_emulation_bytes), 8);
-        assert_eq!(offset_of!(VAProcPipelineParameterBuffer, input_color_properties), 132);
-        assert_eq!(offset_of!(VAProcPipelineParameterBuffer, processing_mode), 148);
-        assert_eq!(offset_of!(VAProcPipelineParameterBuffer, output_hdr_metadata), 152);
+        assert_eq!(
+            offset_of!(VAEncSliceParameterBufferH264, luma_weight_l0),
+            2344
+        );
+        assert_eq!(
+            offset_of!(VAEncSliceParameterBufferH264, cabac_init_idc),
+            3118
+        );
+        assert_eq!(
+            offset_of!(VAEncPackedHeaderParameterBuffer, has_emulation_bytes),
+            8
+        );
+        assert_eq!(
+            offset_of!(VAProcPipelineParameterBuffer, input_color_properties),
+            132
+        );
+        assert_eq!(
+            offset_of!(VAProcPipelineParameterBuffer, processing_mode),
+            148
+        );
+        assert_eq!(
+            offset_of!(VAProcPipelineParameterBuffer, output_hdr_metadata),
+            152
+        );
         assert_eq!(offset_of!(VAImage, pitches), 68);
     }
 }

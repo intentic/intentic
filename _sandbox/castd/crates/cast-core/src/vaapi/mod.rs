@@ -271,7 +271,14 @@ impl Device {
         (a.value != VA_ATTRIB_NOT_SUPPORTED).then_some(a.value)
     }
 
-    fn surfaces(&self, format: u32, fourcc: Option<u32>, w: u32, h: u32, n: usize) -> Result<Vec<VASurfaceID>, String> {
+    fn surfaces(
+        &self,
+        format: u32,
+        fourcc: Option<u32>,
+        w: u32,
+        h: u32,
+        n: usize,
+    ) -> Result<Vec<VASurfaceID>, String> {
         let mut ids = vec![VA_INVALID_SURFACE; n];
         let mut attrs: Vec<VASurfaceAttrib> = fourcc
             .map(|f| VASurfaceAttrib::int(VASurfaceAttribPixelFormat, f as i32))
@@ -298,27 +305,56 @@ impl Device {
     }
 
     /// A parameter buffer holding `data`'s bytes.
-    fn buffer<T: Copy>(&self, ctx: VAContextID, kind: VABufferType, data: &T) -> Result<VABufferID, String> {
+    fn buffer<T: Copy>(
+        &self,
+        ctx: VAContextID,
+        kind: VABufferType,
+        data: &T,
+    ) -> Result<VABufferID, String> {
         self.buffer_bytes(ctx, kind, std::ptr::from_ref(data).cast(), size_of::<T>())
     }
 
-    fn buffer_bytes(&self, ctx: VAContextID, kind: VABufferType, data: *const u8, len: usize) -> Result<VABufferID, String> {
+    fn buffer_bytes(
+        &self,
+        ctx: VAContextID,
+        kind: VABufferType,
+        data: *const u8,
+        len: usize,
+    ) -> Result<VABufferID, String> {
         let mut id = VA_INVALID_ID;
         va!(
             self.va,
-            vaCreateBuffer(self.dpy, ctx, kind, len as u32, 1, data as *mut c_void, &mut id)
+            vaCreateBuffer(
+                self.dpy,
+                ctx,
+                kind,
+                len as u32,
+                1,
+                data as *mut c_void,
+                &mut id
+            )
         )?;
         Ok(id)
     }
 
     /// A misc parameter buffer: its type, then `payload`.
-    fn misc<T: Copy>(&self, ctx: VAContextID, kind: u32, payload: &T) -> Result<VABufferID, String> {
+    fn misc<T: Copy>(
+        &self,
+        ctx: VAContextID,
+        kind: u32,
+        payload: &T,
+    ) -> Result<VABufferID, String> {
         let mut bytes = kind.to_ne_bytes().to_vec();
         // SAFETY: T is one of ffi.rs's plain-data payloads.
         bytes.extend_from_slice(unsafe {
             std::slice::from_raw_parts(std::ptr::from_ref(payload).cast::<u8>(), size_of::<T>())
         });
-        self.buffer_bytes(ctx, VAEncMiscParameterBufferType, bytes.as_ptr(), bytes.len())
+        self.buffer_bytes(
+            ctx,
+            VAEncMiscParameterBufferType,
+            bytes.as_ptr(),
+            bytes.len(),
+        )
     }
 
     /// Writes into `surface` through `write(memory, pitches, offsets)`: mapped in place where the driver derives an
@@ -337,7 +373,10 @@ impl Device {
         if !derived {
             *derive = false;
             let mut f = *format;
-            va!(self.va, vaCreateImage(self.dpy, &mut f, w as i32, h as i32, &mut image))?;
+            va!(
+                self.va,
+                vaCreateImage(self.dpy, &mut f, w as i32, h as i32, &mut image)
+            )?;
         }
         let result = (|| {
             let mut ptr = std::ptr::null_mut();
@@ -479,7 +518,9 @@ impl Vaapi {
         if cfg.width < 16 || cfg.height < 16 || cfg.width % 2 == 1 || cfg.height % 2 == 1 {
             return Err(format!("vaapi: a {}x{} picture", cfg.width, cfg.height));
         }
-        let rc_modes = dev.attribute(dev.entrypoint, VAConfigAttribRateControl).unwrap_or(0);
+        let rc_modes = dev
+            .attribute(dev.entrypoint, VAConfigAttribRateControl)
+            .unwrap_or(0);
         // CBR where the driver's VBR misbehaves (`CAST_VAAPI_RC=cbr`); never stuffing either way.
         let cbr = std::env::var("CAST_VAAPI_RC").is_ok_and(|v| v == "cbr");
         let rc = if rc_modes & VA_RC_VBR != 0 && !cbr {
@@ -493,8 +534,8 @@ impl Vaapi {
             ));
         };
         let packed = dev
-                .attribute(dev.entrypoint, VAConfigAttribEncPackedHeaders)
-                .is_some_and(|v| v & VA_ENC_PACKED_HEADER_SEQUENCE != 0);
+            .attribute(dev.entrypoint, VAConfigAttribEncPackedHeaders)
+            .is_some_and(|v| v & VA_ENC_PACKED_HEADER_SEQUENCE != 0);
         let mut attrs = vec![
             VAConfigAttrib {
                 type_: VAConfigAttribRTFormat,
@@ -611,7 +652,14 @@ impl Vaapi {
         let mut config = VA_INVALID_ID;
         va!(
             d.va,
-            vaCreateConfig(d.dpy, VAProfileNone, VAEntrypointVideoProc, std::ptr::null_mut(), 0, &mut config)
+            vaCreateConfig(
+                d.dpy,
+                VAProfileNone,
+                VAEntrypointVideoProc,
+                std::ptr::null_mut(),
+                0,
+                &mut config
+            )
         )?;
         let mut vpp = Vpp {
             config,
@@ -624,7 +672,16 @@ impl Vaapi {
             let mut target = self.input;
             va!(
                 d.va,
-                vaCreateContext(d.dpy, config, w as i32, h as i32, VA_PROGRESSIVE, &mut target, 1, &mut vpp.ctx)
+                vaCreateContext(
+                    d.dpy,
+                    config,
+                    w as i32,
+                    h as i32,
+                    VA_PROGRESSIVE,
+                    &mut target,
+                    1,
+                    &mut vpp.ctx
+                )
             )
         })();
         if let Err(e) = made {
@@ -651,19 +708,26 @@ impl Vaapi {
                 };
                 let d = &self.dev;
                 let row = w as usize * 4;
-                d.upload(vpp.rgb, &bgrx_format(), w, h, &mut vpp.derive, |mem, pitch, offset| {
-                    for y in 0..h as usize {
-                        let src = &data[y * stride..y * stride + row];
-                        // SAFETY: the mapped image holds `h` rows of `pitch[0]` bytes from `offset[0]`.
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(
-                                src.as_ptr(),
-                                mem.add(offset[0] as usize + y * pitch[0] as usize),
-                                row,
-                            )
-                        };
-                    }
-                })?;
+                d.upload(
+                    vpp.rgb,
+                    &bgrx_format(),
+                    w,
+                    h,
+                    &mut vpp.derive,
+                    |mem, pitch, offset| {
+                        for y in 0..h as usize {
+                            let src = &data[y * stride..y * stride + row];
+                            // SAFETY: the mapped image holds `h` rows of `pitch[0]` bytes from `offset[0]`.
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    src.as_ptr(),
+                                    mem.add(offset[0] as usize + y * pitch[0] as usize),
+                                    row,
+                                )
+                            };
+                        }
+                    },
+                )?;
                 let region = VARectangle {
                     x: 0,
                     y: 0,
@@ -721,7 +785,10 @@ impl Vaapi {
                     let v = &p.v[y * p.stride_uv..y * p.stride_uv + w / 2];
                     // SAFETY: the chroma plane holds `h / 2` rows of `pitch[1]` bytes from `offset[1]`, `w` used.
                     let dst = unsafe {
-                        std::slice::from_raw_parts_mut(mem.add(offset[1] as usize + y * pitch[1] as usize), w)
+                        std::slice::from_raw_parts_mut(
+                            mem.add(offset[1] as usize + y * pitch[1] as usize),
+                            w,
+                        )
                     };
                     for (i, pair) in dst.as_chunks_mut::<2>().0.iter_mut().enumerate() {
                         *pair = [u[i], v[i]];
@@ -834,7 +901,11 @@ impl VideoEncoder for Vaapi {
     ) -> Result<Encoded, String> {
         self.load(p)?;
         let idr = force_idr || self.since_idr.is_none();
-        let count = if idr { 0 } else { self.since_idr.unwrap_or(0) + 1 };
+        let count = if idr {
+            0
+        } else {
+            self.since_idr.unwrap_or(0) + 1
+        };
         let frame_num = (count % (1 << LOG2_MAX_FRAME_NUM)) as u32;
         let poc = (2 * count) as i32;
         let reference = self.recon[1 - self.current];
@@ -843,7 +914,11 @@ impl VideoEncoder for Vaapi {
         let mut buffers = Vec::new();
         let result = (|| {
             if idr {
-                buffers.push(d.buffer(self.ctx, VAEncSequenceParameterBufferType, &self.sequence())?);
+                buffers.push(d.buffer(
+                    self.ctx,
+                    VAEncSequenceParameterBufferType,
+                    &self.sequence(),
+                )?);
             }
             if idr || self.applied != Some(self.rate) {
                 self.rate_buffers(&mut buffers)?;

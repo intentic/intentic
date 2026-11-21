@@ -184,10 +184,16 @@ impl Request {
             "auto" => Ok(Request::Auto),
             "x264" => Ok(Request::Only(Backend::X264)),
             "nvenc" if NVENC => Ok(Request::Only(Backend::Nvenc)),
-            "nvenc" => Err("--encoder nvenc: this castd was built without the `nvenc` feature".into()),
+            "nvenc" => {
+                Err("--encoder nvenc: this castd was built without the `nvenc` feature".into())
+            }
             "vaapi" if VAAPI => Ok(Request::Only(Backend::Vaapi)),
-            "vaapi" => Err("--encoder vaapi: this castd was built without the `vaapi` feature".into()),
-            other => Err(format!("--encoder {other}: expected auto, x264, nvenc or vaapi")),
+            "vaapi" => {
+                Err("--encoder vaapi: this castd was built without the `vaapi` feature".into())
+            }
+            other => Err(format!(
+                "--encoder {other}: expected auto, x264, nvenc or vaapi"
+            )),
         }
     }
 }

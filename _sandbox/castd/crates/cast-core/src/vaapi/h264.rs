@@ -91,7 +91,11 @@ impl Bits {
 
     /// Signed Exp-Golomb.
     pub fn se(&mut self, v: i32) {
-        self.ue(if v > 0 { 2 * v as u32 - 1 } else { (-2 * v) as u32 });
+        self.ue(if v > 0 {
+            2 * v as u32 - 1
+        } else {
+            (-2 * v) as u32
+        });
     }
 
     /// The RBSP's stop bit and the zeros to the byte boundary.
@@ -283,7 +287,11 @@ mod tests {
     fn three_zeros_never_appear_in_a_nal() {
         let n = nal(3, 7, &[0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0]);
         assert_eq!(&n[..5], &[0, 0, 0, 1, 0x67]);
-        assert!(!n[4..].windows(3).any(|w| w[0] == 0 && w[1] == 0 && w[2] <= 3 && w[2] != 3));
+        assert!(
+            !n[4..]
+                .windows(3)
+                .any(|w| w[0] == 0 && w[1] == 0 && w[2] <= 3 && w[2] != 3)
+        );
         assert_eq!(rbsp(&n), vec![0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0]);
     }
 
