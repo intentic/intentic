@@ -9083,7 +9083,8 @@
             "emailNeedsUpdateOwner": "Ten sandbox wymaga aktualizacji, zanim przyjmie logowanie przez e-mail. Zaktualizuj go na maszynie, na której działa, albo użyj klucza dostępu.",
             "emailSignInIncomplete": "Logowanie przez e-mail nie zostało dokończone.",
             "intenticConfirmsAddress": "intentic potwierdza sandboxowi twój adres, więc nie trzeba niczego więcej.",
-            "continueAsEmail": "Kontynuuj jako {email}"
+            "continueAsEmail": "Kontynuuj jako {email}",
+            "googleDidntLoad": "Logowanie Google nie wczytało się w tej przeglądarce. Bloker reklam albo ustawienie prywatności może blokować accounts.google.com: zezwól na nie dla tej strony i odśwież."
         },
         "skillForm": {
             "addSkill": "Dodaj umiejętność",

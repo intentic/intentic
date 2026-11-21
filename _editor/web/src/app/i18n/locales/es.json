@@ -9560,7 +9560,8 @@
             "emailNeedsUpdateOwner": "Este sandbox necesita una actualización para aceptar el inicio de sesión por correo. Actualízalo en la máquina donde se ejecuta o usa una clave de acceso.",
             "emailSignInIncomplete": "No se ha completado el inicio de sesión por correo.",
             "intenticConfirmsAddress": "intentic confirma tu dirección al sandbox, así que no se pide nada más.",
-            "continueAsEmail": "Continuar como {email}"
+            "continueAsEmail": "Continuar como {email}",
+            "googleDidntLoad": "El inicio de sesión de Google no se cargó en este navegador. Un bloqueador de anuncios o un ajuste de privacidad puede estar bloqueando accounts.google.com: permítelo para este sitio y recarga."
         },
         "skillForm": {
             "addSkill": "Añadir la skill",

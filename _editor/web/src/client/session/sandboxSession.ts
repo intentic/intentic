@@ -435,6 +435,10 @@ const spendForWall =
 
 // The account's email road on the wall: offered where the daemon takes the assertion, a named gap where it is too old
 // to and the account has no other way in. An account that also signs in with Google has Google there instead.
+// A sandbox that has not opted this person in by email refuses every assertion until its owner changes that, so an
+// account with Google is shown Google alone. (2026-11: every account lists `email` wherever the platform mails codes,
+// so the owner of a sandbox bound with Google met "Continue as" beside Google's button, refused on each press, under a
+// line telling them to ask the owner.)
 const emailRoadFor = (target: ScopedTarget, door: DaemonDoor, refusal: EmailRefusal | undefined): EmailRoad | undefined => {
     const ways = accountWaysIn.value;
     if (ways === undefined) {
@@ -442,6 +446,9 @@ const emailRoadFor = (target: ScopedTarget, door: DaemonDoor, refusal: EmailRefu
     }
     if (!takesEmailProof(door)) {
         return emailOnly(ways.methods) ? { kind: `outdated`, address: ways.email } : undefined;
+    }
+    if (refusal === EMAIL_SIGN_IN_OFF && !emailOnly(ways.methods)) {
+        return undefined;
     }
     const known = refusal === EMAIL_SIGN_IN_OFF || refusal === PLATFORM_KEY_UNKNOWN || refusal === NOT_A_MEMBER ? refusal : undefined;
     return { kind: `offered`, address: ways.email, spend: spendForWall(target), refusal: known };

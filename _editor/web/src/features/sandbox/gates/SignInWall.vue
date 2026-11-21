@@ -75,12 +75,16 @@ const outdatedNote = computed(() =>
     emailRoad.value?.kind === `outdated` ? (isOwner.value ? t(`sandbox.signInWall.emailNeedsUpdateOwner`) : t(`sandbox.signInWall.emailNeedsUpdate`)) : undefined,
 );
 
+// Whether Google's button failed to draw (its script blocked or unreachable): an empty slot where the only way in was
+// meant to be, so the wall says why instead.
+const googleDidntLoad = ref(false);
+
 // Watches the container itself, not just the flag: a mint already in flight when mounted never toggles it.
 watch(
     [needsSignIn, scheme, btn],
-    () => {
+    async () => {
         if (needsSignIn.value && btn.value && !desktop.value) {
-            void renderButton(btn.value, scheme.value === `dark`);
+            googleDidntLoad.value = !(await renderButton(btn.value, scheme.value === `dark`));
         }
     },
     { flush: `post` },
@@ -300,6 +304,14 @@ const backToSetup = async (): Promise<void> => {
                         </Button>
                         <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
                         <div v-else-if="!desktop" ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
+                        <p
+                            v-if="!desktop && googleDidntLoad"
+                            class="w-full rounded-md bg-overlay px-3 py-2 text-left text-xs leading-snug text-muted"
+                            role="note"
+                            data-testid="google-didnt-load"
+                        >
+                            {{ t(`sandbox.signInWall.googleDidntLoad`) }}
+                        </p>
                     </template>
                     <!-- The email road: the platform vouches for the address, so it works the same in every window. -->
                     <template v-if="emailRoad?.kind === `offered` && !waitingInBrowser">

@@ -9560,7 +9560,8 @@
             "emailNeedsUpdateOwner": "Diese Sandbox braucht ein Update, bevor sie die E-Mail-Anmeldung annimmt. Aktualisieren Sie sie auf dem Rechner, auf dem sie läuft, oder verwenden Sie einen Passkey.",
             "emailSignInIncomplete": "Die E-Mail-Anmeldung wurde nicht abgeschlossen.",
             "intenticConfirmsAddress": "intentic bestätigt der Sandbox Ihre Adresse, daher wird nichts weiter abgefragt.",
-            "continueAsEmail": "Weiter als {email}"
+            "continueAsEmail": "Weiter als {email}",
+            "googleDidntLoad": "Die Google-Anmeldung wurde in diesem Browser nicht geladen. Ein Werbeblocker oder eine Datenschutzeinstellung blockiert vielleicht accounts.google.com: Erlaube es für diese Seite und lade neu."
         },
         "skillForm": {
             "addSkill": "Skill hinzufügen",

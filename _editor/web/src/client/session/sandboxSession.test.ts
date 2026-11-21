@@ -810,8 +810,9 @@ it(`names a platform that does not count the account in the sandbox, before and 
 });
 
 // An account that also signs in with Google has that road: a sandbox that has not opted it in by email falls back to
-// Google's own prompt, with the email row still on the wall saying why it did not open.
-it(`falls back to Google for an account that has it when the sandbox has not opted it in by email`, async () => {
+// Google's own prompt alone. The email row would only meet the same refusal on every press (2026-11: the owner of a
+// sandbox bound with Google pressed it five times in six seconds, told each time to ask the owner).
+it(`falls back to Google alone for an account that has it when the sandbox has not opted it in by email`, async () => {
     accountWaysIn.value = { email: `ana@corp.example`, methods: [`google`, `email`] };
     const fetchMock = daemonAnswering({ proofs: [`google`, `email`], sessions: [refusal(403, EMAIL_SIGN_IN_OFF), () => sessionResponse(`sess-google`)] });
     stubGlobal(`fetch`, fetchMock);
@@ -820,9 +821,26 @@ it(`falls back to Google for an account that has it when the sandbox has not opt
     const pending = useSandboxSession().getSessionToken();
 
     await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
-    expect(prompts.useSignInPrompt().prompt.value).toMatchObject({ email: { kind: `offered`, refusal: EMAIL_SIGN_IN_OFF } });
-    expect(prompts.useSignInPrompt().prompt.value).not.toHaveProperty(`withoutGoogle`, true);
+    const shown = prompts.useSignInPrompt().prompt.value;
+    expect(shown?.kind === `choose` ? shown.email : `no prompt`).toBeUndefined();
+    expect(shown).not.toHaveProperty(`withoutGoogle`, true);
     expect(state.minted).toBe(1);
+    prompts.dismissSignIn();
+    state.releaseMint();
+    await expect(pending).resolves.toBeUndefined();
+});
+
+// A refusal a moment can lift keeps the row beside Google: a press may open the sandbox once the daemon learns the key.
+it(`keeps "Continue as" beside Google when the refusal is one another try may get past`, async () => {
+    accountWaysIn.value = { email: `ana@corp.example`, methods: [`google`, `email`] };
+    const fetchMock = daemonAnswering({ proofs: [`google`, `email`], sessions: [refusal(401, PLATFORM_KEY_UNKNOWN)] });
+    stubGlobal(`fetch`, fetchMock);
+    state.mintParks = true;
+    const { useSandboxSession } = await load();
+    const pending = useSandboxSession().getSessionToken();
+
+    await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
+    expect(prompts.useSignInPrompt().prompt.value).toMatchObject({ email: { kind: `offered`, refusal: PLATFORM_KEY_UNKNOWN } });
     prompts.dismissSignIn();
     state.releaseMint();
     await expect(pending).resolves.toBeUndefined();

@@ -115,10 +115,21 @@ it(`never renders Google's own button inside the desktop app`, async () => {
 });
 
 it(`keeps Google's own button in an ordinary browser`, async () => {
-    await mount();
+    const el = await mount();
 
     expect(renderButton).toHaveBeenCalledTimes(1);
     expect(buttonSaying(`Continue with Google`)).toBeUndefined();
+    expect(el.querySelector(`[data-testid="google-didnt-load"]`)).toBeNull();
+});
+
+// Google's script blocked: the slot stayed empty and the wall showed nothing to press, nor why.
+it(`says so when Google's button could not be drawn, rather than leaving an empty slot`, async () => {
+    renderButton.mockResolvedValue(false);
+
+    const el = await mount();
+    await settle();
+
+    expect(el.querySelector(`[data-testid="google-didnt-load"]`)?.textContent).toContain(`Google's sign-in didn't load in this browser`);
 });
 
 it(`offers a passkey beside Google's button only once the daemon says one is registered here, and its session settles the prompt`, async () => {

@@ -9560,7 +9560,8 @@
             "emailNeedsUpdateOwner": "This sandbox needs an update before it accepts email sign-in. Update it on the machine it runs on, or use a passkey.",
             "emailSignInIncomplete": "The email sign-in didn't complete.",
             "intenticConfirmsAddress": "intentic confirms your address to the sandbox, so nothing else is asked.",
-            "continueAsEmail": "Continue as {email}"
+            "continueAsEmail": "Continue as {email}",
+            "googleDidntLoad": "Google's sign-in didn't load in this browser. An ad blocker or privacy setting may be blocking accounts.google.com: allow it for this site, then reload."
         },
         "skillForm": {
             "addSkill": "Add skill",

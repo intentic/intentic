@@ -1,5 +1,5 @@
 import { Latest, pollUntil, whenAborted } from "@intentic/base/async";
-import { t } from "@intentic/ui/i18n";
+import { activeLocale, t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { desktopVersion } from "../../app/environments/desktop";
@@ -35,6 +35,8 @@ interface GsiButtonConfig {
     readonly logo_alignment?: "left" | "center";
     /** Rendered width in px; Google accepts 200-400 and shortens its own label to fit. */
     readonly width?: number;
+    /** The label's language; Google takes the browser's when it is left out. */
+    readonly locale?: string;
 }
 interface GoogleAccountsId {
     initialize(config: GoogleIdConfig): void;
@@ -491,6 +493,8 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean
         text: `continue_with`,
         shape: `pill`,
         logo_alignment: `center`,
+        // In the app's language: left to Google it followed the browser's, and an English page carried a Polish button.
+        locale: activeLocale.value,
         ...(measured >= 200 ? { width: Math.min(measured, 400) } : {}),
     });
     return true;

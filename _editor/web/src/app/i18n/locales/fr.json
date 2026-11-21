@@ -9560,7 +9560,8 @@
             "emailNeedsUpdateOwner": "Ce sandbox doit être mis à jour avant d'accepter la connexion par e-mail. Mettez-le à jour sur la machine où il tourne, ou utilisez une clé d'accès.",
             "emailSignInIncomplete": "La connexion par e-mail n'a pas abouti.",
             "intenticConfirmsAddress": "intentic confirme votre adresse au sandbox : rien d'autre ne vous est demandé.",
-            "continueAsEmail": "Continuer en tant que {email}"
+            "continueAsEmail": "Continuer en tant que {email}",
+            "googleDidntLoad": "La connexion Google ne s'est pas chargée dans ce navigateur. Un bloqueur de publicités ou un réglage de confidentialité bloque peut-être accounts.google.com : autorisez-le pour ce site, puis rechargez."
         },
         "skillForm": {
             "addSkill": "Ajouter le skill",
