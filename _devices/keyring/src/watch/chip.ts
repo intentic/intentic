@@ -2,16 +2,15 @@ import { z } from "zod";
 import type { KeyringOp, KeyringRequest, KeyringResponse } from "../protocol.js";
 
 // THE APP CHIP (2026-10-19): while the person lets Passwords remember what they type in programs, the session helper
-// watches which field has the keyboard's focus (watch-windows.ts, watch-linux.ts). When it is a password field, a small
-// "Fill with Intentic" chip shows under it if an entry is saved for that program, "Save with Intentic" if none is. A click
-// asks the keyring to `fill-window`: the keyring asks the person (a Hello tap) and types the saved value, or, with
-// nothing saved, shows its own type-once box, saves what is typed and types it. The chip goes when focus moves or after
-// eight seconds. Nothing here reads a field's value or hooks the keyboard: what a watcher reports is a program, whether
+// watches which field has the keyboard's focus (watch-windows.ts, watch-linux.ts). When it is a password field and an
+// entry is saved for that program, a small "Fill with Intentic" chip shows under it; with nothing saved, nothing shows
+// (2026-11-21: a "Save with Intentic" chip on every sign-in nagged a person who had already chosen to have passwords
+// remembered; a new one is added from the Passwords app). A click asks the keyring to `fill-window`: the keyring asks
+// the person (a Hello tap) and types the saved value. The chip goes when focus moves or after eight seconds. Nothing here reads a field's value or hooks the keyboard: what a watcher reports is a program, whether
 // the field is a password field, and where it is on screen.
 
 export const CHIP_SECONDS = 8;
 export const FILL_LABEL = "Fill with Intentic";
-export const SAVE_LABEL = "Save with Intentic";
 
 // One focus change, as a watcher reports it.
 export const FocusEventSchema = z
@@ -106,9 +105,11 @@ export class ChipController {
             return;
         }
         const matches = CandidatesSchema.safeParse(answer);
-        const label = matches.success && matches.data.matches.length > 0 ? FILL_LABEL : SAVE_LABEL;
+        if (!matches.success || matches.data.matches.length === 0) {
+            return;
+        }
         this.#shown = true;
-        this.#deps.surface.show(label, { x: Math.round(event.x), y: Math.round(event.y + event.height + 2) });
+        this.#deps.surface.show(FILL_LABEL, { x: Math.round(event.x), y: Math.round(event.y + event.height + 2) });
         this.#cancel = (this.#deps.after ?? realAfter)(CHIP_SECONDS * 1000, () => this.#hide());
     }
 

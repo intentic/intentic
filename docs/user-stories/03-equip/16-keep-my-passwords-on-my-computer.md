@@ -23,8 +23,9 @@ Then I am asked once to let Intentic remember the passwords I type, source by so
 - **Browsers.** The Intentic extension saves a sign-in when I submit it, and fills it back after my Windows Hello yes.
 - **Terminals on my computer.** For an ssh, sudo or git prompt nothing answers yet, Passwords' own box asks me once,
   answers the program and keeps it. git's credential helper saves a sign-in that worked.
-- **Apps.** A small "Save with Intentic" chip on a program's password field lets me type it once into Passwords' box,
-  which types it into the program and keeps it. Nothing reads keys I type elsewhere.
+- **Apps.** Once a program's password is in Passwords, a small "Fill with Intentic" chip on its password field types it
+  in after my yes. A program with nothing saved gets no chip, so I am not asked at every sign-in. Nothing reads keys I
+  type elsewhere.
 - **My phone.** The Intentic Device app is Android's autofill service, paired with my computer once.
 - **Sandbox terminals.** A password I type at a hidden prompt in a sandbox terminal is kept on my computer.
 

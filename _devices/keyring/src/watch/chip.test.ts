@@ -1,9 +1,9 @@
 import type { KeyringRequest } from "../protocol.js";
 import { watchEventOf } from "./apps.js";
-import { CHIP_SECONDS, ChipController, FILL_LABEL, type FocusEvent, programOf, SAVE_LABEL } from "./chip.js";
+import { CHIP_SECONDS, ChipController, FILL_LABEL, type FocusEvent, programOf } from "./chip.js";
 import { showCommand } from "./watch-windows.js";
 
-/* The chip's decisions: shown under a focused password field, "Fill" when an entry is saved for the program and "Save"
+/* The chip's decisions: shown under a focused password field, "Fill" when an entry is saved for the program and nothing
    when none is, gone when focus moves or its time is up, and a click asks the keyring to fill the window. The watcher
    programs (UI Automation, AT-SPI) are not run here. */
 
@@ -36,10 +36,11 @@ test("a password field with a saved entry gets Fill, under the field, asked by t
     expect(shown).toEqual([`${FILL_LABEL}@100,226`]);
 });
 
-test("one with nothing saved gets Save; a field that is not a password field gets nothing", async () => {
-    const saved = harness(0);
-    await saved.chip.onFocus(field(true));
-    expect(saved.shown).toEqual([`${SAVE_LABEL}@100,226`]);
+test("one with nothing saved gets no chip, nor does a field that is not a password field", async () => {
+    const unsaved = harness(0);
+    await unsaved.chip.onFocus(field(true));
+    expect(unsaved.shown).toEqual([]);
+    expect(unsaved.chip.shown).toBe(false);
     const plain = harness(1);
     await plain.chip.onFocus(field(false));
     expect(plain.shown).toEqual([]);

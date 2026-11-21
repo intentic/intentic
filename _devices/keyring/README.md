@@ -257,8 +257,9 @@ While the person lets Passwords remember what they type in programs (the vault's
 `state` op every minute), the session helper watches which field has the keyboard's focus (`src/watch/`). On Windows a
 long-running PowerShell holds a UI Automation focus-changed handler, reporting whether the focused element is a password
 field, its program's executable and where it is; a small topmost window that never takes focus then shows under the
-field, "Fill with Intentic" when `candidates` has an entry for that program and "Save with Intentic" when not, and goes
-when focus moves or after eight seconds. A click sends `fill-window`. On Linux the watcher is AT-SPI through python3-gi,
+field, "Fill with Intentic", when `candidates` has an entry for that program, and goes when focus moves or after eight
+seconds. With nothing saved for the program no chip shows: the person already chose to have passwords remembered, so
+asking again at every sign-in only nags; a new one is added from the Passwords app. A click sends `fill-window`. On Linux the watcher is AT-SPI through python3-gi,
 and the chip is a desktop notification with one action, since a Wayland compositor does not let a program place a
 window; without python3's AT-SPI bindings the chip stays off. Nothing reads a field's value or hooks the keyboard.
 
