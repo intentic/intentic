@@ -1,7 +1,8 @@
 use super::close::hide_faces;
 use super::unsaved::{unsaved_windows, QUITTING};
+use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Duration;
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -187,32 +188,38 @@ fn hold_quit_for_runs(app: &AppHandle, code: i32) -> bool {
         return false;
     }
     let waits = quit_waits_for(&crate::scripts::running_ids(), crate::project::busy());
-    if waits.is_empty() {
+    let moving = moves_stopped(&crate::scripts::running_ids(), crate::scripts::moving);
+    if waits.is_empty() && moving.is_empty() {
         return false;
     }
     if ASKING_QUIT.swap(true, Ordering::SeqCst) {
         return true;
     }
-    const WAIT: &str = "Quit when it's done";
-    const NOW: &str = "Quit now";
+    // A move the quit would stop is asked about in the reader's own words, and says what stopping it costs.
+    let asked = if moving.is_empty() {
+        Asked::runs(&waits)
+    } else {
+        Asked::moving(&MOVE_WORDS.lock().unwrap_or_else(PoisonError::into_inner))
+    };
+    let (wait, now) = (asked.wait.clone(), asked.now.clone());
     let handle = app.clone();
     app.dialog()
-        .message(runs_question(&waits))
-        .title("Quit Intentic?")
+        .message(asked.message)
+        .title(asked.title)
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::YesNoCancelCustom(
-            WAIT.into(),
-            NOW.into(),
-            "Cancel".into(),
+            asked.wait,
+            asked.now,
+            asked.cancel,
         ))
         .show_with_result(move |answer| {
             ASKING_QUIT.store(false, Ordering::SeqCst);
             use tauri_plugin_dialog::MessageDialogResult;
             match answer {
                 MessageDialogResult::Yes => wait_then_quit(handle, code),
-                MessageDialogResult::Custom(said) if said == WAIT => wait_then_quit(handle, code),
+                MessageDialogResult::Custom(said) if said == wait => wait_then_quit(handle, code),
                 MessageDialogResult::No => quit_now(&handle, code),
-                MessageDialogResult::Custom(said) if said == NOW => quit_now(&handle, code),
+                MessageDialogResult::Custom(said) if said == now => quit_now(&handle, code),
                 // Cancel, or the dialog closed: stays, and an earlier "Quit when it's done" no longer stands.
                 _ => quit_cancelled(),
             }
@@ -224,6 +231,7 @@ fn quit_now(app: &AppHandle, code: i32) {
     use crate::commands::SETUP_RUN;
     if !crate::scripts::is_running(SETUP_RUN) {
         RUNS_ANSWERED.store(true, Ordering::SeqCst);
+        note_moves_stopped();
         let stopped = folder_setup_runs();
         crate::scripts::note_quit(&stopped.iter().map(String::as_str).collect::<Vec<_>>());
         app.exit(code);
@@ -239,6 +247,7 @@ fn quit_now(app: &AppHandle, code: i32) {
             SETUP_RUN,
             "[Intentic quit while this setup was running, and stopped it with everything it started.]",
         );
+        note_moves_stopped();
         if let Err(error) = crate::scripts::stop(SETUP_RUN) {
             eprintln!("intentic: the setup did not stop with the app: {error}");
         }
@@ -249,6 +258,138 @@ fn quit_now(app: &AppHandle, code: i32) {
         ASKING_QUIT.store(false, Ordering::SeqCst);
         handle.exit(code);
     });
+}
+
+/* A QUIT IN THE MIDDLE OF A MOVE BETWEEN ENGINES (issue #48, 2026-11-20). A setup moves this PC's sandboxes off Docker
+ * Desktop inside `ic docker prepare`, for as long as their files take to copy (92 GB, in the report). A reader quit
+ * during the copy, the question said only "If you quit now, the setup stops", and "Quit now" stopped it with everything
+ * it started, ic's move included, which never got to put anything back. Now a quit that would stop a move asks in the
+ * reader's own words ([`MoveWords`], handed over by the page, which has the translations) and says what it costs: the
+ * move stops, and the sandboxes go back on Docker Desktop the next time this PC is set up. Its log says it too.
+ *
+ * Nothing runs `ic engine move --abort` on the way out. Putting a move back starts every sandbox again on Docker Desktop,
+ * which may have to start Docker Desktop first: minutes, not something a quit can wait on. Left running past the app it
+ * would go on unwatched, beside the next setup, as the setup did before 2026-10-12. ic finds the move it left on its own
+ * next run (`ic docker prepare`, `ic engine move`) and puts it back then, with the person watching. */
+
+/// The note a run's log gets when a quit stopped the move under way in it.
+const MOVE_STOPPED_NOTE: &str = "[Intentic quit while this setup was moving this PC's sandboxes between engines, and \
+     stopped the move mid-copy. ic puts the sandboxes back where they were the next time this PC is set up.]";
+
+/// The runs a quit stops (a handed-over setup, a folder's own setup) that are moving sandboxes between engines right now,
+/// as `moving` says of each. Pure.
+pub fn moves_stopped(runs: &[String], moving: impl Fn(&str) -> bool) -> Vec<String> {
+    runs.iter()
+        .filter(|run| {
+            *run == crate::commands::SETUP_RUN || run.starts_with(crate::folder_setup::RUN_PREFIX)
+        })
+        .filter(|run| moving(run))
+        .cloned()
+        .collect()
+}
+
+/// Each move the quit stops gets its line in its run's log, before it is stopped.
+fn note_moves_stopped() {
+    for run in moves_stopped(&crate::scripts::running_ids(), crate::scripts::moving) {
+        crate::scripts::note(&run, MOVE_STOPPED_NOTE);
+    }
+}
+
+/// The words of the question about a move, in the reader's language: the page hands them over
+/// (`quit_move_words`), since this side has no translations; English until a page has.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveWords {
+    pub title: String,
+    pub message: String,
+    pub wait: String,
+    pub quit: String,
+    pub cancel: String,
+}
+
+impl Default for MoveWords {
+    fn default() -> MoveWords {
+        MoveWords {
+            title: "Stop moving your sandboxes?".into(),
+            message: "Intentic is moving this PC's sandboxes to its own engine right now. If you quit, the move stops, \
+                      and your sandboxes are put back on Docker Desktop the next time this PC is set up."
+                .into(),
+            wait: "Quit when it's done".into(),
+            quit: "Stop the move and quit".into(),
+            cancel: "Cancel".into(),
+        }
+    }
+}
+
+/// The longest a button may be, and the question.
+const BUTTON_MAX: usize = 60;
+const MESSAGE_MAX: usize = 600;
+
+impl MoveWords {
+    /// Words a native dialog can carry: none empty, the buttons short, no line breaks but the question's. Pure.
+    fn valid(&self) -> bool {
+        let fits = |text: &str, most: usize, breaks: bool| {
+            (1..=most).contains(&text.trim().chars().count())
+                && !text
+                    .chars()
+                    .any(|character| character.is_control() && !(breaks && character == '\n'))
+        };
+        fits(&self.title, BUTTON_MAX * 2, false)
+            && fits(&self.message, MESSAGE_MAX, true)
+            && [&self.wait, &self.quit, &self.cancel]
+                .iter()
+                .all(|button| fits(button, BUTTON_MAX, false))
+            // Two answers worded alike could not be told apart once pressed.
+            && self.wait != self.quit
+            && self.wait != self.cancel
+            && self.quit != self.cancel
+    }
+}
+
+static MOVE_WORDS: LazyLock<Mutex<MoveWords>> = LazyLock::new(Mutex::default);
+
+/// The page's words for the question about a move, in the reader's language (its i18n catalog): a window hands them over
+/// as it starts, and each language change after.
+#[tauri::command]
+pub fn quit_move_words(words: MoveWords) -> Result<(), String> {
+    if !words.valid() {
+        return Err(
+            "the quit question's words are a title, a question and three different buttons".into(),
+        );
+    }
+    *MOVE_WORDS.lock().unwrap_or_else(PoisonError::into_inner) = words;
+    Ok(())
+}
+
+/// A question about work under way, as the dialog shows it.
+struct Asked {
+    title: String,
+    message: String,
+    wait: String,
+    now: String,
+    cancel: String,
+}
+
+impl Asked {
+    fn runs(waits: &[String]) -> Asked {
+        Asked {
+            title: "Quit Intentic?".into(),
+            message: runs_question(waits),
+            wait: "Quit when it's done".into(),
+            now: "Quit now".into(),
+            cancel: "Cancel".into(),
+        }
+    }
+
+    fn moving(words: &MoveWords) -> Asked {
+        Asked {
+            title: words.title.clone(),
+            message: words.message.clone(),
+            wait: words.wait.clone(),
+            now: words.quit.clone(),
+            cancel: words.cancel.clone(),
+        }
+    }
 }
 
 /// The folders' setups running now: a quit stops them (folder_setup.rs `before_exit`), so their transcripts are not told
@@ -299,7 +440,10 @@ fn wait_then_quit(app: AppHandle, code: i32) {
             if !QUIT_WAIT.lock().unwrap().holds(id) {
                 return;
             }
-            if quit_waits_for(&crate::scripts::running_ids(), crate::project::busy()).is_empty() {
+            let runs = crate::scripts::running_ids();
+            if quit_waits_for(&runs, crate::project::busy()).is_empty()
+                && moves_stopped(&runs, crate::scripts::moving).is_empty()
+            {
                 break;
             }
             std::thread::sleep(Duration::from_secs(1));
@@ -325,6 +469,64 @@ fn quit_question(count: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A quit asks about a move only where it would stop it: in a handed-over setup or a folder's own, never in a run a
+    /// quit leaves to carry on (issue #48).
+    #[test]
+    fn a_quit_asks_about_the_moves_it_would_stop() {
+        let folder = format!("{}work", crate::folder_setup::RUN_PREFIX);
+        let runs = vec![
+            "engine-move".to_string(),
+            "pc-setup".to_string(),
+            crate::commands::SETUP_RUN.to_string(),
+            folder.clone(),
+        ];
+        assert_eq!(
+            moves_stopped(&runs, |_| true),
+            vec![crate::commands::SETUP_RUN.to_string(), folder]
+        );
+        assert!(moves_stopped(&runs, |_| false).is_empty());
+        assert!(moves_stopped(&runs[..2], |_| true).is_empty());
+    }
+
+    /// The page's words for the question about a move: taken when a dialog can carry them, refused otherwise.
+    #[test]
+    fn the_move_questions_words_are_checked_before_they_are_kept() {
+        let english = MoveWords::default();
+        assert!(english.valid());
+        assert!(english.message.contains("Docker Desktop"));
+        let polish = MoveWords {
+            title: "Przerwać przenoszenie piaskownic?".into(),
+            message: "Zamknięcie przerwie przenoszenie.\nPiaskownice wrócą do Docker Desktop."
+                .into(),
+            wait: "Zamknij po zakończeniu".into(),
+            quit: "Przerwij i zamknij".into(),
+            cancel: "Anuluj".into(),
+        };
+        assert!(polish.valid());
+        assert!(quit_move_words(polish).is_ok());
+        assert!(!MoveWords {
+            quit: String::new(),
+            ..english.clone()
+        }
+        .valid());
+        assert!(!MoveWords {
+            quit: english.wait.clone(),
+            ..english.clone()
+        }
+        .valid());
+        assert!(!MoveWords {
+            title: "a\nb".into(),
+            ..english.clone()
+        }
+        .valid());
+        assert!(!MoveWords {
+            wait: "x".repeat(BUTTON_MAX + 1),
+            ..english
+        }
+        .valid());
+        *MOVE_WORDS.lock().unwrap() = MoveWords::default();
+    }
 
     /// The Quit question counts the windows the way it is read, and says what quitting costs.
     #[test]

@@ -670,6 +670,20 @@ flowchart LR
     on Docker Desktop. Measured on omen: 1.47 GB of volumes
     with checksums matching in 61 s once the image was there (about 70 MB/s onto our engine, 26 MB/s back); the
     8.75 GB image crossed as its 2.36 GB export at about 45 MB/s. See [src/engine/moves.rs](src/engine/moves.rs).
+  - **A move cut off part-way (2026-11-20, intentic#48).** A move is running only while its process is alive and its
+    heartbeat is under 10 minutes old; a dead pid is proof it ended, a live one is not proof it runs (Windows reuses
+    pids). Before each step that changes the source (stop, rename, commit) the move writes what it is about to do into
+    `moving.progress` in `moves.json`, beside its `from` and its `log`. An interrupted move (its ic killed: the desktop
+    app quit mid-copy ends ic's whole process tree) is rolled back with the same steps as a failed move's undo: the
+    source's containers get their names back and run again if they ran, and what was made on the target is removed,
+    what the engine refuses staying in `made`. If the device had already switched, every sandbox was across, and the move
+    is recorded as finished instead. The rollback adds a line to the move's own log and clears `moving`; an entry left
+    while the source engine does not answer stays for the next try. `ic engine move --abort` does it on its own (refused
+    while a move runs); every `ic engine move` and `ic docker prepare` does it first, so Prepare this PC heals itself.
+    Other verbs that change sandboxes are refused (exit 3) while an interrupted move is not undone; reads go ahead, and
+    `ic engine status --json` says `moves.interrupted: true`. An entry from ic 1.429.0 or older records no steps: it
+    is undone by names alone, renaming back and starting only `<name>.moved` containers ic's own naming made for this
+    side's sandboxes whose own name is free and which no finished move keeps, and deleting nothing.
   - **Which engine.** [src/engine/choice.rs](src/engine/choice.rs): ours, on every Windows PC, since 2026-10-13.
     Only `IC_ENGINE=docker-desktop` (a test or CI run) puts a setup on Docker Desktop. Nothing the PC holds keeps it
     there: sandboxes still on Docker Desktop are carried across by the setup's `engine-move` step

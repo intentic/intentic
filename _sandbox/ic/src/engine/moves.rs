@@ -106,6 +106,12 @@ fn forget_made(journal: &mut Journal, slug: &str, on: &str, names: Option<&[Stri
     });
 }
 
+/* A MOVE WRITES DOWN WHAT IT HAS DONE BEFORE IT DOES IT (2026-11-20). Somebody quit the desktop app during a 92 GB
+ * volume copy; the app ends ic's whole process tree, so its undo never ran. The entry below stayed with a dead pid, every
+ * ic run after refused with "sandboxes are being moved", and nothing on the PC could say which containers the move had
+ * renamed aside. Each step that changes the source (a stop, a rename, a commit) is now recorded in `progress` first, so a
+ * later ic finds the move interrupted ([`state_of`]) and undoes exactly those steps ([`recover`]). */
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Moving {
@@ -113,6 +119,110 @@ pub struct Moving {
     pub to: String,
     pub started: u64,
     pub heartbeat: u64,
+    /// The engine it carries from (a [`Kind`] id). An entry of ic 1.429.0 or older names only `to`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    /// The move's own log, where its rollback adds its line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<String>,
+    /// What each sandbox's move has done so far, written before each step that changes the source. None in an entry an
+    /// older ic wrote, which recorded nothing: that one is recovered by ic's own names alone ([`legacy_restores`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<Vec<Carried>>,
+}
+
+/// Whether the ic doing a move still does it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveState {
+    Running,
+    Interrupted(Interruption),
+}
+
+/// How a move was found to have stopped without finishing or undoing itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Interruption {
+    /// No process with its pid is alive.
+    ProcessGone,
+    /// A process with its pid is alive, yet the move has not said so for [`STALE_HEARTBEAT_MS`]: a pid Windows gave to
+    /// another program, or an ic hung beyond its own limits.
+    HeartbeatStale,
+}
+
+impl Interruption {
+    fn words(self, moving: &Moving) -> String {
+        match self {
+            Interruption::ProcessGone => format!("its ic (process {}) is gone", moving.pid),
+            Interruption::HeartbeatStale => format!(
+                "it has not said it was alive for {} minutes",
+                STALE_HEARTBEAT_MS / 60_000
+            ),
+        }
+    }
+}
+
+/// A move's state from its entry, the time and whether a pid is alive. A dead pid is proof the move ended; a live one is
+/// not proof it runs, since Windows reuses pids, so a live pid still needs a fresh heartbeat. _(2026-11-20) Only the
+/// heartbeat was read, so a move whose ic was killed blocked every ic run for ten minutes and, with a pid reused, longer._
+/// Pure.
+pub(crate) fn state_of(moving: &Moving, now: u64, alive: impl Fn(u32) -> bool) -> MoveState {
+    if !alive(moving.pid) {
+        MoveState::Interrupted(Interruption::ProcessGone)
+    } else if now.saturating_sub(moving.heartbeat) >= STALE_HEARTBEAT_MS {
+        MoveState::Interrupted(Interruption::HeartbeatStale)
+    } else {
+        MoveState::Running
+    }
+}
+
+/// Whether a process with `pid` is alive on this machine. Unsure answers alive: reading a live move as dead would undo
+/// it under its own feet. (Not `sandbox::fix::host`'s `alive`, which asks `tasklist.exe` and reads a timed-out ask as
+/// dead.)
+pub(crate) fn process_alive(pid: u32) -> bool {
+    if pid == std::process::id() {
+        return true;
+    }
+    process_alive_here(pid)
+}
+
+#[cfg(windows)]
+fn process_alive_here(pid: u32) -> bool {
+    use std::ffi::c_void;
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+    const ERROR_INVALID_PARAMETER: i32 = 87;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+        fn GetExitCodeProcess(process: *mut c_void, code: *mut u32) -> i32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+    // SAFETY: plain Win32 calls on a pid; the handle is closed before return.
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if handle.is_null() {
+        // No such process is ERROR_INVALID_PARAMETER; anything else (access denied) means one exists.
+        return std::io::Error::last_os_error().raw_os_error() != Some(ERROR_INVALID_PARAMETER);
+    }
+    let mut code = 0u32;
+    // SAFETY: `handle` is the valid handle just opened, and `code` outlives the call.
+    let read = unsafe { GetExitCodeProcess(handle, &mut code) };
+    // SAFETY: closed once, here.
+    unsafe { CloseHandle(handle) };
+    read == 0 || code == STILL_ACTIVE
+}
+
+#[cfg(target_os = "linux")]
+fn process_alive_here(pid: u32) -> bool {
+    std::path::Path::new(&format!("/proc/{pid}")).exists()
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn process_alive_here(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_or(true, |status| status.success())
 }
 
 /// One sandbox carried across, and the copies it left on the engine it left.
@@ -164,22 +274,27 @@ fn now_ms() -> u64 {
 
 /// A move whose ic is still alive: what every other ic run stays away from while it lasts.
 pub fn in_progress() -> bool {
-    moving_now(&load_journal(), now_ms())
+    state() == Some(MoveState::Running)
 }
 
-fn moving_now(journal: &Journal, now: u64) -> bool {
-    journal
+/// The move on this device, if its entry is there: running, or interrupted and not yet undone.
+pub fn state() -> Option<MoveState> {
+    load_journal()
         .moving
         .as_ref()
-        .is_some_and(|moving| now.saturating_sub(moving.heartbeat) < STALE_HEARTBEAT_MS)
+        .map(|moving| state_of(moving, now_ms(), process_alive))
 }
 
 /// What `ic engine status --json` says about moves, for the desktop app's card and Repair: None when nothing ever moved.
 pub fn summary() -> Option<Value> {
-    summary_of(&load_journal(), now_ms())
+    summary_of(&load_journal(), now_ms(), process_alive)
 }
 
-fn summary_of(journal: &Journal, now: u64) -> Option<Value> {
+fn summary_of(journal: &Journal, now: u64, alive: impl Fn(u32) -> bool) -> Option<Value> {
+    let state = journal
+        .moving
+        .as_ref()
+        .map(|moving| state_of(moving, now, alive));
     let kept: Vec<&Moved> = journal
         .moved
         .iter()
@@ -190,7 +305,10 @@ fn summary_of(journal: &Journal, now: u64) -> Option<Value> {
     }
     let last = journal.moved.iter().max_by_key(|moved| moved.at);
     Some(json!({
-        "moving": moving_now(journal, now),
+        "moving": state == Some(MoveState::Running),
+        // A move whose ic is gone and whose entry is still here: the next `ic engine move` or `ic docker prepare` rolls
+        // it back, and `ic engine move --abort` does so on its own.
+        "interrupted": matches!(state, Some(MoveState::Interrupted(_))),
         "to": journal.moving.as_ref().map(|moving| moving.to.clone()),
         "last": last.map(|moved| json!({ "from": moved.from, "to": moved.to, "at": moved.at })),
         "leftBehind": kept.iter().map(|moved| json!({
@@ -225,6 +343,8 @@ pub fn run(args: Args) -> Result<()> {
     let Some(to) = Kind::parse(&args.to).filter(|kind| *kind != Kind::Native) else {
         bail!("move to `intentic` or `docker-desktop`, not '{}'.", args.to);
     };
+    // A move cut off before is undone first: it left sandboxes renamed aside, which this one would refuse to carry.
+    recover(false)?;
     let from = super::in_use();
     if from == to {
         ui::begin("move sandboxes between container engines", vec![], None);
@@ -306,6 +426,9 @@ pub fn run(args: Args) -> Result<()> {
             to: to.id().to_string(),
             started,
             heartbeat: started,
+            from: Some(from.id().to_string()),
+            log: Some(log.path.display().to_string()),
+            progress: Some(Vec::new()),
         })
     })?;
     let mut locks = Vec::new();
@@ -313,6 +436,8 @@ pub fn run(args: Args) -> Result<()> {
         locks.push(crate::sandbox::lock::hold_for_person(&sandbox.slug)?);
     }
     let mut carried: Vec<Carried> = Vec::new();
+    // Each sandbox's channel record as it was, written back by an undo (the reshape on the other engine rewrites it).
+    let mut records: Vec<(String, crate::record::ChannelRecord)> = Vec::new();
     let mut failure: Option<String> = None;
     for (index, sandbox) in plan.sandboxes.iter().enumerate() {
         say(
@@ -320,6 +445,9 @@ pub fn run(args: Args) -> Result<()> {
             "begin",
             json!({ "index": index, "count": plan.sandboxes.len(), "bytes": sandbox.bytes }),
         );
+        if let Ok(record) = crate::record::read(&sandbox.slug) {
+            records.push((sandbox.slug.clone(), record));
+        }
         let mut carry = Carried::new(sandbox);
         match move_one(sandbox, &source, &target, to, &mut carry, &log) {
             Ok(()) => carried.push(carry),
@@ -340,7 +468,10 @@ pub fn run(args: Args) -> Result<()> {
             ),
         );
         for carry in carried.iter().rev() {
-            undo(carry, &source, &target, to, &log);
+            undo(carry, &source, Some(&target), to, &log);
+            if let Some((_, record)) = records.iter().find(|(slug, _)| *slug == carry.slug) {
+                let _ = crate::record::write(&carry.slug, record);
+            }
         }
         let _ = update_journal(|journal| journal.moving = None);
         drop(locks);
@@ -355,36 +486,7 @@ pub fn run(args: Args) -> Result<()> {
     }
     switch(to)?;
     docker::adopt_target(&target);
-    let remove_after = now_ms() + KEEP_DAYS * DAY_MS;
-    update_journal(|journal| {
-        journal.moving = None;
-        for carry in &carried {
-            // What it made on the target is the sandbox now, no longer a copy to clear away.
-            forget_made(journal, &carry.slug, to.id(), None);
-            // A move back makes the copies the earlier move left on this engine the live ones again, and the record of
-            // them is over.
-            for earlier in journal.moved.iter_mut() {
-                if earlier.slug == carry.slug && earlier.from == to.id() && !earlier.removed {
-                    earlier.removed = true;
-                }
-            }
-            journal.moved.push(Moved {
-                slug: carry.slug.clone(),
-                from: from.id().to_string(),
-                to: to.id().to_string(),
-                at: now_ms(),
-                containers: carry
-                    .renamed
-                    .iter()
-                    .map(|(_, moved)| moved.clone())
-                    .collect(),
-                volumes: carry.volumes.clone(),
-                images: carry.committed.clone(),
-                remove_after,
-                removed: false,
-            });
-        }
-    })?;
+    update_journal(|journal| record_finished(journal, &carried, from, to, now_ms()))?;
     drop(locks);
     if to == Kind::DockerDesktop {
         // Nothing runs on our engine now but the copies kept for the days: it rests until cleanup needs it.
@@ -415,6 +517,483 @@ pub fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
+/// A move that carried every sandbox, written down as finished: what it made is the sandboxes now, and the source's
+/// copies are kept for [`KEEP_DAYS`]. Pure.
+fn record_finished(journal: &mut Journal, carried: &[Carried], from: Kind, to: Kind, now: u64) {
+    journal.moving = None;
+    let remove_after = now + KEEP_DAYS * DAY_MS;
+    for carry in carried {
+        // What it made on the target is the sandbox now, no longer a copy to clear away.
+        forget_made(journal, &carry.slug, to.id(), None);
+        // A move back makes the copies the earlier move left on this engine the live ones again, and the record of
+        // them is over.
+        for earlier in journal.moved.iter_mut() {
+            if earlier.slug == carry.slug && earlier.from == to.id() && !earlier.removed {
+                earlier.removed = true;
+            }
+        }
+        journal.moved.push(Moved {
+            slug: carry.slug.clone(),
+            from: from.id().to_string(),
+            to: to.id().to_string(),
+            at: now,
+            containers: carry
+                .renamed
+                .iter()
+                .map(|(_, moved)| moved.clone())
+                .collect(),
+            volumes: carry.volumes.clone(),
+            images: carry.committed.clone(),
+            remove_after,
+            removed: false,
+        });
+    }
+}
+
+/* ——— A move found interrupted, and putting it right. ——— */
+
+/// What to do about an interrupted move, decided from its entry and the engine this device runs on now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Recovery {
+    /// The switch was already made, so every sandbox had been carried: the move finished but for its journal, which is
+    /// written now as the move would have.
+    Finish {
+        from: Kind,
+        to: Kind,
+        carried: Vec<Carried>,
+    },
+    /// Each sandbox's recorded steps undone, the last first: the source's containers get their names back and run if
+    /// they ran, and what was made on the target is removed.
+    Undo {
+        from: Kind,
+        to: Kind,
+        carried: Vec<Carried>,
+    },
+    /// An entry an older ic wrote, with no steps recorded: only the containers ic's own naming says it set aside are
+    /// given back ([`legacy_restores`]), and nothing is removed; the volumes it left on our engine are written down as
+    /// made ([`legacy_leftovers`]). With the switch made there is nothing to give back.
+    Legacy {
+        from: Kind,
+        to: Kind,
+        switched: bool,
+    },
+    /// An entry naming no engine this ic knows: it is dropped, and nothing else is touched.
+    Forget,
+}
+
+/// The engine a move between the two engines carries from, when its entry does not say. Pure.
+fn other_engine(to: Kind) -> Kind {
+    if to == Kind::Intentic {
+        Kind::DockerDesktop
+    } else {
+        Kind::Intentic
+    }
+}
+
+/// Pure.
+fn recovery_of(moving: &Moving, in_use: Kind) -> Recovery {
+    let Some(to) = Kind::parse(&moving.to).filter(|kind| *kind != Kind::Native) else {
+        return Recovery::Forget;
+    };
+    let from = moving
+        .from
+        .as_deref()
+        .and_then(Kind::parse)
+        .unwrap_or_else(|| other_engine(to));
+    let switched = in_use == to;
+    match &moving.progress {
+        None => Recovery::Legacy { from, to, switched },
+        Some(carried) if switched => Recovery::Finish {
+            from,
+            to,
+            carried: carried.clone(),
+        },
+        Some(carried) => Recovery::Undo {
+            from,
+            to,
+            carried: carried.clone(),
+        },
+    }
+}
+
+/// One container an older ic's move set aside, to be given its name back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Restore {
+    slug: String,
+    /// Its name now, `<name>.moved`.
+    moved: String,
+    name: String,
+}
+
+/// The containers on the source a move of ic 1.429.0 or older renamed aside before it was cut off, read off their names
+/// alone: a sandbox's own container, its dind host or its tunnel, with [`MOVED_SUFFIX`] on a slug ic could have made,
+/// whose own name is free (a sandbox still there by its name was never set aside), and which is not a copy a finished
+/// move keeps for its days (`kept`). The sandbox's own container first, as a move sets them aside. Pure.
+fn legacy_restores(names: &[String], kept: &[String]) -> Vec<Restore> {
+    let mut restores: Vec<Restore> = Vec::new();
+    for moved in names {
+        if kept.contains(moved) {
+            continue;
+        }
+        let Some(name) = moved.strip_suffix(MOVED_SUFFIX) else {
+            continue;
+        };
+        // The tunnel's prefix starts with the sandbox's own: asked first.
+        let slug = [TUNNEL_PREFIX, DIND_PREFIX, CONTAINER_PREFIX]
+            .iter()
+            .find_map(|prefix| name.strip_prefix(prefix));
+        let Some(slug) = slug.filter(|slug| sandbox::is_slug(slug)) else {
+            continue;
+        };
+        if slug.ends_with(crate::sandbox::PARKED_SUFFIX) || names.iter().any(|other| other == name)
+        {
+            continue;
+        }
+        restores.push(Restore {
+            slug: slug.to_string(),
+            moved: moved.clone(),
+            name: name.to_string(),
+        });
+    }
+    restores.sort_by_key(|restore| restore.name != sandbox::container_of(&restore.slug));
+    restores
+}
+
+/// `ic engine move --abort`: roll back a move whose ic is gone. Refused while one runs.
+pub fn abort() -> Result<()> {
+    ui::begin("undo an interrupted move between engines", vec![], None);
+    if !recover(true)? {
+        ui::finished(
+            "nothing to undo",
+            None,
+            "no move between engines was interrupted on this device: there is nothing to undo",
+            &[],
+        );
+    }
+    Ok(())
+}
+
+/// Find a move cut off part-way (its ic killed: the desktop app quit mid-copy, the PC shut down) and put this device back
+/// as it was before it. Run by `ic engine move --abort` (`explicit`, which refuses while a move runs) and at the start of
+/// every `ic engine move` and `ic docker prepare`, so the PC's own setup heals itself. Answers whether there was one.
+/// Its entry stays while the source engine cannot be reached, for the next run to finish the job.
+pub fn recover(explicit: bool) -> Result<bool> {
+    let Some(moving) = load_journal().moving else {
+        return Ok(false);
+    };
+    let why = match state_of(&moving, now_ms(), process_alive) {
+        MoveState::Running if explicit => bail!(
+            "a move between engines is running on this device (ic process {}): it can only be undone once it has stopped — let it finish, or end that process first.",
+            moving.pid
+        ),
+        MoveState::Running => return Ok(false),
+        MoveState::Interrupted(why) => why,
+    };
+    let log = log_of(&moving);
+    let how = why.words(&moving);
+    if let Some(log) = &log {
+        log.section("found interrupted");
+        log.line(&format!(
+            "this move to {} was found interrupted: {how}. Putting it right.",
+            moving.to
+        ));
+    }
+    let said = |line: &str| {
+        if let Some(log) = &log {
+            log.line(line);
+        }
+    };
+    let ended = match recovery_of(&moving, super::in_use()) {
+        Recovery::Forget => "its entry named no engine this ic knows, so it was dropped and nothing else touched".to_string(),
+        Recovery::Finish { from, to, carried } => {
+            update_journal(|journal| record_finished(journal, &carried, from, to, now_ms()))?;
+            format!(
+                "it had carried every sandbox and switched this device to {}, so it was recorded as finished; {}'s copies stay, stopped, for {KEEP_DAYS} days",
+                to.name(),
+                from.name()
+            )
+        }
+        Recovery::Undo { from, to, carried } => {
+            let source = ready_source(from)?;
+            let target = reachable(to);
+            if target.is_none() {
+                said(&format!("{} does not answer: what the move made there stays recorded, for the next move to replace.", to.name()));
+            }
+            let mut locks = Vec::new();
+            for carry in &carried {
+                if let Ok(lock) = crate::sandbox::lock::hold_for_person(&carry.slug) {
+                    locks.push(lock);
+                }
+            }
+            let fallback;
+            let into = match &log {
+                Some(log) => log,
+                None => {
+                    fallback = Log::create_named("engine", "move")?;
+                    &fallback
+                }
+            };
+            for carry in carried.iter().rev() {
+                undo(carry, &source, target.as_ref(), to, into);
+            }
+            drop(locks);
+            format!("rolled back: every sandbox it had begun is back on {}", from.name())
+        }
+        Recovery::Legacy { switched: true, .. } => {
+            "this device had already switched engines, so its sandboxes run there; nothing was undone".to_string()
+        }
+        Recovery::Legacy {
+            from,
+            to,
+            switched: false,
+        } => {
+            let source = ready_source(from)?;
+            let (given, names) = give_back_legacy(&source, from, &said)?;
+            if to == Kind::Intentic {
+                note_legacy_leftovers(&source, &names, to, &said);
+            }
+            if given.is_empty() {
+                format!("rolled back: no container on {} was set aside by it", from.name())
+            } else {
+                format!("rolled back: {} back on {} by their own names", given.join(", "), from.name())
+            }
+        }
+    };
+    update_journal(|journal| {
+        if journal
+            .moving
+            .as_ref()
+            .is_some_and(|now| now.started == moving.started && now.pid == moving.pid)
+        {
+            journal.moving = None;
+        }
+    })?;
+    said(&format!("interrupted move: {ended}."));
+    ui::note(&format!(
+        "A move between engines on this device was interrupted ({how}) — {ended}.{}",
+        log.as_ref()
+            .map(|log| format!(" Log: {}", log.path.display()))
+            .unwrap_or_default()
+    ));
+    Ok(true)
+}
+
+/// The log of the move itself, opened to add to: the one its entry names, else (an entry of an older ic) the newest
+/// move log written since it started. None when there is none to be had, which is said on the terminal alone.
+fn log_of(moving: &Moving) -> Option<Log> {
+    if let Some(path) = moving.log.as_deref() {
+        if let Ok(log) = Log::append(std::path::Path::new(path)) {
+            return Some(log);
+        }
+    }
+    let started = std::time::UNIX_EPOCH + Duration::from_millis(moving.started);
+    let newest = std::fs::read_dir(crate::logfile::log_dir())
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("move-") && name.ends_with(".log")
+        })
+        .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+        .filter(|(modified, _)| *modified >= started)
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, path)| path);
+    match newest {
+        Some(path) => Log::append(&path).ok(),
+        None => Log::create_named("engine", "move").ok(),
+    }
+}
+
+/// The engine `kind` when it answers now, started if it is ours and stopped; None otherwise. Nothing is installed.
+fn reachable(kind: Kind) -> Option<Target> {
+    let target = match kind {
+        Kind::Intentic => Target::Intentic(super::reach()?),
+        _ => Target::DockerDesktop,
+    };
+    if answers(&target) {
+        return Some(target);
+    }
+    if kind == Kind::Intentic && super::start().is_ok() && answers(&target) {
+        return Some(target);
+    }
+    None
+}
+
+/// An older ic's interrupted move undone by names alone: each container [`legacy_restores`] finds on this side of the
+/// device gets its name back and is started. Nothing is removed. Answers the names given back.
+/// Answers the names given back, and the source's containers as they were listed before.
+fn give_back_legacy(
+    source: &Target,
+    from: Kind,
+    said: &dyn Fn(&str),
+) -> Result<(Vec<String>, Vec<String>)> {
+    let listed = docker::capture_on(
+        source,
+        &["ps", "-a", "--format", "{{.Names}}"],
+        docker::READ_LIMIT,
+    )?;
+    if listed.code != Some(0) {
+        bail!(
+            "{} would not list its containers: {}",
+            from.name(),
+            last_words(&listed.stderr)
+        );
+    }
+    let names: Vec<String> = listed
+        .stdout
+        .lines()
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty())
+        .collect();
+    let kept: Vec<String> = load_journal()
+        .moved
+        .iter()
+        .filter(|moved| !moved.removed && moved.from == from.id())
+        .flat_map(|moved| moved.containers.clone())
+        .collect();
+    let here = side::here();
+    let mut given = Vec::new();
+    for restore in legacy_restores(&names, &kept) {
+        // Another side of this PC (a WSL distro with its own ic) keeps its own sandboxes: not ours to start.
+        let Ok(inspect) = inspect_on(source, &restore.moved) else {
+            continue;
+        };
+        if let side::Stamp::Side(kept_by) = side::stamp_in(env_of(&inspect).join("\0").as_bytes()) {
+            if !kept_by.same(&here) {
+                continue;
+            }
+        }
+        match run_on(
+            source,
+            &["rename", &restore.moved, &restore.name],
+            docker::READ_LIMIT,
+        ) {
+            Ok(()) => said(&format!("gave {} its name back", restore.name)),
+            Err(Fail(reason)) => {
+                ui::warn(&format!(
+                    "could not give {} its name back: {reason}",
+                    restore.name
+                ));
+                said(&format!(
+                    "could not give {} its name back: {reason}",
+                    restore.name
+                ));
+                continue;
+            }
+        }
+        if let Err(Fail(reason)) =
+            run_on(source, &["start", &restore.name], Duration::from_secs(120))
+        {
+            ui::warn(&format!("could not start {} again: {reason}", restore.name));
+            said(&format!("could not start {}: {reason}", restore.name));
+        }
+        given.push(restore.name);
+    }
+    Ok((given, names))
+}
+
+/* WHAT AN OLDER IC'S MOVE LEFT ON OUR ENGINE (2026-11-20, intentic#48). ic 1.429.0 wrote nothing down of what it made on
+ * the target, so a PC upgrading with its interrupted move found the next move refusing the move's own partial copy (about
+ * 1.4 GB there) as somebody else's volume. Its rollback writes each such volume down as made, which the next move then
+ * replaces; nothing is removed here. */
+
+/// The volumes on the target that are one of `sources`' (slug, volume) pairs, which no move still keeps as a copy and
+/// which are not yet written down as made: what an older ic's interrupted move left there. Pure.
+fn legacy_leftovers(
+    sources: &[(String, String)],
+    on_target: &[String],
+    journal: &Journal,
+    to: &str,
+) -> Vec<(String, String)> {
+    let mut found: Vec<(String, String)> = Vec::new();
+    for (slug, volume) in sources {
+        let kept = journal
+            .moved
+            .iter()
+            .any(|moved| !moved.removed && moved.volumes.contains(volume));
+        if on_target.contains(volume)
+            && !kept
+            && !made_by_a_move(journal, slug, to, volume)
+            && !found.iter().any(|(_, seen)| seen == volume)
+        {
+            found.push((slug.clone(), volume.clone()));
+        }
+    }
+    found
+}
+
+/// [`legacy_leftovers`] read off both engines and written down as made. Only on our own engine, and only when it
+/// answers: best effort, said in the log.
+fn note_legacy_leftovers(source: &Target, names: &[String], to: Kind, said: &dyn Fn(&str)) {
+    let Some(target) = reachable(to) else {
+        said(&format!(
+            "{} does not answer: what the move left there is not written down.",
+            to.name()
+        ));
+        return;
+    };
+    // Every sandbox the move set aside, and every one the source has by its name.
+    let mut slugs: Vec<String> = legacy_restores(names, &[])
+        .into_iter()
+        .map(|restore| restore.slug)
+        .collect();
+    for slug in sandbox::slugs_of(names) {
+        if !slugs.contains(&slug) {
+            slugs.push(slug);
+        }
+    }
+    let here = side::here();
+    let mut sources: Vec<(String, String)> = Vec::new();
+    for slug in &slugs {
+        for name in [
+            sandbox::container_of(slug),
+            format!("{DIND_PREFIX}{slug}"),
+            format!("{TUNNEL_PREFIX}{slug}"),
+        ] {
+            let Some(inspect) = [name.clone(), format!("{name}{MOVED_SUFFIX}")]
+                .iter()
+                .find_map(|candidate| inspect_on(source, candidate).ok())
+            else {
+                continue;
+            };
+            if let side::Stamp::Side(kept_by) =
+                side::stamp_in(env_of(&inspect).join("\0").as_bytes())
+            {
+                if !kept_by.same(&here) {
+                    continue;
+                }
+            }
+            for (volume, _) in named_volumes(&inspect) {
+                sources.push((slug.clone(), volume));
+            }
+        }
+    }
+    let Ok(listed) = docker::capture_on(
+        &target,
+        &["volume", "ls", "--format", "{{.Name}}"],
+        docker::READ_LIMIT,
+    ) else {
+        return;
+    };
+    if listed.code != Some(0) {
+        return;
+    }
+    let on_target: Vec<String> = listed
+        .stdout
+        .lines()
+        .map(|line| line.trim().to_string())
+        .collect();
+    for (slug, volume) in legacy_leftovers(&sources, &on_target, &load_journal(), to.id()) {
+        if note_made(&slug, to, &volume, false).is_ok() {
+            said(&format!(
+                "{volume} on {} is this move's partial copy: written down for the next move to replace",
+                to.name()
+            ));
+        }
+    }
+}
+
 /// `ic engine cleanup [--now]`: remove the copies a move left behind whose days are up (all of them with `now`).
 pub fn cleanup(now: bool) -> Result<()> {
     // Off Windows the only copies left behind are a device move's (sandbox/device_move), on this machine's own docker.
@@ -438,7 +1017,8 @@ pub fn cleanup(now: bool) -> Result<()> {
     if due.is_empty() {
         return Ok(());
     }
-    if in_progress() {
+    // An interrupted move's entry holds cleanup off too: the copies it set aside may share their names with the ones due.
+    if journal.moving.is_some() {
         return Ok(());
     }
     let mut removed: Vec<(String, u64)> = Vec::new();
@@ -814,22 +1394,31 @@ fn check_space(plan: &Plan, to: Kind) -> Result<()> {
 
 /* ——— Moving one sandbox, and undoing it. ——— */
 
-/// What a sandbox's move has done so far, so a failure anywhere undoes exactly that.
-#[derive(Debug, Default)]
-struct Carried {
+/// What a sandbox's move has done so far, so a failure anywhere undoes exactly that: kept in memory, and in the
+/// journal's `moving.progress` for an ic that finds the move interrupted. Each source step is written down before it is
+/// taken, so an entry may name a step that never happened; [`undo`] reads the engine before acting on one.
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Carried {
     slug: String,
-    /// Containers renamed aside on the source: (own name, `.moved` name), and whether each was running.
+    /// Containers renamed aside on the source: (own name, `.moved` name).
+    #[serde(default)]
     renamed: Vec<(String, String)>,
+    /// Which of them were running, to start again.
+    #[serde(default)]
     running: Vec<String>,
     /// Images committed from companions on the source, to carry them.
+    #[serde(default)]
     committed: Vec<String>,
     /// Volumes this move created on the target.
+    #[serde(default)]
     created_volumes: Vec<String>,
     /// Containers this move created on the target, the sandbox's included.
+    #[serde(default)]
     created_containers: Vec<String>,
     /// Every volume carried, by name: what the source keeps for the days.
+    #[serde(default)]
     volumes: Vec<String>,
-    record: Option<crate::record::ChannelRecord>,
 }
 
 impl Carried {
@@ -851,7 +1440,6 @@ fn move_one(
 ) -> Result<()> {
     let slug = &sandbox.slug;
     log.section(&format!("moving {slug}"));
-    carry.record = crate::record::read(slug).ok();
     // Stopped and set aside, the sandbox first and what lives beside it after.
     let mut aside: Vec<(String, &Value)> = vec![(sandbox.container.clone(), &sandbox.inspect)];
     aside.extend(
@@ -861,21 +1449,22 @@ fn move_one(
             .map(|(name, inspect)| (name.clone(), inspect)),
     );
     for (name, inspect) in &aside {
+        let moved = format!("{name}{MOVED_SUFFIX}");
         if inspect["State"]["Running"].as_bool() == Some(true) {
             carry.running.push(name.clone());
         }
+        // Written down before the stop and the rename, so an ic killed between them is undone by the next one.
+        carry.renamed.push((name.clone(), moved.clone()));
+        keep_progress(carry)?;
         say(slug, "stopping", json!({ "container": name }));
         run_on(
             source,
             &["stop", "-t", "60", name],
             Duration::from_secs(120),
         )?;
-        let moved = format!("{name}{MOVED_SUFFIX}");
         let _ = run_on(source, &["rm", "-f", &moved], docker::READ_LIMIT);
         run_on(source, &["rename", name, &moved], docker::READ_LIMIT)?;
-        carry.renamed.push((name.clone(), moved));
     }
-    heartbeat();
 
     // The companions' own files (an SSH key the deploy target was given lives in its container, not on a volume) go
     // across as images of themselves.
@@ -883,12 +1472,13 @@ fn move_one(
     let mut companion_images = Vec::new();
     for (name, _) in &sandbox.companions {
         let image = format!("intentic-moved-{}:{}", name, now_ms());
+        carry.committed.push(image.clone());
+        keep_progress(carry)?;
         run_on(
             source,
             &["commit", &format!("{name}{MOVED_SUFFIX}"), &image],
             Duration::from_secs(600),
         )?;
-        carry.committed.push(image.clone());
         images.push(image.clone());
         companion_images.push(image);
     }
@@ -911,6 +1501,7 @@ fn move_one(
     let helper = &sandbox.images[0];
     for (volume, docker_data) in &sandbox.volumes {
         prepare_volume(source, target, to, slug, volume, helper, carry)?;
+        keep_progress(carry)?;
         let total = beating(|| volume_bytes(source, volume, helper)).unwrap_or(0);
         say(slug, "volume", json!({ "volume": volume, "total": total }));
         copy_volume(
@@ -934,7 +1525,7 @@ fn move_one(
         }
         log.line(&format!("{volume}: {} files match", ours.0));
         carry.volumes.push(volume.clone());
-        heartbeat();
+        keep_progress(carry)?;
     }
 
     // The sandbox's network, then a stopped placeholder the reshape makes the sandbox from.
@@ -946,6 +1537,7 @@ fn move_one(
     run_on(target, &refs, Duration::from_secs(120))?;
     carry.created_containers.push(sandbox.container.clone());
     carry.created_containers.push(sandbox::parked_of(slug));
+    keep_progress(carry)?;
 
     say(slug, "starting", json!({}));
     // The placeholder carries no bind, so the reshape finds no key mounted on it: handed the key the sandbox had as the
@@ -975,6 +1567,7 @@ fn move_one(
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         run_on(target, &refs, Duration::from_secs(120))?;
         carry.created_containers.push(name.clone());
+        keep_progress(carry)?;
         if carry.running.contains(name) {
             run_on(target, &["start", name], Duration::from_secs(120))?;
         }
@@ -991,10 +1584,56 @@ fn move_one(
 }
 
 /// Put a sandbox back as it was on the source: what the target got is removed, and the source's copies take their
-/// names back and run again if they ran. Best effort, and said when a step fails.
-fn undo(carry: &Carried, source: &Target, target: &Target, to: Kind, log: &Log) {
+/// names back and run again if they ran. Best effort, and said when a step fails. Without a `target` (it does not
+/// answer: an interrupted move's recovery) nothing is removed there, and what the move made stays recorded as [`Made`].
+fn undo(carry: &Carried, source: &Target, target: Option<&Target>, to: Kind, log: &Log) {
     log.section(&format!("undoing {}", carry.slug));
-    // Removed only when the engine says so: what it refused stays recorded as made ([`Made`]), for the next move to replace.
+    if let Some(target) = target {
+        remove_made(carry, target, to, log);
+    }
+    for (name, moved) in &carry.renamed {
+        match give_back(source, name, moved) {
+            Ok(true) => log.line(&format!("gave {name} its name back")),
+            Ok(false) => {}
+            Err(Fail(reason)) => {
+                log.line(&format!("could not give {name} its name back: {reason}"));
+                crate::ui::warn(&format!("could not give {name} its name back: {reason}"));
+            }
+        }
+    }
+    for name in &carry.running {
+        if let Err(Fail(reason)) = run_on(source, &["start", name], Duration::from_secs(120)) {
+            log.line(&format!("could not start {name} again: {reason}"));
+            crate::ui::warn(&format!("could not start {name} again: {reason}"));
+        }
+    }
+    for image in &carry.committed {
+        let _ = docker::capture_on(source, &["image", "rm", image], docker::READ_LIMIT);
+    }
+    ui::note(&format!("{} is back as it was.", carry.slug));
+}
+
+/// `moved` renamed back to `name` on the source, when the move got that far: a container still under its own name was
+/// never set aside (its rename is written down before it is made), and is left as it is. Answers whether it renamed.
+fn give_back(source: &Target, name: &str, moved: &str) -> Result<bool> {
+    let there = |container: &str| {
+        docker::capture_on(
+            source,
+            &["container", "inspect", container],
+            docker::READ_LIMIT,
+        )
+        .is_ok_and(|ran| ran.code == Some(0) && !ran.timed_out)
+    };
+    if there(name) || !there(moved) {
+        return Ok(false);
+    }
+    run_on(source, &["rename", moved, name], docker::READ_LIMIT)?;
+    Ok(true)
+}
+
+/// What a sandbox's move made on the target, removed. Removed only when the engine says so: what it refused stays
+/// recorded as made ([`Made`]), for the next move to replace.
+fn remove_made(carry: &Carried, target: &Target, to: Kind, log: &Log) {
     let mut gone: Vec<String> = Vec::new();
     let mut removed = |args: &[&str], name: &str| {
         let ran = docker::capture_on(target, args, docker::READ_LIMIT);
@@ -1017,23 +1656,6 @@ fn undo(carry: &Carried, source: &Target, target: &Target, to: Kind, log: &Log) 
         removed(&["volume", "rm", "-f", volume], volume);
     }
     let _ = update_journal(|journal| forget_made(journal, &carry.slug, to.id(), Some(&gone)));
-    for (name, moved) in &carry.renamed {
-        if let Err(Fail(reason)) = run_on(source, &["rename", moved, name], docker::READ_LIMIT) {
-            crate::ui::warn(&format!("could not give {name} its name back: {reason}"));
-        }
-    }
-    for name in &carry.running {
-        if let Err(Fail(reason)) = run_on(source, &["start", name], Duration::from_secs(120)) {
-            crate::ui::warn(&format!("could not start {name} again: {reason}"));
-        }
-    }
-    for image in &carry.committed {
-        let _ = docker::capture_on(source, &["image", "rm", image], docker::READ_LIMIT);
-    }
-    if let Some(record) = &carry.record {
-        let _ = crate::record::write(&carry.slug, record);
-    }
-    ui::note(&format!("{} is back as it was.", carry.slug));
 }
 
 /// A volume of the same name on the target is one an earlier move left there (a copy it kept, or one it made and never
@@ -2316,6 +2938,26 @@ fn heartbeat() {
     });
 }
 
+/// A sandbox's progress written into the move's entry, with a heartbeat: before each step that changes the source, so
+/// an ic killed at any point leaves what its successor needs to undo it ([`recover`]).
+fn keep_progress(carry: &Carried) -> Result<()> {
+    update_journal(|journal| {
+        if let Some(moving) = journal.moving.as_mut() {
+            record_progress(moving, carry);
+            moving.heartbeat = now_ms();
+        }
+    })
+}
+
+/// `carry` as the entry's record of its sandbox, replacing the one before. Pure.
+fn record_progress(moving: &mut Moving, carry: &Carried) {
+    let progress = moving.progress.get_or_insert_with(Vec::new);
+    match progress.iter_mut().find(|known| known.slug == carry.slug) {
+        Some(known) => *known = carry.clone(),
+        None => progress.push(carry.clone()),
+    }
+}
+
 /// One `intentic-move:` line for the desktop app's card.
 pub(crate) fn say(slug: &str, step: &str, detail: Value) {
     let mut line = json!({ "slug": slug, "step": step });
@@ -2575,18 +3217,294 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_move_is_in_progress_only_while_its_ic_says_so() {
-        let mut journal = Journal::default();
-        assert!(!moving_now(&journal, 1_000_000));
-        journal.moving = Some(Moving {
-            pid: 1,
+    /// An entry as this ic writes one, with nothing done yet.
+    fn moving(pid: u32, heartbeat: u64) -> Moving {
+        Moving {
+            pid,
             to: "intentic".into(),
             started: 0,
-            heartbeat: 1_000_000,
-        });
-        assert!(moving_now(&journal, 1_000_000 + 60_000));
-        assert!(!moving_now(&journal, 1_000_000 + STALE_HEARTBEAT_MS + 1));
+            heartbeat,
+            from: Some("dockerDesktop".into()),
+            log: Some("C:\\Users\\x\\.intentic\\logs\\move-1.log".into()),
+            progress: Some(Vec::new()),
+        }
+    }
+
+    #[test]
+    fn a_move_runs_only_while_its_process_is_alive_and_its_heartbeat_fresh() {
+        let entry = moving(70892, 1_000_000);
+        let fresh = 1_000_000 + 60_000;
+        let stale = 1_000_000 + STALE_HEARTBEAT_MS;
+        let alive = |_: u32| true;
+        let dead = |_: u32| false;
+        assert_eq!(state_of(&entry, fresh, alive), MoveState::Running);
+        // The incident's shape: the desktop app killed ic mid-copy, seconds after its last heartbeat.
+        assert_eq!(
+            state_of(&entry, fresh, dead),
+            MoveState::Interrupted(Interruption::ProcessGone)
+        );
+        // A live pid with a silent move is another program holding a reused pid, or an ic hung past its limits.
+        assert_eq!(
+            state_of(&entry, stale, alive),
+            MoveState::Interrupted(Interruption::HeartbeatStale)
+        );
+        assert_eq!(
+            state_of(&entry, stale, dead),
+            MoveState::Interrupted(Interruption::ProcessGone)
+        );
+        // Only its own pid is asked about.
+        assert_eq!(
+            state_of(&entry, fresh, |pid| pid == 70892),
+            MoveState::Running
+        );
+        assert!(process_alive(std::process::id()));
+    }
+
+    #[test]
+    fn the_summary_says_when_a_move_was_interrupted() {
+        let journal = Journal {
+            moving: Some(moving(70892, 1_000)),
+            ..Journal::default()
+        };
+        let running = summary_of(&journal, 2_000, |_| true).unwrap();
+        assert_eq!(running["moving"], true);
+        assert_eq!(running["interrupted"], false);
+        let dead = summary_of(&journal, 2_000, |_| false).unwrap();
+        assert_eq!(dead["moving"], false);
+        assert_eq!(dead["interrupted"], true);
+        assert_eq!(dead["to"], "intentic");
+        let stale = summary_of(&journal, 1_000 + STALE_HEARTBEAT_MS, |_| true).unwrap();
+        assert_eq!(stale["interrupted"], true);
+    }
+
+    #[test]
+    fn the_journal_an_older_ic_left_mid_move_still_reads_and_is_recovered_by_names() {
+        // moves.json as ic 1.429.0 left it when the desktop app was quit mid-copy (intentic#48).
+        let text = r#"{ "moving": { "pid": 70892, "to": "intentic", "started": 1763600000000, "heartbeat": 1763600420000 }, "moved": [] }"#;
+        let journal: Journal = serde_json::from_str(text).unwrap();
+        let entry = journal.moving.clone().unwrap();
+        assert_eq!(entry.pid, 70892);
+        assert_eq!(
+            (
+                entry.from.as_deref(),
+                entry.log.as_deref(),
+                entry.progress.as_ref()
+            ),
+            (None, None, None)
+        );
+        assert!(journal.made.is_empty());
+        assert_eq!(
+            recovery_of(&entry, Kind::DockerDesktop),
+            Recovery::Legacy {
+                from: Kind::DockerDesktop,
+                to: Kind::Intentic,
+                switched: false
+            }
+        );
+        assert_eq!(
+            recovery_of(&entry, Kind::Intentic),
+            Recovery::Legacy {
+                from: Kind::DockerDesktop,
+                to: Kind::Intentic,
+                switched: true
+            }
+        );
+        let unknown = Moving {
+            to: "podman".into(),
+            ..entry
+        };
+        assert_eq!(recovery_of(&unknown, Kind::DockerDesktop), Recovery::Forget);
+    }
+
+    #[test]
+    fn an_interrupted_move_with_progress_is_undone_or_finished_by_whether_it_switched() {
+        let mut entry = moving(70892, 1_000);
+        let mut first = Carried {
+            slug: "a".into(),
+            ..Carried::default()
+        };
+        first.running.push("intentic-sandbox-a".into());
+        first.renamed.push((
+            "intentic-sandbox-a".into(),
+            "intentic-sandbox-a.moved".into(),
+        ));
+        first.created_volumes.push("intentic-workspace-a".into());
+        first.volumes.push("intentic-workspace-a".into());
+        record_progress(&mut entry, &first);
+        let second = Carried {
+            slug: "b".into(),
+            renamed: vec![(
+                "intentic-sandbox-b".into(),
+                "intentic-sandbox-b.moved".into(),
+            )],
+            ..Carried::default()
+        };
+        record_progress(&mut entry, &second);
+        // A later step of the same sandbox replaces its record rather than adding one.
+        first.created_containers.push("intentic-sandbox-a".into());
+        record_progress(&mut entry, &first);
+        assert_eq!(
+            entry.progress.as_deref(),
+            Some(&[first.clone(), second.clone()][..])
+        );
+        // What it wrote survives the file.
+        let text = serde_json::to_string(&Journal {
+            moving: Some(entry.clone()),
+            ..Journal::default()
+        })
+        .unwrap();
+        assert!(text.contains("\"createdVolumes\""));
+        let back: Journal = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.moving.as_ref(), Some(&entry));
+
+        assert_eq!(
+            recovery_of(&entry, Kind::DockerDesktop),
+            Recovery::Undo {
+                from: Kind::DockerDesktop,
+                to: Kind::Intentic,
+                carried: vec![first.clone(), second.clone()],
+            }
+        );
+        assert_eq!(
+            recovery_of(&entry, Kind::Intentic),
+            Recovery::Finish {
+                from: Kind::DockerDesktop,
+                to: Kind::Intentic,
+                carried: vec![first.clone(), second.clone()],
+            }
+        );
+        // An entry naming no `from` carries from the other engine.
+        let back_to_desktop = Moving {
+            to: "dockerDesktop".into(),
+            from: None,
+            ..entry.clone()
+        };
+        assert!(matches!(
+            recovery_of(&back_to_desktop, Kind::Intentic),
+            Recovery::Undo {
+                from: Kind::Intentic,
+                to: Kind::DockerDesktop,
+                ..
+            }
+        ));
+
+        // Finished, it is written down as the move itself would have.
+        let mut journal = Journal {
+            moving: Some(entry),
+            made: vec![made("a", "intentic-workspace-a", false)],
+            ..Journal::default()
+        };
+        record_finished(
+            &mut journal,
+            &[first, second],
+            Kind::DockerDesktop,
+            Kind::Intentic,
+            5,
+        );
+        assert_eq!(journal.moving, None);
+        assert!(journal.made.is_empty());
+        assert_eq!(journal.moved.len(), 2);
+        assert_eq!(
+            journal.moved[0].containers,
+            vec!["intentic-sandbox-a.moved".to_string()]
+        );
+        assert_eq!(journal.moved[0].remove_after, 5 + KEEP_DAYS * DAY_MS);
+    }
+
+    #[test]
+    fn an_older_move_s_partial_copy_on_our_engine_is_found_and_nothing_else() {
+        let pair = |slug: &str, volume: &str| (slug.to_string(), volume.to_string());
+        let sources = vec![
+            pair("a", "intentic-history-a"),
+            pair("a", "intentic-workspace-a"),
+            pair("a", "intentic-docker-a"),
+            // A volume two containers of one sandbox mount is found once.
+            pair("a", "intentic-history-a"),
+            pair("b", "intentic-workspace-b"),
+            pair("c", "intentic-workspace-c"),
+        ];
+        let on_target: Vec<String> = [
+            "intentic-history-a",
+            "intentic-docker-a",
+            "intentic-workspace-b",
+            "intentic-workspace-c",
+            // On the target but no source sandbox's: somebody else's.
+            "postgres-data",
+        ]
+        .iter()
+        .map(|name| name.to_string())
+        .collect();
+        let mut journal = Journal {
+            // b's volume is the copy a finished move keeps for its days.
+            moved: vec![Moved {
+                from: "intentic".into(),
+                to: "dockerDesktop".into(),
+                volumes: vec!["intentic-workspace-b".into()],
+                ..moved("b", 1, 2)
+            }],
+            // c's is already written down as made.
+            made: vec![made("c", "intentic-workspace-c", false)],
+            ..Journal::default()
+        };
+        assert_eq!(
+            legacy_leftovers(&sources, &on_target, &journal, "intentic"),
+            vec![
+                pair("a", "intentic-history-a"),
+                pair("a", "intentic-docker-a")
+            ]
+        );
+        // A removed record keeps nothing.
+        journal.moved[0].removed = true;
+        assert_eq!(
+            legacy_leftovers(&sources, &on_target, &journal, "intentic"),
+            vec![
+                pair("a", "intentic-history-a"),
+                pair("a", "intentic-docker-a"),
+                pair("b", "intentic-workspace-b")
+            ]
+        );
+        assert!(legacy_leftovers(&sources, &[], &journal, "intentic").is_empty());
+    }
+
+    #[test]
+    fn an_older_move_gives_back_only_ic_s_own_set_aside_names_whose_own_name_is_free() {
+        let names: Vec<String> = [
+            // Set aside by the cut-off move: the sandbox and its dind host.
+            "intentic-dind-host-a.moved",
+            "intentic-sandbox-a.moved",
+            // b was set aside too, but something already took its name back: left alone.
+            "intentic-sandbox-b.moved",
+            "intentic-sandbox-b",
+            // c's copy is one a finished move keeps for its days.
+            "intentic-sandbox-c.moved",
+            // d's tunnel.
+            "intentic-sandbox-tunnel-d.moved",
+            // Nobody's to touch: not ic's naming, a parked swap, a name no slug could have.
+            "postgres.moved",
+            "intentic-sandbox-e.previous.moved",
+            "intentic-sandbox-../x.moved",
+        ]
+        .iter()
+        .map(|name| name.to_string())
+        .collect();
+        let kept = vec!["intentic-sandbox-c.moved".to_string()];
+        let restores = legacy_restores(&names, &kept);
+        let pairs: Vec<(&str, &str, &str)> = restores
+            .iter()
+            .map(|r| (r.slug.as_str(), r.moved.as_str(), r.name.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                ("a", "intentic-sandbox-a.moved", "intentic-sandbox-a"),
+                ("a", "intentic-dind-host-a.moved", "intentic-dind-host-a"),
+                (
+                    "d",
+                    "intentic-sandbox-tunnel-d.moved",
+                    "intentic-sandbox-tunnel-d"
+                ),
+            ]
+        );
     }
 
     #[test]
@@ -2606,13 +3524,13 @@ mod tests {
 
     #[test]
     fn the_summary_names_what_is_kept_and_where() {
-        assert_eq!(summary_of(&Journal::default(), 0), None);
+        assert_eq!(summary_of(&Journal::default(), 0, |_| true), None);
         let journal = Journal {
             moving: None,
             moved: vec![moved("a", 10, 100)],
             made: Vec::new(),
         };
-        let summary = summary_of(&journal, 20).unwrap();
+        let summary = summary_of(&journal, 20, |_| true).unwrap();
         assert_eq!(summary["moving"], false);
         assert_eq!(summary["last"]["to"], "intentic");
         assert_eq!(summary["leftBehind"][0]["slug"], "a");
@@ -2826,12 +3744,7 @@ mod tests {
     #[test]
     fn the_journal_round_trips_with_the_names_the_desktop_app_reads() {
         let journal = Journal {
-            moving: Some(Moving {
-                pid: 7,
-                to: "intentic".into(),
-                started: 1,
-                heartbeat: 2,
-            }),
+            moving: Some(moving(7, 2)),
             moved: vec![moved("a", 1, 2)],
             made: vec![made("a", "intentic-history-a", false)],
         };

@@ -469,11 +469,16 @@ enum EngineCommand {
     /// keeps its copies, stopped, for 7 days; moving back is a move the other way
     Move {
         /// The engine to move onto: `intentic` (the intentic engine) or `docker-desktop`
-        #[arg(long)]
-        to: String,
+        #[arg(long, required_unless_present = "abort")]
+        to: Option<String>,
         /// Skip the confirmation (the desktop app asks it on its own card)
         #[arg(short = 'y', long = "yes")]
         yes: bool,
+        /// Undo a move whose ic was killed part-way (its process gone, or silent for 10 minutes): the source's
+        /// sandboxes get their names back and run again, and what it made on the other engine is removed. Refused while
+        /// a move runs; every `ic engine move` and `ic docker prepare` does this first by itself
+        #[arg(long, conflicts_with_all = ["to", "yes"])]
+        abort: bool,
     },
     /// Remove the copies a move left on the other engine once their days are up (`--now`: all of them)
     Cleanup {
@@ -1245,13 +1250,40 @@ fn main() {
     let mut cli = Cli::parse();
     // A move between engines stops sandboxes and copies their volumes: nothing else may change them meanwhile, and a
     // background round (the machine agent's watch, keeper, tidy) is told so rather than restarting one mid-copy.
-    if engine::moves::in_progress() && !allowed_during_a_move(&cli.command) {
-        ui::error(&ui::explain(
-            "Nothing was changed: sandboxes are being moved between engines on this device.",
-            None,
-            Some("wait for the move to finish, then run the same command again."),
-        ));
-        std::process::exit(3);
+    match engine::moves::state() {
+        Some(engine::moves::MoveState::Running) if !allowed_during_a_move(&cli.command) => {
+            ui::error(&ui::explain(
+                "Nothing was changed: sandboxes are being moved between engines on this device.",
+                None,
+                Some("wait for the move to finish, then run the same command again."),
+            ));
+            std::process::exit(3);
+        }
+        // A move whose ic is gone left sandboxes renamed aside. The verbs a person presses roll it back first: the
+        // sandbox verbs here, before they act on a sandbox that may not be there by its name, refused if that does not
+        // work; the move and the PC's setup in their own flow. Background rounds wait for one of those. (2026-11-20: a
+        // killed move's dead pid blocked every verb with "wait for the move to finish", which could never come, and
+        // the desktop app's buttons said the same.)
+        Some(engine::moves::MoveState::Interrupted(_)) if !allowed_during_a_move(&cli.command) => {
+            let refused = if !recovers_an_interrupted_move(&cli.command) {
+                Some(None)
+            } else if matches!(cli.command, Command::Sandbox(_)) {
+                engine::moves::recover(false)
+                    .err()
+                    .map(|util::Fail(reason)| Some(reason))
+            } else {
+                None
+            };
+            if let Some(reason) = refused {
+                ui::error(&ui::explain(
+                    "Nothing was changed: a move between engines on this device was interrupted part-way, and is not undone yet.",
+                    reason.as_deref(),
+                    Some("run `ic engine move --abort` (or the desktop app's Prepare this PC) to put every sandbox back, then run the same command again."),
+                ));
+                std::process::exit(3);
+            }
+        }
+        _ => {}
     }
     // A sandbox may be named by the owner's name for it as `ic sandbox list` shows it, as well as by its slug.
     if let Err(util::Fail(message)) = by_slug(&mut cli.command) {
@@ -1579,12 +1611,24 @@ fn main() {
         Command::Image(ImageCommand::Load { image }) => {
             image_cache::load_now(&image_or_default(image))
         }
-        Command::Docker(DockerCommand::Prepare { yes, dry_run }) => prepare::run(prepare::Args {
-            // The desktop app has no terminal to answer a question on, so its consent arrives as the same
-            // environment variable connect.sh has always used for a headless install.
-            yes: yes || std::env::var("INSTALL_DOCKER").as_deref() == Ok("1"),
-            dry_run,
-        }),
+        Command::Docker(DockerCommand::Prepare { yes, dry_run }) => {
+            // A move between engines cut off part-way is rolled back before the setup runs, so Prepare this PC heals
+            // it. Not getting there yet (an engine that does not answer) is said and left for the move step, which
+            // tries again once the setup has the engines up and refuses to move until it has.
+            if !dry_run {
+                if let Err(util::Fail(reason)) = engine::moves::recover(false) {
+                    ui::warn(&format!(
+                        "an interrupted move between engines is not undone yet: {reason}"
+                    ));
+                }
+            }
+            prepare::run(prepare::Args {
+                // The desktop app has no terminal to answer a question on, so its consent arrives as the same
+                // environment variable connect.sh has always used for a headless install.
+                yes: yes || std::env::var("INSTALL_DOCKER").as_deref() == Ok("1"),
+                dry_run,
+            })
+        }
         Command::Engine { command } => match command {
             None => engine::default_action(),
             Some(EngineCommand::Fetch) => engine::run_fetch(),
@@ -1607,9 +1651,11 @@ fn main() {
             Some(EngineCommand::Stop) => engine::run_stop(),
             Some(EngineCommand::Hold) => engine::run_hold(),
             Some(EngineCommand::Restart) => engine::run_restart(),
-            Some(EngineCommand::Move { to, yes }) => {
-                engine::moves::run(engine::moves::Args { to, yes })
-            }
+            Some(EngineCommand::Move { abort: true, .. }) => engine::moves::abort(),
+            Some(EngineCommand::Move { to, yes, .. }) => engine::moves::run(engine::moves::Args {
+                to: to.unwrap_or_default(),
+                yes,
+            }),
             Some(EngineCommand::Cleanup { now }) => engine::moves::cleanup(now),
             Some(EngineCommand::Prefer { engine }) => engine::run_prefer(&engine),
             Some(EngineCommand::Update) => engine::run_update(),
@@ -1715,6 +1761,36 @@ fn named_sandboxes(command: &mut Command) -> Vec<&mut String> {
             vec![slug]
         }
         _ => Vec::new(),
+    }
+}
+
+/// The verbs that roll an interrupted move back before anything else (engine/moves.rs `recover`): the move itself, its
+/// `--abort`, the PC's setup (the desktop app's Prepare this PC), and the sandbox verbs a person presses, which the
+/// desktop app's buttons run through recreate.ps1 and the machine agent's tools run when asked. The machine agent's
+/// own rounds never do (`fix --auto`, `prepare --auto`, `backup`, `tidy`, `watch`, `sleep`, `wakes`), nor reads:
+/// undoing a move starts engines and containers.
+fn recovers_an_interrupted_move(command: &Command) -> bool {
+    match command {
+        Command::Engine {
+            command: Some(EngineCommand::Move { .. }),
+        } => true,
+        Command::Docker(DockerCommand::Prepare { dry_run, .. }) => !*dry_run,
+        Command::Sandbox(command) => match command {
+            SandboxCommand::Prepare { auto, .. } | SandboxCommand::Fix { auto, .. } => !*auto,
+            SandboxCommand::Connect { .. }
+            | SandboxCommand::Update { .. }
+            | SandboxCommand::Rebuild { .. }
+            | SandboxCommand::Rollback { .. }
+            | SandboxCommand::Reshape { .. }
+            | SandboxCommand::Shape { .. }
+            | SandboxCommand::Start { .. }
+            | SandboxCommand::Stop { .. }
+            | SandboxCommand::Restart { .. }
+            | SandboxCommand::Remove { .. }
+            | SandboxCommand::Restore { .. } => true,
+            _ => false,
+        },
+        _ => false,
     }
 }
 
@@ -2255,6 +2331,80 @@ mod tests {
             panic!("engine disk did not parse")
         };
         assert!(allowed_during_a_move(&read.command));
+    }
+
+    #[test]
+    fn a_move_is_aborted_without_naming_an_engine_and_the_setup_verbs_recover_first() {
+        let Ok(abort) = parse(&["engine", "move", "--abort"]) else {
+            panic!("engine move --abort did not parse")
+        };
+        assert!(matches!(
+            abort.command,
+            Command::Engine {
+                command: Some(EngineCommand::Move {
+                    abort: true,
+                    to: None,
+                    ..
+                })
+            }
+        ));
+        assert!(recovers_an_interrupted_move(&abort.command));
+        assert!(parse(&["engine", "move", "--abort", "--to", "intentic"]).is_err());
+        assert!(parse(&["engine", "move"]).is_err());
+        let Ok(to) = parse(&["engine", "move", "--to", "intentic", "--yes"]) else {
+            panic!("engine move --to did not parse")
+        };
+        assert!(recovers_an_interrupted_move(&to.command));
+        let Ok(prepare) = parse(&["docker", "prepare", "--yes"]) else {
+            panic!("docker prepare did not parse")
+        };
+        assert!(recovers_an_interrupted_move(&prepare.command));
+        let Ok(dry) = parse(&["docker", "prepare", "--dry-run"]) else {
+            panic!("docker prepare --dry-run did not parse")
+        };
+        assert!(!recovers_an_interrupted_move(&dry.command));
+        let Ok(status) = parse(&["engine", "status"]) else {
+            panic!("engine status did not parse")
+        };
+        assert!(!recovers_an_interrupted_move(&status.command));
+        // What the desktop app's buttons run (recreate.ps1) and the machine agent's tools run when a person asks.
+        for pressed in [
+            &["sandbox", "update", "a"][..],
+            &["sandbox", "rebuild", "a", "abc"],
+            &["sandbox", "rollback", "a"],
+            &["sandbox", "rollback", "a", "--to", "1.2.3"],
+            &["sandbox", "reshape", "a", "--memory", "8g"],
+            &["sandbox", "shape", "a", "--cpus", "4", "--when", "now"],
+            &["sandbox", "start", "a"],
+            &["sandbox", "stop", "a"],
+            &["sandbox", "restart", "a"],
+            &["sandbox", "remove", "a", "-y"],
+            &["sandbox", "prepare", "a"],
+            &["sandbox", "fix", "a"],
+            &["sandbox", "connect", "-y", "--", "CODE"],
+        ] {
+            let Ok(cli) = parse(pressed) else {
+                panic!("{pressed:?} did not parse")
+            };
+            assert!(recovers_an_interrupted_move(&cli.command), "{pressed:?}");
+        }
+        // The machine agent's own rounds (keeper, auto-backup, tidy, probation watch, sleep), never.
+        for round in [
+            &["sandbox", "fix", "--auto", "--json", "--source", "agent"][..],
+            &["sandbox", "prepare", "a", "--auto"],
+            &["sandbox", "backup", "a", "--auto", "--json"],
+            &["sandbox", "tidy", "--json"],
+            &["sandbox", "watch", "--json"],
+            &[
+                "sandbox", "sleep", "--idle", "30", "--json", "--source", "agent",
+            ],
+            &["sandbox", "wakes", "--json", "--source", "agent"],
+        ] {
+            let Ok(cli) = parse(round) else {
+                panic!("{round:?} did not parse")
+            };
+            assert!(!recovers_an_interrupted_move(&cli.command), "{round:?}");
+        }
     }
 
     #[test]

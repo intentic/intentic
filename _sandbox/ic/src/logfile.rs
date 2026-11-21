@@ -160,6 +160,19 @@ impl Log {
         })
     }
 
+    /// An earlier run's log, opened to add to its end: a move found interrupted says so in the log of the move itself
+    /// (engine/moves.rs).
+    pub fn append(path: &std::path::Path) -> Result<Log> {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .map_err(|err| Fail(format!("could not open {}: {err}", path.display())))?;
+        Ok(Log {
+            path: path.to_path_buf(),
+            file: Arc::new(Mutex::new(Sink::new(Box::new(file)))),
+        })
+    }
+
     /// One line of ic's own, with its moment in front.
     pub fn line(&self, text: &str) {
         if let Ok(mut sink) = self.file.lock() {

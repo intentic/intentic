@@ -1,5 +1,5 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { parseJsonOr } from "@intentic/base/json";
@@ -12,6 +12,7 @@ import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pai
 import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess, runProcessSync, type SyncExecResult } from "./exec.js";
 import { mutagenEnv } from "./mutagen-env.js";
+import { allowNote, deniedByThePc } from "../release/security-hint.js";
 import { projectShell, realProjectRunner, sandboxCopy } from "./project/project-remote.js";
 import { reportRepoIgnoreProblems } from "./ignores/repo-ignores.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./ignores/residue.js";
@@ -1162,10 +1163,41 @@ export const runMutagenAsync = async (mutagen: string, args: readonly string[], 
     if (result.status === 0) {
         return;
     }
+    const plain = mutagenFailureSaid(mutagen, result.spawnCode, said);
+    if (plain !== undefined) {
+        throw new Error(plain);
+    }
     if (said !== "") {
         log(`  mutagen: ${said.split("\n").join(" / ")}`);
     }
     throw new Error(`mutagen ${args[0] ?? ""} exited with code ${result.status}`);
+};
+
+// The archive of agents Mutagen installs in each sandbox it syncs with, which it looks for beside its own executable.
+export const AGENT_BUNDLE = "mutagen-agents.tar.gz";
+
+// allow(dependency-text): Mutagen 0.18's agent lookup words a missing bundle only so; an unmatched wording falls back to its own output and exit code
+const BUNDLE_MISSING = /unable to locate agent bundle/i;
+
+// Whether Mutagen's output says the agent bundle it installs in each sandbox is not beside it.
+const saysBundleMissing = (said: string): boolean => BUNDLE_MISSING.test(said);
+
+/**
+ * (2026-11-20, intentic#49) THE FAILURES A PERSON CAN ACT ON, IN THEIR WORDS. A Windows PC whose antivirus removed
+ * Mutagen's agent bundle logged a wall of Mutagen's own output and then "preparing its file sync failed: mutagen sync
+ * exited with code 1", for every pass, and nothing said what was wrong or what to do. A missing bundle is now said as
+ * such; the watcher fetches it again on its next pass (mutagen-binary.ts repairAgentBundle). A Mutagen the PC would not
+ * start is said as the refusal it is. Undefined for every other failure, which keeps Mutagen's own words. Pure.
+ */
+export const mutagenFailureSaid = (mutagen: string, spawnCode: string | undefined, said: string): string | undefined => {
+    if (deniedByThePc(spawnCode)) {
+        return `this device refused to start ${mutagen}. ${allowNote("start", mutagen)}`;
+    }
+    if (saysBundleMissing(said)) {
+        const bundle = join(dirname(mutagen), AGENT_BUNDLE);
+        return `Mutagen's agent bundle ${bundle} is missing, so it cannot install its agent in the sandbox. This agent fetches it again on its next pass; if it keeps disappearing: ${allowNote("removed", bundle)}`;
+    }
+    return undefined;
 };
 
 // Runs a mutagen subcommand, inheriting stdio, throwing on failure. One-shot CLI commands only, never the

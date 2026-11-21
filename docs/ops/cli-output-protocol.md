@@ -133,7 +133,7 @@ While it runs, the same line reads `⠹  Stopping sandbox-82789f4106b4  ·  wait
      fix:     check the network, then run the same command again.
 ```
 
-The headline says what did not happen. `problem:` says why, in terms of the reader's device rather than the code. `fix:` is the one thing to do, and when that is a command, the command is the whole value. Several independent failures are numbered, each with its own `problem:`/`fix:` pair.
+The headline says what did not happen. `problem:` says why, in terms of the reader's device rather than the code, and carries the failure's own words where something threw: `github.com did not answer from this device (The remote name could not be resolved: 'github.com').`, or `could not write <path>: <message>` when the device refused a file rather than the network failing. When Windows answers "Access is denied", the problem adds that security software on this PC may be blocking the file, naming the product Security Center lists, and `fix:` names the folder to ask whoever manages it to allow (`scripts-kit/kit.ps1`, `Get-IntenticSecurityAdvice`; 2026-11-20, intentic#49). A failure no script anticipated still ends in a stop block, `The script stopped unexpectedly.`, whose problem says where: `<message> (in step "<label>", at <command> <path>, script line <n>).` `fix:` is the one thing to do, and when that is a command, the command is the whole value. Several independent failures are numbered, each with its own `problem:`/`fix:` pair.
 
 ### Words
 

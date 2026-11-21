@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, readdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
+import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
 import { binDir } from "./config.js";
@@ -17,6 +19,7 @@ import {
     versionOf,
 } from "./release.js";
 import { type ReleaseFile, verifyReleaseFiles } from "./release/release-verify.js";
+import { allowNote, deniedByThePc } from "./release/security-hint.js";
 
 // One environment to one exact release: download → check against the release's signed SHA256SUMS → probe → swap →
 // restart through the supervisor → verify → roll back.
@@ -40,6 +43,9 @@ export interface UpgradeExec {
     readonly verify: (version: string, files: readonly ReleaseFile[]) => Promise<string | undefined>;
     // The release the binary reports itself as; undefined where it does not run as an agent.
     readonly probe: (binary: string) => string | undefined;
+    // Why a binary the probe got nothing from is security software's doing (gone since it arrived, or refused a start),
+    // in the words that ask for it to be allowed (security-hint.ts); undefined when it is not, or not known.
+    readonly blocked?: (binary: string) => string | undefined;
     readonly swap: (from: string, to: string) => Promise<void>;
     // Clears a path for a swap to land on: deleted, or where a running process still holds it, moved aside under a name
     // bin/'s sweep removes later (release.ts vacate).
@@ -275,7 +281,8 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
         );
         return { kind: "failed", reason: `the download did not check out (${unverified}), so it was deleted and the agent you have is kept.` };
     }
-    const refused = refusal(exec.probe(pieces.at(-1)?.staged ?? `${agentPath}.new-${target}`), target);
+    const download = pieces.at(-1)?.staged ?? `${agentPath}.new-${target}`;
+    const refused = withBlock(refusal(exec.probe(download), target), exec, download);
     if (refused !== undefined) {
         await discardAll(
             exec,
@@ -290,9 +297,37 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
     }
     // Nothing was running to restart: the new agent's trial begins at its first start, whenever that is.
     if (!wasRunning) {
-        return { kind: "upgraded", from: installed, to: target };
+        return await settleInPlace(exec, pieces, target, installed);
     }
     return await restartOnto(exec, pieces, target, installed, log);
+};
+
+// A probe that got nothing, with what security software did to the file when it was that (UpgradeExec.blocked).
+const withBlock = (reason: string | undefined, exec: UpgradeExec, binary: string): string | undefined => {
+    if (reason === undefined) {
+        return undefined;
+    }
+    const blocked = exec.blocked?.(binary);
+    return blocked === undefined ? reason : `${reason} ${blocked}`;
+};
+
+/* AN UPDATE WITH NOTHING TO RESTART STILL PROVES THE FILE IN PLACE (2026-11-20, intentic#49). With no agent running, the
+   swap used to be the end of it: on a Windows PC whose antivirus removes or refuses intentic-machine.exe once it sits at
+   its own path, the probe of the part file passed, the swap landed, and then nothing was at bin\intentic-machine.exe
+   that would start. Setup re-ran itself on that file and failed, and the login entry pointed at a program that was not
+   there, so the device read as disconnected until someone came to it. The new file is asked its version where it now
+   lies; one that does not answer is swapped back out, so the agent that was there before is still there. */
+const settleInPlace = async (exec: UpgradeExec, pieces: readonly Piece[], target: string, installed: string): Promise<UpgradeOutcome> => {
+    const agent = pieces.at(-1)?.target ?? agentPath;
+    const landed = exec.probe(agent);
+    if (landed === target) {
+        return { kind: "upgraded", from: installed, to: target };
+    }
+    const why = withBlock(`it did not run once in place.`, exec, agent) ?? "";
+    const stuck = await swapOut(exec, pieces);
+    return stuck === undefined
+        ? { kind: "failed", reason: `the new agent (${target}) was put in place, but ${why} So ${installed} was put back.` }
+        : { kind: "failed", reason: `the new agent (${target}) was put in place, but ${why} Putting ${installed} back was refused too (${stuck}).`, fix: "intentic-machine upgrade" };
 };
 
 // Part files of any other release: nothing else would ever remove a stale one, and one of this release is resumed, its
@@ -321,6 +356,16 @@ const downloadProgress = (log: Log): ((received: number, total: number) => void)
     };
 };
 
+// What security software did to a binary that did not answer its probe: removed it since it arrived, or refused to
+// start it. Asked only after a failed probe, so the second start costs nothing on the way that works.
+const blockedBinary = (binary: string): string | undefined => {
+    if (!existsSync(binary)) {
+        return allowNote("removed", binary);
+    }
+    const tried = spawnSync(binary, ["version"], { timeout: 10_000, windowsHide: true, stdio: "ignore" });
+    return deniedByThePc(errnoCode(tried.error)) ? allowNote("start", binary) : undefined;
+};
+
 // `swap` is a rename throughout: what lets a running executable be displaced on Windows and every step be undone.
 export const realUpgradeExec = (
     restart: () => Promise<string | undefined>,
@@ -346,6 +391,7 @@ export const realUpgradeExec = (
         }
     },
     probe: versionOf,
+    blocked: blockedBinary,
     swap: renameIfPresent,
     vacate,
     runningBuild,

@@ -181,6 +181,33 @@ describe("runUpgrade", () => {
         expect(steps).not.toContain(`discard ${previous}`);
     });
 
+    // (2026-11-20, intentic#49) With nothing running, the swap was the end of it: an antivirus that removes or refuses the
+    // agent at its own path left nothing there that would start, and the login entry pointing at it.
+    it("puts the previous agent back when the new one, with nothing running, does not run once in place", async () => {
+        const { steps, exec } = scripted({
+            running: undefined,
+            probe: (binary) => {
+                steps.push(`probe ${binary}`);
+                return binary === staged ? TARGET : undefined;
+            },
+            blocked: (binary) => `Please allow Intentic on this PC: security software removes ${binary} as soon as it is put in place.`,
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome.kind).toBe("failed");
+        expect(upgradeMessage(outcome)).toContain("1.0.0 was put back");
+        expect(upgradeMessage(outcome)).toContain(`security software removes ${agentPath}`);
+        expect(steps).toContain(`probe ${agentPath}`);
+        expect(steps.at(-1)).toBe(`swap ${previous} → ${agentPath}`);
+        expect(steps).not.toContain("restart");
+    });
+
+    it("says what security software did to a download that does not run, and keeps the agent it has", async () => {
+        const { steps, exec } = scripted({ downloaded: undefined, blocked: () => "Please allow Intentic on this PC." });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(upgradeMessage(outcome)).toContain("keeping the one you have. Please allow Intentic on this PC.");
+        expect(steps.some((step) => step.startsWith("swap"))).toBe(false);
+    });
+
     // A direct start whose agent stopped at once THROWS (spawnDetached). Escaping from here, it skipped the put-back and
     // left the new, broken binary installed with nothing running.
     it("puts the previous agent back when the restart throws, and restarts that one", async () => {

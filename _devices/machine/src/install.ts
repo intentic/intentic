@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { parseJsonWith } from "@intentic/base/json";
 import { runBounded } from "@intentic/base/process";
 import { renameOver } from "@intentic/base/fs";
@@ -15,6 +15,7 @@ import { machineId } from "./machine-id.js";
 import { runningAsInstalledAgent } from "./installed.js";
 import { agentPath, downloadAsset, launcherAssetName, launcherAssetUrl, launcherPath } from "./release.js";
 import { verifyReleaseFiles } from "./release/release-verify.js";
+import { allowNote, deniedByThePc } from "./release/security-hint.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 import { readRegistryValue, type RegistryValue } from "./windows-registry.js";
@@ -28,7 +29,8 @@ export interface SelfUpdateIo {
     readonly installed: string;
     readonly installedAgent: () => boolean;
     readonly upgrade: () => Promise<UpgradeOutcome>;
-    readonly reexec: (args: readonly string[], version: string) => never;
+    // Runs setup again on the new build and exits with it; returns only when that build could not be started, with why.
+    readonly reexec: (args: readonly string[], version: string) => string;
     // When a setup last found this very release the newest, and the remembering of it; absent where nothing is kept.
     readonly checkedCurrent?: () => Promise<CurrentCheck | undefined>;
     readonly rememberCurrent?: (check: CurrentCheck) => Promise<void>;
@@ -93,7 +95,10 @@ export const selfUpdateBeforeSetup = async (
     }
     if (outcome.kind === "upgraded") {
         out(upgradeMessage(outcome));
-        io.reexec(args, outcome.to);
+        // (2026-11-20, intentic#49) A new build the PC would not start is no reason to end the setup: this process is
+        // the build that was there, and it pairs the folder as well as it did before the update.
+        const unstarted = io.reexec(args, outcome.to);
+        out(`Couldn't start the updated agent (${unstarted}); continuing with ${io.installed}.`);
     }
     if (outcome.kind === "failed") {
         out(`Couldn't update the agent first (${outcome.reason}); continuing with ${io.installed}.`);
@@ -125,6 +130,10 @@ export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
     // this process's own: setup bounds its own steps, and in this process's group their Ctrl-C reaches it.
     reexec: (args, version) => {
         const child = spawnSync(agentPath, [...args], { stdio: "inherit", env: { ...process.env, [UPGRADE_ENV]: version }, windowsHide: true });
+        if (child.error !== undefined) {
+            const code = errnoCode(child.error);
+            return deniedByThePc(code) ? `${errorMessage(child.error)}. ${allowNote("start", agentPath)}` : errorMessage(child.error);
+        }
         process.exit(child.status ?? 1);
     },
 });

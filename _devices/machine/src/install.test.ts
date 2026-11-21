@@ -43,6 +43,14 @@ const io = (
 };
 
 describe("selfUpdateBeforeSetup", () => {
+    // (2026-11-20, intentic#49) An updated build the PC would not start used to end the setup with nothing paired.
+    it("goes on with the build it has when the updated one cannot be started", async () => {
+        const said: string[] = [];
+        const t = io({ outcome: { kind: "upgraded", from: "1.2.3", to: "1.3.0" }, reexec: () => "spawn EACCES" });
+        await selfUpdateBeforeSetup(t.io, {}, ["setup"], (line) => void said.push(line));
+        expect(said.at(-1)).toBe("Couldn't start the updated agent (spawn EACCES); continuing with 1.2.3.");
+    });
+
     // The same variable marks setup's own re-exec and one leg of a machine-wide upgrade: either is already an update.
     it("skips under the re-exec guard, so an updated agent never updates again", async () => {
         const t = io();

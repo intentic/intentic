@@ -767,32 +767,49 @@ fn ic_trash_empty() -> Option<bool> {
     .map(|listing| listing.trim().is_empty())
 }
 
-/// The recreate shim with `ic`'s own verb behind the shim's switch for it: `recreate.sh <slug> --restart` /
 /// ic's exit when sandboxes are being moved between engines on this PC (its main.rs guard), which recreate.ps1/.sh pass
-/// through from every `ic sandbox` verb they run: nothing was changed, and the same press works once the move is over.
+/// through from every `ic sandbox` verb they run: nothing was changed. Usually a move whose process is still alive, and
+/// the same press works once it is over; a move a quit or a crash cut short is put back by the verb itself first (issue
+/// #48, 2026-11-20), and only when that cannot be done yet does ic answer 3 with its own words for it.
 const EXIT_MOVING: i32 = 3;
 
-/// What a sandbox verb run through recreate.ps1/.sh answers when it did not finish. _(2026-11-20) An update pressed while
-/// the installer's move was still copying came back as "recreate.ps1 exited with status 3", in 3 s with no step: a
-/// refusal that changed nothing, read as a failure with no word of why._ Pure.
-pub fn sandbox_verb_failure(file: &str, code: Option<i32>) -> String {
+/// What a sandbox verb run through recreate.ps1/.sh answers when it did not finish. `said` is ic's own stop block from the
+/// run's transcript, when it ended on one. _(2026-11-20) An update pressed while the installer's move was still copying
+/// came back as "recreate.ps1 exited with status 3", in 3 s with no step: a refusal that changed nothing, read as a
+/// failure with no word of why. ic's words win over this app's on a 3, since an interrupted move it could not undo yet
+/// is a 3 too, and "try again once the move has finished" would send the reader to wait for a move nobody is running._
+/// Pure.
+pub fn sandbox_verb_failure(file: &str, code: Option<i32>, said: Option<String>) -> String {
     match code {
-        Some(EXIT_MOVING) => "Nothing was changed: this PC's sandboxes are being moved to another engine right now. Try again once the move has finished.".to_string(),
+        Some(EXIT_MOVING) => said.unwrap_or_else(|| "Nothing was changed: this PC's sandboxes are being moved to another engine right now. Try again once the move has finished.".to_string()),
         Some(code) => format!("{file} exited with status {code}"),
         None => format!("{file} was terminated"),
     }
 }
 
-/// [`scripts::run`] for a sandbox verb: a refusal ic made because a move is running is said as one ([`sandbox_verb_failure`]).
+/// [`scripts::run`] for a sandbox verb: a refusal ic made because of a move between engines is said as one
+/// ([`sandbox_verb_failure`]).
 fn run_sandbox_verb(app: &AppHandle, id: &str, run: ScriptRun) -> Result<(), String> {
     let file = run.file;
     let ended = scripts::run_heard(app, id, run, None, None)?;
     if ended.success {
         return Ok(());
     }
-    Err(sandbox_verb_failure(file, ended.code.filter(|_| !ended.timed_out)))
+    let said = ended
+        .log
+        .as_deref()
+        .and_then(|log| std::fs::read_to_string(log).ok())
+        .and_then(|transcript| {
+            crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(&transcript))
+        });
+    Err(sandbox_verb_failure(
+        file,
+        ended.code.filter(|_| !ended.timed_out),
+        said,
+    ))
 }
 
+/// The recreate shim with `ic`'s own verb behind the shim's switch for it: `recreate.sh <slug> --restart` /
 /// `recreate.ps1 -Slug … -Restart`. The shim fetches this build's own `ic` first, as it does for every recreate, so
 /// the verb is one this app knows `ic` has. Named on PowerShell, positional on sh, for [`setup_script`]'s reason.
 fn ic_verb_script(
@@ -1269,17 +1286,29 @@ mod tests {
 
     #[test]
     fn a_sandbox_verb_refused_for_a_move_says_so_and_any_other_exit_names_its_status() {
-        assert!(sandbox_verb_failure("recreate.ps1", Some(3)).contains("being moved to another engine"));
+        assert!(sandbox_verb_failure("recreate.ps1", Some(3), None)
+            .contains("being moved to another engine"));
         assert_eq!(
-            sandbox_verb_failure("recreate.ps1", Some(1)),
+            sandbox_verb_failure("recreate.ps1", Some(1), Some("not this".into())),
             "recreate.ps1 exited with status 1"
         );
         assert_eq!(
-            sandbox_verb_failure("recreate.sh", None),
+            sandbox_verb_failure("recreate.sh", None, None),
             "recreate.sh was terminated"
         );
     }
 
+    #[test]
+    fn a_sandbox_verb_refused_for_an_interrupted_move_says_ics_own_words() {
+        let transcript = "intentic: [running-ic] handing over to ic...\n\
+            ! error: Nothing was changed: a move between engines on this device was interrupted part-way, and is not undone yet.\n\
+            !    fix:     run `ic engine move --abort` (or the desktop app's Prepare this PC) to put every sandbox back, then run the same command again.\n";
+        let said = crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(transcript));
+        let failure = sandbox_verb_failure("recreate.ps1", Some(3), said);
+        assert!(failure.starts_with("Nothing was changed: a move between engines on this device was interrupted"));
+        assert!(failure.contains("\nfix:"));
+        assert!(failure.contains("run `ic engine move --abort`"));
+    }
 
     /* `shutdown` documents that any `/t` above 0 implies `/f`: a forced restart closes the reader's unsaved work. */
     #[test]

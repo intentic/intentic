@@ -16,6 +16,7 @@ import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../environments/wsl.js";
+import { runLogPath } from "../config.js";
 import { ensureResident, readResidentBuild, readResidentPid } from "../resident/resident.js";
 import { MACHINE_VERSION } from "../version.js";
 import {
@@ -36,11 +37,11 @@ import {
 import { type TransportAsk, transportFor } from "./endpoint.js";
 import { canonicalFolder, folderRefusal, overlappingPairing } from "./folders.js";
 import { retireMirroredPort, retirePairingMirror } from "./mirror.js";
-import { asidePrefix } from "./project/adopt.js";
 import { projectCommands } from "./project/project-commands.js";
 import { existingSyncSessions, healDerivedConflicts, readAllSessions, retireOrphanSessions, sessionName, startMutagenDaemon } from "./mutagen.js";
 import { adoptOwnerPauses, HOLD_WORDS, holdSessions, syncHeld, syncHolds } from "./holds.js";
-import { ensureMutagen } from "./binary/mutagen-binary.js";
+import { ensureMutagen, mutagenProblem } from "./binary/mutagen-binary.js";
+import { logSince, logSizeNow, notStartedReason, prepareFailureIn, setupEnding } from "./setup/setup-verdict.js";
 import { wakeWatcher } from "./wake.js";
 import { forget } from "./forget-command.js";
 import { revokeEnrollment, syncsAFolder, uninstallPairings } from "./uninstall.js";
@@ -467,6 +468,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     await writeManagedSshConfig(pairingSshConfig(pairings));
 
     ui.step("sync-starting", "starting the sync engine…");
+    // Where the agent's log stands now: a failure it logs for this pairing from here on is this setup's to say.
+    const logFrom = await logSizeNow(runLogPath);
+    // A Mutagen that is not whole (its agent bundle missing, security software in the way) is said before the wait.
+    sayIfDefined(ui.warn, mutagenProblem());
     // What a late start adds to the ending's footnotes.
     const later: Footnote[] = [];
     // The daemon holds both sync and forward sessions, so this covers mirror-only too. The resident agent starts it
@@ -480,16 +485,12 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // command's as well. The two used to race, and one name ended up holding two identical sessions. Waiting for it is
     // only so the lines below can say it began. Every other pairing's session keeps running; only sessions no pairing
     // claims are swept.
-    if (mode === "sync" && localDir !== undefined && !(await syncSessionAppears(mutagen, sandboxId, SESSION_READY_MS))) {
-        const late = await notStartedYet(localDir);
-        ui.warn(late.said);
-        later.push(late.later);
-    }
+    const notStarted = await syncStartFailure(mutagen, pairing, logFrom, later);
     retireOrphanSessions(mutagen, pairings, out);
     // No bridge pass of this command's own: the watcher's next pass, seconds away, starts one, and a first fetch of a big
     // repository can run for hours (git-bridge.ts), which would hold this command open as long, and two fetches into
     // one clone at once would only race.
-    finishSetup(ui, flags.url, pairing, pairings, later);
+    finishSetup(ui, flags.url, pairing, pairings, later, notStarted);
 };
 
 // Whether a folder exists and has anything in it; what it holds is adopt.ts's to compare.
@@ -529,34 +530,47 @@ const proveTransport = async (out: Log, warn: Log, sandboxId: string, container:
     await probeSshTransport(ssh, alias, out);
 };
 
-// What a file-sync setup leaves true. The first copy is still to come when setup returns, so it says it is under way
-// rather than done; a folder that already held files says where the ones that disagree with the sandbox go (adopt.ts),
-// since that is the one thing setup does to files the owner put there.
-const syncedSentence = (pairing: Pairing): string => {
-    const kept = `That folder and your sandbox's ${pairingRemoteDir(pairing)} are kept the same from now on; the first copy can take a few minutes.`;
-    return pairing.adoptFolder === true && pairing.localDir !== undefined
-        ? `${kept}\nThe folder already held files: any that differ from the sandbox's copy are moved to ${asidePrefix(pairing.localDir)}<time> first, so the sandbox's version is the one that syncs. Nothing is deleted.`
-        : kept;
-};
-
 // The ending block. The fleet is said out loud first: pairing a sandbox on a machine that already had one is the exact
 // moment the user needs to know the others are still syncing. The address a person acts on is the folder, the thing
-// they open, and an immediately visible path is the anchor that setup worked.
-const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: readonly Pairing[], later: readonly Footnote[] = []): void => {
+// they open, and an immediately visible path is the anchor that setup worked. `notStarted` is why this pairing's file
+// sync has not started, which turns the verdict (setup-verdict.ts).
+const finishSetup = (
+    ui: Ui,
+    sandboxUrl: string,
+    pairing: Pairing,
+    pairings: readonly Pairing[],
+    later: readonly Footnote[] = [],
+    notStarted?: string,
+): void => {
     if (pairings.length > 1) {
         ui.note(`This device now syncs ${pairings.length} pairings:`);
         for (const held of pairings) {
             ui.note(`  ${pairingKey(held)}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
         }
     }
-    const syncing = pairing.mode === "sync";
-    ui.finished(
-        syncing ? "Desktop sync is running." : "Enrolled for port mirroring.",
-        syncing ? pairing.localDir : undefined,
-        syncing ? syncedSentence(pairing) : `Ports from ${sandboxUrl} now answer on this device's localhost (mirror-only, no file sync).`,
-        [["check it", "intentic-machine status"], ["remove it", unpairCommand(pairing.sandboxId)], ...later],
-    );
+    const ending = setupEnding(pairing, sandboxUrl, notStarted);
+    ui.finished(ending.verdict, ending.address, ending.instruction, [["check it", "intentic-machine status"], ["remove it", unpairCommand(pairing.sandboxId)], ...later]);
 };
+
+const sayIfDefined = (say: Log, said: string | undefined): void => {
+    if (said !== undefined) {
+        say(said);
+    }
+};
+
+// Why this pairing's file sync did not start within the wait, said in the ending's verdict (setup-verdict.ts) rather
+// than under a "running" it is not; undefined once its session exists, or for a pairing with no file sync. A late
+// start's footnote goes on `later`.
+const syncStartFailure = async (mutagen: string, pairing: Pairing, logFrom: number, later: Footnote[]): Promise<string | undefined> => {
+    if (pairing.mode !== "sync" || pairing.localDir === undefined || (await syncSessionAppears(mutagen, pairing.sandboxId, SESSION_READY_MS))) {
+        return undefined;
+    }
+    const late = await notStartedYet(pairing.localDir);
+    later.push(late.later);
+    const logged = await logSince(runLogPath, logFrom);
+    return notStartedReason(prepareFailureIn(logged.text, pairingKey(pairing)), mutagenProblem(), late.said);
+};
+
 
 // How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
 // startup, not by any work the watcher does.

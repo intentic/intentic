@@ -79,8 +79,11 @@ const EXIT_PREPARE_FAILED: i32 = 1;
 /// as Windows' permission refused, it answered eleven presses in a row with "choose Yes when Windows asks" while the
 /// installer's own move was still copying, and no prompt was ever shown._
 const EXIT_BUSY_MOVING: i32 = 3;
-/// What the page says of a setup refused by [`EXIT_BUSY_MOVING`].
-const BUSY_MOVING_REASON: &str = "Nothing was changed: this PC's sandboxes are being moved to the intentic engine right now (a setup started earlier is still copying them). Wait for that move to finish, then set up this PC again.";
+/// What the page says of a setup refused by [`EXIT_BUSY_MOVING`]. ic refuses only for a move whose process is still alive:
+/// one a quit or a crash cut short is put back by the next `ic docker prepare` itself rather than refused (issue #48,
+/// 2026-11-20), so "wait for it" is always the answer. The move may be a setup's or one started from This device's
+/// engine card, and either way it goes towards the intentic engine or back, so neither is named.
+const BUSY_MOVING_REASON: &str = "Nothing was changed: this PC's sandboxes are being moved between engines right now, by a move started earlier that is still copying them. Wait for that move to finish, then set up this PC again.";
 #[cfg_attr(not(windows), allow(dead_code))]
 const EXIT_NEEDS_RESTART: i32 = 4;
 
@@ -1141,12 +1144,19 @@ fn newest_setup_log() -> Option<String> {
         .map(|name| dir.join(name).to_string_lossy().into_owned())
 }
 
+/// Why the setup stopped, for its card: ic's last stop block whole (its headline, `problem:` and `fix:`, setup_progress.rs
+/// `stop_block`), else the last line that reads as an error. _(2026-11-20) It took that last line alone, which in a stop
+/// block is the `fix:`: a move that stopped on a volume already on the other engine said only that every sandbox was
+/// back on Docker Desktop, never why the move had not finished._ Pure but for the log it may read.
 fn scrub_setup_reason(ended: &scripts::Ended, transcript: &str) -> String {
-    transcript
-        .lines()
-        .rev()
-        .find(|line| line.contains('!') || line.contains("error"))
-        .map(|line| line.trim_start_matches('!').trim().to_string())
+    crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(transcript))
+        .or_else(|| {
+            transcript
+                .lines()
+                .rev()
+                .find(|line| line.contains('!') || line.contains("error"))
+                .map(|line| line.trim_start_matches('!').trim().to_string())
+        })
         .or_else(|| {
             ended.log.as_deref().and_then(|path| {
                 std::fs::read_to_string(path).ok().and_then(|text| {
@@ -1650,8 +1660,15 @@ fn phase_failure(
 
 /// The line of a run's transcript that best says why it stopped: the last thing it wrote to stderr (the transcript
 /// marks those `! `; `ic` writes its `error: …` there), else the last thing it said at all. Never a progress marker
-/// (`intentic-prefetch: …`) or this app's own `[… exited with …]` note. Pure.
+/// (`intentic-prefetch: …`) or this app's own `[… exited with …]` note. An ic stop block is taken whole, its headline,
+/// `problem:` and `fix:` on one line, since its last line alone is only the `fix:` ([`scrub_setup_reason`], 2026-11-20).
+/// Pure.
 fn last_meaningful_line(transcript: &str) -> Option<String> {
+    if let Some(block) =
+        crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(transcript))
+    {
+        return Some(tidy_reason(&block));
+    }
     let mut said = None;
     for line in transcript.lines().rev() {
         let line = line.trim();
@@ -2184,7 +2201,8 @@ intentic-prepare-summary: {\"state\":\"needsSetup\",\"met\":[{\"id\":\"disk-spac
             let apply = setup_outcome(
                 Some(EXIT_BUSY_MOVING),
                 summary,
-                "Nothing was changed: sandboxes are being moved between engines on this device.".into(),
+                "Nothing was changed: sandboxes are being moved between engines on this device."
+                    .into(),
             );
             assert_eq!(
                 apply.setup,
@@ -2201,6 +2219,48 @@ intentic-prepare-summary: {\"state\":\"needsSetup\",\"met\":[{\"id\":\"disk-spac
         let apply = setup_outcome(Some(1), Some(&summary), String::new());
         assert_eq!(apply.setup, Setup::Idle);
         assert_eq!(apply.check_state.as_deref(), Some("cantRun"));
+    }
+
+    /// A move that did not finish, as ic stopped on it in the 2026-11-20 report: the card carries why it stopped and what
+    /// ic did about it, not the `fix:` line alone.
+    #[test]
+    fn a_failed_setup_says_ics_whole_stop_block() {
+        let transcript = "\
+intentic-move: {\"slug\":\"sandbox-x\",\"step\":\"volume\",\"done\":5,\"total\":10}
+! error: the move to the intentic engine did not finish
+!    problem: sandbox-x: a volume named intentic-history-sandbox-x already exists on the other engine, holds files, and no earlier move left it there — remove or rename it, then try again.
+!    fix:     every sandbox is back on Docker Desktop as it was, and this device still runs on it. Log: C:\\Users\\ann\\.intentic\\logs\\move-1.log
+
+[ic docker prepare --yes exited with Some(1)]
+";
+        let ended = scripts::Ended {
+            code: Some(1),
+            success: false,
+            timed_out: false,
+            log: None,
+        };
+        let reason = scrub_setup_reason(&ended, transcript);
+        assert_eq!(
+            reason,
+            "the move to the intentic engine did not finish\n\
+             problem: sandbox-x: a volume named intentic-history-sandbox-x already exists on the other engine, holds files, and no earlier move left it there — remove or rename it, then try again.\n\
+             fix:     every sandbox is back on Docker Desktop as it was, and this device still runs on it. Log: C:\\Users\\ann\\.intentic\\logs\\move-1.log"
+        );
+        assert_eq!(
+            setup_outcome(Some(1), None, reason.clone()).setup,
+            Setup::Failed { reason }
+        );
+        // The download's one line carries it all too, within its 300 characters.
+        let line = last_meaningful_line(transcript).unwrap();
+        assert!(line.starts_with(
+            "the move to the intentic engine did not finish problem: sandbox-x: a volume"
+        ));
+        assert!(line.chars().count() <= 300);
+        // A run that said no stop block still reads as before: its last line that reads as an error.
+        assert_eq!(
+            scrub_setup_reason(&ended, "intentic: [x] going\n! WSL would not start\n"),
+            "WSL would not start"
+        );
     }
 
     #[test]

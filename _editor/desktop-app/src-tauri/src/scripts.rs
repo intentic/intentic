@@ -171,6 +171,9 @@ that waits on it names (update.rs). */
 struct Live {
     pid: u32,
     started_ms: u64,
+    /// It is moving this PC's sandboxes between engines right now: it said a move's step, and not yet its end
+    /// ([`hear_move`]). What a Quit that would stop it asks about first (windows/quit.rs, issue #48).
+    moving: bool,
 }
 
 fn running() -> &'static Mutex<HashMap<String, Live>> {
@@ -185,6 +188,7 @@ fn remember(id: &str, pid: u32) {
             Live {
                 pid,
                 started_ms: now_ms(),
+                moving: false,
             },
         );
     }
@@ -194,6 +198,28 @@ fn forget(id: &str) {
     if let Ok(mut live) = running().lock() {
         live.remove(id);
     }
+}
+
+/// One line of the run `id`: an `intentic-move:` line says whether a move between engines is under way in it. A setup
+/// runs one inside `ic docker prepare` (setup_move.rs), and a quit that stops the setup stops the move with it.
+fn hear_move(id: &str, line: &str) {
+    let Some(event) = crate::engine::parse_move_line(line) else {
+        return;
+    };
+    if let Ok(mut live) = running().lock() {
+        if let Some(run) = live.get_mut(id) {
+            run.moving = crate::setup_move::still_moving(&event);
+        }
+    }
+}
+
+/// Whether the run `id` is moving this PC's sandboxes between engines right now ([`hear_move`]). A poisoned lock answers
+/// no: the question it guards is a courtesy on the way out.
+pub fn moving(id: &str) -> bool {
+    running()
+        .lock()
+        .map(|live| live.get(id).is_some_and(|run| run.moving))
+        .unwrap_or(false)
 }
 
 /// Whether anything this app spawned is still going — the guard the self-updater checks before it replaces
@@ -1639,6 +1665,7 @@ fn follow(
                         );
                     }
                 }
+                hear_move(&id, line);
                 if let Some(heard) = &heard {
                     heard(stream, line);
                 }

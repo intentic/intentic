@@ -560,6 +560,12 @@ flowchart LR
   rest of its words went), "Cancel" stays. A folder's own sandbox's setup is not asked about: a quit stops it and the
   next launch runs it again. _(2026-10-05) Quit used to ask about unsaved windows alone, and abandoned every run under
   way with a dead pipe (`windows.rs` `hold_quit`)._
+
+  A Quit that would stop a move between engines (a setup moving this PC's sandboxes off Docker Desktop inside
+  `ic docker prepare`, followed from its `intentic-move:` lines) asks in the reader's own language, whose words every
+  window hands the app (`quit_move_words`, `src/device/engine/quitWords.ts`): the move stops, and the sandboxes go back on
+  Docker Desktop the next time this PC is set up, which ic does itself on its next run. A stop goes in the setup's log.
+  _(2026-11-20, issue #48) A reader quit mid-copy of 92 GB, and the quit stopped the move without a word of it._
 - **A folder becomes its own sandbox, copy-first** (2026-10-21). "Work on this with an agent" in a folder's window opens
   the folder's own page for it (the web's `local/setup/LocalSandboxSetup.vue`), drawn from `project_preview`
   (`src-tauri/src/project.rs`): the folder's name and path, what its first copy carries, anything to beware of (another

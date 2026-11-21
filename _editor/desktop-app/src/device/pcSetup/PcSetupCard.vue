@@ -504,7 +504,7 @@ const retryTask = (): Promise<void> =>
                 <!-- STOPPED: why in a sentence, the setup's own words behind a press, the same press again, Repair to look into it. -->
                 <template v-else-if="phase === `setupFailed`">
                     <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.app.pcSetupFailed`) }}</p>
-                    <p v-if="failedReason && detailsOpen" class="rounded-md bg-canvas px-2.5 py-2 font-mono break-words text-2xs text-muted">{{ failedReason }}</p>
+                    <p v-if="failedReason && detailsOpen" class="rounded-md bg-canvas px-2.5 py-2 font-mono break-words whitespace-pre-line text-2xs text-muted">{{ failedReason }}</p>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <Button tier="accent" size="small" :label="t(`ui.action.tryAgain`)" @click="startSetup(false)">
                             <template #icon><Icon name="refresh" /></template>

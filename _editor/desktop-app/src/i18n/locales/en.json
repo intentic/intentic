@@ -60,6 +60,12 @@
         "quitIntentic": "Quit Intentic",
         "sandboxesKeepRunningEither": "Your sandboxes keep running either way: they live in Docker, not in this window."
     },
+    "quitMove": {
+        "title": "Stop moving your sandboxes?",
+        "message": "Intentic is moving this PC's sandboxes to its own engine right now. If you quit, the move stops, and your sandboxes are put back on Docker Desktop the next time this PC is set up.",
+        "wait": "Quit when it's done",
+        "quit": "Stop the move and quit"
+    },
     "docker": {
         "accountNotAllowed": "This account isn't allowed to use Docker",
         "accountNotAllowedWindows": "This Windows account isn't allowed to use Docker yet",

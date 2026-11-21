@@ -19,7 +19,7 @@ $route = 'sync'
 # Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
 # Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
-$IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
+$IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Step = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {
     $IntenticKit.Mode = $env:INTENTIC_UI
 } elseif ($env:INTENTIC_PLAIN -ne '1' -and -not [Console]::IsOutputRedirected) {
@@ -77,6 +77,7 @@ function Format-IntenticDuration {
 
 function Complete-IntenticStep {
     param([string]$Tone = 'ok')
+    $IntenticKit.Step = ''
     if (-not $IntenticKit.Label) { return }
     if ($IntenticKit.Mode -eq 'rich') {
         $took = Format-IntenticDuration $IntenticKit.Clock.Elapsed
@@ -122,6 +123,8 @@ function Write-IntenticStep {
             Write-IntenticLive
         }
     }
+    # Kept in every mode, not only where a live line draws it: the unexpected stop below names the step it broke in.
+    $IntenticKit.Step = if ($Label) { $Label } else { $Sentence }
 }
 
 function Write-IntenticSay {
@@ -250,6 +253,138 @@ function Read-IntenticConfirm {
     Stop-Intentic 'Nothing was changed.' "nobody is at this terminal to answer: $Question" "run it again with $Flag"
 }
 
+# WHEN SECURITY SOFTWARE STANDS BETWEEN A SCRIPT AND ITS FILES (2026-11-20, intentic#49). On a PC whose endpoint
+# security (Bitdefender Endpoint Security Tools, run from a company's console) takes Intentic's programs, a file it wrote
+# a minute ago is listed and cannot be opened, run, moved or replaced: Windows answers "Access is denied" and nothing
+# else. Said bare, that read as a fault of the script, and the one install that hit it reported a network failure
+# instead. So a refusal is told apart wherever it can land, and the stop names the product and the folder to allow.
+# Nothing here adds an exclusion: software that exempts itself from a scanner is what malware does, and scanners treat
+# it so.
+
+# The antivirus Windows Security Center lists as on, someone else's before Microsoft's own; '' where there is none to
+# name (Windows Server has no Security Center). productState's middle byte is 0x10 or 0x11 while it scans.
+function Get-IntenticSecurityProduct {
+    try {
+        $listed = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+    } catch {
+        return ''
+    }
+    $on = @($listed | Where-Object { (([int]$_.productState -shr 8) -band 0xFF) -in 0x10, 0x11 })
+    $named = @($on | Where-Object { "$($_.displayName)" -notmatch '^(Windows|Microsoft) Defender' }) + $on
+    if ($named.Count -gt 0) { return "$($named[0].displayName)".Trim() }
+    return ''
+}
+
+# Whether a failure is Windows' "Access is denied", at any depth: a cmdlet's own UnauthorizedAccessException, an
+# IOException carrying E_ACCESSDENIED (0x80070005), or a process start's Win32 error 5 inside the
+# ApplicationFailedException PowerShell wraps it in.
+function Test-IntenticAccessDenied {
+    param($Failure)
+    while ($null -ne $Failure) {
+        if ($Failure -is [System.UnauthorizedAccessException]) { return $true }
+        if ($Failure -is [System.ComponentModel.Win32Exception] -and $Failure.NativeErrorCode -eq 5) { return $true }
+        try { if ($Failure.HResult -eq -2147024891) { return $true } } catch { $null = $_ }
+        $Failure = $Failure.InnerException
+    }
+    return $false
+}
+
+# Whether Windows refuses to open the file at $Path for reading. A failed start cannot always say so itself: PowerShell 7
+# with its output captured retries a refused start another way and reports that retry's InvalidOperationException
+# ("StandardErrorEncoding is only supported when standard error is redirected") instead of the refusal (2026-11-20).
+function Test-IntenticFileDenied {
+    param([string]$Path)
+    if (-not $Path) { return $false }
+    try {
+        $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        $stream.Dispose()
+    } catch {
+        return (Test-IntenticAccessDenied $_.Exception)
+    }
+    return $false
+}
+
+# The two halves of a stop for a file Windows refused: Suspect, a sentence for the problem line naming the product
+# where Security Center names one, and Fix, who to ask to allow which folder. A path that is not a full one (or none)
+# names the folder every Intentic program lives under.
+function Get-IntenticSecurityAdvice {
+    param([string]$Path)
+    $product = Get-IntenticSecurityProduct
+    $leaf = 'a file Intentic needs'
+    $folder = Join-Path $HOME '.intentic'
+    try {
+        if ($Path -and [IO.Path]::IsPathRooted($Path)) {
+            $leaf = Split-Path $Path -Leaf
+            $folder = Split-Path $Path
+        }
+    } catch {
+        $leaf = 'a file Intentic needs'
+    }
+    $who = if ($product) { "Security software on this PC ($product)" } else { 'Security software on this PC' }
+    $manager = if ($product) { $product } else { 'the security software' }
+    return @{
+        Suspect = "$who may be blocking $leaf."
+        Fix = "ask whoever manages $manager on this PC (at work, your IT) to allow the folder $folder, then run the same command again."
+    }
+}
+
+# A failure's message as one line: a failed program start runs the position of the failing statement onto the end of
+# its message ("...Access is deniedAt line:830 char:13"), over several lines, and a stop block's problem is a single
+# line the desktop app reads. Takes the error record, whose position is what gets cut.
+function Get-IntenticFailureLine {
+    param($Record)
+    $message = "$($Record.Exception.Message)"
+    try {
+        $position = @("$($Record.InvocationInfo.PositionMessage)" -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+        if ($position) { $message = $message.Replace("$position".Trim(), '') }
+    } catch {
+        $message = "$($Record.Exception.Message)"
+    }
+    $first = @($message -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+    return "$first".Trim()
+}
+
+# What the failing statement acted on: the file a cmdlet named, or the program a call tried to start. '' when the
+# error record says neither.
+function Get-IntenticFailureTarget {
+    param($Record)
+    try {
+        $command = $Record.InvocationInfo.MyCommand
+        if ($command -is [System.Management.Automation.ApplicationInfo]) { return "$($command.Path)" }
+        if ($Record.CategoryInfo.TargetName) { return "$($Record.CategoryInfo.TargetName)" }
+        if ($Record.TargetObject -is [string] -or $Record.TargetObject -is [IO.FileSystemInfo]) { return "$($Record.TargetObject)" }
+        # A program PowerShell 7 could not start is named only inside its message, in quotes, with its full path.
+        if ("$($Record.Exception.Message)" -match "'([A-Za-z]:\\[^']+)'") { return $Matches[1] }
+    } catch {
+        return ''
+    }
+    return ''
+}
+
+# Where an unexpected failure happened, as a parenthesis for the problem line: the step that was running, the command
+# and what it acted on, and the line of the script. A bare "Access is denied" from a device with no step and no path
+# (2026-11-20, intentic#49) could not be traced to anything; this is what it lacked.
+function Get-IntenticFailurePlace {
+    param($Record, [string]$Step)
+    $said = @()
+    if ($Step) { $said += "in step ""$Step""" }
+    $command = ''
+    $line = 0
+    try {
+        if ($Record.InvocationInfo.MyCommand) { $command = "$($Record.InvocationInfo.MyCommand.Name)" }
+        $line = [int]$Record.InvocationInfo.ScriptLineNumber
+    } catch {
+        $line = 0
+    }
+    $target = Get-IntenticFailureTarget $Record
+    if ($target -and $command -and $target.EndsWith($command)) { $command = '' }
+    $what = (@($command, $target) | Where-Object { $_ }) -join ' '
+    if ($what) { $said += "at $what" }
+    if ($line -gt 0) { $said += "script line $line" }
+    if ($said.Count -eq 0) { return '' }
+    return '(' + ($said -join ', ') + ')'
+}
+
 function Invoke-IntenticScript {
     param([scriptblock]$Body)
     $IntenticKit.Code = 0
@@ -258,10 +393,23 @@ function Invoke-IntenticScript {
         Complete-IntenticStep 'ok'
     } catch {
         if ("$($_.Exception.Message)" -ne 'intentic:stop') {
-            # Anything this script did not expect still ends in the protocol's stop block, never PowerShell's red one.
-            $said = "$($_.Exception.Message)"
+            # Anything this script did not expect still ends in the protocol's stop block, never PowerShell's red one,
+            # and says where it broke: the step, the command and its file, the line. A refusal by security software
+            # names what to allow instead of asking for the same run again, which would only stop the same way.
+            $failure = $_
+            $said = (Get-IntenticFailureLine $failure).TrimEnd('.')
+            $place = Get-IntenticFailurePlace $failure $IntenticKit.Step
+            if ($place) { $said = "$said $place" }
+            $said = "$said."
+            $fix = 'run the same command again; if it stops here again, report it with this message.'
+            $target = Get-IntenticFailureTarget $failure
+            if ((Test-IntenticAccessDenied $failure.Exception) -or (Test-IntenticFileDenied $target)) {
+                $advice = Get-IntenticSecurityAdvice -Path $target
+                $said = "$said $($advice.Suspect)"
+                $fix = $advice.Fix
+            }
             try {
-                Stop-Intentic 'The script stopped unexpectedly.' $said 'run the same command again; if it stops here again, report it with this message.'
+                Stop-Intentic 'The script stopped unexpectedly.' $said $fix
             } catch {
                 $IntenticKit.Code = 1
             }
@@ -550,9 +698,10 @@ function Copy-IntenticFile {
 # is what a release from before the copies has (its .gz answers 404), what a copy that does not unpack falls back to,
 # and what a partial of the binary already here resumes.
 function Get-IntenticPackedAgent {
-    param([string]$Url, [string]$Part)
+    param([string]$Url, [string]$Part, [string]$Dest, [string]$Version)
     if (Test-Path $Part) { return $false }
     $packed = "$Part.gz"
+    $failure = $null
     Suspend-IntenticLine
     try {
         $null = Copy-IntenticFile -Uri "$Url.gz" -Path $packed
@@ -562,7 +711,12 @@ function Get-IntenticPackedAgent {
             Remove-Item -Force -ErrorAction SilentlyContinue $packed
             return $false
         }
-        Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($($_.Exception.Message)); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
+        $failure = $_.Exception
+    }
+    if ($failure) {
+        # Windows refusing the partial file is security software, not the network (2026-11-20, intentic#49).
+        if (Test-IntenticAccessDenied $failure) { Stop-IntenticAgentRefused -Dest $Dest -Part '' -Version $Version -How 'denied' -Blocked $packed }
+        Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($($failure.Message)); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
     }
     Resume-IntenticLine
     $unpacked = $true
@@ -583,25 +737,14 @@ function Get-IntenticPackedAgent {
 # empty file as much as for the agent, while any other file saved in the same folder. That read as a permissions fault,
 # and nothing anyone does on the PC itself changes it: whoever manages the antivirus has to allow the file. So the
 # refusal is told apart and named, with what to ask them for. Nothing here adds an exclusion: software that exempts
-# itself from a scanner is what malware does, and scanners treat it so.
-
-# The antivirus Windows Security Center lists as on, someone else's before Microsoft's own; '' where there is none to
-# name (Windows Server has no Security Center). productState's middle byte is 0x10 or 0x11 while it scans.
-function Get-IntenticSecurityProduct {
-    try {
-        $listed = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
-    } catch {
-        return ''
-    }
-    $on = @($listed | Where-Object { (([int]$_.productState -shr 8) -band 0xFF) -in 0x10, 0x11 })
-    $named = @($on | Where-Object { "$($_.displayName)" -notmatch '^(Windows|Microsoft) Defender' }) + $on
-    if ($named.Count -gt 0) { return "$($named[0].displayName)".Trim() }
-    return ''
-}
+# itself from a scanner is what malware does, and scanners treat it so. Get-IntenticSecurityProduct and
+# Test-IntenticAccessDenied are kit.ps1's, since the ic download and the unexpected stop need them too (2026-11-20).
 
 # How security software refused the agent, or '' when the refusal looks like anything else: 'removed' when the probed
 # download is gone (taken into quarantine after it ran), 'name' when this folder takes a file under any other name and
 # refuses one under the agent's own, even an empty one. Cmdlets rather than [IO.File], so a test can stand in for them.
+# The third way, 'denied', is not found here but told by the failure itself (Test-IntenticAccessDenied): a file Windows
+# lists and will not open, start or move, which is how the agent already in place was taken (2026-11-20, intentic#49).
 function Get-IntenticAgentRefusal {
     param([string]$Dest, [string]$Part)
     if (-not (Test-Path -LiteralPath $Part)) { return 'removed' }
@@ -629,6 +772,8 @@ function Get-IntenticAllowNote {
     param([string]$Who, [string]$Leaf, [string]$Folder, [string]$Version, [string]$Hash, [string]$How)
     $blocks = if ($How -eq 'removed') {
         "removes $Leaf as soon as it is downloaded."
+    } elseif ($How -eq 'denied') {
+        "blocks $Leaf (Windows answers ""Access denied"" when it is opened, started or replaced)."
     } else {
         "blocks $Leaf (Windows answers ""Access denied"", even for an empty file of that name)."
     }
@@ -651,21 +796,25 @@ function Get-IntenticAllowNote {
 # only, where it is the reader) as something only the reader, or whoever manages their antivirus, can do; a terminal
 # gets the same words in the stop block, and the note under it. Its JSON is kept ASCII (\u escapes), since a redirected
 # Windows PowerShell writes in the console's code page and a path may hold any letter.
+# -Blocked is the file Windows refused for 'denied', when that is not $Dest itself (the partial download).
 function Stop-IntenticAgentRefused {
-    param([string]$Dest, [string]$Part, [string]$Version, [string]$How)
+    param([string]$Dest, [string]$Part, [string]$Version, [string]$How, [string]$Blocked = '')
     $product = Get-IntenticSecurityProduct
     $who = if ($product) { $product } else { 'Security software on this PC' }
     $manager = if ($product) { $product } else { 'the security software' }
     $leaf = Split-Path $Dest -Leaf
     $folder = Split-Path $Dest
     $hash = ''
-    if (Test-Path -LiteralPath $Part) {
+    if ($Part -and (Test-Path -LiteralPath $Part)) {
         try { $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Part).Hash.ToLowerInvariant() } catch { $hash = '' }
     }
     $title = "$who is blocking $leaf"
     $what = 'the program Intentic needs on this PC to sync folders and reach your sandboxes'
+    if (-not $Blocked) { $Blocked = $Dest }
     $problem = if ($How -eq 'removed') {
         "$leaf, $what, was removed as soon as it was downloaded."
+    } elseif ($How -eq 'denied') {
+        "Windows answered ""Access is denied"" for $Blocked, $what, though it is there."
     } else {
         "Windows refused to save $leaf, $what, at $Dest, though other files save in that folder."
     }
@@ -719,7 +868,7 @@ function Install-IntenticAgent {
     $named = if ($published) { " $published" } else { '' }
     Write-IntenticStep '' "downloading intentic-machine$named..." "Download intentic-machine$named"
     $attempt = 0
-    $packedAgent = Get-IntenticPackedAgent -Url $url -Part $part
+    $packedAgent = Get-IntenticPackedAgent -Url $url -Part $part -Dest $Dest -Version $published
     while (-not $packedAgent) {
         $attempt++
         # Copy-IntenticFile draws its own percentage, so the live line steps aside while it runs.
@@ -727,13 +876,16 @@ function Install-IntenticAgent {
         $fetched = $true
         $whole = $false
         $why = ''
+        $denied = $false
         try {
             $whole = Copy-IntenticFile -Uri $url -Path $part
         } catch {
             $fetched = $false
             $why = $_.Exception.Message
+            $denied = Test-IntenticAccessDenied $_.Exception
         }
         Resume-IntenticLine
+        if ($denied) { Stop-IntenticAgentRefused -Dest $Dest -Part '' -Version $published -How 'denied' -Blocked $part }
         if (-not $fetched) {
             Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($why); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
         }
@@ -756,11 +908,13 @@ function Install-IntenticAgent {
     # binary takes its place. The leftover is cleared on the next run, once nothing is executing it.
     Remove-Item -Force -ErrorAction SilentlyContinue "$Dest.old"
     $refused = ''
+    $denied = $false
     try {
         if (Test-Path $Dest) { Move-Item -Force -Path $Dest -Destination "$Dest.old" -ErrorAction Stop }
         Move-Item -Force -Path $part -Destination $Dest -ErrorAction Stop
     } catch {
         $refused = $_.Exception.Message
+        $denied = Test-IntenticAccessDenied $_.Exception
     }
     if ($refused) {
         # The agent moved aside goes back where it was, where it still can: a PC that had one keeps it.
@@ -768,10 +922,27 @@ function Install-IntenticAgent {
             Move-Item -Force -Path "$Dest.old" -Destination $Dest -ErrorAction SilentlyContinue
         }
         $how = Get-IntenticAgentRefusal -Dest $Dest -Part $part
+        if (-not $how -and $denied) { $how = 'denied' }
         if ($how) { Stop-IntenticAgentRefused -Dest $Dest -Part $part -Version $published -How $how }
         Stop-Intentic 'intentic-machine could not be put in place.' "Windows refused to move it to $Dest ($refused)." 'close anything using that folder and run the same command again; if it repeats, check whether security software on this PC blocked intentic-machine.exe.'
     }
+    # Started once more under its own name, before the run spends its code on a handover it cannot make: the partial
+    # answered its probe, and security software that keys on the name takes the file only now (2026-11-20, intentic#49).
+    if (Test-IntenticAgentDenied -Path $Dest) { Stop-IntenticAgentRefused -Dest $Dest -Part '' -Version $published -How 'denied' }
     Complete-IntenticStep
+}
+
+# Whether Windows refuses to start the program at $Path with "Access is denied". Every other outcome, a version or none,
+# is $false: telling a working agent from a broken one is Get-IntenticAgentVersion's question, not this one's.
+function Test-IntenticAgentDenied {
+    param([string]$Path)
+    if (Test-IntenticFileDenied $Path) { return $true }
+    try {
+        $null = & $Path version
+    } catch {
+        return (Test-IntenticAccessDenied $_.Exception)
+    }
+    return $false
 }
 # The agent to hand over to: AGENT_BIN as it is (a dev build, taken without asking), else the installed agent when it
 # speaks the route and every flag in -Flags, else a fresh download. Returns the path, or '' for AGENT_BIN.
@@ -792,16 +963,33 @@ function Get-IntenticAgent {
 # Run the agent with the handover's arguments and keep its exit code. AGENT_BIN is a whitespace-separated command: its
 # first token is the program, the rest lead the arguments. Named, then splatted: `@(...)` is the array subexpression
 # operator and would pass the whole list as one space-joined string. Only `@name` splats.
+#
+# THE START ITSELF CAN BE REFUSED, and was the one call on this path nothing guarded: on a PC whose security software
+# took intentic-machine.exe after its probes had passed, `& $Bin` threw "Access is denied" and the run ended in the
+# kit's unexpected stop, saying only that, with no path and no step (2026-11-20, intentic#49). The try holds the start
+# alone: a native command's own exit code and output pass through it untouched.
 function Invoke-IntenticAgent {
     param([string]$Bin, [string[]]$Arguments)
     Suspend-IntenticLine
-    if ($env:AGENT_BIN) {
-        $parts = $env:AGENT_BIN -split '\s+'
-        $lead = if ($parts.Length -gt 1) { $parts[1..($parts.Length - 1)] } else { @() }
-        $agentArgs = @($lead) + $Arguments
-        & $parts[0] @agentArgs
-    } else {
-        & $Bin @Arguments
+    $failure = $null
+    $said = ''
+    try {
+        if ($env:AGENT_BIN) {
+            $parts = $env:AGENT_BIN -split '\s+'
+            $lead = if ($parts.Length -gt 1) { $parts[1..($parts.Length - 1)] } else { @() }
+            $agentArgs = @($lead) + $Arguments
+            & $parts[0] @agentArgs
+        } else {
+            & $Bin @Arguments
+        }
+    } catch {
+        $failure = $_.Exception
+        $said = Get-IntenticFailureLine $_
+    }
+    if ($failure) {
+        if ($Bin -and ((Test-IntenticAccessDenied $failure) -or (Test-IntenticFileDenied $Bin))) { Stop-IntenticAgentRefused -Dest $Bin -Part '' -Version '' -How 'denied' }
+        $what = if ($Bin) { $Bin } else { $env:AGENT_BIN }
+        Stop-Intentic 'intentic-machine could not be started.' "Windows could not start $what ($said)." 'get a new command from the card it came from, and run it.'
     }
     Set-IntenticExit $LASTEXITCODE
 }

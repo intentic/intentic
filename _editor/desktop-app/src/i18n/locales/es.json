@@ -60,6 +60,12 @@
         "quitIntentic": "Salir de Intentic",
         "sandboxesKeepRunningEither": "Tus sandboxes siguen en marcha en cualquier caso: viven en Docker, no en esta ventana."
     },
+    "quitMove": {
+        "title": "¿Detener el traslado de tus sandboxes?",
+        "message": "Intentic está trasladando ahora los sandboxes de este PC a su propio motor. Si sales, el traslado se detiene y tus sandboxes vuelven a Docker Desktop la próxima vez que se configure este PC.",
+        "wait": "Salir cuando termine",
+        "quit": "Detener el traslado y salir"
+    },
     "docker": {
         "accountNotAllowed": "Esta cuenta no tiene permiso para usar Docker",
         "accountNotAllowedWindows": "Esta cuenta de Windows todavía no tiene permiso para usar Docker",

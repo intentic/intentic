@@ -50,7 +50,7 @@ import {
     syncMode,
     syncSessionNames,
 } from "./mutagen.js";
-import { ensureMutagen } from "./binary/mutagen-binary.js";
+import { ensureMutagen, repairAgentBundle } from "./binary/mutagen-binary.js";
 import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { quieted } from "./repeats.js";
 import { sleepUnlessWoken } from "./wake.js";
@@ -1302,6 +1302,11 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     // its listener up first, and a moved base gets rebound here too.
     await guard(say, "reconciling the sync transports", async () => await watch.tunnels.reconcile(tunnelTargets(dialed)));
     progress("the sync transports");
+    // (2026-11-20, intentic#49) Mutagen's agent bundle, fetched again when it went missing (security software, a
+    // cleanup), so sessions can be made again within a pass or two rather than failing until the agent next starts.
+    // Not awaited: 97 MB on a slow uplink could outlast WATCHER_STALL_MS, and a pass that waited would be abandoned.
+    // ensureMutagen runs one install at a time, so a pass that finds it still missing joins the fetch under way.
+    void guard(say, "restoring Mutagen's agent bundle", async () => await repairAgentBundle(mutagen));
     // One legacy session relabelled per pass at most (mutagen.ts RelabelBudget).
     const relabels = relabelBudget(1);
     // After the transport reconcile above, which is what a new pairing's sessions ride, and what a session that

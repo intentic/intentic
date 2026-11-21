@@ -61,7 +61,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 # Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
 # Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
-$IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
+$IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Step = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {
     $IntenticKit.Mode = $env:INTENTIC_UI
 } elseif ($env:INTENTIC_PLAIN -ne '1' -and -not [Console]::IsOutputRedirected) {
@@ -119,6 +119,7 @@ function Format-IntenticDuration {
 
 function Complete-IntenticStep {
     param([string]$Tone = 'ok')
+    $IntenticKit.Step = ''
     if (-not $IntenticKit.Label) { return }
     if ($IntenticKit.Mode -eq 'rich') {
         $took = Format-IntenticDuration $IntenticKit.Clock.Elapsed
@@ -164,6 +165,8 @@ function Write-IntenticStep {
             Write-IntenticLive
         }
     }
+    # Kept in every mode, not only where a live line draws it: the unexpected stop below names the step it broke in.
+    $IntenticKit.Step = if ($Label) { $Label } else { $Sentence }
 }
 
 function Write-IntenticSay {
@@ -292,6 +295,138 @@ function Read-IntenticConfirm {
     Stop-Intentic 'Nothing was changed.' "nobody is at this terminal to answer: $Question" "run it again with $Flag"
 }
 
+# WHEN SECURITY SOFTWARE STANDS BETWEEN A SCRIPT AND ITS FILES (2026-11-20, intentic#49). On a PC whose endpoint
+# security (Bitdefender Endpoint Security Tools, run from a company's console) takes Intentic's programs, a file it wrote
+# a minute ago is listed and cannot be opened, run, moved or replaced: Windows answers "Access is denied" and nothing
+# else. Said bare, that read as a fault of the script, and the one install that hit it reported a network failure
+# instead. So a refusal is told apart wherever it can land, and the stop names the product and the folder to allow.
+# Nothing here adds an exclusion: software that exempts itself from a scanner is what malware does, and scanners treat
+# it so.
+
+# The antivirus Windows Security Center lists as on, someone else's before Microsoft's own; '' where there is none to
+# name (Windows Server has no Security Center). productState's middle byte is 0x10 or 0x11 while it scans.
+function Get-IntenticSecurityProduct {
+    try {
+        $listed = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+    } catch {
+        return ''
+    }
+    $on = @($listed | Where-Object { (([int]$_.productState -shr 8) -band 0xFF) -in 0x10, 0x11 })
+    $named = @($on | Where-Object { "$($_.displayName)" -notmatch '^(Windows|Microsoft) Defender' }) + $on
+    if ($named.Count -gt 0) { return "$($named[0].displayName)".Trim() }
+    return ''
+}
+
+# Whether a failure is Windows' "Access is denied", at any depth: a cmdlet's own UnauthorizedAccessException, an
+# IOException carrying E_ACCESSDENIED (0x80070005), or a process start's Win32 error 5 inside the
+# ApplicationFailedException PowerShell wraps it in.
+function Test-IntenticAccessDenied {
+    param($Failure)
+    while ($null -ne $Failure) {
+        if ($Failure -is [System.UnauthorizedAccessException]) { return $true }
+        if ($Failure -is [System.ComponentModel.Win32Exception] -and $Failure.NativeErrorCode -eq 5) { return $true }
+        try { if ($Failure.HResult -eq -2147024891) { return $true } } catch { $null = $_ }
+        $Failure = $Failure.InnerException
+    }
+    return $false
+}
+
+# Whether Windows refuses to open the file at $Path for reading. A failed start cannot always say so itself: PowerShell 7
+# with its output captured retries a refused start another way and reports that retry's InvalidOperationException
+# ("StandardErrorEncoding is only supported when standard error is redirected") instead of the refusal (2026-11-20).
+function Test-IntenticFileDenied {
+    param([string]$Path)
+    if (-not $Path) { return $false }
+    try {
+        $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        $stream.Dispose()
+    } catch {
+        return (Test-IntenticAccessDenied $_.Exception)
+    }
+    return $false
+}
+
+# The two halves of a stop for a file Windows refused: Suspect, a sentence for the problem line naming the product
+# where Security Center names one, and Fix, who to ask to allow which folder. A path that is not a full one (or none)
+# names the folder every Intentic program lives under.
+function Get-IntenticSecurityAdvice {
+    param([string]$Path)
+    $product = Get-IntenticSecurityProduct
+    $leaf = 'a file Intentic needs'
+    $folder = Join-Path $HOME '.intentic'
+    try {
+        if ($Path -and [IO.Path]::IsPathRooted($Path)) {
+            $leaf = Split-Path $Path -Leaf
+            $folder = Split-Path $Path
+        }
+    } catch {
+        $leaf = 'a file Intentic needs'
+    }
+    $who = if ($product) { "Security software on this PC ($product)" } else { 'Security software on this PC' }
+    $manager = if ($product) { $product } else { 'the security software' }
+    return @{
+        Suspect = "$who may be blocking $leaf."
+        Fix = "ask whoever manages $manager on this PC (at work, your IT) to allow the folder $folder, then run the same command again."
+    }
+}
+
+# A failure's message as one line: a failed program start runs the position of the failing statement onto the end of
+# its message ("...Access is deniedAt line:830 char:13"), over several lines, and a stop block's problem is a single
+# line the desktop app reads. Takes the error record, whose position is what gets cut.
+function Get-IntenticFailureLine {
+    param($Record)
+    $message = "$($Record.Exception.Message)"
+    try {
+        $position = @("$($Record.InvocationInfo.PositionMessage)" -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+        if ($position) { $message = $message.Replace("$position".Trim(), '') }
+    } catch {
+        $message = "$($Record.Exception.Message)"
+    }
+    $first = @($message -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+    return "$first".Trim()
+}
+
+# What the failing statement acted on: the file a cmdlet named, or the program a call tried to start. '' when the
+# error record says neither.
+function Get-IntenticFailureTarget {
+    param($Record)
+    try {
+        $command = $Record.InvocationInfo.MyCommand
+        if ($command -is [System.Management.Automation.ApplicationInfo]) { return "$($command.Path)" }
+        if ($Record.CategoryInfo.TargetName) { return "$($Record.CategoryInfo.TargetName)" }
+        if ($Record.TargetObject -is [string] -or $Record.TargetObject -is [IO.FileSystemInfo]) { return "$($Record.TargetObject)" }
+        # A program PowerShell 7 could not start is named only inside its message, in quotes, with its full path.
+        if ("$($Record.Exception.Message)" -match "'([A-Za-z]:\\[^']+)'") { return $Matches[1] }
+    } catch {
+        return ''
+    }
+    return ''
+}
+
+# Where an unexpected failure happened, as a parenthesis for the problem line: the step that was running, the command
+# and what it acted on, and the line of the script. A bare "Access is denied" from a device with no step and no path
+# (2026-11-20, intentic#49) could not be traced to anything; this is what it lacked.
+function Get-IntenticFailurePlace {
+    param($Record, [string]$Step)
+    $said = @()
+    if ($Step) { $said += "in step ""$Step""" }
+    $command = ''
+    $line = 0
+    try {
+        if ($Record.InvocationInfo.MyCommand) { $command = "$($Record.InvocationInfo.MyCommand.Name)" }
+        $line = [int]$Record.InvocationInfo.ScriptLineNumber
+    } catch {
+        $line = 0
+    }
+    $target = Get-IntenticFailureTarget $Record
+    if ($target -and $command -and $target.EndsWith($command)) { $command = '' }
+    $what = (@($command, $target) | Where-Object { $_ }) -join ' '
+    if ($what) { $said += "at $what" }
+    if ($line -gt 0) { $said += "script line $line" }
+    if ($said.Count -eq 0) { return '' }
+    return '(' + ($said -join ', ') + ')'
+}
+
 function Invoke-IntenticScript {
     param([scriptblock]$Body)
     $IntenticKit.Code = 0
@@ -300,10 +435,23 @@ function Invoke-IntenticScript {
         Complete-IntenticStep 'ok'
     } catch {
         if ("$($_.Exception.Message)" -ne 'intentic:stop') {
-            # Anything this script did not expect still ends in the protocol's stop block, never PowerShell's red one.
-            $said = "$($_.Exception.Message)"
+            # Anything this script did not expect still ends in the protocol's stop block, never PowerShell's red one,
+            # and says where it broke: the step, the command and its file, the line. A refusal by security software
+            # names what to allow instead of asking for the same run again, which would only stop the same way.
+            $failure = $_
+            $said = (Get-IntenticFailureLine $failure).TrimEnd('.')
+            $place = Get-IntenticFailurePlace $failure $IntenticKit.Step
+            if ($place) { $said = "$said $place" }
+            $said = "$said."
+            $fix = 'run the same command again; if it stops here again, report it with this message.'
+            $target = Get-IntenticFailureTarget $failure
+            if ((Test-IntenticAccessDenied $failure.Exception) -or (Test-IntenticFileDenied $target)) {
+                $advice = Get-IntenticSecurityAdvice -Path $target
+                $said = "$said $($advice.Suspect)"
+                $fix = $advice.Fix
+            }
             try {
-                Stop-Intentic 'The script stopped unexpectedly.' $said 'run the same command again; if it stops here again, report it with this message.'
+                Stop-Intentic 'The script stopped unexpectedly.' $said $fix
             } catch {
                 $IntenticKit.Code = 1
             }
@@ -393,6 +541,53 @@ function Add-IntenticPath {
 # run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
 # release asked for. A download is checked against the release's SHA256SUMS before anything runs it; a mismatch is
 # deleted unrun and the ic already installed stays.
+
+# Swap aside, never delete first (2026-11-20, intentic#49): Move-Item -Force onto an installed ic deletes it before the
+# new one is in, and when Windows then refused the new one (security software holding the folder), a device that had a
+# working ic was left with none. So the installed ic is renamed to ic.old.exe (Windows allows renaming a running
+# program), the new one takes its name, and a failure puts the old one back before it rethrows. Where Windows refuses
+# the name itself, putting it back fails too, so the old one stays as ic.old.exe and Get-IntenticIc runs it from there.
+# Leftovers are removed only once ic.exe is a working ic: before that, one of them may be the only ic this device has.
+function Get-IntenticIcLeftovers([string]$Dest) {
+    $Leaf = [IO.Path]::GetFileNameWithoutExtension($Dest)
+    return @(Get-ChildItem -LiteralPath (Split-Path $Dest) -Filter "$Leaf.old*.exe" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+}
+
+function Install-IntenticIcFile([string]$From, [string]$Dest) {
+    if (Test-IntenticIc $Dest) {
+        foreach ($Left in (Get-IntenticIcLeftovers $Dest)) { Remove-Item -Force -LiteralPath $Left -ErrorAction SilentlyContinue }
+    }
+    $Old = [IO.Path]::ChangeExtension($Dest, '.old.exe')
+    # Still there: an ic started from it is running, or it is the only working copy. A name of its own keeps it.
+    if (Test-Path -LiteralPath $Old) { $Old = [IO.Path]::ChangeExtension($Dest, '.old-' + [guid]::NewGuid().ToString('N') + '.exe') }
+    $Aside = $false
+    if (Test-Path -LiteralPath $Dest) {
+        Move-Item -LiteralPath $Dest -Destination $Old -ErrorAction Stop
+        $Aside = $true
+    }
+    try {
+        Move-Item -LiteralPath $From -Destination $Dest -ErrorAction Stop
+    } catch {
+        $Refusal = $_
+        if ($Aside -and -not (Test-Path -LiteralPath $Dest)) {
+            try { Move-Item -LiteralPath $Old -Destination $Dest -ErrorAction Stop } catch { $null = $_ }
+        }
+        throw $Refusal
+    }
+    foreach ($Left in (Get-IntenticIcLeftovers $Dest)) { Remove-Item -Force -LiteralPath $Left -ErrorAction SilentlyContinue }
+}
+
+# Test-IntenticIcNetwork: the failure is the network's (a name that does not resolve, a refused or reset connection, a
+# timeout, an HTTP error) rather than this device's, at any depth. Matched by type name: System.Net.Http is not loaded
+# in every Windows PowerShell 5.1 session, and naming one of its types there is itself an error.
+function Test-IntenticIcNetwork($Failure) {
+    while ($null -ne $Failure) {
+        if ($Failure.GetType().FullName -match '^System\.Net\.|HttpResponseException$|TaskCanceledException$|TimeoutException$|AuthenticationException$') { return $true }
+        $Failure = $Failure.InnerException
+    }
+    return $false
+}
+
 # Test-IntenticIc: the file starts and answers --version as ic does ('ic <version>'). A download that answered 200 can be
 # a captive portal's login page or an empty body; Windows refuses to start either, which lands in the catch.
 function Test-IntenticIc([string]$Path) {
@@ -500,7 +695,7 @@ function Get-IntenticIc {
             if ($IcCarried -eq ('ic ' + ($env:IC_VERSION -replace '^v', ''))) {
                 try {
                     Copy-Item -LiteralPath $env:INTENTIC_IC_PATH -Destination "$IcDest.tmp" -Force -ErrorAction Stop
-                    Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
+                    Install-IntenticIcFile "$IcDest.tmp" $IcDest
                     $IcCopied = $true
                 } catch {
                     Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
@@ -516,11 +711,18 @@ function Get-IntenticIc {
             # five-megabyte download take several seconds instead of a fraction of one.
             $ProgressPreference = 'SilentlyContinue'
             $IcFetched = $false
-            $IcRefused = $false
-            $IcWhy = "$(([uri]$IcBase).Host) did not answer from this device."
+            # Why ic is not installed, by what failed (2026-11-20, intentic#49): $IcWhy once said "<host> did not answer"
+            # whatever threw, and a device whose security software refused ic.exe was told to check a network that was
+            # fine. 'network' keeps that wording with the failure's own words; 'refused' is a download that arrived and
+            # was not installed (a checksum, a probe, a file Windows would not start); 'write' is a file Windows would not write.
+            $IcFailed = 'network'
+            $IcHost = ([uri]$IcBase).Host
+            $IcWhy = "$IcHost did not answer from this device."
             $IcFix = 'check the network, then run the same command again.'
             # Named .exe so it can be started for the probe below; only a checked, probed download replaces the installed ic.
             $IcNew = "$IcDir\ic.download.exe"
+            # The file being written when something throws: the download first, the installed ic once the swap starts.
+            $IcWriting = $IcNew
             try {
                 # By the .gz copy the release publishes beside ic (scripts-kit/gzip.ps1), else by ic itself: a release from
                 # before the copies answers 404 for it, and so does a server that serves only ic (IC_URL).
@@ -539,34 +741,74 @@ function Get-IntenticIc {
                 }
                 $IcRefusal = Get-IntenticChecksumRefusal $IcNew 'ic-windows-amd64.exe' $IcBase
                 if ($IcRefusal) {
-                    $IcRefused = $true
+                    $IcFailed = 'refused'
                     $IcWhy = $IcRefusal.Why
                     $IcFix = $IcRefusal.Fix
                 } elseif (Test-IntenticIc $IcNew) {
-                    Move-Item -Force $IcNew $IcDest -ErrorAction Stop
+                    $IcWriting = $IcDest
+                    Install-IntenticIcFile $IcNew $IcDest
                     $IcFetched = $true
+                } elseif (-not (Test-Path -LiteralPath $IcNew)) {
+                    # Gone between landing and its probe: taken into quarantine, which no network check would explain.
+                    $IcAdvice = Get-IntenticSecurityAdvice -Path $IcNew
+                    $IcFailed = 'refused'
+                    $IcWhy = "the downloaded ic was removed from $IcNew as soon as it arrived. $($IcAdvice.Suspect)"
+                    $IcFix = $IcAdvice.Fix
                 } else {
                     $IcWhy = 'what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture.'
+                    # Test-IntenticIc reads every failure to start as "not ic"; one Windows refused is security software.
+                    $IcStart = ''
+                    try {
+                        $null = & $IcNew --version
+                    } catch {
+                        if ((Test-IntenticAccessDenied $_.Exception) -or (Test-IntenticFileDenied $IcNew)) { $IcStart = Get-IntenticFailureLine $_ }
+                    }
+                    if (-not $IcStart -and (Test-IntenticFileDenied $IcNew)) { $IcStart = 'Access is denied' }
+                    if ($IcStart) {
+                        $IcAdvice = Get-IntenticSecurityAdvice -Path $IcNew
+                        $IcFailed = 'refused'
+                        $IcWhy = "Windows refused to start the downloaded ic at $IcNew ($IcStart). $($IcAdvice.Suspect)"
+                        $IcFix = $IcAdvice.Fix
+                    }
                 }
             } catch {
                 $IcFetched = $false
+                $IcSaid = (Get-IntenticFailureLine $_).TrimEnd('.')
+                if (Test-IntenticAccessDenied $_.Exception) {
+                    $IcAdvice = Get-IntenticSecurityAdvice -Path $IcWriting
+                    $IcFailed = 'write'
+                    $IcWhy = "could not write $($IcWriting): $IcSaid. $($IcAdvice.Suspect)"
+                    $IcFix = $IcAdvice.Fix
+                } elseif ($IcWriting -eq $IcDest -or -not (Test-IntenticIcNetwork $_.Exception)) {
+                    $IcFailed = 'write'
+                    $IcWhy = "could not write $($IcWriting): $IcSaid."
+                    $IcFix = "close anything running ic, check that $IcDir has room, then run the same command again."
+                } else {
+                    $IcWhy = "$IcHost did not answer from this device ($IcSaid)."
+                }
             }
             Remove-Item -Force $IcNew -ErrorAction SilentlyContinue
             # The warning when an installed ic runs instead; <ic> is where it is.
-            $IcKept = if ($IcRefused) { "the newest ic was not installed: $IcWhy The one installed at <ic> runs instead." } else { 'the newest ic could not be downloaded, so the one installed at <ic> runs instead.' }
+            $IcKept = if ($IcFailed -ne 'network') { "the newest ic was not installed: $IcWhy The one installed at <ic> runs instead." } else { 'the newest ic could not be downloaded, so the one installed at <ic> runs instead.' }
             if ($IcFetched) {
                 $Ic = $IcDest
                 Add-IntenticPath -Folder $IcDir -Command 'ic'
             } elseif (Test-IntenticIc $IcDest) {
                 Write-IntenticWarn $IcKept.Replace('<ic>', $IcDest)
                 $Ic = $IcDest
+            } elseif ($IcLeft = @(Get-IntenticIcLeftovers $IcDest | Where-Object { Test-IntenticIc $_ }) | Select-Object -First 1) {
+                # The installed ic, moved aside by a swap Windows would not let finish (Install-IntenticIcFile).
+                Write-IntenticWarn $IcKept.Replace('<ic>', $IcLeft)
+                $Ic = $IcLeft
             } else {
                 $IcInstalled = Get-Command ic -ErrorAction SilentlyContinue
                 if ($IcInstalled -and (Test-IntenticIc $IcInstalled.Source)) {
                     Write-IntenticWarn $IcKept.Replace('<ic>', $IcInstalled.Source)
                     $Ic = $IcInstalled.Source
-                } elseif ($IcRefused) {
+                } elseif ($IcFailed -eq 'refused') {
                     Stop-Intentic 'ic was downloaded but not installed, and no copy is installed.' $IcWhy $IcFix
+                } elseif ($IcFailed -eq 'write') {
+                    Stop-Intentic 'ic could not be installed, and no copy is installed.' $IcWhy $IcFix
                 } else {
                     Stop-Intentic 'ic could not be downloaded, and no copy is installed.' $IcWhy $IcFix
                 }

@@ -100,6 +100,66 @@ pub fn blocked_words(requirement: &serde_json::Value) -> Option<String> {
     Some(words.chars().take(600).collect())
 }
 
+/* IC'S STOP BLOCK, WHOLE (2026-11-20). A stopped `ic` ends with `error: <headline>`, then indented `problem:` and `fix:`
+ * lines under it (ic's ui.rs `explain`, docs/ops/cli-output-protocol.md). Every reader here took the last stderr line,
+ * which is the `fix:`: a move refused because a volume of the same name already held files on the other engine reached
+ * the "Prepare this PC" card as "every sandbox is back on Docker Desktop as it was", with nothing of what went wrong,
+ * and the reader pressed "Try again" into the same wall. The block is now read whole, as installTelemetry.ts
+ * `stopBlock` reads it for the workspace. */
+
+/// The most a stop block carries: what a process's failure carries (processReport.ts `text(600)`, installTelemetry.ts).
+pub const STOP_BLOCK_CHARS: usize = 600;
+
+/// A stop block's headline: the text after `error:` on a line of its own. Pure.
+pub fn stop_headline(line: &str) -> Option<&str> {
+    line.trim()
+        .strip_prefix("error:")
+        .map(str::trim)
+        .filter(|headline| !headline.is_empty())
+}
+
+/// A line under a stop block's headline: its `problem:` or its `fix:`. Pure.
+pub fn stop_detail(line: &str) -> bool {
+    let line = line.trim();
+    line.starts_with("problem:") || line.starts_with("fix:")
+}
+
+/// The last stop block among `lines` (in the order they were said, each without a transcript's `! `): its headline, then
+/// its `problem:` and `fix:` lines, one per line, cut at [`STOP_BLOCK_CHARS`]; none when the run never stopped with one.
+/// Pure.
+pub fn stop_block<'a>(lines: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let mut block: Option<Vec<String>> = None;
+    let mut open = false;
+    for line in lines {
+        if let Some(headline) = stop_headline(line) {
+            block = Some(vec![headline.to_string()]);
+            open = true;
+        } else if open && stop_detail(line) {
+            if let Some(block) = block.as_mut() {
+                block.push(line.trim().to_string());
+            }
+        } else {
+            open = false;
+        }
+    }
+    let said = block?.join("\n");
+    Some(if said.chars().count() > STOP_BLOCK_CHARS {
+        format!(
+            "{}…",
+            said.chars().take(STOP_BLOCK_CHARS - 1).collect::<String>()
+        )
+    } else {
+        said
+    })
+}
+
+/// A transcript's lines as the run said them: without the `! ` the transcript marks a stderr line with (scripts.rs). Pure.
+pub fn transcript_lines(transcript: &str) -> impl Iterator<Item = &str> {
+    transcript
+        .lines()
+        .map(|line| line.strip_prefix('!').map_or(line, str::trim_start))
+}
+
 /// The setup's phases in the order it runs them, each weighed in rough seconds (setupPlan.ts, sandbox-run's
 /// setup-progress.fixture.json): Windows fetches `ic` before it checks Docker; an image already here is a docker answer
 /// away. Docker is never installed by this run, and a folder's setup always syncs: its folder's link comes right after
@@ -138,6 +198,9 @@ pub struct Progress {
     pub percent: u8,
     pub requirements: Vec<serde_json::Value>,
     command_failure: Option<String>,
+    /// Its stderr since its last stop block's headline ([`stop_block`]), else nothing.
+    stopped: Vec<String>,
+    stop_open: bool,
     last_error: Option<String>,
     /// The run said its folder's sync did not finish (ic's connect.rs `sync_unfinished`): the sandbox is made, and no
     /// pairing for the folder is coming.
@@ -155,6 +218,8 @@ impl Progress {
             percent: 0,
             requirements: Vec::new(),
             command_failure: None,
+            stopped: Vec::new(),
+            stop_open: false,
             last_error: None,
             sync_unfinished: false,
         }
@@ -175,8 +240,10 @@ impl Progress {
             if !said.is_empty() {
                 self.step = Some(said);
             }
-            // A step after a command that said it failed: the setup went on after all.
+            // A step after a command that said it failed, or after a stop block: the setup went on after all.
             self.command_failure = None;
+            self.stopped.clear();
+            self.stop_open = false;
             self.percent = self.percent.max(self.percent_now());
             return before != (self.phase.clone(), self.step.clone(), self.percent);
         }
@@ -202,6 +269,15 @@ impl Progress {
             if let Some(failure) = said.strip_prefix("Command failed,") {
                 self.command_failure = Some(failure.trim().to_string());
             } else if !said.is_empty() {
+                // Kept: the headline, and the `problem:`/`fix:` lines straight under it. Anything else ends the block.
+                if stop_headline(said).is_some() {
+                    self.stopped = vec![said.to_string()];
+                    self.stop_open = true;
+                } else if self.stop_open && stop_detail(said) {
+                    self.stopped.push(said.to_string());
+                } else {
+                    self.stop_open = false;
+                }
                 self.last_error = Some(said.to_string());
             }
         }
@@ -245,10 +321,12 @@ impl Progress {
     }
 
     /// Why the run stopped, in its own words: security software refusing the machine agent, else a command that said it
-    /// failed, else the last thing it said on stderr (a stop block's last line is its `fix:`, not its reason).
+    /// failed, else ic's stop block whole ([`stop_block`]: a stop block's last line is its `fix:`, not its reason), else
+    /// the last thing it said on stderr.
     pub fn reason(&self) -> Option<String> {
         self.blocked()
             .or_else(|| self.command_failure.clone())
+            .or_else(|| stop_block(self.stopped.iter().map(String::as_str)))
             .or_else(|| self.last_error.clone())
     }
 
@@ -475,6 +553,38 @@ mod tests {
         progress.hear(Stream::Stdout, "intentic: [verifying] checking");
         assert_eq!(progress.reason().as_deref(), Some("! trailing noise"));
         assert_eq!(Progress::new(false, true).reason(), None);
+    }
+
+    /// ic's stop block is why the run stopped, whole: its headline, its problem and its fix (2026-11-20).
+    #[test]
+    fn a_stop_block_is_the_reason_whole_not_its_fix_line() {
+        let block = [
+            "error: the move to the intentic engine did not finish",
+            "   problem: a volume named intentic-history-x already exists on the other engine.",
+            "   fix:     every sandbox is back on Docker Desktop as it was.",
+        ];
+        let whole = "the move to the intentic engine did not finish\nproblem: a volume named intentic-history-x already exists on the other engine.\nfix:     every sandbox is back on Docker Desktop as it was.";
+        assert_eq!(stop_block(block).as_deref(), Some(whole));
+        let mut progress = Progress::new(true, true);
+        progress.hear(Stream::Stderr, "error: an earlier stop");
+        progress.hear(Stream::Stderr, "warning: something");
+        for line in block {
+            progress.hear(Stream::Stderr, line);
+        }
+        // A line after the block closes it without taking its place, and a `problem:` after that is not under it.
+        progress.hear(Stream::Stderr, "intentic: a warning after it");
+        progress.hear(Stream::Stderr, "   problem: not under a headline");
+        assert_eq!(progress.reason().as_deref(), Some(whole));
+        // A step after it: the setup went on, and the block is not its last word.
+        progress.hear(Stream::Stdout, "intentic: [verifying] checking");
+        progress.hear(Stream::Stderr, "! trailing noise");
+        assert_eq!(progress.reason().as_deref(), Some("! trailing noise"));
+        // A transcript's `! ` marks come off; a block past 600 characters is cut there.
+        let long = format!("! error: {}\n!    fix: y", "x".repeat(700));
+        let cut = stop_block(transcript_lines(&long)).unwrap();
+        assert_eq!(cut.chars().count(), STOP_BLOCK_CHARS);
+        assert!(cut.ends_with('…'));
+        assert_eq!(stop_block(["! warning", "fix: z"]), None);
     }
 
     #[test]

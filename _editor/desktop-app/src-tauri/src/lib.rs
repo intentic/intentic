@@ -316,6 +316,7 @@ pub fn run() {
             os_settings::os_drives_list,
             os_settings::os_drives_seen,
             os_settings::os_drive_words,
+            windows::quit::quit_move_words,
             os_settings::os_drive_import,
             os_settings::os_drive_eject,
         ])

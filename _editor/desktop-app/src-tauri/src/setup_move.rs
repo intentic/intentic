@@ -41,6 +41,12 @@ pub struct SetupMove {
     copied: u64,
 }
 
+/// Whether a move is still under way after this `intentic-move:` line: every step but its end (`done`, `failed`) says it
+/// is, from Docker Desktop started to read the sandboxes through the last one started again. Pure.
+pub fn still_moving(event: &Value) -> bool {
+    !matches!(event["step"].as_str(), Some("done" | "failed") | None)
+}
+
 fn amount(event: &Value, key: &str) -> Option<u64> {
     event.get(key).and_then(Value::as_u64)
 }
@@ -131,6 +137,23 @@ mod tests {
             moving.hear(line);
         }
         moving
+    }
+
+    /// A quit asks about a move from its first step to its end (windows/quit.rs, issue #48).
+    #[test]
+    fn a_move_is_under_way_until_it_says_how_it_ended() {
+        for step in [
+            "source", "engine", "begin", "stopping", "image", "volume", "starting", "moved",
+        ] {
+            assert!(
+                still_moving(&json!({ "slug": "work", "step": step })),
+                "{step}"
+            );
+        }
+        assert!(!still_moving(&json!({ "slug": "", "step": "done" })));
+        assert!(!still_moving(
+            &json!({ "slug": "", "step": "failed", "reason": "x" })
+        ));
     }
 
     #[test]

@@ -468,18 +468,34 @@ ic_fetch() {
         ic_host="${ic_base#*://}"
         ic_why="${ic_host%%/*} did not answer from this device."
         ic_fix="check the network, then run the same command again."
+        # Why ic is not installed, by what failed (2026-11-20, intentic#49): ic_why once said "<host> did not answer"
+        # whatever failed, so a device that could not write its own ic was told to check a network that was fine.
+        # Empty is the network, said with curl's own words; "refused" a download that arrived and was not installed;
+        # "write" a file this device would not write.
         ic_refused=""
         ic_arrived=""
         # ic_download <asset> <file>: the asset into <file>, by the .gz copy each release publishes beside it (under half
         # the bytes) where gzip can unpack it, else by the asset itself, which every release from before the copies
-        # answers for. What lands is checked against the asset's own line in SHA256SUMS either way.
+        # answers for. What lands is checked against the asset's own line in SHA256SUMS either way. The second curl's
+        # complaint is kept in ic_said rather than shown: exit 23 is curl failing to write <file>, not the network.
         ic_download() {
             if command -v gzip >/dev/null 2>&1 && curl -fsL "${ic_base}/$1.gz" -o "$2.gz" 2>/dev/null && gzip -dc "$2.gz" >"$2" 2>/dev/null; then
                 rm -f "$2.gz"
                 return 0
             fi
             rm -f "$2.gz"
-            curl -fsL "${ic_base}/$1" -o "$2" 2>/dev/null
+            ic_status=0
+            ic_said="$(curl -fsSL "${ic_base}/$1" -o "$2" 2>&1)" || ic_status=$?
+            ic_said="$(printf '%s' "$ic_said" | tr '\n' ' ' | sed 's/ *$//')"
+            [ "$ic_status" = 0 ] && return 0
+            if [ "$ic_status" = 23 ]; then
+                ic_refused=write
+                ic_why="could not write $2: ${ic_said:-curl could not save the download there}."
+                ic_fix="check that $(dirname "$2") is writable and has room, then run the same command again."
+            elif [ -n "$ic_said" ]; then
+                ic_why="${ic_host%%/*} did not answer from this device (${ic_said})."
+            fi
+            return 1
         }
         # curl's own sentence would land on the live line; the stop below says the same thing in this page's words. The
         # carried copy is not checked against SHA256SUMS: it is a file on this device, not a download, and the network
@@ -490,20 +506,25 @@ ic_fetch() {
             if ic_checked "${dest}.tmp" "ic-${os}-${arch}"; then
                 ic_arrived=1
             else
-                ic_refused=1
+                ic_refused=refused
             fi
         fi
         if [ -n "$ic_arrived" ]; then
             chmod +x "${dest}.tmp"
-            if ic_runs "${dest}.tmp"; then
-                mv -f "${dest}.tmp" "$dest"
+            # mv over a running ic is safe here (the running one keeps its inode), so only its failure needs words: under
+            # set -e a bare mv ended the script with mv's own line and no stop block.
+            if ! ic_runs "${dest}.tmp"; then
+                ic_why="what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture."
+            elif ic_said="$(mv -f "${dest}.tmp" "$dest" 2>&1)"; then
                 IC="$dest"
                 if [ "$(id -u)" != 0 ]; then
                     mkdir -p "$HOME/.local/bin"
                     ln -sf "$dest" "$HOME/.local/bin/ic"
                 fi
             else
-                ic_why="what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture."
+                ic_refused=write
+                ic_why="could not write $dest: $(printf '%s' "${ic_said:-mv failed}" | tr '\n' ' ' | sed 's/ *$//')."
+                ic_fix="check that $(dirname "$dest") is writable, then run the same command again."
             fi
         fi
         if [ -z "$IC" ]; then
@@ -519,6 +540,8 @@ ic_fetch() {
                 kit_warn "the newest ic was not installed: $ic_why The one installed at $IC runs instead."
             elif [ -n "$IC" ]; then
                 kit_warn "the newest ic could not be downloaded, so the one installed at $IC runs instead."
+            elif [ "$ic_refused" = write ]; then
+                kit_stop "ic could not be installed, and no copy is installed." "$ic_why" "$ic_fix"
             elif [ -n "$ic_refused" ]; then
                 kit_stop "ic was downloaded but not installed, and no copy is installed." "$ic_why" "$ic_fix"
             else

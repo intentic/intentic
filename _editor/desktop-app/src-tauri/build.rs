@@ -161,6 +161,8 @@ const COMMANDS: &[&str] = &[
     "os_drives_list",
     "os_drives_seen",
     "os_drive_words",
+    // The words of the Quit question about a move between engines, in the reader's language (windows/quit.rs).
+    "quit_move_words",
     "os_drive_import",
     "os_drive_eject",
 ];
