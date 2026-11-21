@@ -336,7 +336,11 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    timeout-minutes: 60
+    # Most of this is the push to ghcr, which shares the fleet's one uplink with ci.yml's `images` jobs: 30 and 49
+    # minutes on 2026-11-21's first two releases, then cancelled at 60 on the third with two layer pushes taking 20
+    # and 40 minutes on their own, which skipped publish. A cancelled push wastes the whole release, a slow one
+    # wastes nothing.
+    timeout-minutes: 100
     permissions:
       contents: read
       packages: write
