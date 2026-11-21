@@ -36,7 +36,7 @@ const running = computed(() => props.session?.subagents?.running ?? 0);
             v-if="children"
             role="img"
             :aria-label="children.hint"
-            class="text-[0.625rem] font-semibold leading-none tabular-nums"
+            class="pt-px text-[0.625rem] font-semibold leading-none tabular-nums"
             :class="children.running > 0 && pressure !== `full` ? `text-link` : ``"
             data-children-count
             >{{ children.total > 99 ? `99+` : children.total }}</span
@@ -47,7 +47,7 @@ const running = computed(() => props.session?.subagents?.running ?? 0);
         <!-- `ring-canvas` parts the count from the disc it overlaps, as every badge pinned to an avatar does. -->
         <span
             v-if="!counted && running > 0"
-            class="absolute -right-1.5 -top-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-content px-0.5 text-[0.5625rem] font-bold leading-none text-canvas tabular-nums ring-1 ring-canvas"
+            class="absolute -right-1.5 -top-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-content px-0.5 pt-px text-[0.5625rem] font-bold leading-none text-canvas tabular-nums ring-1 ring-canvas"
             aria-hidden="true"
             data-subagents-badge
             >{{ running }}</span
