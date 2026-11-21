@@ -40,6 +40,8 @@ const workspace = async (): Promise<{ readonly root: string; readonly app: strin
     await sh(app, "config", "user.name", "t");
     await sh(app, "config", "user.email", "t@t");
     await writeFile(join(app, "README.md"), "# app\n");
+    await mkdir(join(app, "gen"));
+    await writeFile(join(app, "gen", ".gitkeep"), "");
     await sh(app, "add", "-A");
     await sh(app, "commit", "-q", "-m", "base");
     return { root, app };
@@ -63,7 +65,7 @@ const stagedNames = async (app: string): Promise<readonly string[]> => (await sh
 test("a stage-all past the guardrail holds before touching the index, names the dirs, and stages once confirmed, never a dependency dir", async () => {
     const { root, app } = await workspace();
     const generated = INDEX_RUN_FILE_LIMIT + 50;
-    await mkdir(join(app, "gen"));
+    await mkdir(join(app, "gen"), { recursive: true });
     await Promise.all(Array.from({ length: generated }, (_, index) => writeFile(join(app, "gen", `f${String(index)}.txt`), `${String(index)}\n`)));
     await writeFile(join(app, "main.py"), "print('hi')\n");
     // Dependency trees at the top and nested: the project excludes keep both out of what a stage-all counts or takes.

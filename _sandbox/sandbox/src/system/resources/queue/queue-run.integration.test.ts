@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +36,7 @@ const queueRun = (
                 INTENTIC_QUEUE_CAPTURE_DIR: "",
                 // This suite may itself run under queue-run, whose gate would otherwise pass to every command here.
                 INTENTIC_QUEUE_GATE: "",
+                INTENTIC_ROOM_ADMITTED: "",
                 ...extraEnv,
                 INTENTIC_QUEUE_DIR: dir,
                 INTENTIC_QUEUE_POLL: "1",
@@ -320,7 +322,15 @@ test("names who holds the pool while it waits, says so again as the wait goes on
     const queue = await dir();
     const held = join(queue, "held");
     const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${held}; sleep 30`], {
-        env: { ...process.env, INTENTIC_QUEUE_CAPTURE_DIR: "", INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
+        env: {
+            ...process.env,
+            INTENTIC_QUEUE_CAPTURE_DIR: "",
+            INTENTIC_QUEUE_GATE: "",
+            INTENTIC_ROOM_ADMITTED: "",
+            INTENTIC_QUEUE_DIR: queue,
+            INTENTIC_TURN_OWNER: "holding-conversation",
+            INTENTIC_HEAVY_HELD: "bun-test",
+        },
     });
     for (let tries = 0; tries < RENDEZVOUS_SECONDS / POLL_SECONDS && !(await readdir(queue)).includes("held"); tries += 1) {
         await new Promise((resolve) => setTimeout(resolve, POLL_SECONDS * 1000));
@@ -331,6 +341,9 @@ test("names who holds the pool while it waits, says so again as the wait goes on
         const child = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--wait", "30", "--label", "second", "--", "bash", "-c", "echo ran"], {
             env: {
                 ...process.env,
+                INTENTIC_QUEUE_CAPTURE_DIR: "",
+                INTENTIC_QUEUE_GATE: "",
+                INTENTIC_ROOM_ADMITTED: "",
                 INTENTIC_QUEUE_DIR: queue,
                 INTENTIC_QUEUE_POLL: "1",
                 INTENTIC_QUEUE_SAY_EVERY: "1",
@@ -342,10 +355,21 @@ test("names who holds the pool while it waits, says so again as the wait goes on
         child.stderr.on("data", (chunk: Buffer) => {
             stderr += chunk.toString();
             if (seen === "" && stderr.includes("holders and waiters:")) {
-                void readFile(state, "utf8").then((text) => (seen = text));
+                try {
+                    seen = readFileSync(state, "utf8");
+                } catch {
+                    // allow(silent-catch): read when the file is available
+                }
             }
             // Freed once the wait has been said again and the state it saw is read: the rest is the waiter starting.
-            if (seen !== "" && stderr.includes("still waiting after")) {
+            if (stderr.includes("still waiting after")) {
+                if (seen === "") {
+                    try {
+                        seen = readFileSync(state, "utf8");
+                    } catch {
+                        // allow(silent-catch)
+                    }
+                }
                 holder.kill("SIGKILL");
             }
         });
@@ -355,7 +379,7 @@ test("names who holds the pool while it waits, says so again as the wait goes on
     });
     expect(second.stderr).toMatch(/slot\.1: pid \d+, running \d+s by rule bun-test for conversation holding-conversation: .*sleep 30/);
     expect(second.stderr).toContain(`(holders and waiters: ${state})`);
-    expect(second.stderr).toMatch(/still waiting after \ds for pool "p"/);
+    expect(second.stderr).toMatch(/still waiting after \d+s for pool "p"/);
     const [ran, json] = second.stdout.split("\n");
     expect(ran).toBe("ran");
     expect(JSON.parse(json ?? "")).toMatchObject({

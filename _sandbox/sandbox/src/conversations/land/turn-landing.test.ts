@@ -196,12 +196,12 @@ describe("a turn that may not land", () => {
 // settles only logged it, and the card rested on a standing read off the main repo's copy of a branch that never moved.
 describe("a land that breaks", () => {
     test("while an ended turn's books settle is kept on the card, in the words it broke with", async () => {
-        const { agents, conversations, perf, logger } = services();
+        const { agents, conversations, perf, logger, activity } = services();
         await beginTurn(conversations, { conversationId: "c", isolated: true, prompt: "p", profile: { agent: "claude", harness: "native" } }, 1);
         await agents.recordWorktree("c", [{ repo: "root", base: "a".repeat(40) }]);
         // The checkout lost its link and could not be re-linked: every land stops at its first step.
         const agentWorktrees = unstubbed<AgentWorktrees>("worktrees", { relink: async () => ["root"] });
-        await settleLandBooks({ agents, conversations, perf, logger, agentWorktrees, branchCheckouts: unstubbed<BranchCheckouts>("branchCheckouts", {}) }, "c");
+        await settleLandBooks({ agents, conversations, perf, logger, activity, agentWorktrees, branchCheckouts: unstubbed<BranchCheckouts>("branchCheckouts", {}) }, "c");
         expect(agents.get("c")?.landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
     });
 });
