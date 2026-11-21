@@ -48,14 +48,19 @@ const when = computed(() => {
 </script>
 
 <template>
-    <!-- Sunk into the lane's gaps (`-my-3`) so the groups stand only a little further apart than two cards do; the first
-         keeps its top margin, since above it is the lane's header, not a gap. -->
+    <!-- Sunk into the lane's gaps (`-mt-3` / `-mb-3`) so the groups stand only a little further apart than two cards
+         do; the first keeps its top margin, since above it is the lane's header, not a gap. Folded with no cards
+         shown, it leaves its bottom margin alone so adjacent headers or the lane's end do not collide. -->
     <component
         :is="group.foldable ? `button` : `div`"
         :type="group.foldable ? `button` : undefined"
         :aria-expanded="group.foldable ? !group.folded : undefined"
         class="flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-2xs text-muted"
-        :class="[first ? `-mb-3` : `-my-3`, group.foldable ? `transition-colors hover:text-content` : ``]"
+        :class="[
+            first ? `` : `-mt-3`,
+            group.shown.length > 0 ? `-mb-3` : ``,
+            group.foldable ? `transition-colors hover:text-content` : ``,
+        ]"
         @click="group.foldable && toggleFold(group.key)"
     >
         <span class="shrink-0 font-semibold">{{ label }}</span>
