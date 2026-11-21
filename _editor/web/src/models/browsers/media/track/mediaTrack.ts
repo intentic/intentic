@@ -176,6 +176,13 @@ export const mediaTrack = (options: MediaTrackOptions): MediaTrack => {
             if (now === undefined) {
                 return undefined;
             }
+            // A window behind another, or a tab in the background, gets no video frame callbacks: the browser decodes the
+            // track but composites nothing. The decoder's own count says a picture is there, so the view stops saying
+            // it is connecting instead of waiting for a callback that comes only once the window is in front.
+            if (!pictured && now.framesDecoded > 0) {
+                pictured = true;
+                options.shown();
+            }
             const stats = { ...between(last, now, ages.map((age) => age.ms)), ...castd };
             last = now;
             return stats;

@@ -26,6 +26,19 @@ test("/info is read as remoteStart answers it, whatever else remoted says beside
     });
 });
 
+test("/info's screen reason is kept only while there is no screen to show", async () => {
+    const reason = "this computer has no display, and a virtual desktop needs Xvfb: install xvfb";
+    const base = { version: "1.2.3", environments: ["native"], allow: { view: true, control: true, terminal: true } };
+    const read = async (monitors: unknown[]) =>
+        remotedControl(
+            "/x.sock",
+            answering({ "GET /info": { status: 200, body: JSON.stringify({ ...base, monitors, screen: { mode: "virtual", reason } }) } }),
+        ).info();
+    expect((await read([]))?.screenReason).toBe(reason);
+    const monitor = { id: "0", name: "DP-1", x: 0, y: 0, width: 1, height: 1, scale: 1, primary: true };
+    expect((await read([monitor]))?.screenReason).toBeUndefined();
+});
+
 test("terminals are listed and made as remoted names them, and a refusal carries its words", async () => {
     const listed = { session: "t-1", title: "bash", environment: "native", createdAt: 1_700_000_000_000, viewers: 2 };
     const control = remotedControl(

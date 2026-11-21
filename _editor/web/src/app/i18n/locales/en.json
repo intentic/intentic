@@ -11930,6 +11930,7 @@
             "reconnecting": "Reconnecting…",
             "connecting": "Connecting…",
             "connectingTo": "Connecting to {name}…",
+            "pausedHidden": "Paused while this window is out of sight: {name} sends nothing until you look.",
             "keysCtrlAltDel": "Security screen",
             "keysWin": "Start menu",
             "keysAltTab": "Switch window",

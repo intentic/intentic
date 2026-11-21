@@ -270,6 +270,7 @@ const status = async (held: Held, device: string, caller: RemoteCaller): Promise
         ...opt("reason", off),
         allow,
         monitors: screen ? (info?.monitors ?? []) : [],
+        ...opt("screenReason", screen ? info?.screenReason : undefined),
         environments: offeredEnvironments(info?.environments ?? [], environments),
         terminals,
     };

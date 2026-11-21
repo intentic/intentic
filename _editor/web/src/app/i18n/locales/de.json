@@ -11930,6 +11930,7 @@
             "reconnecting": "Neu verbinden…",
             "connecting": "Verbinden…",
             "connectingTo": "Verbinde mit {name}…",
+            "pausedHidden": "Pausiert, solange dieses Fenster nicht zu sehen ist: {name} sendet nichts, bis du hinschaust.",
             "keysCtrlAltDel": "Sicherheitsbildschirm",
             "keysWin": "Startmenü",
             "keysAltTab": "Fenster wechseln",

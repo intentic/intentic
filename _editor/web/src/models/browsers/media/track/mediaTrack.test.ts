@@ -108,3 +108,17 @@ it("reads the overlay's numbers off the browser's report between two reads, with
     expect(second?.decodeMs).toBeCloseTo(2, 5);
     expect(second?.rttMs).toBeUndefined();
 });
+
+it("counts a decoded frame as the first picture where no frame callback comes (a window behind another)", async () => {
+    const entry = { type: `inbound-rtp`, kind: `video`, framesDecoded: 3, framesDropped: 0, totalDecodeTime: 0, bytesReceived: 1, frameWidth: 8, frameHeight: 8 };
+    const report = async (): Promise<RTCStatsReport> => {
+        const made: RTCStatsReport = unstubbed<RTCStatsReport>(`report`, { forEach: (each) => each(entry, `0`, made) });
+        return made;
+    };
+    const { track, shown } = setup(report);
+    track.took(TRACK);
+    track.carrying(true);
+    await track.stats({ scale: 1 });
+    await track.stats({ scale: 1 });
+    expect(shown()).toBe(1);
+});

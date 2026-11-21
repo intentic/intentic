@@ -11326,6 +11326,7 @@
             "reconnecting": "Ponowne łączenie…",
             "connecting": "Łączenie…",
             "connectingTo": "Łączenie z {name}…",
+            "pausedHidden": "Wstrzymane, póki to okno jest niewidoczne: {name} nic nie wysyła, dopóki nie spojrzysz.",
             "keysCtrlAltDel": "Ekran zabezpieczeń",
             "keysWin": "Menu Start",
             "keysAltTab": "Przełącz okno",

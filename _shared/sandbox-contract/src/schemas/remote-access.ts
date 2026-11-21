@@ -60,6 +60,9 @@ export const RemoteStatusSchema = z.object({
     allow: RemoteAccessAllowSchema,
     // Empty until remoted has run once since the device connected.
     monitors: z.array(RemoteAccessMonitorSchema),
+    // Why a computer that would show its screen here has none to show (no display and nothing to start a virtual desktop
+    // with, a Wayland session without PipeWire), in remoted's words naming what to install. Only while monitors is empty.
+    screenReason: z.string().optional(),
     // The environments a terminal can open in.
     environments: z.array(z.string()),
     terminals: z.array(RemoteTerminalSchema),

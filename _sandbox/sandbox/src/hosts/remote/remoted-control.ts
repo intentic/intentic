@@ -5,6 +5,7 @@ import { RemoteAllowSchema, RemoteMonitorSchema } from "@intentic/sandbox-contra
 import type { RemoteTerminal } from "@intentic/sandbox-contract/schemas/remote-access";
 import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
+import { opt } from "../../opt.js";
 import type { RemoteInfo } from "./remote-device.js";
 
 /* remoted's control routes, asked on the socket netd serves for a connected device (`<DEVICE_SOCKET_DIR>/<uplink
@@ -50,8 +51,18 @@ const InfoSchema = z
         allow: RemoteAllowSchema.strip(),
         monitors: z.array(RemoteMonitorSchema.strip()),
         environments: z.array(z.string()),
+        // remoted's account of its screen (`describe()`): only its `reason` is read, said when there is none to show.
+        screen: z.object({ reason: z.string().optional() }).optional().catch(undefined),
     })
-    .transform(({ version, allow, monitors, environments }): RemoteInfo => ({ version, allow, monitors, environments }));
+    .transform(
+        ({ version, allow, monitors, environments, screen }): RemoteInfo => ({
+            version,
+            allow,
+            monitors,
+            environments,
+            ...opt("screenReason", monitors.length === 0 ? screen?.reason : undefined),
+        }),
+    );
 
 // A terminal as remoted lists it; `createdAt` read as ms since the epoch whether it came as a number or a date.
 const TerminalSchema = z.object({

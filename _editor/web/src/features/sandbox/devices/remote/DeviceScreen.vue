@@ -6,6 +6,7 @@
 <script setup lang="ts">
 import { Button, Icon, Picker, SegmentedControl, toneWash, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { onScreen } from "../../../../workbench/window/onScreen";
 import { isApplePlatform } from "@intentic/ui/keys";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
@@ -136,7 +137,12 @@ const message = computed(() => {
         case `failed`:
             return status.value.reason;
         default:
-            return picture.pictured.value ? undefined : t(`sandbox.deviceScreen.connectingTo`, { name });
+            if (picture.pictured.value) {
+                return undefined;
+            }
+            // Out of sight the computer is told to stop sending (useDeviceScreen), so no picture comes: say that, not
+            // that it is still connecting.
+            return onScreen.value ? t(`sandbox.deviceScreen.connectingTo`, { name }) : t(`sandbox.deviceScreen.pausedHidden`, { name });
     }
 });
 const waiting = computed(() => message.value !== undefined && status.value.kind !== `failed`);

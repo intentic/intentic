@@ -40,6 +40,8 @@ export interface RemoteStatus {
     readonly reason?: string | undefined;
     readonly allow: { readonly view: boolean; readonly control: boolean; readonly terminal: boolean };
     readonly monitors: readonly RemoteMonitor[];
+    // Why there is no screen to show, when monitors is empty and the computer knows (what to install for one).
+    readonly screenReason?: string | undefined;
     readonly environments: readonly string[];
     readonly terminals: readonly RemoteTerminalInfo[];
 }

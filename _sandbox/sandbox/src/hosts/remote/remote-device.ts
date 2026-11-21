@@ -28,7 +28,8 @@ import { type ConnectionEnvironments, isDistro } from "./remote-environments.js"
    the person at the computer answers, up to ten minutes, inside the hub's own ceiling on a device call. */
 
 // What remoteStart answers, and what remoted's own `GET /info` is read as (remoted-control.ts).
-export type RemoteInfo = RemoteStartResult;
+// What remoteStart answers, plus what only remoted's own `/info` says: why there is no screen to show (remoted-control.ts).
+export type RemoteInfo = RemoteStartResult & { readonly screenReason?: string };
 
 // What an agent is sent: `iceServers` only to one advertising `remote-ice`, since the input schema is strict and an older
 // agent would refuse the whole call over a field it does not know. Pure.

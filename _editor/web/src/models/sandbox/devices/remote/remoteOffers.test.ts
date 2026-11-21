@@ -77,3 +77,10 @@ it("names a terminal by the computer and where on it the shell runs", () => {
     expect(primaryMonitor([{ ...monitor, id: `1`, primary: false }, monitor])?.id).toBe(`0`);
     expect(primaryMonitor([])).toBeUndefined();
 });
+
+it("says why a computer with no screen to show has none, when it knows, and draws no button when it does not", () => {
+    const reason = `this computer has no display, and a virtual desktop needs Xvfb and a desktop session: install xvfb xfce4`;
+    const headless = remoteSide(row(), { kind: `answered`, status: status({ monitors: [], screenReason: reason }) });
+    expect(headless?.screen).toEqual({ ready: false, reason });
+    expect(remoteSide(row(), { kind: `answered`, status: status({ monitors: [] }) })?.screen).toBeUndefined();
+});

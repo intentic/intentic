@@ -57,6 +57,19 @@ const blockedBefore = (row: DeviceRow): string | undefined => {
     return undefined;
 };
 
+// The PC's screen is its native side's alone; a distro's own remoted names none (the sandbox drops any it does). A native
+// side with no screen to show says why when remoted knows (no display and no Xvfb: what to install), rather than hiding
+// the button and leaving the person to guess.
+const screenOffer = (native: boolean, status: RemoteStatus): Offer | undefined => {
+    if (!native) {
+        return undefined;
+    }
+    if (status.monitors.length === 0) {
+        return status.screenReason === undefined ? undefined : off(status.screenReason);
+    }
+    return status.allow.view ? READY : off(t(`sandbox.deviceRemote.viewOff`));
+};
+
 /** One environment's offers, or undefined for a row with no command door (nothing remote reaches it). */
 export const remoteSide = (row: DeviceRow, read: StatusRead | undefined): RemoteSide | undefined => {
     const device = row.device.hostId;
@@ -84,8 +97,7 @@ export const remoteSide = (row: DeviceRow, read: StatusRead | undefined): Remote
         checking: false,
         monitors: status.monitors,
         terminals: status.terminals,
-        // The PC's screen is its native side's alone; a distro's own remoted names none (the sandbox drops any it does).
-        screen: !native || status.monitors.length === 0 ? undefined : status.allow.view ? READY : off(t(`sandbox.deviceRemote.viewOff`)),
+        screen: screenOffer(native, status),
         terminal: status.allow.terminal ? READY : off(t(`sandbox.deviceRemote.terminalOff`)),
     };
 };

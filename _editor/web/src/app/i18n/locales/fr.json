@@ -11930,6 +11930,7 @@
             "reconnecting": "Reconnexion…",
             "connecting": "Connexion…",
             "connectingTo": "Connexion à {name}…",
+            "pausedHidden": "En pause tant que cette fenêtre n'est pas visible : {name} n'envoie rien tant que vous ne regardez pas.",
             "keysCtrlAltDel": "Écran de sécurité",
             "keysWin": "Menu Démarrer",
             "keysAltTab": "Changer de fenêtre",
