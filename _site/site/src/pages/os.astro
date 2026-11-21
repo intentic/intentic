@@ -1,0 +1,236 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import PageHero from "../components/content/PageHero.astro";
+import OsInstaller from "../components/download/OsInstaller.astro";
+import OsStackFigure from "../components/figures/OsStackFigure.astro";
+import OsUpdateFigure from "../components/figures/OsUpdateFigure.astro";
+import OsIsolationFigure from "../components/figures/OsIsolationFigure.astro";
+import OsEditionsFigure from "../components/figures/OsEditionsFigure.astro";
+import OsPairingFigure from "../components/figures/OsPairingFigure.astro";
+import { APP_URL } from "@intentic/site-content/site";
+
+/* INTENTIC OS: the dedicated operating system for autonomous coding agents.
+   A minimal, immutable Linux host based on Fedora bootc, Kata microVMs, and the ic host authority. */
+
+const jumpLinks = {
+    label: "Explore",
+    links: [
+        { href: "#architecture", label: "The Stack" },
+        { href: "#updates", label: "Atomic Updates" },
+        { href: "#isolation", label: "Sandbox Isolation" },
+        { href: "#editions", label: "Editions" },
+        { href: "#setup", label: "Zero-Touch Setup" },
+        { href: "#installer", label: "Download ISO" },
+    ],
+};
+---
+
+<BaseLayout breadcrumbs={[{ name: "Intentic OS", path: "/os/" }]}>
+    <Nav />
+    <main class="flex-1">
+        <!-- Hero: The claim, key badges, and jump navigation -->
+        <PageHero
+            eyebrow="Intentic OS"
+            heading="An immutable Linux OS built for autonomous coding agents."
+            sub="Bare-metal performance, atomic bootc deployments, hardware-isolated sandboxes, and zero-touch setup on any x86-64 PC or server."
+            jumpLinks={jumpLinks}
+        >
+            <div class="mt-8 flex flex-wrap items-center gap-4">
+                <a href="#installer" class="btn btn-primary">Download the ISO</a>
+                <a href="#architecture" class="btn btn-secondary">Explore Architecture</a>
+            </div>
+
+            <div class="mt-8 flex flex-wrap gap-2 text-3xs font-mono text-subtle">
+                <span class="border border-line bg-surface px-2.5 py-1">bootc A/B deployments</span>
+                <span class="border border-line bg-surface px-2.5 py-1">greenboot auto-rollback</span>
+                <span class="border border-line bg-surface px-2.5 py-1">runc &middot; kata microVMs</span>
+                <span class="border border-line bg-surface px-2.5 py-1">sway kiosk</span>
+                <span class="border border-line bg-surface px-2.5 py-1 text-gold">TPM 2.0 full-disk encryption</span>
+            </div>
+        </PageHero>
+
+        <!-- Section 1: The Stack -->
+        <section id="architecture" class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+            <div class="max-w-3xl">
+                <span class="eyebrow">Architecture</span>
+                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">A deterministic floor. The agent controls the machine without root.</h2>
+                <p class="mt-3 text-sm leading-relaxed text-muted">
+                    Sandboxes run on the metal with no VM layers in between. The first steward sandbox manages hardware, storage, and updates through the audited <code class="font-mono text-subtle">ic</code> host authority. It never receives root or the host Docker socket.
+                </p>
+            </div>
+
+            <div class="mt-8">
+                <OsStackFigure />
+            </div>
+
+            <div class="mt-8 grid gap-6 sm:grid-cols-3">
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">No Raw Docker Socket</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Agents never touch the host Docker daemon directly. Operations pass through capability-scoped, audited device tools.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Steward Sandbox</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        The first sandbox supervises host Wi-Fi, audio, screens, and OS update approvals via <code class="font-mono text-3xs text-subtle">ic os</code>.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Immutable <span class="font-mono text-gold">/usr</span></h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        The root operating system is deployed as a read-only bootc container image. Agent tasks cannot corrupt or drift system binaries.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Atomic Updates & Self-Healing -->
+        <section id="updates" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
+            <div class="max-w-3xl">
+                <span class="eyebrow">Reliability</span>
+                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Atomic updates in background. Self-healing on failure.</h2>
+                <p class="mt-3 text-sm leading-relaxed text-muted">
+                    OS updates stage in the background while workspaces run. If an update fails health checks, greenboot automatically rolls back to the prior image deployment.
+                </p>
+            </div>
+
+            <div class="mt-8">
+                <OsUpdateFigure />
+            </div>
+
+            <div class="mt-8 grid gap-6 sm:grid-cols-3">
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Background Staging</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        <code class="font-mono text-3xs text-subtle">ic os update</code> pulls new container layers into the local OSTree repository without interrupting active agent turns.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Orderly Reboots</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Every running sandbox records its state into <code class="font-mono text-3xs text-subtle">restart-resume.json</code> before the host restarts.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Three-Boot Rollback</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        If Docker fails or expected sandboxes do not answer within 10 minutes across 3 boots, greenboot rolls back to the previous deployment.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Dual-Runtime Sandboxing -->
+        <section id="isolation" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
+            <div class="max-w-3xl">
+                <span class="eyebrow">Isolation</span>
+                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Fast containers for dev loops. Kata microVMs for untrusted code.</h2>
+                <p class="mt-3 text-sm leading-relaxed text-muted">
+                    Choose between sub-second container starts or hardware-isolated microVMs. Both run on the same bare-metal host with bounded memory and swap.
+                </p>
+            </div>
+
+            <div class="mt-8">
+                <OsIsolationFigure />
+            </div>
+
+            <div class="mt-8 grid gap-6 sm:grid-cols-3">
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Instant Containers</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Standard sandboxes launch in &lt; 200 ms via runc, using Linux cgroups v2, user namespaces, and seccomp filters.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Kata MicroVMs</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Workloads demanding <code class="font-mono text-3xs text-subtle">--privileged</code> or untrusted code run in dedicated microVMs with their own guest kernel.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Bounded Swap</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Hard swap bounds (1–4 GiB) stop runaway compiler fan-outs or memory leaks from paging the host machine to a standstill.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Server & Desktop Editions -->
+        <section id="editions" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
+            <div class="max-w-3xl">
+                <span class="eyebrow">Editions</span>
+                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Headless server or dedicated desktop kiosk.</h2>
+                <p class="mt-3 text-sm leading-relaxed text-muted">
+                    Intentic OS ships in two editions: a headless server for homelabs and mini-PCs, and a desktop edition featuring a locked Sway kiosk.
+                </p>
+            </div>
+
+            <div class="mt-8">
+                <OsEditionsFigure />
+            </div>
+
+            <div class="mt-8 grid gap-6 sm:grid-cols-2">
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Server Edition (<span class="font-mono text-gold text-3xs">ghcr.io/intentic/os</span>)</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Pure headless Linux. Zero graphical overhead. Controlled entirely through <a href={APP_URL} class="text-link hover:underline">app.intentic.dev</a>, phone companion apps, or local network.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Desktop Edition (<span class="font-mono text-gold text-3xs">ghcr.io/intentic/os-desktop</span>)</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Tiled Sway kiosk with an i3bar status stream, salted PIN screen lock, and isolated Wayland sockets with amber compositor window frames.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5: Zero-Touch Setup & Pairing -->
+        <section id="setup" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
+            <div class="max-w-3xl">
+                <span class="eyebrow">First Boot</span>
+                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Zero questions during install. Paired in 60 seconds.</h2>
+                <p class="mt-3 text-sm leading-relaxed text-muted">
+                    No partition menus or keyboard prompts. Flash the ISO to a USB drive, boot the machine, and pair from your phone or browser.
+                </p>
+            </div>
+
+            <div class="mt-8">
+                <OsPairingFigure />
+            </div>
+
+            <div class="mt-8 grid gap-6 sm:grid-cols-3">
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Unattended Install</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        The installer automatically wipes the target internal disk, partitions root and state, and enables TPM 2.0 encryption.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">Local Web Pairing</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        The box serves <code class="font-mono text-3xs text-subtle">http://intentic.local</code> on your local network until pairing completes, then closes forever.
+                    </p>
+                </div>
+                <div class="border border-line bg-card p-4">
+                    <h3 class="text-xs font-semibold text-content uppercase tracking-wider">TPM 2.0 Encryption</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        LUKS disk encryption is sealed against the machine's TPM 2.0 chip. It unlocks automatically at boot with no passphrase prompts.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 6: Download & Install -->
+        <section id="installer" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-24">
+            <div class="border border-line bg-surface p-6 sm:p-10">
+                <OsInstaller />
+            </div>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

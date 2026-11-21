@@ -1,0 +1,101 @@
+---
+/* OS Isolation figure: Comparison of runc containers and Kata microVMs with bounded swap. */
+const GLYPHS = {
+    box: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5"/><path d="M12 12v9"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    gauge: '<circle cx="12" cy="12" r="10"/><path d="M16.2 7.8 12 12"/>',
+};
+---
+
+<figure class="os-isolation-fig" aria-label="Intentic OS Sandbox Isolation: runc containers and Kata microVMs">
+    <div class="border border-line bg-surface p-4 sm:p-6">
+        <div class="grid gap-6 md:grid-cols-2">
+            <!-- Container Mode (runc) -->
+            <div class="flex flex-col justify-between border border-line bg-card p-5">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.box}</svg>`} />
+                            <h3 class="text-base font-semibold text-content">Container Mode</h3>
+                        </div>
+                        <span class="border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">runc</span>
+                    </div>
+
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Sub-second startup for everyday coding loops. Leverages Linux cgroups v2, user namespaces, and seccomp profiles.
+                    </p>
+
+                    <ul class="mt-4 space-y-2 border-t border-line/60 pt-3 text-xs text-subtle">
+                        <li class="flex items-center gap-2">
+                            <span class="h-1 w-1 rounded-full bg-gold"></span>
+                            <span><strong>Shared host kernel:</strong> Near-zero overhead</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="h-1 w-1 rounded-full bg-gold"></span>
+                            <span><strong>Instant start:</strong> Ready in &lt; 200 ms</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="h-1 w-1 rounded-full bg-gold"></span>
+                            <span><strong>Target:</strong> Standard coding agents &amp; repos</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-subtle">
+                    isolation: "container" (default)
+                </div>
+            </div>
+
+            <!-- MicroVM Mode (Kata) -->
+            <div class="flex flex-col justify-between border border-gold/40 bg-card p-5">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.shield}</svg>`} />
+                            <h3 class="text-base font-semibold text-content">MicroVM Mode</h3>
+                        </div>
+                        <span class="border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-3xs text-gold">Kata runtime</span>
+                    </div>
+
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        True hardware virtualization boundary for privileged workloads, untrusted agent code, and Docker-in-Docker engines.
+                    </p>
+
+                    <ul class="mt-4 space-y-2 border-t border-line/60 pt-3 text-xs text-subtle">
+                        <li class="flex items-center gap-2">
+                            <span class="h-1 w-1 rounded-full bg-gold"></span>
+                            <span><strong>Independent guest kernel:</strong> Full VM boundary</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="h-1 w-1 rounded-full bg-gold"></span>
+                            <span><strong>Safe privileges:</strong> Root in VM cannot touch host</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="h-1 w-1 rounded-full bg-gold"></span>
+                            <span><strong>Target:</strong> Privileged tasks, untrusted builds</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
+                    isolation: "auto" / "vm"
+                </div>
+            </div>
+        </div>
+
+        <!-- Bounded Swap callout -->
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-4 border border-line bg-card p-4">
+            <div class="flex items-center gap-3">
+                <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.gauge}</svg>`} />
+                <div>
+                    <h4 class="text-xs font-semibold text-content">Bounded Swap Enforced</h4>
+                    <p class="text-2xs text-muted">A runaway memory build or language server leak cannot page the host machine into an unresponsive lockup.</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 font-mono text-3xs text-subtle">
+                <span class="border border-line px-2 py-1">workloadSwapMaxBytes</span>
+                <span class="text-gold">1–4 GiB ceiling</span>
+            </div>
+        </div>
+    </div>
+</figure>

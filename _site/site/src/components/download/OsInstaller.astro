@@ -2,6 +2,8 @@
 import { APP_URL } from "@intentic/site-content/site";
 import { glyph, type GlyphName } from "./glyphs";
 
+const isOsPage = Astro.url.pathname === "/os" || Astro.url.pathname === "/os/";
+
 /* INTENTIC OS, THE INSTALLER: a whole machine for sandboxes, from a USB stick. The links never carry a version; the
    worker's /os/ routes (src/lib/worker/os-downloads.ts) hand over what os.yml last published to R2, and the script
    below fills the version, size and checksum from /os/latest.json. Until a first build is published it says so and
@@ -27,7 +29,9 @@ const traits: { glyph: GlyphName; text: string }[] = [
         <h2 class="display mt-2 text-2xl sm:text-3xl">Give your sandboxes a machine of their own</h2>
         <p class="mt-3 max-w-copy text-sm leading-relaxed text-muted">
             A spare PC or a small server becomes a dedicated host for sandboxes. It needs no screen: you reach it from{" "}
-            <a href={APP_URL} class="text-link hover:underline">your browser</a> and the phone app, from anywhere.
+            <a href={APP_URL} class="text-link hover:underline">your browser</a> and the phone app, from anywhere.{!isOsPage && (
+                <> <a href="/os/" class="text-link hover:underline">Explore the architecture &rarr;</a></>
+            )}
         </p>
         <ul class="mt-6 flex flex-col gap-3 text-sm text-muted">
             {

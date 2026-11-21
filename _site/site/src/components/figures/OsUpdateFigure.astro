@@ -1,0 +1,83 @@
+---
+/* OS Update figure: Atomic A/B bootc deployments and greenboot self-healing gate. */
+const ICONS = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+    rollback: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/>',
+};
+---
+
+<figure class="os-update-fig" aria-label="Intentic OS Atomic Updates: Staging in background and automatic rollback on failure">
+    <div class="border border-line bg-surface p-4 sm:p-6">
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <!-- Stage 1 -->
+            <div class="relative flex flex-col justify-between border border-line bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">01 &middot; Active</span>
+                        <span class="flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20"></span>
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">Deployment A</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted">Currently booted. The entire <code class="font-mono text-subtle">/usr</code> filesystem is strictly read-only.</p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 text-3xs font-mono text-subtle">
+                    status: booted &middot; healthy
+                </div>
+            </div>
+
+            <!-- Stage 2 -->
+            <div class="relative flex flex-col justify-between border border-line bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">02 &middot; Stage</span>
+                        <span class="text-gold" set:html={`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ICONS.download}</svg>`} />
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">Pull Image B</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted"><code class="font-mono text-subtle">ic os update</code> stages newer container layers in background. No interruptions.</p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 text-3xs font-mono text-subtle">
+                    zero downtime &middot; staged
+                </div>
+            </div>
+
+            <!-- Stage 3 -->
+            <div class="relative flex flex-col justify-between border border-line bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">03 &middot; Reboot</span>
+                        <span class="text-subtle" set:html={`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ICONS.refresh}</svg>`} />
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">Orderly Restart</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted"><code class="font-mono text-subtle">ic os update --apply</code> writes resume state for every sandbox, then reboots.</p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 text-3xs font-mono text-subtle">
+                    saves state &middot; boots B
+                </div>
+            </div>
+
+            <!-- Stage 4 -->
+            <div class="relative flex flex-col justify-between border border-gold/40 bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">04 &middot; Health</span>
+                        <span class="text-gold" set:html={`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ICONS.rollback}</svg>`} />
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">greenboot Gate</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted">Tests Docker & sandboxes. If 3 consecutive boots fail, automatically reverts to Deployment A.</p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 text-3xs font-mono text-gold">
+                    auto-rollback &middot; safe
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 text-xs text-subtle">
+            <span class="flex items-center gap-2">
+                <span class="inline-block h-1.5 w-1.5 rounded-full bg-gold"></span>
+                <span>Config stays in <code class="font-mono text-muted">/etc</code>, data in <code class="font-mono text-muted">/var</code>, OS in immutable ostree.</span>
+            </span>
+            <span class="font-mono text-3xs">bootc switch &middot; bootc rollback</span>
+        </div>
+    </div>
+</figure>

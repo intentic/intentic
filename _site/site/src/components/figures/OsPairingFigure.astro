@@ -1,0 +1,65 @@
+---
+/* OS Pairing figure: Zero-touch install, unattended partitioning, and LAN/console pairing. */
+const GLYPHS = {
+    usb: '<rect x="6" y="2" width="12" height="20" rx="2"/><line x1="9" y1="6" x2="9" y2="8"/><line x1="15" y1="6" x2="15" y2="8"/>',
+    wifi: '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+};
+---
+
+<figure class="os-pairing-fig" aria-label="Intentic OS Zero-Touch Setup and Pairing Steps">
+    <div class="border border-line bg-surface p-4 sm:p-6">
+        <div class="grid gap-4 sm:grid-cols-3">
+            <!-- Step 1 -->
+            <div class="flex flex-col justify-between border border-line bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">Step 01</span>
+                        <span class="text-subtle" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.usb}</svg>`} />
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">Flash &amp; Boot</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted">
+                        Write ISO to USB drive. Boot the machine. The installer partitions the target disk and enables TPM 2.0 full-disk encryption with zero interactive prompts.
+                    </p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 font-mono text-3xs text-subtle">
+                    unattended &middot; auto-format
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="flex flex-col justify-between border border-line bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">Step 02</span>
+                        <span class="text-gold" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.wifi}</svg>`} />
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">LAN or Console Pair</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted">
+                        Machine prints its setup code on console and starts a temporary local web page at <code class="font-mono text-subtle">http://intentic.local</code>.
+                    </p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
+                    intentic.local &middot; setup code
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="flex flex-col justify-between border border-gold/40 bg-card p-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-gold">Step 03</span>
+                        <span class="text-gold" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${GLYPHS.check}</svg>`} />
+                    </div>
+                    <h3 class="mt-2 text-sm font-semibold text-content">Steward Sandbox Online</h3>
+                    <p class="mt-1 text-2xs leading-relaxed text-muted">
+                        Enter your account setup code. The 1st steward sandbox starts, connects as host device manager, and the local pairing server shuts down permanently.
+                    </p>
+                </div>
+                <div class="mt-4 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
+                    paired &middot; ready to work
+                </div>
+            </div>
+        </div>
+    </div>
+</figure>

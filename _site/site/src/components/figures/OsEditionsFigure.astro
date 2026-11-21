@@ -1,0 +1,90 @@
+---
+/* OS Editions figure: Server (headless) vs Desktop (Sway kiosk with security-context-v1). */
+const GLYPHS = {
+    server: '<rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+};
+---
+
+<figure class="os-editions-fig" aria-label="Intentic OS Editions: Server and Desktop">
+    <div class="border border-line bg-surface p-4 sm:p-6">
+        <div class="grid gap-6 md:grid-cols-2">
+            <!-- Server Edition -->
+            <div class="flex flex-col justify-between border border-line bg-card p-5">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.server}</svg>`} />
+                            <h3 class="text-base font-semibold text-content">Server Edition</h3>
+                        </div>
+                        <span class="border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">headless</span>
+                    </div>
+
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Lightweight, headless Linux for spare PCs, mini-PCs, homelab servers, or cloud VPS instances.
+                    </p>
+
+                    <ul class="mt-4 space-y-2.5 border-t border-line/60 pt-3 text-xs text-subtle">
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Zero GUI overhead:</strong> All resources dedicated to Docker, agents, and builds.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Browser &amp; Phone control:</strong> Managed remotely via app.intentic.dev and mobile devices.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Fast pairing:</strong> First-boot setup code via console or local network web page.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-subtle">
+                    image: ghcr.io/intentic/os:stable
+                </div>
+            </div>
+
+            <!-- Desktop Edition -->
+            <div class="flex flex-col justify-between border border-gold/40 bg-card p-5">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.monitor}</svg>`} />
+                            <h3 class="text-base font-semibold text-content">Desktop Edition</h3>
+                        </div>
+                        <span class="border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-3xs text-gold">sway kiosk</span>
+                    </div>
+
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Complete workstation with a Sway Wayland kiosk, system status bar, screen lock, and isolated sandbox windows.
+                    </p>
+
+                    <ul class="mt-4 space-y-2.5 border-t border-line/60 pt-3 text-xs text-subtle">
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Amber window frames:</strong> Compositor-enforced borders prevent agents from spoofing windows.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Isolated Wayland sockets:</strong> Each sandbox receives its own restricted security-context-v1 socket.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Input security:</strong> Sandboxes cannot steal keyboard focus (<code class="font-mono text-3xs">no_focus</code>) or spy on keystrokes.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
+                            <span><strong>Screen PIN lock:</strong> Salted PIN with automatic lockout after 5 failed attempts.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
+                    image: ghcr.io/intentic/os-desktop:stable
+                </div>
+            </div>
+        </div>
+    </div>
+</figure>

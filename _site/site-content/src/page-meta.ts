@@ -82,6 +82,13 @@ export const pageMeta: Record<string, PageMeta> = {
             "Run your coding agents on our servers or on your own computer. What each costs, what it asks of you, and what the install does.",
         datePublished: "2026-08-29",
     },
+    // The dedicated OS page: immutable Linux, bootc, Kata microVMs, and zero-touch installation.
+    "/os/": {
+        title: "Intentic OS · An immutable Linux operating system for coding agents",
+        description:
+            "An immutable, self-healing Linux operating system for autonomous coding agents. Atomic bootc updates, hardware-isolated sandboxes, and zero-touch setup.",
+        datePublished: "2026-11-21",
+    },
     // Entries come from GitHub Releases at build; description says what changed, not version numbers.
     "/changelog/": {
         title: "Changelog · intentic",

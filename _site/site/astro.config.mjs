@@ -140,7 +140,7 @@ export default defineConfig({
                     p === "/docs/quickstart/"
                 ) {
                     item.priority = 0.8;
-                } else if (p.startsWith("/docs/") || p === "/blog/" || p.startsWith("/blog/") || p === "/where-it-runs/" || p === "/download/") {
+                } else if (p.startsWith("/docs/") || p === "/blog/" || p.startsWith("/blog/") || p === "/where-it-runs/" || p === "/download/" || p === "/os/") {
                     item.priority = 0.7;
                 } else if (p.startsWith("/api/")) {
                     item.priority = 0.4;

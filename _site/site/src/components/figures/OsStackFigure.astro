@@ -1,0 +1,131 @@
+---
+/* OS Stack figure: Bare metal, deterministic bootc floor, host authority, and sandboxes. */
+const GLYPHS = {
+    box: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5"/><path d="M12 12v9"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+    terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+};
+---
+
+<figure class="os-stack-fig" aria-label="Intentic OS Architecture: Sandboxes running above the ic host authority and deterministic bootc floor">
+    <div class="relative w-full overflow-hidden border border-line bg-surface p-4 sm:p-6">
+        <!-- Top: Sandboxes Layer -->
+        <div class="mb-4">
+            <div class="flex items-center justify-between pb-2">
+                <span class="eyebrow text-2xs">01 · Sandboxes Layer</span>
+                <span class="text-2xs text-subtle font-mono">runc · kata microVM</span>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+                <!-- Steward Sandbox -->
+                <div class="border border-gold/40 bg-card p-3.5 sm:p-4">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gold" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.box}</svg>`} />
+                            <h3 class="text-sm font-semibold text-content">Steward Sandbox</h3>
+                        </div>
+                        <span class="rounded bg-gold/10 px-1.5 py-0.5 text-3xs font-mono text-gold">1st Sandbox</span>
+                    </div>
+                    <p class="mt-2 text-xs text-muted">Manages host network, storage, screens, and OS updates via audited device tools.</p>
+                    <div class="mt-2.5 flex flex-wrap gap-1.5 text-3xs font-mono text-subtle">
+                        <span class="border border-line px-1.5 py-0.5">no root</span>
+                        <span class="border border-line px-1.5 py-0.5">no docker socket</span>
+                        <span class="border border-line px-1.5 py-0.5 text-gold">device tools</span>
+                    </div>
+                </div>
+
+                <!-- Worker Sandboxes -->
+                <div class="border border-line bg-card p-3.5 sm:p-4">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-muted" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.box}</svg>`} />
+                            <h3 class="text-sm font-semibold text-content">Coding Sandboxes</h3>
+                        </div>
+                        <span class="rounded bg-surface px-1.5 py-0.5 text-3xs font-mono text-subtle">workspaces</span>
+                    </div>
+                    <p class="mt-2 text-xs text-muted">Isolated environments for git repos, language toolchains, test runs, and background tasks.</p>
+                    <div class="mt-2.5 flex flex-wrap gap-1.5 text-3xs font-mono text-subtle">
+                        <span class="border border-line px-1.5 py-0.5">bounded swap</span>
+                        <span class="border border-line px-1.5 py-0.5">cgroup v2 limits</span>
+                        <span class="border border-line px-1.5 py-0.5">kata microVM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle: Host Authority Tier -->
+        <div class="mb-4">
+            <div class="flex items-center justify-between pb-2">
+                <span class="eyebrow text-2xs">02 · Host Authority & Policy</span>
+                <span class="text-2xs text-subtle font-mono">user service · polkit rules</span>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-3">
+                <div class="border border-line bg-card p-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-content">intentic-machine</span>
+                        <span class="text-3xs font-mono text-subtle">systemd --user</span>
+                    </div>
+                    <p class="mt-1 text-2xs text-muted">Lingering user service. Capability scopes, audited toolcalls.</p>
+                </div>
+
+                <div class="border border-gold/50 bg-card p-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gold">ic os &middot; ic sandbox</span>
+                        <span class="text-3xs font-mono text-gold">the authority</span>
+                    </div>
+                    <p class="mt-1 text-2xs text-muted">Sole host interface. Updates, reboots, health verdicts, sandboxes.</p>
+                </div>
+
+                <div class="border border-line bg-card p-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-content">dockerd</span>
+                        <span class="text-3xs font-mono text-subtle">engine</span>
+                    </div>
+                    <p class="mt-1 text-2xs text-muted">Supervises runc containers and Kata microVMs with resource ceilings.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Base: Deterministic Floor -->
+        <div class="mb-4 border border-line bg-card p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-line">
+                <div class="flex items-center gap-2">
+                    <span class="text-gold" set:html={`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.shield}</svg>`} />
+                    <span class="text-xs font-semibold text-content">Deterministic Floor</span>
+                </div>
+                <span class="text-3xs text-subtle">Operates without any running agent</span>
+            </div>
+            <div class="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                <div>
+                    <span class="font-mono text-2xs text-gold">bootc</span>
+                    <p class="mt-0.5 text-2xs text-muted">Immutable Fedora image. Read-only <code class="font-mono text-subtle">/usr</code>. A/B atomic deployments.</p>
+                </div>
+                <div>
+                    <span class="font-mono text-2xs text-gold">greenboot</span>
+                    <p class="mt-0.5 text-2xs text-muted">Automated boot health checks. Rolls back after 3 failed boots.</p>
+                </div>
+                <div>
+                    <span class="font-mono text-2xs text-gold">systemd</span>
+                    <p class="mt-0.5 text-2xs text-muted">Service supervisor. Automatic restarts, timers, and orderly shutdown.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom: Bare Metal Hardware -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border border-line/60 bg-ground p-3 text-xs">
+            <div class="flex items-center gap-2">
+                <span class="text-subtle" set:html={`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.cpu}</svg>`} />
+                <span class="font-medium text-subtle">Bare Metal Hardware:</span>
+            </div>
+            <div class="flex flex-wrap gap-2 text-3xs font-mono text-subtle">
+                <span class="border border-line bg-card px-2 py-0.5">x86-64</span>
+                <span class="border border-line bg-card px-2 py-0.5">UEFI</span>
+                <span class="border border-line bg-card px-2 py-0.5">NVMe</span>
+                <span class="border border-line bg-card px-2 py-0.5">NVIDIA GPU</span>
+                <span class="border border-line bg-card px-2 py-0.5 text-gold">TPM 2.0 (FDE)</span>
+            </div>
+        </div>
+    </div>
+</figure>
