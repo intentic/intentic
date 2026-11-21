@@ -57,6 +57,9 @@ struct Job {
     paintover_final: bool,
     /// New content over much of the picture after a lull (FreshContent): given a keyframe's budget.
     fresh: bool,
+    /// The most a keyframe or fresh frame may be, in kbit, when a viewer's pictures ride a track: what the slowest
+    /// such link carries in [`KEY_WINDOW`] (None: a keyframe's usual budget).
+    key_kbit: Option<u32>,
     /// Rows that changed in this capture.
     band: Option<Band>,
     /// Per-macroblock change map for this capture (None: analyse everything).
@@ -391,6 +394,47 @@ fn flow(hub: &Hub, interval_ms: f64) -> Flow {
     flow
 }
 
+/// How much of a track's link a keyframe (or a fresh frame) may take: a keyframe that takes longer to cross the link
+/// than this fills the bottleneck's buffer, what overflows is lost, and the congestion estimate collapses under the
+/// loss (measured: about a megabyte in a quarter second as a cap fell). Pictures behind it wait as long.
+const KEY_WINDOW: Duration = Duration::from_millis(200);
+/// The least a keyframe is allowed whatever the link, kbit: below it a 1080p keyframe is mush the paint-over has to
+/// redo anyway, and a link this slow takes a moment to carry one regardless.
+const KEY_FLOOR_KBIT: u32 = 160;
+
+/// A keyframe's budget on a track whose congestion control estimates `estimate_kbps`, kbit.
+fn key_budget_kbit(estimate_kbps: f64) -> u32 {
+    ((estimate_kbps * KEY_WINDOW.as_secs_f64()) as u32).max(KEY_FLOOR_KBIT)
+}
+
+/// Past this, one step of the capture loop (or one picture's encode) is logged by name: the bench once saw six seconds
+/// with no picture encoded, the flow open and nothing skipped, and never again in 60 runs, so a stall says where it is.
+const STEP_SLOW: Duration = Duration::from_secs(1);
+
+/// The step of the capture loop it is in, and since when ([`STEP_SLOW`]).
+struct Step {
+    name: &'static str,
+    at: Instant,
+}
+
+impl Step {
+    fn new() -> Step {
+        Step {
+            name: "start",
+            at: Instant::now(),
+        }
+    }
+
+    fn enter(&mut self, name: &'static str) {
+        let took = self.at.elapsed();
+        if took > STEP_SLOW {
+            log::warn!("capture: {} ms in {}", took.as_millis(), self.name);
+        }
+        self.name = name;
+        self.at = Instant::now();
+    }
+}
+
 /// Least time between two keyframes a lagging viewer's recovery may ask for: each one is a burst for every viewer.
 const RECOVERY_KEYFRAME_GAP: Duration = Duration::from_secs(1);
 
@@ -644,6 +688,7 @@ fn capture_loop(
     let mut fresh = FreshContent::new();
     // Since when the flow has held the capture back (a track's keyframe waits at most TRACK_HOLD_MAX).
     let mut held_since: Option<Instant> = None;
+    let mut step = Step::new();
 
     loop {
         if hub.is_stopped()
@@ -657,12 +702,14 @@ fn capture_loop(
         // Allow slight early capture so source jitter doesn't alias into dropped frames.
         let min_interval = interval.mul_f64(0.85);
         let interval_ms = interval.as_secs_f64() * 1000.0;
+        step.enter("pump");
         cap.pump()?;
         if cap.needs_rebuild() {
             return Ok(());
         }
         note_changes(cap, &hub);
         hub.drain_wake();
+        step.enter("snapshots");
         let snaps = std::mem::take(&mut *hub.snapshots.lock());
         if !snaps.is_empty() {
             // The whole current screen, whether or not anyone is watching. Damage
@@ -685,6 +732,7 @@ fn capture_loop(
         while let Ok((i, b)) = ret_rx.try_recv() {
             pool[i] = Some(b);
         }
+        step.enter("clients");
         let clients = hub.video_clients();
         if clients.is_empty() {
             if had_clients {
@@ -701,6 +749,7 @@ fn capture_loop(
             continue;
         }
         let viewers: Vec<rate::Viewer> = clients.iter().map(|c| c.viewer()).collect();
+        step.enter("rate");
         let steer = rate::steering(&viewers);
         hub.steering
             .store(steer.map_or(0, |v| v.id), Ordering::Relaxed);
@@ -818,6 +867,7 @@ fn capture_loop(
                 continue;
             }
         }
+        step.enter("flow");
         let held = match flow(&hub, interval_ms) {
             Flow::Open => false,
             Flow::Acks => !want_key,
@@ -831,6 +881,7 @@ fn capture_loop(
         }
         held_since = None;
         // Need a free buffer (the encoder may still hold the other).
+        step.enter("buffer");
         if pool[next_idx].is_none() {
             match ret_rx.recv_timeout(Duration::from_millis(50)) {
                 Ok((i, b)) => pool[i] = Some(b),
@@ -841,6 +892,7 @@ fn capture_loop(
             }
         }
 
+        step.enter("grab");
         let t0 = Instant::now();
         let origin = cap.damage().damaged_at.unwrap_or(t0);
         hub.stats
@@ -991,6 +1043,14 @@ fn capture_loop(
                 paintover,
                 paintover_final: frame_paintover && paintover_left == 0,
                 fresh: fresh_frame,
+                // Every viewer gets the keyframe, the one that asked for it (not started, so not steering) as well:
+                // the slowest track's link sets its size.
+                key_kbit: clients
+                    .iter()
+                    .filter(|c| !c.internal)
+                    .filter_map(|c| c.on_track()?.estimate_kbps())
+                    .min_by(f64::total_cmp)
+                    .map(key_budget_kbit),
                 mb_dirty: mb_map,
                 band,
                 changed,
@@ -1055,6 +1115,8 @@ struct StripeJob {
     paintover: bool,
     /// New content after a lull (FreshContent): a keyframe's budget at motion quality.
     fresh: bool,
+    /// A keyframe's (and a fresh frame's) most, kbit, on a track (`Job::key_kbit`).
+    key_kbit: Option<u32>,
     crf: f32,
     cap: u32,
     mb_dirty: Option<Arc<Vec<u8>>>,
@@ -1265,7 +1327,14 @@ fn stripe_worker(
         } else {
             job.crf
         };
-        if job.force_idr || job.fresh {
+        if let (true, Some(most)) = (job.force_idr || job.fresh, job.key_kbit) {
+            // On a track the keyframe is what the link carries in KEY_WINDOW, a full buffer of that size: no ack
+            // holds the next pictures back while a larger one crosses, and the bottleneck's buffer would overflow. The
+            // paint-over sharpens it once the screen is still. A track carries one stripe (rtc's `Pictures`), so the
+            // stripe's buffer is the picture's.
+            s.enc.set_rate_key(crf, job.cap, most);
+            s.applied_kbps = 0;
+        } else if job.force_idr || job.fresh {
             // A keyframe is what a new viewer sees first, and a fresh frame the new page; don't starve either to the
             // steady-state frame budget. Eight frames of buffer at 4x the cap, full, of which x264 lets one frame take
             // half: up to 16 frames' worth of the cap, though CRF keeps most far under it. The next frame sets the cap
@@ -1308,6 +1377,13 @@ fn stripe_worker(
             info.as_deref_mut(),
             &mut out,
         );
+        if te.elapsed() > STEP_SLOW {
+            log::warn!(
+                "stripe y{}: one picture took {} ms to encode",
+                s.y,
+                te.elapsed().as_millis()
+            );
+        }
         if debug {
             log::info!(
                 "stripe y{} encode {} us wall, thread cpu total {} us, {} bytes",
@@ -1463,6 +1539,7 @@ fn encode_loop(
                     force_idr: job.force_idr,
                     paintover: job.paintover,
                     fresh: job.fresh,
+                    key_kbit: job.key_kbit,
                     crf: want_crf,
                     cap,
                     mb_dirty: job.mb_dirty.clone(),
@@ -1505,6 +1582,7 @@ fn encode_loop(
         hub.stats.bytes.fetch_add(total as u64, Ordering::Relaxed);
         if all_key {
             hub.stats.keyframes.fetch_add(1, Ordering::Relaxed);
+            hub.stats.key_bytes.store(total as u64, Ordering::Relaxed);
         }
         frame_id = frame_id.wrapping_add(1);
         let flags =
@@ -1605,6 +1683,14 @@ fn encode_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_track_keyframe_is_what_its_link_carries_in_a_fifth_of_a_second() {
+        assert_eq!(key_budget_kbit(3000.0), 600);
+        assert_eq!(key_budget_kbit(9000.0), 1800);
+        // A link too slow for any keyframe still gets one worth showing.
+        assert_eq!(key_budget_kbit(200.0), KEY_FLOOR_KBIT);
+    }
 
     #[test]
     fn a_page_that_loads_after_a_lull_gets_the_budget_for_its_first_paints() {

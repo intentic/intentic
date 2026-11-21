@@ -60,6 +60,12 @@ pub trait VideoEncoder: Send {
     /// The same with an explicit VBV buffer, in kbit, which starts full: room for one large picture (a keyframe, a page
     /// that loaded) however little the steady buffer held. The next `set_rate` brings the steady buffer back.
     fn set_rate_buf(&mut self, crf: f32, max_kbps: u32, buf_kbit: u32);
+    /// For the next picture, a keyframe a slow link must carry: at most `most_kbit`, at `max_kbps` otherwise. A full
+    /// VBV buffer of that size by default; an encoder without one finds its own way to that size, or near it. The next
+    /// `set_rate` brings the steady rate back.
+    fn set_rate_key(&mut self, crf: f32, max_kbps: u32, most_kbit: u32) {
+        self.set_rate_buf(crf, max_kbps, most_kbit);
+    }
     /// The frames it reads, the best first; the pipeline hands it the first one the capture can fill. I420 by default.
     fn formats(&self) -> &'static [FrameFormat] {
         &[FrameFormat::I420]

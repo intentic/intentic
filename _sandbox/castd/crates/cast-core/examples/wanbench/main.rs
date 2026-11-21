@@ -8,7 +8,9 @@
 //! own timeline to `--out`.
 //!
 //! `wanbench --listen IP:PORT --rtc IP:0 --out FILE [--encoder openh264|x264] [--size 1280x720] [--fps 60]
-//!  [--seconds 60] [--warmup 4] [--dev IFACE --caps 0:8000,20:2000,40:8000 --buffer-ms 100] [--mode dc|track]`
+//!  [--seconds 60] [--warmup 4] [--dev IFACE --caps 0:8000,20:2000,40:8000 --buffer-ms 100] [--mode dc|track]
+//!  [--keyframes 16,31]` (the page asks for a keyframe that many seconds into the measurement, as a decoder that lost
+//!  the stream would)
 
 mod scene;
 
@@ -101,6 +103,8 @@ struct Sample {
     target_kbps: u32,
     cap_kbps: Option<u32>,
     keyframes: u64,
+    /// The last keyframe's size, bytes.
+    key_bytes: u64,
     encoded: u64,
     rtt_ms: u32,
     on_peer: bool,
@@ -254,6 +258,7 @@ async fn run(a: HashMap<String, String>) -> Result<(), String> {
             "seconds": seconds,
             "warmup": num("warmup", 4.0),
             "label": a.get("label").cloned().unwrap_or_default(),
+            "keyframes": a.get("keyframes").map(|k| k.split(',').filter_map(|t| t.parse::<f64>().ok()).collect::<Vec<_>>()).unwrap_or_default(),
         }),
         out,
         run: Arc::new(Mutex::new(Run {
@@ -349,6 +354,7 @@ async fn sample(b: Bench, hub: Arc<Hub>) {
             target_kbps: hub.target_kbps.load(Ordering::Relaxed),
             cap_kbps: cap_now,
             keyframes: hub.stats.keyframes.load(Ordering::Relaxed),
+            key_bytes: hub.stats.key_bytes.load(Ordering::Relaxed),
             encoded: hub.stats.encoded.load(Ordering::Relaxed),
             rtt_ms: client
                 .as_ref()

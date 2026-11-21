@@ -8,18 +8,18 @@
 #
 #   run.sh --bin target/release/examples/wanbench --out /tmp/wan/lan-dc.json --mode dc|track [--rtt 100] [--jitter 10]
 #          [--loss 2] [--caps 0:10000,20:3000,40:10000] [--seconds 60] [--encoder openh264] [--chrome PATH]
-#          [--app-fps 57] [--buffer-ms 100]      (WARMUP=4 in the environment: seconds before measuring)
+#          [--app-fps 57] [--buffer-ms 100] [--keyframes 16,31]      (WARMUP=4 in the environment: seconds before measuring)
 set -euo pipefail
 
 # The app paints at 57 Hz, off the 60 Hz of capture and display, so a run samples every phase between them instead of
 # locking to one.
-BIN= OUT= MODE=dc RTT=0 JITTER=0 LOSS=0 CAPS= SECONDS_=60 ENCODER=openh264 BUFFER=100 SIZE=1280x720 FPS=60 APP_FPS=57
+BIN= OUT= MODE=dc RTT=0 JITTER=0 LOSS=0 CAPS= KEYFRAMES= SECONDS_=60 ENCODER=openh264 BUFFER=100 SIZE=1280x720 FPS=60 APP_FPS=57
 CHROME=${CHROME:-$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux64/chrome 2>/dev/null | tail -1)}
 while [ $# -gt 0 ]; do
   case $1 in
     --bin) BIN=$2;; --out) OUT=$2;; --mode) MODE=$2;; --rtt) RTT=$2;; --jitter) JITTER=$2;; --loss) LOSS=$2;;
     --caps) CAPS=$2;; --seconds) SECONDS_=$2;; --encoder) ENCODER=$2;; --chrome) CHROME=$2;; --buffer-ms) BUFFER=$2;;
-    --size) SIZE=$2;; --fps) FPS=$2;; --app-fps) APP_FPS=$2;;
+    --size) SIZE=$2;; --fps) FPS=$2;; --app-fps) APP_FPS=$2;; --keyframes) KEYFRAMES=$2;;
     *) echo "unknown $1" >&2; exit 2;;
   esac
   shift 2
@@ -38,7 +38,7 @@ cleanup() {
   wait 2>/dev/null || true
   ip netns del "$SRV" 2>/dev/null || true
   ip netns del "$VIEW" 2>/dev/null || true
-  rm -rf "$WORK"
+  rm -rf "$WORK" 2>/dev/null || true  # Chrome may still be writing its profile
 }
 trap cleanup EXIT
 
@@ -67,6 +67,7 @@ fi
 
 ARGS=(--listen "$SIP:8080" --rtc "$SIP:0" --out "$OUT" --mode "$MODE" --seconds "$SECONDS_" --warmup "${WARMUP:-4}" --encoder "$ENCODER" --size "$SIZE" --fps "$FPS" --app-fps "$APP_FPS")
 [ -n "$CAPS" ] && ARGS+=(--dev "$SDEV" --caps "$CAPS" --buffer-ms "$BUFFER")
+[ -n "$KEYFRAMES" ] && ARGS+=(--keyframes "$KEYFRAMES")
 ip netns exec "$SRV" "$BIN" "${ARGS[@]}" >"$WORK/server.out" 2>"$WORK/server.log" &
 SPID=$!
 for _ in $(seq 100); do grep -q READY "$WORK/server.out" 2>/dev/null && break; sleep 0.1; done

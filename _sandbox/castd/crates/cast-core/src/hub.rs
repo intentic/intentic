@@ -378,6 +378,8 @@ pub struct Stats {
     pub flow_blocked: AtomicU64,
     pub paintovers: AtomicU64,
     pub keyframes: AtomicU64,
+    /// The last keyframe's size, in bytes.
+    pub key_bytes: AtomicU64,
     pub refines: AtomicU64,
     pub skipped: AtomicU64,
     /// Exact copies sent (one per viewer each went to), and their pixels' bytes.

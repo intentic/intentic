@@ -86,15 +86,25 @@ clock, and it carries the playout-delay extension at zero, beside the viewer's o
 browser's own WebRTC pipeline shows it (hardware decoder, jitter buffer); everything else stays on the channels.
 
 - **Repair**: a NACK is answered from str0m's send buffer (on the retransmission format where the viewer offered one),
-  and a decoder that lost the stream asks with PLI or FIR, which castd answers with a keyframe at most every 500 ms
-  (one may still be on its way).
+  every one of them: str0m's default drops all queued resends once what it resent passes 15% of what it sent in the
+  last second, which a burst of loss does, and the pictures then wait for the viewer to ask again (turned off
+  2026-11-21, measured below). A decoder that lost the stream asks with PLI or FIR, which castd answers with a
+  keyframe at most every 500 ms (one may still be on its way).
+- **Keyframes**: on a track a keyframe, and a frame of new content after a lull, may take what the slowest track's
+  link carries in 200 ms (`KEY_WINDOW` in [src/video.rs](src/video.rs), never below 160 kbit) instead of a channel's
+  four times the cap: nothing acks the pictures behind it, so a larger one only fills the bottleneck's buffer. The
+  encoder gets it through `VideoEncoder::set_rate_key`: a full VBV buffer of that size for x264, NVENC and VA-API;
+  openh264 has no VBV and picks an IDR's QP from bits per pixel, so it is given a bitrate whose second is the budget,
+  which tops its range at QP 40 (720p text still comes out at 100 to 120 kB, about 1.5 times the budget at 2.7
+  Mbit/s); Media Foundation is given the cap.
 - **Rate**: transport-wide feedback drives str0m's congestion control (Google's: delay gradient, loss, probing),
   started at the bitrate castd aims for or 2 Mbit/s, whichever is higher, and probing toward `--max-kbps`. While a
   track's viewer steers, the encoder is given `TRACK_SHARE` (0.85) of its estimate, the rest left for
   retransmissions, scaled down further while the encoder puts out more than that share (openh264 at its QP ceiling on
   content too busy for the link), and to 0.7 of it while what was sent runs ahead (below).
 - **Pace**: nothing acks a track's pictures. castd counts what it sent against a bucket that the share drains, never
-  more than 500 ms of it, and holds the capture while the bucket is more than two frames (and 60 ms) ahead: frames
+  more than 500 ms of it, and holds the capture while the bucket is more than two frames (and 60 ms) ahead, or the
+  oldest packet str0m's pacer still holds (a picture's, or a resend's, which go first) has waited that long: frames
   are dropped at the source rather than filling the bottleneck's buffer and every retransmission behind it. A
   keyframe waits too, a second at most. A viewer that does not steer is skipped on the same bucket as a channel
   viewer is on its acks. str0m paces what is sent at 1.1 times its estimate.
@@ -124,7 +134,8 @@ browser's own WebRTC pipeline shows it (hardware decoder, jitter buffer); everyt
 3 px a frame, a box crossing them, painted at 57 Hz so a run samples every phase against the 60 Hz capture and display)
 whose top row carries a stamp (the wall-clock millisecond it was painted, a counter and a checksum, in 16-pixel blocks),
 to a headless Chrome whose page reads the stamp back off every picture it shows: capture to the rendering update that
-first shows it ("glass"), on the canvas for `media` and on `requestVideoFrameCallback` for the track. `run.sh` puts
+first shows it ("glass"), on the canvas for `media` and on `requestVideoFrameCallback` for the track. `--keyframes
+16,31` has the page ask for a keyframe at those seconds, as a decoder that lost the stream would. `run.sh` puts
 the server and Chrome in two network namespaces joined by a veth pair: netem on each end (half the round trip, half the
 jitter, the loss, in order) and tbf downstream as the bottleneck (a 100 ms buffer at the cap), the cap 10 Mbit/s,
 3 Mbit/s from a third of the run and 10 again from two thirds. `matrix.sh` runs every profile; `analyze.mjs` reads the
@@ -193,6 +204,140 @@ its first two seconds left out.
   updating while the browser went on decoding, which the bench caught by its stamps no longer reading and which did
   not come back in six runs after a failed write on the track was made to wait for a keyframe (`Track::broken`),
   the one way found for castd to send a picture its viewer would decode against the wrong reference.
+
+### Loss, keyframes and the 40 ms case, measured again (2026-11-21, later)
+
+Every track freeze at 40 ms and 0.5% in the first matrix came from one moment, the cap's fall from 10 to 3 Mbit/s: the
+track was sending 4.5 Mbit/s (openh264 at its QP floor; `media`'s ack-based controller held itself near 2), the
+bottleneck overflowed before the estimate fell, and the burst of lost packets was never all sent again: str0m drops
+every queued resend once what it resent passes 15% of what it sent in the last second, so the pictures waited for the
+viewer to ask again, about 2.3 s of freezes with pictures 1.4 to 1.8 s old. Three changes since:
+
+- **Every resend goes** ([src/rtc/peer.rs](src/rtc/peer.rs), `open_track`): 40 ms and 0.5% went from 3.8 to 5.1%
+  frozen to 1.4 to 1.5% in the first runs, the cap's fall from 2.3 s of freezes to 0.6.
+- **str0m's own queue counts** (`Feedback::queue_ms`): with resends uncapped they go ahead of the pictures in str0m's
+  pacer, and after a burst the pictures stood a second behind there through the 3 Mbit/s step (p95 1.3 s at 40 ms and
+  0.5%, 0.7 to 1.8 s at 200 ms and 0.5%) with castd's bucket empty. The age of the oldest packet str0m still holds
+  now gates the capture beside the bucket, and the standing delay went.
+- **A keyframe sized to the link** (above, under Keyframes): before it, a keyframe asked for in the 3 Mbit/s step
+  (`--keyframes`) was 128 to 164 kB from openh264, 390 to 580 ms of that link's estimate; now 102 to 121 kB from
+  openh264 and a full VBV buffer of 200 ms of the estimate from the encoders that have one.
+
+Measured as the first matrix was (same harness, `matrix.sh`, 45 s a run after 4 s of warm-up, `quiet --pin 4`, Chrome
+for Testing 156 headless, openh264 at 1280x720), in this sandbox on `rog` with 1 to 3 cores busy elsewhere. "Before" is
+the cast-core this work started from, "after" this one, each run twice; `media`'s path did not change and ran once.
+None of the "after" or `media` runs logged a stalled step (`capture: N ms in <step>`, added by this change: earlier,
+on a loaded host, the bench's own synthetic screen took seconds in its mutex and memcpy; those runs are not here).
+
+| Link (RTT, loss each way) | Path | Glass p50 / p95 / p99 (ms) | Shown /s | Freezes /min (frozen) | Keyframes | Sent (kbit/s) |
+| --- | --- | --- | --- | --- | --- | --- |
+| LAN (no impairment) | track, before | 16.3 / 24.2 / 26.4 | 53.7 | 0 (0%) | 0 | 3704 |
+| LAN (no impairment) | track, before, again | 16.4 / 24 / 25.5 | 54.1 | 0 (0%) | 0 | 3889 |
+| LAN (no impairment) | track, after | 15.9 / 23.6 / 24.9 | 53.9 | 0 (0%) | 0 | 3743 |
+| LAN (no impairment) | track, after, again | 16.1 / 23.6 / 24.9 | 54 | 0 (0%) | 0 | 3725 |
+| LAN (no impairment) | `media` | 17.1 / 25.3 / 39.9 | 55.9 | 0 (0%) | 0 | 3715 |
+| 40 ms, 0.5% | track, before | 40 / 66.7 / 108.8 | 44.6 | 4 (4.2%) | 0 | 3593 → 2148 → 3505 |
+| 40 ms, 0.5% | track, before, again | 40.6 / 74.2 / 303.8 | 43.5 | 8 (7.1%) | 0 | 3608 → 2413 → 2867 |
+| 40 ms, 0.5% | track, after | 40 / 73.6 / 112.8 | 45.8 | 1.3 (0.9%) | 0 | 3604 → 2199 → 3610 |
+| 40 ms, 0.5% | track, after, again | 40 / 80.3 / 115.5 | 45.6 | 2.7 (1.2%) | 0 | 3611 → 2230 → 3046 |
+| 40 ms, 0.5% | `media` | 61.9 / 151.8 / 216.7 | 36.1 | 5.3 (2.2%) | 0 | 1008 → 542 → 659 |
+| 40 ms, 2% | track, before | 41.6 / 88.5 / 134.6 | 34.1 | 1.3 (4.7%) | 0 | 3811 → 2377 → 3517 |
+| 40 ms, 2% | track, before, again | 41.7 / 129.1 / 201.7 | 36 | 2.7 (2.2%) | 0 | 3316 → 2252 → 3667 |
+| 40 ms, 2% | track, after | 40.6 / 80.3 / 124.8 | 37.4 | 2.7 (1.7%) | 0 | 3587 → 2176 → 2962 |
+| 40 ms, 2% | track, after, again | 40.5 / 74.8 / 100.8 | 37.9 | 1.3 (0.5%) | 0 | 3870 → 1950 → 3677 |
+| 40 ms, 2% | `media` | 75.3 / 427.1 / 1103.8 | 28.1 | 22.7 (18.3%) | 0 | 398 → 518 → 626 |
+| 40 ms, 5% | track, before | 44 / 146.1 / 693 | 24 | 17.3 (13.4%) | 0 | 3864 → 2276 → 3029 |
+| 40 ms, 5% | track, before, again | 44.7 / 147.9 / 253.1 | 25.8 | 12 (6.9%) | 0 | 3728 → 2271 → 3167 |
+| 40 ms, 5% | track, after | 42.8 / 96.7 / 194.7 | 27.6 | 5.3 (3%) | 0 | 3837 → 2064 → 2719 |
+| 40 ms, 5% | track, after, again | 49.3 / 161.1 / 302.6 | 24.1 | 10.7 (5.3%) | 0 | 3671 → 2441 → 3394 |
+| 40 ms, 5% | `media` | 98.4 / 1091.8 / 1375.4 | 14 | 44 (55.3%) | 0 | 410 → 459 → 339 |
+| 100 ms, 0.5% | track, before | 71.9 / 117.9 / 170.1 | 39.9 | 6.7 (6.1%) | 0 | 3674 → 2376 → 3288 |
+| 100 ms, 0.5% | track, before, again | 73 / 142.5 / 207.4 | 40.7 | 5.3 (3.7%) | 0 | 3699 → 2324 → 3028 |
+| 100 ms, 0.5% | track, after | 71.8 / 106.3 / 162.6 | 41.8 | 2.7 (1.5%) | 0 | 3715 → 2275 → 3202 |
+| 100 ms, 0.5% | track, after, again | 72 / 126.2 / 365.3 | 38.6 | 5.3 (2.1%) | 0 | 3526 → 2269 → 3467 |
+| 100 ms, 0.5% | `media` | 84.2 / 286.7 / 477.3 | 33.4 | 14.7 (6.2%) | 0 | 542 → 577 → 646 |
+| 100 ms, 2% | track, before | 74.8 / 166 / 278.6 | 26.1 | 4 (2.1%) | 0 | 3687 → 2206 → 3212 |
+| 100 ms, 2% | track, before, again | 74.6 / 174.7 / 1055.5 | 24.8 | 13.3 (11.2%) | 0 | 3843 → 2233 → 3210 |
+| 100 ms, 2% | track, after | 74.1 / 167.5 / 271 | 27.1 | 16 (6.9%) | 0 | 3787 → 2072 → 3186 |
+| 100 ms, 2% | track, after, again | 73.3 / 164.1 / 304.2 | 27.3 | 13.3 (6%) | 0 | 3722 → 2174 → 3145 |
+| 100 ms, 2% | `media` | 308.9 / 1043.6 / 2163.7 | 17 | 45.3 (34.5%) | 0 | 536 → 478 → 425 |
+| 100 ms, 5% | track, before | 146.9 / 279.1 / 373.6 | 17.8 | 26.7 (11.3%) | 0 | 3828 → 2264 → 3735 |
+| 100 ms, 5% | track, before, again | 130.3 / 272.6 / 1110.9 | 17 | 32 (18.5%) | 0 | 3884 → 2203 → 2743 |
+| 100 ms, 5% | track, after | 134.7 / 247.6 / 350.4 | 17.4 | 30.7 (14.3%) | 0 | 3061 → 2124 → 3571 |
+| 100 ms, 5% | track, after, again | 123.8 / 233.1 / 574.8 | 17.5 | 33.3 (14.8%) | 0 | 3728 → 1978 → 2786 |
+| 100 ms, 5% | `media` | 4644.7 / 7686.5 / 7872 | 5 | 29.3 (81.1%) | 11 | 483 → 420 → 453 |
+| 200 ms, 0.5% | track, before | 126.1 / 187.7 / 316.9 | 32.7 | 64 (28.8%) | 0 | 3843 → 2160 → 3075 |
+| 200 ms, 0.5% | track, before, again | 125.8 / 212.8 / 2966.9 | 29.6 | 60 (32.3%) | 0 | 3820 → 1983 → 3534 |
+| 200 ms, 0.5% | track, after | 133 / 300.4 / 468.6 | 27.3 | 70.7 (27.6%) | 0 | 2735 → 2173 → 3109 |
+| 200 ms, 0.5% | track, after, again | 126 / 193.7 / 365.9 | 31.7 | 72 (29.7%) | 0 | 3832 → 2190 → 3415 |
+| 200 ms, 0.5% | `media` | 251.3 / 1819.6 / 2028.2 | 17.2 | 45.3 (42.1%) | 0 | 397 → 311 → 435 |
+| 200 ms, 2% | track, before | 146.2 / 328.3 / 613.4 | 13.1 | 80 (44.6%) | 1 | 3802 → 2066 → 3446 |
+| 200 ms, 2% | track, before, again | 130.4 / 333.4 / 769.8 | 16.7 | 81.3 (38.1%) | 0 | 3836 → 2241 → 2962 |
+| 200 ms, 2% | track, after | 152.3 / 354.1 / 757.9 | 14.8 | 92 (37.4%) | 0 | 3824 → 2149 → 3108 |
+| 200 ms, 2% | track, after, again | 168.6 / 425.4 / 862.4 | 14.2 | 105.3 (43.8%) | 0 | 3876 → 2237 → 3211 |
+| 200 ms, 2% | `media` | 16671.4 / 20839 / 20985.6 | 1.9 | 26.7 (90.9%) | 11 | 427 → 381 → 553 |
+| 200 ms, 5% | track, before | 310.5 / 510.6 / 2645.6 | 11.4 | 49.3 (36.3%) | 1 | 3802 → 2093 → 2758 |
+| 200 ms, 5% | track, before, again | 311.7 / 495.6 / 2807.8 | 12.5 | 50.7 (27.4%) | 0 | 3815 → 2266 → 3228 |
+| 200 ms, 5% | track, after | 304.6 / 467 / 715.7 | 13.7 | 50.7 (20.9%) | 0 | 3633 → 1973 → 3446 |
+| 200 ms, 5% | track, after, again | 298.3 / 392.4 / 660.3 | 13.3 | 48 (21.4%) | 0 | 3704 → 1976 → 2765 |
+| 200 ms, 5% | `media` | 30599.8 / 33387.3 / 33431.3 | 4.2 | 28 (79.3%) | 11 | 392 → 462 → 424 |
+
+- **40 ms and 100 ms with 0.5%**, the commonest home internet: the track now freezes a third to a sixth as often as
+  before (0.9 to 2.1% frozen against 3.7 to 7.1%) and is ahead of `media` on every count, a third less delay at the
+  median and half at the 95th percentile at 40 ms. At 40 ms with 2 and 5% loss it froze 0.5 to 5.3% of the time, from
+  2.2 to 13.4%.
+- **100 and 200 ms with 2 to 5% loss** freeze about as often as before (6 to 15% at 100 ms, 37 to 44% at 200 ms and
+  2%, and 28 to 30% at 200 ms and 0.5%), except 200 ms and 5% (21% from 27 to 36%); the 99th percentile fell by up to
+  three quarters. What is left there is the round trip each lost packet costs: an H.264 frame waits for every packet
+  before it (below), and at 200 ms and 2% about eight are lost a second, each holding the picture for a round trip.
+- **On a LAN** the two are the same within a millisecond (16/24 ms for the track, 17/25 for `media`); the track shows
+  54 pictures a second to `media`'s 56, though it decodes all 57 (`framesDecoded`): the rest are never presented
+  (`requestVideoFrameCallback` skips them). Not a difference worth switching carriers for, which costs a keyframe and
+  a decoder mid-session.
+- **The mode**, then: the track wherever the viewer can show it, on every link; `media` is what a viewer or server that
+  cannot do the track falls back to, as before. No per-link switch was built: no profile has `media` ahead.
+
+Weighed for repairing a loss without waiting a round trip, and not built:
+
+- **Intra refresh, long-term references, reference invalidation, decoding past a gap**: Chrome's packet buffer
+  (libwebrtc's `modules/video_coding/packet_buffer.cc`) hands an H.264 delta frame on only once no sequence number
+  before it is missing, unless the packet carries a generic frame descriptor, and it starts a stream again only on an
+  IDR. So on the track as negotiated, a loss holds every later picture until its resend or a keyframe arrives, whatever
+  the encoder's references; intra refresh would only spread a keyframe out, and a viewer could not even restart on it.
+- **ULPFEC in RED**: str0m negotiates RED for audio only and writes the header extensions (the transport-wide
+  sequence number) as it sends, after castd would have had to XOR them; and without a generic descriptor a lost FEC
+  packet is a sequence gap that holds the next frame as a lost picture packet does. FlexFEC: Chrome offers it only
+  behind a field trial.
+- **The dependency descriptor and temporal layers**: Chrome 156 negotiates the descriptor when the viewer asks
+  (`setHeaderExtensionsToNegotiate`; it lists it as stopped), which lifts the rule above, and openh264's two temporal
+  layers make every other frame one nothing references, whose loss costs that frame alone. But reference frames carry
+  most of the packets, so at 200 ms and 2% the picture would still wait on a round trip several times a second; it
+  needs a descriptor writer and layering in every encoder for perhaps half the stalls, and was left.
+- **Proactive resends**, each packet sent again on the RTX stream right after it, so a picture waits only when both
+  copies are lost: measured once with a str0m patched to do it (`StreamTx::set_duplicates`, not kept) and the encoder
+  given half the share: at 200 ms and 2%, 8.1% frozen against 34 to 44%, 37 pictures a second against 14 to 17, NACKs
+  from 678 to 99; at 100 ms and 2%, 41 pictures a second against 27. But doubling what crossed the link made the
+  3 Mbit/s step collapse the estimate (p95 2.1 s). It needs str0m to offer it (str0m has no way to resend unasked) and
+  a rate that makes room for it only where loss and round trip call for it: the largest gain left for 200 ms links.
+
+**The stuck picture** did not come back: 40 LAN runs of the track, 30 s each, every picture's stamp read, no PLI, no
+keyframe, the longest gap between pictures 33 to 67 ms in 38 of them and 333 and 367 ms in two the host loaded.
+Once, at 40 ms and 0.5% with keyframes asked for, no picture was encoded for six seconds with the flow open; the
+`capture: N ms in <step>` warning added for it has since caught the same shape in one loaded stretch, up to 4.1 s in
+the synthetic screen's `pump` and 4.4 s in its `grab` (a mutex and a 3.7 MB copy) and a 1.8 s encode, with the host
+swapping and its cores busy: the bench's own process stalled, most likely the first time too.
+
+**Left**, as of this measurement:
+
+- 200 ms links with 2 to 5% loss, still frozen a fifth to two fifths of the time: proactive resends (above), or the
+  descriptor with a reference structure that skips a lost frame.
+- At 200 ms a cap's fall still leaves 1.5 to 2 s of stale pictures while resends repair the burst; a keyframe once a
+  burst would take longer to repair than to replace was not tried.
+- openh264's keyframes stay about 1.5 times the budget (its QP for an IDR tops out at 40).
+- Starting on a bad link: the socket carries video until the peer is up, and at 200 ms and 5% the answer once waited
+  16 s behind it and the peer then failed (the page measured nothing). Holding video off the socket while an offer
+  is pending would fix it.
+- The estimate climbs back slowly after a cap lifts: about 3.5 Mbit/s 15 s after the cap went back to 10.
 
 ## VA-API
 

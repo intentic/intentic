@@ -4,12 +4,13 @@
 # at two thirds. One run.sh each, one report each in --dir, analyze.mjs over them at the end.
 #
 #   matrix.sh --bin target/release/examples/wanbench --dir /tmp/wan/baseline --mode dc|track [--seconds 45] [--only rtt100-l2]
+#             [--keyframes 16,31]   (the page asks for a keyframe at those seconds, as a decoder that lost the stream would)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-BIN= DIR= MODE=dc SECONDS_=45 ONLY= ENCODER=openh264
+BIN= DIR= MODE=dc SECONDS_=45 ONLY= ENCODER=openh264 KEYFRAMES=
 while [ $# -gt 0 ]; do
   case $1 in
-    --bin) BIN=$2;; --dir) DIR=$2;; --mode) MODE=$2;; --seconds) SECONDS_=$2;; --only) ONLY=$2;; --encoder) ENCODER=$2;;
+    --bin) BIN=$2;; --dir) DIR=$2;; --mode) MODE=$2;; --seconds) SECONDS_=$2;; --only) ONLY=$2;; --encoder) ENCODER=$2;; --keyframes) KEYFRAMES=$2;;
     *) echo "unknown $1" >&2; exit 2;;
   esac
   shift 2
@@ -27,6 +28,7 @@ for p in "${profiles[@]}"; do
     rtt=${p#rtt}; rtt=${rtt%%-*}; loss=${p#*-l}
     args=(--rtt "$rtt" --jitter "$((rtt / 10))" --loss "$loss" --caps "$CAPS")
   fi
+  [ -n "$KEYFRAMES" ] && args+=(--keyframes "$KEYFRAMES")
   echo "== $p $MODE" >&2
   "$HERE/run.sh" --bin "$BIN" --out "$DIR/$p-$MODE.json" --mode "$MODE" --seconds "$SECONDS_" --encoder "$ENCODER" "${args[@]}" \
     >"$DIR/$p-$MODE.log" 2>&1 || echo "   failed: $DIR/$p-$MODE.log" >&2

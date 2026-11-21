@@ -227,6 +227,7 @@ const scheduleMeasure = () => {
     await fetch(`/start`, { method: `POST` });
     state.measuring = true; state.measureStart = wall();
     state.statsStart = await inboundStats();
+    for (const at of state.config.keyframes ?? []) setTimeout(() => { event(`ask-keyframe`); send({ type: `keyframe` }); }, at * 1000);
     const every = setInterval(async () => state.statsSamples.push({ t: wall() - state.measureStart, ...(await inboundStats()) }), 1000);
     setTimeout(async () => {
       state.measuring = false; clearInterval(every);

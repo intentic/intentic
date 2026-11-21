@@ -81,6 +81,9 @@ pub struct Pictures {
 pub struct Feedback {
     estimate_kbps: AtomicU32,
     queued: Mutex<Bucket>,
+    /// Since when the oldest packet str0m has yet to send on the track (a picture's or a resend's) has waited in its
+    /// pacer; None while it holds none.
+    unsent_since: Mutex<Option<Instant>>,
     /// The capture time the track's RTP clock counts from: its first picture's.
     base: OnceLock<Instant>,
 }
@@ -139,14 +142,27 @@ impl Feedback {
     }
 
     /// How far what castd sent on the track runs ahead of its share of the estimate, in milliseconds of that share (0
-    /// before there is an estimate).
+    /// before there is an estimate), or how long the oldest packet str0m still holds has waited, whichever is more:
+    /// every resend the viewer asks for goes ahead of the pictures in str0m's pacer, so after a burst of loss the
+    /// pictures can queue there behind them with the bucket empty (measured: a second of standing delay through a
+    /// 3 Mbit/s step, until this counted it).
     pub fn queue_ms(&self) -> f64 {
-        self.drain(Instant::now());
+        let now = Instant::now();
+        self.drain(now);
         let rate = self.drain_bytes_per_ms();
-        if rate <= 0.0 {
-            return 0.0;
-        }
-        self.queued.lock().bytes / rate
+        let counted = if rate > 0.0 {
+            self.queued.lock().bytes / rate
+        } else {
+            0.0
+        };
+        let waiting = self.unsent_since.lock().map_or(0.0, |at| {
+            now.saturating_duration_since(at).as_secs_f64() * 1000.0
+        });
+        counted.max(waiting)
+    }
+
+    fn set_unsent_since(&self, at: Option<Instant>) {
+        *self.unsent_since.lock() = at;
     }
 }
 
@@ -194,6 +210,10 @@ const DISCONNECTED_FOR: Duration = Duration::from_secs(5);
 pub const TRACK_SHARE: f64 = 0.85;
 /// The furthest a track is counted ahead of its share (`Feedback::queue_ms`): about what a home router buffers.
 const AHEAD_AT_MOST: Duration = Duration::from_millis(500);
+/// What a track keeps to answer NACKs with: str0m's defaults (`send_buffer_video`, its RTX cache's age), without the
+/// cap on resends.
+const RTX_PACKETS: usize = 1000;
+const RTX_AGE: Duration = Duration::from_secs(3);
 /// The lowest a track's congestion control starts at, kbit/s.
 const TRACK_START_KBPS: u32 = 2000;
 /// How many due timeouts the peer takes in a row, and for how long at most, before it reads what came in: a frame's
@@ -450,6 +470,14 @@ async fn drive(r: &mut Running, started: Instant) -> String {
                 Err(e) => return format!("str0m: {e}"),
             }
         };
+        if let Some(track) = &channels.track {
+            let since = r
+                .rtc
+                .direct_api()
+                .stream_tx_by_mid(track.mid, None)
+                .and_then(|tx| tx.queue_info().and_then(|q| q.first_unsent()));
+            r.feedback.set_unsent_since(since);
+        }
         if !r.rtc.is_alive() {
             return "the connection ended".into();
         }
@@ -528,6 +556,11 @@ fn open_track(rtc: &mut Rtc, video: Option<Mid>, pictures: &Pictures) -> Option<
         Bitrate::kbps(300),
         Bitrate::kbps(u64::from(pictures.max_kbps.max(1000))),
     );
+    // Every resend the viewer asks for goes, however many: str0m's default drops all queued ones once what it resent
+    // passes 15% of what it sent in the last second, which on a lossy link is exactly when pictures wait on them.
+    if let Some(tx) = rtc.direct_api().stream_tx_by_mid(mid, None) {
+        tx.set_rtx_cache(RTX_PACKETS, RTX_AGE, None);
+    }
 
     log::info!("rtc: the pictures ride the video track ({mid}, payload type {pt})");
     Some(Track {
@@ -656,5 +689,26 @@ fn flush(rtc: &mut Rtc, media: Option<ChannelId>, waiting: &mut VecDeque<(bool, 
                 waiting.pop_front();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_waits_in_str0ms_pacer_counts_as_queued_with_the_bucket_empty() {
+        let f = Feedback::default();
+        f.set_estimate(3000);
+        assert!(f.queue_ms() < 1.0);
+        // Resends ahead of the pictures: the oldest unsent packet has waited 300 ms, though castd wrote nothing.
+        f.set_unsent_since(Some(Instant::now() - Duration::from_millis(300)));
+        assert!(f.queue_ms() >= 300.0, "{}", f.queue_ms());
+        f.set_unsent_since(None);
+        assert!(f.queue_ms() < 1.0);
+        // What castd wrote past its share counts as before: 85% of 3000 kbit/s drains 318.75 bytes a millisecond.
+        f.written(31_875);
+        let ms = f.queue_ms();
+        assert!((99.0..=100.0).contains(&ms), "{ms}");
     }
 }

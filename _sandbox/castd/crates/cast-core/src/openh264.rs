@@ -259,6 +259,14 @@ impl VideoEncoder for Encoder {
         self.set_rate(crf, max_kbps);
     }
 
+    fn set_rate_key(&mut self, crf: f32, max_kbps: u32, most_kbit: u32) {
+        // openh264 has no VBV, and its IDR's size is not its target's: it clamps an IDR's QP to a range it picks from
+        // bits per pixel (QP 24 to 36 at 2.6 Mbit/s for 720p at 60 Hz), and dense text at QP 36 is some 130 kB. A
+        // bitrate whose second is the most a keyframe may be gives the lowest bits per pixel, the range topping out at
+        // QP 40, and the smallest IDR openh264 makes; the next picture's `set_rate` brings the bitrate back.
+        self.set_rate(crf, max_kbps.min(most_kbit));
+    }
+
     fn encode(
         &mut self,
         p: &Picture,
@@ -360,6 +368,59 @@ mod tests {
             e.set_bitrate(kbps * 1000)
                 .unwrap_or_else(|err| panic!("{kbps} kbit/s: {err}"));
         }
+    }
+
+    /// One IDR of a 720p page of text-like strokes, after `prepare` sets the encoder's rate; its size in bytes.
+    fn idr_bytes(prepare: impl FnOnce(&mut Encoder)) -> usize {
+        let (w, h) = (1280usize, 720usize);
+        let mut e = Encoder::new(&EncoderConfig {
+            width: w as u32,
+            height: h as u32,
+            fps: 60,
+            preset: String::new(),
+            threads: 1,
+            crf: 24.0,
+            max_kbps: 2600,
+        })
+        .unwrap();
+        prepare(&mut e);
+        let mut seed: u32 = 0x9e37_79b9;
+        let y: Vec<u8> = (0..w * h)
+            .map(|i| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                // Dark strokes on white in lines of 11 rows every 20, as text is.
+                if (i / w) % 20 < 11 && seed.is_multiple_of(3) {
+                    40
+                } else {
+                    235
+                }
+            })
+            .collect();
+        let (u, v) = (vec![128u8; w * h / 4], vec![128u8; w * h / 4]);
+        let picture = Picture::I420(crate::encoder::Planes {
+            y: &y,
+            u: &u,
+            v: &v,
+            stride_y: w,
+            stride_uv: w / 2,
+        });
+        let mut out = Vec::new();
+        let encoded = e.encode(&picture, 0, true, None, None, &mut out).unwrap();
+        assert!(encoded.keyframe);
+        out.len()
+    }
+
+    #[test]
+    fn a_keyframe_held_to_a_slow_links_budget_comes_out_smaller() {
+        // What a channel's keyframe gets (four times the cap), and what a track's at 2.7 Mbit/s gets (200 ms of it).
+        let boosted = idr_bytes(|e| e.set_rate_buf(24.0, 4 * 2600, 4 * 2600 / 60 * 8));
+        let held = idr_bytes(|e| e.set_rate_key(24.0, 2600, 540));
+        assert!(
+            held * 10 < boosted * 8,
+            "held to the budget {held} bytes, boosted {boosted} bytes"
+        );
     }
 
     #[test]
