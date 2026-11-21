@@ -5,6 +5,7 @@ import type { Conversation } from "../../../models/conversations/session/convers
 import { placeConversation } from "./pane/composerControls";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { useRunners } from "../../../models/sandbox/devices/useRunners";
+import { runnerTitle } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { Button, SectionHeader } from "@intentic/ui";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useT } from "@intentic/ui/i18n";
@@ -92,7 +93,7 @@ const placedRow = computed(() => {
     }
     if (pickedRunner.value !== undefined) {
         const runner = runners.value.find((candidate) => candidate.id === pickedRunner.value);
-        return { icon: `desktop` as const, name: pickedRunner.value, line: runner === undefined ? undefined : detail(runner) };
+        return { icon: `desktop` as const, name: runner === undefined ? pickedRunner.value : runnerTitle(runner), line: runner === undefined ? undefined : detail(runner) };
     }
     return { icon: `box` as const, name: t(`shared.thisSandbox`), line: hereLine.value };
 });
@@ -156,7 +157,7 @@ const place = (at: { box?: string; runner?: string }): void => {
             <Icon name="desktop" class="text-xs" :class="pickedRunner === runner.id ? 'text-accent' : 'text-subtle'" />
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="flex items-center gap-1.5">
-                    <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
+                    <span class="text-sm text-content md:text-xs">{{ runnerTitle(runner) }}</span>
                     <!-- The machine the fleet would start this chat on, said where the person is already choosing. -->
                     <span v-if="suggested === runner.id" class="rounded-full bg-primary-500/15 px-1.5 text-2xs font-medium text-link">{{
                         t(`chat.fleetAdvice.suggested`)

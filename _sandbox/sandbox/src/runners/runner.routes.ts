@@ -4,8 +4,9 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { createRunnerLabelRoute } from "./naming/runner-label.js";
 
-/* The one owner route a runner has beyond its peer door (runner-peer.ts): the settings push. */
+/* The owner routes a runner has beyond its peer door (runner-peer.ts): the settings push, and its name for people. */
 const createRunnerDefinitionSyncRoute =
     (services: Services) =>
     async (c: Context<AppEnv>): Promise<Response> => {
@@ -29,7 +30,8 @@ const createRunnerDefinitionSyncRoute =
         return c.json(report);
     };
 
-// A runner's settings push.
+// A runner's settings push and its rename.
 export const runnerDefinitionRawRoutes = defineRawRoutes((services: Services) => ({
     "POST /system/runners/{id}/definition/sync": createRunnerDefinitionSyncRoute(services),
+    "POST /system/runners/{id}/label": createRunnerLabelRoute(services),
 }));

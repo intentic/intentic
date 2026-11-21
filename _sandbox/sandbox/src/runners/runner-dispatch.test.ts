@@ -119,6 +119,7 @@ const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], optio
         reply: os.reply.handler(notHere),
         steer: os.steer.handler(notHere),
         applyDefinition: os.applyDefinition.handler(notHere),
+        present: os.present.handler(notHere),
         runCommand: os.runCommand.handler(notHere),
         cancelCommand: os.cancelCommand.handler(notHere),
     });

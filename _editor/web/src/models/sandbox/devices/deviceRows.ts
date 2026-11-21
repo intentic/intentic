@@ -299,9 +299,15 @@ const renames = (current: string | undefined, wanted: string | undefined): boole
 // folder (named once, at setup, and never again) or by its bare slug. A pairing needs its own name because its
 // sandbox may run somewhere else entirely (hosted, or on another computer), leaving no container here to carry one.
 // The account's name wins over one the machine recorded, since a rename lands there first; a sandbox this account
-// cannot see keeps whatever it had. Devices with nothing to rename are returned as they came.
+// cannot see keeps whatever it had. A runner's parent is named the same way, by the slug of the address it dials, so a
+// runner card says "runner of <the name this account knows>". Devices with nothing to rename are returned as they came.
 export const withSandboxNames = (devices: readonly Device[], account: readonly { name: string; daemonUrl: string | null }[]): Device[] => {
     const names = accountNames(account);
+    const parentOf = (sandbox: DeviceSandbox): string | undefined => {
+        const slug = slugOfDaemonUrl(sandbox.runnerOf?.url);
+        return slug === undefined ? undefined : names.get(slug);
+    };
+    const renamed = (sandbox: DeviceSandbox): boolean => renames(sandbox.name, names.get(sandbox.slug)) || renames(sandbox.runnerOf?.name ?? undefined, parentOf(sandbox));
     const nameOf = (sandboxId: string): string | undefined => {
         for (const [slug, name] of names) {
             if (isSameSandbox(sandboxId, slug)) {
@@ -311,7 +317,7 @@ export const withSandboxNames = (devices: readonly Device[], account: readonly {
         return undefined;
     };
     return devices.map((device) => {
-        const sandboxes = device.sandboxes?.some((sandbox) => renames(sandbox.name, names.get(sandbox.slug))) === true;
+        const sandboxes = device.sandboxes?.some(renamed) === true;
         const pairings = device.report?.pairings.some((pairing) => renames(pairing.name, nameOf(pairing.sandboxId))) === true;
         if (!sandboxes && !pairings) {
             return device;
@@ -322,7 +328,11 @@ export const withSandboxNames = (devices: readonly Device[], account: readonly {
                 ? {
                       sandboxes: device.sandboxes.map((sandbox) => {
                           const name = names.get(sandbox.slug);
-                          return name === undefined ? sandbox : { ...sandbox, name };
+                          const parent = parentOf(sandbox);
+                          const named = name === undefined ? sandbox : { ...sandbox, name };
+                          return parent === undefined || named.runnerOf === undefined || named.runnerOf === null
+                              ? named
+                              : { ...named, runnerOf: { ...named.runnerOf, name: parent } };
                       }),
                   }
                 : {}),

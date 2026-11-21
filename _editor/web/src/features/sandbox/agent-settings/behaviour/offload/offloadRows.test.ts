@@ -2,12 +2,13 @@
 import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { HERE, kindTitle, runnerName, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
-const omen: RunnerSummary = { id: `runner-omen`, host: `omen`, online: true, parity: `current` };
+const omen: RunnerSummary = { id: `runner-omen`, label: `Gaming PC`, host: `omen`, online: true, parity: `current` };
 const asleep: RunnerSummary = { id: `runner-rog`, host: `rog`, online: false, parity: `current` };
 
 describe(`where heavy work runs`, () => {
-    test(`a runner is named by the machine it sits on, one started by hand by its id`, () => {
-        expect(runnerName(omen)).toBe(`omen`);
+    // Not by the computer it sits on, as until 2026-11-21: two runners on one computer read the same that way.
+    test(`a runner is named by the name it was given, else by its id`, () => {
+        expect(runnerName(omen)).toBe(`Gaming PC`);
         expect(runnerName({ id: `runner-x` })).toBe(`runner-x`);
     });
 
@@ -15,9 +16,11 @@ describe(`where heavy work runs`, () => {
         expect(targetOptions([omen, asleep]).map(({ value, label }) => [value, label])).toEqual([
             [HERE, `This sandbox`],
             [`auto`, `Any machine with room`],
-            [`runner-omen`, `omen`],
-            [`runner-rog`, `rog`],
+            [`runner-omen`, `Gaming PC`],
+            [`runner-rog`, `runner-rog`],
         ]);
+        // The computer each is on rides beside whether it is there now.
+        expect(targetOptions([omen, asleep]).slice(2).map(({ description }) => description)).toEqual([`omen · Connected`, `rog · Offline now: work sent here runs in this sandbox until it's back`]);
     });
 
     test(`picking a runner sets that kind alone, and picking this sandbox removes it`, () => {
@@ -47,7 +50,7 @@ describe(`where heavy work runs`, () => {
     test(`a pick naming an offline or vanished runner says the work runs here meanwhile`, () => {
         expect(unavailableRunner(undefined, [omen])).toBeUndefined();
         expect(unavailableRunner(`runner-omen`, [omen])).toBeUndefined();
-        expect(unavailableRunner(`runner-rog`, [asleep])).toBe(`rog is offline, so this runs here until it's back.`);
+        expect(unavailableRunner(`runner-rog`, [asleep])).toBe(`runner-rog is offline, so this runs here until it's back.`);
         expect(unavailableRunner(`runner-gone`, [omen])).toBe(`The runner "runner-gone" is no longer set up, so this runs here.`);
     });
 

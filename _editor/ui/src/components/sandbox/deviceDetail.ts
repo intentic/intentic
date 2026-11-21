@@ -1,6 +1,8 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { t } from "../../i18n/index.js";
 import { formatUntil } from "../../lib/timeWindow.js";
+import type { RunnerOfRow } from "./deviceRunner.js";
+import { titled } from "./deviceTitle.js";
 import { type DeviceBridgeHoldRow, type DeviceLowDiskRow, folderHold, historyHint, holdWarnings } from "./deviceHolds.js";
 import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
@@ -119,7 +121,10 @@ export interface DeviceSandboxRow {
     adoptedFrom?: string | undefined;
     // The machine's keeper put it to sleep for want of use; it starts again when somebody opens it.
     asleep?: boolean | undefined;
+    // Whose runner it is (the contract's `runnerOf`, deviceRunner.ts): null for a person's sandbox, absent from an older ic.
+    runnerOf?: RunnerOfRow | null | undefined;
 }
+
 
 /**
  * The open row's version line: what runs, and while the version before the last swap is still parked, until when.
@@ -184,26 +189,7 @@ const twinKey = (port: DevicePortRow): string => `${port.port}:${port.state}:${p
 // spellings meet anywhere a screen asks "is that pairing this sandbox", not only where a container meets a folder.
 export const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
 
-// Most-human-first: a recorded display name (the container's, else the pairing's), then the synced folder's own leaf, then
-// the raw id. The exact id survives as `subtitle` rather than being replaced, since it's the string somebody actually types.
-const leafOf = (dir: string | undefined): string | undefined => {
-    const trimmed = (dir ?? ``).replace(/[/\\]+$/, ``);
-    const leaf = trimmed.slice(Math.max(trimmed.lastIndexOf(`/`), trimmed.lastIndexOf(`\\`)) + 1);
-    // A drive root (`C:\`) leaves something shaped like a name but meaning nothing about this sandbox.
-    return leaf === `` || leaf.endsWith(`:`) ? undefined : leaf;
-};
-
-const titled = (
-    exact: string,
-    sandbox: DeviceSandboxRow | undefined,
-    folder: DeviceFolderRow | undefined,
-): Pick<DeviceSandboxGroup, `title` | `subtitle`> => {
-    const title = sandbox?.name ?? folder?.name ?? leafOf(folder?.localDir) ?? exact;
-    return { title, ...(title === exact ? {} : { subtitle: exact }) };
-};
-
-/** Nothing named it (no recorded name, no folder to take one from): its title is the raw id, and a card says it has none. */
-export const isUntitled = (group: DeviceSandboxGroup): boolean => group.subtitle === undefined && group.sandbox?.name === undefined && group.folder === undefined;
+export { isUntitled } from "./deviceTitle.js";
 
 // Driven by the pairings, in their own order, since that's what the user set up and it survives a
 // restart with nothing re-mirrored yet. Containers with no pairing come last.

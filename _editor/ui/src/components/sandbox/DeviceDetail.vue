@@ -34,6 +34,7 @@ import {
     portsLine,
     sandboxGroups,
 } from "./deviceDetail.js";
+import { runnerLine } from "./deviceRunner.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 import { useT } from "../../i18n/index.js";
 import { toneTint } from "../../lib/tone.js";
@@ -283,6 +284,10 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 {{ cardStatus(item.group, busy.includes(item.group.sandboxId)).label }}
                             </span>
                             <span v-if="item.group.sandbox?.tunnelRunning === false" class="shrink-0 text-2xs text-warning">{{ t(`ui.deviceDetail.tunnelOff`) }}</span>
+                            <!-- A runner is another sandbox's execution container: whose it is, said where the eye already is. -->
+                            <span v-if="runnerLine(item.group.sandbox)" class="shrink-0 text-2xs text-muted" v-tooltip.top="runnerLine(item.group.sandbox)?.hint">{{
+                                runnerLine(item.group.sandbox)?.text
+                            }}</span>
                             <slot name="badges" :group="item.group" />
                         </div>
                         <!-- Who it is to a terminal, what version runs, and its share of the machine: one quiet line. The

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Button, ConfirmDialog, Icon, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { RUNNER_LABEL_MAX, type RunnerSummary, runnerTitle } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { Button, ConfirmDialog, Icon, InlineRename, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useOperation, useOperations } from "../../../../workbench/operations/operations";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
 import RunnerProgress from "./RunnerProgress.vue";
 import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
 import { foldRunnerFlow, type RunnerFlow, settleRunnerFlow, startRunnerFlow } from "./runnerStages";
-import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "../../../../models/sandbox/devices/useRunners";
+import { createRunner, removeRunner, renameRunner, syncRunnerSettings, updateRunner, useRunners } from "../../../../models/sandbox/devices/useRunners";
+import { runnerNameProblem } from "./runnerNames";
 import { DeviceFlowLostError } from "../../../../models/sandbox/devices/useDevices";
 import { lastRun, sentTo } from "./runnerWork";
 import { beginDeviceWork } from "./deviceWork";
@@ -81,6 +83,20 @@ const syncing = (id: string): boolean => syncs.at(id)?.state === `running`;
 const failure = computed(() => flow.failure.value ?? mine.value.map((runner) => syncs.at(runner.id)?.failure).find((found) => found !== undefined));
 // An added runner has dialled in once the list shows it online, which is the last thing its card waits to say.
 const paired = (name: string): boolean => mine.value.some((runner) => runner.id === name && runner.online);
+
+// A runner's name for people is its label; the id under it is what agents, `ic` and the container go by, so it stays on
+// the row's line whenever the name no longer says it.
+const rename = async (id: string, label: string): Promise<void> => {
+    try {
+        await renameRunner(id, label);
+    } finally {
+        refetch();
+    }
+};
+const idPart = (runner: RunnerSummary): string | undefined =>
+    runnerTitle(runner) === runner.id ? undefined : t(`sandbox.deviceRunners.idLine`, { id: runner.id });
+const lineOf = (runner: RunnerSummary): string =>
+    [idPart(runner), facts(runner), builtOn(runner.host)].filter((part): part is string => part !== undefined).join(` · `);
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
     if (!runner.online) {
@@ -196,7 +212,10 @@ const execute = async (op: RunnerOp, name: string): Promise<void> => {
 
 const asked = ref("");
 const adding = ref(false);
-const nameError = computed(() => (asked.value !== "" && !/^[a-z0-9-]+$/.test(asked.value) ? t(`sandbox.deviceRunners.nameRule`) : undefined));
+// Taken names are said before anything starts: this sandbox's own (another of its runners holds that enrollment) and this
+// computer's (another sandbox's runner holds that container), the second named by whose it is.
+const machineContainers = computed(() => machine.environments.flatMap((row) => row.device.sandboxes ?? []));
+const nameError = computed(() => runnerNameProblem(asked.value, runners.value, machineContainers.value));
 
 const add = async (): Promise<void> => {
     if (asked.value === "" || nameError.value !== undefined) {
@@ -247,14 +266,18 @@ const add = async (): Promise<void> => {
 
         <!-- One row each at the list's own height: what it is under its name, its state and its verbs at the edge, and only
              what needs a second look (what is sent here, the last run, drift) on a line of its own under the name. -->
-        <Row
-            v-for="runner in mine"
-            :key="runner.id"
-            :title="runner.id"
-            :description="builtOn(runner.host) ? `${facts(runner)} · ${builtOn(runner.host)}` : facts(runner)"
-            :data-runner="runner.id"
-            indent
-        >
+        <Row v-for="runner in mine" :key="runner.id" :description="lineOf(runner)" :data-runner="runner.id" indent>
+            <!-- The name renames itself in place; typing the id back clears the name. -->
+            <template #title>
+                <InlineRename
+                    :value="runnerTitle(runner)"
+                    :write="(label: string) => rename(runner.id, label)"
+                    :label="t(`sandbox.deviceRunners.runnerName`)"
+                    :action="t(`sandbox.deviceRunners.renameRunner`)"
+                    :maxlength="RUNNER_LABEL_MAX"
+                    :failure="t(`sandbox.deviceRunners.renameFailed`)"
+                />
+            </template>
             <template #lead="{ iconClass }">
                 <Icon name="desktop" class="shrink-0" :class="[iconClass, runner.online ? 'text-accent' : 'text-subtle']" />
             </template>

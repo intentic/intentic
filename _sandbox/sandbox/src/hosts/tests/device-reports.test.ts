@@ -915,6 +915,8 @@ const runnerServices = (
         custom?: string;
         settings?: Record<string, unknown>;
         features?: string[];
+        // Runners this sandbox already has enrolled.
+        enrolled?: { id: string; host?: string }[];
     } = {},
 ): { services: Services; sent: DeviceSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
     const sent: DeviceSandboxFlow[] = [];
@@ -957,6 +959,7 @@ const runnerServices = (
         runtimeInstalls: { recordComposition: async () => undefined },
         sandboxSettings: { get: async () => ({ ...overrides.settings }) },
         runners: {
+            list: async () => overrides.enrolled ?? [],
             mintPairing: (id: string) => {
                 minted.push(id);
                 return { token: `pair-for-${id}`, expiresIn: 600 };
@@ -1013,6 +1016,17 @@ test("starting a runner fills in this sandbox's address and a pairing bound to t
     await drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
     expect(minted).toEqual(["rig"]);
     expect(sent[0]).toEqual({ op: "runner-up", slug: "rig", parentUrl: "https://sandbox-x.intentic.dev", pair: "pair-for-rig" });
+});
+
+// An id is one enrollment: minting it again would replace the working runner's, wherever it runs, and it would be refused
+// at its next connect with nobody told why.
+test("a runner name this sandbox already uses is refused before anything is minted or built", async () => {
+    const { services, sent, minted } = runnerServices({ enrolled: [{ id: "rig", host: "omen" }] });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }))).rejects.toThrow(
+        /already has a runner called "rig" \(on omen\)/,
+    );
+    expect(minted).toEqual([]);
+    expect(sent).toEqual([]);
 });
 
 test("a sandbox with no public address refuses rather than leaving a container with no way home", async () => {

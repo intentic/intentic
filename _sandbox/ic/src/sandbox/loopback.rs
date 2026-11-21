@@ -103,6 +103,31 @@ pub fn presentation_from(file: &Value) -> (Option<String>, Option<String>) {
     (name, logo)
 }
 
+/// Whose runner a container is, as its daemon kept it beside its name (`runnerOf` in the presentation file, written from
+/// what its parent told it): the parent's address and name, each None when the file does not say it. Pure.
+pub fn runner_of_from(file: &Value) -> (Option<String>, Option<String>) {
+    let text = |key: &str| {
+        file["runnerOf"][key]
+            .as_str()
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+    };
+    (text("url"), text("name"))
+}
+
+/// A listing row's `runnerOf`: the parent sandbox's address and name for a runner, null for anything else. The address is
+/// the one the container was made with (RUNNER_PARENT_URL, which every recreate replays), else the one its daemon kept;
+/// the name only its daemon knows. Pure.
+pub fn runner_of(inspected: &Value, kept: &(Option<String>, Option<String>)) -> Value {
+    let url = env_of(inspected, "RUNNER_PARENT_URL")
+        .map(str::to_string)
+        .or_else(|| kept.0.clone());
+    match url {
+        Some(url) => json!({ "url": url, "name": kept.1 }),
+        None => Value::Null,
+    }
+}
+
 // The sandbox's HISTORY_ROOT as its container was created with it, the daemon's default when it names none.
 fn history_of(inspected: Option<&Value>) -> &str {
     inspected
@@ -134,6 +159,8 @@ pub struct VolumeFacts {
     pub platform_id: Option<String>,
     pub display_name: Option<String>,
     pub logo: Option<String>,
+    /// A runner's parent, as its daemon kept it (`runner_of_from`): its address and its name.
+    pub runner_of: (Option<String>, Option<String>),
 }
 
 /// Every listed container's facts off its volume, read side by side: one `docker cp` per file, a container's two files
@@ -151,7 +178,7 @@ pub fn volume_facts(
                 let row = scope.spawn(move || platform_id(container, inspected));
                 let presentation = scope.spawn(move || {
                     history_file(container, inspected, PRESENTATION_FILE)
-                        .map(|file| presentation_from(&file))
+                        .map(|file| (presentation_from(&file), runner_of_from(&file)))
                         .unwrap_or_default()
                 });
                 (container, row, presentation)
@@ -160,11 +187,12 @@ pub fn volume_facts(
         reads
             .into_iter()
             .map(|(container, row, presentation)| {
-                let (display_name, logo) = presentation.join().unwrap_or_default();
+                let ((display_name, logo), runner_of) = presentation.join().unwrap_or_default();
                 let facts = VolumeFacts {
                     platform_id: row.join().ok().flatten(),
                     display_name,
                     logo,
+                    runner_of,
                 };
                 (container.clone(), facts)
             })
@@ -206,8 +234,8 @@ pub fn display_names(slugs: &[String]) -> Vec<(String, Option<String>)> {
     })
 }
 
-/// The listing's rows with `sandboxId`, `localPort`, `platformId`, `displayName` and `logo` added, each null when
-/// unknown. A row whose container was not inspected gets none of them: nothing is known, which is not the same as known
+/// The listing's rows with `sandboxId`, `localPort`, `platformId`, `displayName`, `logo` and `runnerOf` added, each null
+/// when unknown. A row whose container was not inspected gets none of them: nothing is known, which is not the same as known
 /// to be absent. Pure.
 pub fn with_addressing(
     listing: Value,
@@ -231,6 +259,7 @@ pub fn with_addressing(
                     fields.insert("platformId".into(), json!(read.platform_id));
                     fields.insert("displayName".into(), json!(read.display_name));
                     fields.insert("logo".into(), json!(read.logo));
+                    fields.insert("runnerOf".into(), runner_of(found, &read.runner_of));
                 }
                 row
             })
@@ -322,15 +351,56 @@ mod tests {
                 platform_id: Some("cm1".to_string()),
                 display_name: Some("Work".to_string()),
                 logo: Some("data:image/png;base64,iVBORw0KGgo=".to_string()),
+                runner_of: (None, None),
             },
         )]);
         assert_eq!(
             with_addressing(listing, &inspected, &facts),
             json!([
-                { "slug": "work", "container": "intentic-sandbox-work", "running": true, "sandboxId": "3c469e9d6c58", "localPort": 30238, "platformId": "cm1", "displayName": "Work", "logo": "data:image/png;base64,iVBORw0KGgo=" },
+                { "slug": "work", "container": "intentic-sandbox-work", "running": true, "sandboxId": "3c469e9d6c58", "localPort": 30238, "platformId": "cm1", "displayName": "Work", "logo": "data:image/png;base64,iVBORw0KGgo=", "runnerOf": null },
                 { "slug": "gone", "container": "intentic-sandbox-gone", "running": false },
-                { "slug": "new", "container": "intentic-sandbox-new", "running": true, "sandboxId": null, "localPort": null, "platformId": null, "displayName": null, "logo": null },
+                { "slug": "new", "container": "intentic-sandbox-new", "running": true, "sandboxId": null, "localPort": null, "platformId": null, "displayName": null, "logo": null, "runnerOf": null },
             ])
+        );
+    }
+
+    /// A runner says whose it is: the parent's address from the env it was made with, else the one its daemon kept, and
+    /// the parent's name only its daemon knows. Anything else is no runner at all.
+    #[test]
+    fn a_runner_names_its_parent_and_a_persons_sandbox_names_none() {
+        let runner = json!({ "Config": { "Env": ["RUNNER_PARENT_URL=https://x.intentic.dev", "HISTORY_ROOT=/history"] } });
+        let kept = runner_of_from(
+            &json!({ "name": "Gaming PC", "runnerOf": { "url": "https://old.intentic.dev", "name": "intentic" } }),
+        );
+        assert_eq!(
+            kept,
+            (
+                Some("https://old.intentic.dev".to_string()),
+                Some("intentic".to_string())
+            )
+        );
+        assert_eq!(
+            runner_of(&runner, &kept),
+            json!({ "url": "https://x.intentic.dev", "name": "intentic" })
+        );
+        // A runner from before its daemon kept a name: its address alone.
+        assert_eq!(
+            runner_of(&runner, &(None, None)),
+            json!({ "url": "https://x.intentic.dev", "name": null })
+        );
+        // An env stripped of its address: the one its daemon kept.
+        let bare = json!({ "Config": { "Env": [] } });
+        assert_eq!(
+            runner_of(&bare, &kept),
+            json!({ "url": "https://old.intentic.dev", "name": "intentic" })
+        );
+        // A person's sandbox.
+        let person = json!({ "Config": { "Env": ["CONNECT_TOKEN=token"] } });
+        assert_eq!(runner_of(&person, &(None, None)), Value::Null);
+        assert_eq!(runner_of_from(&json!({ "name": "Work" })), (None, None));
+        assert_eq!(
+            runner_of_from(&json!({ "runnerOf": { "url": " ", "name": 7 } })),
+            (None, None)
         );
     }
 

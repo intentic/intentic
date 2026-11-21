@@ -97,6 +97,7 @@ import {
 import { DefinitionDiffSchema, DefinitionExportSchema, WorkspacePublishResultSchema, WorkspacePublishSchema, WorkspaceRemoteSchema } from "../../state/definition.js";
 import {
     RunnerDefinitionAppliedSchema,
+    RunnerLabelSchema,
     RunnersListSchema,
 } from "../doors/runner-protocol.js";
 import type { RawRouteKey } from "./raw-routes.js";
@@ -180,6 +181,8 @@ export const RAW_JSON_ROUTES = {
     "GET /system/runners": { output: RunnersListSchema },
     "DELETE /system/runners/{id}": { output: OkSchema },
     "POST /system/runners/{id}/definition/sync": { output: RunnerDefinitionAppliedSchema },
+    // A runner's name for people (its id never changes); empty clears it.
+    "POST /system/runners/{id}/label": { input: RunnerLabelSchema, output: OkSchema },
     // Desktop sync: the sandbox-level state, the pairing (`?mode=mirror` asks for the narrower one), one machine's key.
     "GET /system/sync": { output: SyncStatusSchema },
     "POST /system/sync/pair": { input: SyncPairRequestSchema, output: SyncPairAnswerSchema },

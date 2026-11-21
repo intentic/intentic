@@ -82,6 +82,10 @@ export const DeviceSandboxSchema = z.object({
     sandboxId: z.string().nullable().optional(),
     localPort: z.number().int().nullable().optional(),
     platformId: z.string().nullable().optional(),
+    // (2026-11-21) Whose runner this container is: its parent sandbox's address (the RUNNER_PARENT_URL it was made with)
+    // and that sandbox's name as the parent last told it (runnerContract.present). Null for a person's sandbox; absent
+    // from an older ic.
+    runnerOf: z.object({ url: z.string(), name: z.string().nullable().optional() }).nullable().optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending

@@ -20,6 +20,8 @@ import { createRunnerCommands } from "./runner-command.js";
 import { machineFacts } from "./machine-facts.js";
 import type { RemoteTurns } from "./held-turns/remote-turns.js";
 import type { RunnerIdentity } from "./runner-identity.js";
+import { keepRunnerPresentation } from "./naming/runner-presentation.js";
+import { filePresentationStore } from "../system/presentation/presentation-store.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
 // adapter onto machinery this daemon already has: a turn, its answers and its steers go through the TurnStarter port,
@@ -151,6 +153,9 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         queue: services.queueHeavy,
     });
 
+    // The file this machine's `ic sandbox list` reads the runner's name and its parent from (runner-presentation.ts).
+    const presentation = filePresentationStore(services.config.historyRoot);
+
     const os = implement(runnerContract);
     return os.router({
         // Measured on every ask, by the same ruler the parent measures itself with, so its fleet advice compares like with like.
@@ -184,6 +189,11 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         applyDefinition: os.applyDefinition.handler(async ({ input }) => ({
             settings: await adoptDefinitionSettings(services, parseDefinitionToml(input.toml)),
         })),
+        // What the parent calls this runner and itself, kept where its machine reads a sandbox's name.
+        present: os.present.handler(async ({ input }) => {
+            await keepRunnerPresentation(presentation, identity, input);
+            return { ok: true };
+        }),
         interrupt: os.interrupt.handler(({ input }) => {
             remoteTurns.interrupt(input.conversationId);
             return { ok: true };

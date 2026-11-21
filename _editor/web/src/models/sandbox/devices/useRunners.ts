@@ -1,4 +1,4 @@
-import { runnerSlug } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { type RunnerSummary, runnerSlug, runnerTitle } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { computed } from "vue";
 import { RUNNERS } from "../../../lib/queryKeys";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
@@ -32,6 +32,12 @@ export function useRunners(poll = true) {
     };
 }
 
+// The name a person reads the runner `id` by (its label), the id itself when it is no longer listed, undefined for none.
+export const runnerNameOf = (runners: readonly RunnerSummary[], id: string | undefined): string | undefined => {
+    const runner = id === undefined ? undefined : runners.find((candidate) => candidate.id === id);
+    return runner === undefined ? id : runnerTitle(runner);
+};
+
 // Both run through manageDeviceSandbox's streaming door, so progress and refusals come from the machine
 // itself. The daemon mints the pairing directly to the machine; no credential passes through the browser.
 export const createRunner = (hostId: string, name: string, onLine?: (line: string) => void): Promise<string> =>
@@ -49,6 +55,13 @@ export const updateRunner = (hostId: string, name: string, onLine?: (line: strin
 // is gone for good.
 export const forgetRunner = async (id: string): Promise<void> => {
     await sandboxRaw(`DELETE /system/runners/{id}`, { params: { id } });
+};
+
+// Gives a runner a name for people; its id, which everything else holds it by, never changes. Empty clears it. The daemon
+// keeps it beside the runner's enrollment and tells the runner (now, or when it next connects), so its machine lists it by
+// that name; the `runners` push refreshes every list that shows it.
+export const renameRunner = async (id: string, label: string): Promise<void> => {
+    await sandboxRaw(`POST /system/runners/{id}/label`, { params: { id }, input: { label } });
 };
 
 // Pushes this sandbox's settings onto the runner over its live link, settings only. An overlay change

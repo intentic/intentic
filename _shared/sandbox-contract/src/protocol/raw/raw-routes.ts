@@ -291,6 +291,7 @@ export const RAW_ROUTES = {
     // sandbox's own address, before it shares anything with it, rather than take them from whoever relays the share.
     "GET /keyring/keys": { auth: "door", control: "never" },
     "POST /system/runners/{id}/definition/sync": { control: "never" },
+    "POST /system/runners/{id}/label": { control: "never" },
     // A runner's git door and credential doors, each on the runner's own bearer.
     "GET /system/runners/git/{repo}/info/refs": { auth: "door", control: "never", lane: "bulk" },
     "POST /system/runners/git/{repo}/git-upload-pack": { auth: "door", control: "never", lane: "bulk" },

@@ -17,14 +17,13 @@ import {
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { ORPCError } from "@orpc/server";
-import { flowTimeoutMs, refuseUnsupported } from "./device-feature-gates.js";
+import { flowTimeoutMs, refuseUnsupported } from "./flows/device-feature-gates.js";
 import { commandingCards, withHostShell } from "./egress/host-shell.js";
 import { withEgressOwnerKeys } from "./egress/owner-keys.js";
+import { runnerUpFlow } from "./flows/runner-up-flow.js";
 import type { Services } from "../composition.js";
-import { composeEnvironment } from "../environment/overlay.js";
 import { opt } from "../opt.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
-import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, type HostFiles, hostConnections, hostSummaries, readHostFiles } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
@@ -55,7 +54,7 @@ const PULL_TIMEOUT_MS = 8_000;
 const PULL_GIVE_UP_MS = 60_000;
 
 // Ceiling on a management flow; the machine bounds its own work, a cutoff here only ends the watching. A move's copy
-// can take hours, so its ops get their own (device-feature-gates.ts `flowTimeoutMs`).
+// can take hours, so its ops get their own (flows/device-feature-gates.ts `flowTimeoutMs`).
 const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
 
 // Ceiling for watching an update: above the download, below the flow ceiling; the view then polls the version.
@@ -521,32 +520,7 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
         input.op === "reconnect" || input.op === "create"
             ? { ...input, platformUrl: mintingPlatform(services) }
             : input.op === "runner-up"
-              ? await (async () => {
-                    const parentUrl = services.config.sandbox.publicUrl;
-                    if (parentUrl === "") {
-                        throw new ORPCError("CONFLICT", {
-                            message:
-                                "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
-                        });
-                    }
-                    // Overlay ships as approved bytes plus sha256, re-checked on the machine; definition ships settings
-                    // only, best-effort.
-                    const definition = await Promise.resolve()
-                        .then(() => settingsDefinition(services))
-                        .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
-                        // allow(silent-catch): settings ride along best-effort; the runner is built without them, never refused
-                        .catch(() => undefined);
-                    // The overlay this sandbox wants, composed now; none is no overlay, and a compose that failed throws, or
-                    // the runner would be built without it.
-                    const overlay = await composeEnvironment(services);
-                    return {
-                        ...input,
-                        parentUrl,
-                        pair: services.runners.mintPairing(input.slug, { host: id }).token,
-                        ...(definition !== undefined ? { definition } : {}),
-                        ...(overlay === undefined ? {} : { overlay: overlay.content, overlayHash: overlay.hash }),
-                    };
-                })()
+              ? await runnerUpFlow(services, id, input)
               : input.op === "set-egress"
                 ? await withEgressOwnerKeys(services, input, origin)
                 : input;

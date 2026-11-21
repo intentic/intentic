@@ -5,7 +5,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref, watch } from "vue";
 import { boxNameOf, sandboxesElsewhere } from "../../../../models/fleet/fleetScope";
 import { useAgents } from "../../../../models/fleet/useAgents";
-import { useRunners } from "../../../../models/sandbox/devices/useRunners";
+import { runnerNameOf, useRunners } from "../../../../models/sandbox/devices/useRunners";
 import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
 import { useComposerLanding } from "../../composer/composerLanding";
 import type { useStartFrom } from "../../composer/composerStartFrom";
@@ -203,7 +203,7 @@ export const useComposerControls = (host: ControlsHost) => {
         remote,
         pairedRunners,
         placementShown,
-        placementLabel: computed(() => remoteName.value ?? conversation().runner.value ?? t(`chat.composerQuickPick.here`)),
+        placementLabel: computed(() => remoteName.value ?? runnerNameOf(pairedRunners.value, conversation().runner.value) ?? t(`chat.composerQuickPick.here`)),
         modelReading,
         modelLabelText: computed(() => composerModelName(modelReading.value)),
         // Our own text, always a real model name; `providerDisplayLabel` covers capability-derived providers too.

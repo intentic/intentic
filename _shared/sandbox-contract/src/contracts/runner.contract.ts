@@ -9,6 +9,7 @@ import {
     RunnerDefinitionAppliedSchema,
     RunnerFactsSchema,
     RunnerHeldTurnSchema,
+    RunnerPresentationSchema,
     RunnerSyncLineSchema,
     RunnerSyncSchema,
     RunnerTurnSchema,
@@ -53,6 +54,10 @@ export const runnerContract = {
         .output(z.object({ applied: z.boolean(), invalid: z.string().optional() })),
     // REPLACE semantics: a key the definition omits returns to its default, unlike the owner apply's merge-beside.
     applyDefinition: oc.input(z.object({ toml: z.string() })).output(RunnerDefinitionAppliedSchema),
+    // What the runner calls itself on its machine and whose it is, said on every connect and after a rename; the runner
+    // keeps it where its machine's `ic sandbox list` reads a sandbox's name. An older runner lacks it (NOT_FOUND), and
+    // stays listed by its slug.
+    present: oc.input(RunnerPresentationSchema).output(OkSchema),
     // Stop the running turn; the parent's stop button reaching through.
     interrupt: oc.input(RunnerTurnSchema.pick({ conversationId: true })).output(OkSchema),
     // One shell line the parent offloaded (settings `offload`), run against a snapshot of the parent's tree; its output

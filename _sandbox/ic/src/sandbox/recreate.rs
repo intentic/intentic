@@ -1965,9 +1965,15 @@ pub(crate) fn restamp(old: Option<&Side>, here: &Side) -> Restamp {
 }
 
 /// The options a recreate's run line gets beside the contract's: ic's labels for the side it names, and HOST_ENV.
-/// Pure.
+/// A runner stays labelled a runner (`runner up` made it one): every update recreates it, and each used to relabel it a
+/// person's sandbox. Pure.
 pub(crate) fn stamp_args(slug: &str, stamp: &Restamp) -> Vec<String> {
-    let mut extra = labels::args(slug, LabelKind::Sandbox, &stamp.side.wire());
+    let kind = if crate::runner::is_runner(slug) {
+        LabelKind::Runner
+    } else {
+        LabelKind::Sandbox
+    };
+    let mut extra = labels::args(slug, kind, &stamp.side.wire());
     if let Some(env) = &stamp.env {
         extra.extend(["-e".to_string(), format!("HOST_ENV={env}")]);
     }
@@ -2407,6 +2413,11 @@ mod tests {
             !stamp_args("x", &restamp(Some(&Side::new("windows", None)), &here))
                 .iter()
                 .any(|arg| arg.starts_with("HOST_ENV="))
+        );
+        // A runner recreated (an update) is still labelled a runner, and a person's sandbox a sandbox.
+        assert!(args.contains(&"dev.intentic.kind=sandbox".to_string()));
+        assert!(
+            stamp_args("runner-omen", &theirs).contains(&"dev.intentic.kind=runner".to_string())
         );
     }
 

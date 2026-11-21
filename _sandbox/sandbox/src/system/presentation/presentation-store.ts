@@ -11,12 +11,17 @@ import { z } from "zod";
 // The daemon's GET /system/presentation answers it, and the machine that runs the sandbox reads it as `ic` does
 // platform-row.json, through `docker cp`, so the name and logo survive with no network at all.
 // A plain file rather than a converted document, for platform-row.ts's reasons: written whole, and read by a host that is
-// not this build, so its shape is fixed here: `{ name, image?, digest?, at }`, `at` the ISO time the daemon heard it.
+// not this build, so its shape is fixed here: `{ name, image?, digest?, at, runnerOf? }`, `at` the ISO time the daemon heard it.
 // It sits in store/, beside platform-row.ts, so whichever layer reads it next (auth/'s host scripts) need not import
 // system/.
 
 // Spelled where it is joined, as every /history path is, so the state table's coverage test sees it built.
 const presentationFile = (historyRoot: string): string => join(historyRoot, "presentation.json");
+
+// (2026-11-21) Whose runner this sandbox is, on a runner alone: its parent's address and name. A runner has no platform
+// row, so its name is the one its parent gave it (runners/runner-presentation.ts), and `ic sandbox list` reads both
+// from here as it reads a person's sandbox's name (ic's loopback.rs), so the machine says whose runner it is.
+export const RunnerOfSchema = z.object({ url: z.string(), name: z.string().optional() });
 
 export const HeldPresentationSchema = z.object({
     name: z.string(),
@@ -25,6 +30,7 @@ export const HeldPresentationSchema = z.object({
     // api-contract presentationDigest over the name and logo, which an announce's `presentationDigest` is compared with.
     digest: z.string().optional(),
     at: z.string(),
+    runnerOf: RunnerOfSchema.optional(),
 });
 export type HeldPresentation = z.infer<typeof HeldPresentationSchema>;
 
@@ -40,7 +46,11 @@ export interface PresentationStore {
 
 // Whether two copies say the same, whenever each was heard: what decides a write.
 export const sameCopy = (held: HeldPresentation, next: HeldPresentation): boolean =>
-    held.name === next.name && held.image === next.image && held.digest === next.digest;
+    held.name === next.name &&
+    held.image === next.image &&
+    held.digest === next.digest &&
+    held.runnerOf?.url === next.runnerOf?.url &&
+    held.runnerOf?.name === next.runnerOf?.name;
 
 export const filePresentationStore = (historyRoot: string): PresentationStore => {
     const read = async (): Promise<HeldPresentation | undefined> => {

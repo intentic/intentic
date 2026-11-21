@@ -36,6 +36,7 @@ import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
 import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { manageBlock } from "./deviceFacts";
+import { isUntitled, runnerLine } from "@intentic/ui";
 
 // The board's and the device page's shared rules, checked without mounting either: which machine reads as
 // live, what a card says about it, and what it wants from the reader.
@@ -855,6 +856,41 @@ test(`returns a device with nothing to rename as it came`, () => {
     const lone = device();
     expect(withSandboxNames([lone], ACCOUNT)[0]).toBe(lone);
     const named = withSandboxNames([rog()], ACCOUNT);
+    expect(withSandboxNames(named, ACCOUNT)[0]).toBe(named[0]);
+});
+
+// Runners on omen as they were found (2026-11-21): two containers that read "Unnamed sandbox", one of them this account's
+// sandbox's and one another's, with nothing to say which.
+const omen = (): Device =>
+    device({
+        sandboxes: [
+            {
+                slug: `runner-omen`,
+                container: `intentic-sandbox-runner-omen`,
+                running: true,
+                image: `sandbox`,
+                name: `Gaming PC`,
+                runnerOf: { url: `https://sandbox-574ea8038415.sbx.intentic.dev`, name: `phaser (old name)` },
+            },
+            { slug: `runner-omen-runner`, container: `intentic-sandbox-runner-omen-runner`, running: true, image: `sandbox`, runnerOf: { url: `https://sandbox-aaaaaaaaaaaa.example.dev` } },
+            { slug: `runner-rig`, container: `intentic-sandbox-runner-rig`, running: true, image: `sandbox` },
+        ],
+    });
+
+test(`a runner is titled by its name, else its id, and names its parent by this account's name for it`, () => {
+    const groups = machineRows(withSandboxNames([omen()], ACCOUNT), undefined, NOW)[0]!.groups;
+    expect(groups.map((group) => [group.title, group.subtitle, isUntitled(group)])).toEqual([
+        [`Gaming PC`, `runner-omen`, false],
+        [`omen-runner`, `runner-omen-runner`, false],
+        [`rig`, `runner-rig`, false],
+    ]);
+    // The account's name wins over the one the runner was last told; a parent the account cannot see keeps its address.
+    expect(groups.map((group) => runnerLine(group.sandbox)?.text)).toEqual([`runner of phaser`, `runner of sandbox-aaaaaaaaaaaa.example.dev`, `runner`]);
+    expect(runnerLine(groups[0]!.sandbox)?.hint).toBe(`https://sandbox-574ea8038415.sbx.intentic.dev`);
+    // A person's sandbox is no runner.
+    expect(runnerLine(machineRows([rog()], undefined, NOW)[0]!.groups[2]!.sandbox)).toBeUndefined();
+    // Nothing left to rename: returned as it came.
+    const named = withSandboxNames([omen()], ACCOUNT);
     expect(withSandboxNames(named, ACCOUNT)[0]).toBe(named[0]);
 });
 

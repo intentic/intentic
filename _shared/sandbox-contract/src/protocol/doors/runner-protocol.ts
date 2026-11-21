@@ -102,6 +102,9 @@ export const runnerIncomingRef = (conversationId: string): string => `refs/runne
 // updates target a container that doesn't exist.
 export const runnerSlug = (name: string): string => `runner-${name}`;
 
+// The runner id a container slug names, undefined for a slug that is not a runner's. Pure.
+export const runnerIdOfSlug = (slug: string): string | undefined => (slug.startsWith("runner-") && slug.length > "runner-".length ? slug.slice("runner-".length) : undefined);
+
 // Credential doors: a runner's turns spend the origin sandbox's model providers, never accounts of its own. The parent
 // answers with the least that travels (a minted token or a route); refresh tokens never leave it.
 export const runnerCredentialsUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/credentials`;
@@ -186,10 +189,30 @@ export type RunnerFacts = z.infer<typeof RunnerFactsSchema>;
 export const RunnerParitySchema = z.enum(["current", "outdated", "unknown"]);
 export type RunnerParity = z.infer<typeof RunnerParitySchema>;
 
+/* A RUNNER'S NAME FOR PEOPLE (2026-11-21). Its `id` is the handle everything else holds (its container `runner-<id>` and
+   volumes, the parent's enrollment, a conversation's placement, offload settings, `ic runner remove <id>`), so it never
+   changes; a person renames a runner by giving it a `label`, kept by the parent beside its enrollment. */
+export const RUNNER_LABEL_MAX = 64;
+
+// What the rename route takes: the new label, trimmed; empty clears it and the runner reads by its id again.
+export const RunnerLabelSchema = z.object({ label: z.string().trim().max(RUNNER_LABEL_MAX) });
+export type RunnerLabel = z.infer<typeof RunnerLabelSchema>;
+
+// What the parent tells a runner to call itself on its machine (runnerContract.present): the name a person reads it by,
+// and the parent's own name, so the machine's listing says whose runner it is with nothing else to ask.
+export const RunnerPresentationSchema = z.object({ name: z.string().min(1), parentName: z.string().optional() });
+export type RunnerPresentation = z.infer<typeof RunnerPresentationSchema>;
+
+// The name a person reads a runner by: its label, else its id. Pure.
+export const runnerTitle = (runner: { readonly id: string; readonly label?: string | undefined }): string =>
+    runner.label === undefined || runner.label.trim() === "" ? runner.id : runner.label;
+
 // One runner as the owner's list shows it: enrolled state plus whatever the hub currently knows — HostSummary's shape,
 // retold with parity instead of platform/scopes.
 export const RunnerSummarySchema = z.object({
     id: z.string(),
+    // The name a person gave it (RunnerLabelSchema); absent reads as its id (`runnerTitle`).
+    label: z.string().optional(),
     // The connected device that requested it (Devices view); absent for one started by hand on a machine.
     host: z.string().optional(),
     online: z.boolean(),

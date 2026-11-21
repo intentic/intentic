@@ -799,6 +799,10 @@
     {
       "type": "{ runners: { enrolledAt: number; hash: string; host?: string; id: string }[] }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ runners: { enrolledAt: number; hash: string; host?: string; id: string; label?: string }[] }",
+      "since": "unreleased"
     }
   ],
   "history:runner-identity.json": [

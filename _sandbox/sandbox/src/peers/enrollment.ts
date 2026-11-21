@@ -329,7 +329,8 @@ export const runnerEnrollmentsDocument = defineDocument({
     path: "runner-enrollments.json",
     // A runner's enrollment names this sandbox as parent; elsewhere its digest would dial the old parent.
     portability: "identity",
-    schema: enrollmentsSchema("runners", { host: z.string().optional() }),
+    // `label`: the name a person gave the runner (its id never changes, runner-protocol.ts RunnerLabelSchema).
+    schema: enrollmentsSchema("runners", { host: z.string().optional(), label: z.string().optional() }),
 });
 // Any door's enrollments document.
 export type EnrollmentsDocument = DocumentSpec<z.ZodObject, readonly Conversion[], readonly string[], "object", false>;

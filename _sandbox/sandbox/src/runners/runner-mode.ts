@@ -4,6 +4,8 @@ import { parentCredentialSource } from "./runner-credentials.js";
 import { ensureRunnerIdentity, readRunnerIdentity } from "./runner-identity.js";
 import { startRunnerLink } from "./runner-link.js";
 import { parentWake } from "./ownership/wake.js";
+import { seedRunnerPresentation } from "./naming/runner-presentation.js";
+import { filePresentationStore } from "../system/presentation/presentation-store.js";
 
 // The same image, told at container creation that it's a parent's execution container, not a person's. A posture, not a
 // fork: the daemon boots as any loopback sandbox, then adds the one thing a runner has, an outbound link to its parent.
@@ -36,6 +38,11 @@ export const startRunnerMode = async (services: Services, env: RunnerModeEnv | u
     if (identity === undefined) {
         return;
     }
+    // Named on its machine before the link is up: by its id and its parent's address until the parent says more
+    // (runner-presentation.ts). Never fatal: a runner that cannot write it is still a runner, listed by its slug.
+    await seedRunnerPresentation(filePresentationStore(services.config.historyRoot), identity).catch((err: Error) =>
+        services.logger.warn({ err }, "runner: could not keep its name for its machine's listing"),
+    );
     // Before the link, so the very first dispatched turn already resolves against the origin's providers.
     // And the owner of every conversation it runs: its own wakes go there (runners/ownership/wake.ts).
     services.runnerParent.current = { ...parentCredentialSource(identity, services.logger), wake: parentWake(identity, services.logger) };

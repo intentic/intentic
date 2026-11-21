@@ -20,6 +20,7 @@ import type { PeerStore } from "../peers/peer-store.js";
 import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../definition/definition.js";
 import { refreshRunnerFacts } from "./fleet-facts.js";
 import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/enrollment.js";
+import { pushRunnerPresentation } from "./naming/runner-label.js";
 
 // A runner is a peer door (peers/): this sandbox's own execution container elsewhere, dialling in with its durable
 // token and serving runnerContract. Every pairing is minted replayable, since it ends up immortal once burned into a
@@ -30,19 +31,23 @@ export type RunnerClient = ContractRouterClient<typeof runnerContract>;
 // `definitionToml` is replaced in place after a successful settings push (runner.routes.ts).
 export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "baseImage" | "baseDigest" | "channel" | "overlayHash" | "definitionToml">;
 export type RunnerHub = PeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>;
-export type RunnerStore = PeerStore<{ readonly host?: string | undefined }>;
+export type RunnerStore = PeerStore<{ readonly host?: string | undefined; readonly label?: string | undefined }>;
 
 // A runner redeems its pairing only when its container first boots, after `ic` has pulled a multi-gigabyte image and
 // built the overlay on it; the relayed flow's own ceiling (hosts/device-reports.ts) bounds that wait.
 export const RUNNER_PAIR_TTL_MS = 60 * 60 * 1000;
 
-export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOptional<z.ZodString> }> = {
+export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOptional<z.ZodString>; label: z.ZodOptional<z.ZodString> }> = {
     slug: "runners",
     noun: "runner",
     listKey: "runners",
     store: {
         documents: { enrollments: runnerEnrollmentsDocument, consumed: runnerPairConsumedDocument },
-        key: "runners", prefix: "irt_", extra: { host: z.string().optional() }, replayable: true, pairTtlMs: RUNNER_PAIR_TTL_MS
+        key: "runners",
+        prefix: "irt_",
+        extra: { host: z.string().optional(), label: z.string().optional() },
+        replayable: true,
+        pairTtlMs: RUNNER_PAIR_TTL_MS,
     },
     hub: {
         domain: "runners",
@@ -129,6 +134,7 @@ export const runnerSummaries = async (services: Services): Promise<RunnerSummary
         const drift = runnerDriftLines(parentBuild, parent, state.announced);
         return {
             id: runner.id,
+            ...opt("label", runner.label),
             ...(runner.host !== undefined ? { host: runner.host } : {}),
             online: state.online,
             ...(state.announced === undefined
@@ -158,4 +164,10 @@ export const freshRunnerSummaries = async (services: Services): Promise<RunnerSu
 };
 
 export const runnerPeerRoutes = (services: Services) =>
-    createPeerRoutes(services, RUNNER_PEER, { store: services.runners, hub: services.runnerHub, summaries: () => runnerSummaries(services) });
+    createPeerRoutes(services, RUNNER_PEER, {
+        store: services.runners,
+        hub: services.runnerHub,
+        summaries: () => runnerSummaries(services),
+        // Fire-and-forget by the door's contract: a connect never waits on a name.
+        onConnected: (id) => void pushRunnerPresentation(services, id),
+    });

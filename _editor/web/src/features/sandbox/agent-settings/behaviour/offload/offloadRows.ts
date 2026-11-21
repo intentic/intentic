@@ -1,5 +1,5 @@
 import { OFFLOAD_ANY_RUNNER, type OffloadKind, type SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
-import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { type RunnerSummary, runnerTitle } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
@@ -35,8 +35,9 @@ const KIND_DETAILS: Readonly<Record<string, () => string>> = {
 };
 export const kindDetail = (kind: OffloadKind): string => KIND_DETAILS[kind.id]?.() ?? t(`sandbox.agentOffload.kindCustomDetail`, { pattern: kind.pattern });
 
-// The machine a runner sits on, the word the owner knows it by; a runner started by hand has only its id.
-export const runnerName = (runner: Pick<RunnerSummary, `id` | `host`>): string => runner.host ?? runner.id;
+// The name a person gave the runner, else its id: two runners on one computer are told apart by it, which the computer's
+// name (what this said until 2026-11-21) could not do.
+export const runnerName = (runner: Pick<RunnerSummary, `id` | `label`>): string => runnerTitle(runner);
 
 // This sandbox first, then whichever runner has room, then every runner by name, an offline one still offered (a choice
 // made now binds once it is back) but saying so.
@@ -47,7 +48,10 @@ export const targetOptions = (runners: readonly RunnerSummary[]): PickerOption<s
         value: runner.id,
         label: runnerName(runner),
         icon: `desktop` as const,
-        description: runner.online ? t(`sandbox.agentOffload.runnerOnline`) : t(`sandbox.agentOffload.runnerOffline`),
+        // Which computer it is on, beside whether it is there now: the name alone may not say.
+        description: [runner.host, runner.online ? t(`sandbox.agentOffload.runnerOnline`) : t(`sandbox.agentOffload.runnerOffline`)]
+            .filter((part): part is string => part !== undefined && part !== runnerName(runner))
+            .join(` · `),
     })),
 ];
 

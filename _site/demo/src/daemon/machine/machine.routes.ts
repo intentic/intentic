@@ -12,6 +12,7 @@ import { ArrivalApplySchema, ArrivalScanSchema } from "@intentic/sandbox-contrac
 import { SpeechWakeClaimSchema } from "@intentic/sandbox-contract/schemas/speech";
 import { SyncPairRequestSchema } from "@intentic/sandbox-contract/schemas/short-codes";
 import { PhoneWakeRegistrationSchema } from "@intentic/sandbox-contract/schemas/phone";
+import { RunnerLabelSchema } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { removeDemoBlock } from "../../fixture/sandbox";
 import { enginesView, revertEngine, setEngineChannel, updateEngine } from "./engines";
 import {
@@ -30,6 +31,7 @@ import { abandonArrival, applyArrival, arrivalHosts, planFromBundle, planFromHos
 import { bundleDownload, bundleExports, bundleTicket, removeBundle, startBundle } from "./bundles";
 import {
     forgetRunner,
+    labelRunner,
     pairPhone,
     phonesList,
     registerPhoneWake,
@@ -129,6 +131,10 @@ const peerRoutes = {
     "DELETE /system/runners/{id}": ({ param }) => answer(`DELETE /system/runners/{id}`, forgetRunner(param(`id`))),
     "POST /system/runners/{id}/definition/sync": async ({ param }) =>
         answer(`POST /system/runners/{id}/definition/sync`, await syncRunnerDefinition(param(`id`))),
+    "POST /system/runners/{id}/label": async ({ param, request }) => {
+        const { label } = await inputOf(RunnerLabelSchema, request);
+        return answer(`POST /system/runners/{id}/label`, labelRunner(param(`id`), label));
+    },
     "GET /system/phones": () => answer(`GET /system/phones`, { phones: phonesList() }),
     // A pairing for the phone card's QR code; the recording's Pixel scans it a few seconds later (daemon/peers.ts).
     "POST /system/phones/pair": ({ url }) => answer(`POST /system/phones/pair`, pairPhone(url.searchParams.get(`id`) ?? `phone`)),

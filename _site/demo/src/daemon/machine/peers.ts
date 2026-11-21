@@ -72,6 +72,7 @@ export const revokeSyncMachine = (machine: string): RawJsonOutput<`DELETE /syste
 const runners: RunnerSummary[] = [
     {
         id: `build-box`,
+        label: `Build server`,
         host: `build-box`,
         online: true,
         version: `1.320.4`,
@@ -111,6 +112,19 @@ export const forgetRunner = (id: string): RawJsonOutput<`DELETE /system/runners/
         return refuse(`no runner by that id`, 404);
     }
     runners.splice(at, 1);
+    pushDomains(`runners`);
+    return { ok: true };
+};
+
+/** A runner's name for people, kept beside it (its id never changes); empty, or its id, clears it, as the daemon does. */
+export const labelRunner = (id: string, label: string): RawJsonOutput<`POST /system/runners/{id}/label`> => {
+    const runner = runners.find((candidate) => candidate.id === id) ?? refuse(`this sandbox has no runner with that id`, 404);
+    const trimmed = label.trim();
+    if (trimmed === `` || trimmed === id) {
+        delete runner.label;
+    } else {
+        runner.label = trimmed;
+    }
     pushDomains(`runners`);
     return { ok: true };
 };

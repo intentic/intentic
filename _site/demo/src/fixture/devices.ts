@@ -2,6 +2,7 @@ import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { EgressOwnerKeysRead } from "@intentic/sandbox-contract/schemas/egress";
 import { demoQuiet, deskEdition } from "../mode";
+import { DEMO_DAEMON_ORIGIN } from "../transport";
 
 // One of the owner's own computers, as the daemon's device registry reports it. The Devices tab used to answer
 // "the demo fixture doesn't serve GET /system/devices", so every control under a paired folder — pause, unpair,
@@ -389,6 +390,15 @@ const allDevices = (now: number): Device[] => [
             { slug: `ml-eval`, name: `ml-eval`, container: `intentic-sandbox-ml-eval`, running: true, image: `ghcr.io/intentic/sandbox:latest`, tunnelRunning: true },
             { slug: `nightly-e2e`, name: `nightly-e2e`, container: `intentic-sandbox-nightly-e2e`, running: false, image: `ghcr.io/intentic/sandbox:latest` },
             { slug: `staging-api`, name: `staging-api`, container: `intentic-sandbox-staging-api`, running: true, image: `ghcr.io/intentic/sandbox:latest`, tunnelRunning: true },
+            // This sandbox's own runner here (daemon/machine/peers.ts `build-box`), named and saying whose it is.
+            {
+                slug: `runner-build-box`,
+                name: `Build server`,
+                container: `intentic-sandbox-runner-build-box`,
+                running: true,
+                image: `ghcr.io/intentic/sandbox:stable`,
+                runnerOf: { url: DEMO_DAEMON_ORIGIN, name: null },
+            },
         ],
         report: {
             hostname: `build-box`,
