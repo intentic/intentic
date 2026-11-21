@@ -193,9 +193,20 @@ const handedOn = (refusal: ReadRefusal): Response =>
      allowance (limit-cause.ts throttleAsOutage, which reads throttledAt). */
 type RefusalCause = "spent" | "benched" | "throttled";
 
-// How many accounts a throttled request is tried on before the loop gets the throttle back. Model capacity throttles every
-// account alike, and asking all 31 at once only adds 31 requests to what is being throttled.
+// How many accounts a throttled request is tried on before the loop gets the throttle back: asking all 31 at once only
+// adds 31 requests to what is being throttled when the throttle is the model's. The loop's next retry starts past them
+// (THROTTLE_REST_MS), so a throttle on these accounts alone is walked out of a few accounts per retry.
 const THROTTLED_ASKS = 3;
+
+/* AN ACCOUNT THAT THROTTLED A MODEL IS ASKED LAST FOR IT A WHILE. Google throttles one account's requests as well as a
+   model's: on 2026-11-21 every Google account read 100% left, so the ranking tied them all and kept the translator's
+   order (plan-pools.ts preferredAccount), every request in the sandbox went to the same first account, and the first three
+   alphabetically answered "Resource has been exhausted" to every retry for minutes while 25 others answered a probe at
+   once. With THROTTLED_ASKS at three and nothing remembering a throttle, each retry asked those three again and the turns
+   ended as outages. So a throttle (or the translator's bench, which follows one) is remembered per account and model,
+   and for THROTTLE_REST_MS the account goes behind every one that has not throttled, the one throttled longest ago first;
+   an answer from it clears it. Nothing is filed: the verdict and Usage left still read the account's own allowance. */
+const THROTTLE_REST_MS = 10 * 60_000;
 
 // The translator's own word for a credential it is resting (CLIProxyAPI's `model_cooldown` error code).
 const TRANSLATOR_BENCH = /"model_cooldown"/u;
@@ -270,7 +281,35 @@ interface Gateway extends TranslatorGatewayDeps {
     readonly clock: () => number;
     readonly attributed: Map<string, number>;
     readonly throttled: Map<string, number>;
+    // When each account last throttled (or was benched on) each model, keyed `provider:model:account` (THROTTLE_REST_MS).
+    readonly resting: Map<string, number>;
 }
+
+const restingKey = (asked: Pinnable, account: string): string => `${asked.provider}:${asked.model}:${account}`;
+
+// The candidates with every account resting on this model moved behind the rest, the one throttled longest ago first; the
+// order among the others is the ranking's. A rest that has run out is forgotten here.
+const restedOrder = (g: Gateway, asked: Pinnable, candidates: readonly PinCandidate[]): readonly PinCandidate[] => {
+    const now = g.clock();
+    const restingSince = (candidate: PinCandidate): number | undefined => {
+        const key = restingKey(asked, candidate.account);
+        const at = g.resting.get(key);
+        if (at !== undefined && now - at >= THROTTLE_REST_MS) {
+            g.resting.delete(key);
+            return undefined;
+        }
+        return at;
+    };
+    const fresh = candidates.filter((candidate) => restingSince(candidate) === undefined);
+    const resting = candidates
+        .flatMap((candidate) => {
+            const at = restingSince(candidate);
+            return at === undefined ? [] : [{ candidate, at }];
+        })
+        .toSorted((one, other) => one.at - other.at)
+        .map(({ candidate }) => candidate);
+    return [...fresh, ...resting];
+};
 
 // The line a filed refusal leaves in the log.
 interface RefusalLine {
@@ -401,6 +440,7 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
         const { url, method, headers, signal } = outgoing;
         const response = await g.send(url, { method, headers, body: pinnedBody(asked, candidate.prefix), signal });
         if (response.ok) {
+            g.resting.delete(restingKey(asked, candidate.account));
             return answered(response, settleOn(g, asked, candidate, askedAt, signal));
         }
         const refusal = await readRefusal(response);
@@ -414,6 +454,9 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
         round.last = { refusal, cause };
         if (cause === "benched") {
             round.benched.push(candidate.account);
+        }
+        if (cause !== "spent") {
+            g.resting.set(restingKey(asked, candidate.account), g.clock());
         }
         if (cause === "spent") {
             await fileRefusal(g, asked, candidate, refusal);
@@ -433,7 +476,7 @@ const pinnedAnswer = async (g: Gateway, outgoing: Outgoing, asked: Pinnable): Pr
         g.logger.warn({ err: error, provider: asked.provider, model: asked.model }, "translator gateway: the accounts could not be ranked, sending unpinned");
         return undefined;
     }
-    return candidates.length === 0 ? undefined : placed(g, outgoing, asked, candidates);
+    return candidates.length === 0 ? undefined : placed(g, outgoing, asked, restedOrder(g, asked, candidates));
 };
 
 // The request as it came, to whichever credential the translator picks.
@@ -473,7 +516,7 @@ const routeOf =
     };
 
 export const createTranslatorGateway = (deps: TranslatorGatewayDeps): TranslatorGateway => {
-    const g: Gateway = { ...deps, send: deps.fetch ?? fetch, clock: deps.now ?? Date.now, attributed: new Map(), throttled: new Map() };
+    const g: Gateway = { ...deps, send: deps.fetch ?? fetch, clock: deps.now ?? Date.now, attributed: new Map(), throttled: new Map(), resting: new Map() };
     return {
         route: routeOf(g),
         baseUrlFor: async (provider) => `${deps.loopbackBase}${TRANSLATOR_GATEWAY_PATH}/${await deps.sessions.sign(provider)}`,

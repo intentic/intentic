@@ -8,6 +8,7 @@ import { pino } from "pino";
 import type { AppEnv } from "../../../app-env.js";
 import { memoryProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { opt } from "../../../opt.js";
 import { createTranslatorGateway, pinnedCandidates } from "../translator-gateway.js";
 import { accountPrefix } from "../translator-prefixes.js";
 import { translatorGatewaySessionsFrom } from "../translator-gateway-session.js";
@@ -60,6 +61,8 @@ interface HarnessOptions {
     readonly accounts?: readonly string[];
     // The models the translator routes to each account, where a test names them (TranslatorAccount.models).
     readonly models?: Readonly<Record<string, readonly string[]>>;
+    // The gateway's clock, where a test moves time.
+    readonly now?: () => number;
 }
 
 const harness = (answer: (model: string | undefined) => Response, options: HarnessOptions = {}) => {
@@ -113,6 +116,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         offPlan: (_provider, account, model) => offPlan.push([account, model]),
         logger: { info: (_fields: object, message?: string) => said.push(message ?? ""), warn: (_fields: object, message?: string) => warned.push(message ?? "") },
         fetch: upstream.fetchFn,
+        ...opt("now", options.now),
     });
     const app = new Hono<AppEnv>();
     app.all("/translator-gateway/:session/*", gateway.route);
@@ -221,6 +225,45 @@ test("an account throttled is passed for the next, and the answer settles nothin
     expect(await response.text()).toBe(STREAM);
     expect(await filed(ledger)).toStrictEqual([]);
     expect(reread).toStrictEqual([]);
+});
+
+// 2026-11-21: every Google account read 100% left, so every request went to the same first accounts in the translator's
+// order; the first three answered every retry with a throttle while 25 others answered at once.
+test("accounts that throttled a model are asked last for it on the next request, until an answer or their rest runs out", async () => {
+    const accounts = ["a.json", "b.json", "c.json", "d.json", "e.json"];
+    const throttling = new Set(["a.json", "b.json", "c.json"].map((name) => `${accountPrefix(name)}/${MODEL}`));
+    let clock = 1_000_000;
+    const { upstream, send } = harness((model) => (throttling.has(model ?? "") ? throttle() : sse()), { accounts, now: () => clock });
+
+    expect((await send("/v1/chat/completions", { body: chat })).status).toBe(429);
+    upstream.seen.length = 0;
+
+    // The loop's retry starts past the three that throttled, and is answered.
+    const retried = await send("/v1/chat/completions", { body: chat });
+    expect(retried.status).toBe(200);
+    expect(await retried.text()).toBe(STREAM);
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix("d.json")}/${MODEL}`]);
+
+    // Once the rest has run out, the ranking's own order is back.
+    clock += 10 * 60_000;
+    upstream.seen.length = 0;
+    throttling.clear();
+    await (await send("/v1/chat/completions", { body: chat })).text();
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix("a.json")}/${MODEL}`]);
+});
+
+test("the next request goes first to the account that answered, not the one that throttled before it", async () => {
+    const accounts = ["a.json", "b.json"];
+    let clock = 1_000_000;
+    const { upstream, send } = harness((model) => (model === `${accountPrefix("a.json")}/${MODEL}` ? throttle() : sse()), { accounts, now: () => clock });
+
+    // a throttles; b answers and is clear.
+    await (await send("/v1/chat/completions", { body: chat })).text();
+    clock += 1000;
+    upstream.seen.length = 0;
+    await (await send("/v1/chat/completions", { body: chat })).text();
+
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix("b.json")}/${MODEL}`]);
 });
 
 // The translator answers for a credential it is resting on this model without asking the provider: that bench is on its
