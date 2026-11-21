@@ -4,13 +4,20 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { flakeCounts, passedAgain, rerunFailures, testUnitParts } from "./flakes.mjs";
+import { flakeCounts, goneFromCheckout, passedAgain, rerunFailures, testUnitParts } from "./flakes.mjs";
 
 const TASK = { taskId: "@s/web#test", name: "@s/web", task: "test", directory: "_editor/web" };
 
 test("a test unit is read back to its file inside the package and its test name", () => {
-    assert.deepEqual(testUnitParts("@s/web#test _editor/web/src/a.test.ts › outer > it works", TASK), { file: "src/a.test.ts", name: "outer > it works", unhandled: false });
-    assert.deepEqual(testUnitParts("@s/web#test _editor/web/src/b.test.ts › unhandled error: boom", TASK), { file: "src/b.test.ts", unhandled: true });
+    assert.deepEqual(testUnitParts("@s/web#test _editor/web/src/a.test.ts › outer > it works", TASK), {
+        file: "src/a.test.ts",
+        name: "outer > it works",
+        unhandled: false,
+    });
+    assert.deepEqual(testUnitParts("@s/web#test _editor/web/src/b.test.ts › unhandled error: boom", TASK), {
+        file: "src/b.test.ts",
+        unhandled: true,
+    });
     assert.deepEqual(testUnitParts("@s/web#test _editor/web/src/c.test.ts › (unnamed)", TASK), { file: "src/c.test.ts", unhandled: true });
     assert.equal(testUnitParts("@s/web#test", TASK), undefined);
     assert.equal(testUnitParts("@s/web#typecheck _editor/web/src/a.ts: TS1 m", { ...TASK, task: "typecheck" }), undefined);
@@ -68,8 +75,43 @@ test("a test that fails once and passes alone is flaky, and one that keeps faili
         writeFileSync(marker, "");
         const task = { taskId: "@s/pkg#test", name: "@s/pkg", task: "test", directory: "pkg" };
         const units = ["@s/pkg#test pkg/src/w.test.ts › wobbles", "@s/pkg#test pkg/src/w.test.ts › breaks", "@s/other#test"];
-        assert.deepEqual(rerunFailures(root, [task], units), { flaky: [units[0]], still: [units[1], units[2]] });
+        assert.deepEqual(rerunFailures(root, [task], units), { flaky: [units[0]], still: [units[1], units[2]], gone: [] });
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
+});
+
+test("a test no longer in the checkout is gone, not failed: its file moved, or it was renamed in a file that still runs", () => {
+    const root = mkdtempSync(join(tmpdir(), "flake-root-"));
+    try {
+        const dir = join(root, "pkg");
+        mkdirSync(join(dir, "src"), { recursive: true });
+        writeFileSync(
+            join(dir, "src/kept.test.ts"),
+            [
+                `import { test, expect } from "bun:test";`,
+                `test("new name", () => expect(1).toBe(1));`,
+                `test("breaks", () => expect(1).toBe(2));`,
+            ].join("\n"),
+        );
+        const task = { taskId: "@s/pkg#test", name: "@s/pkg", task: "test", directory: "pkg" };
+        const moved = "@s/pkg#test pkg/src/moved.test.ts › anything";
+        const renamed = "@s/pkg#test pkg/src/kept.test.ts › old name";
+        const broken = "@s/pkg#test pkg/src/kept.test.ts › breaks";
+        assert.deepEqual(rerunFailures(root, [task], [moved]), { flaky: [], still: [moved], gone: [moved] });
+        assert.deepEqual(rerunFailures(root, [task], [moved, renamed, broken]), {
+            flaky: [],
+            still: [moved, renamed, broken],
+            gone: [moved, renamed],
+        });
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("a file that reported nothing is the file failing, not its tests gone", () => {
+    const named = { file: "src/a.test.ts", name: "works", unhandled: false };
+    assert.equal(goneFromCheckout(named, [], true), false);
+    assert.equal(goneFromCheckout(named, [], false), true);
+    assert.equal(goneFromCheckout({ file: named.file, unhandled: true }, [], false), false);
 });

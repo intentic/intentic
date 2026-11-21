@@ -144,6 +144,14 @@ export const night = (store, results) => {
     return { store: { ...store, entries }, released, evicted };
 };
 
+// Entries whose test is no longer in the checkout (`gone`, a Set of units), dropped: moved, renamed or deleted, it ran
+// nothing tonight, so it neither passed nor failed. A test that still flakes under its new name is listed again by the
+// next gate job that sees it fail.
+export const forget = (store, gone) => ({
+    store: { ...store, entries: store.entries.filter((entry) => !gone.has(entry.unit)) },
+    forgotten: store.entries.filter((entry) => gone.has(entry.unit)),
+});
+
 // What one gate job's failures come to: `tolerated` listed cases, `rerun` the units to re-run alone, `hard` the rest
 // (a typecheck, a build, a task nothing could be read out of), and whether a re-run is worth it at all.
 export const triage = (store, tasks, units) => {
@@ -435,12 +443,13 @@ const nightly = () => {
     const tasks = [
         ...new Map(entries.map((entry) => [entry.task, { taskId: entry.task, name: entry.name, task: "test", directory: entry.directory }])).values(),
     ];
-    const { flaky: passedAlone } = rerunFailures(
+    const { flaky: passedAlone, gone: goneUnits } = rerunFailures(
         root,
         tasks,
         entries.map((entry) => entry.unit),
     );
-    const results = new Map(entries.map((entry) => [entry.unit, passedAlone.includes(entry.unit)]));
+    const gone = new Set(goneUnits);
+    const results = new Map(entries.filter((entry) => !gone.has(entry.unit)).map((entry) => [entry.unit, passedAlone.includes(entry.unit)]));
     if (built.status !== 0) {
         // A test that could not build ran against stale code: neither a pass nor a failure of its own.
         for (const entry of entries) {
@@ -449,7 +458,15 @@ const nightly = () => {
             }
         }
     }
-    const { store, released, evicted } = withStore(path, (read) => night(expire(read, Date.now()).store, results));
+    const { store, released, evicted, forgotten } = withStore(path, (read) => {
+        const { store: kept, forgotten: dropped } = forget(expire(read, Date.now()).store, gone);
+        return { ...night(kept, results), forgotten: dropped };
+    });
+    for (const entry of forgotten) {
+        console.log(
+            `::notice file=${posix.join(entry.directory, entry.file)},title=quarantined test no longer exists::${escapeData(`${entry.test} (${entry.name}) is not in the checkout any more (moved, renamed or deleted), so it was dropped from the list.`)}`,
+        );
+    }
     for (const entry of evicted) {
         console.log(
             `::error file=${posix.join(entry.directory, entry.file)},title=quarantined test failed alone::${escapeData(`${entry.test} (${entry.name}) failed when run alone, so it is not a flake: it is back in the gate's verdict.`)}`,
@@ -465,6 +482,9 @@ const nightly = () => {
             "",
             `**Evicted** (failed alone, back in the verdict): ${evicted.length}`,
             ...evicted.map(line),
+            "",
+            `**Dropped** (no longer in the checkout): ${forgotten.length}`,
+            ...forgotten.map(line),
             "",
             `**Still listed**: ${store.entries.length}`,
             ...store.entries.map((entry) => `${line(entry)} (${entry.nights}/${RELEASE_NIGHTS})`),

@@ -1,6 +1,6 @@
 // A failing test is re-run once, alone, before anyone is charged with it; one that passes then is a flake, logged here.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, loadavg, tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -83,7 +83,16 @@ const rerun = (root, directory, kind, files) => {
     }
 };
 
+// Whether a named case is no longer in the checkout: its file is gone (moved or deleted), or its file ran and reported
+// cases but none by that name (renamed). Neither ran, so neither passed or failed: a quarantine entry recorded under an
+// old path re-runs nothing, and on 2026-11-21 that nothing was charged as a failure alone. A file that ran and reported
+// nothing at all (a crash, a load error) is not "gone": that is the file failing.
+export const goneFromCheckout = (parts, cases, fileExists) =>
+    !parts.unhandled &&
+    (!fileExists || (cases.some(({ file }) => file === parts.file) && !cases.some(({ file, name }) => file === parts.file && name === parts.name)));
+
 // Splits `units` into those that passed a second, lone run (`flaky`) and the rest (`still`); only test units re-run.
+// `gone` names the units of `still` whose test is no longer in the checkout (goneFromCheckout).
 export const rerunFailures = (root, tasks, units) => {
     const byTask = new Map(tasks.map((task) => [task.taskId, task]));
     const groups = new Map();
@@ -96,24 +105,37 @@ export const rerunFailures = (root, tasks, units) => {
         }
     }
     const flaky = new Set();
+    const gone = new Set();
     for (const [key, members] of groups) {
         const kind = key.split("\n")[1];
+        const directory = members[0].task.directory ?? "";
         const files = [...new Set(members.map(({ parts }) => parts.file))];
-        const { cases, errors, log } = rerun(root, members[0].task.directory ?? "", kind, files);
+        const present = new Set(files.filter((file) => existsSync(join(root, directory, file))));
+        // bun given only missing paths finds no test files and fails; it has nothing to re-run.
+        const { cases, errors, log } =
+            present.size > 0
+                ? rerun(root, directory, kind, [...present])
+                : { cases: [], errors: [], log: ["no file to re-run: every one is gone from the checkout"] };
         for (const { unit, parts } of members) {
             if (passedAgain(parts, cases, errors)) {
                 flaky.add(unit);
+            } else if (goneFromCheckout(parts, cases, present.has(parts.file))) {
+                gone.add(unit);
             }
         }
         // A test that fails alone is charged with it (the gate fails, the nightly evicts it), so the reason is printed
         // here: the run's output is captured for its errors and was otherwise dropped, leaving a verdict with no cause.
-        if (members.some(({ unit }) => !flaky.has(unit))) {
+        if (members.some(({ unit }) => !flaky.has(unit) && !gone.has(unit))) {
             console.log(`::group::re-run alone in ${members[0].task.directory ?? "."}: ${files.join(" ")}`);
             console.log(log.join("\n"));
             console.log("::endgroup::");
         }
     }
-    return { flaky: units.filter((unit) => flaky.has(unit)), still: units.filter((unit) => !flaky.has(unit)) };
+    return {
+        flaky: units.filter((unit) => flaky.has(unit)),
+        still: units.filter((unit) => !flaky.has(unit)),
+        gone: units.filter((unit) => gone.has(unit)),
+    };
 };
 
 const ledgerPath = (root) => {

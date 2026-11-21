@@ -12,6 +12,7 @@ import {
     emptyStore,
     expire,
     fingerprints,
+    forget,
     gateSummary,
     judgeGate,
     MAX_ENTRIES,
@@ -173,6 +174,20 @@ test("release: three nights passed in a row release a test, a failure alone evic
         last.store.entries.map((entry) => entry.unit),
         [z],
         "a test that did not run keeps its place and count",
+    );
+});
+
+test("forget: a listed test no longer in the checkout is dropped, neither evicted nor counted", () => {
+    const store = listed([caseNamed("src/a.test.ts", "x"), caseNamed("src/b.test.ts", "y")]);
+    const [x, y] = store.entries.map((entry) => entry.unit);
+    const { store: kept, forgotten } = forget(store, new Set([y]));
+    assert.deepEqual(
+        kept.entries.map((entry) => entry.unit),
+        [x],
+    );
+    assert.deepEqual(
+        forgotten.map((entry) => entry.unit),
+        [y],
     );
 });
 
