@@ -123,10 +123,16 @@ export const loadImprintScope = (scope: string): Promise<void> => {
     return loading;
 };
 
-/** Hands the store imprints another reader already holds (a sweep over every scope), without asking persistence again. */
-export const adoptImprints = (scope: string, stored: ReadonlyMap<string, SkeletonImprint>): void => {
+/**
+ * Hands the store imprints another reader already holds (a sweep over every scope), without asking persistence again.
+ * `partial` when they are only some of the scope's: the rest are still read from persistence the first time the scope
+ * is drawn.
+ */
+export const adoptImprints = (scope: string, stored: ReadonlyMap<string, SkeletonImprint>, partial = false): void => {
     merge(scope, stored);
-    loads.set(scope, Promise.resolve());
+    if (!partial) {
+        loads.set(scope, Promise.resolve());
+    }
 };
 
 /** The imprint `name` last left in the current scope. Reactive: on the scope, and on its imprints arriving from disk. */

@@ -56,7 +56,9 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
         return { paths, cut };
     });
 
-    const serverMode = computed(() => includeIgnored.value || rootHidden.value > 0 || clientTree.value.cut);
+    // The tree is walked only while the picker is open: every composer holds one of these, and a closed picker walked the
+    // whole tree again on every delta the watcher pushed. Closed, nothing it answers is drawn.
+    const serverMode = computed(() => includeIgnored.value || rootHidden.value > 0 || (active.value && clientTree.value.cut));
     const scope = ref<SearchScope>(`files`);
     const serverActive = computed(() => active.value && serverMode.value);
     const server = useWorkspaceSearch(query, scope, serverActive, SERVER_DEBOUNCE_MS);

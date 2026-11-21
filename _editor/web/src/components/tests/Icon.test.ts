@@ -119,7 +119,27 @@ it(`turns the whole glyph on the compositor on a touch screen`, async () => {
     const host = await spinner(true);
 
     expect(host.querySelector(`animateTransform, animatetransform`)).toBeNull();
-    expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(true);
+    expect(host.querySelector(`.ui-icon-turning > svg`)).not.toBeNull();
+});
+
+// WHAT TURNS IS AN HTML BOX, never the <svg>: Chromium composites a transform on an SVG element only at an effective zoom
+// of 1, which a display scaled to 125% never is, and there a turning svg re-painted the whole page every frame.
+it(`turns an HTML box around the glyph, which carries the glyph's name`, async () => {
+    setDeveloperBuild(false);
+    try {
+        const box = (await mount({ name: `spinner`, spin: true, "aria-label": `Loading`, class: `text-2xs` })).querySelector(`.ui-icon-turning`)!;
+
+        expect({
+            tag: box.tagName,
+            role: box.getAttribute(`role`),
+            label: box.getAttribute(`aria-label`),
+            sized: box.classList.contains(`text-2xs`),
+            glyphHidden: box.querySelector(`svg`)?.getAttribute(`aria-hidden`),
+            glyphTurns: box.querySelector(`svg`)?.classList.contains(`ui-icon-turning`),
+        }).toEqual({ tag: `SPAN`, role: `img`, label: `Loading`, sized: true, glyphHidden: `true`, glyphTurns: false });
+    } finally {
+        setDeveloperBuild(true);
+    }
 });
 
 // OUTSIDE A DEVELOPER'S BUILD a desktop pointer turns it on the compositor too: SMIL is kept only where a DevTools Styles
@@ -130,7 +150,7 @@ it(`turns the whole glyph on the compositor under a desktop pointer outside a de
         const host = await spinner(true);
 
         expect(host.querySelector(`animateTransform, animatetransform`)).toBeNull();
-        expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(true);
+        expect(host.querySelector(`.ui-icon-turning > svg`)).not.toBeNull();
     } finally {
         setDeveloperBuild(true);
     }
@@ -143,7 +163,8 @@ it(`keeps a still icon still on a touch screen`, async () => {
     stubGlobal(`matchMedia`, (query: string) => (query.includes(`pointer: coarse`) ? touch : real(query)));
     const host = await spinner(false);
 
-    expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(false);
+    expect(host.querySelector(`.ui-icon-turning`)).toBeNull();
+    expect(host.querySelector(`svg`)?.classList.contains(`ui-icon`)).toBe(true);
 });
 
 // Assert the actual accessible SVG, including attribute changes after mount.

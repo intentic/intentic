@@ -414,7 +414,9 @@ flowchart LR
   The app also tells each page window whether it is on screen (`intentic-desktop-shown`, `src-tauri/src/shown.rs`):
   WebView2 keeps `document.visibilityState` at `visible` for a window hidden in the tray or minimised (`webview_sync.rs`
   says why the app does not change that), so the page reported its reader present all day, and the sandbox held back
-  every push to their phone while the app sat in the tray.
+  every push to their phone while the app sat in the tray. The same change sets WebView2's memory target for the page
+  (2026-11-21): low while it is out of sight (a face stepped aside, the frame in the tray or on the taskbar, a spare),
+  which collects V8's and Blink's heaps and drops caches while the page keeps running, and normal once it is back.
 
   _(2026-10-02) Rejected as overkill: flashing the taskbar button or a dock's "urgent" state for an ask, which repeat
   what the mark already shows and do it again each time; the taskbar's progress bar while agents work; a notification

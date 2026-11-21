@@ -153,12 +153,12 @@ it(`says only the count and its two facts while the pool is answering cleanly`, 
 it(`draws what is left as a bar that empties, amber once little is left`, async () => {
     const element = mount();
     const fill = (): HTMLElement | null => element.querySelector<HTMLElement>(`[aria-hidden="true"].rounded-full > div`);
-    expect(fill()?.style.width).toBe(`40%`);
+    expect(fill()?.style.transform).toBe(`translateX(-60%)`);
     expect(fill()?.className).toContain(`bg-primary-600`);
 
     trialStatus.value = { ...trialStatus.value, used: 8, remaining: 2 };
     await nextTick();
-    expect(fill()?.style.width).toBe(`20%`);
+    expect(fill()?.style.transform).toBe(`translateX(-80%)`);
     expect(fill()?.className).toContain(`bg-warning`);
 });
 

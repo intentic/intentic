@@ -5,7 +5,8 @@ use tauri::{Manager, Webview, Window, WindowEvent};
 
 /* Report visible, non-minimized, active-face windows through intentic-desktop-shown { shown }, and seed the state at chrome_is_up.
  * WebView2's unchanged IsVisible makes document.visibilityState unreliable, otherwise hidden windows suppress phone push and loud notices.
- * Linux already follows window visibility; missing events mean shown for compatibility with older apps. */
+ * Linux already follows window visibility; missing events mean shown for compatibility with older apps. The same change
+ * sets how much memory WebView2 keeps for the page (`memory_target`). */
 
 /// The DOM event the page listens on, dispatched by `eval` like every other word the app says to a page.
 const SHOWN_EVENT: &str = "intentic-desktop-shown";
@@ -34,6 +35,9 @@ fn changed(told: &Mutex<HashMap<String, bool>>, label: &str, shown: bool) -> boo
 pub fn tell(window: &Webview, always: bool) {
     let shown = on_screen(window);
     let moved = changed(&TOLD, window.label(), shown);
+    if moved {
+        memory_target(window, shown);
+    }
     if moved && shown {
         crate::badge::window_shown(window);
     }
@@ -44,6 +48,42 @@ pub fn tell(window: &Webview, always: bool) {
         "window.dispatchEvent(new CustomEvent('{SHOWN_EVENT}', {{ detail: {{ shown: {shown} }} }}));"
     ));
 }
+
+/// What WebView2 keeps in memory for a page out of sight: as little as it can (`MemoryUsageTargetLevel` low), and as
+/// usual once the page is back on screen. Low is what Chromium does under memory pressure: a full collection of V8 and
+/// Blink's heaps, and its caches let go. The page keeps running (its sandbox streams, the wake word, notices), which a
+/// suspended page would not; and a face that stepped aside, a window in the tray or on the taskbar, and a spare built
+/// ahead of its folder are all most of what the app holds while nobody looks at it. A WebView2 runtime too old to have
+/// the setting leaves the page at the usual target.
+#[cfg(windows)]
+fn memory_target(page: &Webview, shown: bool) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+    };
+    use windows::core::Interface;
+    let level = if shown {
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+    } else {
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+    };
+    let _ = page.with_webview(move |webview| {
+        // SAFETY: plain COM calls on the controller this webview owns, made on the thread that created it
+        // (`with_webview` runs there).
+        unsafe {
+            let Ok(core) = webview.controller().CoreWebView2() else {
+                return;
+            };
+            if let Ok(core) = core.cast::<ICoreWebView2_19>() {
+                let _ = core.SetMemoryUsageTargetLevel(level);
+            }
+        }
+    });
+}
+
+/// WebKitGTK has no such setting; it already follows the window's visibility.
+#[cfg(not(windows))]
+fn memory_target(_page: &Webview, _shown: bool) {}
 
 /// Keep the pages in `window` told for the life of the window: the two faces in the frame, or a window's own page. A
 /// minimise or a restore arrives as a resize (tao reports the minimised one with a zero size), and a window the app

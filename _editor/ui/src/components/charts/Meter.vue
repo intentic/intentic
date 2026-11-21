@@ -63,9 +63,19 @@ const percent = computed(() => (value === undefined ? undefined : Math.round(Mat
     >
         <!-- Growing, the recipe moves the width too: a utility's transition list would outrank it and drop the growth. -->
         <div
-            class="h-full rounded-full"
-            :class="[TONES[tone].fill, grow ? `ui-grow-x` : `transition-[width] duration-500`]"
+            v-if="grow"
+            class="ui-grow-x h-full rounded-full"
+            :class="TONES[tone].fill"
             :style="{ width: `${percent ?? 0}%`, '--ui-grow-i': growStep }"
+        />
+        <!-- Otherwise a full-width fill slid left behind the track's clip, so a new value glides on the compositor. A
+             width that glides lays the whole page out again every frame it moves, and a meter fed every few seconds (a
+             sandbox's CPU beside its name) kept the page laying out most of the time it was on screen. -->
+        <div
+            v-else
+            class="h-full w-full rounded-full transition-transform duration-500"
+            :class="TONES[tone].fill"
+            :style="{ transform: `translateX(${(percent ?? 0) - 100}%)` }"
         />
     </div>
 </template>

@@ -7,7 +7,15 @@
 import "@intentic/testing/dom";
 import { SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { type ImprintElement, type ImprintNode, type SkeletonImprint, takeImprint } from "@intentic/ui/skeleton-imprint";
-import { clearImprints, configureSkeletonSnapshots, imprintOf, loadImprintScope, rememberImprint, type SkeletonPersistence } from "@intentic/ui/skeleton-store";
+import {
+    adoptImprints,
+    clearImprints,
+    configureSkeletonSnapshots,
+    imprintOf,
+    loadImprintScope,
+    rememberImprint,
+    type SkeletonPersistence,
+} from "@intentic/ui/skeleton-store";
 import { type App, createApp, h, nextTick, ref, type VNode, withDirectives } from "vue";
 
 // jsdom lays nothing out, so each element says where it sits (`data-box="top,left,width,height"`) and a text node's
@@ -430,6 +438,20 @@ describe(`the imprint store`, () => {
         await loadImprintScope(`sandbox-a`);
         expect(imprintOf(`list`)?.at).toBe(2);
         expect(imprintOf(`other`)?.at).toBe(1);
+    });
+
+    // Another sandbox's views are handed over at boot, its variants left on disk until it is drawn: a partial hand-over
+    // must not count as the scope's load, or what was left behind would never be read.
+    it(`still reads from disk what a partial hand-over left behind, the first time the scope is drawn`, async () => {
+        const onDisk = { ...imprintOfList(), at: 1 };
+        const { persistence } = persisting(new Map([[`list`, onDisk], [`transcript:c1`, onDisk]]));
+        configureSkeletonSnapshots({ scope: () => `sandbox-b`, persistence });
+        adoptImprints(`sandbox-b`, new Map([[`list`, { ...imprintOfList(), at: 2 }]]), true);
+
+        expect(imprintOf(`list`)?.at).toBe(2);
+        await loadImprintScope(`sandbox-b`);
+        expect(imprintOf(`transcript:c1`)?.at).toBe(1);
+        expect(imprintOf(`list`)?.at).toBe(2);
     });
 
     it(`batches writes into one save per scope, and skips an imprint that did not change`, () => {

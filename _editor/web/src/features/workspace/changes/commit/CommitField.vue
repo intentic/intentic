@@ -163,36 +163,39 @@ defineExpose({ focus: (): void => box.value?.focus() });
                 v-tooltip.right="tip"
                 @click="box?.focus()"
             >
-                <svg v-if="pace" viewBox="0 0 16 16" class="size-[1.1em] -rotate-90 text-2xs" :class="STEP_MARKS[line.status].tone" aria-hidden="true">
-                    <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" class="opacity-25" />
-                    <!-- Past the usual time a quarter arc turns instead: still working, no longer a promise. -->
-                    <circle
-                        v-if="pace.overdue"
-                        cx="8"
-                        cy="8"
-                        r="6"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        :stroke-dasharray="`${RING / 4} ${RING}`"
-                        class="origin-center motion-safe:animate-spin"
-                    />
-                    <!-- Eased over the clock's one-second tick, so the fill moves continuously rather than in steps. -->
-                    <circle
-                        v-else
-                        cx="8"
-                        cy="8"
-                        r="6"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        :stroke-dasharray="RING"
-                        :stroke-dashoffset="RING * (1 - pace.share)"
-                        class="transition-[stroke-dashoffset] duration-1000 ease-linear"
-                    />
-                </svg>
+                <!-- Overdue, the HTML box turns rather than the arc: Chromium composites a transform on an SVG element only at an
+                     effective zoom of 1, which a display scaled to 125% never is (Icon.vue). -->
+                <span v-if="pace" class="inline-flex" :class="pace.overdue ? `motion-safe:animate-spin` : undefined">
+                    <svg viewBox="0 0 16 16" class="size-[1.1em] -rotate-90 text-2xs" :class="STEP_MARKS[line.status].tone" aria-hidden="true">
+                        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" class="opacity-25" />
+                        <!-- Past the usual time a quarter arc turns instead: still working, no longer a promise. -->
+                        <circle
+                            v-if="pace.overdue"
+                            cx="8"
+                            cy="8"
+                            r="6"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            :stroke-dasharray="`${RING / 4} ${RING}`"
+                        />
+                        <!-- Eased over the clock's one-second tick, so the fill moves continuously rather than in steps. -->
+                        <circle
+                            v-else
+                            cx="8"
+                            cy="8"
+                            r="6"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            :stroke-dasharray="RING"
+                            :stroke-dashoffset="RING * (1 - pace.share)"
+                            class="transition-[stroke-dashoffset] duration-1000 ease-linear"
+                        />
+                    </svg>
+                </span>
                 <Icon v-else :name="STEP_MARKS[line.status].icon" :spin="STEP_MARKS[line.status].spin" class="text-2xs" :class="STEP_MARKS[line.status].tone" />
                 <span v-if="line.elapsed !== undefined" class="tabular-nums text-subtle" aria-hidden="true">{{ line.elapsed }}</span>
                 <span class="sr-only">{{ spoken }}</span>

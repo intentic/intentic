@@ -38,6 +38,7 @@ import {
     relistWhenSeen,
 } from "./lazyListings";
 import { actionError, busy, run } from "./treeActions";
+import { eagerIndex, spanningIndex } from "./treeIndex";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { isShared, scopeFields, scopeQuery, workspaceView } from "../../../app/workspaceScope";
@@ -82,21 +83,6 @@ const collapseAll = (): void => {
 
 // Read-only tree of the full /work filesystem, read directly from the sandbox daemon (workspace.tree), which owns
 // the ignore rules and secret denylist. Backed by vue-query for caching; file reads stay imperative.
-
-// Flattens the tree to a path → entry map so a file's size/type resolves in O(1) without re-walking the tree.
-const buildMap = (nodes: readonly WorkspaceTreeEntry[]): Map<string, WorkspaceTreeEntry> => {
-    const map = new Map<string, WorkspaceTreeEntry>();
-    const walk = (list: readonly WorkspaceTreeEntry[]): void => {
-        for (const node of list) {
-            map.set(node.path, node);
-            if (node.children) {
-                walk(node.children);
-            }
-        }
-    };
-    walk(nodes);
-    return map;
-};
 
 // A folder can't move into itself, its own parent (a no-op), or one of its own descendants.
 const canMoveInto = (source: string, targetDir: string): boolean =>
@@ -431,17 +417,9 @@ export function useWorkspaceTree() {
     // Folders containing only empty folders, workspace-wide; not derivable from `tree` since budget cuts hide it.
     const barren = computed<readonly string[]>(() => query.data.value?.barren ?? []);
     // Eager tree walk, cached separately so a lazy subtree landing doesn't re-walk the whole eager tree each time.
-    const eagerByPath = computed(() => buildMap(tree.value));
+    const eagerByPath = computed(() => eagerIndex(tree.value));
     // Path → entry map spanning the eager tree and every lazy subtree, so a lazily-shown file resolves by path.
-    const entriesByPath = computed(() => {
-        const map = new Map(eagerByPath.value);
-        for (const entries of lazyChildren.value.values()) {
-            for (const child of entries) {
-                map.set(child.path, child);
-            }
-        }
-        return map;
-    });
+    const entriesByPath = computed(() => spanningIndex(eagerByPath.value, lazyChildren.value));
 
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));

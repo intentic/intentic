@@ -175,7 +175,7 @@ const trim = (store: IDBObjectStore, kept: Map<string, Held[]>): void => {
 };
 
 // Over every record once: drops what is stale or of another encoding, keeps each sandbox's newest of each kind, and
-// hands what survives to memory, so every sandbox's imprints are there before the reader switches to it.
+// hands what survives to memory (sweepOnce), so every sandbox's views are there before the reader switches to it.
 const sweep = (now: number): Promise<ReadonlyMap<string, readonly Held[]>> =>
     transact(`readwrite`, new Map<string, Held[]>(), (store) => {
         const kept = new Map<string, Held[]>();
@@ -207,8 +207,14 @@ const sweepOnce = async (): Promise<void> => {
         return;
     }
     swept = true;
+    const active = sandboxScope();
     for (const [scope, held] of await sweep(Date.now())) {
-        adoptImprints(scope, new Map(held.map(({ key, imprint }) => [key[1], imprint])));
+        // Another sandbox's views alone: what its first frame draws after a switch. Its variants (a transcript per
+        // conversation, a diff per file: up to a hundred, and most of the bytes) are read from disk when that sandbox
+        // is drawn. Holding every sandbox's whole set was ~14 MB of a 21-sandbox account's heap from boot.
+        const own = scope === active;
+        const kept = own ? held : held.filter(({ key }) => !isVariant(key[1]));
+        adoptImprints(scope, new Map(kept.map(({ key, imprint }) => [key[1], imprint])), !own);
     }
 };
 

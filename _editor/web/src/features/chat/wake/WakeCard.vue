@@ -16,10 +16,12 @@ const t = useT();
 const props = defineProps<{ listener: WakeListener; delivery: WakeDelivery }>();
 const emit = defineEmits<{ open: [id: string] }>();
 
-const now = useNow(true, 100);
 const pending = computed(() => props.delivery.pending.value);
 const sent = computed(() => props.delivery.sent.value);
 const called = computed(() => pending.value === undefined && props.listener.mode.value === `called` && props.listener.modeUntil.value !== undefined);
+// Ticks only while a bar runs out under a card: the listener is mounted for the window's whole life, and a clock ten times
+// a second with nothing on screen kept waking the page for nothing.
+const now = useNow(() => pending.value !== undefined || called.value, 100);
 
 const word = computed(() => props.listener.word.value);
 

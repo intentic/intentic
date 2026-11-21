@@ -439,8 +439,12 @@ export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = verd
     };
 };
 
-// Whether the panel should reserve the rail's strip before layout runs, so it must know before anything is drawn.
-export const hasCapacity = (): boolean => planLimitRows(providerAccounts.value, translatorAccounts.value).length > 0;
+// Whether the panel should reserve the rail's strip before layout runs, so it must know before anything is drawn. A row
+// is drawn for every account (planLimitRows), so any account at all answers it, without judging every account's
+// verdicts: this is read by a watcher and a computed in every chat panel, again whenever any account's reading moves.
+export const hasCapacity = (): boolean =>
+    Object.values(providerAccounts.value).some((accounts) => accounts.length > 0) ||
+    Object.values(translatorAccounts.value).some((accounts) => accounts.length > 0);
 
 // Only claims width no pane needs: past the narrowest reading measure (chat.css `--chat-measure`, 36rem plus the 4.5rem
 // of gutters `.chat-turns` wears at that width, plus the scroller's strips) a pane is just centring. That per-pane

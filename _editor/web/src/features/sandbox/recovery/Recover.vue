@@ -129,7 +129,7 @@ onMounted(async () => {
                     >
                         {{ t(`sandbox.recover.forget`) }}
                     </button>
-                    <Icon v-else-if="candidate.state.kind === `checking` || candidate.state.kind === `reconnecting`" name="spinner" class="animate-spin text-muted" />
+                    <Icon v-else-if="candidate.state.kind === `checking` || candidate.state.kind === `reconnecting`" name="spinner" spin class="text-muted" />
                     <Icon v-else name="check-circle" class="text-success" />
                 </li>
             </ul>

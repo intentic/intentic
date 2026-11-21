@@ -41,34 +41,39 @@ const tintId = `assistant-tint-${useId()}`;
         role="img"
         :aria-label="label"
     >
-        <svg
-            class="assistant-art block h-full w-full select-none overflow-visible"
-            :viewBox="`0 0 ${ASSISTANT_CANVAS} ${ASSISTANT_CANVAS}`"
-            aria-hidden="true"
-            focusable="false"
-        >
-            <defs>
-                <!-- Grey clay to the body color: desaturate, then map dark, mid, light and highlight per channel. -->
-                <filter :id="tintId" color-interpolation-filters="sRGB">
-                    <feColorMatrix type="saturate" values="0" />
-                    <feComponentTransfer>
-                        <feFuncR type="table" :tableValues="tint.r" />
-                        <feFuncG type="table" :tableValues="tint.g" />
-                        <feFuncB type="table" :tableValues="tint.b" />
-                    </feComponentTransfer>
-                </filter>
-            </defs>
-            <image
-                v-for="(layer, index) in layers"
-                :key="index"
-                :href="layer.src"
-                :x="layer.rect[0]"
-                :y="layer.rect[1]"
-                :width="layer.rect[2]"
-                :height="layer.rect[3]"
-                :filter="layer.tint ? `url(#${tintId})` : undefined"
-            />
-        </svg>
+        <!-- The breath moves this HTML box, never the <svg>: Chromium composites a transform on an SVG element only at an
+             effective zoom of 1, which a display scaled to 125% never is, and there every breathing face re-painted the
+             page (and re-ran its tint filter) on the main thread every frame. -->
+        <span class="assistant-art block h-full w-full">
+            <svg
+                class="block h-full w-full select-none overflow-visible"
+                :viewBox="`0 0 ${ASSISTANT_CANVAS} ${ASSISTANT_CANVAS}`"
+                aria-hidden="true"
+                focusable="false"
+            >
+                <defs>
+                    <!-- Grey clay to the body color: desaturate, then map dark, mid, light and highlight per channel. -->
+                    <filter :id="tintId" color-interpolation-filters="sRGB">
+                        <feColorMatrix type="saturate" values="0" />
+                        <feComponentTransfer>
+                            <feFuncR type="table" :tableValues="tint.r" />
+                            <feFuncG type="table" :tableValues="tint.g" />
+                            <feFuncB type="table" :tableValues="tint.b" />
+                        </feComponentTransfer>
+                    </filter>
+                </defs>
+                <image
+                    v-for="(layer, index) in layers"
+                    :key="index"
+                    :href="layer.src"
+                    :x="layer.rect[0]"
+                    :y="layer.rect[1]"
+                    :width="layer.rect[2]"
+                    :height="layer.rect[3]"
+                    :filter="layer.tint ? `url(#${tintId})` : undefined"
+                />
+            </svg>
+        </span>
     </span>
 </template>
 
@@ -80,8 +85,13 @@ const tintId = `assistant-tint-${useId()}`;
 }
 
 @keyframes assistant-breathe {
-    0%, 100% { transform: translateY(0) rotate(-.6deg) scale(1); }
-    50% { transform: translateY(-2%) rotate(.6deg) scale(1.015, 1.025); }
+    0%,
+    100% {
+        transform: translateY(0) rotate(-0.6deg) scale(1);
+    }
+    50% {
+        transform: translateY(-2%) rotate(0.6deg) scale(1.015, 1.025);
+    }
 }
 
 :root[data-motion="reduced"] .assistant-face[data-animated="true"] .assistant-art {

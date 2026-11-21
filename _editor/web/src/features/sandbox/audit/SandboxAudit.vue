@@ -227,7 +227,7 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
                     v-tooltip.bottom="t(`sandbox.sandboxAudit.checkAgain`)"
                     @click="void recheck()"
                 >
-                    <Icon name="refresh" class="text-2xs" :class="isChecking ? `animate-spin` : ``" />
+                    <Icon name="refresh" :spin="isChecking" class="text-2xs" />
                 </button>
             </span>
 
