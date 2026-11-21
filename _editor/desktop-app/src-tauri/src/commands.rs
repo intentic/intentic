@@ -1303,9 +1303,12 @@ mod tests {
         let transcript = "intentic: [running-ic] handing over to ic...\n\
             ! error: Nothing was changed: a move between engines on this device was interrupted part-way, and is not undone yet.\n\
             !    fix:     run `ic engine move --abort` (or the desktop app's Prepare this PC) to put every sandbox back, then run the same command again.\n";
-        let said = crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(transcript));
+        let said =
+            crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(transcript));
         let failure = sandbox_verb_failure("recreate.ps1", Some(3), said);
-        assert!(failure.starts_with("Nothing was changed: a move between engines on this device was interrupted"));
+        assert!(failure.starts_with(
+            "Nothing was changed: a move between engines on this device was interrupted"
+        ));
         assert!(failure.contains("\nfix:"));
         assert!(failure.contains("run `ic engine move --abort`"));
     }
