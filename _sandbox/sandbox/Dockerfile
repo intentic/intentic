@@ -125,7 +125,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.21.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.22.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the
@@ -154,7 +154,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # this spot with a `zrok2` binary that WAS the reachability fabric; that fabric is the platform's own edge now,
 # which the daemon dials over an outbound WebSocket with no binary to install (sandbox-contract/ingress-contract.ts).
 # Placed HERE, before the tree COPYs below, so the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.11.0
+ARG CLOUDFLARED_VERSION=2026.11.1
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
@@ -190,11 +190,11 @@ RUN arch="$(dpkg --print-architecture)" \
 # it at 2.46.0 (March 2024, still the version in unstable), and gh is a client for an API that keeps moving under it.
 # A static Go binary, sha256-checked per architecture like ripgrep and jq; the tool bumper
 # (_tools/scripts/tools/bump-tools.mjs) moves the version and both checksums together.
-ARG GH_VERSION=2.104.0
+ARG GH_VERSION=2.105.0
 RUN set -eu; arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) gh_sha=98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e ;; \
-      arm64) gh_sha=cb34cefc6f4e77b90731374a2b737516bb8f3033c6ca46aa949e5344f68069e3 ;; \
+      amd64) gh_sha=79e7ab5db738c48777b696e374f8b428f0647debfb424f44d2f426370407fe2f ;; \
+      arm64) gh_sha=b1278c75107423d818f1937fd92cafc9e5e9b606631568f68d7fb816f5885a02 ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz; \
