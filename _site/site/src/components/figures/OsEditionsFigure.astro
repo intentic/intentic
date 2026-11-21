@@ -1,90 +1,184 @@
 ---
-/* OS Editions figure: Server (headless) vs Desktop (Sway kiosk with security-context-v1). */
-const GLYPHS = {
-    server: '<rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/>',
-    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
-    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
-};
+/* OsEditionsFigure: Visual comparison of Server (Headless hardware) vs Desktop (Sway Wayland Kiosk display). */
 ---
 
-<figure class="os-editions-fig" aria-label="Intentic OS Editions: Server and Desktop">
-    <div class="border border-line bg-surface p-4 sm:p-6">
-        <div class="grid gap-6 md:grid-cols-2">
-            <!-- Server Edition -->
-            <div class="flex flex-col justify-between border border-line bg-card p-5">
-                <div>
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.server}</svg>`} />
-                            <h3 class="text-base font-semibold text-content">Server Edition</h3>
-                        </div>
-                        <span class="border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">headless</span>
+<div class="os-editions my-6" aria-label="Comparison of Intentic OS Server Edition and Desktop Edition">
+    <div class="grid gap-6 lg:grid-cols-2">
+        <!-- 1. Server Edition: Headless Hardware Box -->
+        <div class="server-chassis flex flex-col justify-between border border-line bg-card/80 p-5 sm:p-6">
+            <div>
+                <!-- Header with image tag -->
+                <div class="flex items-center justify-between border-b border-line/60 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+                        <h3 class="font-mono text-sm font-semibold tracking-wider text-content uppercase">Server Edition</h3>
                     </div>
-
-                    <p class="mt-2 text-xs leading-relaxed text-muted">
-                        Lightweight, headless Linux for spare PCs, mini-PCs, homelab servers, or cloud VPS instances.
-                    </p>
-
-                    <ul class="mt-4 space-y-2.5 border-t border-line/60 pt-3 text-xs text-subtle">
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Zero GUI overhead:</strong> All resources dedicated to Docker, agents, and builds.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Browser &amp; Phone control:</strong> Managed remotely via app.intentic.dev and mobile devices.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Fast pairing:</strong> First-boot setup code via console or local network web page.</span>
-                        </li>
-                    </ul>
+                    <span class="rounded border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">ghcr.io/intentic/os</span>
                 </div>
 
-                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-subtle">
-                    image: ghcr.io/intentic/os:stable
+                <!-- Visual: Server Hardware Chassis Diagram -->
+                <div class="my-5 rounded border border-line/80 bg-canvas p-4">
+                    <div class="flex items-center justify-between border-b border-line/40 pb-2">
+                        <span class="font-mono text-3xs text-subtle">HEADLESS NODE // 1U / MINI-PC</span>
+                        <span class="flex items-center gap-1.5 font-mono text-3xs text-emerald-400">
+                            <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                            ACTIVE · NO DISPLAY
+                        </span>
+                    </div>
+
+                    <!-- Server Front Bezel Representation -->
+                    <div class="mt-3 flex items-center justify-between rounded border border-line/50 bg-ground p-3">
+                        <div class="flex items-center gap-3">
+                            <div class="flex flex-col gap-1">
+                                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                <span class="h-1.5 w-1.5 rounded-full bg-gold animate-pulse"></span>
+                            </div>
+                            <div class="font-mono text-2xs text-muted">
+                                <p class="font-semibold text-content">intentic-node-01</p>
+                                <p class="text-3xs text-subtle">Linux 6.x · bootc ostree</p>
+                            </div>
+                        </div>
+
+                        <!-- Port connections -->
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5 rounded border border-line/60 bg-surface px-2 py-1 font-mono text-3xs text-gold">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+                                </svg>
+                                <span>1 GbE LAN</span>
+                            </div>
+                            <div class="rounded border border-dashed border-line/60 px-2 py-1 font-mono text-3xs text-subtle line-through opacity-60">
+                                HDMI / DP
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Remote links visualization -->
+                    <div class="mt-4 grid grid-cols-2 gap-3 text-center">
+                        <div class="flex items-center justify-center gap-2 rounded border border-line/40 bg-surface/50 p-2 text-2xs text-muted">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="text-gold">
+                                <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+                            </svg>
+                            <span class="font-mono text-3xs">Mobile App</span>
+                        </div>
+                        <div class="flex items-center justify-center gap-2 rounded border border-line/40 bg-surface/50 p-2 text-2xs text-muted">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="text-gold">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+                            </svg>
+                            <span class="font-mono text-3xs">app.intentic.dev</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Specs Pills -->
+                <div class="grid grid-cols-3 gap-2 border-t border-line/40 pt-3 text-center">
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">GUI RAM</p>
+                        <p class="font-mono text-xs font-semibold text-gold">0 MB</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">CONTROL</p>
+                        <p class="font-mono text-xs font-semibold text-content">Remote</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">TARGET</p>
+                        <p class="font-mono text-xs font-semibold text-content">Homelab / VPS</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Desktop Edition -->
-            <div class="flex flex-col justify-between border border-gold/40 bg-card p-5">
-                <div>
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.monitor}</svg>`} />
-                            <h3 class="text-base font-semibold text-content">Desktop Edition</h3>
+            <p class="mt-4 font-mono text-3xs text-subtle">
+                Pure headless Linux. All hardware dedicated to Docker, sandboxes, and agent tasks.
+            </p>
+        </div>
+
+        <!-- 2. Desktop Edition: Sway Kiosk Display -->
+        <div class="desktop-kiosk flex flex-col justify-between border border-line bg-card/80 p-5 sm:p-6">
+            <div>
+                <!-- Header with image tag -->
+                <div class="flex items-center justify-between border-b border-line/60 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 rounded-full bg-gold shadow-[0_0_8px_rgba(201,160,92,0.8)]"></span>
+                        <h3 class="font-mono text-sm font-semibold tracking-wider text-content uppercase">Desktop Edition</h3>
+                    </div>
+                    <span class="rounded border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">ghcr.io/intentic/os-desktop</span>
+                </div>
+
+                <!-- Visual: Simulated Sway Kiosk Display -->
+                <div class="my-5 overflow-hidden rounded border border-line/80 bg-canvas">
+                    <!-- Top i3bar Status Line -->
+                    <div class="flex items-center justify-between border-b border-line bg-ground px-3 py-1 font-mono text-3xs">
+                        <div class="flex items-center gap-2 text-gold">
+                            <span class="font-bold">intentic-os</span>
+                            <span class="text-subtle">·</span>
+                            <span class="text-muted">ws: 1</span>
                         </div>
-                        <span class="border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-3xs text-gold">sway kiosk</span>
+                        <div class="flex items-center gap-3 text-subtle">
+                            <span>CPU 12%</span>
+                            <span>RAM 4.2G</span>
+                            <span class="flex items-center gap-1 text-gold">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                                    <rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>
+                                </svg>
+                                PIN LOCKED
+                            </span>
+                        </div>
                     </div>
 
-                    <p class="mt-2 text-xs leading-relaxed text-muted">
-                        Complete workstation with a Sway Wayland kiosk, system status bar, screen lock, and isolated sandbox windows.
-                    </p>
+                    <!-- Screen Area: Tiled Sway Windows with Amber Compositor Border -->
+                    <div class="grid grid-cols-2 gap-2 p-3">
+                        <!-- Left Tiled Window: Active Sandbox with Amber Border -->
+                        <div class="relative rounded-sm border-2 border-gold bg-card p-2.5 shadow-[0_0_12px_rgba(201,160,92,0.18)]">
+                            <div class="flex items-center justify-between border-b border-gold/40 pb-1">
+                                <span class="font-mono text-3xs font-semibold text-gold">sandbox: acme-web</span>
+                                <span class="rounded bg-gold/20 px-1 py-0.2 font-mono text-3xs text-gold">security-context-v1</span>
+                            </div>
+                            <div class="mt-2 font-mono text-3xs text-muted">
+                                <p class="text-subtle">$ ic sandbox status</p>
+                                <p class="text-emerald-400">ready · isolated</p>
+                            </div>
+                            <!-- Amber border annotation label -->
+                            <div class="mt-2.5 rounded bg-gold/15 px-1.5 py-0.5 font-mono text-3xs text-gold-bright">
+                                🔒 Amber frame enforced by Sway
+                            </div>
+                        </div>
 
-                    <ul class="mt-4 space-y-2.5 border-t border-line/60 pt-3 text-xs text-subtle">
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Amber window frames:</strong> Compositor-enforced borders prevent agents from spoofing windows.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Isolated Wayland sockets:</strong> Each sandbox receives its own restricted security-context-v1 socket.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Input security:</strong> Sandboxes cannot steal keyboard focus (<code class="font-mono text-3xs">no_focus</code>) or spy on keystrokes.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gold"></span>
-                            <span><strong>Screen PIN lock:</strong> Salted PIN with automatic lockout after 5 failed attempts.</span>
-                        </li>
-                    </ul>
+                        <!-- Right Tiled Window: Auxiliary Window -->
+                        <div class="rounded-sm border border-line bg-surface/60 p-2.5 opacity-80">
+                            <div class="flex items-center justify-between border-b border-line pb-1">
+                                <span class="font-mono text-3xs text-subtle">preview: localhost:3000</span>
+                                <span class="font-mono text-3xs text-subtle">no_focus</span>
+                            </div>
+                            <div class="mt-4 flex flex-col items-center justify-center text-center font-mono text-3xs text-subtle">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="mb-1 text-muted">
+                                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>
+                                </svg>
+                                <span>Keyboard isolated</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
-                    image: ghcr.io/intentic/os-desktop:stable
+                <!-- Key Specs Pills -->
+                <div class="grid grid-cols-3 gap-2 border-t border-line/40 pt-3 text-center">
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">COMPOSITOR</p>
+                        <p class="font-mono text-xs font-semibold text-gold">Sway (Wayland)</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">WINDOWS</p>
+                        <p class="font-mono text-xs font-semibold text-content">Amber-bordered</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">KEYBOARD</p>
+                        <p class="font-mono text-xs font-semibold text-content">No keystroke spy</p>
+                    </div>
                 </div>
             </div>
+
+            <p class="mt-4 font-mono text-3xs text-subtle">
+                Dedicated workstation kiosk. Compositor renders unmistakable amber borders so agents cannot spoof UI.
+            </p>
         </div>
     </div>
-</figure>
+</div>

@@ -1,65 +1,77 @@
 ---
-/* OS Pairing figure: Zero-touch install, unattended partitioning, and LAN/console pairing. */
-const GLYPHS = {
-    usb: '<rect x="6" y="2" width="12" height="20" rx="2"/><line x1="9" y1="6" x2="9" y2="8"/><line x1="15" y1="6" x2="15" y2="8"/>',
-    wifi: '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
-    check: '<polyline points="20 6 9 17 4 12"/>',
-};
+/* OsPairingFigure: Visual 3-phase zero-touch installation and LAN pairing flow. */
 ---
 
-<figure class="os-pairing-fig" aria-label="Intentic OS Zero-Touch Setup and Pairing Steps">
-    <div class="border border-line bg-surface p-4 sm:p-6">
-        <div class="grid gap-4 sm:grid-cols-3">
-            <!-- Step 1 -->
-            <div class="flex flex-col justify-between border border-line bg-card p-4">
+<div class="os-pairing my-6" aria-label="Zero-touch setup and pairing flow">
+    <div class="border border-line bg-card/80 p-5 sm:p-6 font-mono text-2xs">
+        <div class="grid gap-4 lg:grid-cols-3">
+            <!-- Phase 1: USB Boot & Unattended Partition -->
+            <div class="flex flex-col justify-between rounded border border-line bg-canvas p-4">
                 <div>
-                    <div class="flex items-center justify-between">
-                        <span class="font-mono text-xs text-gold">Step 01</span>
-                        <span class="text-subtle" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.usb}</svg>`} />
+                    <div class="flex items-center justify-between text-3xs border-b border-line/60 pb-2">
+                        <span class="text-gold font-bold">PHASE 01</span>
+                        <span class="rounded bg-surface px-1.5 py-0.5 text-subtle border border-line">USB BOOT</span>
                     </div>
-                    <h3 class="mt-2 text-sm font-semibold text-content">Flash &amp; Boot</h3>
-                    <p class="mt-1 text-2xs leading-relaxed text-muted">
-                        Write ISO to USB drive. Boot the machine. The installer partitions the target disk and enables TPM 2.0 full-disk encryption with zero interactive prompts.
-                    </p>
+
+                    <div class="my-4 flex flex-col gap-2 rounded border border-line/40 bg-ground p-3 text-3xs">
+                        <div class="flex items-center justify-between text-content">
+                            <span>Target NVMe Disk</span>
+                            <span class="text-emerald-400">Auto-wiped</span>
+                        </div>
+                        <div class="h-2 w-full overflow-hidden rounded bg-surface">
+                            <div class="h-full w-full bg-gold/40"></div>
+                        </div>
+                        <span class="text-subtle">EFI · LUKS Root (TPM 2.0) · Var</span>
+                    </div>
                 </div>
-                <div class="mt-4 border-t border-line/60 pt-2 font-mono text-3xs text-subtle">
-                    unattended &middot; auto-format
+
+                <div class="border-t border-line/40 pt-2 text-3xs text-subtle">
+                    0 prompts · Automatic disk encryption
                 </div>
             </div>
 
-            <!-- Step 2 -->
-            <div class="flex flex-col justify-between border border-line bg-card p-4">
+            <!-- Phase 2: Local Beacon & Setup Code -->
+            <div class="flex flex-col justify-between rounded border border-line bg-canvas p-4">
                 <div>
-                    <div class="flex items-center justify-between">
-                        <span class="font-mono text-xs text-gold">Step 02</span>
-                        <span class="text-gold" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.wifi}</svg>`} />
+                    <div class="flex items-center justify-between text-3xs border-b border-line/60 pb-2">
+                        <span class="text-gold font-bold">PHASE 02</span>
+                        <span class="rounded bg-gold/15 px-1.5 py-0.5 text-gold border border-gold/30">BEACON</span>
                     </div>
-                    <h3 class="mt-2 text-sm font-semibold text-content">LAN or Console Pair</h3>
-                    <p class="mt-1 text-2xs leading-relaxed text-muted">
-                        Machine prints its setup code on console and starts a temporary local web page at <code class="font-mono text-subtle">http://intentic.local</code>.
-                    </p>
+
+                    <div class="my-4 flex flex-col items-center justify-center gap-1.5 rounded border border-line/40 bg-ground p-3 text-center">
+                        <span class="font-bold text-gold text-sm tracking-widest">482 - 910</span>
+                        <span class="text-3xs text-subtle">Console Setup Code</span>
+                        <span class="mt-1 rounded bg-surface px-2 py-0.5 text-3xs text-muted">http://intentic.local</span>
+                    </div>
                 </div>
-                <div class="mt-4 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
-                    intentic.local &middot; setup code
+
+                <div class="border-t border-line/40 pt-2 text-3xs text-gold">
+                    Local LAN mDNS · Temporary pairing web
                 </div>
             </div>
 
-            <!-- Step 3 -->
-            <div class="flex flex-col justify-between border border-gold/40 bg-card p-4">
+            <!-- Phase 3: Steward Online & Fleet Joined -->
+            <div class="flex flex-col justify-between rounded border border-gold/40 bg-canvas p-4">
                 <div>
-                    <div class="flex items-center justify-between">
-                        <span class="font-mono text-xs text-gold">Step 03</span>
-                        <span class="text-gold" set:html={`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${GLYPHS.check}</svg>`} />
+                    <div class="flex items-center justify-between text-3xs border-b border-line/60 pb-2">
+                        <span class="text-gold font-bold">PHASE 03</span>
+                        <span class="rounded bg-emerald-950/60 px-1.5 py-0.5 text-emerald-400 border border-emerald-500/30">ONLINE</span>
                     </div>
-                    <h3 class="mt-2 text-sm font-semibold text-content">Steward Sandbox Online</h3>
-                    <p class="mt-1 text-2xs leading-relaxed text-muted">
-                        Enter your account setup code. The 1st steward sandbox starts, connects as host device manager, and the local pairing server shuts down permanently.
-                    </p>
+
+                    <div class="my-4 flex flex-col gap-2 rounded border border-line/40 bg-ground p-3 text-3xs">
+                        <div class="flex items-center justify-between">
+                            <span class="text-content font-semibold">Steward Sandbox</span>
+                            <span class="text-emerald-400">Connected</span>
+                        </div>
+                        <p class="text-subtle">Local web server terminates permanently.</p>
+                        <span class="text-gold">Machine joins your private fleet</span>
+                    </div>
                 </div>
-                <div class="mt-4 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
-                    paired &middot; ready to work
+
+                <div class="border-t border-line/40 pt-2 text-3xs text-emerald-400">
+                    Ready to run coding agents
                 </div>
             </div>
         </div>
     </div>
-</figure>
+</div>

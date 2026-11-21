@@ -1,101 +1,163 @@
 ---
-/* OS Isolation figure: Comparison of runc containers and Kata microVMs with bounded swap. */
-const GLYPHS = {
-    box: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5"/><path d="M12 12v9"/>',
-    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-    gauge: '<circle cx="12" cy="12" r="10"/><path d="M16.2 7.8 12 12"/>',
-};
+/* OsIsolationFigure: Architectural cross-section of runc container isolation vs Kata hardware microVM isolation, with bounded swap gauge. */
 ---
 
-<figure class="os-isolation-fig" aria-label="Intentic OS Sandbox Isolation: runc containers and Kata microVMs">
-    <div class="border border-line bg-surface p-4 sm:p-6">
-        <div class="grid gap-6 md:grid-cols-2">
-            <!-- Container Mode (runc) -->
-            <div class="flex flex-col justify-between border border-line bg-card p-5">
-                <div>
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.box}</svg>`} />
-                            <h3 class="text-base font-semibold text-content">Container Mode</h3>
-                        </div>
-                        <span class="border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">runc</span>
+<div class="os-isolation my-6" aria-label="Isolation Architecture: runc Containers vs Kata Hardware microVMs">
+    <div class="grid gap-6 lg:grid-cols-2">
+        <!-- 1. Container Mode (runc) -->
+        <div class="flex flex-col justify-between border border-line bg-card/80 p-5 sm:p-6">
+            <div>
+                <div class="flex items-center justify-between border-b border-line/60 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                        <h3 class="font-mono text-sm font-semibold tracking-wider text-content uppercase">Container Mode</h3>
                     </div>
-
-                    <p class="mt-2 text-xs leading-relaxed text-muted">
-                        Sub-second startup for everyday coding loops. Leverages Linux cgroups v2, user namespaces, and seccomp profiles.
-                    </p>
-
-                    <ul class="mt-4 space-y-2 border-t border-line/60 pt-3 text-xs text-subtle">
-                        <li class="flex items-center gap-2">
-                            <span class="h-1 w-1 rounded-full bg-gold"></span>
-                            <span><strong>Shared host kernel:</strong> Near-zero overhead</span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <span class="h-1 w-1 rounded-full bg-gold"></span>
-                            <span><strong>Instant start:</strong> Ready in &lt; 200 ms</span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <span class="h-1 w-1 rounded-full bg-gold"></span>
-                            <span><strong>Target:</strong> Standard coding agents &amp; repos</span>
-                        </li>
-                    </ul>
+                    <span class="rounded border border-line bg-surface px-2 py-0.5 font-mono text-3xs text-subtle">runc · default</span>
                 </div>
 
-                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-subtle">
-                    isolation: "container" (default)
+                <!-- Architectural Layered Diagram -->
+                <div class="my-5 flex flex-col gap-2 rounded border border-line/60 bg-canvas p-4 font-mono text-2xs">
+                    <!-- Layer 1: App / Agent Space -->
+                    <div class="rounded border border-line/80 bg-surface/80 p-3 text-center">
+                        <p class="font-semibold text-content">Workspace / Coding Agent</p>
+                        <p class="text-3xs text-subtle">/work repos · language toolchains · tests</p>
+                    </div>
+
+                    <!-- Layer 2: Kernel Isolation Boundary -->
+                    <div class="flex items-center justify-between rounded border border-dashed border-emerald-500/40 bg-emerald-950/20 px-3 py-2 text-3xs text-emerald-300">
+                        <span>Linux cgroups v2 · namespaces · seccomp</span>
+                        <span class="font-semibold">&lt; 200 ms</span>
+                    </div>
+
+                    <!-- Layer 3: Shared Host Kernel -->
+                    <div class="rounded border border-line/80 bg-ground p-3 text-center">
+                        <p class="font-semibold text-gold">Shared Host Linux Kernel</p>
+                        <p class="text-3xs text-subtle">Direct hardware access · Zero hypervisor overhead</p>
+                    </div>
+                </div>
+
+                <!-- Metrics Strip -->
+                <div class="grid grid-cols-3 gap-2 border-t border-line/40 pt-3 text-center">
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">START TIME</p>
+                        <p class="font-mono text-xs font-semibold text-emerald-400">&lt; 200 ms</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">OVERHEAD</p>
+                        <p class="font-mono text-xs font-semibold text-content">Near-zero</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">WORKLOAD</p>
+                        <p class="font-mono text-xs font-semibold text-content">Everyday repos</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- MicroVM Mode (Kata) -->
-            <div class="flex flex-col justify-between border border-gold/40 bg-card p-5">
-                <div>
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.shield}</svg>`} />
-                            <h3 class="text-base font-semibold text-content">MicroVM Mode</h3>
-                        </div>
-                        <span class="border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-3xs text-gold">Kata runtime</span>
+            <p class="mt-4 font-mono text-3xs text-subtle">
+                Fast, lightweight container boundary. Ideal for rapid interactive coding loops.
+            </p>
+        </div>
+
+        <!-- 2. MicroVM Mode (Kata) -->
+        <div class="flex flex-col justify-between border border-line bg-card/80 p-5 sm:p-6">
+            <div>
+                <div class="flex items-center justify-between border-b border-line/60 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 rounded-full bg-gold shadow-[0_0_8px_rgba(201,160,92,0.8)]"></span>
+                        <h3 class="font-mono text-sm font-semibold tracking-wider text-content uppercase">MicroVM Mode</h3>
                     </div>
-
-                    <p class="mt-2 text-xs leading-relaxed text-muted">
-                        True hardware virtualization boundary for privileged workloads, untrusted agent code, and Docker-in-Docker engines.
-                    </p>
-
-                    <ul class="mt-4 space-y-2 border-t border-line/60 pt-3 text-xs text-subtle">
-                        <li class="flex items-center gap-2">
-                            <span class="h-1 w-1 rounded-full bg-gold"></span>
-                            <span><strong>Independent guest kernel:</strong> Full VM boundary</span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <span class="h-1 w-1 rounded-full bg-gold"></span>
-                            <span><strong>Safe privileges:</strong> Root in VM cannot touch host</span>
-                        </li>
-                        <li class="flex items-center gap-2">
-                            <span class="h-1 w-1 rounded-full bg-gold"></span>
-                            <span><strong>Target:</strong> Privileged tasks, untrusted builds</span>
-                        </li>
-                    </ul>
+                    <span class="rounded border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-3xs text-gold">kata · hardware VM</span>
                 </div>
 
-                <div class="mt-5 border-t border-line/60 pt-2 font-mono text-3xs text-gold">
-                    isolation: "auto" / "vm"
+                <!-- Architectural Layered Diagram -->
+                <div class="my-5 flex flex-col gap-2 rounded border border-line/60 bg-canvas p-4 font-mono text-2xs">
+                    <!-- Layer 1: Privileged App Space -->
+                    <div class="rounded border border-gold/40 bg-surface/80 p-2.5 text-center">
+                        <p class="font-semibold text-content">Privileged Tasks / DinD</p>
+                        <p class="text-3xs text-subtle">Docker-in-Docker · Untrusted builds · Kernel access</p>
+                    </div>
+
+                    <!-- Layer 2: Dedicated Guest Kernel -->
+                    <div class="rounded border border-line/80 bg-card p-2 text-center text-3xs text-gold">
+                        <span class="font-semibold">Isolated Guest Linux Kernel</span>
+                        <span class="block text-subtle">Independent memory space &amp; syscall table</span>
+                    </div>
+
+                    <!-- Layer 3: Hardware Hypervisor Boundary -->
+                    <div class="flex items-center justify-between rounded border border-dashed border-gold/50 bg-gold/10 px-3 py-1.5 text-3xs text-gold-bright">
+                        <span>Hardware Virtualization (VT-x / AMD-V)</span>
+                        <span class="font-semibold">QEMU / Cloud-Hyp</span>
+                    </div>
+
+                    <!-- Layer 4: Host Kernel (Untouched) -->
+                    <div class="rounded border border-line/80 bg-ground p-2.5 text-center">
+                        <p class="font-semibold text-subtle">Host Linux Kernel (Protected)</p>
+                        <p class="text-3xs text-subtle">Root in guest cannot escape to host</p>
+                    </div>
+                </div>
+
+                <!-- Metrics Strip -->
+                <div class="grid grid-cols-3 gap-2 border-t border-line/40 pt-3 text-center">
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">ISOLATION</p>
+                        <p class="font-mono text-xs font-semibold text-gold">Hardware VM</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">ROOT ACCESS</p>
+                        <p class="font-mono text-xs font-semibold text-emerald-400">Safe in VM</p>
+                    </div>
+                    <div class="border border-line/40 bg-surface/30 p-1.5">
+                        <p class="font-mono text-3xs text-subtle">WORKLOAD</p>
+                        <p class="font-mono text-xs font-semibold text-content">Privileged / Untrusted</p>
+                    </div>
+                </div>
+            </div>
+
+            <p class="mt-4 font-mono text-3xs text-subtle">
+                Hardware-isolated VM boundary. A rogue process or root exploit remains trapped inside the guest.
+            </p>
+        </div>
+    </div>
+
+    <!-- Bounded Swap Visual Instrument (Full Width Bar) -->
+    <div class="mt-6 border border-line bg-card/80 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-3">
+            <div class="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gold">
+                    <circle cx="12" cy="12" r="10"/><path d="M16.2 7.8 12 12"/>
+                </svg>
+                <h4 class="font-mono text-xs font-semibold tracking-wider text-content uppercase">Bounded Swap Enforcement</h4>
+            </div>
+            <span class="font-mono text-3xs text-gold">workloadSwapMaxBytes: 1–4 GiB</span>
+        </div>
+
+        <!-- Visual Memory Bar Meter -->
+        <div class="my-4">
+            <div class="flex h-7 w-full overflow-hidden rounded border border-line/80 font-mono text-3xs font-semibold">
+                <!-- Sandbox Memory Cap (e.g. 80%) -->
+                <div class="flex w-[75%] items-center justify-center bg-gold/20 text-gold border-r border-line">
+                    Assigned RAM Cap (e.g. 8 GiB)
+                </div>
+                <!-- Bounded Swap Slice (e.g. 20%) -->
+                <div class="flex w-[20%] items-center justify-center bg-amber-500/25 text-amber-300 border-r border-line">
+                    Swap Cap (2 GiB)
+                </div>
+                <!-- Hard Wall -->
+                <div class="flex w-[5%] items-center justify-center bg-red-950/60 text-red-400">
+                    OOM
                 </div>
             </div>
         </div>
 
-        <!-- Bounded Swap callout -->
-        <div class="mt-6 flex flex-wrap items-center justify-between gap-4 border border-line bg-card p-4">
-            <div class="flex items-center gap-3">
-                <span class="text-gold" set:html={`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${GLYPHS.gauge}</svg>`} />
-                <div>
-                    <h4 class="text-xs font-semibold text-content">Bounded Swap Enforced</h4>
-                    <p class="text-2xs text-muted">A runaway memory build or language server leak cannot page the host machine into an unresponsive lockup.</p>
-                </div>
+        <div class="grid gap-3 sm:grid-cols-2 font-mono text-3xs text-subtle">
+            <div class="flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                <span><strong>Intentic OS:</strong> Swap ceiling stops runaway memory fan-out from freezing the host.</span>
             </div>
-            <div class="flex items-center gap-2 font-mono text-3xs text-subtle">
-                <span class="border border-line px-2 py-1">workloadSwapMaxBytes</span>
-                <span class="text-gold">1–4 GiB ceiling</span>
+            <div class="flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
+                <span><strong>Generic Linux:</strong> Unbounded swap pages NVMe into infinite IO lockup.</span>
             </div>
         </div>
     </div>
-</figure>
+</div>
