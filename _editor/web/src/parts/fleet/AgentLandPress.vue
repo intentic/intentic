@@ -9,7 +9,7 @@ import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
 
 // One body for the desktop header and a phone's Changes screen, so the role split (maintainers land, collaborators
 // ask, the daemon enforcing the floor either way) is decided in one template rather than kept in step across two.
-const { block = false } = defineProps<{
+const { block = false, explain = true } = defineProps<{
     /** A maintainer, whose press lands. */
     canShip: boolean;
     /** The card: whether a collaborator has already asked (which turns their press into a fact), and where its land goes. */
@@ -22,6 +22,8 @@ const { block = false } = defineProps<{
     requestHint: Tip;
     /** A phone's full-width, thumb-high press under the review, rather than the header's small one. */
     block?: boolean;
+    /** Whether to show the sentence above the button in maker mode. Defaults to true. */
+    explain?: boolean;
     /**
      * A refused land the agent can clear: the press becomes the fix, since landing again would only be refused again.
      * `queued` waits for the running turn to end; `working` is the fix turn itself.
@@ -39,8 +41,8 @@ const { maker } = useAudience();
 <template>
     <!-- In plain words the press comes with one sentence above it saying what accepting does; a developer's press is
          laid out exactly as before (`contents` leaves no box of its own). -->
-    <div :class="maker ? [`flex min-w-0 flex-col gap-2`, block ? `items-stretch` : `items-start`] : `contents`">
-        <p v-if="maker && canShip && fix === undefined" class="max-w-sm text-xs text-muted">{{ t(`workspace.results.acceptExplanation`) }}</p>
+    <div :class="maker && explain ? [`flex min-w-0 flex-col gap-2`, block ? `items-stretch` : `items-start`] : `contents`">
+        <p v-if="maker && explain && canShip && fix === undefined" class="max-w-sm text-xs text-muted">{{ t(`workspace.results.acceptExplanation`) }}</p>
         <!-- While it is queued or running the press is a fact, not a second ask; the conflict bar carries its Cancel and Stop. -->
         <Button
             v-if="fix !== undefined"

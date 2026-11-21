@@ -50,6 +50,8 @@ const requestHint = computed((): Tip => ({ title: t(`agents.agentDetail.needsMai
 
 // The diff is a developer's fact, as on the board card; plain words say only that it is ready.
 const diff = computed(() => (props.strip.kind === `ready` && !maker.value ? props.strip.diff : undefined));
+// In plain words, a maintainer gets one sentence explaining what accepting does before the buttons.
+const explanation = computed(() => (props.strip.kind === `ready` && maker.value && canShip.value ? t(`workspace.results.acceptExplanation`) : undefined));
 // A refused land, in the board card's own words: its corner's chip ("Land conflict", or "Your edits" when the reader's
 // own uncommitted files refused it) and its drill-in's verb.
 const conflict = computed(() => ({
@@ -61,13 +63,20 @@ const conflict = computed(() => ({
 <template>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-card px-3 py-2 text-2xs shadow-sm" role="status" data-land-strip>
         <template v-if="strip.kind === `ready`">
-            <span class="flex min-w-0 flex-1 items-center gap-2">
+            <span class="flex min-w-0 flex-1 items-center gap-2" :class="explanation !== undefined ? `items-start` : `items-center`">
                 <Icon name="check" class="shrink-0 text-success" />
-                <span class="font-medium text-content">{{ words.readyToLand }}</span>
-                <span v-if="diff !== undefined" class="flex min-w-0 items-center gap-1.5 truncate text-muted">
-                    <span>{{ t(`chat.chatLandStrip.files`, { count: diff.files }, diff.files) }}</span>
-                    <span class="tabular-nums text-success">+{{ diff.insertions }}</span>
-                    <span class="tabular-nums text-danger">−{{ diff.deletions }}</span>
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span class="flex items-center gap-2">
+                        <span class="font-medium text-content">{{ words.readyToLand }}</span>
+                        <span v-if="diff !== undefined" class="flex min-w-0 items-center gap-1.5 truncate text-muted">
+                            <span>{{ t(`chat.chatLandStrip.files`, { count: diff.files }, diff.files) }}</span>
+                            <span class="tabular-nums text-success">+{{ diff.insertions }}</span>
+                            <span class="tabular-nums text-danger">−{{ diff.deletions }}</span>
+                        </span>
+                    </span>
+                    <p v-if="explanation !== undefined" class="text-2xs leading-relaxed text-muted">
+                        {{ explanation }}
+                    </p>
                 </span>
             </span>
             <!-- A phone gives the two presses equal halves at thumb height; AgentLandPress's own block form fills its half. -->
@@ -83,6 +92,7 @@ const conflict = computed(() => ({
                     :land-hint="landHint"
                     :request-hint="requestHint"
                     :block="mobile"
+                    :explain="false"
                     @land="land"
                     @request="requestLand"
                 />

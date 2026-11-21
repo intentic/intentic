@@ -9,7 +9,7 @@ import AgentLandPress from "./AgentLandPress.vue";
 let app: App | undefined;
 const { audience } = useAudience();
 
-const mount = async (props: { canShip: boolean; fix?: { count: number; state: `ready`; busy: boolean } }): Promise<HTMLElement> => {
+const mount = async (props: { canShip: boolean; explain?: boolean; fix?: { count: number; state: `ready`; busy: boolean } }): Promise<HTMLElement> => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
@@ -43,6 +43,13 @@ describe(`AgentLandPress`, () => {
         const element = await mount({ canShip: true });
         expect(element.querySelector(`p`)).toBeNull();
         expect(element.querySelectorAll(`button`)).toHaveLength(1);
+    });
+
+    it(`omits the explanation sentence when explain is false, even in maker mode`, async () => {
+        audience.value = `maker`;
+        const element = await mount({ canShip: true, explain: false });
+        expect(element.querySelector(`p`)).toBeNull();
+        expect(element.querySelector(`button`)?.textContent).toContain(`Accept`);
     });
 
     it(`says nothing over a press that is not Accept: a request, or the fix for a refused land`, async () => {
