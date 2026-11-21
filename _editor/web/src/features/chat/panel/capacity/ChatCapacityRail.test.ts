@@ -79,9 +79,9 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
         })),
     });
 
-    // One bar, at the pool's roomiest reading: what a turn routed to this provider would land on. It drains, so its
-    // width is what that reading has left.
-    expect(barWidths(el)).toEqual([`96%`]);
+    // One bar for the pool as a whole: each account's use averaged, the spent one included (chatCapacity's
+    // pooledPools), so (4+44+100+30+12+7)/6 used leaves about 67%. It drains, so its width is what the pool has left.
+    expect(barWidths(el)).toEqual([`${100 - (4 + 44 + 100 + 30 + 12 + 7) / 6}%`]);
     // Not one address shown: the reader can't pick among these, so naming one would read as the account in use.
     expect(el.textContent).not.toContain(`radarsuspam`);
     // The pool's depth is carried by the count instead; 5/6 means one credential is exhausted (spentOutright).
@@ -287,7 +287,8 @@ it(`does not render 'most room' row for pooled providers`, () => {
     });
 
     expect(el.textContent).not.toContain(`most room`);
-    expect(barWidths(el)).toEqual([`60%`]);
+    // The pool's mean use, (40+70)/2, not the roomier account's 60% left.
+    expect(barWidths(el)).toEqual([`45%`]);
 });
 
 // The age beside the refresh control is the OLDEST reading on the rail, so one account the provider will not re-read
