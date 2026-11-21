@@ -1,5 +1,5 @@
 import { psText } from "@intentic/desktop-automation";
-import { isolatedExit, SANDBOX_APP_DIR, SANDBOX_LOG_DIR, startScript, windowsSandboxMissing, wsbConfig } from "./isolated.js";
+import { INTERNAL_TELEMETRY_ENV, isolatedExit, SANDBOX_APP_DIR, SANDBOX_LOG_DIR, startScript, windowsSandboxMissing, wsbConfig } from "./isolated.js";
 
 // What Windows Sandbox is handed for an isolated run: the build's folder read-only, the run's log folder writable, a
 // logon command that starts the program with its output captured and its exit code kept; nothing more of the machine.
@@ -29,6 +29,11 @@ test("the start script runs the program from the mapped folder, quotes what it i
     expect(script).toContain(` -WorkingDirectory 'C:\\app' `);
     expect(script).toContain(`-ArgumentList @(${psText("--flag")}, ${psText('"two words"')}, ${psText("it's")})`);
     expect(script).toContain(`[Environment]::SetEnvironmentVariable(${psText("RUST_LOG")}, ${psText("debug")}, 'Process')`);
+    // Any Intentic app run in the VM reports as a test install, Explorer's launches inside it included.
+    expect(script).toContain(`[Environment]::SetEnvironmentVariable('INTENTIC_TELEMETRY_INTERNAL', '1', 'User')`);
+    expect(INTERNAL_TELEMETRY_ENV).toBe(`INTENTIC_TELEMETRY_INTERNAL`);
+    // Set before the agent's own environment, so a run that means to test the unmarked app can say `0`.
+    expect(script.indexOf(`'INTENTIC_TELEMETRY_INTERNAL', '1', 'Process'`)).toBeLessThan(script.indexOf(psText("RUST_LOG")));
     expect(script).toContain(`-RedirectStandardOutput 'C:\\intentic-log\\output.log'`);
     expect(script).toContain(`Set-Content -Path 'C:\\intentic-log\\exit-code' -Value $p.ExitCode`);
 });

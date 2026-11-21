@@ -124,6 +124,7 @@ afterEach(() => {
     takeBrowserHandoffDestination();
     document.body.innerHTML = ``;
     Reflect.deleteProperty(window, `IdentityCredential`);
+    jest.useRealTimers();
 });
 
 // A browser tab has its own back button and no app to go back to.
@@ -473,6 +474,44 @@ describe(`with email sign-in offered`, () => {
 
         expect(el.textContent).toContain(`Continue with Google is faster`);
         expect(button(`Continue with email`)?.disabled).toBe(false);
+    });
+
+    // A reader pressed "Continue with email" with a Gmail address, saw the hint and no code step. The press sends; the
+    // hint sits under the button, so its appearing never moves the button out from under a press already on its way.
+    it(`sends the code on the first press with a Google address, the hint staying as advice under the button`, async () => {
+        const el = await mount();
+        await type(field(`input[type="email"]`), [`ana`, `gmail.com`].join(`@`));
+        const hint = [...el.querySelectorAll(`p`)].find((paragraph) => paragraph.textContent?.includes(`Continue with Google is faster`));
+        const press = button(`Continue with email`);
+
+        expect(press?.compareDocumentPosition(hint!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        press?.click();
+        await settle();
+
+        expect(sendEmailCode).toHaveBeenCalledWith([`ana`, `gmail.com`].join(`@`));
+        expect(field(`input[autocomplete="one-time-code"]`)).toEqual(expect.any(HTMLInputElement));
+        expect(track).toHaveBeenCalledWith(`signin_code_requested`, { surface: `login`, google_address: true });
+    });
+
+    it(`offers help a minute into the code step with nothing typed, pointing at Google too`, async () => {
+        const el = await mount();
+        jest.useFakeTimers();
+        await type(field(`input[type="email"]`), `ana@corp.example`);
+        button(`Continue with email`)?.click();
+        await advanceTimersByTimeAsync(0);
+        await nextTick();
+
+        expect(el.querySelector(`[data-testid="email-code-help"]`)).toBeNull();
+        await advanceTimersByTimeAsync(60_000);
+        await nextTick();
+
+        expect(el.querySelector(`[data-testid="email-code-help"]`)?.textContent?.trim()).toBe(
+            `No code yet? It can take a minute. Look in your spam or promotions folder, send it again below, or sign in with Google above.`,
+        );
+        expect(track).toHaveBeenCalledWith(`signin_code_waiting`, { surface: `login` });
+
+        await type(field(`input[autocomplete="one-time-code"]`), `1`);
+        expect(el.querySelector(`[data-testid="email-code-help"]`)).toBeNull();
     });
 
     it(`asks for a minute's rest when the platform says too many codes were asked for`, async () => {

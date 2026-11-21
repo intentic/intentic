@@ -3,6 +3,7 @@ import { noticeFrom,useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, type Ref, ref } from "vue";
 import { useAuth } from "../../client/auth/useAuth";
+import { type EmailCodeSurface, type Track, useEmailCodeEvents } from "./emailCodeEvents";
 import { CODE_LENGTH, codeDigits, codeSpent, EmailCodeError, plausibleAddress } from "../../client/auth/emailCode";
 
 // THE EMAILED-CODE SIGN-IN, as one small machine every screen that offers it shares (Login.vue, AcceptInvite.vue,
@@ -16,16 +17,32 @@ export const RESEND_AFTER_MS = 60_000;
 
 export type EmailCodeStep = `address` | `code`;
 
+// The platform's two calls, real by default and handed in by tests.
+type EmailCodeAuth = Pick<ReturnType<typeof useAuth>, `sendEmailCode` | `signInWithEmailCode`>;
+
 interface EmailCodeOptions {
     readonly lockedEmail?: Readonly<Ref<string | undefined>>;
     // An account being added beside the one signed in: the sign-in is not taken as this page's (useAuth `afterSignIn`).
     readonly adding?: Readonly<Ref<boolean>>;
+    // Google's sign-in is on the same screen: the first send counts whether the address was a Google one.
+    readonly googleOffered?: Readonly<Ref<boolean>>;
+    readonly surface: EmailCodeSurface;
     readonly onSignedIn: () => void | Promise<void>;
+    readonly auth?: EmailCodeAuth;
+    readonly track?: Track;
 }
+
+// The seconds left before another code may be asked for, and the hold a code mailed (or a "wait" refusal) starts.
+const useResendCountdown = () => {
+    const until = ref<number>();
+    const now = useNow(() => until.value !== undefined);
+    const seconds = computed(() => (until.value === undefined ? 0 : Math.max(0, Math.ceil((until.value - now.value) / 1000))));
+    return { seconds, hold: (): void => void (until.value = Date.now() + RESEND_AFTER_MS) };
+};
 
 export const useEmailCode = (options: EmailCodeOptions) => {
     const t = useT();
-    const { sendEmailCode, signInWithEmailCode } = useAuth();
+    const { sendEmailCode, signInWithEmailCode } = options.auth ?? useAuth();
 
     const typed = ref(``);
     // The invite's address when there is one: the platform accepts the invite only for it, so no other is offered.
@@ -40,29 +57,27 @@ export const useEmailCode = (options: EmailCodeOptions) => {
     const notice = ref<NoticeModel>();
     // Whether the last refusal spent the code (wrong too often, run out), so the screen puts "send a new code" first.
     const needsNewCode = ref(false);
-    const resendAt = ref<number>();
-
-    const now = useNow(() => resendAt.value !== undefined);
-    const resendInSeconds = computed(() => (resendAt.value === undefined ? 0 : Math.max(0, Math.ceil((resendAt.value - now.value) / 1000))));
+    const { seconds: resendInSeconds, hold: holdResend } = useResendCountdown();
     const canSend = computed(() => !sending.value && plausibleAddress(address.value));
     const canResend = computed(() => !sending.value && resendInSeconds.value === 0);
     const canVerify = computed(() => !verifying.value && code.value.length === CODE_LENGTH);
+    const events = useEmailCodeEvents(options, () => step.value === `code` && code.value === `` && !verifying.value);
 
-    const mail = async (to: string): Promise<boolean> => {
+    const mail = async (to: string, stage: `send` | `resend`): Promise<boolean> => {
         sending.value = true;
         notice.value = undefined;
         try {
-            await sendEmailCode(to);
+            await events.mail(stage, to, () => sendEmailCode(to));
             sentTo.value = to;
             needsNewCode.value = false;
             code.value = ``;
-            resendAt.value = Date.now() + RESEND_AFTER_MS;
+            holdResend();
             return true;
         } catch (error) {
             notice.value = noticeFrom(error, t(`auth.emailCode.sendFailed`), { tone: `warning` });
             // The platform said wait: the countdown says how long, rather than a button that would be refused again.
             if (error instanceof EmailCodeError && error.refusal === `rate-limited`) {
-                resendAt.value = Date.now() + RESEND_AFTER_MS;
+                holdResend();
             }
             return false;
         } finally {
@@ -74,7 +89,7 @@ export const useEmailCode = (options: EmailCodeOptions) => {
         if (!canSend.value) {
             return;
         }
-        if (await mail(address.value.toLowerCase())) {
+        if (await mail(address.value.toLowerCase(), `send`)) {
             step.value = `code`;
         }
     };
@@ -84,7 +99,7 @@ export const useEmailCode = (options: EmailCodeOptions) => {
         if (to === undefined || !canResend.value) {
             return;
         }
-        await mail(to);
+        await mail(to, `resend`);
     };
 
     const verify = async (): Promise<void> => {
@@ -95,7 +110,7 @@ export const useEmailCode = (options: EmailCodeOptions) => {
         verifying.value = true;
         notice.value = undefined;
         try {
-            await (options.adding?.value === true ? signInWithEmailCode(to, code.value, { adding: true }) : signInWithEmailCode(to, code.value));
+            await events.verify(() => (options.adding?.value === true ? signInWithEmailCode(to, code.value, { adding: true }) : signInWithEmailCode(to, code.value)));
             await options.onSignedIn();
         } catch (error) {
             notice.value = noticeFrom(error, t(`auth.emailCode.signInFailed`), { tone: `warning` });
@@ -119,6 +134,7 @@ export const useEmailCode = (options: EmailCodeOptions) => {
         code.value = ``;
         notice.value = undefined;
         needsNewCode.value = false;
+        events.reset();
     };
 
     return {
@@ -131,6 +147,7 @@ export const useEmailCode = (options: EmailCodeOptions) => {
         verifying,
         notice,
         needsNewCode,
+        waitedLong: events.waitedLong,
         resendInSeconds,
         canSend,
         canResend,

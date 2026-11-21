@@ -17,6 +17,9 @@ import ChatHeldStatus from "./ChatHeldStatus.vue";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { QueuedReopen } from "@intentic/sandbox-contract/schemas/agent";
 import { accountsOf } from "../../../../models/conversations/accounts/useChat-accounts";
+import type { QueuedTrialRetry } from "@intentic/sandbox-contract/schemas/queued-trial-retry";
+import { RouterLink } from "vue-router";
+import { modelsHref } from "../../../../lib/routes/modelsPath";
 
 /* Messages booked for later that go together, drawn where the reader looks for what they sent: their own prompts, over one line with the time they go (or the agent they wait for), Change, which re-times them in the panel that booked them, and Send now. Both act on these messages alone: every other booking keeps its own time. */
 
@@ -66,6 +69,12 @@ const hint = computed((): Tip => {
 // old to record the reason says nothing here (docs/architecture/app-plane.md).
 const waitedOut = computed((): QueuedReopen | undefined =>
     until.value === undefined ? undefined : props.group.messages.find((message) => message.reopenOf !== undefined)?.reopenOf,
+);
+
+// The sandbox sending words again that the busy free trial turned away (the daemon's trial-retry.ts): which try this is.
+// Its own words, never a reader's booking; a model of the reader's own is the way past the wait, so it is offered beside it.
+const retry = computed((): QueuedTrialRetry | undefined =>
+    until.value === undefined ? undefined : props.group.messages.find((message) => message.trialRetry !== undefined)?.trialRetry,
 );
 
 // A booking that waits out an allowance nobody needs any more: the account the next turn runs on has room now, because
@@ -131,8 +140,9 @@ const takeBack = (): void => {
     <template v-if="!group.continues">
         <ChatHeldBubble v-for="message in group.messages" :key="message.id" :message="message" :compact="compact" />
     </template>
-    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact" :continues="group.continues">
+    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact" :continues="group.continues" :retry="retry">
         <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+            <Button v-if="retry" :as="RouterLink" :to="modelsHref()" size="small" thumb tier="quiet">{{ t(`chat.words.connectAModel`) }}</Button>
             <span v-if="retimable" ref="changeAnchor" class="inline-flex">
                 <Button size="small" thumb tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{
                     t(`chat.chatHeld.change`)

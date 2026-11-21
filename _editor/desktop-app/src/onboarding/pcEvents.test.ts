@@ -225,6 +225,22 @@ describe(`the PC setup's events`, () => {
         expect(told).toEqual([[`onboarding_setup`, { action: `failed`, step: `Downloading the engine`, reason: `could not write <path> denied` }]]);
     });
 
+    it(`tells a failure's problem, fix and cause apart from its reason (2026-11-21)`, () => {
+        const reason = [
+            `the engine stopped as it started (exit -1): Kod błędu: Wsl/Service/0x80072747`,
+            `problem: Windows ran out of network buffers as WSL started (0x80072747, WSAENOBUFS).`,
+            `fix:     open a terminal as administrator, run netsh winsock reset, restart the PC, then try again.`,
+        ].join(`\n`);
+        const told = playSetup([{ state: `running`, percent: 10, step: `Starting the engine` }, { state: `failed`, reason }]);
+        expect(told[0]?.[1]).toMatchObject({
+            action: `failed`,
+            reason: `the engine stopped as it started (exit -1): Kod błędu: Wsl/Service/0x80072747 problem: Windows ran out of network buffers as WSL started (0x80072747, WSAENOBUFS). fix: open a terminal as administrator, run netsh winsock reset, restart the PC, then try again.`,
+            problem: `Windows ran out of network buffers as WSL started (0x80072747, WSAENOBUFS).`,
+            fix: `open a terminal as administrator, run netsh winsock reset, restart the PC, then try again.`,
+            cause: `winsock-buffers`,
+        });
+    });
+
     it(`tells both a restart and a sign-out asked for`, () => {
         expect(actions(playSetup([{ state: `waiting`, for: `restart` }]))).toEqual([`restartAsked`]);
         expect(actions(playSetup([{ state: `waiting`, for: `signOut` }]))).toEqual([`signOutAsked`]);

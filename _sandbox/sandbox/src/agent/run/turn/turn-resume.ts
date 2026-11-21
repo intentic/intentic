@@ -43,7 +43,7 @@ import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume } from "./recovery/restart-resume-policy.js";
 import { spentUntil } from "./holds/allowance-gate.js";
 import { releaseRoomHolds } from "./holds/room-holds.js";
-import { releaseAccountHolds } from "./holds/account-refusal-release.js";
+import { releaseRefusedWords } from "./holds/trial-retry.js";
 import { memoryRerunsOf, memoryTail } from "./holds/memory-kill.js";
 import { holdCutForMemory } from "./recovery/memory-restart.js";
 import { heldVerdict } from "./holds/held-verdict.js";
@@ -625,11 +625,7 @@ export const createTurnResumeScheduler = (services: Services, backstopMs = RESUM
         } catch (error) {
             services.logger.error({ err: error }, "resume pass: a low-memory hold could not be let go, the next pass tries again");
         }
-        try {
-            await releaseAccountHolds(services, now);
-        } catch (error) {
-            services.logger.error({ err: error }, "resume pass: an account refusal's words could not be let go, the next pass tries again");
-        }
+        await releaseRefusedWords(services, now, due);
     };
     const passes = nudgedPass(pass, {
         backstopMs,

@@ -4,6 +4,7 @@ import { CLEAR_STATE_PLAN, type FakeFlyExecAnswer, type FakeFlyMachine } from "@
 import { DAEMON_HEALTH_COMMAND, DAEMON_VITALS_COMMAND, DAEMON_VITALS_FILE_COMMAND } from "./sandbox/hosted/gate/daemon-health.js";
 import type { HostedGateRecord } from "./sandbox/hosted/gate/gate-row.js";
 import type { withHostedAppLock } from "./sandbox/hosted/hosted-app-lock.js";
+import type { CodeAllowanceRow, CodeAllowances } from "./sign-in.js";
 
 const hostedAppLocks = new Map<string, Promise<void>>();
 
@@ -399,4 +400,19 @@ export const fakeAccountStore = (seed: Partial<FakeAccountRows> = {}) => {
     // fails the test naming the call), and each answers in the shape Prisma would for the fields they read.
     const prisma: PrismaClient = db as never;
     return { db, prisma, rows, locked };
+};
+
+// The sign-in code allowance table in memory, the one seam the per-address limit reads and writes.
+export const memoryAllowances = (): CodeAllowances => {
+    const rows = new Map<string, CodeAllowanceRow>();
+    return {
+        read: async (key) => rows.get(key) ?? null,
+        restart: async (key, windowStart) => void rows.set(key, { count: 1, windowStart }),
+        increment: async (key) => {
+            const held = rows.get(key);
+            if (held !== undefined) {
+                rows.set(key, { ...held, count: held.count + 1 });
+            }
+        },
+    };
 };

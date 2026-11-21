@@ -3,7 +3,7 @@ import type { User } from "@intentic/api-contract";
 import { type Ref, watch } from "vue";
 import { takeReloadReason } from "@intentic/ui/reload-reason";
 import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
-import { analyticsAvailable, analyticsChoice } from "./analyticsConsent";
+import { analyticsAvailable, analyticsChoice, internalHere, noteInternalSwitch } from "./analyticsConsent";
 import { desktopApp, desktopLaunchId } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
@@ -179,6 +179,10 @@ const registerClient = (posthog: PostHog): void => {
     posthog.register(
         app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId, ...landingCampaign },
     );
+    // The team's own install or browser (analyticsConsent.ts), on every event so its test machines filter out.
+    if (internalHere()) {
+        posthog.register({ internal: true });
+    }
     // The same id the app's own launch events carry (launch.rs), so a run's window joins what the app said about it.
     if (launchId !== undefined) {
         posthog.register({ desktop_launch_id: launchId });
@@ -235,6 +239,8 @@ const arrivedWith = (search: string): Campaign => {
     return campaign;
 };
 const landingCampaign = arrivedWith(globalThis.location?.search ?? ``);
+// Read as the module loads for the same reason: `?internal=1` marks this browser as the team's own.
+noteInternalSwitch(globalThis.location?.search ?? ``);
 // The person's first-touch fields; an absent tag is left out when the SDK serialises the call.
 const firstTouch = () => ({
     initial_utm_source: landingCampaign.utm_source,

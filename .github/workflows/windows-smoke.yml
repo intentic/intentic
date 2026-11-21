@@ -86,6 +86,10 @@ jobs:
       # everything up to the turn still runs: a tier that cannot reach its credential has nothing to say, and
       # must not fail.
       INTENTIC_AGENT_AUTH_VOLUME: ${{ vars.WINDOWS_AGENT_AUTH_VOLUME }}
+      # Every app this job starts is a test, never a person's install: a release candidate is built with the analytics
+      # key, so the app tags each event `internal: true` (the desktop app's launch.rs `telemetry_internal`) and the
+      # runner's installs filter out of product analytics. hermetic.ts also pins the config folder's marker file.
+      INTENTIC_TELEMETRY_INTERNAL: "1"
     steps:
       # KEPT BETWEEN RUNS, as the Linux fleet's checkouts are: this is one long-lived machine, and a clean checkout
       # deleted node_modules and every turbo output, so each release paid a full install and build here (2m13s of

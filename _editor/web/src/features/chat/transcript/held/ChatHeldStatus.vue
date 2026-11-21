@@ -5,6 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { formatReset, formatWait } from "../../../../models/providers/usageStatus";
 import type { HoldReason } from "./heldQueue";
+import type { QueuedTrialRetry } from "@intentic/sandbox-contract/schemas/queued-trial-retry";
 import { memoryTip } from "../../../../models/agent-status/memoryTip";
 
 /* The one line under a message that did not go out: that it did not, why in a few words, and the way on (the slot). A
@@ -25,6 +26,9 @@ const props = defineProps<{
     spread?: boolean;
     // A Continue booked for later rather than words: it says the conversation continues then, not that something sends.
     continues?: boolean;
+    // A booking the sandbox made itself, sending words the busy free trial turned away again: said as the retry it is,
+    // with which try, never as a time the reader chose.
+    retry?: QueuedTrialRetry | undefined;
 }>();
 
 const t = useT();
@@ -46,6 +50,14 @@ const sendsWhen = (until: number, at: number): string => {
 };
 const shortly = (): string => (props.continues === true ? t(`chat.chatHeld.continuesShortly`) : t(`chat.chatHeld.sendsShortly`));
 
+// The sandbox's own retry of words the busy trial turned away: when, and which try of how many.
+const retryWhen = (retry: QueuedTrialRetry, until: number | undefined, at: number): string => {
+    const tries = { made: retry.made, max: retry.max };
+    return until === undefined || until <= at
+        ? t(`chat.chatHeld.retriesShortly`, tries)
+        : t(`chat.chatHeld.retriesIn`, { ...tries, wait: formatWait(Math.round(until / 1_000), at) });
+};
+
 // One key per reason, spelled out so every word here is one the catalog check can find.
 const why = computed(() => {
     switch (props.reason) {
@@ -57,6 +69,9 @@ const why = computed(() => {
             // Waiting on another agent's land: said with that agent's name, which is a link to it (the template's).
             if (props.after !== undefined) {
                 return props.after.title === undefined ? t(`chat.chatHeld.waitsForGone`) : ``;
+            }
+            if (props.retry !== undefined) {
+                return retryWhen(props.retry, props.until, now.value);
             }
             // Past its instant, the sandbox is letting it go on its next pass (every few seconds).
             return props.until === undefined || props.until <= now.value ? shortly() : sendsWhen(props.until, now.value);
@@ -71,7 +86,11 @@ const why = computed(() => {
         <!-- Said once when it appears, which is the moment a message the reader just sent did not go out. -->
         <span role="status" class="flex min-w-0 items-center gap-1.5">
             <!-- A scheduled send is the reader's own booking, said as one: a clock, no alarm. -->
-            <span v-if="reason === `scheduled`" class="flex shrink-0 items-center gap-1.5 font-medium text-muted">
+            <!-- The sandbox's retry is not the reader's booking: it says the trial was busy, in the warning ink a refusal has. -->
+            <span v-if="reason === `scheduled` && retry !== undefined" class="flex shrink-0 items-center gap-1.5 font-medium text-warning">
+                <Icon name="refresh" class="shrink-0 text-2xs" />{{ t(`chat.chatHeld.trialBusy`) }}
+            </span>
+            <span v-else-if="reason === `scheduled`" class="flex shrink-0 items-center gap-1.5 font-medium text-muted">
                 <Icon name="clock" class="shrink-0 text-2xs" />{{ t(`chat.chatHeld.scheduled`) }}
             </span>
             <!-- Toned only when the sandbox or a provider held it: a stop is the reader's own doing, and needs no flag. -->

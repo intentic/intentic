@@ -5,6 +5,7 @@ import { ref } from "vue";
 import { track } from "../analytics";
 import { sandboxLogs, sandboxPower, sandboxRecreate, sandboxRemove, sandboxResize, takePendingRecreate } from "../desktop";
 import { answering, clearProcess, processOf, reportProcess } from "../processes";
+import { failureDetail, type FailureFacts } from "./failure/failureDetail";
 import { runReason, stopBlock } from "./installTelemetry";
 import { eventsOf, linesOf, running, runOutcome, type RunOutcome, start } from "./runs";
 
@@ -51,11 +52,16 @@ const onRow = async (slug: string, verb: SandboxVerb, run: string, action: () =>
 };
 
 // How a recreate went, as the funnel hears it: the run's outcome and, when it failed, why in its own scrubbed words
-// (installTelemetry.ts `runReason`), so a failure inside ic is no longer only an exit code (2026-11-20).
-const finished = (run: string, failure: string | undefined, startedAt: number): RunOutcome & { readonly reason?: string } => {
+// (installTelemetry.ts `runReason`), so a failure inside ic is no longer only an exit code (2026-11-20), with its stop
+// block's problem and fix and what kind of failure it was (failureDetail.ts, 2026-11-21).
+const finished = (run: string, failure: string | undefined, startedAt: number): RunOutcome & FailureFacts => {
     const outcome = runOutcome(run, failure === undefined, startedAt);
-    const reason = failure === undefined ? undefined : runReason(eventsOf(run));
-    return reason === undefined ? outcome : { ...outcome, reason };
+    if (failure === undefined) {
+        return outcome;
+    }
+    const reason = runReason(eventsOf(run));
+    const detail = failureDetail(stopBlock(eventsOf(run)));
+    return reason === undefined ? { ...outcome, ...detail } : { ...outcome, reason, ...detail };
 };
 
 // `source` distinguishes a click here from the workspace's Update or Environment card handing it over.

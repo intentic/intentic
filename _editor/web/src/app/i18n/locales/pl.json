@@ -1284,6 +1284,8 @@
             "typeItOrOpenLink": "Wpisz go tutaj albo otwórz link z wiadomości na tym urządzeniu.",
             "codeLabel": "Kod logowania",
             "useDifferentAddress": "Użyj innego adresu",
+            "noCodeYet": "Nadal brak kodu? To może potrwać minutę. Zajrzyj do folderu spam lub oferty albo wyślij go ponownie poniżej.",
+            "noCodeYetOrGoogle": "Nadal brak kodu? To może potrwać minutę. Zajrzyj do folderu spam lub oferty, wyślij go ponownie poniżej albo zaloguj się przez Google powyżej.",
             "sendAgainIn": "Wyślij ponownie za {seconds} s",
             "sendAgain": "Wyślij ponownie",
             "usedLinkElsewhere": "Użyto linku na innym urządzeniu? Tam jesteś już zalogowany.",
@@ -3569,7 +3571,10 @@
             "servedElsewhere": "Czeka na wysłanie do {served}. W polu wiadomości wybrano {pick}.",
             "moveToPick": "Przenieś ją tam | Przenieś je tam | Przenieś je tam",
             "bookedForSpentReopened": "Zaplanowano na odnowienie {waited}, a ma już zapas: Wyślij teraz wyśle ją od razu.",
-            "servedOn": "Pójdzie do {served}. | Pójdą do {served}. | Pójdą do {served}."
+            "servedOn": "Pójdzie do {served}. | Pójdą do {served}. | Pójdą do {served}.",
+            "trialBusy": "Darmowa wersja próbna zajęta",
+            "retriesIn": "ponowna próba za {wait} (próba {made} z {max})",
+            "retriesShortly": "ponowna próba za chwilę (próba {made} z {max})"
         },
         "chatLandStrip": {
             "files": "{count} plik | {count} pliki | {count} plików"
@@ -4557,7 +4562,9 @@
             "sameChat": "Ten sam czat",
             "spentAt": "limit wraca o {when}",
             "spentIn": "limit wraca za {when}",
-            "stopsAttempt": "Zatrzymuje tę próbę"
+            "stopsAttempt": "Zatrzymuje tę próbę",
+            "trialBusy": "Darmowa wersja próbna jest teraz zajęta i może znowu odrzucić Twoją wiadomość. Własny model pozwala ominąć czekanie.",
+            "trialBusyUntil": "Darmowa wersja próbna jest teraz zajęta i może znowu odpowiedzieć {when}. Własny model pozwala ominąć czekanie."
         },
         "limitReset": {
             "alreadyUsed": "Reset na ten tydzień został już wykorzystany.",
@@ -4993,7 +5000,8 @@
             "needsBadge": "Wymaga {requirement}",
             "runsUnderClaudeCode": "{runs} w Claude Code",
             "trialLeft": "Darmowa wersja próbna · kroków na dziś: {remaining}",
-            "trialUsedUp": "Darmowa wersja próbna · na dziś wyczerpana"
+            "trialUsedUp": "Darmowa wersja próbna · na dziś wyczerpana",
+            "trialBusy": "Darmowa wersja próbna · teraz zajęta"
         },
         "cardReplies": {
             "answersNotSubmitted": "Nie udało się wysłać Twoich odpowiedzi: tura mogła się już skończyć.",

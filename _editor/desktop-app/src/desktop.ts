@@ -92,6 +92,7 @@ export interface DesktopInfo {
     // Installation id, minted once; the thread analytics.ts uses to tie this app to the user's SPA session.
     installId: string;
     analyticsAllowed: boolean;
+    telemetryInternal: boolean; // The team's own install (launch.rs `telemetry_internal`): events say `internal: true`.
     // Seconds a Docker start waits for its engine before it answers `tookTooLong`.
     engineLimitSeconds: number;
     // Seconds an `ic sandbox fix` may run before the app stops it.

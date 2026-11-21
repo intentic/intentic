@@ -16,6 +16,11 @@ import { formatChord, isApplePlatform } from "../../../../workbench/commands/key
 import { runAllowance } from "../../../../models/conversations/accounts/shellModelPicking";
 import { atReopenPhrase } from "../../../../models/conversations/endings/pickUp";
 import { useT } from "@intentic/ui/i18n";
+import { formatUntil } from "@intentic/ui/time";
+import { RouterLink } from "vue-router";
+import { isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import { trialBusy } from "../../../../models/providers/access";
+import { modelsHref } from "../../../../lib/routes/modelsPath";
 
 const t = useT();
 
@@ -95,6 +100,20 @@ const spend = computed<string>(() => {
               );
     return [modelLabelFor(held.provider, held.model), ...(tier === undefined ? [] : [tier]), ...(back === undefined ? [] : [back])].join(` · `);
 });
+/* THE FREE TRIAL STAGED WHILE IT IS TURNING MESSAGES AWAY: "Choose another model" after a refusal offered the same trial
+   back with nothing said, and people re-picked it and were refused again (session replays, 2026-11). The bar says it is
+   busy, and leads with a model of the reader's own; picking the trial stays possible, as the quieter press. */
+const busyTrial = computed((): string | undefined => {
+    const held = request.value;
+    const busy = held === undefined || !isTrialProvider(held.provider) ? undefined : trialBusy();
+    if (busy === undefined) {
+        return undefined;
+    }
+    return busy.retryAt === undefined || busy.retryAt <= now.value
+        ? t(`chat.hostPickerBody.trialBusy`)
+        : t(`chat.hostPickerBody.trialBusyUntil`, { when: formatUntil(busy.retryAt) });
+});
+
 // A booked press's tip says what pressing does instead of starting now.
 const bookedNote = computed(() => (booked.value === undefined ? undefined : t(`chat.hostPickerBody.bookedNote`)));
 const continueTip = computed((): Tip => ({ title: t(`chat.hostPickerBody.sameChat`), keys: submitKeys, note: bookedNote.value }));
@@ -188,6 +207,22 @@ const choose = (entry: PickerEntry): void => {
                             @click="commitModelPick(`start-over`)"
                         >
                             <template #icon><Icon :name="verbIcon(`refresh`)" /></template>
+                        </Button>
+                    </div>
+                </template>
+                <template v-else-if="busyTrial">
+                    <p class="text-2xs text-warning" role="status">{{ busyTrial }}</p>
+                    <div class="flex gap-1.5">
+                        <Button
+                            :as="RouterLink"
+                            :to="modelsHref()"
+                            tier="accent"
+                            :label="t(`chat.words.connectAModel`)"
+                            class="flex-1"
+                            @click="dismissModelPick()"
+                        />
+                        <Button :label="request.action" class="flex-1" tier="boring" :disabled="!chosen" v-tooltip.top="actionTip" @click="commitModelPick()">
+                            <template #icon><Icon name="play" /></template>
                         </Button>
                     </div>
                 </template>

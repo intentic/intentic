@@ -37,17 +37,19 @@ import {
 } from "../desktop";
 import { currentPcCheck, followPcSetup, pcParts, setUpThisPc as startPcSetup, type PcParts } from "../onboarding/pc";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "../setupPlan";
+import { failureFacts, type FailureFacts } from "./failure/failureDetail";
 import {
     endRequirements,
     failureLine,
+    finishedFacts,
     foldRequirement,
     homeOf,
     openStep,
     pullReportDue,
     runEnding,
     runFacts,
-    scrubReason,
     stepLeft,
+    stopBlock,
     type RequirementClocks,
     type RequirementTime,
     type StepOutcome,
@@ -503,26 +505,30 @@ const requirementFacts = (): Record<string, unknown> => {
     };
 };
 
-// Why a run failed, in its own words: the requirement row that failed and what it said, else the run's last error line;
-// scrubbed of the home folder, the account, any address and the code (installTelemetry.ts `scrubReason`).
-const reasonOf = (args: SetupArgs): string | undefined => {
-    const failed = Object.values(requirementState.value).findLast((row) => row.state === `failed` && row.detail !== undefined);
-    const said = failed?.detail ?? failureLine(eventsOf(`setup`));
-    const reason = said === undefined ? `` : scrubReason(said, { home: homeOf(setupLog.value), code: args.code });
-    return reason === `` ? undefined : reason;
+// Why a run failed, in its own words (failureDetail.ts `failureFacts`): the requirement row that failed, else the run's
+// last error line, as its reason; ic's or the script's stop block whole as its problem and fix; and security software's
+// requirement where one was raised, which names the product. None for a run that did not fail.
+const failureOfRun = (args: SetupArgs, ending: StepOutcome): FailureFacts => {
+    if (ending !== `failed`) {
+        return {};
+    }
+    const events = eventsOf(`setup`);
+    const row = Object.values(requirementState.value).findLast((state) => state.state === `failed` && state.detail !== undefined);
+    const blocked = requirements.value.find((requirement) => requirement.id === `security-software`);
+    const said = { line: failureLine(events), block: stopBlock(events), row: row?.detail, blocked: blocked?.problem };
+    return failureFacts(said, { home: homeOf(setupLog.value), code: args.code });
 };
 
-// What the funnel hears of a finished run: its outcome, the requirements it stopped on, and why, when it failed. A
-// designed stop (a question, a restart) and a reader's own Stop are not failures, and carry no reason.
+// What the funnel hears of a finished run: its outcome (installTelemetry.ts `finishedFacts`: a question or a restart is
+// `needsYou`, a reader's own Stop `stopped`, neither `ok: false`), the requirements it stopped on, and why it failed.
 const reportFinished = (args: SetupArgs, ok: boolean, startedAt: number): void => {
-    const failed = !ok && !stopping.value && !expectedStop(setupExit.value ?? null);
-    const reason = failed ? reasonOf(args) : undefined;
+    const ending = runEnding({ ok, code: setupExit.value, stopped: stopping.value });
     // A stopped run says who stopped it: the card's Stop, or a machine of ours taking the sandbox over.
     const stopped = !ok && stopping.value && stopReason !== undefined ? { stopped: stopReason } : {};
     track(`desktop_install_finished`, {
-        ...runOutcome(`setup`, ok, startedAt),
+        ...finishedFacts(runOutcome(`setup`, ok, startedAt), ending),
         ...requirementFacts(),
-        ...(reason === undefined ? {} : { reason }),
+        ...failureOfRun(args, ending),
         ...stopped,
     });
 };

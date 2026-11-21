@@ -132,7 +132,16 @@ pub enum Report {
         ok: bool,
         seconds: u64,
         attempt: u32,
+        /// The headline of what the start said, scrubbed ([`engine_failure`]).
         reason: Option<String>,
+        /// Its stop block's `problem:` and `fix:`, scrubbed (2026-11-21).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        problem: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fix: Option<String>,
+        /// The kind of failure, for the few counted by kind (scripts.rs `engine_failure_cause`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<String>,
         version: String,
     },
     /// `desktop_install_step` with `run: folder`: one step of a folder's own setup (folder_setup.rs) and how long it
@@ -522,8 +531,14 @@ pub fn note_engine_restart(
     ok: bool,
     seconds: u64,
     attempt: u32,
-    reason: Option<String>,
+    failure: Option<&crate::scripts::EngineStartFailure>,
 ) {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok();
+    let told = failure
+        .map(|failure| engine_failure(&failure.said, failure.cause, home.as_deref()))
+        .unwrap_or_default();
     if let Some(dir) = config_dir() {
         keep_report(
             &dir,
@@ -531,12 +546,44 @@ pub fn note_engine_restart(
                 ok,
                 seconds,
                 attempt,
-                reason,
+                reason: told.reason,
+                problem: told.problem,
+                fix: told.fix,
+                cause: told.cause,
                 version: crate::commands::VERSION.to_string(),
             },
         );
     }
     send_reports(app);
+}
+
+/// What `desktop_engine_restarted` carries of a failed start.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EngineFailure {
+    pub reason: Option<String>,
+    pub problem: Option<String>,
+    pub fix: Option<String>,
+    pub cause: Option<String>,
+}
+
+/// Pure: a failed engine start as its event carries it (2026-11-21): the headline of what it said as its reason, its
+/// stop block's `problem:` and `fix:` lines apart, each scrubbed of the home folder ([`scrub`]), and its cause.
+pub fn engine_failure(said: &str, cause: Option<&str>, home: Option<&str>) -> EngineFailure {
+    let mut told = EngineFailure {
+        cause: cause.map(str::to_string),
+        ..EngineFailure::default()
+    };
+    let one_line = |text: &str| scrub(&text.split_whitespace().collect::<Vec<_>>().join(" "), home);
+    for line in said.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if let Some(problem) = line.strip_prefix("problem:") {
+            told.problem = Some(one_line(problem));
+        } else if let Some(fix) = line.strip_prefix("fix:") {
+            told.fix = Some(one_line(fix));
+        } else if told.reason.is_none() {
+            told.reason = Some(one_line(line));
+        }
+    }
+    told
 }
 
 /// One step of a folder's own setup, kept and sent right away (folder_setup.rs).
@@ -665,6 +712,41 @@ pub fn set_analytics_consent(choice: &str) {
     }
 }
 
+/* THIS INSTALL IS THE TEAM'S OWN (2026-11-21): every event it sends carries `internal: true`, so the team's test
+ * machines can be told from real users' in PostHog whatever network they report from. */
+
+/// The variable that marks it: any value but empty or `0`. A harness sets it on the process it starts.
+pub const INTERNAL_ENV: &str = "INTENTIC_TELEMETRY_INTERNAL";
+/// The file that marks it, in the config folder. Kept across updates and the reinstall a newer setup runs over an
+/// installed copy, but a real uninstall takes the folder with it (installer-hooks.nsh): a machine that installs from
+/// scratch again and again is marked by the variable, kept where the OS keeps it (a Windows user variable, an image's
+/// ENV). Deleting the file is the only way to unmark an install the variable once marked.
+pub const INTERNAL_FILE: &str = "telemetry-internal";
+
+/// Whether this install is marked, read once per process. A launch that sees the variable writes the file, so a
+/// later launch the OS starts without the harness's environment (a deep link, sign-in autostart) stays marked.
+pub fn telemetry_internal() -> bool {
+    static INTERNAL: OnceLock<bool> = OnceLock::new();
+    *INTERNAL.get_or_init(|| {
+        internal_marked(
+            config_dir().as_deref(),
+            std::env::var_os(INTERNAL_ENV).as_deref(),
+        )
+    })
+}
+
+/// [`telemetry_internal`] with the folder and the variable handed in.
+fn internal_marked(dir: Option<&Path>, said: Option<&std::ffi::OsStr>) -> bool {
+    let marked = dir.is_some_and(|dir| dir.join(INTERNAL_FILE).is_file());
+    let said = said.is_some_and(|value| !value.is_empty() && value != "0");
+    if said && !marked {
+        if let Some(dir) = dir {
+            let _ = std::fs::write(dir.join(INTERNAL_FILE), "1\n");
+        }
+    }
+    marked || said
+}
+
 /// Send what earlier launches left, off the launch's thread. A report is removed once PostHog took it; one that
 /// could not be sent stays for the next launch.
 pub fn send_reports(app: &AppHandle) {
@@ -695,6 +777,7 @@ pub fn send_reports(app: &AppHandle) {
         }
     }
     let install_id = app.state::<crate::state::AppState>().install_id();
+    let internal = telemetry_internal();
     tauri::async_runtime::spawn(async move {
         let _sending = Sending;
         if rustls::crypto::CryptoProvider::get_default().is_none() {
@@ -710,7 +793,7 @@ pub fn send_reports(app: &AppHandle) {
             if !analytics_allowed() {
                 break;
             }
-            let body = event_body(key, &install_id, &report);
+            let body = tag_internal(event_body(key, &install_id, &report), internal);
             let sent = client
                 .post(format!("{}/i/v0/e/", POSTHOG_HOST.trim_end_matches('/')))
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -736,6 +819,15 @@ pub fn send_reports(app: &AppHandle) {
             }
         }
     });
+}
+
+/// Pure: `event` as a marked install sends it ([`telemetry_internal`]), with `internal: true` among its properties;
+/// anyone else's goes as it was, the property left out rather than false.
+pub fn tag_internal(mut event: serde_json::Value, internal: bool) -> serde_json::Value {
+    if internal {
+        event["properties"]["internal"] = true.into();
+    }
+    event
 }
 
 /// Pure: the PostHog event for one report, with the properties every desktop event carries (analytics.ts).
@@ -792,18 +884,26 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
             seconds,
             attempt,
             reason,
+            problem,
+            fix,
+            cause,
             version,
-        } => (
-            "desktop_engine_restarted",
-            serde_json::json!({
+        } => {
+            let mut properties = serde_json::json!({
                 "engine": "intentic",
                 "ok": ok,
                 "seconds": seconds,
                 "attempt": attempt,
                 "reason": reason,
                 "launchVersion": version,
-            }),
-        ),
+            });
+            for (key, value) in [("problem", problem), ("fix", fix), ("cause", cause)] {
+                if let Some(value) = value {
+                    properties[key] = serde_json::json!(value);
+                }
+            }
+            ("desktop_engine_restarted", properties)
+        }
         Report::FolderStep {
             step,
             tenths,
@@ -1307,6 +1407,86 @@ mod tests {
         assert_eq!(body["properties"]["how"], "replaced");
         assert_eq!(body["properties"]["client"], "desktop");
         assert_eq!(body["properties"]["desktop_install_id"], "install-1");
+        assert_eq!(body["properties"].get("internal"), None);
+    }
+
+    /// A marked install says so on every event, and an unmarked one leaves the property out rather than sending false.
+    #[test]
+    fn a_marked_install_sends_internal_on_its_events() {
+        let report = Report::Unreachable {
+            status: "502".into(),
+            version: "1.0.0".into(),
+        };
+        let marked = tag_internal(event_body("phc_test", "install-1", &report), true);
+        assert_eq!(marked["event"], "desktop_workspace_unreachable");
+        assert_eq!(marked["properties"]["internal"], true);
+        assert_eq!(marked["properties"]["client"], "desktop");
+        let unmarked = tag_internal(event_body("phc_test", "install-1", &report), false);
+        assert_eq!(unmarked, event_body("phc_test", "install-1", &report));
+        assert_eq!(unmarked["properties"].get("internal"), None);
+    }
+
+    /// The variable marks the install and leaves the file behind, so a later launch without it is still marked; `0`
+    /// and an empty value mark nothing.
+    #[test]
+    fn the_variable_marks_the_install_for_good_and_the_file_alone_is_enough() {
+        let dir = std::env::temp_dir().join(format!("intentic-internal-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(!internal_marked(Some(&dir), None));
+        assert!(!internal_marked(Some(&dir), Some("0".as_ref())));
+        assert!(!internal_marked(Some(&dir), Some("".as_ref())));
+        assert!(!dir.join(INTERNAL_FILE).exists());
+        assert!(internal_marked(Some(&dir), Some("1".as_ref())));
+        assert!(dir.join(INTERNAL_FILE).is_file());
+        assert!(internal_marked(Some(&dir), None));
+        assert!(internal_marked(None, Some("1".as_ref())));
+        assert!(!internal_marked(None, None));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A failed engine start carries its headline, its problem and fix apart, scrubbed, and its cause (2026-11-21); a
+    /// report queued by an older app, without them, still sends.
+    #[test]
+    fn a_failed_engine_restart_carries_its_problem_fix_and_cause() {
+        let said = "the engine stopped as it started (exit -1): Kod błędu: Wsl/Service/0x80072747\n   problem: Windows ran out of network buffers.\n   fix:     see C:\\Users\\ann\\.intentic\\logs\\x.log";
+        let told = engine_failure(said, Some("winsock-buffers"), Some("C:\\Users\\ann"));
+        assert_eq!(
+            told.reason.as_deref(),
+            Some("the engine stopped as it started (exit -1): Kod błędu: Wsl/Service/0x80072747")
+        );
+        assert_eq!(
+            told.problem.as_deref(),
+            Some("Windows ran out of network buffers.")
+        );
+        assert_eq!(told.fix.as_deref(), Some("see ~\\.intentic\\logs\\x.log"));
+        let body = event_body(
+            "key",
+            "install",
+            &Report::EngineRestarted {
+                ok: false,
+                seconds: 3,
+                attempt: 1,
+                reason: told.reason,
+                problem: told.problem,
+                fix: told.fix,
+                cause: told.cause,
+                version: "1.0.0".into(),
+            },
+        );
+        assert_eq!(body["event"], "desktop_engine_restarted");
+        assert_eq!(body["properties"]["cause"], "winsock-buffers");
+        assert_eq!(
+            body["properties"]["problem"],
+            "Windows ran out of network buffers."
+        );
+        let queued: Report = serde_json::from_str(
+            r#"{"kind":"engineRestarted","ok":false,"seconds":1,"attempt":1,"reason":"x","version":"old"}"#,
+        )
+        .unwrap();
+        let body = event_body("key", "install", &queued);
+        assert_eq!(body["properties"]["reason"], "x");
+        assert_eq!(body["properties"].get("cause"), None);
+        assert_eq!(body["properties"].get("problem"), None);
     }
 
     #[test]

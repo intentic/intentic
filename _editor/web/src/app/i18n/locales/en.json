@@ -1284,6 +1284,8 @@
             "typeItOrOpenLink": "Type it here, or open the link in the email on this device.",
             "codeLabel": "Sign-in code",
             "useDifferentAddress": "Use a different address",
+            "noCodeYet": "No code yet? It can take a minute. Look in your spam or promotions folder, or send it again below.",
+            "noCodeYetOrGoogle": "No code yet? It can take a minute. Look in your spam or promotions folder, send it again below, or sign in with Google above.",
             "sendAgainIn": "Send it again in {seconds}s",
             "sendAgain": "Send it again",
             "usedLinkElsewhere": "Used the link on another device? That signed you in there.",
@@ -3569,7 +3571,10 @@
             "servedElsewhere": "Waiting to go on {served}. The composer is on {pick}.",
             "moveToPick": "Move it there | Move them there",
             "bookedForSpentReopened": "Booked for when {waited} reopens, and it has room again: Send now sends it.",
-            "servedOn": "Goes on {served}. | Go on {served}."
+            "servedOn": "Goes on {served}. | Go on {served}.",
+            "trialBusy": "Free trial busy",
+            "retriesIn": "retrying in {wait} (try {made} of {max})",
+            "retriesShortly": "retrying in a moment (try {made} of {max})"
         },
         "chatLandStrip": {
             "files": "{count} file | {count} files"
@@ -4557,7 +4562,9 @@
             "sameChat": "Same chat",
             "spentAt": "allowance back at {when}",
             "spentIn": "allowance back in {when}",
-            "stopsAttempt": "Stops this attempt"
+            "stopsAttempt": "Stops this attempt",
+            "trialBusy": "The free trial is busy right now and may turn your message away again. A model of your own skips the wait.",
+            "trialBusyUntil": "The free trial is busy right now and may answer again {when}. A model of your own skips the wait."
         },
         "limitReset": {
             "alreadyUsed": "This week's reset is already spent.",
@@ -4993,7 +5000,8 @@
             "needsBadge": "Needs {requirement}",
             "runsUnderClaudeCode": "{runs} under Claude Code",
             "trialLeft": "Free trial · {remaining} steps left today",
-            "trialUsedUp": "Free trial · used up today"
+            "trialUsedUp": "Free trial · used up today",
+            "trialBusy": "Free trial · busy right now"
         },
         "cardReplies": {
             "answersNotSubmitted": "Could not submit your answers: the turn may have ended.",

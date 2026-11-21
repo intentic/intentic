@@ -5,6 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, toRef, useId, watch } from "vue";
 import { CODE_LENGTH } from "../../client/auth/emailCode";
 import { googleMailbox } from "../../client/auth/signInMethods";
+import type { EmailCodeSurface } from "./emailCodeEvents";
 import { useEmailCode } from "./useEmailCode";
 
 const props = defineProps<{
@@ -17,6 +18,8 @@ const props = defineProps<{
     readonly inApp?: boolean;
     // Whether Google's sign-in is on this screen too, so a Google address is pointed at it (a hint, never a block).
     readonly googleOffered?: boolean;
+    // The screen it is on, as its analytics events name it.
+    readonly surface: EmailCodeSurface;
 }>();
 
 const emit = defineEmits<{ signedIn: [] }>();
@@ -33,6 +36,7 @@ const {
     verifying,
     notice,
     needsNewCode,
+    waitedLong,
     resendInSeconds,
     canSend,
     canResend,
@@ -45,6 +49,8 @@ const {
 } = useEmailCode({
     lockedEmail: toRef(props, `lockedEmail`),
     adding: computed(() => props.adding === true),
+    googleOffered: computed(() => props.googleOffered === true),
+    surface: props.surface,
     onSignedIn: () => emit(`signedIn`),
 });
 
@@ -82,7 +88,6 @@ const onCode = (event: Event): void => typeCode(event.target instanceof HTMLInpu
                     :placeholder="t(`auth.emailSignIn.addressPlaceholder`)"
                     :class="ui.input(`w-full`)"
                 />
-                <p v-if="googleHint" class="text-xs leading-snug text-subtle">{{ t(`auth.emailSignIn.googleFaster`) }}</p>
             </template>
             <Button
                 type="submit"
@@ -94,6 +99,10 @@ const onCode = (event: Event): void => typeCode(event.target instanceof HTMLInpu
             >
                 <template #icon><Icon name="envelope" /></template>
             </Button>
+            <!-- Advice, under the button rather than above it: it appears as the address completes (or as the browser
+                 reveals an autofilled one at the first press), and above the button it moved the button from under a
+                 press already on its way. The press sends the code either way. -->
+            <p v-if="googleHint" class="text-xs leading-snug text-subtle">{{ t(`auth.emailSignIn.googleFaster`) }}</p>
         </form>
 
         <!-- CODE: the six digits the platform mailed. -->
@@ -130,6 +139,11 @@ const onCode = (event: Event): void => typeCode(event.target instanceof HTMLInpu
                 :loading="verifying"
                 :disabled="!canVerify"
             />
+            <!-- A minute on this step with nothing typed: the mail may be in spam, slow, or not coming. The buttons it
+                 points at are the ones right below it, and Google's above. -->
+            <p v-if="waitedLong && code === ``" class="text-xs leading-snug text-muted" data-testid="email-code-help">
+                {{ googleOffered ? t(`auth.emailSignIn.noCodeYetOrGoogle`) : t(`auth.emailSignIn.noCodeYet`) }}
+            </p>
             <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
                 <button v-if="lockedEmail === undefined" type="button" :class="ui.textButton({ tone: `subtle` })" @click="changeAddress">
                     {{ t(`auth.emailSignIn.useDifferentAddress`) }}

@@ -124,6 +124,34 @@ pub fn stop_detail(line: &str) -> bool {
     line.starts_with("problem:") || line.starts_with("fix:")
 }
 
+/// A numbered item of a stop block that is a list (ic's prepare `explain`, "1 thing is in the way:", and checks.rs,
+/// "found 2 problems — …:"), each with its own `problem:` and `fix:` under it (2026-11-21). Pure.
+pub fn stop_item(line: &str) -> bool {
+    let line = line.trim();
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    digits > 0 && line[digits..].starts_with(". ")
+}
+
+/// What a line does to an open stop block: kept in it, passed over (a blank line, or the long form under a list's item,
+/// so the next item is still kept), or the end of it. Pure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopLine {
+    Keep,
+    Skip,
+    End,
+}
+
+/// [`StopLine`] for `line`, under a block whose kept lines include a list's item when `listed`. Pure.
+pub fn stop_line(line: &str, listed: bool) -> StopLine {
+    if stop_detail(line) || stop_item(line) {
+        StopLine::Keep
+    } else if line.trim().is_empty() || listed {
+        StopLine::Skip
+    } else {
+        StopLine::End
+    }
+}
+
 /// The last stop block among `lines` (in the order they were said, each without a transcript's `! `): its headline, then
 /// its `problem:` and `fix:` lines, one per line, cut at [`STOP_BLOCK_CHARS`]; none when the run never stopped with one.
 /// Pure.
@@ -134,12 +162,15 @@ pub fn stop_block<'a>(lines: impl IntoIterator<Item = &'a str>) -> Option<String
         if let Some(headline) = stop_headline(line) {
             block = Some(vec![headline.to_string()]);
             open = true;
-        } else if open && stop_detail(line) {
-            if let Some(block) = block.as_mut() {
-                block.push(line.trim().to_string());
-            }
-        } else {
-            open = false;
+            continue;
+        }
+        let Some(kept) = block.as_mut().filter(|_| open) else {
+            continue;
+        };
+        match stop_line(line, kept.iter().any(|said| stop_item(said))) {
+            StopLine::Keep => kept.push(line.trim().to_string()),
+            StopLine::Skip => {}
+            StopLine::End => open = false,
         }
     }
     let said = block?.join("\n");
@@ -269,14 +300,17 @@ impl Progress {
             if let Some(failure) = said.strip_prefix("Command failed,") {
                 self.command_failure = Some(failure.trim().to_string());
             } else if !said.is_empty() {
-                // Kept: the headline, and the `problem:`/`fix:` lines straight under it. Anything else ends the block.
+                // Kept: the headline, and the `problem:`/`fix:` lines (and a list's items) under it ([`stop_line`]).
                 if stop_headline(said).is_some() {
                     self.stopped = vec![said.to_string()];
                     self.stop_open = true;
-                } else if self.stop_open && stop_detail(said) {
-                    self.stopped.push(said.to_string());
-                } else {
-                    self.stop_open = false;
+                } else if self.stop_open {
+                    let listed = self.stopped.iter().any(|kept| stop_item(kept));
+                    match stop_line(said, listed) {
+                        StopLine::Keep => self.stopped.push(said.to_string()),
+                        StopLine::Skip => {}
+                        StopLine::End => self.stop_open = false,
+                    }
                 }
                 self.last_error = Some(said.to_string());
             }
@@ -585,6 +619,41 @@ mod tests {
         assert_eq!(cut.chars().count(), STOP_BLOCK_CHARS);
         assert!(cut.ends_with('…'));
         assert_eq!(stop_block(["! warning", "fix: z"]), None);
+    }
+
+    /// A stop block that is a list (ic's prepare: "1 thing is in the way:") keeps every item's title, problem and fix,
+    /// past the blank lines between them and the long form under an item (2026-11-21).
+    #[test]
+    fn a_stop_block_that_is_a_list_keeps_every_item() {
+        let block = [
+            "error: 2 things are in the way:",
+            "",
+            "  1. WSL",
+            "     problem: WSL is not installed.",
+            "     fix:     run wsl --install as administrator.",
+            "",
+            "     the long form, line one",
+            "  2. Virtualization",
+            "     problem: virtualization is off in the firmware.",
+            "     fix:     turn it on in the BIOS.",
+        ];
+        let whole = "2 things are in the way:\n1. WSL\nproblem: WSL is not installed.\nfix:     run wsl --install as administrator.\n2. Virtualization\nproblem: virtualization is off in the firmware.\nfix:     turn it on in the BIOS.";
+        assert_eq!(stop_block(block).as_deref(), Some(whole));
+        let mut progress = Progress::new(true, true);
+        for line in block {
+            progress.hear(Stream::Stderr, line);
+        }
+        assert_eq!(progress.reason().as_deref(), Some(whole));
+        // A block that is no list still ends at a line that is not its own.
+        assert_eq!(
+            stop_block(["error: x", "   problem: y", "other", "   fix: z"]).as_deref(),
+            Some("x\nproblem: y")
+        );
+        assert!(
+            stop_item("  12. Title")
+                && !stop_item("1 thing is in the way:")
+                && !stop_item("1.5 GB")
+        );
     }
 
     #[test]

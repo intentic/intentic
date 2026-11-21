@@ -311,6 +311,12 @@ flowchart LR
   loads it instead of pulling. Devices reports each step's and each requirement's time
   (`desktop_install_step`, `desktop_install_requirement`, `src/device/installTelemetry.ts`) and a failed run's last
   error line, scrubbed of the home folder, the account, addresses and the code (`desktop_install_finished.reason`).
+  `desktop_install_finished.outcome` is `done`, `failed`, `needsYou` (ic stopped for consent, exit 3, or a restart,
+  exit 4; `needs` says which) or `stopped`, and `ok` is there only for `done` (true) and `failed` (false). A failure
+  also carries its stop block's `problem` and `fix` (every item of a "2 things are in the way:" list, numbered),
+  `problemCount` for a list, `blockedBy: security-software` with `securityProduct` when a script says security
+  software refused a program, and a `cause` for the failures counted by kind (`src/device/failure/failureDetail.ts`; the
+  onboarding and recreate failure events carry the same keys).
 
   _(2026-10-08) The entry was a RunOnce value, which Windows deletes before the launch it makes, and a resumed setup
   never got a new code: two restarts outlast a code's thirty minutes, and "Try again" ran the dead one again._
@@ -1135,7 +1141,8 @@ the sign-in launch (`--resume-setup`) marks the park `resumed`, and only then do
 
 Product events from the first launch (`onboarding_launched`, `onboarding_check`, `onboarding_prefetch`,
 `onboarding_setup`, `onboarding_cloud`) are sent from `src/onboarding/pc.ts` through `analytics.ts`, keyed to the
-install id; reasons are scrubbed with `installTelemetry.ts` `scrubReason`.
+install id; reasons are scrubbed with `installTelemetry.ts` `scrubReason`, and a failure's `problem`, `fix` and `cause`
+are read off it by `src/device/failure/failureDetail.ts`.
 
 ```sh
 pnpm --filter @intentic/desktop-app tauri:dev        # the close question's page on :47146, workspace from INTENTIC_APP_URL
@@ -1155,7 +1162,9 @@ changes nothing.
 The engine keeper (`engine_keeper.rs`) looks every 20 seconds and, after two misses in a row, runs
 `ic engine start --quiet`, waiting longer after each failed start (1, 2, 5, then 15 minutes). It leaves alone an engine
 stopped on purpose (`held`), one the PC does not run on, and everything while a move or a setup runs; each start it
-makes is reported as `desktop_engine_restarted`. Every desktop event carries `desktop_engine`.
+makes is reported as `desktop_engine_restarted`, a failed one with ic's stop block (`reason` its headline, `problem`
+and `fix` apart) and a `cause` where it is one counted by kind (`scripts.rs` `engine_failure_cause`). Every desktop
+event carries `desktop_engine`.
 
 The engine card on Devices says which engine the sandboxes run on and moves them (`ic engine move`, confirmed
 first): onto Intentic's engine from Docker Desktop, or back. While the migration's switch is off (`ic`'s
@@ -1171,6 +1180,25 @@ Open it from the tray (**Repair Intentic…**), the workspace recovery panel (**
 ## Product analytics
 
 `POSTHOG_KEY` enables reporting in a release build. `POSTHOG_HOST` selects the capture origin for both the webview and Rust launch reporter; it defaults to `https://us.i.posthog.com` and can be set to `https://eu.i.posthog.com`. The app records events only after the editor's Data & privacy consent is allowed.
+
+**The team's own installs** send `internal: true` on every event: the Rust launch reports (`launch.rs` `event_body`),
+this app's own screens (`src/analytics.ts`), and the workspace page, which the app tells through `internal` on
+`__INTENTIC_DESKTOP__` (the web's `analyticsConsent.ts`). An install is marked by either of:
+
+- `INTENTIC_TELEMETRY_INTERNAL` set to anything but empty or `0` in the app's environment. A launch that sees it also
+  writes the file below, so a later launch the OS starts without it (a deep link, sign-in autostart) stays marked.
+- `telemetry-internal` in the config folder (`%APPDATA%\dev.intentic.desktop`, `~/.config/dev.intentic.desktop`,
+  `~/Library/Application Support/dev.intentic.desktop`), whatever it holds.
+
+A real uninstall deletes the config folder, so a machine that installs from scratch over and over (a CI runner, a VM)
+is marked with the variable where the OS keeps it: a Windows user variable
+(`[Environment]::SetEnvironmentVariable('INTENTIC_TELEMETRY_INTERNAL', '1', 'User')`), an image's `ENV`. The file
+alone marks a machine whose config folder outlives the install (a VM snapshot taken with it). The Windows smoke tiers
+(`windows-smoke.yml`, `hermetic.ts`, `setup-windows-runner.ps1`), the Linux smoke image (`_tools/desktop-smoke`) and the
+machine agent's Windows Sandbox runs set it. Unmarking takes deleting the file and unsetting the variable.
+_2026-11-21: chosen over a build flavour or a second key, which would not reach a released build a test machine
+downloads, and over filtering by address alone, which breaks when the team's network changes; the address filters in
+PostHog stay as a second net._
 
 ## Process lifecycle telemetry and session-end smoke test
 

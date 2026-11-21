@@ -1661,13 +1661,19 @@ fn phase_failure(
 /// The line of a run's transcript that best says why it stopped: the last thing it wrote to stderr (the transcript
 /// marks those `! `; `ic` writes its `error: …` there), else the last thing it said at all. Never a progress marker
 /// (`intentic-prefetch: …`) or this app's own `[… exited with …]` note. An ic stop block is taken whole, its headline,
-/// `problem:` and `fix:` on one line, since its last line alone is only the `fix:` ([`scrub_setup_reason`], 2026-11-20).
-/// Pure.
+/// `problem:` and `fix:` each on a line of its own, since its last line alone is only the `fix:` ([`scrub_setup_reason`],
+/// 2026-11-20): the page reads them apart for the funnel (failureDetail.ts, 2026-11-21) and shows them as one line. Pure.
 fn last_meaningful_line(transcript: &str) -> Option<String> {
     if let Some(block) =
         crate::setup_progress::stop_block(crate::setup_progress::transcript_lines(transcript))
     {
-        return Some(tidy_reason(&block));
+        return Some(
+            block
+                .lines()
+                .map(tidy_reason)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
     }
     let mut said = None;
     for line in transcript.lines().rev() {
@@ -2250,12 +2256,16 @@ intentic-move: {\"slug\":\"sandbox-x\",\"step\":\"volume\",\"done\":5,\"total\":
             setup_outcome(Some(1), None, reason.clone()).setup,
             Setup::Failed { reason }
         );
-        // The download's one line carries it all too, within its 300 characters.
+        // The download's reason carries it all too, a line each, so the page can read its problem and fix apart.
         let line = last_meaningful_line(transcript).unwrap();
         assert!(line.starts_with(
-            "the move to the intentic engine did not finish problem: sandbox-x: a volume"
+            "the move to the intentic engine did not finish\nproblem: sandbox-x: a volume"
         ));
-        assert!(line.chars().count() <= 300);
+        assert!(line
+            .lines()
+            .nth(2)
+            .unwrap()
+            .starts_with("fix: every sandbox"));
         // A run that said no stop block still reads as before: its last line that reads as an error.
         assert_eq!(
             scrub_setup_reason(&ended, "intentic: [x] going\n! WSL would not start\n"),

@@ -1284,6 +1284,8 @@
             "typeItOrOpenLink": "Saisissez-le ici, ou ouvrez le lien de l'e-mail sur cet appareil.",
             "codeLabel": "Code de connexion",
             "useDifferentAddress": "Utiliser une autre adresse",
+            "noCodeYet": "Pas encore de code ? Cela peut prendre une minute. Regardez dans vos spams ou vos promotions, ou renvoyez-le ci-dessous.",
+            "noCodeYetOrGoogle": "Pas encore de code ? Cela peut prendre une minute. Regardez dans vos spams ou vos promotions, renvoyez-le ci-dessous ou connectez-vous avec Google ci-dessus.",
             "sendAgainIn": "Renvoyer dans {seconds} s",
             "sendAgain": "Renvoyer",
             "usedLinkElsewhere": "Vous avez utilisé le lien sur un autre appareil ? C'est là-bas qu'il vous a connecté.",
@@ -3569,7 +3571,10 @@
             "servedElsewhere": "En attente de partir sur {served}. Le compositeur est sur {pick}.",
             "moveToPick": "L'y déplacer | Les y déplacer",
             "bookedForSpentReopened": "Prévu pour la réouverture de {waited}, qui a de nouveau de la marge : Envoyer maintenant l'envoie.",
-            "servedOn": "Part sur {served}. | Partent sur {served}."
+            "servedOn": "Part sur {served}. | Partent sur {served}.",
+            "trialBusy": "Essai gratuit saturé",
+            "retriesIn": "nouvel essai dans {wait} (tentative {made} sur {max})",
+            "retriesShortly": "nouvel essai dans un instant (tentative {made} sur {max})"
         },
         "chatLandStrip": {
             "files": "{count} fichier | {count} fichiers"
@@ -4557,7 +4562,9 @@
             "sameChat": "Même chat",
             "spentAt": "quota de retour à {when}",
             "spentIn": "quota de retour dans {when}",
-            "stopsAttempt": "Arrête cette tentative"
+            "stopsAttempt": "Arrête cette tentative",
+            "trialBusy": "L'essai gratuit est saturé en ce moment et risque de refuser à nouveau votre message. Un modèle à vous évite l'attente.",
+            "trialBusyUntil": "L'essai gratuit est saturé en ce moment et pourra répondre à nouveau {when}. Un modèle à vous évite l'attente."
         },
         "limitReset": {
             "alreadyUsed": "La réinitialisation de cette semaine a déjà été utilisée.",
@@ -4993,7 +5000,8 @@
             "needsBadge": "Nécessite {requirement}",
             "runsUnderClaudeCode": "{runs} sous Claude Code",
             "trialLeft": "Essai gratuit · {remaining} étapes restantes aujourd'hui",
-            "trialUsedUp": "Essai gratuit · épuisé pour aujourd'hui"
+            "trialUsedUp": "Essai gratuit · épuisé pour aujourd'hui",
+            "trialBusy": "Essai gratuit · saturé en ce moment"
         },
         "cardReplies": {
             "answersNotSubmitted": "Impossible d'envoyer vos réponses : le tour est peut-être terminé.",

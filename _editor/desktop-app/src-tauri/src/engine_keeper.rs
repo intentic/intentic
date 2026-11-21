@@ -144,10 +144,10 @@ fn run(app: AppHandle) {
                 emit(&app, "running", None);
                 crate::launch::note_engine_restart(&app, true, seconds, attempt, None);
             }
-            Err(reason) => {
+            Err(failure) => {
                 was_down = true;
-                emit(&app, "down", Some(reason.clone()));
-                crate::launch::note_engine_restart(&app, false, seconds, attempt, Some(reason));
+                emit(&app, "down", Some(failure.said.clone()));
+                crate::launch::note_engine_restart(&app, false, seconds, attempt, Some(&failure));
             }
         }
     }

@@ -9,7 +9,15 @@ import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
 import { deviceSessions } from "./device-sessions/device-sessions.js";
 import { eraseAccount, OwnsOrganisationSandboxes } from "./account-erase.js";
-import { emailSignInEnabled, prismaCodeAllowances, SIGN_IN_CODE_ATTEMPTS, SIGN_IN_CODE_TTL_SECONDS, sendSignInCode } from "./sign-in.js";
+import {
+    type CodeAllowances,
+    emailSignInEnabled,
+    prismaCodeAllowances,
+    SIGN_IN_CODE_ATTEMPTS,
+    SIGN_IN_CODE_TTL_SECONDS,
+    sendSignInCode,
+    signInCodeGate,
+} from "./sign-in.js";
 import type { PrismaClient } from "@intentic/prisma";
 
 export type Auth = ReturnType<typeof createAuth>;
@@ -28,8 +36,9 @@ const encryptAccountTokens = (config: Config, account: { accessToken?: string | 
 // stored hashed, offered two ways in one mail: typed in, or opened from a link whose page asks for a Confirm press first.
 // Better Auth's magic-link plugin was passed over (2026-10-12): its verify step is a GET, which the link scanners
 // company mail runs (Safe Links and the like) spend before the person clicks. Better Auth limits each asker to a few
-// codes a minute; sign-in.ts limits each address.
-const emailCodes = (config: Config, prisma: PrismaClient, logger: Logger) =>
+// codes a minute; sign-in.ts limits each address, in a gate ahead of the endpoint so a refused send mints nothing.
+export const emailCodes = (config: Config, allowances: CodeAllowances, logger: Logger) => [
+    signInCodeGate({ config, allowances, logger }),
     emailOTP({
         otpLength: SIGN_IN_CODE_LENGTH,
         expiresIn: SIGN_IN_CODE_TTL_SECONDS,
@@ -41,9 +50,10 @@ const emailCodes = (config: Config, prisma: PrismaClient, logger: Logger) =>
             if (type === `forget-password`) {
                 return;
             }
-            await sendSignInCode({ config, allowances: prismaCodeAllowances(prisma), logger }, { email, code: otp });
+            await sendSignInCode({ config, logger }, { email, code: otp });
         },
-    });
+    }),
+];
 
 // What a new account is called before its owner names it: the part of the address before the @, since an emailed code
 // carries no name the way a Google profile does.
@@ -126,7 +136,7 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
             // once.
             oneTap(),
             // Absent where email sign-in is off, so its routes do not exist there at all.
-            ...(emailSignInEnabled(config) ? [emailCodes(config, prisma, logger)] : []),
+            ...(emailSignInEnabled(config) ? emailCodes(config, prismaCodeAllowances(prisma), logger) : []),
             // Several accounts in one browser (a company address and a personal one): each sign-in keeps its own signed
             // cookie beside the active one, so the editor lists them, switches between them, and signs one out without
             // the others. With it on, /sign-out ends every account in the browser; the editor revokes one at a time

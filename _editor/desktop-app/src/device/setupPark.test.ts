@@ -123,7 +123,7 @@ beforeEach(() => {
         calls.push({ command, args: (args ?? {}) as Record<string, unknown> });
         switch (command) {
             case `desktop_info`:
-                return { os, version: `1.0.0`, appUrl: ``, platformUrl: ``, installId: `install`, analyticsAllowed: false, engineLimitSeconds: 300, fixLimitSeconds: 600 };
+                return { os, version: `1.0.0`, appUrl: ``, platformUrl: ``, installId: `install`, analyticsAllowed: false, telemetryInternal: false, engineLimitSeconds: 300, fixLimitSeconds: 600 };
             case `take_pending_setup`:
                 return handedOver;
             case `docker_ready`:
@@ -344,7 +344,9 @@ describe(`a sandbox taken to a machine of ours`, () => {
         expect(calls.filter((call) => call.command === `run_stop`).map((call) => call.args)).toEqual([{ id: `setup` }]);
         expect(told(`desktop_install_stopped`)).toEqual([{ percent: expect.any(Number), reason: `hosted` }]);
         const [finished] = told(`desktop_install_finished`);
-        expect(finished).toMatchObject({ ok: false, stopped: `hosted` });
+        // A stop is neither a success nor a failure: no `ok` at all (installTelemetry.ts `finishedFacts`).
+        expect(finished).toMatchObject({ outcome: `stopped`, stopped: `hosted` });
+        expect(finished).not.toHaveProperty(`ok`);
         expect(finished).not.toHaveProperty(`reason`);
         expect(told(`desktop_install_step`).at(-1)).toMatchObject({ outcome: `stopped` });
         expect(setup.wasStopped.value).toBe(true);

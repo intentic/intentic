@@ -1,4 +1,4 @@
-import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
+import { deviceKey, removeStoredValue, storedValue, storeValue } from "@intentic/ui/storage";
 import { ref } from "vue";
 import { desktopApp, openDesktopLink } from "./environments/desktop";
 import { environment } from "./environments/environment";
@@ -81,3 +81,26 @@ export const chooseAnalytics = (choice: Exclude<AnalyticsChoice, `unasked`>): vo
         openDesktopLink(`intentic://analytics?choice=${choice}`);
     }
 };
+
+// THE TEAM'S OWN BROWSERS AND INSTALLS (2026-11-21). Every event of a page the team marked carries `internal: true`, so
+// its test machines can be told from real users' whatever network they report from. In the desktop app the app says so
+// (`internal` on `__INTENTIC_DESKTOP__`, from the install's INTENTIC_TELEMETRY_INTERNAL or its config folder's
+// telemetry-internal file: the desktop app's launch.rs). A browser is marked once by opening any address of the app
+// with `?internal=1`, and unmarked with `?internal=0`; the mark is this browser's (device scope), so signing out keeps
+// it. Chosen over a switch under Settings, Data, which every reader would see and wonder about for a flag only the
+// team ever sets.
+const INTERNAL_KEY = deviceKey(`intentic-telemetry-internal`);
+const INTERNAL_PARAM = `internal`;
+
+/** Keep what an address's `?internal=` says for this browser: `1` marks it, `0` unmarks it, anything else is ignored. */
+export const noteInternalSwitch = (search: string): void => {
+    const said = new URLSearchParams(search).get(INTERNAL_PARAM);
+    if (said === `1`) {
+        storeValue(INTERNAL_KEY, `1`);
+    } else if (said === `0`) {
+        removeStoredValue(INTERNAL_KEY);
+    }
+};
+
+/** Whether this page's events are the team's own: a marked desktop install, or a marked browser. */
+export const internalHere = (): boolean => desktopApp()?.internal === true || storedValue(INTERNAL_KEY) === `1`;

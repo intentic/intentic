@@ -148,7 +148,9 @@ export class TurnFailures {
             case `trial-unavailable`:
             case `trial-model-unavailable`:
             case `trial-exhausted`:
-                // Undelivered and refunded; held in the queue for an explicit retry, not the outage auto-resume loop.
+                // Undelivered and refunded; held in the queue. A person's words a busy trial (`trial-unavailable`) turned away
+                // are booked by the sandbox to go again a few times by themselves (the daemon's trial-retry.ts), drawn as
+                // their booking (ChatHeldBooking); the rest wait for a press. This window only reads the trial's state again.
                 importOrReload(
                     () => import(`../accounts/useChat-catalog`),
                     async (chat) => {

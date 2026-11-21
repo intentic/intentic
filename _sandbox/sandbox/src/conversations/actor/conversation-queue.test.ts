@@ -105,6 +105,55 @@ describe("a conversation's queue, booking each message on its own", () => {
     });
 });
 
+// The free trial turned the words away as busy, and the sandbox books them to go again by itself (trial-retry.ts): the
+// count outlives the booking being let go or handed back, and a person's own word ends the retry.
+describe("a conversation's queue, sending a busy free trial's words again", () => {
+    const TRIAL = { agent: "endpoint/free-trial", harness: "claude-code", model: "auto" } as const;
+    const trialWords = (id: string): Omit<QueuedItem, "revision"> => message(id, "hello", { turn: { conversationId: "c1", prompt: "hello", messageId: id, ...TRIAL } });
+    const retrying = (): TurnQueue => rescheduled(returned(NO_QUEUE, [trialWords("m1")]), { until: 20_000, trialRetry: { made: 1, max: 3 } }, ["m1"]);
+
+    it("shows the retry with its booking, and keeps its count once the booking is let go and handed back", () => {
+        const booked = retrying();
+        expect(booked).toMatchObject({ paused: "scheduled", until: 20_000 });
+        expect(queueView(booked).items.map(({ id, until, trialRetry }) => ({ id, until, trialRetry }))).toEqual([
+            { id: "m1", until: 20_000, trialRetry: { made: 1, max: 3 } },
+        ]);
+        const sent = released(booked, ["m1"]);
+        expect(sent.items[0]?.trialRetry).toEqual({ made: 1, max: 3 });
+        // Unbooked, the window is told nothing: it is no retry until the sandbox books one.
+        expect(queueView(sent).items[0]?.trialRetry).toBeUndefined();
+        const [went] = sent.items;
+        if (went === undefined) {
+            throw new Error("the released words are gone");
+        }
+        const back = returned(taken(sent, ["m1"]), [went]);
+        expect(back.paused).toBe("refused");
+        expect(back.items.map(({ id, until, trialRetry }) => ({ id, until, trialRetry }))).toEqual([{ id: "m1", until: undefined, trialRetry: { made: 1, max: 3 } }]);
+    });
+
+    it("ends the retry when a person sends something else: the words go now, with theirs", () => {
+        const sent = joined(retrying(), message("m2", "are you there?"));
+        expect(sent.paused).toBeUndefined();
+        expect(sent.items.map(({ id, until, trialRetry }) => ({ id, until, trialRetry }))).toEqual([
+            { id: "m1", until: undefined, trialRetry: undefined },
+            { id: "m2", until: undefined, trialRetry: undefined },
+        ]);
+    });
+
+    it("ends the retry when a pick moves the words off the trial: they wait, held, for the press on the new model", () => {
+        const moved = rerouted(retrying(), { agent: "codex", harness: "native", model: "gpt-6" });
+        expect(moved.paused).toBe("refused");
+        expect(moved.items.map(({ id, until, trialRetry, turn }) => ({ id, until, trialRetry, agent: turn.agent }))).toEqual([
+            { id: "m1", until: undefined, trialRetry: undefined, agent: "codex" },
+        ]);
+    });
+
+    it("ends the retry when a person re-times the words for a time of their own", () => {
+        const retimed = rescheduled(retrying(), { until: 99_000 }, ["m1"]);
+        expect(retimed.items.map(({ id, until, trialRetry }) => ({ id, until, trialRetry }))).toEqual([{ id: "m1", until: 99_000, trialRetry: undefined }]);
+    });
+});
+
 describe("a conversation's queue", () => {
     it("takes messages in the order they came, each written at the revision it moved the queue to", () => {
         const queue = waiting(message("m1", "one"), message("m2", "two"));

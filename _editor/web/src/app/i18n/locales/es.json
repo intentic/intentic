@@ -1284,6 +1284,8 @@
             "typeItOrOpenLink": "Escríbelo aquí, o abre el enlace del correo en este dispositivo.",
             "codeLabel": "Código de inicio de sesión",
             "useDifferentAddress": "Usar otra dirección",
+            "noCodeYet": "¿Aún no tienes el código? Puede tardar un minuto. Revisa la carpeta de spam o de promociones, o reenvíalo abajo.",
+            "noCodeYetOrGoogle": "¿Aún no tienes el código? Puede tardar un minuto. Revisa la carpeta de spam o de promociones, reenvíalo abajo o inicia sesión con Google arriba.",
             "sendAgainIn": "Reenviar en {seconds} s",
             "sendAgain": "Reenviar",
             "usedLinkElsewhere": "¿Usaste el enlace en otro dispositivo? Eso inició tu sesión allí.",
@@ -3569,7 +3571,10 @@
             "servedElsewhere": "Esperando para ir a {served}. El editor de mensajes está en {pick}.",
             "moveToPick": "Moverlo allí | Moverlos allí",
             "bookedForSpentReopened": "Programado para cuando se reabra {waited}, y vuelve a tener margen: Enviar ahora lo envía.",
-            "servedOn": "Va a {served}. | Van a {served}."
+            "servedOn": "Va a {served}. | Van a {served}.",
+            "trialBusy": "Prueba gratuita ocupada",
+            "retriesIn": "reintentando en {wait} (intento {made} de {max})",
+            "retriesShortly": "reintentando en un momento (intento {made} de {max})"
         },
         "chatLandStrip": {
             "files": "{count} archivo | {count} archivos"
@@ -4557,7 +4562,9 @@
             "sameChat": "Mismo chat",
             "spentAt": "cuota de vuelta a las {when}",
             "spentIn": "cuota de vuelta en {when}",
-            "stopsAttempt": "Detiene este intento"
+            "stopsAttempt": "Detiene este intento",
+            "trialBusy": "La prueba gratuita está ocupada ahora mismo y puede volver a rechazar tu mensaje. Con un modelo propio te ahorras la espera.",
+            "trialBusyUntil": "La prueba gratuita está ocupada ahora mismo y puede volver a responder {when}. Con un modelo propio te ahorras la espera."
         },
         "limitReset": {
             "alreadyUsed": "El restablecimiento de esta semana ya se ha usado.",
@@ -4993,7 +5000,8 @@
             "needsBadge": "Necesita {requirement}",
             "runsUnderClaudeCode": "{runs} con Claude Code",
             "trialLeft": "Prueba gratuita · quedan {remaining} pasos hoy",
-            "trialUsedUp": "Prueba gratuita · agotada por hoy"
+            "trialUsedUp": "Prueba gratuita · agotada por hoy",
+            "trialBusy": "Prueba gratuita · ocupada ahora mismo"
         },
         "cardReplies": {
             "answersNotSubmitted": "No se pudieron enviar tus respuestas: puede que el turno haya terminado.",

@@ -1284,6 +1284,8 @@
             "typeItOrOpenLink": "Geben Sie ihn hier ein oder öffnen Sie den Link in der E-Mail auf diesem Gerät.",
             "codeLabel": "Anmeldecode",
             "useDifferentAddress": "Eine andere Adresse verwenden",
+            "noCodeYet": "Noch kein Code? Das kann eine Minute dauern. Sehen Sie im Spam- oder Werbeordner nach oder senden Sie ihn unten erneut.",
+            "noCodeYetOrGoogle": "Noch kein Code? Das kann eine Minute dauern. Sehen Sie im Spam- oder Werbeordner nach, senden Sie ihn unten erneut oder melden Sie sich oben mit Google an.",
             "sendAgainIn": "Erneut senden in {seconds} s",
             "sendAgain": "Erneut senden",
             "usedLinkElsewhere": "Den Link auf einem anderen Gerät geöffnet? Dann sind Sie dort angemeldet.",
@@ -3569,7 +3571,10 @@
             "servedElsewhere": "Wartet darauf, auf {served} zu laufen. Der Eingabebereich steht auf {pick}.",
             "moveToPick": "Dorthin verschieben | Dorthin verschieben",
             "bookedForSpentReopened": "Geplant für den Zeitpunkt, an dem {waited} wieder öffnet, und es hat wieder Kontingent: „Jetzt senden“ schickt es ab.",
-            "servedOn": "Läuft auf {served}. | Laufen auf {served}."
+            "servedOn": "Läuft auf {served}. | Laufen auf {served}.",
+            "trialBusy": "Kostenlose Testversion ausgelastet",
+            "retriesIn": "neuer Versuch in {wait} (Versuch {made} von {max})",
+            "retriesShortly": "neuer Versuch gleich (Versuch {made} von {max})"
         },
         "chatLandStrip": {
             "files": "{count} Datei | {count} Dateien"
@@ -4557,7 +4562,9 @@
             "sameChat": "Gleicher Chat",
             "spentAt": "Kontingent wieder um {when}",
             "spentIn": "Kontingent wieder in {when}",
-            "stopsAttempt": "Stoppt diesen Versuch"
+            "stopsAttempt": "Stoppt diesen Versuch",
+            "trialBusy": "Die kostenlose Testversion ist gerade ausgelastet und lehnt deine Nachricht womöglich erneut ab. Mit einem eigenen Modell entfällt die Wartezeit.",
+            "trialBusyUntil": "Die kostenlose Testversion ist gerade ausgelastet und antwortet womöglich wieder {when}. Mit einem eigenen Modell entfällt die Wartezeit."
         },
         "limitReset": {
             "alreadyUsed": "Das Zurücksetzen für diese Woche ist bereits verbraucht.",
@@ -4993,7 +5000,8 @@
             "needsBadge": "Benötigt {requirement}",
             "runsUnderClaudeCode": "{runs} unter Claude Code",
             "trialLeft": "Kostenlose Testversion · heute noch {remaining} Schritte",
-            "trialUsedUp": "Kostenlose Testversion · für heute aufgebraucht"
+            "trialUsedUp": "Kostenlose Testversion · für heute aufgebraucht",
+            "trialBusy": "Kostenlose Testversion · gerade ausgelastet"
         },
         "cardReplies": {
             "answersNotSubmitted": "Ihre Antworten konnten nicht übermittelt werden: Der Zug ist möglicherweise beendet.",

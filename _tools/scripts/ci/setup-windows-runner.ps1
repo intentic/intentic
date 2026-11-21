@@ -220,6 +220,14 @@ try {
     Die "could not register the '$TaskName' task, so this machine is unchanged: $($_.Exception.Message)"
 }
 
+# the team's own machine
+# Every Intentic app started on this account is a test (the smoke tiers', its owner's own tries), so each event the app
+# sends says `internal: true` and the runner's installs filter out of product analytics (the desktop app's launch.rs
+# `telemetry_internal`). A user variable rather than the app's marker file, because an uninstall takes the app's
+# folder, and every smoke run uninstalls; the variable reaches every process this account starts, Explorer's included.
+[Environment]::SetEnvironmentVariable('INTENTIC_TELEMETRY_INTERNAL', '1', 'User')
+Step 'marked this account as the team''s own for Intentic''s analytics (INTENTIC_TELEMETRY_INTERNAL=1).'
+
 if ($AutoLogon) {
     $password = Read-Host "password for $Account (stored in the registry in CLEARTEXT)" -AsSecureString
     $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(

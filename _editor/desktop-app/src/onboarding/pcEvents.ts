@@ -1,6 +1,7 @@
 import type { LocalPrefetch } from "@intentic/web/local-host";
 import type { OnboardingPrefetch, OnboardingSetup, OnboardingSnapshot } from "../desktop";
-import { homeOf, scrubReason } from "../device/installTelemetry";
+import { failureDetail, scrubDetail } from "../device/failure/failureDetail";
+import { homeOf } from "../device/installTelemetry";
 
 /* WHAT THE FUNNEL HEARS OF THIS PC'S SETUP (2026-10-12), decided here and sent by pc.ts. On 2026-10-12 a reader's first
    launch went quiet for two hours: the download said `failed` and nothing else, the setup said nothing at all, and the
@@ -14,21 +15,11 @@ export type Tracked = readonly [
     properties: Readonly<Record<string, string | number | boolean | undefined>>,
 ];
 
-// Any path left once the home folder is `~`: a drive path, a share, `~\…`, or an absolute Unix path of two parts or more
-// (a URL's own slashes, `npipe:////./pipe/…` and `ghcr.io/intentic/sandbox` are not: each is preceded by a word, a dot,
-// a colon or a slash).
-const PATHS = /\b[A-Za-z]:[\\/][^\s"'<>|]*|\\\\[^\s"'<>|\\]+\\[^\s"'<>|]*|~[\\/][^\s"'<>|]*|(?<![\w.~:/\\-])\/(?:[\w.@+-]+\/)+[\w.@+-]*/g;
-
-// A Windows profile folder the text names itself, up to the separator after it. Its name may have a space in it (the
-// reader of 2026-10-12 was "prf game"), where scrubReason's own guess stops and would send the rest of the name.
-const PROFILE = /\b[A-Za-z]:[\\/]Users[\\/][^\\/"'<>|:*?\r\n]+(?=[\\/])/i;
-
 /**
  * A line a run said, fit to send: the account's home folder and name, any email address and then any path at all taken
- * out (installTelemetry.ts `scrubReason`, with the home read off the run's own log path, else off the text itself).
+ * out (failureDetail.ts `scrubDetail`, with the home read off the run's own log path, else off the text itself).
  */
-export const eventReason = (text: string, log?: string): string =>
-    scrubReason(text, { home: homeOf(log) ?? PROFILE.exec(text)?.[0] }).replace(PATHS, `<path>`);
+export const eventReason = (text: string, log?: string): string => scrubDetail(text, { home: homeOf(log) });
 
 const minutesSince = (seconds: number | undefined, now: number): number | undefined =>
     seconds === undefined ? undefined : Math.max(0, Math.round((now / 1000 - seconds) / 60));
@@ -82,6 +73,8 @@ const failedEvent = (raw: OnboardingPrefetch): Tracked => {
             phase: failure?.phase,
             exitCode: failure?.exitCode,
             reason: failure === undefined ? undefined : eventReason(failure.reason, failure.log),
+            // Its stop block's problem and fix, and what kind of failure it was (failureDetail.ts, 2026-11-21).
+            ...failureDetail(failure?.reason, { home: homeOf(failure?.log) }),
             done: raw.done,
             total: raw.total,
             attempt: raw.attempt,
@@ -195,7 +188,12 @@ const outcomeEvent = (raw: OnboardingSetup, previous: OnboardingSetup, minutes: 
             const step = previous.state === `running` ? previous.step : undefined;
             return [
                 `onboarding_setup`,
-                { action: `failed`, step: step === undefined ? undefined : eventReason(step), reason: eventReason(raw.reason) },
+                {
+                    action: `failed`,
+                    step: step === undefined ? undefined : eventReason(step),
+                    reason: eventReason(raw.reason),
+                    ...failureDetail(raw.reason),
+                },
             ];
         }
         default:

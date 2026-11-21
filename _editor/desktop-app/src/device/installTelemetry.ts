@@ -1,5 +1,6 @@
 import { EXIT_NEEDS_CONSENT, EXIT_NEEDS_RESTART, parseStep, readMarker, type RequirementProgress, type RunEvent } from "../desktop";
 import { parseLayer, type Progress, type ProgressView } from "../setupPlan";
+import type { RunOutcome } from "./runs";
 
 // WHERE A SETUP'S TIME GOES, as the funnel hears it (setup.ts sends it): how long each step of the plan ran, how long
 // each requirement row ran and how much of that it sat waiting on the person (Windows' permission prompt), and, for a
@@ -26,6 +27,40 @@ export const runEnding = (ended: { readonly ok: boolean; readonly code: number |
         return `consent`;
     }
     return ended.ok ? `done` : `failed`;
+};
+
+/**
+ * How a finished run reads in `desktop_install_finished` (2026-11-21): `outcome` is `done`, `failed`, `needsYou` (a
+ * designed stop: ic asked for the person's consent, exit 3, or for a restart, exit 4; `needs` says which) or `stopped`
+ * (the reader's Stop, or a machine of ours taking the sandbox over). `ok` is there only for the first two, `true` for
+ * done and `false` for a real failure, so a funnel counting `ok=false` no longer counts a run that was waiting on its
+ * person as a failed install (9 of them from 7 installs, by 2026-11-21). The step a run ended on is `failedStep` for a
+ * failure only, `endedStep` for the other two.
+ */
+export type RunFinish = `done` | `failed` | `needsYou` | `stopped`;
+
+/** A run's outcome as `desktop_install_finished` carries it. */
+export interface FinishedFacts extends Omit<RunOutcome, `ok`> {
+    readonly ok?: boolean;
+    readonly outcome: RunFinish;
+    readonly needs?: `consent` | `restart`;
+    readonly endedStep?: string;
+}
+
+/** A run's outcome (runs.ts `runOutcome`) as `desktop_install_finished` carries it, by how its step ended. */
+export const finishedFacts = (run: RunOutcome, ending: StepOutcome): FinishedFacts => {
+    const { ok, failedStep, ...facts } = run;
+    if (ending === `consent` || ending === `parked`) {
+        const needs = ending === `consent` ? `consent` : `restart`;
+        return failedStep === undefined ? { ...facts, outcome: `needsYou`, needs } : { ...facts, outcome: `needsYou`, needs, endedStep: failedStep };
+    }
+    if (ending === `stopped`) {
+        return failedStep === undefined ? { ...facts, outcome: `stopped` } : { ...facts, outcome: `stopped`, endedStep: failedStep };
+    }
+    if (ok && ending === `done`) {
+        return { ...facts, ok: true, outcome: `done` };
+    }
+    return failedStep === undefined ? { ...facts, ok: false, outcome: `failed` } : { ...facts, ok: false, outcome: `failed`, failedStep };
 };
 
 /** A step of the plan the cursor was on, and for how long. */
@@ -174,16 +209,19 @@ export const failureLine = (events: readonly RunEvent[]): string | undefined => 
 };
 
 // The lines of a stop block under its headline (ic's ui.rs `explain`, the scripts' Stop-Intentic): what went wrong and
-// what to do about it.
+// what to do about it, under a numbered item each where the block is a list (prepare's `explain`, checks.rs).
 const STOP_DETAIL = /^(?:problem|fix):/;
+// An item of a stop block that is a list ("1 thing is in the way:", "found 2 problems — …:"), each with its own pair.
+const STOP_ITEM = /^\d+\.\s/;
 // The most a process report's `failure` carries: the workspace drops a longer one whole (processReport.ts `text(600)`).
 const STOP_BLOCK_CHARS = 600;
 const capped = (text: string): string => (text.length > STOP_BLOCK_CHARS ? `${text.slice(0, STOP_BLOCK_CHARS - 1)}…` : text);
 
 /**
  * Why a failed run failed, for the person who ran it: its last stop block, the headline without its `error:` and the
- * `problem:` and `fix:` lines under it, else its last stderr line; none when it said none. What the workspace shows in
- * place of the bare "exited with status 1" (sandboxes.ts), so it is not scrubbed: it goes to the owner's own sandbox.
+ * `problem:` and `fix:` lines under it (each under its numbered title where the block is a list), else its last stderr
+ * line; none when it said none. What the workspace shows in place of the bare "exited with status 1" (sandboxes.ts), so
+ * it is not scrubbed: it goes to the owner's own sandbox.
  */
 export const stopBlock = (events: readonly RunEvent[]): string | undefined => {
     const lines = events.flatMap((event) => (event.kind === `line` ? [event.text.trim()] : []));
@@ -194,10 +232,16 @@ export const stopBlock = (events: readonly RunEvent[]): string | undefined => {
     }
     const detail: string[] = [];
     for (const line of lines.slice(at + 1)) {
-        if (!STOP_DETAIL.test(line)) {
+        if (line === `` || STOP_DETAIL.test(line) || STOP_ITEM.test(line)) {
+            if (line !== ``) {
+                detail.push(line);
+            }
+            continue;
+        }
+        // A list's item may carry its long form under its fix (prepare's `explain`): skipped, so the next item is kept.
+        if (!detail.some((kept) => STOP_ITEM.test(kept))) {
             break;
         }
-        detail.push(line);
     }
     return capped([lines[at]?.replace(/^error:\s*/i, ``) ?? ``, ...detail].join(`\n`));
 };
@@ -233,7 +277,8 @@ const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, `\
  * setup code, on one line and at most 300 characters.
  */
 export const scrubReason = (text: string, hide: { readonly home?: string; readonly code?: string }): string => {
-    let said = text.replace(/\s+/g, ` `).trim();
+    // The address first: its local part is often the account's own name, which would leave the rest of it behind.
+    let said = text.replace(/\s+/g, ` `).trim().replace(EMAIL, `<email>`);
     const home = hide.home ?? ``;
     if (home.length > 3) {
         said = said.replace(new RegExp(home.split(/[\\/]/).map(escaped).join(`[\\\\/]`), `gi`), `~`);
@@ -242,7 +287,7 @@ export const scrubReason = (text: string, hide: { readonly home?: string; readon
             said = said.replace(new RegExp(`(?<![\\w.-])${escaped(account)}(?![\\w-])`, `gi`), `<user>`);
         }
     }
-    said = said.replace(ANY_HOME, `~`).replace(EMAIL, `<email>`);
+    said = said.replace(ANY_HOME, `~`);
     if ((hide.code ?? ``).length >= 4) {
         said = said.replaceAll(hide.code ?? ``, `<code>`);
     }

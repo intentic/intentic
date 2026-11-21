@@ -11,6 +11,7 @@ import {
     withRuntimeDefaults,
     WordlessTurnSchema,
 } from "@intentic/sandbox-contract/schemas/agent";
+import { QueuedTrialRetrySchema, type QueuedTrialRetry } from "@intentic/sandbox-contract/schemas/queued-trial-retry";
 import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
 import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SessionOwnerSchema } from "@intentic/sandbox-contract/schemas/agents";
@@ -65,6 +66,10 @@ const QueuedItemSchema = z.object({
     // it was booked for, by the composer (`sendAtReopen`) or by the sandbox (allowance-gate.ts). Goes with the booking: a
     // new one replaces it, a move to another account keeps it, which is how a window knows the wait is no longer needed.
     reopenOf: QueuedReopenSchema.optional(),
+    // Added 2026-11-21, optional: the sandbox sending these words again by itself after the free trial turned them away
+    // as busy (trial-retry.ts), and which try that is. Outlives its booking being let go or handed back, so the next try
+    // counts on; a person re-timing, moving or sending after them takes it off.
+    trialRetry: QueuedTrialRetrySchema.optional(),
     // A continuation, not words (agent.run `continues`, booked for later): it carries the conversation on from where its
     // last turn stopped, its prompt empty, and goes alone (turn-admission.ts, together). A turn that starts before it
     // goes makes it moot (`superseded`).
@@ -94,16 +99,16 @@ export type TurnQueue = z.infer<typeof TurnQueueSchema>;
 // What a booked message waits for: an instant, or another conversation's work landing. Exactly one. An instant may say
 // it is an allowance's reopen (`reopenOf`).
 export type Booking =
-    | { readonly until: number; readonly after?: undefined; readonly reopenOf?: QueuedReopen | undefined }
-    | { readonly after: AfterLand; readonly until?: undefined; readonly reopenOf?: undefined };
+    | { readonly until: number; readonly after?: undefined; readonly reopenOf?: QueuedReopen | undefined; readonly trialRetry?: QueuedTrialRetry | undefined }
+    | { readonly after: AfterLand; readonly until?: undefined; readonly reopenOf?: undefined; readonly trialRetry?: undefined };
 
 // The holds a press lets go: a Stop, or a refusal at the door. Neither touches a booked message.
 export type QueueHold = Exclude<QueuePause, "scheduled">;
 
 // The booking one message waits by, if any.
-export const bookingOfItem = (item: Pick<QueuedItem, "until" | "after" | "reopenOf">): Booking | undefined => {
+export const bookingOfItem = (item: Pick<QueuedItem, "until" | "after" | "reopenOf" | "trialRetry">): Booking | undefined => {
     if (item.until !== undefined) {
-        return { until: item.until, ...opt("reopenOf", item.reopenOf) };
+        return { until: item.until, ...opt("reopenOf", item.reopenOf), ...opt("trialRetry", item.trialRetry) };
     }
     return item.after === undefined ? undefined : { after: item.after };
 };
@@ -150,10 +155,25 @@ const soonestOf = (items: readonly QueuedItem[]): Booking | undefined => {
     return after === undefined ? undefined : { after };
 };
 
-// A message with this booking in place of whatever it had; undefined takes its booking off.
+// A message with this booking in place of whatever it had; undefined takes its booking off. A trial retry's count stays
+// when the booking is only let go (its time came, a press, a refusal handing it back), so the next try counts on; any
+// other booking is somebody's own word, and ends it.
 const rebooked = (item: QueuedItem, booking: Booking | undefined): QueuedItem => {
-    const { until: _until, after: _after, reopenOf: _reopenOf, ...rest } = item;
-    return { ...rest, ...opt("until", booking?.until), ...opt("after", booking?.after), ...opt("reopenOf", booking?.reopenOf) };
+    const { until: _until, after: _after, reopenOf: _reopenOf, trialRetry, ...rest } = item;
+    const retry = booking === undefined ? trialRetry : booking.trialRetry;
+    return { ...rest, ...opt("until", booking?.until), ...opt("after", booking?.after), ...opt("reopenOf", booking?.reopenOf), ...opt("trialRetry", retry) };
+};
+
+/** Whether the sandbox has booked this message to go again by itself after the free trial turned it away as busy. */
+export const trialRetryBooked = (item: Pick<QueuedItem, "until" | "trialRetry">): boolean => item.until !== undefined && item.trialRetry !== undefined;
+
+// The message with the sandbox's trial retries off it: its count gone, and the retry's own booking with it.
+const withoutTrialRetry = (item: QueuedItem): QueuedItem => {
+    if (item.trialRetry === undefined) {
+        return item;
+    }
+    const { trialRetry: _retry, ...rest } = item;
+    return trialRetryBooked(item) ? rebooked(rest, undefined) : rest;
 };
 
 export const NO_QUEUE: TurnQueue = { items: [], revision: 0 };
@@ -181,13 +201,17 @@ const named = (queue: TurnQueue, ids: readonly string[] | undefined): ReadonlySe
 
 /**
  * Joins the end of the queue; a person's message lets a Stop's or a refusal's hold go, since sending again is them saying
- * so. A booked message is not held, and stays on its time: sending something now says nothing about it.
+ * so. A booked message is not held, and stays on its time: sending something now says nothing about it. The sandbox's
+ * trial retry is the refusal's hold going on by itself, so a person's message ends it as it ends the hold: the words it
+ * was sending again go now, with theirs.
  */
 export const joined = (queue: TurnQueue, item: Omit<QueuedItem, "revision">): TurnQueue => {
     if (queue.items.some((waiting) => waiting.id === item.id)) {
         return queue;
     }
-    return next(queue, [...queue.items, rebooked({ ...item, revision: queue.revision + 1 }, undefined)], item.voice === "person" ? undefined : holdOf(queue));
+    const person = item.voice === "person";
+    const before = person ? queue.items.map(withoutTrialRetry) : queue.items;
+    return next(queue, [...before, rebooked({ ...item, revision: queue.revision + 1 }, undefined)], person ? undefined : holdOf(queue));
 };
 
 /**
@@ -290,11 +314,15 @@ export const rerouted = (queue: TurnQueue, routing: ResumeRouting, ids?: readonl
     if (!queue.items.some(moving)) {
         return queue;
     }
+    // Words the sandbox was sending again to the free trial stop being sent by themselves once moved off it: they wait,
+    // held as the refusal left them, for the press on wherever they now go.
+    const retrying = queue.items.some((item) => moving(item) && trialRetryBooked(item));
     const moved = (item: QueuedItem): QueuedItem => {
         if (!moving(item)) {
             return item;
         }
-        const { agent: _agent, harness: _harness, account: _account, model, effort, ...turn } = item.turn;
+        const kept = withoutTrialRetry(item);
+        const { agent: _agent, harness: _harness, account: _account, model, effort, ...turn } = kept.turn;
         const pick = routing.model ?? model;
         const routed = {
             ...turn,
@@ -304,9 +332,9 @@ export const rerouted = (queue: TurnQueue, routing: ResumeRouting, ids?: readonl
             ...opt("model", pick),
             ...opt("effort", routing.effort ?? effort),
         };
-        return { ...item, revision: queue.revision + 1, turn: routed };
+        return { ...kept, revision: queue.revision + 1, turn: routed };
     };
-    return next(queue, queue.items.map(moved), holdOf(queue));
+    return next(queue, queue.items.map(moved), holdOf(queue) ?? (retrying ? "refused" : undefined));
 };
 
 // The one message named, if it still reads as it did at `revision`.
@@ -382,6 +410,7 @@ export const queueView = (queue: TurnQueue): ConversationQueue => ({
         ...opt("after", item.after?.conversationId),
         ...opt("afterTurn", item.until === undefined ? item.after?.turn : undefined),
         ...opt("reopenOf", item.until === undefined ? undefined : item.reopenOf),
+        ...opt("trialRetry", item.until === undefined ? undefined : item.trialRetry),
         ...opt("serves", servingOf(item)),
         ...opt("continues", item.continues),
     })),

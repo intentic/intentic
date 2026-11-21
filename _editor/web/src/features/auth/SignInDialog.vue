@@ -179,7 +179,7 @@ watch(
                             <p v-if="options.google" class="or" aria-hidden="true">
                                 <span>{{ t(`auth.login.or`) }}</span>
                             </p>
-                            <EmailCodeSignIn in-app :google-offered="options.google" @signed-in="arrive" />
+                            <EmailCodeSignIn surface="dialog" in-app :google-offered="options.google" @signed-in="arrive" />
                         </template>
 
                         <p class="fine">

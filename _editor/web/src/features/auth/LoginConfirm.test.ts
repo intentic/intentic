@@ -29,6 +29,9 @@ const signInWithEmailCode = jest.fn<(email: string, otp: string) => Promise<void
 const sendEmailCode = jest.fn<(email: string) => Promise<void>>();
 jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref(null), signInWithEmailCode, sendEmailCode }) }));
 
+const track = jest.fn();
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
+
 const { default: LoginConfirm } = await import("./LoginConfirm.vue");
 const { EmailCodeError } = await import("../../client/auth/emailCode");
 
@@ -59,6 +62,7 @@ beforeEach(() => {
     replace.mockReset();
     signInWithEmailCode.mockReset().mockResolvedValue(undefined);
     sendEmailCode.mockReset().mockResolvedValue(undefined);
+    track.mockReset();
     globalThis.history.replaceState(null, ``, `/login/confirm?email=ana%40corp.example&code=123456&returnTo=%2Fsandbox%2Fusage`);
 });
 
@@ -84,6 +88,8 @@ it(`signs in on the press with the code the link carried, then lands where the l
 
     expect(signInWithEmailCode).toHaveBeenCalledWith(`ana@corp.example`, `123456`);
     expect(replace).toHaveBeenCalledWith(`/sandbox/usage`);
+    // Counted beside a typed code and Google's, with nothing of the address or the code in it.
+    expect(track.mock.calls).toEqual([[`signin_completed`, { method: `email`, via: `link`, surface: `confirm` }]]);
 });
 
 // The same rule /login holds: a destination off this origin is an open redirect waiting for a link to carry it.
@@ -110,6 +116,10 @@ it(`offers a fresh code to the same address when this one no longer signs in`, a
     await settle();
 
     expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`);
+    expect(track.mock.calls).toEqual([
+        [`signin_code_failed`, { surface: `confirm`, stage: `link`, reason: `expired` }],
+        [`signin_code_requested`, { surface: `confirm` }],
+    ]);
     // The address is the link's, never another: there is no field to change it in.
     expect(document.querySelector(`input[type="email"]`)).toBeNull();
 });

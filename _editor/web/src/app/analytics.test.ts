@@ -25,7 +25,7 @@ const routePatternOf = (path: string): string | undefined => (path.startsWith(`/
 
 // `desktop` stands in for the app's init script (windows.rs), the only signal that tells this SPA it's running in
 // the desktop app rather than a browser tab.
-const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }, launchId?: string) => {
+const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null; internal?: boolean }, launchId?: string) => {
     environment.analytics.posthogKey = posthogKey;
     const stubbed: { env: typeof environment } & Pick<Window, `__INTENTIC_DESKTOP__` | `__INTENTIC_LAUNCH_ID__`> = { env: environment };
     if (desktop !== undefined) {
@@ -231,6 +231,35 @@ describe(`initAnalytics`, () => {
         expect(mocked(posthog.register).mock.calls.at(-1)).toEqual([
             { client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` },
         ]);
+    });
+
+    // The team's own test machines are told from real users' by this mark, whatever network they report from: the
+    // desktop app says so of a marked install, and a browser is marked once by an address with `?internal=1`.
+    it(`marks every event of the team's own install or browser as internal, and nobody else's`, async () => {
+        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null, internal: true });
+        expect(app.register).toHaveBeenCalledWith({ internal: true });
+        jest.clearAllMocks();
+        const { posthog: unmarked } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null, internal: false });
+        expect(unmarked.register).not.toHaveBeenCalledWith({ internal: true });
+
+        try {
+            stubGlobal(`location`, { search: `?internal=1` });
+            jest.clearAllMocks();
+            const { posthog: marked } = await bootAnalytics(`phc_test`);
+            expect(marked.register).toHaveBeenCalledWith({ internal: true });
+            // The mark is the browser's: a later page with no parameter keeps it.
+            stubGlobal(`location`, { search: `` });
+            jest.clearAllMocks();
+            const { posthog: later } = await bootAnalytics(`phc_test`);
+            expect(later.register).toHaveBeenCalledWith({ internal: true });
+        } finally {
+            stubGlobal(`location`, { search: `?internal=0` });
+            jest.clearAllMocks();
+            const { posthog: cleared } = await bootAnalytics(`phc_test`);
+            expect(cleared.register).toHaveBeenCalledWith({ client: `browser` });
+            expect(cleared.register).not.toHaveBeenCalledWith({ internal: true });
+            unstubAllGlobals();
+        }
     });
 
     // EasyPrivacy blocks bare `/posthog-recorder.js` and `/dead-clicks-autocapture.js` on any host, so proxying alone

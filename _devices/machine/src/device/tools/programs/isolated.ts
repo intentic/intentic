@@ -14,6 +14,8 @@ import { execBounded } from "@intentic/base/process";
 // that runs start.ps1 from there: the program started with its output redirected, and its exit code written when it ends.
 
 export const SANDBOX_APP_DIR = "C:\\app";
+// The variable that marks an Intentic install as the team's own test, not a person's (desktop-app launch.rs INTERNAL_ENV).
+export const INTERNAL_TELEMETRY_ENV = "INTENTIC_TELEMETRY_INTERNAL";
 export const SANDBOX_LOG_DIR = "C:\\intentic-log";
 // The Windows Sandbox client processes: what is running while a sandbox is open, and what a stop ends. The host
 // service behind them (CmService, vmcompute) is Windows' own and never touched.
@@ -86,6 +88,10 @@ export const startScript = (spec: IsolatedSpec): string => {
     const args = spec.args.length === 0 ? "" : ` -ArgumentList @(${spec.args.map((arg) => psText(arg.includes(" ") ? `"${arg}"` : arg)).join(", ")})`;
     return [
         "$ErrorActionPreference = 'Stop'",
+        // An Intentic app started in a throwaway VM is a test, never a person's install: it tags each analytics event
+        // `internal: true` (the desktop app's launch.rs `telemetry_internal`). A user variable, so a launch Explorer
+        // starts inside the VM (a deep link, the installer's own) carries it as well as the program started here.
+        ...(["User", "Process"] as const).map((scope) => `[Environment]::SetEnvironmentVariable('${INTERNAL_TELEMETRY_ENV}', '1', '${scope}')`),
         ...Object.entries(spec.env).map(([key, value]) => `[Environment]::SetEnvironmentVariable(${psText(key)}, ${psText(value)}, 'Process')`),
         `Set-Content -Path ${log("started")} -Value (Get-Date -Format o)`,
         "try {",

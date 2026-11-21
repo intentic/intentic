@@ -3,6 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
 import type { ConversationQueue, QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, type Directive, h, nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { NO_ATTENTION } from "../../../../models/agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../../../models/agent-status/agentStatus-standing";
 import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
@@ -584,6 +585,47 @@ describe(`a scheduled send`, () => {
         await nextTick();
 
         expect(statusLine(element)).toBe(`Scheduled · sends in a moment`);
+    });
+});
+
+// The free trial turned the words away as busy, and the sandbox books them to go again by itself (the daemon's
+// trial-retry.ts): the line says so, with which try, and offers a model of the reader's own beside Send now.
+describe(`words the busy free trial turned away, sent again by the sandbox`, () => {
+    it(`says the trial is busy and when it retries, which try, with Connect a model and Send now`, async () => {
+        const until = Date.now() + 40_500;
+        const chat = chatHolding({ items: [held({ attachments: [], until, trialRetry: { made: 2, max: 3 } })], paused: `scheduled`, until }, SENT);
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = document.createElement(`div`);
+        document.body.append(element);
+        const router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] });
+        app = createApp({ render: () => h(ChatHeldMessages) });
+        app.provide(PANE_VIEW, conversationView(computed(() => chat)));
+        app.component(`Icon`, IconStub);
+        app.directive(`tooltip`, tooltip);
+        app.use(router);
+        app.mount(element);
+        await nextTick();
+
+        expect(statusLine(element)).toMatch(/^Free trial busy · retrying in about 4[01]s \(try 2 of 3\)$/u);
+        expect(element.querySelector(`a`)?.textContent?.trim()).toBe(`Connect a model`);
+        pressNamed(element, `Send now`)[0]!.click();
+        expect(resume.mock.calls).toEqual([[[`m1`]]]);
+    });
+
+    it(`says it retries in a moment once its time has come`, async () => {
+        const until = Date.now() - 1;
+        const element = document.createElement(`div`);
+        document.body.append(element);
+        const chat = chatHolding({ items: [held({ attachments: [], until, trialRetry: { made: 1, max: 3 } })], paused: `scheduled`, until }, SENT);
+        app = createApp({ render: () => h(ChatHeldMessages) });
+        app.provide(PANE_VIEW, conversationView(computed(() => chat)));
+        app.component(`Icon`, IconStub);
+        app.directive(`tooltip`, tooltip);
+        app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] }));
+        app.mount(element);
+        await nextTick();
+
+        expect(statusLine(element)).toBe(`Free trial busy · retrying in a moment (try 1 of 3)`);
     });
 });
 

@@ -3,6 +3,7 @@ import { advance, progressView, startProgress, tick, type PlanStep } from "../se
 import {
     endRequirements,
     failureLine,
+    finishedFacts,
     foldRequirement,
     homeOf,
     openStep,
@@ -251,5 +252,52 @@ describe(`a pull under way`, () => {
         const facts = runFacts(pulling, progressView(pulling, 20_000), 20_000);
         expect([facts.downloadedMb, facts.downloadTotalMb, facts.bytesPerSecond]).toEqual([null, null, null]);
         expect(runFacts(startProgress(PULL, 0), progressView(startProgress(PULL, 0), 0), 0).step).toBeNull();
+    });
+});
+
+/* THE WHOLE LIST, AND A STOP THAT WAITS ON ITS PERSON (2026-11-21). */
+describe(`a stop block that is a list`, () => {
+    it(`keeps every item, past blank lines and an item's long form`, () => {
+        const events = [
+            said(`error: 2 things are in the way:`),
+            said(``),
+            said(`  1. WSL`),
+            said(`     problem: WSL is not installed.`),
+            said(`     fix:     run wsl --install as administrator.`),
+            said(``),
+            said(`     the long form`),
+            said(`  2. Virtualization`),
+            said(`     problem: off in the firmware.`),
+            said(`     fix:     turn it on.`),
+        ];
+        expect(stopBlock(events)).toBe(
+            [
+                `2 things are in the way:`,
+                `1. WSL`,
+                `problem: WSL is not installed.`,
+                `fix:     run wsl --install as administrator.`,
+                `2. Virtualization`,
+                `problem: off in the firmware.`,
+                `fix:     turn it on.`,
+            ].join(`\n`),
+        );
+    });
+});
+
+describe(`how a finished install reads`, () => {
+    const run = { ok: false, durationMs: 5, exitCode: 3, steps: 2, failedStep: `checking-docker` } as const;
+
+    it(`is needsYou, with no ok at all, when ic stopped for the person's consent or a restart`, () => {
+        expect(finishedFacts(run, `consent`)).toEqual({ durationMs: 5, exitCode: 3, steps: 2, outcome: `needsYou`, needs: `consent`, endedStep: `checking-docker` });
+        expect(finishedFacts({ ...run, exitCode: 4 }, `parked`)).toMatchObject({ outcome: `needsYou`, needs: `restart` });
+        expect(finishedFacts(run, `consent`)).not.toHaveProperty(`ok`);
+    });
+
+    it(`keeps ok for a success and a real failure, and a reader's Stop is neither`, () => {
+        expect(finishedFacts({ ok: true, durationMs: 5, exitCode: 0, steps: 9 }, `done`)).toEqual({ ok: true, outcome: `done`, durationMs: 5, exitCode: 0, steps: 9 });
+        expect(finishedFacts({ ...run, exitCode: 1 }, `failed`)).toMatchObject({ ok: false, outcome: `failed`, failedStep: `checking-docker` });
+        const stopped = finishedFacts(run, `stopped`);
+        expect(stopped).toMatchObject({ outcome: `stopped`, endedStep: `checking-docker` });
+        expect(stopped).not.toHaveProperty(`ok`);
     });
 });

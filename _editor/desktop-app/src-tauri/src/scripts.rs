@@ -709,7 +709,52 @@ fn engine_home() -> Option<PathBuf> {
 /// `ic engine start` for our engine, bounded: the installed ic, or the one beside this app. `quiet` is the background
 /// start, which leaves an engine stopped on purpose (or not switched on) alone; without it the start is a person's
 /// own, and ends any hold.
-pub(crate) fn start_our_engine(quiet: bool, limit: Duration) -> Result<(), String> {
+/// Why `ic engine start` left the engine down: what it said (see [`engine_start_said`]) and, for the few failures counted
+/// by kind, which one it was ([`engine_failure_cause`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EngineStartFailure {
+    pub said: String,
+    pub cause: Option<&'static str>,
+}
+
+impl EngineStartFailure {
+    fn plain(said: String) -> Self {
+        let cause = engine_failure_cause(&said);
+        Self { said, cause }
+    }
+}
+
+/// Pure: what a failed `ic engine start` said about why: its stop block on stderr whole (setup_progress.rs `stop_block`:
+/// its headline, `problem:` and `fix:`), else its last stderr line, else its last stdout line. _(2026-11-21) It took the
+/// last line of either stream, stdout's first, so a note ic printed on its way (`intentic: could not refresh the
+/// engine's keeper (…); starting the one it has.`) stood in for the error that stopped it, 20 times a day on one PC._
+pub(crate) fn engine_start_said(stderr: &str, stdout: &str) -> String {
+    let last = |text: &str| {
+        text.lines()
+            .rfind(|line| !line.trim().is_empty())
+            .map(|line| line.trim().to_string())
+    };
+    crate::setup_progress::stop_block(stderr.lines())
+        .or_else(|| last(stderr))
+        .or_else(|| last(stdout))
+        .unwrap_or_else(|| "ic engine start failed".to_string())
+}
+
+/// Pure: the kind of an engine failure worth counting, read off everything the start said: `winsock-buffers`, WSL's
+/// WSAENOBUFS (0x80072747: Windows' sockets out of buffers, a VPN's or a network filter's driver), or `wsl-user-lookup`,
+/// WSL unable to read the distro's account database (`getpwnam(root) failed`). None for any other.
+pub(crate) fn engine_failure_cause(said: &str) -> Option<&'static str> {
+    let lower = said.to_ascii_lowercase();
+    if lower.contains("0x80072747") {
+        Some("winsock-buffers")
+    } else if lower.contains("getpwnam(") && lower.contains(") failed") {
+        Some("wsl-user-lookup")
+    } else {
+        None
+    }
+}
+
+pub(crate) fn start_our_engine(quiet: bool, limit: Duration) -> Result<(), EngineStartFailure> {
     let home = engine_home().map(|home| home.to_string_lossy().into_owned());
     let installed = ic_candidates(Host::current(), home.as_deref())
         .into_iter()
@@ -717,7 +762,9 @@ pub(crate) fn start_our_engine(quiet: bool, limit: Duration) -> Result<(), Strin
     let ic = installed
         .map(PathBuf::from)
         .or_else(crate::commands::bundled_ic)
-        .ok_or_else(|| "ic is not installed on this computer.".to_string())?;
+        .ok_or_else(|| {
+            EngineStartFailure::plain("ic is not installed on this computer.".to_string())
+        })?;
     let mut command = quiet_command(&ic);
     command.args(["engine", "start"]);
     if quiet {
@@ -725,15 +772,13 @@ pub(crate) fn start_our_engine(quiet: bool, limit: Duration) -> Result<(), Strin
     }
     match capture("ic engine start", command, limit) {
         Ok(answer) if answer.success => Ok(()),
-        Ok(answer) => Err(answer
-            .stderr
-            .lines()
-            .chain(answer.stdout.lines())
-            .rfind(|line| !line.trim().is_empty())
-            .unwrap_or("ic engine start failed")
-            .trim()
-            .to_string()),
-        Err(silence) => Err(format!("ic engine start did not finish: {silence}")),
+        Ok(answer) => Err(EngineStartFailure {
+            said: engine_start_said(&answer.stderr, &answer.stdout),
+            cause: engine_failure_cause(&format!("{}\n{}", answer.stderr, answer.stdout)),
+        }),
+        Err(silence) => Err(EngineStartFailure::plain(format!(
+            "ic engine start did not finish: {silence}"
+        ))),
     }
 }
 
@@ -1224,8 +1269,8 @@ pub fn bring_engine_up(limit: Duration) -> EngineOutcome {
         if engine_listening() && daemon_refusal().is_none() {
             return EngineOutcome::Ready;
         }
-        if let Err(problem) = start_our_engine(false, limit) {
-            return EngineOutcome::WouldNotStart(problem);
+        if let Err(failure) = start_our_engine(false, limit) {
+            return EngineOutcome::WouldNotStart(failure.said);
         }
         return wait_for_engine(limit);
     }
@@ -2220,6 +2265,29 @@ fn quiet(mut command: Command) -> Command {
 
 #[cfg(test)]
 mod tests {
+
+    /// A failed engine start is said by its stop block on stderr, never by a note ic printed on stdout on its way, and the
+    /// note still counts towards its cause (2026-11-21: "could not refresh the engine's keeper (… getpwnam(root) failed
+    /// 5)" stood in for the error 20 times a day on one PC).
+    #[test]
+    fn a_failed_engine_start_is_said_by_its_stop_block_not_a_note() {
+        let stdout = "intentic: could not refresh the engine's keeper (<3>WSL (12) ERROR: CreateProcessParseCommon:1067: getpwnam(root) failed 5); starting the one it has.\n";
+        let stderr =
+            "error: the engine stopped as it started (exit -1)\n   problem: p\n   fix:     f\n";
+        assert_eq!(
+            super::engine_start_said(stderr, stdout),
+            "the engine stopped as it started (exit -1)\nproblem: p\nfix:     f"
+        );
+        assert_eq!(super::engine_start_said("", stdout), stdout.trim());
+        assert_eq!(super::engine_start_said("", ""), "ic engine start failed");
+        assert_eq!(super::engine_failure_cause(stdout), Some("wsl-user-lookup"));
+        assert_eq!(
+            super::engine_failure_cause("Kod błędu: Wsl/Service/0x80072747"),
+            Some("winsock-buffers")
+        );
+        assert_eq!(super::engine_failure_cause("anything else"), None);
+    }
+
     use super::*;
 
     fn mark(started: Option<&str>, at: u64) -> RunMark {

@@ -19,13 +19,15 @@ const directory = async (): Promise<string> => {
     return dir;
 };
 
-test(`a launch is pinned to the workspace, on a PC hosting nothing, with no setup parked`, () => {
+test(`a launch is pinned to the workspace, on a PC hosting nothing, with no setup parked, as the team's own install`, () => {
     const state = launchState(`http://127.0.0.1:4000`, `http://127.0.0.1:4000`);
     expect(JSON.parse(state.get(`last-face.json`) ?? `null`)).toBe(`workspace`);
     expect(JSON.parse(state.get(`hosts-sandboxes.json`) ?? `null`)).toBe(false);
     expect(state.has(`resume-setup.json`)).toBe(true);
     expect(state.get(`resume-setup.json`)).toBeUndefined();
     expect(JSON.parse(state.get(`settings.json`) ?? `{}`)).toEqual({ appUrl: `http://127.0.0.1:4000`, platformUrl: `http://127.0.0.1:4000` });
+    // The marker the app reads its analytics' `internal: true` from (desktop-app launch.rs INTERNAL_FILE).
+    expect(state.get(`telemetry-internal`)).toBe(`1\n`);
 });
 
 test(`pinned files are written or removed, and put back exactly as they were`, async () => {

@@ -12,7 +12,17 @@ declare const __POSTHOG_HOST__: string;
 
 let consent = false;
 let listening = false;
-let context: { installId: string; shared: Record<string, unknown> } | undefined;
+// What every event carries. `internal` only on an install the team marked as its own (launch.rs `telemetry_internal`),
+// left out rather than false everywhere else, as the Rust launch reporter does.
+interface Shared {
+    client: `desktop`;
+    desktop_surface: `launcher`;
+    desktop_version: string;
+    desktop_os: string;
+    desktop_install_id: string;
+    internal?: true;
+}
+let context: { installId: string; shared: Shared } | undefined;
 
 // Which engine this PC's sandboxes run on (`ic engine status`, device/engine/engine.ts), sent with every event as
 // `desktop_engine` once it is known: the one fact that splits every funnel here in two. Kept apart from `context`, since
@@ -40,16 +50,19 @@ export const initAnalytics = (info: DesktopInfo): void => {
     context = contextFor(info);
 };
 
-const contextFor = (info: DesktopInfo): NonNullable<typeof context> => ({
-        installId: info.installId,
-        shared: {
-            client: `desktop`,
-            desktop_surface: `launcher`,
-            desktop_version: info.version,
-            desktop_os: info.os,
-            desktop_install_id: info.installId,
-        },
-    });
+const contextFor = (info: DesktopInfo): NonNullable<typeof context> => {
+    const shared: Shared = {
+        client: `desktop`,
+        desktop_surface: `launcher`,
+        desktop_version: info.version,
+        desktop_os: info.os,
+        desktop_install_id: info.installId,
+    };
+    if (info.telemetryInternal) {
+        shared.internal = true;
+    }
+    return { installId: info.installId, shared };
+};
 
 // Fire-and-forget event, silent on failure, no-op until initAnalytics has run. Only outcomes, durations and step
 // labels — never a sandbox name, setup code, path, token or line of script output, but for one: a failed install's

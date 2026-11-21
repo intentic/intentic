@@ -9,6 +9,7 @@ import { MENTION_LIMIT } from "../text/mentions.js";
 import { entryId } from "./internal.js";
 import { FRESH_OF_DESCRIPTION, FreshOfSchema, FROM_BRANCH_DESCRIPTION, freshOfIssues, fromBranchIssues } from "./conversation-links.js";
 import { RepoBranchSchema } from "./shared.js";
+import { QueuedTrialRetrySchema } from "./queued-trial-retry.js";
 // Agent runtimes the daemon can serve: native providers have dedicated adapters, `endpoint/<id>` names an installed
 // endpoint capability, anything else is an ACP agent capability id. A bare string, not an enum, so an unknown id is a
 // clean error, not a contract change.
@@ -507,10 +508,7 @@ export type MessageVoice = z.infer<typeof MessageVoiceSchema>;
 // cannot say once the chat has moved somewhere with room.
 export const QueuedReopenSchema = z.object({
     agent: AgentProviderSchema.describe("The provider whose allowance it waits out."),
-    account: z
-        .string()
-        .optional()
-        .describe("Which of its accounts. Absent when none was named, and every account of the provider read spent."),
+    account: z.string().optional().describe("Which of its accounts. Absent when none was named, and every account of the provider read spent."),
 });
 export type QueuedReopen = z.infer<typeof QueuedReopenSchema>;
 // Who a person's waiting message goes on, as its request names it now.
@@ -550,6 +548,7 @@ export const QueuedMessageSchema = z.object({
     reopenOf: QueuedReopenSchema.optional().describe(
         "The allowance this message's `until` waits out: it was booked for that account's reopen, by the composer or by the sandbox holding words it would not send into a spent allowance, rather than for a time somebody chose. Absent on any other booking, and from sandboxes older than the field.",
     ),
+    trialRetry: QueuedTrialRetrySchema.optional(),
     serves: QueuedServingSchema.optional().describe(
         "Who serves the turn this message starts: the provider, loop, model, effort and account it was sent under, or was moved to since (`agent.queueReroute`, an account switch). Only on a person's words; the sandbox's and an agent's own go on wherever the conversation runs when they go. Absent from sandboxes older than the field.",
     ),

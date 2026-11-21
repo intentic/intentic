@@ -22,6 +22,8 @@ pub(super) const BROWSER_ARGS: &str = concat!(
 /// devicePair says this build connects this computer to a sandbox as a device from a card's button (device_pair.rs).
 /// processes says this build keeps one list of its processes for both faces and takes answers to them from the page
 /// (processes.rs): the page listens for it and answers a run where it is drawn, never sending the reader to This computer.
+/// internal says the team marked this install as its own (launch.rs `telemetry_internal`), so the page's analytics tag
+/// every event `internal: true` as the app's own do.
 /// loopbackUngated describes browser behavior, not permission. wake is true only for the microphone-enabled workspace window.
 /// machineFace is true only for the workspace window, on a build that ships the face (machine_face.rs `FACE_BUILT`) and a
 /// computer that hosts sandboxes: the hosted page then offers this computer's sandboxes when it cannot reach the platform,
@@ -37,11 +39,12 @@ pub(super) fn workspace_init_script(
         None => "null".to_string(),
     };
     format!(
-        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, processes: true, devicePair: true, machineFace: {machine_face} }}); }} }})();",
+        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, processes: true, devicePair: true, machineFace: {machine_face}, internal: {} }}); }} }})();",
         launch_id_script(),
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
-        cfg!(windows)
+        cfg!(windows),
+        crate::launch::telemetry_internal()
     )
 }
 
@@ -86,6 +89,19 @@ pub(super) fn open_in_place(origin: &str, path: &str, target: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The page tags its own events as the app tags its, from the same mark.
+    #[test]
+    fn the_page_is_told_whether_the_install_is_the_teams_own() {
+        let script = workspace_init_script("install-1", None, true, false);
+        assert!(
+            script.contains(&format!(
+                "internal: {} }}",
+                crate::launch::telemetry_internal()
+            )),
+            "{script}"
+        );
+    }
 
     #[test]
     fn every_page_gets_the_process_launch_id() {

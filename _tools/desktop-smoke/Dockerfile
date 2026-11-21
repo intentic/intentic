@@ -45,6 +45,11 @@ COPY outage.sh /usr/local/bin/outage.sh
 COPY outage_stub.py /usr/local/bin/outage_stub.py
 RUN chmod +x /usr/local/bin/smoke.sh /usr/local/bin/update.sh /usr/local/bin/outage.sh /usr/local/bin/outage_stub.py
 
+# Every launch in this image is the team's own test, never a person's install: the app tags each event it sends
+# `internal: true` (the desktop app's launch.rs `telemetry_internal`), so a release candidate's smoke runs filter out of
+# product analytics. Set on the image rather than in each script, so smoke.sh, update.sh and outage.sh all carry it.
+ENV INTENTIC_TELEMETRY_INTERNAL=1
+
 # The artifact under test is copied to /artifacts by the runner rather than baked in, so one image serves every
 # build. Created here so the copy lands in a directory that already exists whichever way the runner fills it.
 RUN mkdir -p /artifacts

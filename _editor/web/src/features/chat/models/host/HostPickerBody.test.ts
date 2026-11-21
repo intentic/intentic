@@ -86,7 +86,7 @@ jest.mock(`../../accounts/pickerAccounts`, () => ({
 
 const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } =
     await import("../../../../models/conversations/accounts/hostModelPicker");
-const { modelLabelFor, providerModels } = await import("../../../../models/providers/providerCatalog");
+const { modelLabelFor, providerModels, trialStatus } = await import("../../../../models/providers/providerCatalog");
 const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultPinRunSettings } = await import("../../../../models/providers/pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
@@ -455,4 +455,45 @@ it(`a bar with no attempt answers without a resume verb`, async () => {
     const answer = await result;
     expect(answer).toMatchObject({ provider: `claude`, model: `claude-opus-4-6` });
     expect(Object.keys(answer ?? {})).not.toContain(`resume`);
+});
+
+/* THE FREE TRIAL, STAGED WHILE IT TURNS MESSAGES AWAY: "Choose another model" after a busy trial's refusal offered the same
+   trial back with nothing said (session replays, 2026-11). The bar says it is busy and leads with a model of one's own. */
+describe(`the free trial staged while it is busy`, () => {
+    const TRIAL = { available: true, allowance: 50, used: 2, remaining: 48 } as const;
+    afterEach(() => {
+        trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
+    });
+
+    it(`says the trial is busy and when it may answer, and offers Connect a model before the trial's own press`, async () => {
+        const retryAt = Date.now() + 5 * 60_000;
+        trialStatus.value = { ...TRIAL, health: `unavailable`, retryAt: new Date(retryAt).toISOString() };
+        const anchor = document.createElement(`button`);
+        const result = requestModelPick({ anchor, provider: `endpoint/free-trial`, model: `auto`, action: `Use this model` });
+        const element = mount();
+        await nextTick();
+
+        expect(element.querySelector(`[role="status"]`)?.textContent).toMatch(
+            /^The free trial is busy right now and may answer again \d\d:\d\d (today|tomorrow)\. A model of your own skips the wait\.$/u,
+        );
+        const presses = [...element.querySelectorAll<HTMLButtonElement>(`button`)].map((press) => press.textContent);
+        expect(presses.slice(presses.indexOf(`Connect a model`))).toEqual([`Connect a model`, `Use this model`]);
+        // Still the reader's to pick: the trial's own press answers as it always did.
+        button(element, `Use this model`)!.click();
+        await expect(result).resolves.toMatchObject({ provider: `endpoint/free-trial`, model: `auto` });
+    });
+
+    it(`says nothing of it while the trial answers, nor for another model`, async () => {
+        trialStatus.value = { ...TRIAL, health: `healthy` };
+        const anchor = document.createElement(`button`);
+        void requestModelPick({ anchor, provider: `endpoint/free-trial`, model: `auto`, action: `Use this model` });
+        const element = mount();
+        await nextTick();
+        expect(button(element, `Connect a model`)).toBeUndefined();
+
+        trialStatus.value = { ...TRIAL, health: `unavailable` };
+        button(element, `Pick model`)!.click();
+        await nextTick();
+        expect(button(element, `Connect a model`)).toBeUndefined();
+    });
 });

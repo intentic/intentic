@@ -100,6 +100,7 @@ it(`offers Open on a running sandbox the platform never named where the face can
         platformUrl: `https://api.intentic.dev`,
         installId: `install-1`,
         analyticsAllowed: false,
+        telemetryInternal: false,
         engineLimitSeconds: 150,
         fixLimitSeconds: 600,
     };

@@ -24,6 +24,8 @@ pub struct DesktopInfo {
     /// workspace window is marked with, so both faces report as one app (state.rs).
     pub install_id: String,
     pub analytics_allowed: bool,
+    /// This install is the team's own (launch.rs `telemetry_internal`): every event says `internal: true`.
+    pub telemetry_internal: bool,
     /// Seconds a Docker start waits for its engine before it answers `tookTooLong`.
     pub engine_limit_seconds: u64,
     /// Seconds an `ic sandbox fix` may run before it is stopped (fix.rs).
@@ -95,6 +97,7 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
         platform_url: state.platform_url(),
         install_id: state.install_id(),
         analytics_allowed: crate::launch::analytics_allowed(),
+        telemetry_internal: crate::launch::telemetry_internal(),
         engine_limit_seconds: scripts::ENGINE_LIMIT.as_secs(),
         fix_limit_seconds: crate::fix::LIMIT.as_secs(),
     }

@@ -43,6 +43,9 @@ interface DesktopWebview {
     /* THIS BUILD CONNECTS THIS COMPUTER TO A SANDBOX AS A DEVICE FROM A CARD'S BUTTON (`intentic://device-pair`, the app's
      * device_pair.rs). An older one drops the link, so the card offers only the command to paste. */
     devicePair?: boolean;
+    /* THE TEAM MARKED THIS INSTALL AS ITS OWN (the app's launch.rs `telemetry_internal`): the page's analytics say
+     * `internal: true` on every event, as the app's own do (analyticsConsent.ts). */
+    internal?: boolean;
 }
 
 declare global {

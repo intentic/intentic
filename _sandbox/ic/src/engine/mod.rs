@@ -28,6 +28,7 @@ mod pins;
 mod record;
 #[cfg(windows)]
 mod wsl;
+mod wsl_errors;
 
 #[cfg(windows)]
 mod relay;

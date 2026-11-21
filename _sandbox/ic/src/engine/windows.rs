@@ -945,7 +945,7 @@ pub(super) fn keeper_sentence(code: Option<i32>, said: &str) -> String {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect();
-    format!(
+    let headline = format!(
         "the engine stopped as it started ({}){}",
         code.map(|code| format!("exit {code}"))
             .unwrap_or_else(|| "no exit code".to_string()),
@@ -954,7 +954,12 @@ pub(super) fn keeper_sentence(code: Option<i32>, said: &str) -> String {
         } else {
             format!(": {}", tail.join(" / "))
         }
-    )
+    );
+    // A WSL error whose cause is outside WSL (a network driver's) says what to do about it (2026-11-21).
+    match super::wsl_errors::known(said) {
+        Some((problem, fix)) => ui::explain(&headline, Some(problem), Some(fix)),
+        None => headline,
+    }
 }
 
 fn engine_answers(record: &EngineRecord) -> bool {
@@ -1156,6 +1161,10 @@ mod tests {
         let crashed = keeper_sentence(Some(1), "\nfailed to start daemon: x\n");
         assert!(crashed.contains("exit 1"));
         assert!(crashed.contains("failed to start daemon: x"));
+        let winsock = keeper_sentence(Some(-1), "\nKod błędu: Wsl/Service/0x80072747\n");
+        assert!(winsock.starts_with("the engine stopped as it started (exit -1)"));
+        assert!(winsock
+            .contains("\n   fix:     open a terminal as administrator, run netsh winsock reset"));
     }
 
     #[test]

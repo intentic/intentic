@@ -6,10 +6,12 @@ import { useT } from "@intentic/ui/i18n";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { z } from "zod";
+import { track } from "../../app/analytics";
 import { useAuth } from "../../client/auth/useAuth";
 import { CODE_LENGTH, codeDigits, EmailCodeError, plausibleAddress } from "../../client/auth/emailCode";
 import { toTop } from "../../lib/routes/links";
 import { returnPath } from "../../lib/routes/signIn";
+import { failureReason } from "./emailCodeEvents";
 import EmailCodeSignIn from "./EmailCodeSignIn.vue";
 
 // THE MAIL'S LINK, `/login/confirm?email=…&code=…[&returnTo=…]`. It never signs in on load: mail scanners fetch every
@@ -63,8 +65,11 @@ const confirm = async (): Promise<void> => {
     notice.value = undefined;
     try {
         await signInWithEmailCode(email, code);
+        // The mail's link, counted beside a typed code (emailCodeEvents.ts) and Google (googlePress.ts).
+        track(`signin_completed`, { method: `email`, via: `link`, surface: `confirm` });
         await land();
     } catch (error) {
+        track(`signin_code_failed`, { surface: `confirm`, stage: `link`, reason: failureReason(error instanceof Error ? error : undefined) });
         // A code this link carried that no longer signs in (spent by the code field, run out, guessed at) is a fresh
         // code away, mailed to the same address; anything else is said in the platform's words, with a retry.
         const spent = error instanceof EmailCodeError && error.refusal !== `failed` && error.refusal !== `rate-limited`;
@@ -98,7 +103,7 @@ const brokenNotice = noticeOf(t(`auth.loginConfirm.linkIncomplete`), { tone: `wa
                 <!-- The code is spent: one more mail to the same address, typed here this time. -->
                 <template v-else-if="state === `refused`">
                     <Notice v-if="notice" :of="notice" class="mb-4 rounded-none text-left" />
-                    <EmailCodeSignIn :locked-email="email" @signed-in="land" />
+                    <EmailCodeSignIn surface="confirm" :locked-email="email" @signed-in="land" />
                 </template>
 
                 <template v-else>

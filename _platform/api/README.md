@@ -36,8 +36,10 @@ flowchart LR
   typed in, or a link to `app.intentic.dev/login/confirm?…` whose page needs a Confirm press, so a mail scanner that
   only opens links cannot spend it. Codes are stored hashed, expire after 10 minutes and allow 5 attempts. An address
   is sent at most one code a minute and five an hour, counted in `SignInCodeAllowance` under a hash of the address,
-  beside Better Auth's limit per IP address (kept in each replica's memory). The form answers the same whether a code
-  went out or not, and
+  beside Better Auth's limit per IP address (kept in each replica's memory). The per-address limit is decided in a gate
+  ahead of Better Auth's send endpoint (`signInCodeGate`), before a code is minted: (2026-11-21) that endpoint stores the
+  new code before it asks for the mail, so a send skipped for the limit used to leave the earlier mail's code dead with
+  no new one sent. The form answers the same whether a code went out or not, and
   `HOSTED_CANARY_EMAIL` is never sent one. Accounts are linked by address with Google trusted: a code for an address
   that already has an account enters that account, and Google can be linked to an account made by email.
   `SIGN_IN_EMAIL` switches codes on (the default). In production they stay off while `EMAIL_API_KEY` or `EMAIL_FROM` is

@@ -4,7 +4,10 @@ import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { topPath } from "@intentic/sandbox-contract/app-routes";
+import type { BetterAuthPlugin } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import type { Logger } from "pino";
+import { z } from "zod";
 import type { Config } from "./config.js";
 import { sendMail, signInCodeEmail } from "./mail.js";
 
@@ -85,22 +88,67 @@ export const takeCodeAllowance = async (allowances: CodeAllowances, email: strin
 export const sweepCodeAllowances = (prisma: PrismaClient, now = new Date()): Promise<{ count: number }> =>
     prisma.signInCodeAllowance.deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - Math.max(...CODE_WINDOWS.map((window) => window.ms))) } } });
 
-// Mails a sign-in code, or quietly does not: the address is the canary's (which nobody may sign in as), or it was sent
-// its share of codes already. Either way the asker hears what they would have heard, so the form says nothing about
-// which addresses exist or were asked for.
-export const sendSignInCode = async (
-    deps: { readonly config: Config; readonly allowances: CodeAllowances; readonly logger: Logger },
-    request: { readonly email: string; readonly code: string },
-): Promise<void> => {
+type CodeDeps = { readonly config: Config; readonly allowances: CodeAllowances; readonly logger: Logger };
+
+// Whether a code may be minted for this address at all, decided BEFORE Better Auth mints one: not for the canary's
+// address (which nobody may sign in as), nor for one already sent its share of codes. A yes takes one from the
+// allowance, so it is asked exactly once per code that goes out.
+// (2026-11-21) Decided here, ahead of the code, rather than in `sendVerificationOTP`: Better Auth's send endpoint stores
+// the new code first and only then asks the sender to mail it, so a send skipped for the allowance used to replace the
+// code with one that was never mailed, and the code in the earlier mail stopped working (a reader who reloaded and
+// pressed again within the minute was left with no code that signed in). Switching to `resendStrategy: "reuse"` was
+// passed over: it needs the stored codes encrypted rather than hashed.
+export const maySendSignInCode = async (deps: CodeDeps, rawEmail: string): Promise<boolean> => {
+    const email = rawEmail.trim().toLowerCase();
+    const address = sha256Hex(email).slice(0, 12);
+    const canary = deps.config.hosted.canaryEmail.trim().toLowerCase();
+    if (canary !== `` && email === canary) {
+        deps.logger.warn({ address }, `sign-in code: refused for the canary's address, which nobody signs in as`);
+        return false;
+    }
+    if (!(await takeCodeAllowance(deps.allowances, email))) {
+        deps.logger.warn({ address }, `sign-in code: this address was sent its share of codes for now; not minting another`);
+        return false;
+    }
+    return true;
+};
+
+export const SEND_CODE_PATH = `/email-otp/send-verification-otp`;
+
+// A send the endpoint would mail, read as the endpoint reads it (lowercased, then checked as an address, untrimmed), so
+// the gate takes no allowance for a request the endpoint goes on to refuse. Password and change-of-address codes are
+// never mailed here, so they pass through untaken.
+const SendCodeBodySchema = z.object({ email: z.string().toLowerCase().pipe(z.email()), type: z.enum([`sign-in`, `email-verification`]) });
+
+// The gate in front of Better Auth's send endpoint: a refused address gets the answer a sent code gets (so the form says
+// nothing about which addresses exist or were asked for), and no code is minted, so the one already mailed still works.
+export const signInCodeGate = (deps: CodeDeps) =>
+    ({
+        id: `intentic-sign-in-code-gate`,
+        hooks: {
+            before: [
+                {
+                    matcher: (context) => context.path === SEND_CODE_PATH,
+                    handler: createAuthMiddleware(async (ctx) => {
+                        const body = SendCodeBodySchema.safeParse(ctx.body);
+                        if (!body.success || (await maySendSignInCode(deps, body.data.email))) {
+                            return;
+                        }
+                        return ctx.json({ success: true });
+                    }),
+                },
+            ],
+        },
+    }) satisfies BetterAuthPlugin;
+
+// Mails a code the gate above let through. The canary is checked again in case a send ever reaches here another way;
+// the allowance is not, since the gate already took it for this code.
+export const sendSignInCode = async (deps: Omit<CodeDeps, `allowances`>, request: { readonly email: string; readonly code: string }): Promise<void> => {
     const email = request.email.trim().toLowerCase();
     const address = sha256Hex(email).slice(0, 12);
     const canary = deps.config.hosted.canaryEmail.trim().toLowerCase();
     if (canary !== `` && email === canary) {
         deps.logger.warn({ address }, `sign-in code: refused for the canary's address, which nobody signs in as`);
-        return;
-    }
-    if (!(await takeCodeAllowance(deps.allowances, email))) {
-        deps.logger.warn({ address }, `sign-in code: this address was sent its share of codes for now; not sending another`);
         return;
     }
     const link = signInCodeLink(deps.config, email, request.code);

@@ -20,7 +20,8 @@ flowchart LR
   Accepting the deep link must run that stand-in in the background and keep the workspace's original window.
   The link is fired at a running app (single-instance forwarding) and at one that is not running (startup argv).
 - Hermetic: `INTENTIC_APP_URL` points at a stub page baked into the image and `INTENTIC_DISABLE_UPDATE_CHECK=1`
-  keeps the updater off. `AGENT_BIN` also keeps the background agent pre-install from downloading a release.
+  keeps the updater off. The image sets `INTENTIC_TELEMETRY_INTERNAL=1`, so a release candidate's launches here say
+  `internal: true` on every analytics event rather than counting as new users. `AGENT_BIN` also keeps the background agent pre-install from downloading a release.
 - `outage.sh`, reached the same way and run by `verify-desktop-install.sh` on the deb when `DESKTOP_SMOKE_OUTAGE=1` (the
   nightly sets it; CI and release leave it out until it has passed there), launches the installed app at a workspace address that does not answer, then at one answering a
   Cloudflare-style 530, each in config, data and cache directories of its own, with the Rust side's calls sent to a

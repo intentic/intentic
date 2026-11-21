@@ -58,6 +58,10 @@ export const launchState = (workspaceUrl: string, platformUrl: string): Readonly
         [`hosts-sandboxes.json`, JSON.stringify(false)],
         // No setup an earlier run left parked: one outranks every other face at launch.
         [`resume-setup.json`, undefined],
+        // A test install, never a person's: every event the app sends says `internal: true` (launch.rs
+        // `telemetry_internal`). The job's INTENTIC_TELEMETRY_INTERNAL says the same; the file also reaches a launch
+        // the OS starts outside this process's environment.
+        [`telemetry-internal`, `1\n`],
     ]);
 
 // Writes each file as `files` says (or removes it), and answers what puts every one back exactly as it was. The

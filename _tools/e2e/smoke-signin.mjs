@@ -5,7 +5,10 @@
 import { chromium } from "@playwright/test";
 
 const origin = (process.argv[2] ?? process.env.WEB_ORIGIN ?? "https://app.intentic.dev").replace(/\/+$/, "");
-const loginUrl = `${origin}/login`;
+// `internal=1` marks the browser as the team's own (the web's analyticsInternal.ts): production's analytics would
+// otherwise count every deploy's check as a new visitor.
+const INTERNAL = "internal=1";
+const loginUrl = `${origin}/login?${INTERNAL}`;
 
 // Generous: this runs seconds after deploy, before the container, Google's script and its frame have warmed up.
 const BUTTON_DEADLINE_MS = 30_000;
@@ -100,7 +103,7 @@ const inspectLanding = async (browser) => {
         }
     });
     try {
-        await page.goto(`${origin}/desktop-auth/complete?handoff=smoke-${Date.now()}&verifier=${"0".repeat(64)}`, {
+        await page.goto(`${origin}/desktop-auth/complete?handoff=smoke-${Date.now()}&verifier=${"0".repeat(64)}&${INTERNAL}`, {
             waitUntil: "domcontentloaded",
             timeout: BUTTON_DEADLINE_MS,
         });

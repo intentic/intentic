@@ -1,7 +1,7 @@
 // Pins that access.ts treats an endpoint as ready by existing, the trial's readiness as a spendable measurement,
 // and accessKnown as gating both reads landing before either is trusted.
 import { loopsOf, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
-import { accessKnown, firstReadyProvider, providerReady, providerReadyOn, trialExhausted, trialPhase } from "./access";
+import { accessKnown, firstReadyProvider, providerReady, providerReadyOn, trialBadge, trialBusy, trialExhausted, trialPhase } from "./access";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "./providerCatalog";
 import { advertisedLoops } from "./offeredLoops";
@@ -153,4 +153,21 @@ it(`uses subscriptions on every advertised translator loop, keeping native xAI a
     expect(kimiLoops.map((loop) => providerReadyOn(`kimi`, loop))).toEqual([true, true, true, false]);
     expect([providerReadyOn(`grok`, `native`), providerReadyOn(`grok`, `claude-code`), providerReadyOn(`grok`, `codex`), providerReadyOn(`grok`, `vendor`)]).toEqual([false, true, true, false]);
     advertisedLoops.value = undefined;
+});
+
+// A reader whose message a busy trial just turned away re-picked it from a row that said only how many steps were left
+// (session replays, 2026-11): while the pool refuses, the row says busy, and when it may answer if the platform said.
+it(`says the trial is busy on its row while its pool refuses, and when it may answer again`, () => {
+    trialStatus.value = { available: true, allowance: 12, used: 2, remaining: 10, health: `healthy` };
+    expect(trialBadge(TRIAL_PROVIDER)).toBe(`Free trial · 10 steps left today`);
+    expect(trialBusy()).toBeUndefined();
+
+    trialStatus.value = { available: true, allowance: 12, used: 2, remaining: 10, health: `unavailable`, retryAt: `2026-11-21T12:00:30.000Z` };
+    expect(trialBadge(TRIAL_PROVIDER)).toBe(`Free trial · busy right now`);
+    expect(trialBusy()).toEqual({ retryAt: Date.parse(`2026-11-21T12:00:30.000Z`) });
+
+    // Spent is the bigger news, busy or not.
+    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `unavailable` };
+    expect(trialBadge(TRIAL_PROVIDER)).toBe(`Free trial · used up today`);
+    expect(trialBusy()).toEqual({ retryAt: undefined });
 });

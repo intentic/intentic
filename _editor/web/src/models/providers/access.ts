@@ -167,8 +167,26 @@ export const trialBadge = (provider: AgentProvider): string | undefined => {
     if (!isTrialProvider(provider) || !trialStatus.value.available) {
         return undefined;
     }
-    const { remaining } = trialStatus.value;
-    return remaining > 0 ? t(`chat.access.trialLeft`, { remaining }) : t(`chat.access.trialUsedUp`);
+    const { remaining, health } = trialStatus.value;
+    if (remaining <= 0) {
+        return t(`chat.access.trialUsedUp`);
+    }
+    // Busy is the news while the pool refuses: a reader who just had a message turned away re-picked the trial from this
+    // row, told only how many steps were left (session replays, 2026-11), and was turned away again.
+    return health === `unavailable` ? t(`chat.access.trialBusy`) : t(`chat.access.trialLeft`, { remaining });
+};
+
+/**
+ * Whether the free trial is turning messages away right now, and when its pool may answer again (ms), where the platform
+ * named a time: what a surface offering the trial says before it is picked again.
+ */
+export const trialBusy = (): { readonly retryAt: number | undefined } | undefined => {
+    const status = trialStatus.value;
+    if (!status.available || status.health !== `unavailable`) {
+        return undefined;
+    }
+    const at = status.retryAt === undefined ? Number.NaN : Date.parse(status.retryAt);
+    return { retryAt: Number.isNaN(at) ? undefined : at };
 };
 
 // Where the day's free trial stands, the one reading of its allowance every surface takes: `none` (not the trial, or
