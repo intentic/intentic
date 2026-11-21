@@ -24,6 +24,14 @@ RUN apt-get update \
         osslsigncode jq \
     && rm -rf /var/lib/apt/lists/*
 
+# NVENC's API headers (ffnvcodec) and the libclang bindgen loads, for intentic-remoted's default `nvenc` feature
+# (cast-core's build.rs binds nvEncodeAPI.h; nothing NVIDIA's is linked, the driver is opened at runtime). Without them
+# ic-check's clippy and tests, netd-check's build and the release's build-remoted.sh all stop in cast-core's build
+# script. A layer of its own so adding it rebuilds nothing above.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libffmpeg-nvenc-dev libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # JSIGN, the signer the release uses (WINDOWS_SIGN_TOOL=jsign): Authenticode against Azure Artifact Signing,
 # where the private key lives in Microsoft's HSM and never in this image or a secret. It is Java, hence the
 # headless JRE (~90 MB, the cost docs/ops/windows-code-signing.md weighs). `apt-get install ./x.deb` rather

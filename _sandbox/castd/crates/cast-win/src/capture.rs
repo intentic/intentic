@@ -95,6 +95,9 @@ pub(crate) trait DupOut: Send + Sync + 'static {
     /// Duplication is not offered, or refused with the person's own desktop showing: GDI stands in.
     fn fallback(&self, why: String);
     fn cursor(&self, cursor: MediaCursor);
+    /// Where the pointer is on this output, or (-1, -1) while it is hidden or on another one (`Hub::pointer_at`). A
+    /// duplication whose pointer does not reach a hub of this process (the helper's, over its pipe) says nothing.
+    fn pointer_at(&self, _x: i32, _y: i32) {}
     fn status(&self, status: CaptureStatus);
     /// Whether to stop waiting for duplication and open the capture again: the lock screen and admin prompts helper
     /// became reachable while this process could not see the desktop.
@@ -142,6 +145,9 @@ impl DupOut for LocalOut {
     }
     fn cursor(&self, cursor: MediaCursor) {
         self.hub.set_cursor(cursor);
+    }
+    fn pointer_at(&self, x: i32, y: i32) {
+        self.hub.pointer_at(x, y);
     }
     fn status(&self, mut status: CaptureStatus) {
         if self.via_helper && status.via == "dxgi" {
@@ -1182,7 +1188,7 @@ impl DupThread {
         // Where it is on this output (duplication's position is the output's own), or off the picture while it is on
         // another output or hidden: viewers draw it there when it is not their own (`pointer`).
         let (x, y) = if p.visible { (p.x, p.y) } else { (-1, -1) };
-        self.hub.pointer_at(x, y);
+        self.out.pointer_at(x, y);
         let mut st = self.cursor.lock();
         st.pointer = p;
         let mut changed = false;

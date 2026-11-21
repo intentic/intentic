@@ -70,7 +70,9 @@ for target in "$@"; do
   # checkouts share can call a stale unit current, and this is a binary people's PCs download and run.
   cargo clean --manifest-path "$MANIFEST" --release --target "$triple" -p intentic-remoted
   case "$runner" in
-    zigbuild) cargo zigbuild --manifest-path "$MANIFEST" --release --target "$triple" ;;
+    # musl is a cross target to pkg-config even on x86_64, and the one thing it is asked for (nvenc's ffnvcodec) is
+    # headers alone, the same for every architecture and linked into nothing: the build host's copy is the right one.
+    zigbuild) PKG_CONFIG_ALLOW_CROSS=1 cargo zigbuild --manifest-path "$MANIFEST" --release --target "$triple" ;;
     # The C runtime linked in, not imported: a fresh Windows has no VCRUNTIME140.dll (build-ic.sh, 2026-10-08).
     xwin) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="${CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS:-} -C target-feature=+crt-static" \
       cargo xwin build --manifest-path "$MANIFEST" --release --target "$triple" ;;
