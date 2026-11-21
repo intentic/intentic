@@ -5,16 +5,19 @@
 //!   processes ([`session`]) when remoted's environment does not name them, and every monitor RandR lists is a screen
 //!   of its own (`screen-<output name>`), a crop of the X screen captured with MIT-SHM GetImage and XDamage. The
 //!   person's pointer stays on their display; viewers draw it from its shape.
-//! - **`wayland`**: a Wayland session (GNOME, KDE). Xwayland's root shows X clients only, so it is not captured; the
-//!   desktop portal is the way in, which this build does not have (see the README).
+//! - **`wayland`**: a Wayland session (GNOME, KDE, wlroots). Xwayland's root shows X clients only, so it is not
+//!   captured; the desktop portal is the way in ([`wayland`]): its screen cast over PipeWire, its RemoteDesktop for
+//!   input, the person at the computer asked once.
 //! - **`virtual`**: no display at all. A virtual desktop ([`desktop`]) is started on the first viewer and served like
 //!   the sandbox's own; `/info` names the packages it needs when they are missing.
 //!
-//! `INTENTIC_REMOTED_SCREEN` decides instead of looking: `virtual`, or `x11:<display>` (with `XAUTHORITY`).
+//! `INTENTIC_REMOTED_SCREEN` decides instead of looking: `virtual`, `x11:<display>` (with `XAUTHORITY`), or `wayland`
+//! (the session bus in `DBUS_SESSION_BUS_ADDRESS`).
 
 pub mod desktop;
 pub mod encoders;
 pub mod session;
+pub mod wayland;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -51,6 +54,8 @@ enum Mode {
     },
     Wayland {
         desktop: Option<String>,
+        /// The session bus the portal is on.
+        bus: String,
     },
     Virtual(Result<desktop::Plan, desktop::Missing>),
 }
@@ -66,6 +71,8 @@ struct State {
 pub struct Linux {
     state: Mutex<State>,
     probe: Arc<encoders::Probe>,
+    /// A Wayland session's portal session, kept across looks.
+    wayland: wayland::Wayland,
 }
 
 impl Default for Linux {
@@ -84,6 +91,7 @@ impl Linux {
                 desktop: None,
             }),
             probe: encoders::Probe::start(),
+            wayland: wayland::Wayland::default(),
         }
     }
 
@@ -91,7 +99,7 @@ impl Linux {
     fn fresh(&self) -> std::sync::MutexGuard<'_, State> {
         let mut state = self.state.lock().expect("linux screens poisoned");
         if state.looked.is_none_or(|at| at.elapsed() >= LOOK_EVERY) {
-            look(&mut state);
+            look(&mut state, &self.wayland);
             state.looked = Some(Instant::now());
         }
         state
@@ -99,7 +107,7 @@ impl Linux {
 }
 
 /// Finds which case this computer is, and its monitors.
-fn look(state: &mut State) {
+fn look(state: &mut State, wayland: &wayland::Wayland) {
     let running = state.desktop.as_mut().is_some_and(|d| d.alive());
     if !running && state.desktop.take().is_some() {
         log::info!("the virtual desktop ended (its session exited)");
@@ -124,7 +132,22 @@ fn look(state: &mut State) {
                 }
             }
         }
-        Mode::Wayland { .. } => Vec::new(),
+        Mode::Wayland { .. } => match wayland::pipewire::available() {
+            Ok(_) => {
+                let (width, height) = wayland.size();
+                vec![Monitor {
+                    id: wayland::SCREEN_ID.into(),
+                    name: "Screen".into(),
+                    x: 0,
+                    y: 0,
+                    width,
+                    height,
+                    scale: 1.0,
+                    primary: true,
+                }]
+            }
+            Err(_) => Vec::new(),
+        },
         Mode::Virtual(Ok(plan)) => {
             let size = state
                 .desktop
@@ -151,6 +174,12 @@ fn find_mode(skip: &[String]) -> Mode {
         if forced == "virtual" {
             return Mode::Virtual(desktop::plan());
         }
+        if forced == "wayland" {
+            return Mode::Wayland {
+                desktop: std::env::var("XDG_CURRENT_DESKTOP").ok(),
+                bus: own_bus(),
+            };
+        }
         if let Some(display) = forced.strip_prefix("x11:") {
             return Mode::X11 {
                 display: display.to_owned(),
@@ -159,7 +188,7 @@ fn find_mode(skip: &[String]) -> Mode {
             };
         }
         log::warn!(
-            "INTENTIC_REMOTED_SCREEN={forced}: expected `virtual` or `x11:<display>`; looking instead"
+            "INTENTIC_REMOTED_SCREEN={forced}: expected `virtual`, `x11:<display>` or `wayland`; looking instead"
         );
     }
     // remoted's own environment first: started from inside a session, it is that session's.
@@ -167,6 +196,7 @@ fn find_mode(skip: &[String]) -> Mode {
     if std::env::var_os("WAYLAND_DISPLAY").is_some() {
         return Mode::Wayland {
             desktop: own_desktop,
+            bus: own_bus(),
         };
     }
     if let Ok(display) = std::env::var("DISPLAY")
@@ -184,6 +214,11 @@ fn find_mode(skip: &[String]) -> Mode {
     if let Some(found) = session::find(skip) {
         if found.is_wayland() {
             return Mode::Wayland {
+                bus: wayland::portal::bus_address(
+                    found.bus.as_deref(),
+                    found.runtime_dir.as_deref(),
+                    found.uid,
+                ),
                 desktop: found.desktop,
             };
         }
@@ -198,6 +233,15 @@ fn find_mode(skip: &[String]) -> Mode {
         }
     }
     Mode::Virtual(desktop::plan())
+}
+
+/// remoted's own session bus, started from inside a session.
+fn own_bus() -> String {
+    wayland::portal::bus_address(
+        std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().as_deref(),
+        std::env::var("XDG_RUNTIME_DIR").ok().as_deref(),
+        unsafe { libc::geteuid() },
+    )
 }
 
 /// Whether `display` takes a connection with `authority`'s cookie.
@@ -348,11 +392,24 @@ impl Platform for Linux {
             Mode::X11 {
                 display, desktop, ..
             } => json!({ "mode": "x11", "display": display, "desktop": desktop }),
-            Mode::Wayland { desktop } => json!({
-                "mode": "wayland",
-                "desktop": desktop,
-                "reason": "this computer's session is Wayland, whose screen is reached through the desktop portal, which this intentic-remoted was built without",
-            }),
+            Mode::Wayland { desktop, .. } => {
+                let (consent, words) = self.wayland.consent();
+                match wayland::pipewire::available() {
+                    Ok(version) => json!({
+                        "mode": "wayland",
+                        "desktop": desktop,
+                        "pipewire": version,
+                        "consent": consent,
+                        "reason": words,
+                    }),
+                    Err(why) => json!({
+                        "mode": "wayland",
+                        "desktop": desktop,
+                        "missing": ["pipewire"],
+                        "reason": format!("this computer's session is Wayland, whose screen comes through PipeWire: {why}"),
+                    }),
+                }
+            }
             Mode::Virtual(Ok(plan)) => json!({
                 "mode": "virtual",
                 "session": plan.session.0,
@@ -405,11 +462,29 @@ impl Platform for Linux {
                     stops,
                 })
             }
-            Mode::Wayland { desktop } => Err(format!(
-                "this computer's session is Wayland{}: its screen is reached through the desktop portal, which this \
-                 intentic-remoted was built without",
-                desktop.map(|d| format!(" ({d})")).unwrap_or_default()
-            )),
+            Mode::Wayland { bus, .. } => {
+                drop(state);
+                if monitor != wayland::SCREEN_ID {
+                    return Err(format!(
+                        "no screen {monitor} on this computer's Wayland session"
+                    ));
+                }
+                let opened = self.wayland.open(&bus, hub)?;
+                let input = match opened.input.map(cast_core::input::spawn).transpose() {
+                    Ok(input) => input,
+                    Err(e) => {
+                        log::warn!("wayland: no input: {e}");
+                        None
+                    }
+                };
+                Ok(Opened {
+                    source: opened.source,
+                    video,
+                    input,
+                    audio: None,
+                    stops: vec![opened.stop],
+                })
+            }
             Mode::Virtual(Err(missing)) => Err(missing.words),
             Mode::Virtual(Ok(plan)) => {
                 if monitor != VIRTUAL_ID {

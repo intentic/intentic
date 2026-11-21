@@ -4,7 +4,7 @@
 //! so a platform only opens.
 //!
 //! - Linux ([`super::linux`]): an X11 session's display through cast-x11, a virtual desktop remoted starts on a
-//!   computer with no display at all, and (the `wayland` feature) a Wayland session through the desktop portal.
+//!   computer with no display at all, and a Wayland session through the desktop portal and PipeWire.
 //! - Windows (`super::windows`, cast-win): DXGI duplication, D3D11 encoders, SendInput.
 
 use std::sync::Arc;

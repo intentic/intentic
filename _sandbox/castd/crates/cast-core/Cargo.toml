@@ -18,6 +18,9 @@ libyuv = ["dep:pkg-config"]
 x264 = ["dep:bindgen", "dep:pkg-config"]
 # NVIDIA's encoder on CUDA (Linux): built against the ffnvcodec headers, links nothing; the driver is opened at runtime.
 nvenc = ["dep:libloading", "dep:bindgen", "dep:pkg-config"]
+# VA-API's H.264 encoder (Intel, AMD, and D3D12 on WSL2; Linux): libva and libva-drm are opened at runtime and their
+# API is written out in src/vaapi/ffi.rs, so it needs no headers to build and links nothing.
+vaapi = ["dep:libloading"]
 # openh264 (Cisco's, BSD-2-Clause, built from source by openh264-sys2): a software encoder with no GPL in it, the floor
 # a Windows build falls back to where no hardware encoder passes its self-test.
 openh264 = ["dep:openh264-sys2"]

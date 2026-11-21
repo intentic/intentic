@@ -1,5 +1,6 @@
 //! Encoder cost alone, castd's seam with no capture or Chromium around it: one backend, one size, one synthetic scene,
-//! as JSON. `cargo run --release --example encbench -- --backend nvenc --size 2560x1600 --scene scroll`
+//! as JSON. `cargo run --release --example encbench -- --backend nvenc --size 2560x1600 --scene scroll` (`x264`, `nvenc`
+//! or `vaapi`)
 //!
 //! Scenes: `scroll` (rows of text-like detail moving 8 px a frame: every macroblock changes), `anim` (a 320 px square
 //! sweeping over a still page: about a tenth of the picture changes), `still` (nothing changes after the first frame).
@@ -32,6 +33,7 @@ fn main() {
     }
     let backend = match a.get("backend").map_or("x264", String::as_str) {
         "nvenc" => Backend::Nvenc,
+        "vaapi" => Backend::Vaapi,
         _ => Backend::X264,
     };
     let (w, h) = a

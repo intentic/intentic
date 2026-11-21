@@ -194,7 +194,7 @@ impl Remoted {
             .arg("--parent-stdin")
             .env(
                 "RUST_LOG",
-                "remoted=debug,cast_core=info,cast_x11=info,info",
+                "remoted=debug,cast_core=info,cast_x11=info,info,zbus=warn,tracing=warn",
             )
             .env("INTENTIC_REMOTED_NO_RTC", "1")
             .env_remove("WAYLAND_DISPLAY")
@@ -962,6 +962,200 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
     sorted[((sorted.len() - 1) as f64 * p).round() as usize]
 }
 
+/// `REMOTED_MEASURE_SCREEN=wayland cargo test --test screen -- --ignored --nocapture wayland_input`: on a Wayland
+/// session (its bus in `DBUS_SESSION_BUS_ADDRESS`, its Xwayland at `REMOTED_MEASURE_DISPLAY` with `XAUTHORITY`), a
+/// viewer's pointer moves the session's own (its position comes back from the cast's cursor metadata), and a click and
+/// keys typed by their physical code reach an X window there.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn wayland_input() {
+    let display =
+        std::env::var("REMOTED_MEASURE_DISPLAY").expect("REMOTED_MEASURE_DISPLAY names Xwayland");
+    let (port, mut uplinks) = sandbox().await;
+    let remoted = Remoted::start(
+        &config(port, true, true),
+        &[("INTENTIC_REMOTED_SCREEN", "wayland".into())],
+    )
+    .await;
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let token = viewer_token("media/screen-wayland", false);
+    let (mut viewer, size) = patient_viewer(&uplink, "screen-wayland", &token).await;
+    println!("opened at {}x{}", size.0, size.1);
+
+    // A window of the person's: where mutter put it, and the events it wants.
+    let (conn, n) = cast_x11::connect::connect(Some(&display)).expect("Xwayland connects");
+    let root = conn.setup().roots[n].root;
+    let window = conn.generate_id().unwrap();
+    conn.create_window(
+        x11rb::COPY_DEPTH_FROM_PARENT,
+        window,
+        root,
+        0,
+        0,
+        600,
+        400,
+        0,
+        xproto::WindowClass::INPUT_OUTPUT,
+        x11rb::COPY_FROM_PARENT,
+        &xproto::CreateWindowAux::new()
+            .background_pixel(0x00c0_c0c0)
+            .event_mask(
+                xproto::EventMask::KEY_PRESS
+                    | xproto::EventMask::BUTTON_PRESS
+                    | xproto::EventMask::POINTER_MOTION,
+            ),
+    )
+    .unwrap();
+    conn.map_window(window).unwrap();
+    conn.flush().unwrap();
+    settle(&mut viewer, Duration::from_millis(1500)).await;
+    let at = conn
+        .translate_coordinates(window, root, 0, 0)
+        .unwrap()
+        .reply()
+        .unwrap();
+    let (cx, cy) = (f64::from(at.dst_x) + 300.0, f64::from(at.dst_y) + 200.0);
+    println!("the window is at {},{}", at.dst_x, at.dst_y);
+
+    // The pointer: moved there (from somewhere else, so it moves), and seen there in the cursor metadata.
+    move_to(&mut viewer, cx - 120.0, cy - 60.0).await;
+    settle(&mut viewer, Duration::from_millis(300)).await;
+    move_to(&mut viewer, cx, cy).await;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut seen = None;
+    while Instant::now() < deadline {
+        match viewer.recv(Duration::from_millis(200)).await {
+            Some(Received::Json(browser_wire::BrowserMediaServerMessage::Pointer { x, y })) => {
+                seen = Some((x, y));
+                if (f64::from(x) - cx).abs() < 2.0 && (f64::from(y) - cy).abs() < 2.0 {
+                    break;
+                }
+            }
+            Some(Received::Media { header, .. }) if header.kind == KIND_VIDEO => {
+                ack(&mut viewer, header.id).await
+            }
+            _ => {}
+        }
+    }
+    println!("the session's pointer is at {seen:?}, sent to {cx},{cy}");
+    assert!(
+        seen.is_some_and(
+            |(x, y)| (f64::from(x) - cx).abs() < 2.0 && (f64::from(y) - cy).abs() < 2.0
+        ),
+        "the pointer did not arrive: {seen:?}"
+    );
+
+    // A click focuses the window; keys by their physical code land in it.
+    for action in [
+        browser_wire::PointerAction::Down,
+        browser_wire::PointerAction::Up,
+    ] {
+        viewer
+            .send(&browser_wire::BrowserMediaClientMessage::Mouse {
+                action,
+                x: cx,
+                y: cy,
+                button: Some(0),
+                buttons: None,
+                click_count: None,
+                ctrl: None,
+                shift: None,
+                alt: None,
+            })
+            .await
+            .unwrap();
+    }
+    // The window has the keyboard once Xwayland says so (the compositor focuses it on the click).
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        settle(&mut viewer, Duration::from_millis(100)).await;
+        let focus = conn.get_input_focus().unwrap().reply().unwrap().focus;
+        if focus == window || Instant::now() > deadline {
+            println!(
+                "focus is {}the window",
+                if focus == window { "" } else { "not " }
+            );
+            break;
+        }
+    }
+    for (key, code) in [("a", "KeyA"), ("1", "Digit1"), ("Enter", "Enter")] {
+        for action in [browser_wire::KeyAction::Down, browser_wire::KeyAction::Up] {
+            // As a person types: some milliseconds between a key's press and its release.
+            settle(&mut viewer, Duration::from_millis(40)).await;
+            viewer
+                .send(&browser_wire::BrowserMediaClientMessage::Key {
+                    key: key.into(),
+                    code: Some(code.into()),
+                    action: Some(action),
+                    ctrl: None,
+                    shift: None,
+                    alt: None,
+                })
+                .await
+                .unwrap();
+        }
+    }
+    settle(&mut viewer, Duration::from_millis(1000)).await;
+    let (mut buttons, mut keys, mut motions) = (Vec::new(), Vec::new(), 0);
+    while let Ok(Some(event)) = conn.poll_for_event() {
+        match event {
+            x11rb::protocol::Event::ButtonPress(e) => buttons.push(e.detail),
+            x11rb::protocol::Event::KeyPress(e) => keys.push(e.detail),
+            x11rb::protocol::Event::MotionNotify(_) => motions += 1,
+            _ => {}
+        }
+    }
+    println!("the window saw {motions} motions, buttons {buttons:?}, keys {keys:?}");
+    assert_eq!(buttons, vec![1], "the click");
+    // evdev + 8: KEY_A 30, KEY_1 2, KEY_ENTER 28.
+    assert_eq!(keys, vec![38, 10, 36], "the keys");
+    viewer.close().await;
+    remoted.end().await;
+}
+
+/// A viewer of a screen that may not open at once (a Wayland session's portal asking the person at it): opened again
+/// every two seconds until its hello comes, for up to five minutes.
+async fn patient_viewer(
+    uplink: &Uplink,
+    session: &str,
+    token: &str,
+) -> (MediaClient<Stream>, (u32, u32)) {
+    let deadline = Instant::now() + Duration::from_secs(300);
+    while Instant::now() < deadline {
+        let attempt = async {
+            let mut viewer = uplink.viewer(session, token).await.ok()?;
+            let tried = Instant::now();
+            while tried.elapsed() < Duration::from_secs(10) {
+                match viewer.recv(Duration::from_secs(1)).await {
+                    Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello {
+                        width,
+                        height,
+                        ..
+                    })) => {
+                        return Some((viewer, (width, height)));
+                    }
+                    Some(_) => {}
+                    None => return None,
+                }
+            }
+            None
+        };
+        if let Ok(Some(opened)) = tokio::time::timeout(Duration::from_secs(15), attempt).await {
+            return opened;
+        }
+        if let Ok((_, info)) =
+            tokio::time::timeout(Duration::from_secs(5), uplink.call("GET", "/info")).await
+        {
+            println!("not open yet: {}", info["screen"]);
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+    panic!("the screen did not open within five minutes");
+}
+
 /// CPU seconds a process (and its threads) used so far.
 fn cpu_seconds(pid: u32) -> f64 {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
@@ -1002,7 +1196,10 @@ fn virtual_display() -> Option<(String, PathBuf)> {
 /// `cargo test --test screen -- --ignored --nocapture measure`: a virtual desktop at 1920x1080, a 400x300 box moving
 /// across it at 60 Hz (a window dragged), then the whole screen repainted at 30 Hz, each for `REMOTED_MEASURE_SECONDS`
 /// (default 10), one viewer acking every frame. `REMOTED_MEASURE_DISPLAY=:0` measures an X display that is already
-/// there instead (its first monitor), as a person's session is served.
+/// there instead (its first monitor), as a person's session is served; `REMOTED_MEASURE_SCREEN=wayland` measures the
+/// Wayland session on the session bus in `DBUS_SESSION_BUS_ADDRESS` through the desktop portal (painted through
+/// Xwayland at `REMOTED_MEASURE_DISPLAY`), opening the screen again until the person at it allows it.
+/// `REMOTED_MEASURE_SIZE=2560x1440` paints that much of the screen instead of 1920x1080.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn measure() {
@@ -1013,7 +1210,16 @@ async fn measure() {
     let (port, mut uplinks) = sandbox().await;
     let started = Instant::now();
     let existing = std::env::var("REMOTED_MEASURE_DISPLAY").ok();
+    let wayland = std::env::var("REMOTED_MEASURE_SCREEN").is_ok_and(|s| s == "wayland");
+    let (paint_w, paint_h): (u16, u16) = std::env::var("REMOTED_MEASURE_SIZE")
+        .ok()
+        .and_then(|s| {
+            let (w, h) = s.split_once('x')?;
+            Some((w.parse().ok()?, h.parse().ok()?))
+        })
+        .unwrap_or((1920, 1080));
     let screen = match &existing {
+        _ if wayland => "wayland".into(),
         Some(display) => format!("x11:{display}"),
         None => "virtual".into(),
     };
@@ -1043,8 +1249,13 @@ async fn measure() {
     let opened = Instant::now();
     let session = format!("screen-{monitor}");
     let token = viewer_token(&format!("media/{session}"), false);
-    let mut viewer = uplink.viewer(&session, &token).await.unwrap();
-    let size = hello(&mut viewer).await;
+    let (mut viewer, size) = if wayland {
+        patient_viewer(&uplink, &session, &token).await
+    } else {
+        let mut viewer = uplink.viewer(&session, &token).await.unwrap();
+        let size = hello(&mut viewer).await;
+        (viewer, size)
+    };
     let (got, _) = frames(&mut viewer, 1, PATIENCE).await;
     assert_eq!(got, 1);
     println!(
@@ -1077,21 +1288,22 @@ async fn measure() {
             let painting = painting.clone();
             let display = display.clone();
             std::thread::spawn(move || {
-                let painter = Painter::window(&display, 1920, 1080);
+                let painter = Painter::window(&display, paint_w, paint_h);
                 let mut i = 0u32;
                 let every = Duration::from_micros(1_000_000 / hz);
                 let mut next = Instant::now();
                 while painting.load(std::sync::atomic::Ordering::Relaxed) {
                     if whole {
                         // Bands of changing colour: the encoder sees new content everywhere, every frame.
+                        let band_h = u32::from(paint_h).div_ceil(12);
                         for band in 0..12u32 {
                             let rgb = ((i * 37 + band * 91) & 0xff) << 16
                                 | ((i * 11 + band * 7) & 0xff) << 8
                                 | (band * 20);
-                            painter.fill(0, (band * 90) as i16, 1920, 90, rgb);
+                            painter.fill(0, (band * band_h) as i16, paint_w, band_h as u16, rgb);
                         }
                     } else {
-                        let x = (i * 8 % 1400) as i16;
+                        let x = (i * 8 % (u32::from(paint_w) - 520)) as i16;
                         painter.fill(x.saturating_sub(8), 300, 8, 300, 0x203040);
                         painter.fill(x, 300, 400, 300, 0x00c0_6020 ^ (i & 0xff));
                     }

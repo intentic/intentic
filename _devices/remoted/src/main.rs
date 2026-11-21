@@ -82,10 +82,19 @@ fn main() {
         }
         Some("service") => std::process::exit(remoted::service::main(&args[1..])),
         Some("desktop-helper") => std::process::exit(remoted::service::helper_main()),
+        // One hardware encoder's self-test, in a process of its own so a driver that crashes takes only the probe
+        // (media/linux/encoders.rs starts it).
+        #[cfg(target_os = "linux")]
+        Some("encoder-probe") => {
+            std::process::exit(remoted::media::linux::encoders::probe_main(&args[1..]))
+        }
         _ => {}
     }
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .try_init();
+    // zbus says every handshake step at info (the desktop portal's connection): kept to warnings unless asked.
+    let _ = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info,zbus=warn,tracing=warn"),
+    )
+    .try_init();
     let args = match parse(&args) {
         Ok(args) => args,
         Err(error) => {

@@ -4,8 +4,8 @@
 //! between any two pictures without a keyframe, and no reordering or lookahead (a picture's output comes back from the
 //! call that encoded it).
 //!
-//! `--encoder` picks one: `x264` (the default), `nvenc`, or `auto`, which takes the first hardware encoder that is
-//! present and passes [`self_test`], else x264. A hardware encoder that cannot open at a new size (a session limit, a
+//! `--encoder` picks one: `x264` (the default), `nvenc`, `vaapi`, or `auto`, which takes the first hardware encoder
+//! that is present and passes [`self_test`] (NVENC, then VA-API), else x264. A hardware encoder that cannot open at a new size (a session limit, a
 //! size it does not take) leaves that picture to x264 rather than to nothing.
 //!
 //! The pipeline opens encoders through [`EncoderKind`], so a platform brings its own (a Windows backend's NVENC on
@@ -128,10 +128,13 @@ impl Encoders {
 pub enum Backend {
     X264,
     Nvenc,
+    Vaapi,
 }
 
 /// Whether this build has castd's NVENC (the `nvenc` feature, on Linux).
 const NVENC: bool = cfg!(all(feature = "nvenc", target_os = "linux"));
+/// Whether this build has the VA-API encoder (the `vaapi` feature, on Linux).
+const VAAPI: bool = cfg!(all(feature = "vaapi", target_os = "linux"));
 
 impl EncoderKind for Backend {
     fn name(&self) -> &'static str {
@@ -152,12 +155,18 @@ impl Backend {
         match self {
             Backend::X264 => "x264",
             Backend::Nvenc => "nvenc",
+            Backend::Vaapi => "vaapi",
         }
     }
 
-    /// Hardware encoders `auto` tries, in order: those this castd was built with.
+    /// Hardware encoders `auto` tries, in order: those this castd was built with, NVENC first.
     pub fn hardware() -> &'static [Backend] {
-        if NVENC { &[Backend::Nvenc] } else { &[] }
+        match (NVENC, VAAPI) {
+            (true, true) => &[Backend::Nvenc, Backend::Vaapi],
+            (true, false) => &[Backend::Nvenc],
+            (false, true) => &[Backend::Vaapi],
+            (false, false) => &[],
+        }
     }
 }
 
@@ -169,18 +178,16 @@ pub enum Request {
 }
 
 impl Request {
-    /// Parses `--encoder`. `vaapi` is named so the answer can say why it is refused: castd has no VA-API backend yet.
+    /// Parses `--encoder`.
     pub fn parse(s: &str) -> Result<Request, String> {
         match s {
             "auto" => Ok(Request::Auto),
             "x264" => Ok(Request::Only(Backend::X264)),
             "nvenc" if NVENC => Ok(Request::Only(Backend::Nvenc)),
             "nvenc" => Err("--encoder nvenc: this castd was built without the `nvenc` feature".into()),
-            "vaapi" => Err(
-                "--encoder vaapi: castd has no VA-API backend (no VA-API encoder was reachable to build one against)"
-                    .into(),
-            ),
-            other => Err(format!("--encoder {other}: expected auto, x264 or nvenc")),
+            "vaapi" if VAAPI => Ok(Request::Only(Backend::Vaapi)),
+            "vaapi" => Err("--encoder vaapi: this castd was built without the `vaapi` feature".into()),
+            other => Err(format!("--encoder {other}: expected auto, x264, nvenc or vaapi")),
         }
     }
 }
@@ -248,6 +255,13 @@ pub fn open(backend: Backend, cfg: &EncoderConfig) -> Result<Box<dyn VideoEncode
         Backend::Nvenc => Ok(Box::new(crate::nvenc::Nvenc::new(cfg)?)),
         #[cfg(not(all(feature = "nvenc", target_os = "linux")))]
         Backend::Nvenc => Err("built without the `nvenc` feature".into()),
+        #[cfg(all(feature = "vaapi", target_os = "linux"))]
+        Backend::Vaapi => Ok(Box::new(crate::vaapi::Vaapi::new(
+            cfg,
+            crate::vaapi::VaapiKind::default(),
+        )?)),
+        #[cfg(not(all(feature = "vaapi", target_os = "linux")))]
+        Backend::Vaapi => Err("built without the `vaapi` feature".into()),
     }
 }
 
@@ -450,10 +464,10 @@ mod tests {
             NVENC,
             "nvenc parses exactly when built in"
         );
-        assert!(
-            Request::parse("vaapi")
-                .unwrap_err()
-                .contains("no VA-API backend")
+        assert_eq!(
+            Request::parse("vaapi").is_ok(),
+            VAAPI,
+            "vaapi parses exactly when built in"
         );
         assert!(Request::parse("qsv").is_err());
     }

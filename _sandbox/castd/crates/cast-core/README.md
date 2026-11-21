@@ -8,8 +8,10 @@ castd's streaming engine without its platform: the media socket, the encoder eve
   damage.
 - [src/frame.rs](src/frame.rs) — the frames between capture and encoder: CPU I420, CPU BGRA, or a platform's own
   surface.
-- [src/encoder.rs](src/encoder.rs) — the encoder seam: encoder kinds, the fallback, the self-test, castd's x264 and
-  NVENC.
+- [src/encoder.rs](src/encoder.rs) — the encoder seam: encoder kinds, the fallback, the self-test, castd's x264,
+  NVENC and VA-API.
+- [src/vaapi/mod.rs](src/vaapi/mod.rs) — VA-API's H.264 encoder (Intel, AMD, D3D12 on WSL2), libva opened at run time;
+  [ffi.rs](src/vaapi/ffi.rs) its API written out, [h264.rs](src/vaapi/h264.rs) the SPS and PPS it hands the driver.
 - [src/input.rs](src/input.rs) — viewers' input as the platform receives it, and the thread it runs on.
 - [src/video.rs](src/video.rs) — the pipeline: damage, paint-over, the shared encoder, the per-viewer send and skip.
 - [src/server.rs](src/server.rs) — the media socket's upgrade and the control endpoints, on any byte stream.
@@ -192,10 +194,42 @@ its first two seconds left out.
   not come back in six runs after a failed write on the track was made to wait for a keyframe (`Track::broken`),
   the one way found for castd to send a picture its viewer would decode against the wrong reference.
 
+## VA-API
+
+(2026-11-21) `vaapi` ([src/vaapi](src/vaapi)) is an encoder kind and castd's `Backend::Vaapi` (`--encoder vaapi`, and
+`auto` after NVENC). libva.so.2 and libva-drm.so.2 are opened at run time and the part of libva 2.22's API it uses is
+written out in ffi.rs (MIT headers; a test holds the structs to the sizes and offsets bindgen computed from them), so
+it builds with no headers and runs where libva is absent. `device()` takes `CAST_VAAPI_DEVICE` or the first render
+node whose driver offers H.264 encoding (on WSL2, where the node is vgem, libva is told `d3d12` when its own guess
+fails), once a process.
+
+- **castd's contract**: High profile where offered (CABAC, the 8x8 transform), else Main, else Constrained Baseline;
+  the low-power entry point (Intel's VDEnc) where there is one (`CAST_VAAPI_LOW_POWER=0` leaves it); one reference, no
+  B-frames, picture order from frame order; a GOP of 32,767 told to the driver and an IDR only when asked; each
+  picture synced and its coded buffer read before `encode` returns.
+- **Rate control** is NVENC's floor: VBR (CBR where the driver has no VBR, or `CAST_VAAPI_RC=cbr`) at the
+  controller's cap, `min_qp` at castd's CRF, the HRD buffer castd's 1.25 frames (or `set_rate_buf`'s, full), frame
+  skipping and bit stuffing off. A rate change is a new rate-control and HRD parameter on the next picture.
+- **Headers**: the SPS and PPS are castd's ([h264.rs](src/vaapi/h264.rs)), a packed sequence header on each IDR where
+  the driver takes one, saying what x264's and NVENC's do (BT.601 limited range from sRGB) plus a bitstream
+  restriction (nothing reordered). A driver without packed headers writes its own, which `headers` reads back.
+- **Pictures**: I420 interleaved into the NV12 surface through a derived image where the driver gives one, else an
+  image put onto it. `VaapiKind { vpp: true }` (`CAST_VAAPI_VPP=1`) takes BGRA instead and has the driver's video
+  processor convert it (sRGB full range to BT.601 limited), leaving the CPU only a copy; off by default (below).
+- **Measured** on rog's WSL2 Arch (Mesa 26.2.7's d3d12 driver, libva 2.24), the only VA-API driver on these
+  computers: on the RTX 5080 (`MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`) it passes the self-test (packed headers, the
+  I420 path) and streams as NVENC does (remoted's README has the numbers); on the Intel iGPU, d3d12's default, every
+  picture comes back empty (FFmpeg's `h264_vaapi` as well), which the encoder reports as an error. The d3d12 driver
+  segfaults in `vaEndPicture` in its video processor (FFmpeg's `scale_vaapi` too) and when no packed header is given,
+  so a daemon that must outlive a driver probes in a child process (remoted does). Intel's iHD and AMD's radeonsi, the
+  drivers VA-API is for, were not reachable: neither the low-power path, nor a driver writing its own headers, nor
+  the video processor's colours have been checked on them.
+
 ## Features and Windows
 
 `libyuv` (the default) converts BGRX to I420 with libyuv; without it a portable converter does libyuv's arithmetic in
-Rust. `x264` links libx264 (GPL-2.0), `nvenc` binds NVIDIA's encoder on CUDA (Linux), `opus` and `pulse` the sound.
+Rust. `x264` links libx264 (GPL-2.0), `nvenc` binds NVIDIA's encoder on CUDA (Linux), `vaapi` VA-API's (Linux, below),
+`opus` and `pulse` the sound.
 With none of them cast-core links no C library and builds for Windows:
 
 Two features exist for a build with no GPL and nothing of the system's to link, a Windows one above all

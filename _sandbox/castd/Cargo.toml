@@ -25,12 +25,15 @@ name = "castd-bench"
 path = "src/bin/castd-bench.rs"
 
 [features]
-default = ["audio", "nvenc"]
+default = ["audio", "nvenc", "vaapi"]
 # PulseAudio monitor -> Opus. Without it castd links neither library and its hello never offers sound.
 audio = ["cast-core/pulse"]
 # NVIDIA's hardware encoder, behind `--encoder nvenc|auto`. Builds against the ffnvcodec headers and links nothing:
 # the driver's libnvidia-encode and libcuda are opened at runtime, so the binary runs where there is no NVIDIA driver.
 nvenc = ["cast-core/nvenc"]
+# VA-API's H.264 encoder (Intel, AMD, D3D12 on WSL2), behind `--encoder vaapi|auto`: libva is opened at runtime and its
+# API is written out in cast-core, so it needs no headers and links nothing.
+vaapi = ["cast-core/vaapi"]
 
 [dependencies]
 cast-core = { path = "crates/cast-core", features = ["x264", "libyuv"] }

@@ -19,13 +19,16 @@ name = "intentic-remoted"
 path = "src/main.rs"
 
 [features]
-default = ["nvenc", "openh264"]
+default = ["nvenc", "vaapi", "openh264"]
 # openh264 (Cisco's, BSD) as the software encoder, built from source: what a screen falls back to where no hardware
 # encoder passes its self-test. A Windows build always has it (below).
 openh264 = ["cast-core/openh264"]
 # NVIDIA's encoder (Linux): the driver's libnvidia-encode and libcuda are opened at runtime, so the binary runs where
 # there is none; built against the ffnvcodec headers (bindgen).
 nvenc = ["cast-core/nvenc"]
+# VA-API's H.264 encoder (Intel, AMD, D3D12 on WSL2): libva and libva-drm are opened at runtime, so the binary runs
+# where there is neither, and the build needs no headers.
+vaapi = ["cast-core/vaapi"]
 # x264 as the software encoder (links libx264, GPL-2.0): for measuring against castd, never in a shipped build.
 x264 = ["cast-core/x264"]
 # BGRX to I420 with libyuv instead of cast-core's portable converter (links libyuv).
@@ -76,7 +79,12 @@ webpki-roots = "1"
 # An X display's capture, input, cursor and clipboard (castd's), on a person's session or a virtual desktop.
 cast-x11 = { path = "../../_sandbox/castd/crates/cast-x11" }
 libc = "0.2"
+# libpipewire-0.3, opened at run time for a Wayland session's screen cast (media/linux/wayland/pipewire.rs): a machine
+# without PipeWire still runs remoted, and the build needs no PipeWire headers.
+libloading = "0.8"
 x11rb = { version = "0.13", features = ["randr"] }
+# The desktop portal (ScreenCast, RemoteDesktop) on the person's session bus: pure Rust, on remoted's tokio runtime.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [target.'cfg(windows)'.dependencies]
 # The Windows platform: DXGI duplication, NVENC and Media Foundation's encoders on D3D11, SendInput, the clipboard and

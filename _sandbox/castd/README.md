@@ -290,7 +290,7 @@ was 3–5 ms at the median under the 60 fps cap; under the 30 fps cap frames wai
 
 ## The GPU
 
-`--encoder x264|nvenc|auto` picks the H.264 encoder; x264 is the default, so a window takes the owner's GPU only when
+`--encoder x264|nvenc|vaapi|auto` picks the H.264 encoder; x264 is the default, so a window takes the owner's GPU only when
 the daemon asks. `auto` takes NVENC when the driver is there and passes castd's self-test (an IDR with SPS and PPS,
 deltas that come straight back, a rate change that adds no keyframe, an IDR on demand), else x264, and says why in the
 log; `nvenc` must pass or castd refuses to start. `/geometry` and `/stats` name the encoder in use. A size NVENC will
@@ -303,9 +303,11 @@ the paint-over CRF for the sharpening frames, the same `set_rate` call x264 gets
 On WSL2 the driver's libraries are in /usr/lib/wsl/lib, and castd puts that on its own `LD_LIBRARY_PATH` by starting
 itself again (libnvcuvid needs libdxcore.so, which has no soname, so loading by path is not enough).
 
-There is no VA-API backend: on these machines VA-API is reachable only through Mesa's d3d12 driver on WSL2, and it
-does not start there (`MESA-LOADER: failed to retrieve device information`: WSL 6.18's render node is vgem on the faux
-bus, with no PCI identity), so a backend could not have been tested. `--encoder vaapi` says so.
+`--encoder vaapi` is VA-API's encoder (cast-core's README, "VA-API"; the `vaapi` feature, on by default, links
+nothing), which `auto` tries after NVENC. On these machines VA-API is reachable only through Mesa's d3d12 driver on
+WSL2. In a container with libdrm 2.4.124 (Debian 13) it does not start (`MESA-LOADER: failed to retrieve device
+information`: WSL 6.18's render node is vgem on the faux bus, with no PCI identity); with libdrm 2.4.134 (rog's Arch)
+it does, and it encodes on the NVIDIA GPU and not on the Intel one (2026-11-21).
 
 Measured 2026-11-20 on `rog` (RTX 5080 Laptop, Intel iGPU, 16 cores) in a Debian trixie container started with
 `--gpus all --device /dev/dri`, Chromium 156 from Debian. The encoder alone (`cargo run --release --example encbench`,

@@ -32,6 +32,8 @@ pub mod record;
 pub mod rtc;
 pub mod server;
 pub mod token;
+#[cfg(all(feature = "vaapi", target_os = "linux"))]
+pub mod vaapi;
 pub mod video;
 pub mod wait;
 pub mod wake;

@@ -6,8 +6,11 @@
 #   bash _tools/scripts/build/build-remoted.sh [--version <v>] linux-x64 linux-arm64 windows-x64
 #
 # The targets are the platforms the machine agent ships for that remoted serves: Windows (ConPTY) and Linux (openpty).
-# macOS is left out until remoted has a screen there to serve. Linux is static musl through cargo-zigbuild and Windows
-# MSVC through cargo-xwin with the C runtime linked in, the toolchains build-ic.sh already uses and installs the same way.
+# macOS is left out until remoted has a screen there to serve. Windows is MSVC through cargo-xwin with the C runtime
+# linked in. Linux is glibc 2.28 and later (Debian 10, Ubuntu 18.10, RHEL 8) through cargo-zigbuild, linking only libc:
+# a static musl binary cannot dlopen, and remoted opens the GPU's and the desktop's libraries at run time (NVENC's
+# libcuda, VA-API's libva, PipeWire's libpipewire) so the one binary runs with or without them. The machine agent that
+# downloads it is a glibc program already (bun's linux target), so no musl-only system loses a remoted it could run.
 #
 # Artifacts land in _devices/remoted/dist-bin/ as intentic-remoted-<os>-<arch>[.exe], from where publish-github.sh
 # attaches them to the GitHub Release.
@@ -59,9 +62,10 @@ fi
 
 for target in "$@"; do
   case "$target" in
-    linux-x64) triple="x86_64-unknown-linux-musl" name="intentic-remoted-linux-amd64" runner="zigbuild" ;;
-    linux-arm64) triple="aarch64-unknown-linux-musl" name="intentic-remoted-linux-arm64" runner="zigbuild" ;;
-    windows-x64) triple="x86_64-pc-windows-msvc" name="intentic-remoted-windows-amd64.exe" runner="xwin" ;;
+    # zigbuild reads the glibc to link against from the triple's suffix and builds into the plain triple's directory.
+    linux-x64) triple="x86_64-unknown-linux-gnu" glibc=".2.28" name="intentic-remoted-linux-amd64" runner="zigbuild" ;;
+    linux-arm64) triple="aarch64-unknown-linux-gnu" glibc=".2.28" name="intentic-remoted-linux-arm64" runner="zigbuild" ;;
+    windows-x64) triple="x86_64-pc-windows-msvc" glibc="" name="intentic-remoted-windows-amd64.exe" runner="xwin" ;;
     *) echo "error: unknown target '$target' (remoted ships for linux-x64, linux-arm64 and windows-x64)" >&2; exit 2 ;;
   esac
   rustup target add "$triple" >/dev/null
@@ -70,9 +74,9 @@ for target in "$@"; do
   # checkouts share can call a stale unit current, and this is a binary people's PCs download and run.
   cargo clean --manifest-path "$MANIFEST" --release --target "$triple" -p intentic-remoted
   case "$runner" in
-    # musl is a cross target to pkg-config even on x86_64, and the one thing it is asked for (nvenc's ffnvcodec) is
-    # headers alone, the same for every architecture and linked into nothing: the build host's copy is the right one.
-    zigbuild) PKG_CONFIG_ALLOW_CROSS=1 cargo zigbuild --manifest-path "$MANIFEST" --release --target "$triple" ;;
+    # The one thing pkg-config is asked for (nvenc's ffnvcodec) is headers alone, the same for every architecture and
+    # linked into nothing, so the build host's copy is the right one even where the target is a cross one (arm64).
+    zigbuild) PKG_CONFIG_ALLOW_CROSS=1 cargo zigbuild --manifest-path "$MANIFEST" --release --target "${triple}${glibc}" ;;
     # The C runtime linked in, not imported: a fresh Windows has no VCRUNTIME140.dll (build-ic.sh, 2026-10-08).
     xwin) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="${CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS:-} -C target-feature=+crt-static" \
       cargo xwin build --manifest-path "$MANIFEST" --release --target "$triple" ;;

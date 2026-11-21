@@ -32,6 +32,8 @@ a distro with its own agent would have had two remoteds offering its shell.
 prints the bare version (`0.0.0` from source, the release's when `build-remoted.sh --version` stamped it through
 `INTENTIC_REMOTED_VERSION`). On Windows, `intentic-remoted service status|install|uninstall` manages the lock screen
 and admin prompts service and `desktop-helper` is that service's helper (below, "The lock screen and admin prompts").
+On Linux, `intentic-remoted encoder-probe <nvenc|vaapi|vaapi-vpp>` is one hardware encoder's self-test, which remoted
+runs in a child process of its own (below, "Encoders"), its answer one JSON line.
 
 - **`--config`** is JSON the agent writes 0600 by rename, read again within 500 ms of a change
   ([`src/config.rs`](src/config.rs)), so a switch reaches remoted inside the 2 s the agent promises without a restart:
@@ -128,7 +130,7 @@ by path, which brings quinn into the binary (about a megabyte) in exchange for n
 ## Measured
 
 `cargo test --test terminal -- --ignored --nocapture measure` against release builds (the Windows one from
-`build-remoted.sh`; the Linux one glibc, where the shipped one is static musl), named to the suite through
+`build-remoted.sh`; the Linux one glibc, where the shipped one was static musl until 2026-11-21), named to the suite through
 `CARGO_BIN_EXE_intentic-remoted`, with a fake sandbox on loopback; keystroke echo is the round
 trip through both yamux ends, the hub and the shell. 2026-11-20:
 
@@ -180,10 +182,16 @@ WASAPI), whose README holds its measurements; Linux's is below.
   what Windows says now (`locked`, `inputDesktop` (null: a secure desktop this process may not open), `display`
   `on`/`off`/`dimmed`, `console` and `session`, `connected`, `remote`, `idleMs`), `secureDesktop` is the service's
   status (below) and whether this remoted reaches its helper (`connected`), `capture` each screen's status by monitor.
-- **Encoders**: NVENC where an NVIDIA driver passes castd's self-test (the driver is opened at run time, so a binary
-  built with the `nvenc` feature runs anywhere), else the software encoder: openh264 (BSD) in the default build, x264
-  (GPL) only behind the `x264` feature, for comparisons. The self-test runs once as remoted starts; `/info`'s
-  `screen.encoders` says why each one is or is not used, and `INTENTIC_REMOTED_ENCODER=software` leaves hardware out.
+- **Encoders** (Linux, [`encoders.rs`](src/media/linux/encoders.rs)): NVENC where an NVIDIA driver passes castd's
+  self-test, then VA-API's (Intel, AMD, and D3D12 on WSL2; cast-core's `vaapi`), then the software encoder: openh264
+  (BSD) in the default build, x264 (GPL) only behind the `x264` feature, for comparisons. Both hardware encoders'
+  libraries are opened at run time, so the one binary runs with or without them. Each self-test runs once as remoted
+  starts, in a child process (`encoder-probe`): a GPU driver may crash instead of failing (Mesa's d3d12 driver does,
+  in its video processor and without a packed header), and a crash then costs that encoder (`the GPU driver crashed in
+  the self-test (signal 11)`), not remoted. Every encoder that passed is tried in that order when a screen opens (a
+  driver out of sessions), before openh264 takes the picture. `/info`'s `screen.encoders` says why each one is or is
+  not used; `INTENTIC_REMOTED_ENCODER=software` leaves hardware out, `nvenc` or `vaapi` tries that one alone, and
+  `CAST_VAAPI_VPP=1` gives VA-API BGRA to convert on the GPU (off: below, "Measured (Linux)").
 
 ### Linux
 
@@ -196,9 +204,33 @@ WASAPI), whose README holds its measurements; Linux's is below.
   captured with MIT-SHM GetImage and XDamage, typed into with XTEST at the monitor's origin; the cookie is handed to
   cast-x11 (`connect::set_authority`) rather than set in the environment under running threads. The person's pointer
   stays drawn on their display, and the clipboard goes both ways.
-- **`wayland`, a Wayland session (GNOME, KDE).** Detected, and said in `screen.reason`; no monitor is listed. Xwayland's
-  root shows only X clients, so it is not captured, and the desktop portal (ScreenCast and RemoteDesktop over D-Bus,
-  the frames over PipeWire) is not in this build: libpipewire's headers were not to be had where it was written.
+- **`wayland`, a Wayland session (GNOME, KDE, wlroots)** ([`wayland/`](src/media/linux/wayland)). Xwayland's root
+  shows only X clients, so the screen comes through the desktop portal on the session's bus (the session's own
+  `DBUS_SESSION_BUS_ADDRESS`, else `$XDG_RUNTIME_DIR/bus`): one screen, `screen-wayland`, the monitor the person
+  picks in the portal's dialog.
+  - **Consent.** A viewer's open starts a RemoteDesktop session with a screen cast in it (`SelectDevices` keyboard and
+    pointer, `SelectSources` one monitor, cursor as metadata, `Start`) with `persist_mode` 2. Without a restore token
+    the portal asks the person at the computer; the open answers within 4 s that they are being asked, and `/info`'s
+    `screen.consent` is `pending` (with `reason`), then `granted`; `refused` (not asked again for a minute, the
+    viewer's error counting down), or `failed` (no portal, no ScreenCast: asked again on the next open). The restore
+    token the portal hands back is kept 0600 in `$XDG_STATE_HOME/intentic-remoted/portal-restore-token` (else
+    `~/.local/state/…`), rewritten after every start; `remembered` means one is kept and the next open will not ask.
+    A token the portal no longer honours asks once more. Where the portal has no RemoteDesktop (wlroots), a screen
+    cast alone, which leaves every viewer watching.
+  - **The picture** ([`pipewire.rs`](src/media/linux/wayland/pipewire.rs)): `OpenPipeWireRemote`'s fd, a stream of
+    32-bit RGB in shared memory (MemFd or MemPtr), converted to BGRX where the compositor sends another order, the
+    compositor's damage list used where it sends one and otherwise row runs that differ from the last picture. The
+    cursor is metadata: its shape and position go to viewers (`cursor`, `pointer`), never into the picture.
+  - **Input** ([`input.rs`](src/media/linux/wayland/input.rs)): pointer motion in the stream's logical coordinates
+    (`NotifyPointerMotionAbsolute`, scaled from picture pixels on a scaled monitor), buttons as evdev codes, wheel
+    notches (`NotifyPointerAxisDiscrete`, 120 picture pixels a notch as on X11), and keys by the viewer's physical
+    `code` (`NotifyKeyboardKeycode`, [`keycodes.rs`](src/media/linux/wayland/keycodes.rs)), so the person's own
+    layout applies; a key with no physical code, an AltGr character and an IME's text go by keysym. Mutter (GNOME 48)
+    drops a remote desktop session's first key event, so a `KEY_UNKNOWN` press, which types nothing, goes first.
+  - The portal session ends with the screen (its last viewer gone 10 s), which takes GNOME's "sharing" indicator off
+    the person's screen; stopping the share from that indicator ends the screen (`the screen cast ended`) and the next
+    viewer's open restores it with the token. Not wired yet: the clipboard (the portal's Clipboard interface) and more
+    than one monitor. remoted must run as the session's user: a session bus takes no other uid.
 - **`virtual`, no display at all** ([`desktop.rs`](src/media/linux/desktop.rs)). The first viewer starts an X
   server (Xvfb `-shmem`, or Xorg with the dummy driver where Xvfb is absent) at 3840x2160, sized down to 1920x1080 and
   then to the driving viewer's box through RandR, and on it the desktop session installed (Xfce first; GNOME and KDE
@@ -211,6 +243,24 @@ WASAPI), whose README holds its measurements; Linux's is below.
 (2026-11-20) The X server and the session are started from a thread kept for the desktop's life: `PR_SET_PDEATHSIG`,
 which ties them to remoted, fires when the forking *thread* ends, and tokio retires an idle blocking thread after 10 s,
 which killed the desktop under its viewer on z440.
+
+(2026-11-21) Decisions:
+
+- **libpipewire is opened at run time**, its dozen calls and structs written out by hand from PipeWire 1.0's MIT
+  headers, and SPA's PODs built and read by hand ([`pod.rs`](src/media/linux/wayland/pod.rs): libspa's builders are
+  inline functions a library opened at run time does not have). Rejected: the `pipewire` crate, which needs
+  libpipewire's headers to build and links it, so a computer without PipeWire would not start remoted at all. The cost
+  is the layouts to keep (a test holds their sizes) and no PipeWire API newer than 0.3's stream. D-Bus is zbus, pure
+  Rust, on remoted's tokio runtime.
+- **Shared memory, not DMA-BUF**, for now: the compositor copies the picture to memory on its side. DMA-BUF frames
+  handed to VA-API without a CPU copy need VA-API's video processor (BGRx in, NV12 out) to take them, and the only
+  VA-API driver these computers have (Mesa's d3d12, WSL2) crashes in it, FFmpeg's `scale_vaapi` too; no Intel or AMD
+  machine with a Wayland session was there to build it against. The same holds for X11 through DRI3.
+- **No polling for WSLg.** WSLg's rootless Xwayland reports no damage on its root window, but a distro's remoted serves
+  no screen (the sandbox offers a PC's screen from its Windows side, whose duplication shows WSLg's windows), so
+  polling would cost a full copy and comparison a frame for a screen nobody opens.
+- **The Linux release is glibc 2.28** (`build-remoted.sh`, cargo-zigbuild), linking only libc: a static musl binary
+  cannot `dlopen`, so the shipped musl build never reached NVENC either (only glibc builds were measured with it).
 
 ### Measured (Linux)
 
@@ -225,7 +275,46 @@ virtual desktop, 10 s of each motion. Latency is from capture to the frame's arr
 | the whole screen repainted at 30 Hz | 50 | 1,950 | 46 / 71 ms | 160% of a core |
 
 Frames per second count the paint-over passes that sharpen what stopped moving, hence more than the 60 Hz drawn. The
-desktop started (Xvfb and openbox) and the first frame arrived 0.9 s after the socket opened. z440 has neither Xvfb nor
+desktop started (Xvfb and openbox) and the first frame arrived 0.9 s after the socket opened.
+
+2026-11-21, the release build (glibc 2.28) and the suite cross-built with it, 10 s of each motion, one viewer acking
+every frame. "X11" is an X server remoted reads as a person's (`REMOTED_MEASURE_DISPLAY`: MIT-SHM GetImage and
+XDamage), here a scratch Xvfb started without `-shmem`; "Wayland" is the portal path (`REMOTED_MEASURE_SCREEN=wayland`)
+on a headless GNOME 48 (mutter 48.7, llvmpipe, PipeWire 1.4.2, xdg-desktop-portal-gnome) in a Debian 13 container on
+rog, painted through its Xwayland. A Wayland frame's capture time is its arrival from PipeWire, so the compositor's
+own latency is not in it, and GNOME composited at most about 43 frames a second under llvmpipe there.
+
+| Computer | Screen | Encoder | Box dragged at 60 Hz: fps, kbit/s, p50 / p95, CPU | Whole screen at 30 Hz: fps, kbit/s, p50 / p95, CPU |
+|---|---|---|---|---|
+| z440 (Xeon E5-1620 v4, 4 cores) | X11 1920x1080 | openh264 | 68, 324, 21 / 27 ms, 96% | 49, 1,924, 49 / 64 ms, 153% |
+| z440 | X11 2560x1440 | openh264 | 56, 201, 47 / 59 ms, 125% | 28, 2,446, 91 / 169 ms, 155% |
+| radarsu-server (VM, 2 vCPUs of a Xeon E5-2667 v4) | X11 1920x1080 | openh264 | 57, 296, 35 / 71 ms, 121% | 31, 1,537, 70 / 141 ms, 148% |
+| radarsu-server | X11 2560x1440 | openh264 | 40, 172, 56 / 116 ms, 125% | 20, 1,840, 97 / 190 ms, 153% |
+| rog (WSL2 Arch, 16 cores, RTX 5080 Laptop) | X11 1920x1080 | NVENC | 64, 88, 7 / 20 ms, 9% | 60, 709, 20 / 24 ms, 13% |
+| rog | X11 1920x1080 | VA-API (d3d12, the RTX) | 64, 85, 8 / 19 ms, 9% | 60, 712, 19 / 25 ms, 14% |
+| rog | X11 1920x1080 | openh264 | 65, 318, 9 / 20 ms, 38% | 60, 2,171, 23 / 26 ms, 73% |
+| rog | X11 2560x1600 (its panel) | NVENC | 65, 115, 15 / 29 ms, 13% | 60, 1,277, 29 / 33 ms, 26% |
+| rog | X11 2560x1600 | VA-API (d3d12, the RTX) | 64, 112, 14 / 25 ms, 13% | 60, 1,753, 22 / 28 ms, 28% |
+| rog | X11 2560x1600 | openh264 | 66, 208, 17 / 26 ms, 72% | 48, 3,425, 53 / 60 ms, 114% |
+| rog (GNOME container) | Wayland 1920x1080 | openh264 | 43, 253, 6 / 8 ms, 31% | 30, 1,717, 11 / 12 ms, 37% |
+| rog (GNOME container) | Wayland 2560x1440 | openh264 | 43, 179, 10 / 12 ms, 52% | 30, 2,788, 18 / 19 ms, 62% |
+
+- **z440 has no hardware encoder to use**: its Quadro P2000 runs on nouveau, whose VA-API driver decodes only; NVENC
+  needs NVIDIA's driver, which is the owner's to install. radarsu-server has neither a GPU (a virtual display only, no
+  render node) nor a session. Neither has a desktop: Xvfb, xkbcomp and their libraries were unpacked from the
+  distribution's own packages into a scratch folder (`apt-get download`, nothing installed), Xvfb's built-in
+  `/usr/bin` for xkbcomp patched in its copy to the scratch path, and all of it removed afterwards. On both, openh264
+  at 1440p and above and on 2 vCPUs is where full-screen motion stops keeping up.
+- **VA-API on rog** is Mesa's d3d12 driver (Mesa 26.2.7, libva 2.24) on the RTX 5080, picked with
+  `MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`: on the Intel iGPU, which it picks by default, the driver encodes nothing
+  (FFmpeg's `h264_vaapi` neither), and remoted's probe says so and leaves it out. Its video processor crashes (so does
+  FFmpeg's `scale_vaapi`), which is why BGRA in is off by default. No Intel (iHD) or AMD (radeonsi) driver was
+  reachable: those are the encoders VA-API is for, and they are not measured.
+- **The portal on GNOME 48**: the first open asked (the "Remote Desktop" dialog, "Remember This Selection" ticked,
+  "Allow Remote Interaction" off until the person turns it on); once allowed, every later open (gnome-shell restarted
+  in between, at another size, included) was granted without a dialog, the first frame 140–220 ms after the socket
+  opened. `wayland_input` (ignored, run by hand) moved the session's pointer (its position came back in the cursor
+  metadata), clicked and typed `a`, `1` and Enter into an X window there. KDE and wlroots portals were not tried. z440 has neither Xvfb nor
 a desktop, which `/info` said (`missing: ["xvfb", "xfce4"]`); for the measurement a Debian 13 Xvfb, xkbcomp and
 openbox with the libraries z440 lacks were copied into a scratch directory and used through `PATH` (xkbcomp through an
 overlay in a private mount namespace, Xvfb looking for it in /usr/bin only). On rog's Arch WSL (an
@@ -306,6 +395,14 @@ into `REMOTED_SHOTS`), which with the real service installed is how the secure d
 - [src/media/mod.rs](src/media/mod.rs) — the screens: one pipeline per monitor, the media socket's route, its guard, the peer port.
 - [src/media/linux/mod.rs](src/media/linux/mod.rs) — which Linux case this computer is, its monitors, opening one.
 - [src/media/linux/desktop.rs](src/media/linux/desktop.rs) — the virtual desktop: its X server, its session, what is missing.
+- [src/media/linux/encoders.rs](src/media/linux/encoders.rs) — NVENC, VA-API, openh264: each hardware self-test in a
+  child process, the order they are tried in.
+- [src/media/linux/wayland/mod.rs](src/media/linux/wayland/mod.rs) — a Wayland session's screen: consent, the portal
+  session's life, the stream as a screen source.
+- [src/media/linux/wayland/portal.rs](src/media/linux/wayland/portal.rs) — the desktop portal over zbus, the restore
+  token.
+- [src/media/linux/wayland/pipewire.rs](src/media/linux/wayland/pipewire.rs) — libpipewire at run time, the stream,
+  the capture and the cursor metadata.
 - [tests/terminal.rs](tests/terminal.rs) — the binary end to end against a fake sandbox's uplink.
 - [src/service/mod.rs](src/service/mod.rs) — the lock screen and admin prompts service: install, the SYSTEM helper, who
   may talk to it.
@@ -316,6 +413,10 @@ into `REMOTED_SHOTS`), which with the real service installed is how the secure d
 
 ```sh
 cargo test --manifest-path _devices/remoted/Cargo.toml   # the screen tests need Xvfb, else they stand down
+# On a Wayland session (its bus in DBUS_SESSION_BUS_ADDRESS, its Xwayland at REMOTED_MEASURE_DISPLAY with XAUTHORITY);
+# the first run waits for the person to allow sharing:
+REMOTED_MEASURE_SCREEN=wayland cargo test --manifest-path _devices/remoted/Cargo.toml --test screen -- --ignored --nocapture measure
+cargo test --manifest-path _devices/remoted/Cargo.toml --test screen -- --ignored --nocapture wayland_input
 cargo xwin clippy --manifest-path _devices/remoted/Cargo.toml --all-targets --target x86_64-pc-windows-msvc
 bash _tools/scripts/build/build-remoted.sh [--version <v>] linux-x64 linux-arm64 windows-x64
 ```
