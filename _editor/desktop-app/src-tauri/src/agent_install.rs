@@ -322,7 +322,7 @@ mod tests {
         assert_eq!(stopped.state, "failed");
         assert_eq!(
             stopped.failure.as_deref(),
-            Some("error: intentic-machine could not be downloaded.")
+            Some("intentic-machine could not be downloaded.")
         );
         assert!(stopped.needs.is_empty());
         assert_eq!(stopped.actions, ["retry", "dismiss"]);
