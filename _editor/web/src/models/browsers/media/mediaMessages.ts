@@ -23,6 +23,8 @@ export const HelloSchema = z.object({
     // This viewer reaches castd on this computer's loopback: an exact picture where the socket asked for one, and sound
     // with the jitter buffer's lower floor.
     local: maybe(z.boolean()),
+    // On the peer only: the pictures after it ride the peer's video track, shown by the browser's own WebRTC video.
+    track: maybe(z.boolean()),
 });
 export type MediaHello = z.infer<typeof HelloSchema>;
 
@@ -30,6 +32,10 @@ const CursorSchema = z.object({
     type: z.literal(`cursor`),
     cursor: z.object({ css: maybe(z.string()), png: maybe(z.string()), hotX: maybe(z.number()), hotY: maybe(z.number()) }),
 });
+
+// Where the pointer is on the picture, in its pixels, as it moves there (the person at the computer, an app, or this
+// viewer's own moves as they landed).
+const PointerSchema = z.object({ type: z.literal(`pointer`), x: z.number(), y: z.number() });
 
 const ClipboardSchema = z.object({
     type: z.literal(`clipboard`),
@@ -53,6 +59,7 @@ const RtcClosedSchema = z.object({ type: z.literal(`rtcClosed`), reason: z.strin
 const ServerSchema = z.discriminatedUnion(`type`, [
     HelloSchema,
     CursorSchema,
+    PointerSchema,
     ClipboardSchema,
     StatsSchema,
     PongSchema,

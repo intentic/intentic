@@ -363,6 +363,7 @@ dependencies = [
  "log",
  "parking_lot",
  "png",
+ "serde",
  "serde_json",
  "tokio",
  "windows",
@@ -378,6 +379,7 @@ dependencies = [
  "libc",
  "log",
  "nix",
+ "tokio",
  "x11rb",
 ]
 

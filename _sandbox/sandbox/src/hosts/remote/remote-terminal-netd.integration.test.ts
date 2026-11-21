@@ -403,6 +403,7 @@ test.skipIf(!built.runs)(
                 const status = await (remoted ?? { until: async () => await Promise.reject(new Error("no remoted")) }).until("http://node.test", "up", generation);
                 return { version: status.version, allow: TERMINALS_ONLY, monitors: [], environments: [...status.environments] };
             },
+            service: async () => await Promise.reject(new Error("the lock-screen service is not this suite's")),
             cardAllows: async () => TERMINALS_ONLY,
             environments: () => ({ own: "native", ownConnections: new Set() }),
         };

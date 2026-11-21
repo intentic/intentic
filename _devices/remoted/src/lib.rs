@@ -7,6 +7,7 @@ pub mod daemon;
 pub mod environments;
 pub mod http;
 pub mod media;
+pub mod service;
 pub mod status;
 pub mod term;
 pub mod token;

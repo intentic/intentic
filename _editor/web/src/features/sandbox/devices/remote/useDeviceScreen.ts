@@ -118,8 +118,10 @@ export const useDeviceScreen = (device: () => string, monitor: Ref<string | unde
             status.value = { kind: `failed`, reason: message };
         },
         webTransport: webTransportDeclared,
-        // The computer is elsewhere: a peer straight to it is always shorter than through the sandbox.
+        // The computer is elsewhere: a peer straight to it is always shorter than through the sandbox, and its pictures
+        // ride the peer's video track, which a lost packet across the internet does not hold up (DeviceScreen shows it).
         peerWanted: () => true,
+        track: () => true,
         iceServers: () => grant.value?.iceServers.map(iceServer),
     });
 

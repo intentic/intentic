@@ -1,6 +1,7 @@
 //! The viewer's side of a media peer, in Rust: what the editor's `mediaRtc.ts` does, for the tests and the bench. It
-//! offers the three channels with browser-wire's reliability, runs full ICE as the controlling agent from a UDP socket
-//! of its own, joins castd's chunked video, and chunks its own long JSON the way castd expects.
+//! offers the channels with browser-wire's reliability (and, asked to, a receive-only video section for the pictures'
+//! track), runs full ICE as the controlling agent from a UDP socket of its own, joins castd's chunked video, and chunks
+//! its own long JSON the way castd expects.
 
 use browser_wire::{MEDIA_HEADER_LEN, RTC_CHANNELS, RTC_MESSAGE_MAX};
 use std::collections::{HashMap, VecDeque};
@@ -9,6 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use str0m::change::{SdpAnswer, SdpPendingOffer};
 use str0m::channel::{ChannelConfig, ChannelData, ChannelId, Reliability};
+use str0m::media::{Direction, MediaKind};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
 use tokio::net::UdpSocket;
@@ -20,6 +22,10 @@ pub enum Arrived {
     Text(String),
     /// A video message on `media`, whole again, or an audio message on `audio`, with when its last part arrived.
     Media(Vec<u8>, Instant),
+    /// A picture on the video track (Annex B, as str0m depacketizes H.264), and its RTP time in 90 kHz ticks.
+    Picture(Vec<u8>, u64),
+    /// A message on the unordered `pointer` channel.
+    Pointer(String),
 }
 
 pub struct RtcViewer {
@@ -40,6 +46,11 @@ pub struct RtcViewer {
 impl RtcViewer {
     /// A viewer on a fresh UDP socket on `ip`, and the SDP offer to send castd.
     pub async fn offer(ip: IpAddr) -> Result<(RtcViewer, String), String> {
+        RtcViewer::offer_with(ip, false).await
+    }
+
+    /// [`RtcViewer::offer`], with a receive-only video section for the pictures when `track`.
+    pub async fn offer_with(ip: IpAddr, track: bool) -> Result<(RtcViewer, String), String> {
         let socket = UdpSocket::bind(SocketAddr::new(ip, 0))
             .await
             .map_err(|e| format!("bind: {e}"))?;
@@ -60,6 +71,9 @@ impl RtcViewer {
                 ..ChannelConfig::default()
             });
             labels.insert(id, label);
+        }
+        if track {
+            api.add_media(MediaKind::Video, Direction::RecvOnly, None, None, None);
         }
         let (offer, pending) = api.apply().ok_or("no offer to make")?;
         Ok((
@@ -201,8 +215,21 @@ impl RtcViewer {
                     (Some("audio"), true) => {
                         self.inbox.push_back(Arrived::Media(data, Instant::now()))
                     }
+                    (Some("pointer"), false) => {
+                        if let Ok(text) = String::from_utf8(data) {
+                            self.inbox.push_back(Arrived::Pointer(text));
+                        }
+                    }
                     _ => {}
                 }
+            }
+            Event::MediaData(data) => {
+                let ticks = data
+                    .time
+                    .rebase(str0m::media::Frequency::NINETY_KHZ)
+                    .numer();
+                self.inbox
+                    .push_back(Arrived::Picture(data.data.to_vec(), ticks));
             }
             _ => {}
         }

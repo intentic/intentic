@@ -69,3 +69,9 @@ pkg-config = { version = "0.3", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "io-util"] }
+
+# A browser across an impaired link, measured on the pixels it shows (examples/wanbench/run.sh): both software encoders,
+# so the bench runs castd's (x264) and remoted's (openh264).
+[[example]]
+name = "wanbench"
+required-features = ["x264", "openh264"]

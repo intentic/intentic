@@ -11,6 +11,8 @@ The Windows platform for cast-core: each monitor captured with DXGI Desktop Dupl
 - [src/mft.rs](src/mft.rs) — Media Foundation's hardware H.264 encoder (Quick Sync, AMD) on the same device.
 - [src/input.rs](src/input.rs) — SendInput: DOM keys and codes, Unicode text, the pointer over the virtual desktop.
 - [src/screen.rs](src/screen.rs) — one monitor put together: what intentic-remoted's Windows platform opens.
+- [src/session.rs](src/session.rs) — why a desktop cannot be captured now, and each screen's capture status.
+- [src/helper/mod.rs](src/helper/mod.rs) — the SYSTEM helper that sees the secure desktop, and remoted's link to it.
 
 On any other target the crate is empty, so castd's workspace still builds and tests on Linux. remoted's Windows build
 links it (`_devices/remoted/src/media/windows.rs`).
@@ -38,14 +40,31 @@ and its session is `screen-<id>`.
 - **Frames in memory** (`Sink::Cpu`, openh264): the damaged rows are read back through a staging texture.
 - **Losing it.** A mode change, a desktop switch and a GPU reset take duplication away (`DXGI_ERROR_ACCESS_LOST`,
   `DEVICE_REMOVED`): the thread duplicates again, and a new size, a monitor moved to another GPU or a reset device has the
-  pipeline open a new capture. While it may not duplicate (the secure desktop of a sign-in, a UAC prompt or
-  Ctrl+Alt+Del, which only a SYSTEM service can capture) the picture is a placeholder saying "Secure desktop (sign-in,
-  lock screen, UAC or Ctrl+Alt+Del): not visible remotely", never the last frame frozen. A monitor missing for 5 s ends
-  the screen, its viewers told it was unplugged.
+  pipeline open a new capture. A monitor missing for 5 s ends the screen, its viewers told it was unplugged.
+- **Why it cannot.** `E_ACCESSDENIED` means several things, so a refusal is explained by asking Windows
+  ([session.rs](src/session.rs)), most specific first: this session is not the one on the screen (another user's is,
+  or it was disconnected), the display is off (`GUID_CONSOLE_DISPLAY_STATE`, a power notification with a callback), a
+  secure desktop takes input (the credential screen of a sign-in or a lock, a UAC prompt, Ctrl+Alt+Del: only SYSTEM may
+  open it), or the session is locked. The picture is then a placeholder saying that, never the last frame frozen, and
+  the screen's status (`{via, blocked, reason, error, since}`, `via` one of `dxgi`, `helper`, `gdi`, `placeholder`) says
+  it too, which remoted puts in `/info` and `/stats`. The thread keeps trying every 250 ms and is back by itself once the
+  cause goes. A display that goes off while frames are flowing (duplication then delivers nothing, so the last picture
+  would read as live) is noticed after a second without frames, shown as off, and duplicated afresh when it is on.
 - **GDI** ([gdi.rs](src/gdi.rs)) where duplication is not offered (`DXGI_ERROR_UNSUPPORTED`: Remote Desktop, some VMs,
-  four duplications already) or is refused while the desktop showing is the person's own: BitBlt at 30 fps at most,
-  damage found by comparing 64x32 tiles. It checks every 5 s whether duplication works again and hands back to it.
-  `CAST_WIN_CAPTURE=gdi` forces it.
+  four duplications already) or is refused with nothing Windows says explaining it: BitBlt at 30 fps at most, damage
+  found by comparing 64x32 tiles. It checks every 5 s whether duplication works again and hands back to it, and reports
+  the display off when it is (it would read black). `CAST_WIN_CAPTURE=gdi` forces it.
+- **The lock screen and admin prompts** ([helper/](src/helper/mod.rs)). Where intentic-remoted's Windows service is set
+  up, a helper process runs as SYSTEM in the session on the screen, follows the input desktop onto the secure one and
+  runs this same duplication thread there. remoted asks it for a monitor over a local pipe; the helper shares the
+  mirror with remoted's pipeline device by an NT handle it duplicates into remoted's process, so a frame crosses the
+  process boundary exactly as it crosses two devices in one process, and only rectangles, the pointer and statuses go
+  down the pipe. remoted keeps everything else (the encoder, the viewers, the clipboard, the sound). Input goes the other
+  way and is typed by the helper with SendInput wherever input goes (an elevated window included); a Delete pressed
+  with Ctrl and Alt held becomes a secure attention sequence the service sends. While a monitor is duplicated and a
+  secure desktop takes input, the helper draws a notice strip on it ([helper/notice.rs](src/helper/notice.rs)). A screen
+  on its own duplication that cannot see its desktop checks every 2 s whether a helper appeared and hands over. The
+  service, its install and the pipe's access checks are remoted's ([src/service/](../../../../_devices/remoted/src/service/mod.rs)).
 - While a capture runs, its thread asks Windows to keep the display on (`ES_DISPLAY_REQUIRED`), as a screen someone is
   watching should not go dark; the request ends with the thread and no power setting changes.
 
@@ -98,7 +117,29 @@ H.264 High 4:4:4 is not used: browsers do not decode it, and paint-over sharpens
 
 ## Measured
 
-2026-11-20 on `rog` (RTX 5080 Laptop GPU, Intel Graphics driving the 2560x1600 240 Hz panel, Windows 11 26200) and
+**Desktop duplication of a real desktop, through intentic-remoted** (2026-11-20, rog: the 2560x1600 panel at its native
+size, Quick Sync chosen by its self-test, 60 fps): `tests/screen_windows.rs measure` in remoted, a release remoted and a
+fake sandbox's uplink on loopback, one viewer acking every frame on arrival, cast-win's `pattern` drawing in a
+1280x800 window in the middle of the panel (the owner was using the computer), 10 s per scene; CPU is remoted's whole
+process. Latency is from capture to the frame's arrival at the viewer.
+
+| run | path | scene | fps | Mbit/s | capture to arrival p50 / p95 / p99 | CPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | remoted's own duplication | scroll | 59 | 0.3 | 14.6 / 25.4 / 32.7 ms | 0.10 cores |
+| 1 | remoted's own duplication | video | 60 | 1.8 | 14.7 / 23.5 / 30.5 ms | 0.12 cores |
+| 2 | the SYSTEM helper (service) | scroll | 59 | 0.5 | 15.0 / 30.3 / 36.5 ms | 0.08 cores |
+| 2 | the SYSTEM helper (service) | video | 60 | 2.5 | 14.4 / 30.3 / 38.9 ms | 0.14 cores |
+| 3 | remoted's own duplication | scroll | 59 | 0.9 | 28.5 / 34.2 / 39.7 ms | 0.18 cores |
+| 3 | the helper run as the user | scroll | 58 | 1.0 | 28.5 / 36.7 / 39.6 ms | 0.14 cores |
+| 3 | remoted's own duplication | video | 59 | 2.0 | 28.8 / 34.5 / 39.5 ms | 0.17 cores |
+| 3 | the helper run as the user | video | 58 | 2.4 | 28.6 / 38.0 / 43.6 ms | 0.17 cores |
+
+Run 3 was taken back to back on one path and then the other while rog was short of memory (0.8 GiB of 31 GiB free);
+its 28 ms is the machine's state that half hour, not either path's. Through the helper a frame costs the same as on
+remoted's own duplication: the mirror is shared across processes exactly as it is across devices. The first frame
+arrived 0.6-1.3 s after the socket opened (the encoder's self-test running on first use).
+
+**The pipeline, end to end on the computer itself, synthetic picture** (2026-11-20) on `rog` (RTX 5080 Laptop GPU, Intel Graphics driving the 2560x1600 240 Hz panel, Windows 11 26200) and
 `omen` (RTX 3080 Laptop GPU driving an LG TV at 1920x1080, Intel UHD driving the 2560x1440 panel, Windows 11 26300), both
 on mains power, release builds cross-compiled here with cargo-xwin. Every self-test passed where its hardware is: NVENC
 on both RTX GPUs, Intel's Quick Sync MFT on both iGPUs, openh264 on both; all three monitors duplicated with GPU frames.
@@ -176,10 +217,26 @@ What the numbers say:
 - Quick Sync spends its peak bitrate even on unchanged pictures (6-10 Mbit/s on a still scene when fed one every frame);
   the pipeline sends no frame for a still screen, so this costs only during paint-over.
 
-Not measured yet: capture to arrival with desktop duplication on moving content (duplication of each laptop's own
-screen was measured working, 0.12-0.37 ms to copy a frame on the GPU, 5-10 ms to read one back and convert it for
-openh264), and across a network: the Windows firewall asks the person at the screen before a program listens on the LAN,
-so every run here was on the computer's own loopback.
+Not measured yet: across a network (the Windows firewall asks the person at the screen before a program listens on the
+LAN, so every run here was on the computer's own loopback), NVENC and openh264 on a real desktop (rog's panel picks
+Quick Sync), and a desktop moving over its whole area.
+
+### rog's refusal (2026-11-20)
+
+From about 16:00 UTC duplication answered `E_ACCESSDENIED` for every process on rog while the input desktop was still
+`Default`, and from about 16:30 GDI read it black. Its event log: the owner's last input was about 15:59 (a firewall
+prompt dismissed through the agent); `Kernel-Power` 506 "entering Modern Standby" and a `MonitorSettingChange` to off
+at 16:29:03, exactly the 30 minutes rog's plan turns the display off after on mains power. So the black from 16:30 was
+the display off (Modern Standby begins at display-off on this laptop, and Windows composes nothing then). Nothing in
+the logs a user may read marks 16:00; the readable signal then was idle time. Locking alone is not it: on omen,
+locked with the lock screen's curtain up, the input desktop is `Default` and duplication works and shows the curtain;
+only the credential screen behind it (after a key) is the secure `Winlogon` desktop, which a user process may not
+open. What changed is that cast-win no longer guesses: the refusal is explained from the session's lock state, the
+input desktop, whether the session is the one on screen and the display's power ([session.rs](src/session.rs)), said
+in the placeholder, `/info` (`screen.session`) and `/stats` (`screens[].capture`), and recovered from by itself when
+the cause goes. A refusal none of those explains is logged with the whole state and falls back to GDI, which hands
+back within 5 s of duplication working again. `examples/dupwatch.rs` logs the same state with what duplication and GDI
+answer, every few seconds, for catching the next one.
 
 ## Testing
 
@@ -190,10 +247,12 @@ cargo xwin build -p cast-win --target x86_64-pc-windows-msvc --release --example
 ```
 
 The unit tests (cursor shapes, scancodes, the clipboard's HTML and DIB round trips, GDI's tiles, NVENC's struct layouts,
-monitor ids) passed on omen, 11 of 11 (2026-11-20). The examples run on a Windows PC: `probe` (adapters, monitors, a capture and screenshot of each, every encoder's
-self-test), `dupcheck` (what duplication answers per output), `encbench`, `serve` (a monitor, or `--synthetic`, served
-over loopback TCP with cast-core's router) with cast-core's `viewer` example, and `pattern` (scroll, video or noise in a
-window of its own that never takes focus).
+monitor ids, the helper's wire messages and Ctrl+Alt+Del, a refusal's cause) run on a Windows PC. The examples run on
+one too: `probe` (adapters, monitors, a capture and screenshot of each, every encoder's self-test), `dupcheck` (what
+duplication answers per output), `dupwatch` (that, the session's state and whether GDI reads black, over time),
+`encbench`, `serve` (a monitor, or `--synthetic`, served over loopback TCP with cast-core's router) with cast-core's
+`viewer` example, and `pattern` (scroll, video or noise in a window of its own that never takes focus, `--size` for a
+window smaller than the monitor).
 
 ## Credits
 

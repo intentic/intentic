@@ -36,7 +36,7 @@ fn err(e: impl std::fmt::Display) -> String {
 impl Screen {
     /// Opens the screen for resizing, never larger than `cap` (`--max-size`).
     pub fn open(display: Option<&str>, cap: Option<(u32, u32)>) -> Result<Self, String> {
-        let (conn, n) = RustConnection::connect(display).map_err(err)?;
+        let (conn, n) = crate::connect::connect(display).map_err(err)?;
         let s = &conn.setup().roots[n];
         let (root, w, h) = (s.root, s.width_in_pixels as u32, s.height_in_pixels as u32);
         let mm_per_px = (

@@ -80,7 +80,7 @@ async fn a_full_ice_port_learns_its_outside_address_and_a_viewer_connects() {
             match event {
                 PeerEvent::Open => break,
                 PeerEvent::Closed(why) => panic!("the peer closed: {why}"),
-                PeerEvent::Input(_) => {}
+                PeerEvent::Input(_) | PeerEvent::Keyframe | PeerEvent::Rtt(_) => {}
             }
         }
         assert!(Instant::now() < until, "no open peer within 10 s");

@@ -15,6 +15,13 @@ import { inputMessages, mediaJoiner } from "./mediaRtcWire";
 //
 // The peer lives on the page: Chrome has no RTCPeerConnection in a worker, so what arrives on it is handed to the decode
 // worker as the socket's own messages are, one postMessage later.
+//
+// Across the internet a lost packet on the ordered, reliable `media` channel holds every picture behind it until it is
+// sent again, and SCTP's congestion control knows nothing of video. So a viewer that can show a WebRTC video track asks
+// for the pictures on one (`track`): a receive-only H.264 video section beside the channels, which castd answers by
+// sending the pictures there as RTP (its hello on the peer says `track`), where the browser's own jitter buffer and
+// decoder show them, NACK and PLI repair them, and transport-wide feedback drives castd's bitrate. An older castd
+// leaves the section silent and the pictures on `media`, as before (castd's README has the measurements).
 
 export interface ChannelLike {
     binaryType: BinaryType;
@@ -23,6 +30,12 @@ export interface ChannelLike {
     close(): void;
     addEventListener(type: `open` | `close`, listener: () => void): void;
     addEventListener(type: `message`, listener: (event: { readonly data: unknown }) => void): void;
+}
+
+/** A receive-only video transceiver, as far as the track uses one: its codecs, and the track it receives into. */
+export interface TransceiverLike {
+    setCodecPreferences(codecs: RTCRtpCodec[]): void;
+    readonly receiver: { readonly track: MediaStreamTrack; jitterBufferTarget: number | null };
 }
 
 /** An RTCPeerConnection, as far as the media path uses one. */
@@ -34,6 +47,9 @@ export interface PeerLike {
     setLocalDescription(description: RTCSessionDescriptionInit): Promise<void>;
     setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void>;
     addEventListener(type: `connectionstatechange`, listener: () => void): void;
+    // The pictures' video track, and its numbers: RTCPeerConnection's own, absent on a fake that offers none.
+    addTransceiver?(kind: `video`, init: RTCRtpTransceiverInit): TransceiverLike;
+    getStats?(): Promise<RTCStatsReport>;
     close(): void;
     // Where the offer waits for its candidates (a peer given ICE servers): RTCPeerConnection's own, absent on a fake.
     readonly iceGatheringState?: string;
@@ -53,9 +69,15 @@ export interface MediaRtcOptions {
     // connected computer behind its own NAT). Given, the offer waits for its candidates (GATHER_WITHIN_MS at most) and
     // carries them; absent, castd's own candidates are the way, as on a sandbox's LAN.
     readonly iceServers?: () => readonly RTCIceServer[] | undefined;
-    // Seams for a test: the connection, and the clock its deadlines run on.
+    // Whether to ask for the pictures on a video track rather than `media` (a view that can show one: a `<video>`).
+    readonly track?: () => boolean;
+    // The track the pictures may ride, as the offer asks for it (it shows nothing until castd sends), and undefined
+    // once the peer goes.
+    readonly onTrack?: (track: MediaStreamTrack | undefined) => void;
+    // Seams for a test: the connection, the clock its deadlines run on, and the video codecs this browser receives.
     readonly peer?: () => PeerLike | undefined;
     readonly later?: (run: () => void, ms: number) => () => void;
+    readonly codecs?: () => readonly RTCRtpCodec[] | undefined;
 }
 
 export type MediaRtcState = `off` | `connecting` | `open`;
@@ -71,6 +93,8 @@ export interface MediaRtc {
     // The socket went: its peer goes with it, and the next socket may try again.
     readonly stop: () => void;
     readonly state: () => MediaRtcState;
+    // The connection's numbers (the track's among them), while there is one.
+    readonly stats: () => Promise<RTCStatsReport | undefined>;
 }
 
 // A peer that has not opened its channels by now never will on this network (castd's candidates are LAN addresses a
@@ -109,7 +133,37 @@ const timeout = (run: () => void, ms: number): (() => void) => {
     return () => clearTimeout(timer);
 };
 
-const LABELS: readonly RtcChannelLabel[] = [`media`, `audio`, `input`];
+const LABELS: readonly RtcChannelLabel[] = [`media`, `audio`, `input`, `pointer`];
+
+// The codecs a track is asked for in: castd's H.264 in packetization mode 1 (the profiles this browser receives), and
+// the retransmission format that goes with them. None when this browser receives no H.264.
+const trackCodecs = (codecs: readonly RTCRtpCodec[]): RTCRtpCodec[] => {
+    const h264 = codecs.filter((codec) => codec.mimeType.toLowerCase() === `video/h264` && /packetization-mode=1/.test(codec.sdpFmtpLine ?? ``));
+    return h264.length === 0 ? [] : [...h264, ...codecs.filter((codec) => codec.mimeType.toLowerCase() === `video/rtx`)];
+};
+
+const browserCodecs = (): readonly RTCRtpCodec[] | undefined =>
+    `RTCRtpReceiver` in globalThis ? (RTCRtpReceiver.getCapabilities(`video`)?.codecs ?? undefined) : undefined;
+
+// A receive-only video section offering castd's codecs, and the track it receives into, where the view asked for one
+// and the browser can take it; undefined where it cannot.
+const askTrack = (peer: PeerLike, options: MediaRtcOptions): MediaStreamTrack | undefined => {
+    const wanted = trackCodecs((options.codecs ?? browserCodecs)() ?? []);
+    if (options.track?.() !== true || peer.addTransceiver === undefined || wanted.length === 0) {
+        return undefined;
+    }
+    try {
+        const transceiver = peer.addTransceiver(`video`, { direction: `recvonly` });
+        transceiver.setCodecPreferences(wanted);
+        // Shown as soon as it is whole: castd asks for no playout delay too, and a person's own pointer and keys are what
+        // the picture answers, not a film to smooth.
+        transceiver.receiver.jitterBufferTarget = 0;
+        return transceiver.receiver.track;
+    } catch {
+        // allow(silent-catch): a browser that refuses the section keeps the pictures on `media`, which every castd sends.
+        return undefined;
+    }
+};
 
 // The init a channel is opened with: browser-wire's reliability for it, fully reliable where it names no maximum.
 const channelInit = (label: RtcChannelLabel): RTCDataChannelInit => {
@@ -137,14 +191,15 @@ const openChannels = (peer: PeerLike, events: ChannelEvents): Map<RtcChannelLabe
         channel.binaryType = `arraybuffer`;
         channels.set(label, channel);
         channel.addEventListener(`open`, events.open);
-        channel.addEventListener(`close`, () => label !== `audio` && events.lost());
+        // `audio` and `pointer` closing only lose what they carry; the stream needs the other two.
+        channel.addEventListener(`close`, () => (label === `media` || label === `input`) && events.lost());
         channel.addEventListener(`message`, ({ data }) => {
             if (data instanceof ArrayBuffer) {
                 const whole = label === `media` ? join(data) : data;
-                if (whole !== undefined) {
+                if (whole !== undefined && label !== `pointer`) {
                     events.arrived(whole);
                 }
-            } else if (label === `media`) {
+            } else if (label === `media` || label === `pointer`) {
                 events.arrived(String(data));
             }
         });
@@ -178,6 +233,25 @@ const sendOnInput = (input: ChannelLike | undefined, message: BrowserMediaClient
     return parts.length > 0;
 };
 
+// The offer to send, its candidates gathered first where ICE servers were given; undefined where this browser cannot
+// make one.
+const makeOffer = async (
+    peer: PeerLike,
+    gather: boolean,
+    later: (run: () => void, ms: number) => () => void,
+): Promise<{ readonly sdp: string | undefined } | undefined> => {
+    try {
+        await peer.setLocalDescription(await peer.createOffer());
+        if (gather) {
+            await gathered(peer, later);
+        }
+    } catch {
+        // allow(silent-catch): a browser that cannot make an offer keeps the socket, which is every viewer's way in.
+        return undefined;
+    }
+    return { sdp: peer.localDescription?.sdp };
+};
+
 interface Held {
     readonly peer: PeerLike;
     channels: Map<RtcChannelLabel, ChannelLike>;
@@ -203,6 +277,8 @@ export const mediaRtc = (options: MediaRtcOptions): MediaRtc => {
         if (carried) {
             options.carrying(false);
         }
+        // Whatever track it handed went with it.
+        options.onTrack?.(undefined);
         try {
             was.peer.close();
         } catch {
@@ -238,22 +314,18 @@ export const mediaRtc = (options: MediaRtcOptions): MediaRtc => {
             arrived: ours(options.arrived),
         });
         watchConnection(peer, ours(giveUp), later);
-        try {
-            await peer.setLocalDescription(await peer.createOffer());
-            if ((options.iceServers?.()?.length ?? 0) > 0) {
-                await gathered(peer, later);
-            }
-        } catch {
-            // allow(silent-catch): a browser that cannot make an offer keeps the socket, which is every viewer's way in.
+        const track = askTrack(peer, options);
+        if (track !== undefined) {
+            options.onTrack?.(track);
+        }
+        const offer = await makeOffer(peer, (options.iceServers?.()?.length ?? 0) > 0, later);
+        if (offer === undefined) {
             ours(() => {
                 spent = true;
                 close(false);
             })();
-            return;
-        }
-        const sdp = peer.localDescription?.sdp;
-        if (current === mine && sdp !== undefined) {
-            options.signal({ type: `rtcOffer`, sdp });
+        } else if (current === mine && offer.sdp !== undefined) {
+            options.signal({ type: `rtcOffer`, sdp: offer.sdp });
         }
     };
 
@@ -282,5 +354,6 @@ export const mediaRtc = (options: MediaRtcOptions): MediaRtc => {
             spent = false;
         },
         state: () => state,
+        stats: async () => current?.peer.getStats?.(),
     };
 };

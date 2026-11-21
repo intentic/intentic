@@ -185,7 +185,7 @@ impl Injector {
         session: &str,
         hub: Arc<cast_core::hub::Hub>,
     ) -> Result<Self, String> {
-        let (conn, n) = RustConnection::connect(display).map_err(|e| e.to_string())?;
+        let (conn, n) = crate::connect::connect(display)?;
         let root = conn.setup().roots[n].root;
         let min_kc = conn.setup().min_keycode;
         let max_kc = conn.setup().max_keycode;

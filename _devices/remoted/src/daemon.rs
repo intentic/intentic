@@ -11,6 +11,7 @@ use tokio::sync::watch;
 
 use crate::config::{Config, UplinkConfig};
 use crate::status::{Person, PersonKind, Status};
+use crate::media::Screens;
 use crate::term::Terminals;
 use crate::term::socket::{DROPPED, Gate, Revocation};
 use crate::token::{self, Claims, Refused};
@@ -25,6 +26,7 @@ struct Drops {
 
 struct Open {
     uplink: String,
+    kind: PersonKind,
     read_only: bool,
     revocation: Arc<Revocation>,
 }
@@ -32,6 +34,8 @@ struct Open {
 pub struct Daemon {
     pub status: Arc<Status>,
     pub terminals: Arc<Terminals>,
+    /// The screens being served: one pipeline per monitor, shared by every uplink's viewers.
+    pub screens: Arc<Screens>,
     config: watch::Receiver<Config>,
     open: Mutex<HashMap<u64, Open>>,
     drops: Mutex<HashMap<String, Drops>>,
@@ -59,7 +63,21 @@ impl Drop for Viewer {
 
 impl Daemon {
     pub fn new(status: Arc<Status>, config: watch::Receiver<Config>) -> Arc<Self> {
+        Self::with_screens(
+            status,
+            config,
+            Screens::new(crate::media::platform(), crate::media::linger()),
+        )
+    }
+
+    /// A daemon serving `screens` (a test's own platform).
+    pub fn with_screens(
+        status: Arc<Status>,
+        config: watch::Receiver<Config>,
+        screens: Arc<Screens>,
+    ) -> Arc<Self> {
         Arc::new(Self {
+            screens,
             terminals: Terminals::new(status.clone()),
             status,
             config,
@@ -96,6 +114,16 @@ impl Daemon {
                 .uplinks
                 .iter()
                 .any(|held| held.id == uplink && held.allow.terminal)
+    }
+
+    /// Whether people's input on this uplink's screens reaches them now: its control switch on, and nobody paused.
+    pub fn screen_input_allowed(&self, uplink: &str) -> bool {
+        let config = self.config.borrow();
+        !config.paused
+            && config
+                .uplinks
+                .iter()
+                .any(|held| held.id == uplink && held.allow.control)
     }
 
     /// Checks a viewer's token against the uplink's key, the subject it must open, and every drop since it was minted.
@@ -138,6 +166,7 @@ impl Daemon {
             id,
             Open {
                 uplink: uplink.to_owned(),
+                kind,
                 read_only,
                 revocation: revocation.clone(),
             },
@@ -254,6 +283,18 @@ impl Daemon {
                 self.terminals
                     .end_all(Some(id), "terminals were switched off on this computer");
             }
+            // Watching switched off ends that uplink's screens' viewers; control switched off leaves them watching
+            // (`screen_input_allowed`).
+            let viewing_now = now
+                .uplinks
+                .iter()
+                .any(|held| held.id == id && held.allow.view);
+            if !gone && uplink.allow.view && !viewing_now {
+                let closed = self.revoke(|open| {
+                    open.uplink == id && matches!(open.kind, PersonKind::View | PersonKind::Control)
+                });
+                log::info!("uplink {id}: watching screens switched off ({closed} viewer(s) closed)");
+            }
         }
     }
 }
@@ -295,6 +336,7 @@ mod tests {
                 ..Allow::default()
             },
             generation: 1,
+            ice_servers: None,
         }
     }
 

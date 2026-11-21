@@ -15,6 +15,7 @@ import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { ScopeError } from "./policy.js";
 import { machineRemote } from "./remote/remote.js";
+import { machineRemotedService } from "./remote/remoted-service.js";
 import { stageArtifact } from "./tools/programs/artifacts.js";
 import { copyFile } from "./tools/copy/file-copy.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
@@ -300,6 +301,24 @@ const keyringProcedures = (os: DeviceImplementer, keyring: KeyringLink) => ({
     keyringPhoneFill: os.keyringPhoneFill.handler(async ({ input }) => await keyringPhoneFill(keyring, input)),
 });
 
+// PEOPLE'S REMOTE DESKTOP AND TERMINALS (remote/remote.ts): this link's uplink in intentic-remoted, started or dropped.
+// Behind the link's own three people switches, read as each call arrives; not tools, so no agent can call them, and
+// audited without the token or the key. And WINDOWS' LOCK SCREEN AND ADMINISTRATOR PROMPTS (remote/remoted-service.ts):
+// remoted's own Windows service read, or installed or removed through one UAC prompt the person at this computer
+// answers; the daemon calls it for a person with Full access.
+const remoteProcedures = (os: DeviceImplementer, runtime: HostRuntime) => ({
+    remoteStart: os.remoteStart.handler(
+        async ({ input }) => await machineRemote(runtime.log).start({ sandboxUrl: runtime.sandboxUrl, scopes: runtime.scopes(), log: runtime.log }, input),
+    ),
+    remoteStop: os.remoteStop.handler(async () => {
+        await machineRemote(runtime.log).stop({ sandboxUrl: runtime.sandboxUrl, log: runtime.log });
+        return { ok: true as const };
+    }),
+    remoteService: os.remoteService.handler(
+        async ({ input }) => await machineRemotedService().run(input.action, { sandboxUrl: runtime.sandboxUrl, log: runtime.log }),
+    ),
+});
+
 // The heartbeat's answer as this agent builds it (the contract's DevicePingSchema).
 interface HeartbeatAnswer {
     ok: true;
@@ -395,15 +414,7 @@ export const createHostRouter = (runtime: HostRuntime) => {
         ...keyringProcedures(os, keyring),
         stageArtifact: os.stageArtifact.handler(async ({ input }) => await stageOverLink(runtime, input)),
         copyFile: os.copyFile.handler(async ({ input }) => await copyOverLink(runtime, input)),
-        // PEOPLE'S REMOTE DESKTOP AND TERMINALS (remote/remote.ts): this link's uplink in intentic-remoted, started or
-        // dropped. Behind the link's own three people switches, read as this call arrives; not tools, so no agent can
-        // call them, and audited without the token or the key.
-        remoteStart: os.remoteStart.handler(
-            async ({ input }) => await machineRemote(runtime.log).start({ sandboxUrl: runtime.sandboxUrl, scopes: runtime.scopes(), log: runtime.log }, input),
-        ),
-        remoteStop: os.remoteStop.handler(async () => {
-            await machineRemote(runtime.log).stop({ sandboxUrl: runtime.sandboxUrl, log: runtime.log });
-            return { ok: true as const };
-        }),
+        // People's remote desktop and terminals (remoteProcedures above).
+        ...remoteProcedures(os, runtime),
     });
 };

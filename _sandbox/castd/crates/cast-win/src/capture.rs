@@ -14,12 +14,20 @@
 //!
 //! Windows takes duplication away on a mode change, a desktop switch (the lock screen, a UAC prompt, Ctrl+Alt+Del) and
 //! a GPU reset (`DXGI_ERROR_ACCESS_LOST`, `DEVICE_REMOVED`). The thread duplicates again; a new size or device has the
-//! pipeline open a new capture; a desktop it may not see (the secure desktop, until a service running as SYSTEM
-//! captures it) shows a placeholder saying so rather than a frozen picture.
+//! pipeline open a new capture; a desktop it may not see shows a placeholder saying why ([`crate::session`] asks
+//! Windows: the secure desktop, the display off, another session on the screen) rather than a frozen picture, and the
+//! screen's [`CaptureStatus`] says the same to `/info` and `/stats`.
+//!
+//! The duplication thread reports through a [`DupOut`]: [`LocalOut`] hands its rectangles to this process's pipeline;
+//! the lock screen and admin prompts helper ([`crate::helper`], a process running as SYSTEM in the session, which can
+//! duplicate the secure desktop) runs the same thread and sends them down its pipe instead, the mirror texture shared
+//! across the two processes as it is across two devices here.
 
 use crate::cursor::{self, Pointer};
 use crate::d3d::{Device, GpuFrame, Held};
 use crate::displays::{self, Display};
+use crate::session::{self, Blocked, CaptureStatus, StatusCell};
+use browser_wire::MediaCursor;
 use cast_core::capture::{Capture, Damage, ScreenSource};
 use cast_core::frame::{Frame, FrameFormat};
 use cast_core::geometry::{Band, Rect};
@@ -36,7 +44,7 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Dxgi::{
-    DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_NOT_CURRENTLY_AVAILABLE, DXGI_ERROR_SESSION_DISCONNECTED,
+    DXGI_ERROR_NOT_CURRENTLY_AVAILABLE, DXGI_ERROR_SESSION_DISCONNECTED,
     DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
     DXGI_OUTDUPL_MOVE_RECT, DXGI_OUTDUPL_POINTER_SHAPE_INFO, IDXGIOutput, IDXGIOutput1,
     IDXGIOutput5, IDXGIOutputDuplication, IDXGIResource,
@@ -64,7 +72,7 @@ pub struct Geometry {
 
 /// What the duplication thread hands the pipeline.
 #[derive(Default)]
-struct Shared {
+pub(crate) struct Shared {
     /// Changed areas (x0, y0, x1, y1) since the last pump.
     rects: Vec<(u32, u32, u32, u32)>,
     /// The monitor changed size, moved to another GPU, or the GPU was reset: open a new capture.
@@ -73,6 +81,85 @@ struct Shared {
     gone: Option<String>,
     /// The duplication has been unavailable for a while for a reason a fallback may serve (a Remote Desktop session).
     unsupported: bool,
+}
+
+/// What a duplication thread tells its owner: this process's pipeline ([`LocalOut`]), or a viewer's process across the
+/// helper's pipe.
+pub(crate) trait DupOut: Send + Sync + 'static {
+    /// Areas of the mirror that changed.
+    fn rects(&self, rects: &[(u32, u32, u32, u32)]);
+    /// The monitor changed size, moved to another GPU, or the GPU was reset.
+    fn rebuild(&self);
+    /// The monitor is gone.
+    fn gone(&self, why: String);
+    /// Duplication is not offered, or refused with the person's own desktop showing: GDI stands in.
+    fn fallback(&self, why: String);
+    fn cursor(&self, cursor: MediaCursor);
+    fn status(&self, status: CaptureStatus);
+    /// Whether to stop waiting for duplication and open the capture again: the lock screen and admin prompts helper
+    /// became reachable while this process could not see the desktop.
+    fn hand_over(&self) -> bool {
+        false
+    }
+}
+
+/// The pipeline of this process: rectangles into `shared` and a signal on `wake`, the pointer to the hub.
+pub(crate) struct LocalOut {
+    pub(crate) name: String,
+    pub(crate) shared: Arc<Mutex<Shared>>,
+    pub(crate) wake: Arc<Wake>,
+    pub(crate) hub: Arc<Hub>,
+    pub(crate) gdi: Arc<AtomicBool>,
+    pub(crate) status: StatusCell,
+    /// The helper this screen could use, asked now and then while the desktop cannot be seen.
+    pub(crate) helper: Option<Arc<dyn crate::helper::Finder>>,
+    /// Whether the duplication is the helper's (statuses read `helper` rather than `dxgi`).
+    pub(crate) via_helper: bool,
+    pub(crate) last_probe: Mutex<Option<Instant>>,
+}
+
+impl DupOut for LocalOut {
+    fn rects(&self, rects: &[(u32, u32, u32, u32)]) {
+        self.shared.lock().rects.extend_from_slice(rects);
+        self.wake.signal();
+    }
+    fn rebuild(&self) {
+        self.shared.lock().rebuild = true;
+        self.wake.signal();
+    }
+    fn gone(&self, why: String) {
+        self.shared.lock().gone = Some(why);
+        self.wake.signal();
+    }
+    fn fallback(&self, why: String) {
+        log::warn!("{}: {why}; capturing with GDI until desktop duplication works again", self.name);
+        self.gdi.store(true, Ordering::Relaxed);
+        self.shared.lock().unsupported = true;
+        self.wake.signal();
+    }
+    fn cursor(&self, cursor: MediaCursor) {
+        self.hub.set_cursor(cursor);
+    }
+    fn status(&self, mut status: CaptureStatus) {
+        if self.via_helper && status.via == "dxgi" {
+            status.via = "helper".into();
+        }
+        session::report(&self.status, &self.name, status);
+    }
+    fn hand_over(&self) -> bool {
+        let Some(helper) = &self.helper else {
+            return false;
+        };
+        if self.via_helper {
+            return false;
+        }
+        let mut last = self.last_probe.lock();
+        if last.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return false;
+        }
+        *last = Some(Instant::now());
+        helper.present()
+    }
 }
 
 /// One monitor, captured again after every change of size.
@@ -90,10 +177,15 @@ pub struct DxgiSource {
     gdi: Arc<AtomicBool>,
     /// `CAST_WIN_CAPTURE=gdi`: GDI whatever duplication would do.
     gdi_forced: bool,
+    /// How the picture is made now, and why not by duplication when it is not: `/info` and `/stats` read it.
+    pub status: StatusCell,
+    /// The lock screen and admin prompts helper, when this computer has it: its duplication (which sees the secure
+    /// desktop too) is used before this process's own.
+    helper: Option<Arc<dyn crate::helper::Finder>>,
 }
 
 #[derive(Default)]
-struct CursorState {
+pub(crate) struct CursorState {
     shape: Option<cursor::Shape>,
     css: Option<&'static str>,
     pointer: Pointer,
@@ -102,6 +194,16 @@ struct CursorState {
 
 impl DxgiSource {
     pub fn new(id: &str, hub: Arc<Hub>, sink: Sink) -> DxgiSource {
+        DxgiSource::with_helper(id, hub, sink, None)
+    }
+
+    /// As [`DxgiSource::new`], the picture taken from `helper` whenever it is reachable.
+    pub fn with_helper(
+        id: &str,
+        hub: Arc<Hub>,
+        sink: Sink,
+        helper: Option<Arc<dyn crate::helper::Finder>>,
+    ) -> DxgiSource {
         let mut devices = HashMap::new();
         if let Sink::Gpu(d) = &sink {
             devices.insert(d.adapter.luid, d.clone());
@@ -115,6 +217,8 @@ impl DxgiSource {
             cursor: Arc::new(Mutex::new(CursorState::default())),
             gdi: Arc::new(AtomicBool::new(false)),
             gdi_forced: std::env::var("CAST_WIN_CAPTURE").is_ok_and(|v| v == "gdi"),
+            status: Arc::new(Mutex::new(CaptureStatus::new("dxgi"))),
+            helper,
         }
     }
 
@@ -143,6 +247,20 @@ impl DxgiSource {
         self.devices.insert(display.adapter.luid, d.clone());
         Ok(d)
     }
+
+    fn local_out(&self, display: &Display, shared: &Arc<Mutex<Shared>>, wake: &Arc<Wake>, via_helper: bool) -> LocalOut {
+        LocalOut {
+            name: display.name.clone(),
+            shared: shared.clone(),
+            wake: wake.clone(),
+            hub: self.hub.clone(),
+            gdi: self.gdi.clone(),
+            status: self.status.clone(),
+            helper: self.helper.clone(),
+            via_helper,
+            last_probe: Mutex::new(None),
+        }
+    }
 }
 
 impl ScreenSource for DxgiSource {
@@ -164,6 +282,7 @@ impl ScreenSource for DxgiSource {
                 &display,
                 self.hub.clone(),
                 retry,
+                Some(self.status.clone()),
             )?));
         }
         // The sink's own device after a reset, before the capture's.
@@ -173,6 +292,15 @@ impl ScreenSource for DxgiSource {
             return Err(format!("the encoder's GPU was reset ({why})"));
         }
         let dev = self.device_for(&display)?;
+        if let Some(link) = self.helper.as_ref().and_then(|h| h.link()) {
+            match DxgiCapture::open_helper(&display, dev.clone(), self.sink.clone(), self, &link) {
+                Ok(c) => return Ok(Box::new(c)),
+                Err(why) => log::warn!(
+                    "{}: the lock screen and admin prompts helper did not open it ({why}); duplicating here",
+                    display.name
+                ),
+            }
+        }
         match DxgiCapture::open(&display, dev, self.sink.clone(), self) {
             Ok(c) => Ok(Box::new(c)),
             Err(Open::Unsupported(why)) => {
@@ -181,10 +309,19 @@ impl ScreenSource for DxgiSource {
                     display.name
                 );
                 self.gdi.store(true, Ordering::Relaxed);
+                session::report(
+                    &self.status,
+                    &display.name,
+                    CaptureStatus {
+                        reason: Some(format!("desktop duplication is not offered here ({why})")),
+                        ..CaptureStatus::new("gdi")
+                    },
+                );
                 Ok(Box::new(crate::gdi::GdiCapture::open(
                     &display,
                     self.hub.clone(),
                     Some(self.gdi.clone()),
+                    Some(self.status.clone()),
                 )?))
             }
             Err(Open::Failed(why)) => Err(why),
@@ -192,10 +329,91 @@ impl ScreenSource for DxgiSource {
     }
 }
 
-enum Open {
+pub(crate) enum Open {
     /// Duplication is not offered here (Remote Desktop, some VMs, too many duplications): GDI serves instead.
     Unsupported(String),
     Failed(String),
+}
+
+/// A duplication thread running on one monitor, and the mirror it copies each desktop image into: shared (an NT
+/// handle) so the pipeline's device, in this process or the viewer's, opens it.
+pub(crate) struct Started {
+    pub(crate) thread: std::thread::JoinHandle<()>,
+    pub(crate) stop: Arc<AtomicBool>,
+    pub(crate) handle: crate::d3d::Shared,
+    pub(crate) size: (u32, u32),
+}
+
+/// Duplicates `display` on a device of the thread's own and starts the thread reporting to `out`. `secure_visible`:
+/// this process runs as SYSTEM and follows the input desktop, the secure one included.
+pub(crate) fn start(
+    display: &Display,
+    out: Arc<dyn DupOut>,
+    cursor: Arc<Mutex<CursorState>>,
+    secure_visible: bool,
+) -> Result<Started, Open> {
+    let stop = Arc::new(AtomicBool::new(false));
+    // The first duplication is made here, so a refusal chooses the fallback before any thread runs.
+    let mut tries = 0;
+    let dup_dev = Device::new(&display.adapter).map_err(Open::Failed)?;
+    if secure_visible {
+        crate::follow_input_desktop();
+    }
+    let dup = loop {
+        match duplicate(&dup_dev, &display.output) {
+            Ok(d) => break Some(d),
+            // A desktop this process may not see now (locked, a UAC prompt, the display off): open anyway, showing the
+            // placeholder until it is back.
+            Err(e) if e.code() == E_ACCESSDENIED || e.code() == DXGI_ERROR_SESSION_DISCONNECTED => {
+                log::info!("{}: the desktop cannot be duplicated now ({e})", display.name);
+                break None;
+            }
+            Err(e) if e.code() == DXGI_ERROR_UNSUPPORTED => {
+                return Err(Open::Unsupported(e.to_string()));
+            }
+            // Four duplications per output at most, across every program.
+            Err(e) if e.code() == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE && tries >= 10 => {
+                return Err(Open::Unsupported(e.to_string()));
+            }
+            Err(e) if tries >= 10 => return Err(Open::Failed(format!("DuplicateOutput: {e}"))),
+            Err(e) => {
+                log::debug!("DuplicateOutput: {e}; retrying");
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    };
+    let (full_w, full_h) = dup
+        .as_ref()
+        .map_or((display.width(), display.height()), dup_size);
+    // The mirror lives on the duplication's own device and is opened on the pipeline's: AcquireNextFrame holds its
+    // device's lock while it waits (measured on omen: a copy on the same device waited 219-435 ms on a still screen),
+    // so nothing else may share that device. A keyed mutex orders the two devices' copies.
+    let (dup_mirror, handle) = dup_dev
+        .shared_texture(full_w, full_h)
+        .map_err(Open::Failed)?;
+    let ctx = DupThread {
+        id: display.id.clone(),
+        name: display.name.clone(),
+        dev: dup_dev,
+        luid: display.adapter.luid,
+        mirror: dup_mirror,
+        size: (full_w, full_h),
+        stop: stop.clone(),
+        cursor,
+        out,
+        secure_visible,
+    };
+    let thread = std::thread::Builder::new()
+        .name(format!("dup-{}", display.id))
+        .spawn(move || ctx.run(dup))
+        .map_err(|e| Open::Failed(e.to_string()))?;
+    Ok(Started {
+        thread,
+        stop,
+        handle,
+        size: (full_w, full_h),
+    })
 }
 
 /// Duplicates `output` on `dev`: BGRA from `DuplicateOutput1` (Windows converts an HDR desktop), else the original
@@ -231,8 +449,8 @@ pub struct DxgiCapture {
     damage: Damage,
     wake: Arc<Wake>,
     shared: Arc<Mutex<Shared>>,
-    stop: Arc<AtomicBool>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    /// What fills the mirror: a thread of this process, or the helper.
+    producer: Producer,
     /// The pipeline's device on the monitor's GPU (the encoder's, when it is on the same one), and the duplication's
     /// mirror opened on it.
     dev: Device,
@@ -246,6 +464,17 @@ pub struct DxgiCapture {
     /// The monitor's HMONITOR, as a number (the handle type is not Send).
     monitor: isize,
     last_check: Instant,
+}
+
+/// What fills a capture's mirror.
+enum Producer {
+    /// A duplication thread of this process.
+    Local {
+        stop: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    },
+    /// The helper's duplication thread: closed on its side when the lease is dropped.
+    Helper { _lease: crate::helper::client::Lease },
 }
 
 /// A staging texture on the capture's device and the BGRA buffer rows are read back into.
@@ -263,70 +492,56 @@ impl DxgiCapture {
         source: &DxgiSource,
     ) -> Result<DxgiCapture, Open> {
         let wake = Arc::new(Wake::new().map_err(|e| Open::Failed(e.to_string()))?);
-        let stop = Arc::new(AtomicBool::new(false));
         let shared = Arc::new(Mutex::new(Shared::default()));
-        // The first duplication is made here, so a refusal chooses the fallback before any thread runs.
-        let mut tries = 0;
-        let dup_dev = Device::new(&display.adapter).map_err(Open::Failed)?;
-        let dup = loop {
-            match duplicate(&dup_dev, &display.output) {
-                Ok(d) => break Some(d),
-                // The secure desktop (locked, a UAC prompt): open anyway, showing the placeholder until it is back.
-                Err(e)
-                    if e.code() == E_ACCESSDENIED
-                        || e.code() == DXGI_ERROR_SESSION_DISCONNECTED =>
-                {
-                    log::info!(
-                        "{}: the desktop cannot be duplicated now ({e})",
-                        display.name
-                    );
-                    break None;
-                }
-                Err(e) if e.code() == DXGI_ERROR_UNSUPPORTED => {
-                    return Err(Open::Unsupported(e.to_string()));
-                }
-                // Four duplications per output at most, across every program.
-                Err(e) if e.code() == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE && tries >= 10 => {
-                    return Err(Open::Unsupported(e.to_string()));
-                }
-                Err(e) if tries >= 10 => return Err(Open::Failed(format!("DuplicateOutput: {e}"))),
-                Err(e) => {
-                    log::debug!("DuplicateOutput: {e}; retrying");
-                    tries += 1;
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-            }
+        let out = Arc::new(source.local_out(display, &shared, &wake, false));
+        let started = start(display, out, source.cursor.clone(), false)?;
+        let mirror = dev.open_shared(&started.handle).map_err(Open::Failed)?;
+        drop(started.handle);
+        let producer = Producer::Local {
+            stop: started.stop,
+            thread: Some(started.thread),
         };
-        let (full_w, full_h) = dup
-            .as_ref()
-            .map_or((display.width(), display.height()), dup_size);
-        // The mirror lives on the duplication's own device and is opened on the pipeline's: AcquireNextFrame holds its
-        // device's lock while it waits (measured on omen: a copy on the same device waited 219-435 ms on a still
-        // screen), so nothing else may share that device. A keyed mutex orders the two devices' copies.
-        let (dup_mirror, handle) = dup_dev
-            .shared_texture(full_w, full_h)
-            .map_err(Open::Failed)?;
-        let mirror = dev.open_shared(&handle).map_err(Open::Failed)?;
+        DxgiCapture::assemble(display, dev, sink, source, mirror, started.size, wake, shared, producer)
+            .map_err(Open::Failed)
+    }
+
+    /// The monitor duplicated by the lock screen and admin prompts helper: its mirror opened here from the handle it
+    /// gave this process, its rectangles and pointer arriving over its pipe.
+    fn open_helper(
+        display: &Display,
+        dev: Device,
+        sink: Sink,
+        source: &DxgiSource,
+        link: &Arc<crate::helper::client::Link>,
+    ) -> Result<DxgiCapture, String> {
+        let wake = Arc::new(Wake::new().map_err(|e| e.to_string())?);
+        let shared = Arc::new(Mutex::new(Shared::default()));
+        let out = Arc::new(source.local_out(display, &shared, &wake, true));
+        let (lease, handle, size) = link.open(&display.id, out)?;
+        let mirror = dev.open_shared(&handle)?;
         drop(handle);
+        log::info!(
+            "{}: duplicated by the lock screen and admin prompts helper ({}x{})",
+            display.name,
+            size.0,
+            size.1
+        );
+        DxgiCapture::assemble(display, dev, sink, source, mirror, size, wake, shared, Producer::Helper { _lease: lease })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn assemble(
+        display: &Display,
+        dev: Device,
+        sink: Sink,
+        source: &DxgiSource,
+        mirror: ID3D11Texture2D,
+        (full_w, full_h): (u32, u32),
+        wake: Arc<Wake>,
+        shared: Arc<Mutex<Shared>>,
+        producer: Producer,
+    ) -> Result<DxgiCapture, String> {
         let (w, h) = (full_w & !1, full_h & !1);
-        let ctx = DupThread {
-            id: display.id.clone(),
-            name: display.name.clone(),
-            dev: dup_dev,
-            luid: display.adapter.luid,
-            mirror: dup_mirror,
-            size: (full_w, full_h),
-            shared: shared.clone(),
-            wake: wake.clone(),
-            stop: stop.clone(),
-            hub: source.hub.clone(),
-            cursor: source.cursor.clone(),
-            gdi: source.gdi.clone(),
-        };
-        let thread = std::thread::Builder::new()
-            .name(format!("dup-{}", display.id))
-            .spawn(move || ctx.run(dup))
-            .map_err(|e| Open::Failed(e.to_string()))?;
         log::info!(
             "capturing {} ({}x{} at {},{}, scale {}) on {} with desktop duplication, frames {}",
             display.name,
@@ -350,8 +565,7 @@ impl DxgiCapture {
             damage: Damage::new(w, h),
             wake,
             shared,
-            stop,
-            thread: Some(thread),
+            producer,
             dev,
             mirror,
             sink,
@@ -371,7 +585,7 @@ impl DxgiCapture {
             std::thread::sleep(Duration::from_millis(2));
         }
         if matches!(me.sink, Sink::Cpu) {
-            me.readback(0, me.h).map_err(Open::Failed)?;
+            me.readback(0, me.h)?;
         }
         Ok(me)
     }
@@ -639,9 +853,11 @@ impl Capture for DxgiCapture {
 
 impl Drop for DxgiCapture {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
+        if let Producer::Local { stop, thread } = &mut self.producer {
+            stop.store(true, Ordering::Relaxed);
+            if let Some(t) = thread.take() {
+                let _ = t.join();
+            }
         }
     }
 }
@@ -654,25 +870,29 @@ struct DupThread {
     luid: i64,
     mirror: ID3D11Texture2D,
     size: (u32, u32),
-    shared: Arc<Mutex<Shared>>,
-    wake: Arc<Wake>,
     stop: Arc<AtomicBool>,
-    hub: Arc<Hub>,
     cursor: Arc<Mutex<CursorState>>,
-    gdi: Arc<AtomicBool>,
+    out: Arc<dyn DupOut>,
+    /// This process runs as SYSTEM (the helper): it follows the input desktop onto a secure one.
+    secure_visible: bool,
 }
 
 /// How long the duplication may be gone before the placeholder is shown.
 const PLACEHOLDER_AFTER: Duration = Duration::from_millis(300);
 /// How long a monitor may be missing before the screen ends.
 const GONE_AFTER: Duration = Duration::from_secs(5);
+/// How often a duplication that delivers nothing asks whether the display went off.
+const DISPLAY_CHECK: Duration = Duration::from_secs(1);
 
 impl DupThread {
     fn run(self, first: Option<IDXGIOutputDuplication>) {
         crate::keep_display_on();
         let full = (0, 0, self.size.0, self.size.1);
         let mut dup = match first {
-            Some(d) => d,
+            Some(d) => {
+                self.out.status(CaptureStatus::new("dxgi"));
+                d
+            }
             None => match self.again() {
                 Some(d) => d,
                 None => return,
@@ -680,13 +900,33 @@ impl DupThread {
         };
         let mut whole = true;
         let mut shape_buf: Vec<u8> = Vec::new();
+        let mut last_frame = Instant::now();
+        let mut last_display_check = Instant::now();
         while !self.stop.load(Ordering::Relaxed) {
             let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
             let mut image: Option<IDXGIResource> = None;
             // SAFETY: out-pointers for the frame's info and image.
             match unsafe { dup.AcquireNextFrame(100, &mut info, &mut image) } {
                 Ok(()) => {}
-                Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => continue,
+                Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => {
+                    // Nothing new: a still screen, or a display Windows turned off (it composes nothing then, and the
+                    // last picture would read as live).
+                    if last_frame.elapsed() > DISPLAY_CHECK && last_display_check.elapsed() > DISPLAY_CHECK {
+                        last_display_check = Instant::now();
+                        if session::display() == session::Display::Off {
+                            drop(dup);
+                            match self.while_display_off() {
+                                Some(d) => {
+                                    dup = d;
+                                    whole = true;
+                                    continue;
+                                }
+                                None => return,
+                            }
+                        }
+                    }
+                    continue;
+                }
                 Err(e) => {
                     log::info!("{}: desktop duplication interrupted ({e})", self.name);
                     drop(image);
@@ -702,6 +942,7 @@ impl DupThread {
                     }
                 }
             }
+            last_frame = Instant::now();
             if info.LastMouseUpdateTime != 0 {
                 self.pointer(&dup, &info, &mut shape_buf);
             }
@@ -742,17 +983,33 @@ impl DupThread {
             let _ = unsafe { dup.ReleaseFrame() };
             if !rects.is_empty() {
                 whole = false;
-                self.shared.lock().rects.extend_from_slice(&rects);
-                self.wake.signal();
+                self.out.rects(&rects);
             }
         }
     }
 
-    /// Duplicates the monitor again after Windows took it away, showing the placeholder while it may not be seen.
-    /// None when this thread is done: stopped, or the pipeline must open a new capture (told through `shared`).
+    /// The display went off while duplicating: the placeholder says so until it is on again, then the monitor is
+    /// duplicated afresh (a new duplication's first image is the whole desktop, which repaints over the placeholder).
+    fn while_display_off(&self) -> Option<IDXGIOutputDuplication> {
+        log::info!("{}: the display is off", self.name);
+        self.placeholder(Blocked::DisplayOff.words());
+        self.out.status(CaptureStatus::blocked("placeholder", Blocked::DisplayOff, None));
+        while session::display() == session::Display::Off {
+            if self.stop.load(Ordering::Relaxed) {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        log::info!("{}: the display is on again", self.name);
+        self.again()
+    }
+
+    /// Duplicates the monitor again after Windows took it away, showing the placeholder (and saying why in the
+    /// screen's status) while it may not be seen. None when this thread is done: stopped, handed over, or the pipeline
+    /// must open a new capture.
     fn again(&self) -> Option<IDXGIOutputDuplication> {
         let started = Instant::now();
-        let mut shown = false;
+        let mut shown: Option<Blocked> = None;
         let mut said = String::new();
         loop {
             if self.stop.load(Ordering::Relaxed) {
@@ -762,76 +1019,74 @@ impl DupThread {
             let display = displays::displays().into_iter().find(|d| d.id == self.id);
             let Some(display) = display else {
                 if started.elapsed() > GONE_AFTER {
-                    self.shared.lock().gone =
-                        Some(format!("the monitor {} was unplugged", self.name));
-                    self.wake.signal();
+                    self.out.gone(format!("the monitor {} was unplugged", self.name));
                     return None;
                 }
                 std::thread::sleep(Duration::from_millis(250));
                 continue;
             };
             if display.adapter.luid != self.luid || self.dev.removed().is_some() {
-                self.rebuild();
+                self.out.rebuild();
                 return None;
             }
             match duplicate(&self.dev, &display.output) {
                 Ok(d) => {
                     if dup_size(&d) != self.size {
                         drop(d);
-                        self.rebuild();
+                        self.out.rebuild();
                         return None;
                     }
                     log::info!("{}: desktop duplication is back", self.name);
+                    self.out.status(CaptureStatus::new("dxgi"));
                     return Some(d);
                 }
                 Err(e) => {
                     let words = e.to_string();
                     if words != said {
                         log::info!("{}: duplicating again: {words}", self.name);
-                        said = words;
+                        said.clone_from(&words);
                     }
-                    // Refused while the desktop showing is the person's own, not a secure one: GDI can read what
-                    // duplication will not (seen on rog, 2026-11-20: E_ACCESSDENIED for every process, the input
-                    // desktop `Default`, for minutes on end).
-                    let refused_here =
-                        e.code() == E_ACCESSDENIED && crate::input_desktop_is_default();
-                    if (e.code() == DXGI_ERROR_UNSUPPORTED || refused_here)
-                        && started.elapsed() > Duration::from_secs(2)
-                    {
-                        log::warn!(
-                            "{}: desktop duplication refused ({e}); capturing with GDI until it is back",
-                            self.name
-                        );
-                        self.gdi.store(true, Ordering::Relaxed);
-                        self.shared.lock().unsupported = true;
-                        self.wake.signal();
+                    let state = session::State::now();
+                    let blocked = state.blocked(self.secure_visible);
+                    if e.code() == DXGI_ERROR_UNSUPPORTED && started.elapsed() > Duration::from_secs(2) {
+                        self.out.fallback(format!("desktop duplication is not offered here ({e})"));
                         return None;
                     }
-                    if !shown && started.elapsed() > PLACEHOLDER_AFTER {
-                        shown = true;
-                        self.placeholder(
-                            e.code() == E_ACCESSDENIED || e.code() == DXGI_ERROR_ACCESS_LOST,
-                        );
+                    // Refused with nothing Windows says explaining it: the person's own desktop showing, the session
+                    // unlocked and on the screen, the display on. GDI can read what duplication will not (seen on rog,
+                    // 2026-11-20, for minutes on end) and checks every 5 s whether duplication works again.
+                    if e.code() == E_ACCESSDENIED
+                        && blocked == Blocked::Unknown
+                        && started.elapsed() > Duration::from_secs(2)
+                    {
+                        log::warn!("{}: duplication refused although nothing blocks it: {state:?}", self.name);
+                        self.out.fallback(format!(
+                            "desktop duplication refused ({e}) with the person's own desktop showing"
+                        ));
+                        return None;
+                    }
+                    if started.elapsed() > PLACEHOLDER_AFTER && shown != Some(blocked) {
+                        if shown.is_none() {
+                            log::info!("{}: {} ({state:?})", self.name, blocked.words());
+                        }
+                        shown = Some(blocked);
+                        self.placeholder(blocked.words());
+                        self.out.status(CaptureStatus::blocked("placeholder", blocked, Some(words)));
+                    }
+                    if shown.is_some() && self.out.hand_over() {
+                        log::info!("{}: the lock screen and admin prompts helper is here; handing over", self.name);
+                        self.out.rebuild();
+                        return None;
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(if shown { 250 } else { 50 }));
+            std::thread::sleep(Duration::from_millis(if shown.is_some() { 250 } else { 50 }));
         }
     }
 
-    fn rebuild(&self) {
-        self.shared.lock().rebuild = true;
-        self.wake.signal();
-    }
-
     /// Paints the placeholder into the mirror and sends it as the picture.
-    fn placeholder(&self, secure: bool) {
+    fn placeholder(&self, text: &str) {
         let (w, h) = self.size;
-        let text = if secure {
-            "Secure desktop (sign-in, lock screen, UAC or Ctrl+Alt+Del): not visible remotely"
-        } else {
-            "The desktop is not available to capture right now"
-        };
         let px = crate::placeholder::render(w, h, text);
         let b = D3D11_BOX {
             left: 0,
@@ -850,10 +1105,9 @@ impl DupThread {
                 .ctx
                 .UpdateSubresource(&self.mirror, 0, Some(&b), px.as_ptr().cast(), w * 4, 0)
         };
-        self.hub.set_cursor(cursor::hidden());
+        self.out.cursor(cursor::hidden());
         self.cursor.lock().sent_hidden = true;
-        self.shared.lock().rects.push((0, 0, w, h));
-        self.wake.signal();
+        self.out.rects(&[(0, 0, w, h)]);
     }
 
     /// Takes the pointer's position and, when it changed, its shape, and tells viewers what changed.
@@ -867,6 +1121,10 @@ impl DupThread {
             info.PointerPosition.Visible.as_bool(),
             info.PointerPosition.Position,
         );
+        // Where it is on this output (duplication's position is the output's own), or off the picture while it is on
+        // another output or hidden: viewers draw it there when it is not their own (`pointer`).
+        let (x, y) = if p.visible { (p.x, p.y) } else { (-1, -1) };
+        self.hub.pointer_at(x, y);
         let mut st = self.cursor.lock();
         st.pointer = p;
         let mut changed = false;
@@ -896,7 +1154,7 @@ impl DupThread {
             if !st.sent_hidden {
                 st.sent_hidden = true;
                 drop(st);
-                self.hub.set_cursor(cursor::hidden());
+                self.out.cursor(cursor::hidden());
             }
             return;
         }
@@ -906,7 +1164,7 @@ impl DupThread {
             let msg = cursor::message(shape, st.css);
             st.sent_hidden = false;
             drop(st);
-            self.hub.set_cursor(msg);
+            self.out.cursor(msg);
         }
     }
 }

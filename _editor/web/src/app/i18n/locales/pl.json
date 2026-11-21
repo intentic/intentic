@@ -11281,7 +11281,20 @@
             "switchTerminalNote": "Powłoka na tym komputerze, działająca jako ty, w dowolnym z jego środowisk.",
             "switchFailed": "Nie udało się zmienić przełącznika",
             "on": "Włączone",
-            "off": "Wyłączone"
+            "off": "Wyłączone",
+            "serviceTitle": "Ekran blokady i monity administratora",
+            "serviceNote": "Pozwala widzieć i obsługiwać ekran logowania i blokady, Ctrl+Alt+Del oraz monity administratora (UAC). Wymaga jednorazowej zgody administratora na tym komputerze.",
+            "serviceNotSetUp": "Nieskonfigurowane",
+            "serviceSetUp": "Skonfigurowane",
+            "serviceOlder": "Skonfigurowane, starsza wersja",
+            "serviceInstall": "Skonfiguruj",
+            "serviceUpdate": "Zaktualizuj",
+            "serviceRemove": "Usuń",
+            "serviceWaiting": "Czekam na zgodę administratora na {name}…",
+            "serviceDeclined": "Administrator na {name} nie wyraził zgody, więc nic się nie zmieniło.",
+            "serviceOlderAgent": "Zaktualizuj agenta na {name}, aby to skonfigurować.",
+            "serviceFailed": "Nie udało się zmienić usługi ekranu blokady",
+            "serviceUnsupported": "Niedostępne na tym komputerze."
         },
         "deviceScreen": {
             "direct": "Bezpośrednio",

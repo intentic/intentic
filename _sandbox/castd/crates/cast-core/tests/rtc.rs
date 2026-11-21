@@ -100,6 +100,7 @@ async fn a_viewer_opens_the_three_channels_and_the_stream_crosses_both_ways() {
             Arrived::Text(text) => media.push(text.into_bytes()),
             Arrived::Media(bytes, _) if bytes[0] == 2 => sound += 1,
             Arrived::Media(bytes, _) => media.push(bytes),
+            Arrived::Picture(..) | Arrived::Pointer(_) => panic!("no track and no pointer here"),
         }
     }
     assert_eq!(media, [br#"{"type":"hello"}"#.to_vec(), key, delta]);
@@ -117,7 +118,7 @@ async fn a_viewer_opens_the_three_channels_and_the_stream_crosses_both_ways() {
     while inputs.len() < 2 {
         match next_event(&mut events, &mut viewer).await {
             PeerEvent::Input(text) => inputs.push(text),
-            PeerEvent::Open => {}
+            PeerEvent::Open | PeerEvent::Keyframe | PeerEvent::Rtt(_) => {}
             PeerEvent::Closed(why) => panic!("the peer closed: {why}"),
         }
     }

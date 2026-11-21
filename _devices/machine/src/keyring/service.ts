@@ -5,7 +5,6 @@ import { pollUntil } from "@intentic/base/async";
 import { repoRoot } from "@intentic/constants/node";
 import { errorMessage } from "@intentic/base/errors";
 import { renameOver } from "@intentic/base/fs";
-import { runBounded } from "@intentic/base/process";
 import {
     askKeyring,
     atNormalPriority,
@@ -26,6 +25,7 @@ import { type AutostartKind, autostart, type CliLauncher, explain, livePid, type
 import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import type { KeyringRefusalCode } from "@intentic/sandbox-contract/schemas/keyring";
 import { KEYRING_AUTOSTART } from "../autostart/autostart.js";
+import { type ElevatedCommand, elevatedRun, elevatedScriptCommand, runAsAdministrator } from "../admin/elevated.js";
 import { binDir } from "../config.js";
 import { askpassPath, downloadAsset, keyringAssetName, keyringPath, releaseAssetUrl, renameIfPresent } from "../release.js";
 import { verifyReleaseFiles } from "../release/release-verify.js";
@@ -52,8 +52,6 @@ const START_ASK_MS = 5_000;
 const SLOW_KEYRING_MS = 15_000;
 // A keyring exits within this on a stop; one that does not is waited out no longer.
 const STOP_TIMEOUT_MS = 5_000;
-// A person may take their time with a UAC prompt.
-const ELEVATED_TIMEOUT_MS = 10 * 60_000;
 // How long the protected service may take to publish its door once its task or unit was started.
 const SERVICE_TIMEOUT_MS = 30_000;
 
@@ -203,77 +201,34 @@ export const linkAskpass = async (): Promise<"linked" | "copied"> => {
  */
 export const serviceHere = async (): Promise<boolean> => await serviceInstalledHere(realRunner);
 
-// A PowerShell string literal: single quotes, each one inside doubled.
-const psQuoted = (text: string): string => `'${text.replaceAll("'", "''")}'`;
-
 /** What setup says when the administrator's yes is not given, or cannot be. */
 export const NEEDS_ADMIN = "Passwords needs an administrator's approval once, to install its protected service. Nothing was changed.";
 
-/**
- * The command that runs the keyring binary as an administrator: UAC on Windows, pkexec on Linux. Pure. On Windows the
- * elevated keyring is a console program, which ShellExecute would give a console window of its own: `-WindowStyle
- * Hidden` keeps that window off the screen, so the person sees the UAC prompt and the app's own progress, nothing else.
- */
-export const elevatedCommand = (args: readonly string[], platform: NodeJS.Platform = process.platform): { readonly command: string; readonly args: readonly string[] } =>
-    platform === "win32"
-        ? {
-              command: "powershell.exe",
-              args: [
-                  "-NoProfile",
-                  "-NonInteractive",
-                  "-WindowStyle",
-                  "Hidden",
-                  "-Command",
-                  `$p = Start-Process -FilePath ${psQuoted(keyringPath)} -ArgumentList ${args.map(psQuoted).join(",")} -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`,
-              ],
-          }
-        : { command: "pkexec", args: [keyringPath, ...args] };
-
-/**
- * Whether an elevated run's failure was the administrator's yes not given: UAC's "canceled by the user", pkexec's 126
- * (dialog dismissed) and 127 (not authorized). Pure.
- */
-export const approvalRefused = (exitCode: number | null, said: string, platform: NodeJS.Platform = process.platform): boolean =>
-    platform === "win32" ? /canceled by the user/iu.test(said) : exitCode === 126 || exitCode === 127;
-
-/**
- * A script of the keyring package's run as an administrator, through the one prompt the system shows for it: Windows
- * PowerShell started elevated with the script encoded (UTF-16LE base64, as -EncodedCommand takes it), or sh under
- * pkexec. Used where the keyring binary on this computer may be too old to have the verb itself. Pure.
- */
-export const elevatedScriptCommand = (script: string, platform: NodeJS.Platform = process.platform): { readonly command: string; readonly args: readonly string[] } =>
-    platform === "win32"
-        ? {
-              command: "powershell.exe",
-              args: [
-                  "-NoProfile",
-                  "-NonInteractive",
-                  "-WindowStyle",
-                  "Hidden",
-                  "-Command",
-                  `$p = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-NonInteractive','-WindowStyle','Hidden','-EncodedCommand',${psQuoted(Buffer.from(script, "utf16le").toString("base64"))} -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`,
-              ],
-          }
-        : { command: "pkexec", args: ["sh", "-c", script] };
+/** The command that runs the keyring binary as an administrator (elevated.ts): UAC on Windows, pkexec on Linux. Pure. */
+export const elevatedCommand = (args: readonly string[], platform: NodeJS.Platform = process.platform): ElevatedCommand =>
+    elevatedRun(keyringPath, args, platform);
 
 /** `elevated` run, its failure read as the administrator's yes not given or as `what` not finishing. */
-const runAsAdministrator = async (elevated: { readonly command: string; readonly args: readonly string[] }, what: string): Promise<void> => {
-    const result = await runBounded(elevated.command, elevated.args, { timeoutMs: ELEVATED_TIMEOUT_MS });
-    if (result.spawnError !== undefined) {
-        throw new KeyringCliError("declined", `${NEEDS_ADMIN} (${elevated.command} could not be started: ${errorMessage(result.spawnError)})`);
-    }
-    if (result.exitCode !== 0) {
-        const said = result.stderr.text.trim();
-        if (approvalRefused(result.exitCode, said)) {
+const elevatedOrRefused = async (elevated: ElevatedCommand, what: string): Promise<void> => {
+    const outcome = await runAsAdministrator(elevated);
+    switch (outcome.kind) {
+        case "done":
+            return;
+        case "unstarted":
+            throw new KeyringCliError("declined", `${NEEDS_ADMIN} (${outcome.why})`);
+        case "declined":
             throw new KeyringCliError("declined", NEEDS_ADMIN);
-        }
-        throw new KeyringCliError("failed", `${what} did not finish (exit ${String(result.exitCode)})${said === "" ? "" : `: ${said}`}. Its log is ${keyringPaths().log}.`);
+        default:
+            throw new KeyringCliError(
+                "failed",
+                `${what} did not finish (exit ${String(outcome.exitCode)})${outcome.said === "" ? "" : `: ${outcome.said}`}. Its log is ${keyringPaths().log}.`,
+            );
     }
 };
 
 /** The keyring binary run as an administrator, through the one prompt the system shows for it. */
 const runElevated = async (args: readonly string[]): Promise<void> => {
-    await runAsAdministrator(elevatedCommand(args), `\`intentic-keyring ${args.join(" ")}\``);
+    await elevatedOrRefused(elevatedCommand(args), `\`intentic-keyring ${args.join(" ")}\``);
 };
 
 // ---- running it ----
@@ -554,7 +509,7 @@ export const resetKeyring = async (log: Log, at: Date = new Date()): Promise<{ r
             ? { script: windowsResetScript(windowsServicePaths(id), aside), setAside: join(windowsServicePaths(id).vaultDir, aside) }
             : { script: linuxResetScript(linuxServicePaths(id), aside), setAside: `${linuxServicePaths(id).vaultDir}/${aside}` };
     log("Asking for an administrator's yes to set the vault aside and start Passwords over…");
-    await runAsAdministrator(elevatedScriptCommand(plan.script), "Starting Passwords over");
+    await elevatedOrRefused(elevatedScriptCommand(plan.script), "Starting Passwords over");
     const state = await awaitService((await startKeyring(log)).state);
     if (state === undefined) {
         throw new KeyringCliError("no-keyring", SERVICE_SILENT);

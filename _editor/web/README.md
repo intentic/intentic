@@ -262,7 +262,11 @@ flowchart LR
   the open socket (`{type: "token"}`). The screen is that same media path, its peer gathering with the STUN servers the
   sandbox names so it goes direct across NATs, drawn full page on the Devices view (`?screen=`, keys sent as physical
   keys, Keyboard Lock in full screen); a terminal is a tab of the terminal panel dialled through its own door
-  (`models/terminal/terminalDoor.ts`), kept per sandbox in this browser so a reload reattaches it.
+  (`models/terminal/terminalDoor.ts`), kept per sandbox in this browser so a reload reattaches it. On a Windows computer
+  the Remote access section also says whether its lock screen and administrator prompts can be reached
+  (`remoteService.ts`): set up, set up at an older version, or not, with the one change a maintainer can make, which
+  waits on the administrator's yes at that computer and is kept in the operations ledger, so leaving the page does not
+  lose it.
 - **Unsent words are the sandbox's.** What a composer holds (words, finished files, the model picked) is the
   conversation's draft, kept by the sandbox per person (`agents.drafts`), so every window and device opens the same
   composer and the board shows a draft card for words typed on another device. This browser keeps one optimistic copy

@@ -20,6 +20,9 @@ pub struct Viewer {
     /// Age of its oldest unacknowledged frame.
     pub backlog_age_ms: f64,
     pub rtt_ms: f64,
+    /// What its pictures' video track's congestion control estimates the link carries (kbit/s), for a viewer whose
+    /// pictures ride a track: it sends no acks, and the estimate is the bitrate's measure instead. None otherwise.
+    pub estimate_kbps: Option<f64>,
 }
 
 /// The viewer the bitrate follows: the latest to send input, else the one delivering the most (fewest queued ms on a
@@ -80,10 +83,21 @@ pub struct RateCtl {
     ceiling_at: Instant,
     /// The viewer the estimate belongs to; another one starts over from where the bitrate stands.
     following: Option<u64>,
+    /// What the encoder put out lately (kbit/s), and the cumulative bytes and time it was last read at.
+    encoded_kbps: Option<f64>,
+    encoded_at: Option<(u64, Instant)>,
+    /// How much of a track's share the encoder is asked for, so that what it puts out is the share: an encoder that
+    /// overshoots its target (openh264 at its QP ceiling on content too busy for the cap) is asked for less.
+    track_scale: f64,
 }
 
 /// Starting point for a new session's bitrate cap (kbit/s).
 const START_KBPS: f64 = 8000.0;
+
+/// The share of a track's congestion estimate the encoder is given (rtc's): the rest is room for retransmissions.
+use crate::rtc::TRACK_SHARE;
+/// Past this far ahead of its share (ms), the encoder is given less until what it sent drains.
+const TRACK_QUEUE_MS: f64 = 60.0;
 
 impl RateCtl {
     pub fn new(max: f64, min: f64) -> Self {
@@ -99,7 +113,25 @@ impl RateCtl {
             ceiling: f64::MAX,
             ceiling_at: past,
             following: None,
+            encoded_kbps: None,
+            encoded_at: None,
+            track_scale: 1.0,
         }
+    }
+
+    /// The encoder's cumulative output, in bytes, as of `now`: what a track's bitrate checks its target against.
+    pub fn note_encoded(&mut self, bytes: u64, now: Instant) {
+        let Some((b0, t0)) = self.encoded_at else {
+            self.encoded_at = Some((bytes, now));
+            return;
+        };
+        let secs = now.saturating_duration_since(t0).as_secs_f64();
+        if secs < 0.25 {
+            return;
+        }
+        let kbps = bytes.saturating_sub(b0) as f64 * 8.0 / 1000.0 / secs;
+        self.encoded_kbps = Some(self.encoded_kbps.map_or(kbps, |k| k * 0.5 + kbps * 0.5));
+        self.encoded_at = Some((bytes, now));
     }
 
     /// Moves the ceiling: the local one while a viewer on this computer drives, the network's otherwise. `open`: the
@@ -129,6 +161,28 @@ impl RateCtl {
             self.following = Some(v.id);
             self.ceiling = f64::MAX;
             self.slow_start = true;
+        }
+        // A track's congestion control (delay and loss over transport-wide feedback, with its own probing) already says
+        // what the link carries: the bitrate follows it, and what waits for the link is drained.
+        if let Some(estimate) = v.estimate_kbps {
+            let drain = if v.queue_ms > TRACK_QUEUE_MS {
+                0.7
+            } else {
+                1.0
+            };
+            let share = estimate * TRACK_SHARE * drain;
+            // Only output past the share loads the link: an encoder putting out less (content that needs less, or a
+            // target it undershoots) is left its share.
+            if let Some(out) = self.encoded_kbps.filter(|k| *k > 0.0) {
+                if out > share * 1.05 {
+                    self.track_scale = (self.track_scale * share / out).max(0.3);
+                } else if out < share * 0.95 {
+                    self.track_scale = (self.track_scale * 1.1).min(1.0);
+                }
+            }
+            self.target = (share * self.track_scale).clamp(self.min, self.max);
+            self.slow_start = false;
+            return;
         }
         let congested = v.queue_ms > 30.0 || v.backlog_age_ms > v.rtt_ms + 80.0;
         let clear = v.queue_ms <= 15.0;
@@ -212,6 +266,7 @@ mod tests {
             queue_ms,
             backlog_age_ms: 0.0,
             rtt_ms: 20.0,
+            estimate_kbps: None,
         }
     }
 
@@ -290,6 +345,45 @@ mod tests {
         // A remote driver brings the target down to its ceiling, and starts probing from there.
         rc.set_ceiling(30_000.0, false);
         assert_eq!(rc.target, 30_000.0);
+    }
+
+    #[test]
+    fn a_track_steers_by_its_estimate_and_drains_its_queue() {
+        let mut rc = RateCtl::new(30_000.0, 500.0);
+        let mut track = viewer(1, 10, 0.0, 0.0);
+        track.estimate_kbps = Some(4_000.0);
+        rc.rewind();
+        rc.update(Some(&track));
+        assert_eq!(rc.target, 4_000.0 * TRACK_SHARE);
+        // Waiting in front of the link: less until it drains.
+        track.queue_ms = TRACK_QUEUE_MS + 1.0;
+        rc.rewind();
+        rc.update(Some(&track));
+        assert_eq!(rc.target, 4_000.0 * TRACK_SHARE * 0.7);
+        // An encoder that puts out more than it is asked is asked for less, until it puts out its share.
+        track.queue_ms = 0.0;
+        let t0 = Instant::now();
+        rc.note_encoded(0, t0);
+        rc.note_encoded(1_000_000, t0 + Duration::from_secs(1));
+        rc.rewind();
+        rc.update(Some(&track));
+        assert!(rc.target < 4_000.0 * TRACK_SHARE, "{}", rc.target);
+        // One that puts out less than its share (content that needs less) is given all of it back.
+        for _ in 0..20 {
+            rc.encoded_kbps = Some(1_000.0);
+            rc.rewind();
+            rc.update(Some(&track));
+        }
+        assert_eq!(rc.target, 4_000.0 * TRACK_SHARE);
+        // Within the bounds whatever the estimate.
+        track.estimate_kbps = Some(1e9);
+        rc.rewind();
+        rc.update(Some(&track));
+        assert_eq!(rc.target, 30_000.0);
+        track.estimate_kbps = Some(10.0);
+        rc.rewind();
+        rc.update(Some(&track));
+        assert_eq!(rc.target, 500.0);
     }
 
     #[test]

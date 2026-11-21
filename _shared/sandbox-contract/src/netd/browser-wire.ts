@@ -85,12 +85,14 @@ export const MEDIA_LOSSLESS_QUERY = "lossless";
 
 // The DataChannels a viewer opens on a peer connection straight to castd (browser-wire's RTC_CHANNELS), each with the
 // reliability it must be opened with: `media` (castd's JSON and video, in order, every one), `audio` (Opus packets, none
-// retransmitted, in any order) and `input` (everything the viewer would send on the socket, in order, every one). The
-// Rust constant's comment holds the reasons.
+// retransmitted, in any order), `input` (everything the viewer would send on the socket, in order, every one) and
+// `pointer` (where the pointer is, none retransmitted, in any order: only the newest counts). The Rust constant's
+// comment holds the reasons.
 export const RTC_CHANNELS = {
     media: { ordered: true, maxRetransmits: null },
     audio: { ordered: false, maxRetransmits: 0 },
     input: { ordered: true, maxRetransmits: null },
+    pointer: { ordered: false, maxRetransmits: 0 },
 } as const;
 
 export type RtcChannelLabel = keyof typeof RTC_CHANNELS;

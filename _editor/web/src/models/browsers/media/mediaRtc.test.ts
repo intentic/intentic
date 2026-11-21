@@ -4,7 +4,8 @@
 // own word), each time without the picture waiting on it.
 import type { BrowserMediaClientMessage } from "@intentic/sandbox-contract/browser-wire";
 import { MEDIA_HEADER_LEN, RTC_MESSAGE_MAX } from "@intentic/sandbox-contract/browser-wire";
-import { type ChannelLike, DISCONNECTED_MS, GATHER_WITHIN_MS, mediaRtc, OPEN_WITHIN_MS, type PeerLike } from "./mediaRtc";
+import { unstubbed } from "@intentic/testing";
+import { type ChannelLike, DISCONNECTED_MS, GATHER_WITHIN_MS, mediaRtc, type MediaRtcOptions, OPEN_WITHIN_MS, type PeerLike, type TransceiverLike } from "./mediaRtc";
 
 class FakeChannel implements ChannelLike {
     binaryType: BinaryType = `blob`;
@@ -79,19 +80,38 @@ class FakePeer implements PeerLike {
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-const harness = (wanted = true) => {
-    const peers: FakePeer[] = [];
+// A peer that takes a video section, as a browser's does: the transceiver it made, the codecs it was asked for, and the
+// track it receives into.
+class TransceivingPeer extends FakePeer {
+    readonly transceivers: { readonly kind: string; readonly init: RTCRtpTransceiverInit; codecs: RTCRtpCodec[]; receiver: TransceiverLike[`receiver`] }[] = [];
+    addTransceiver(kind: `video`, init: RTCRtpTransceiverInit): TransceiverLike {
+        const codecs: RTCRtpCodec[] = [];
+        const receiver: TransceiverLike[`receiver`] = { track: unstubbed<MediaStreamTrack>(`track`, { kind }), jitterBufferTarget: null };
+        const made = { kind, init, codecs, receiver };
+        this.transceivers.push(made);
+        return {
+            setCodecPreferences: (asked) => (made.codecs = asked),
+            receiver: made.receiver,
+        };
+    }
+}
+
+const harness = (wanted = true, extra: Partial<Pick<MediaRtcOptions, `track` | `codecs`>> = {}) => {
+    const peers: TransceivingPeer[] = [];
     const signalled: BrowserMediaClientMessage[] = [];
     const arrived: (string | ArrayBuffer)[] = [];
     const carrying: boolean[] = [];
+    const tracks: (MediaStreamTrack | undefined)[] = [];
     const timers: { run: () => void; ms: number; cancelled: boolean }[] = [];
     const rtc = mediaRtc({
+        ...extra,
         signal: (message) => signalled.push(message),
         arrived: (data) => arrived.push(data),
         carrying: (on) => carrying.push(on),
         wanted: () => wanted,
+        onTrack: (track) => tracks.push(track),
         peer: () => {
-            const peer = new FakePeer();
+            const peer = new TransceivingPeer();
             peers.push(peer);
             return peer;
         },
@@ -118,7 +138,7 @@ const harness = (wanted = true) => {
         peer.channel(`input`).open();
         return peer;
     };
-    return { rtc, peers, signalled, arrived, carrying, timers, fire, open };
+    return { rtc, peers, signalled, arrived, carrying, tracks, timers, fire, open };
 };
 
 it("offers a peer only where castd takes one and the socket is not already on the loopback shortcut", async () => {
@@ -131,7 +151,7 @@ it("offers a peer only where castd takes one and the socket is not already on th
     expect(loopback.signalled).toEqual([]);
 });
 
-it("opens the three channels with browser-wire's reliability and sends its offer on the socket", async () => {
+it("opens the four channels with browser-wire's reliability and sends its offer on the socket", async () => {
     const { rtc, peers, signalled } = harness();
     rtc.hello(true);
     // A second hello while it connects (castd's own, a resize) makes no second peer.
@@ -142,7 +162,10 @@ it("opens the three channels with browser-wire's reliability and sends its offer
         [`media`, { ordered: true }, `arraybuffer`],
         [`audio`, { ordered: false, maxRetransmits: 0 }, `arraybuffer`],
         [`input`, { ordered: true }, `arraybuffer`],
+        [`pointer`, { ordered: false, maxRetransmits: 0 }, `arraybuffer`],
     ]);
+    // A view that shows no `<video>` asks for no track: the pictures stay on `media`.
+    expect(peers[0]!.transceivers).toEqual([]);
     expect(signalled).toEqual([{ type: `rtcOffer`, sdp: `v=0 offer` }]);
     rtc.answer(`v=0 answer`);
     await settle();
@@ -235,10 +258,69 @@ it("lets go without telling castd what castd said itself, and when a channel the
     const second = harness();
     const other = await second.open();
     other.channel(`audio`).fire(`close`);
+    other.channel(`pointer`).fire(`close`);
     expect(second.rtc.state()).toBe(`open`);
     other.channel(`input`).fire(`close`);
     expect(second.rtc.state()).toBe(`off`);
     expect(second.signalled.at(-1)).toEqual({ type: `rtcClose` });
+});
+
+const h264 = (profile: string, mode: number): RTCRtpCodec => ({
+    mimeType: `video/H264`,
+    clockRate: 90_000,
+    sdpFmtpLine: `level-asymmetry-allowed=1;packetization-mode=${mode};profile-level-id=${profile}`,
+});
+const RTX: RTCRtpCodec = { mimeType: `video/rtx`, clockRate: 90_000 };
+const VP8: RTCRtpCodec = { mimeType: `video/VP8`, clockRate: 90_000 };
+
+it("asks for the pictures on a video track in castd's codecs where the view shows one, and hands on its track", async () => {
+    const baseline = h264(`42e01f`, 1);
+    const high = h264(`640c1f`, 1);
+    const codecs = [VP8, h264(`42e01f`, 0), baseline, RTX, high];
+    const { rtc, peers, tracks, signalled } = harness(true, { track: () => true, codecs: () => codecs });
+    rtc.hello(true);
+    await settle();
+    const [made] = peers[0]!.transceivers;
+    expect([made?.kind, made?.init]).toEqual([`video`, { direction: `recvonly` }]);
+    // H.264 in packetization mode 1, every profile this browser receives, then the retransmission format.
+    expect(made?.codecs).toEqual([baseline, high, RTX]);
+    // Its jitter buffer holds nothing back; its track is handed on before the offer goes.
+    expect(made?.receiver.jitterBufferTarget).toBe(0);
+    expect(tracks).toEqual([made?.receiver.track]);
+    expect(signalled).toEqual([{ type: `rtcOffer`, sdp: `v=0 offer` }]);
+    // The peer going takes its track with it.
+    rtc.closed(`castd let go`);
+    expect(tracks.at(-1)).toBeUndefined();
+});
+
+it("asks for no track where this browser receives no H.264 or cannot make a video section", async () => {
+    const noH264 = harness(true, { track: () => true, codecs: () => [VP8, RTX] });
+    noH264.rtc.hello(true);
+    await settle();
+    expect([noH264.peers[0]!.transceivers, noH264.tracks]).toEqual([[], []]);
+    const plain = mediaRtc({
+        signal: () => undefined,
+        arrived: () => undefined,
+        carrying: () => undefined,
+        wanted: () => true,
+        track: () => true,
+        codecs: () => [h264(`42e01f`, 1)],
+        onTrack: () => {
+            throw new Error(`no track without a video section`);
+        },
+        peer: () => new FakePeer(),
+    });
+    plain.hello(true);
+    await settle();
+    expect(plain.state()).toBe(`connecting`);
+});
+
+it("hands on castd's pointer as text, from its own channel", async () => {
+    const { arrived, open } = harness();
+    const peer = await open();
+    peer.channel(`pointer`).fire(`message`, `{"type":"pointer","x":1,"y":2}`);
+    peer.channel(`pointer`).fire(`message`, new ArrayBuffer(4));
+    expect(arrived).toEqual([`{"type":"pointer","x":1,"y":2}`]);
 });
 
 // A peer that gathers its candidates as a browser's does: the SDP grows a candidate line once STUN has answered.

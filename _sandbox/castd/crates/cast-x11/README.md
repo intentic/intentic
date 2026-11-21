@@ -9,6 +9,8 @@ The X11 platform for cast-core: XDamage and MIT-SHM capture, RandR resizing, XTE
 - [src/input.rs](src/input.rs) — XTEST keys, text, buttons and scrolling, per viewer: cast-core's input sink.
 - [src/keys.rs](src/keys.rs) — DOM key names to X keysyms.
 - [src/desktop.rs](src/desktop.rs) — the cursor's shape and the two-way clipboard.
+- [src/connect.rs](src/connect.rs) — connecting to a display, with a cookie file a daemon found (`set_authority`) rather
+  than `$XAUTHORITY`.
 
 ## How it reads the screen
 
@@ -33,7 +35,8 @@ wrong.
   whatever RandR changes they make.
 - Keys are typed as the characters the viewer's own layout produced: a keysym the display's keymap lacks goes onto a
   spare keycode, remapped on the fly and noted in a file so a crash's remaps are undone on the next start.
-- The cursor is hidden on the display (XFixes) and sent to viewers instead, who draw it themselves.
+- The cursor is hidden on the display (XFixes) and sent to viewers instead, who draw it themselves. On a person's own
+  session (`desktop::spawn_with(…, false)`) it stays drawn: the server leaves it out of GetImage anyway.
 
 The code is voxl's X11 backend (MIT, v0.4.0 at 21f194f; castd's [LICENSE](../../LICENSE)), with castd's additions
 listed in [castd's README](../../README.md).

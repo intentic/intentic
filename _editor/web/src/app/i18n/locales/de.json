@@ -11885,7 +11885,20 @@
             "switchTerminalNote": "Eine Shell auf diesem Computer, die als du läuft, in jeder seiner Umgebungen.",
             "switchFailed": "Der Schalter konnte nicht geändert werden",
             "on": "An",
-            "off": "Aus"
+            "off": "Aus",
+            "serviceTitle": "Sperrbildschirm und Administrator-Abfragen",
+            "serviceNote": "Lässt Personen den Anmelde- und Sperrbildschirm, Strg+Alt+Entf und Administrator-Abfragen (UAC) sehen und bedienen. Braucht einmal die Zustimmung eines Administrators auf diesem Computer.",
+            "serviceNotSetUp": "Nicht eingerichtet",
+            "serviceSetUp": "Eingerichtet",
+            "serviceOlder": "Eingerichtet, ältere Version",
+            "serviceInstall": "Einrichten",
+            "serviceUpdate": "Aktualisieren",
+            "serviceRemove": "Entfernen",
+            "serviceWaiting": "Warte auf die Zustimmung eines Administrators auf {name}…",
+            "serviceDeclined": "Auf {name} hat kein Administrator zugestimmt, daher hat sich nichts geändert.",
+            "serviceOlderAgent": "Aktualisiere den Agenten auf {name}, um das einzurichten.",
+            "serviceFailed": "Der Sperrbildschirm-Dienst konnte nicht geändert werden",
+            "serviceUnsupported": "Auf diesem Computer nicht verfügbar."
         },
         "deviceScreen": {
             "direct": "Direkt",

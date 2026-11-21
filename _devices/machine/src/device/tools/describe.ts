@@ -9,6 +9,8 @@ import {
     DEVICE_FEATURE_PROJECT_DELIVERY,
     DEVICE_FEATURE_REACH_NETWORK,
     DEVICE_FEATURE_REMOTE,
+    DEVICE_FEATURE_REMOTE_ICE,
+    DEVICE_FEATURE_REMOTE_SERVICE,
     DEVICE_FEATURE_STACKS,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
@@ -117,7 +119,8 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         // a host on this machine's network, a file copied to or from a path, the compose stack tools) always, since this
         // build answers them: a machine without Docker answers the stack tools with Docker's own error. The keyring only
         // while one is installed here and answers (keyring/feature.ts); people's remote access only where an
-        // intentic-remoted can be had (remote/remoted-binary.ts).
+        // intentic-remoted can be had (remote/remoted-binary.ts), and its lock-screen service on Windows alone
+        // (remote/remoted-service.ts).
         features: [
             ...features,
             DEVICE_FEATURE_LOOPBACK_CATCH,
@@ -127,7 +130,8 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
             DEVICE_FEATURE_FILE_COPY,
             DEVICE_FEATURE_STACKS,
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
-            ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE] : []),
+            ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
+            ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE] : []),
         ],
     };
     // Why that list is short, when the ic under it could not be brought up to date.

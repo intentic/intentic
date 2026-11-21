@@ -1,0 +1,263 @@
+<!doctype html>
+<!-- wanbench's viewer: the editor's media path cut to what moves pictures (the media socket as signalling, a peer with
+     browser-wire's channels, and either WebCodecs on the `media` channel acked per frame as decodeCore does, or the
+     browser's own WebRTC video on a track), measuring every picture it shows by the stamp painted into its top row. -->
+<html>
+<head><meta charset="utf-8"><title>wanbench</title>
+<style>html,body{margin:0;background:#111}canvas,video{display:block}</style></head>
+<body>
+<canvas id="picture" width="1280" height="720"></canvas>
+<video id="video" muted playsinline autoplay width="1280" height="720"></video>
+<script>
+"use strict";
+const STAMP_BITS = 56, BLOCK = 16, HEADER = 16, FLAG_KEY = 1;
+const log = (...a) => console.log(`[wanbench]`, ...a);
+const wall = () => performance.timeOrigin + performance.now();
+const at = (t) => performance.timeOrigin + t;
+
+const state = {
+  config: undefined, ws: undefined, pc: undefined, channels: {}, carrier: `socket`, hello: undefined,
+  decoder: undefined, awaitingKey: true, sent: new Map(), stamp: 0, lastKeyAsk: 0,
+  measuring: false, measureStart: 0, frames: [], dc: { keyframes: 0, bytes: 0, decodeErrors: 0, keyAsks: 0, video: 0 },
+  pending: undefined, events: [], statsStart: undefined, statsSamples: [], peerOpenAt: undefined, firstPicture: undefined,
+};
+const event = (what, extra = {}) => state.events.push({ t: wall(), what, ...extra });
+const diag = { stamps: 0, badStamps: 0, outputs: 0, rafs: 0, lastBad: undefined };
+
+// The stamp off a picture: 56 blocks of 16 px, black for 1; undefined when the checksum fails.
+const reader = document.createElement(`canvas`);
+reader.width = STAMP_BITS * BLOCK; reader.height = BLOCK;
+const rctx = reader.getContext(`2d`, { willReadFrequently: true });
+const readStamp = (source) => {
+  rctx.drawImage(source, 0, 0, STAMP_BITS * BLOCK, BLOCK, 0, 0, STAMP_BITS * BLOCK, BLOCK);
+  const px = rctx.getImageData(0, 0, STAMP_BITS * BLOCK, BLOCK).data;
+  const bytes = new Uint8Array(7);
+  for (let bit = 0; bit < STAMP_BITS; bit++) {
+    const i = ((BLOCK / 2) * STAMP_BITS * BLOCK + bit * BLOCK + BLOCK / 2) * 4;
+    const luma = (px[i] + px[i + 1] + px[i + 2]) / 3;
+    if (luma < 128) bytes[bit >> 3] |= 0x80 >> (bit & 7);
+  }
+  if ((bytes[0] ^ bytes[1] ^ bytes[2] ^ bytes[3] ^ bytes[4] ^ bytes[5]) !== bytes[6]) { diag.badStamps++; diag.lastBad ??= Array.from(bytes); return undefined; }
+  diag.stamps++;
+  const view = new DataView(bytes.buffer);
+  return { ms: view.getUint32(0), counter: view.getUint16(4) };
+};
+// Milliseconds from a stamp (Unix ms mod 2^32) to a wall time.
+const since = (stampMs, wallMs) => {
+  let d = (Math.floor(wallMs) % 4294967296) - stampMs + (wallMs % 1);
+  if (d < -2147483648) d += 4294967296;
+  if (d > 2147483648) d -= 4294967296;
+  return d;
+};
+
+const record = (stamp, glass, extra) => {
+  if (!state.measuring || stamp === undefined) return;
+  state.frames.push([stamp.counter, Math.round(since(stamp.ms, glass) * 100) / 100, Math.round((glass - state.measureStart) * 10) / 10, ...(extra ?? [])]);
+};
+
+const send = (message) => {
+  const text = JSON.stringify(message);
+  const input = state.channels.input;
+  if (state.carrier === `peer` && input?.readyState === `open` && !message.type.startsWith(`rtc`)) input.send(text);
+  else if (state.ws?.readyState === 1) state.ws.send(text);
+};
+
+// --- WebCodecs on the media channel (today's path) ---
+const canvas = document.getElementById(`picture`);
+const ctx = canvas.getContext(`2d`);
+const resetDecoder = () => {
+  try { state.decoder?.close(); } catch {}
+  state.decoder = undefined; state.awaitingKey = true; state.sent.clear();
+};
+const askKey = () => {
+  if (performance.now() - state.lastKeyAsk < 500) return;
+  state.lastKeyAsk = performance.now(); state.dc.keyAsks++; send({ type: `keyframe` });
+};
+const buildDecoder = () => {
+  const decoder = new VideoDecoder({
+    output: (frame) => {
+      diag.outputs++;
+      const sent = state.sent.get(frame.timestamp); state.sent.delete(frame.timestamp);
+      if (decoder !== state.decoder) { frame.close(); return; }
+      if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+        canvas.width = frame.displayWidth; canvas.height = frame.displayHeight;
+      }
+      ctx.drawImage(frame, 0, 0);
+      const stamp = readStamp(frame);
+      frame.close();
+      state.firstPicture ??= wall();
+      // Shown in the next rendering update, unless a later frame is drawn over it first.
+      state.pending = stamp;
+      if (sent !== undefined) send({ type: `ack`, id: sent.id, decodeMs: performance.now() - sent.at });
+    },
+    error: (e) => { state.dc.decodeErrors++; event(`decode-error`, { message: String(e) }); resetDecoder(); askKey(); },
+  });
+  decoder.configure({ codec: state.hello.codec, optimizeForLatency: true });
+  state.decoder = decoder;
+};
+const video = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] !== 1) return;
+  const view = new DataView(buffer);
+  const id = view.getUint32(2), key = (bytes[1] & FLAG_KEY) !== 0;
+  state.dc.video++; state.dc.bytes += bytes.byteLength;
+  if (key) state.dc.keyframes++;
+  if (key && state.decoder?.state !== `configured`) buildDecoder();
+  if ((state.awaitingKey && !key) || state.decoder?.state !== `configured`) { send({ type: `ack`, id }); return; }
+  state.awaitingKey = false;
+  state.stamp += 1;
+  state.sent.set(state.stamp, { id, at: performance.now() });
+  try {
+    state.decoder.decode(new EncodedVideoChunk({ type: key ? `key` : `delta`, timestamp: state.stamp, data: bytes.subarray(HEADER) }));
+  } catch (e) { send({ type: `ack`, id }); resetDecoder(); askKey(); }
+};
+const presentLoop = (t) => {
+  diag.rafs++;
+  if (state.pending !== undefined && state.config.mode === `dc`) { record(state.pending, at(t)); state.pending = undefined; }
+  requestAnimationFrame(presentLoop);
+};
+
+// --- chunks on `media` (castd's RTC_MESSAGE_MAX) ---
+let joining;
+const join = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.byteLength < HEADER) return undefined;
+  const index = bytes[14], count = bytes[15];
+  if (count <= 1) { joining = undefined; return buffer; }
+  const id = new DataView(buffer).getUint32(2);
+  if (joining === undefined || joining.id !== id || joining.next !== index) joining = index === 0 ? { id, count, next: 0, parts: [bytes.subarray(0, HEADER)], size: HEADER } : undefined;
+  if (joining === undefined) return undefined;
+  const part = bytes.subarray(HEADER); joining.parts.push(part); joining.size += part.byteLength; joining.next = index + 1;
+  if (joining.next < count) return undefined;
+  const whole = new Uint8Array(joining.size); let o = 0;
+  for (const p of joining.parts) { whole.set(p, o); o += p.byteLength; }
+  whole[14] = 0; whole[15] = 0; joining = undefined;
+  return whole.buffer;
+};
+
+// --- castd's JSON, from either carrier ---
+const text = (data, from) => {
+  const m = JSON.parse(data);
+  if (m.type === `hello`) {
+    state.hello = m; state.carrier = from; resetDecoder();
+    event(`hello`, { from, track: m.track === true });
+    if (from === `socket` && m.rtc && state.pc === undefined) void offer();
+    if (from === `peer`) { state.peerOpenAt = wall(); state.track = m.track === true; scheduleMeasure(); }
+  } else if (m.type === `rtcAnswer`) {
+    event(`answer`, { lines: m.sdp.split(`\r\n`).filter((l) => l.startsWith(`a=extmap`) || l.startsWith(`a=rtpmap`) || l.startsWith(`a=fmtp`) || l.startsWith(`a=rtcp-fb`) || l.startsWith(`m=`)) });
+    void state.pc.setRemoteDescription({ type: `answer`, sdp: m.sdp });
+  } else if (m.type === `rtcClosed`) {
+    event(`rtcClosed`, { reason: m.reason });
+  } else if (m.type === `pointer`) {
+    state.pointer = (state.pointer ?? 0) + 1;
+  }
+};
+
+const offer = async () => {
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  state.pc = pc;
+  for (const [label, init] of [[`media`, { ordered: true }], [`audio`, { ordered: false, maxRetransmits: 0 }], [`input`, { ordered: true }], [`pointer`, { ordered: false, maxRetransmits: 0 }]]) {
+    const channel = pc.createDataChannel(label, init);
+    channel.binaryType = `arraybuffer`;
+    state.channels[label] = channel;
+    channel.onmessage = ({ data }) => {
+      if (label === `media`) {
+        if (typeof data === `string`) text(data, `peer`);
+        else { const whole = join(data); if (whole !== undefined && state.carrier === `peer`) video(whole); }
+      } else if (label === `pointer` && typeof data === `string`) text(data, `peer`);
+    };
+  }
+  if (state.config.mode === `track`) {
+    const transceiver = pc.addTransceiver(`video`, { direction: `recvonly` });
+    const codecs = RTCRtpReceiver.getCapabilities(`video`).codecs;
+    const h264 = codecs.filter((c) => c.mimeType === `video/H264` && /packetization-mode=1/.test(c.sdpFmtpLine ?? ``));
+    if (h264.length > 0) transceiver.setCodecPreferences([...h264, ...codecs.filter((c) => c.mimeType === `video/rtx`)]);
+    pc.ontrack = ({ track, receiver }) => {
+      receiver.playoutDelayHint = 0;
+      if (`jitterBufferTarget` in receiver) receiver.jitterBufferTarget = 0;
+      state.receiver = receiver;
+      const el = document.getElementById(`video`);
+      el.srcObject = new MediaStream([track]);
+      void el.play().catch((e) => event(`play-failed`, { message: String(e) }));
+      const onFrame = (now, meta) => {
+        const stamp = readStamp(el);
+        state.firstPicture ??= wall();
+        const ms = (t) => (t === undefined ? null : Math.round((at(now) - at(t)) * 10) / 10);
+        record(stamp, at(now), [ms(meta.receiveTime), ms(meta.presentationTime), ms(meta.expectedDisplayTime), meta.presentedFrames, ms(meta.captureTime)]);
+        el.requestVideoFrameCallback(onFrame);
+      };
+      el.requestVideoFrameCallback(onFrame);
+    };
+  }
+  pc.onconnectionstatechange = () => event(`pc-${pc.connectionState}`);
+  await pc.setLocalDescription(await pc.createOffer());
+  send({ type: `rtcOffer`, sdp: pc.localDescription.sdp });
+  event(`offer-extmaps`, { lines: pc.localDescription.sdp.split(`\r\n`).filter((l) => l.startsWith(`a=extmap`) || l.startsWith(`a=rtcp-fb`) || l.startsWith(`m=`)) });
+};
+
+const inboundStats = async () => {
+  if (state.pc === undefined) return {};
+  const report = await state.pc.getStats();
+  const out = {};
+  report.forEach((s) => {
+    if (s.type === `inbound-rtp` && s.kind === `video`) {
+      Object.assign(out, {
+        framesDecoded: s.framesDecoded, framesDropped: s.framesDropped, keyFramesDecoded: s.keyFramesDecoded, freezeCount: s.freezeCount,
+        totalFreezesDuration: s.totalFreezesDuration, packetsLost: s.packetsLost, packetsReceived: s.packetsReceived, nackCount: s.nackCount,
+        pliCount: s.pliCount, firCount: s.firCount, bytesReceived: s.bytesReceived, jitterBufferDelay: s.jitterBufferDelay,
+        jitterBufferEmittedCount: s.jitterBufferEmittedCount, totalDecodeTime: s.totalDecodeTime, framesReceived: s.framesReceived,
+        decoderImplementation: s.decoderImplementation, framesPerSecond: s.framesPerSecond, totalAssemblyTime: s.totalAssemblyTime,
+        totalProcessingDelay: s.totalProcessingDelay, jitterBufferTargetDelay: s.jitterBufferTargetDelay, jitterBufferMinimumDelay: s.jitterBufferMinimumDelay,
+        framesAssembledFromMultiplePackets: s.framesAssembledFromMultiplePackets, retransmittedPacketsReceived: s.retransmittedPacketsReceived,
+      });
+    } else if (s.type === `candidate-pair` && s.nominated) {
+      out.rttMs = (s.currentRoundTripTime ?? 0) * 1000;
+    } else if (s.type === `data-channel` && s.label === `media`) {
+      out.mediaChannelBytes = s.bytesReceived;
+    }
+  });
+  return out;
+};
+
+let scheduled = false;
+const scheduleMeasure = () => {
+  if (scheduled) return;
+  scheduled = true;
+  setTimeout(async () => {
+    await fetch(`/start`, { method: `POST` });
+    state.measuring = true; state.measureStart = wall();
+    state.statsStart = await inboundStats();
+    const every = setInterval(async () => state.statsSamples.push({ t: wall() - state.measureStart, ...(await inboundStats()) }), 1000);
+    setTimeout(async () => {
+      state.measuring = false; clearInterval(every);
+      const statsEnd = await inboundStats();
+      const report = {
+        mode: state.config.mode, track: state.track === true, frames: state.frames, dc: state.dc, events: state.events,
+        statsStart: state.statsStart, statsEnd, statsSamples: state.statsSamples, pointerMessages: state.pointer ?? 0,
+        seconds: (wall() - state.measureStart) / 1000, userAgent: navigator.userAgent, diag,
+      };
+      await fetch(`/result`, { method: `POST`, body: JSON.stringify(report) });
+      log(`done`, state.frames.length, `frames`);
+      document.title = `done`;
+    }, state.config.seconds * 1000);
+  }, state.config.warmup * 1000);
+};
+
+const main = async () => {
+  state.config = await (await fetch(`/config`)).json();
+  requestAnimationFrame(presentLoop);
+  const ws = new WebSocket(`ws://${location.host}/system/browser-media/${state.config.session}?token=${encodeURIComponent(state.config.token)}`);
+  ws.binaryType = `arraybuffer`;
+  state.ws = ws;
+  ws.onopen = () => { send({ type: `resize`, width: 1280, height: 720, scale: 1 }); send({ type: `resume` }); };
+  ws.onmessage = ({ data }) => {
+    if (typeof data === `string`) text(data, `socket`);
+    else if (state.carrier === `socket`) video(data);
+  };
+  ws.onclose = (e) => event(`ws-close`, { code: e.code });
+  setTimeout(() => { if (!scheduled) { event(`no-peer`); scheduleMeasure(); } }, 20000);
+};
+main();
+</script>
+</body>
+</html>

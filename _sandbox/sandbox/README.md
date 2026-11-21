@@ -284,6 +284,11 @@ flowchart LR
   (`remote-environments.ts`): a WSL distro with an agent of its own opens native Linux shells through its own Linux
   remoted and shows no screen, the screen being the Windows side's; remoted's own `native` reads as the PC's name for the
   environment (`wsl:<distro>` there), and the Windows side leaves out and refuses a distro that has its own connection.
+  A Windows computer's lock screen and administrator prompts need remoted's own Windows service there:
+  `remote.service` reads whether it is set up and current, for any member (it shows nothing of the screen), and
+  `remote.changeService` sets it up, updates or removes it for Full access alone, through the agent's `remoteService`
+  on an agent advertising `remote-service`; the call waits on the UAC prompt the person at the computer answers, and
+  each change is audited (`device.remote.service.*`) however it ended.
   `remote-terminal-netd.integration.test.ts` runs a terminal end to end on the real netd and remoted.
 - A device or desktop sync joins with a command that carries a short code, never a token
   (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends

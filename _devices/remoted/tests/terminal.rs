@@ -492,7 +492,9 @@ async fn a_terminal_is_created_attached_typed_in_resized_shared_and_refused() {
         json!({ "view": false, "control": false, "terminal": true })
     );
     assert_eq!(info["environments"][0], "native");
-    assert_eq!(info["monitors"], json!([]));
+    // The screens are this computer's (a virtual desktop wherever Xvfb is installed), and `screen` says how they are reached.
+    assert!(info["monitors"].is_array());
+    assert!(info["screen"]["mode"].is_string(), "{info}");
 
     let (status, created) = uplink
         .call(

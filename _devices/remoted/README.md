@@ -30,18 +30,21 @@ a distro with its own agent would have had two remoteds offering its shell.
 
 `intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]`; `intentic-remoted version`
 prints the bare version (`0.0.0` from source, the release's when `build-remoted.sh --version` stamped it through
-`INTENTIC_REMOTED_VERSION`).
+`INTENTIC_REMOTED_VERSION`). On Windows, `intentic-remoted service status|install|uninstall` manages the lock screen
+and admin prompts service and `desktop-helper` is that service's helper (below, "The lock screen and admin prompts").
 
 - **`--config`** is JSON the agent writes 0600 by rename, read again within 500 ms of a change
   ([`src/config.rs`](src/config.rs)), so a switch reaches remoted inside the 2 s the agent promises without a restart:
   `{ paused, notBefore, uplinks: [{ id, url, device, uplinkToken, mediaKey, allow: {view, control, terminal},
-  generation }] }`. `url` is the sandbox's daemon base (loopback when it runs on this computer); `mediaKey` is base64url
-  and tokens are checked under its decoded bytes. A file that does not parse leaves the last good one standing, said
+  generation, iceServers? }] }`. `url` is the sandbox's daemon base (loopback when it runs on this computer); `mediaKey`
+  is base64url and tokens are checked under its decoded bytes. `iceServers` are the sandbox's `remoteIceServers` URLs
+  (`stun:host:port`), written by an agent that advertises `remote-ice`; absent, screens offer host candidates only. A file that does not parse leaves the last good one standing, said
   once. With `--sandbox-url` and `--device` the file holds one uplink's fields at its top level instead (by hand, tests).
 - **`--parent-stdin`**: remoted ends when stdin ends. The agent holds the pipe, so remoted never outlives it, on Windows
   included, where a killed parent takes no child with it. Its terminals end with it.
 - **What changes do.** An uplink's terminal switch turned off ends that uplink's terminals (each viewer told why) and
-  refuses new ones; an uplink removed is closed and its terminals ended; `notBefore` moving drops every person's socket
+  refuses new ones; its view switch turned off closes its screens' sockets, its control switch turned off leaves them
+  watching; an uplink removed is closed and its terminals ended; `notBefore` moving drops every person's socket
   and refuses every token minted before it (`intentic-machine remote end`); `paused` (the person's pause hotkey) drops
   everyone's typing. What stays allowed keeps running.
 - **Status**: one JSON line on stdout at start and on every change ([`src/status.rs`](src/status.rs)):
@@ -72,14 +75,15 @@ Mozilla roots and this computer's own store.
 | Route | Answer |
 |---|---|
 | `GET /health` | `{ok, version}` |
-| `GET /info` | `{version, monitors, environments, encoders, allow, paused}`; `environments` is `native`, then `wsl:<distro>` for each distro on a Windows PC (Docker Desktop's own left out) |
+| `GET /info` | `{version, monitors, environments, encoders, screen, allow, paused}`; `environments` is `native`, then `wsl:<distro>` for each distro on a Windows PC (Docker Desktop's own left out); `screen` says how this computer's screens are reached (below) |
 | `POST /terminals` | `{session, environment?, shell?, cwd?, cols?, rows?}` → 201 `{session, title, environment, createdAt, viewers}`; 400 (a name not `[A-Za-z0-9_-]{1,64}`, an unknown environment or shell), 403 (terminal switch off), 409 (name taken), 429 (16 per uplink, 64 in all), 500 (the program did not start) |
 | `GET /terminals` | the uplink's terminals, oldest first |
 | `DELETE /terminals/<session>` | `{ok: true}`, or 404 |
 | `POST /viewers/drop[?read_write=1]` | castd's drop for this uplink: closes its viewers with 4001 (only those that can type) and refuses tokens minted before now; `{dropped: n}` |
-| `GET /stats` | `{uptimeS, terminals, viewers, uplinks}` |
+| `GET /stats` | `{uptimeS, terminals, viewers, screens: [{monitor, viewers, encoder, capture?}], uplinks}`; `encoder` is what the screen's current picture is encoded with (`nvenc`, `mf`, `openh264`, …); on Windows `capture` is `{via, blocked?, reason?, error?, since}`: duplication (`dxgi`), the service's helper (`helper`), `gdi`, or a `placeholder`, and why |
+| `GET /screenshot/<session>` | a running screen's picture as its viewers get it (a placeholder included), PNG; 403 viewing switched off, 404 not running (a screenshot opens no screen) |
 | `GET /terminal/<session>?token=…` | a viewer's terminal socket (below); 401 without a token, 403 refused |
-| `GET /media/<session>?token=…` | 501 until phase 2 |
+| `GET /media/<session>?token=…` | a viewer's media socket on `screen-<monitor id>` (below); 401 without a token, 403 refused or viewing switched off, 404 no such screen |
 
 The daemon's calls carry no token: the uplink is the sandbox's alone, and netd puts only viewer paths
 (`/terminal/…`, `/media/…`) down it for a browser.
@@ -153,14 +157,126 @@ command's output arrives about 1 ms after its Enter. An uplink is up about 0.5 s
 remoted's half-second re-read of the file; a remoted started fresh reads it at once (69 / 53 ms above). The test also
 runs in CI's netd-check job, which builds both binaries.
 
-## Phase 2: the screen
+## Screens
 
-[`src/media.rs`](src/media.rs) is the seam, and nothing else needs to change for it: `monitors()` (listed by `/info`
-and the status line, and what `screen-<id>` sessions open), `encoders()`, and the `/media/<session>` route in `http.rs`,
-which answers 501 now. The route should check the token with `token::MEDIA_SUBJECT` exactly as `terminal` does, require
-`allow.view`, and gate input on `allow.control` and `paused` the way `Daemon::terminal_input_allowed` gates typing; a
-person's socket registers with `Daemon::viewer(…, PersonKind::View | Control, …)` so the status, the notice and the
-drops cover it. cast-core is not a dependency yet.
+([`src/media/`](src/media)) A person's view of one of this computer's monitors is browser-wire's media socket on
+`/media/screen-<monitor id>`, message for message what castd serves for a sandbox window, from the same engine:
+[cast-core](../../_sandbox/castd/crates/cast-core) does the capture loop, the shared encoder, rate control, paint-over,
+the per-viewer flow and the peer connections, and a platform ([`media/platform.rs`](src/media/platform.rs)) brings
+the monitors, the capture, the encoders and the input. Windows' is [`media/windows.rs`](src/media/windows.rs) on
+[cast-win](../../_sandbox/castd/crates/cast-win) (DXGI capture, NVENC and Media Foundation encoders, SendInput,
+WASAPI), whose README holds its measurements; Linux's is below.
+
+- **One pipeline per monitor**, shared by every viewer of every uplink: opened on the first viewer, stopped 10 s after
+  the last left (a reload rejoins it warm), and ended alone when its capture fails for good: its viewers are closed
+  with 1011 and the reason, the next viewer opens it again, and remoted, its terminals and its other screens go on.
+- **Who may do what**: the token's `s` is `media/<session>` under the uplink's key, as a terminal's; `allow.view` opens
+  the socket, `allow.control` and the person's pause gate input (a viewer without them is a watcher); the socket is a
+  person in the status line (`view` or `control`), and a drop or the view switch going off closes it with 4001.
+- **Peer connections**: one UDP port for every screen, full ICE (cast-core's `rtc`, `Ice::Full`), started on the first
+  viewer with the STUN servers the uplinks that allow viewing name (`iceServers`); with none named, host candidates
+  only. The socket carries everything when no direct path opens. `INTENTIC_REMOTED_NO_RTC` turns peers off.
+- **Windows' `/info`**: `screen` is `{mode: "dxgi", encoders, audio, session, secureDesktop, capture}`: `session` is
+  what Windows says now (`locked`, `inputDesktop` (null: a secure desktop this process may not open), `display`
+  `on`/`off`/`dimmed`, `console` and `session`, `connected`, `remote`, `idleMs`), `secureDesktop` is the service's
+  status (below) and whether this remoted reaches its helper (`connected`), `capture` each screen's status by monitor.
+- **Encoders**: NVENC where an NVIDIA driver passes castd's self-test (the driver is opened at run time, so a binary
+  built with the `nvenc` feature runs anywhere), else the software encoder: openh264 (BSD) in the default build, x264
+  (GPL) only behind the `x264` feature, for comparisons. The self-test runs once as remoted starts; `/info`'s
+  `screen.encoders` says why each one is or is not used, and `INTENTIC_REMOTED_ENCODER=software` leaves hardware out.
+
+### Linux
+
+([`src/media/linux/`](src/media/linux)) Looked at again every 3 s; `/info`'s `screen.mode` says which case applies:
+
+- **`x11`, a person's X11 session.** remoted is usually started without `DISPLAY` or `XAUTHORITY` (a systemd service,
+  the agent at boot), so it reads them from the session's own processes ([`session.rs`](src/media/linux/session.rs)):
+  those of its own user, or everyone's when it runs as root, the busiest session winning, GDM's and the home's cookie
+  file when they name none. Every monitor RandR 1.5 lists is a screen (`screen-DP-1`), the X screen cropped to it,
+  captured with MIT-SHM GetImage and XDamage, typed into with XTEST at the monitor's origin; the cookie is handed to
+  cast-x11 (`connect::set_authority`) rather than set in the environment under running threads. The person's pointer
+  stays drawn on their display, and the clipboard goes both ways.
+- **`wayland`, a Wayland session (GNOME, KDE).** Detected, and said in `screen.reason`; no monitor is listed. Xwayland's
+  root shows only X clients, so it is not captured, and the desktop portal (ScreenCast and RemoteDesktop over D-Bus,
+  the frames over PipeWire) is not in this build: libpipewire's headers were not to be had where it was written.
+- **`virtual`, no display at all** ([`desktop.rs`](src/media/linux/desktop.rs)). The first viewer starts an X
+  server (Xvfb `-shmem`, or Xorg with the dummy driver where Xvfb is absent) at 3840x2160, sized down to 1920x1080 and
+  then to the driving viewer's box through RandR, and on it the desktop session installed (Xfce first; GNOME and KDE
+  last, since they want OpenGL), else a window manager there is, as remoted's user, with a cookie of its own in
+  `$XDG_RUNTIME_DIR/intentic-remoted`. It is captured in place from Xvfb's framebuffer, exactly as castd captures the
+  sandbox's desktop. The desktop outlives its viewers (windows stay where they were) and ends with remoted, or when its
+  session exits; a session that exits at once is an error with its last words. What is missing is named per
+  distribution in `screen.missing` (`["xvfb", "xfce4"]` on Debian) and `screen.reason`; remoted installs nothing.
+
+(2026-11-20) The X server and the session are started from a thread kept for the desktop's life: `PR_SET_PDEATHSIG`,
+which ties them to remoted, fires when the forking *thread* ends, and tokio retires an idle blocking thread after 10 s,
+which killed the desktop under its viewer on z440.
+
+### Measured (Linux)
+
+`cargo test --release --test screen -- --ignored --nocapture measure`, the suite and a release remoted copied to the
+computer: a fake sandbox's uplink on loopback, one viewer acking every frame as soon as it arrives, a 1920x1080
+virtual desktop, 10 s of each motion. Latency is from capture to the frame's arrival at the viewer, encoding included.
+2026-11-20, z440 (Debian 13, Xeon E5-1620 v4, 4 cores at 3.5 GHz, no GPU driver), openh264:
+
+| | frames/s | kbit/s | capture to arrival, p50 / p95 | remoted CPU |
+|---|---|---|---|---|
+| a 400x300 box moving at 60 Hz (a window dragged) | 67 | 204–324 | 21 / 29 ms | 100% of a core |
+| the whole screen repainted at 30 Hz | 50 | 1,950 | 46 / 71 ms | 160% of a core |
+
+Frames per second count the paint-over passes that sharpen what stopped moving, hence more than the 60 Hz drawn. The
+desktop started (Xvfb and openbox) and the first frame arrived 0.9 s after the socket opened. z440 has neither Xvfb nor
+a desktop, which `/info` said (`missing: ["xvfb", "xfce4"]`); for the measurement a Debian 13 Xvfb, xkbcomp and
+openbox with the libraries z440 lacks were copied into a scratch directory and used through `PATH` (xkbcomp through an
+overlay in a private mount namespace, Xvfb looking for it in /usr/bin only). On rog's Arch WSL (an
+NVIDIA laptop GPU through WSL's driver) NVENC passed remoted's self-test in 2.5 s and a 2560x1600 screen opened on it;
+no throughput was measured there, since WSLg's rootless Xwayland reports no damage on its root window.
+
+## The lock screen and admin prompts (Windows)
+
+([`src/service/`](src/service/mod.rs)) A process in the person's session cannot see or type into Windows' secure
+desktop: the credential screen of a sign-in or a lock, a UAC prompt, Ctrl+Alt+Del. Opt-in, one administrator's yes:
+`intentic-remoted service install --client <the agent's remoted>` (the machine agent's `remoteService`, the editor's
+"Lock screen and admin prompts" row) makes this binary a Windows service as well.
+
+- **The service** (`IntenticRemoted`, LocalSystem, automatic) runs from its own copy in
+  `%ProgramData%\Intentic\Remoted\bin`, a folder only SYSTEM and administrators may write, so no program of the
+  user's can change the code that runs as SYSTEM. It keeps one helper in the session on the computer's screen
+  (`WTSGetActiveConsoleSessionId`, followed on session changes): its own token duplicated, moved into that session
+  (`SetTokenInformation(TokenSessionId)`; there is no user token at a sign-in screen), started on `winsta0\default` in
+  a job that ends it with the service. It writes a new 32-byte secret at each start, readable only by the user it was
+  installed for (the owner of the `--client` binary). Ctrl+Alt+Del needs `SoftwareSASGeneration` to allow services:
+  install sets it to 1 if it did not, and records what it was, which uninstall puts back. Its log is
+  `%ProgramData%\Intentic\Remoted\service.log`, with the helper's lines in it.
+- **The helper** (`desktop-helper`, SYSTEM) is a capture and input backend for remoted, not a second streaming stack
+  (cast-win's `helper`): it listens on `\\.\pipe\intentic-remoted-desktop-<session>`, duplicates the monitors remoted
+  asks for on whichever desktop takes input, shares each mirror texture with remoted's GPU device by an NT handle, and
+  types remoted's input there; Ctrl+Alt+Del is a secure attention sequence it asks the service for. While a monitor is
+  duplicated and a secure desktop shows, it draws a "Someone is connected" strip on it. It does nothing unless the
+  person's remoted asks, and remoted runs only while one of the computer's remote switches is on and gates every
+  viewer by them.
+- **Who may talk to whom.** The pipe's access list names SYSTEM and that user only, and refuses remote clients. The
+  helper accepts a process in its own session whose image is one of the installed `--client` paths and whose hello
+  carries the secret. remoted accepts a pipe owned by SYSTEM or Administrators (which a process of the user cannot make)
+  whose process runs from the service's binary. Nothing listens on a network.
+- **remoted's screens** run on the helper whenever it is reachable ([`media/windows.rs`](src/media/windows.rs)),
+  on their own duplication otherwise; a screen showing a placeholder because it cannot see its desktop checks every 2 s
+  and hands over to a helper that appeared. With no service, a secure desktop is a placeholder saying why.
+- **Removing it** needs no administrator when asked by the installing user's remoted: `service uninstall` run
+  unelevated asks the service through its helper to remove itself (it marks itself for deletion, restores the policy,
+  and a `cmd` it leaves behind deletes its folder once it ended). Taking a privilege away needs nobody's yes, and the
+  person may not be at the computer. Elevated, `service uninstall` removes it directly. `--result <file>` writes the
+  one-line answer to a file too, since an elevated run's output does not come back to the agent.
+- `service status` needs no administrator: `{supported, installed, state, version, binary, clients, helper: {session,
+  pid, desktop}}`.
+
+(2026-11-20) The helper is a capture and input backend behind remoted rather than the screen backend itself (remoted
+forwarding whole media sockets to a SYSTEM process). Measured on rog, a frame through the helper costs what one on
+remoted's own duplication does (cast-win's README), and this way the viewers, tokens, switches, the pause, drops, the
+status line, peer connections and the clipboard and sound (which are the person's session's) stay in one process; the
+rejected shape would have put all of them, and the WAN transport being reworked beside it, behind the pipe too.
+Rejected as well: the service running from the agent's folder under the user's profile, which any program of the user
+could have replaced with code that then ran as SYSTEM.
 
 ## Testing on Windows
 
@@ -172,6 +288,14 @@ cargo xwin test --no-run --target x86_64-pc-windows-msvc   # then copy intentic-
 .\terminal.exe --test-threads=1                             # on the PC; add `--ignored wsl` for a distro's terminal
 ```
 
+`tests/screen_windows.rs` runs the screens the same way (`CARGO_BIN_EXE_intentic-remoted` naming the remoted): a
+monitor streamed at its native size with its `/stats` status and a screenshot, and the same through the helper, run by
+hand as the user from a folder standing in for the service's (`INTENTIC_REMOTED_SERVICE_HOME`; no administrator, and
+so no secure desktop). Ignored: `measure` (with `REMOTED_MEASURE_PATTERN` naming cast-win's `pattern.exe`,
+`REMOTED_MEASURE_SIZE` its window, `REMOTED_MEASURE_HELPER=1` through the helper), and `drive`, a person scripted
+(`REMOTED_DRIVE`: `shot:<name>`, `wait:<ms>`, `key:<Key>[:<Code>]`, `type:<text>`, `cad`, `click:<x>,<y>`, screenshots
+into `REMOTED_SHOTS`), which with the real service installed is how the secure desktop was tried.
+
 ## Key files
 
 - [src/uplink.rs](src/uplink.rs) — dialling a sandbox, the backoff, and serving the yamux streams it opens.
@@ -179,12 +303,19 @@ cargo xwin test --no-run --target x86_64-pc-windows-msvc   # then copy intentic-
 - [src/term/session.rs](src/term/session.rs) — one terminal: its pseudo-terminal, the shared grid and the viewers' hub.
 - [src/term/screen.rs](src/term/screen.rs) — the screen remoted keeps, its snapshot, and the queries it answers itself.
 - [src/daemon.rs](src/daemon.rs) — the configuration as it stands, enforced: switches, drops and the pause.
+- [src/media/mod.rs](src/media/mod.rs) — the screens: one pipeline per monitor, the media socket's route, its guard, the peer port.
+- [src/media/linux/mod.rs](src/media/linux/mod.rs) — which Linux case this computer is, its monitors, opening one.
+- [src/media/linux/desktop.rs](src/media/linux/desktop.rs) — the virtual desktop: its X server, its session, what is missing.
 - [tests/terminal.rs](tests/terminal.rs) — the binary end to end against a fake sandbox's uplink.
+- [src/service/mod.rs](src/service/mod.rs) — the lock screen and admin prompts service: install, the SYSTEM helper, who
+  may talk to it.
+- [tests/screen.rs](tests/screen.rs) — a screen end to end on an Xvfb of the suite's own, a virtual desktop, a peer
+  connection through the uplink's STUN servers, and `measure`.
 
 ## Commands
 
 ```sh
-cargo test --manifest-path _devices/remoted/Cargo.toml
-cargo xwin check --manifest-path _devices/remoted/Cargo.toml --all-targets --target x86_64-pc-windows-msvc
+cargo test --manifest-path _devices/remoted/Cargo.toml   # the screen tests need Xvfb, else they stand down
+cargo xwin clippy --manifest-path _devices/remoted/Cargo.toml --all-targets --target x86_64-pc-windows-msvc
 bash _tools/scripts/build/build-remoted.sh [--version <v>] linux-x64 linux-arm64 windows-x64
 ```

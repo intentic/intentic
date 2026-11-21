@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type RemoteServiceResult, RemoteServiceResultSchema } from "./device-remote.js";
 
 // A PERSON'S REMOTE SCREEN AND TERMINALS ON A CONNECTED COMPUTER (2026-11-20), the editor's `remote.*` procedures. The
 // computer's `intentic-remoted` serves both; it dials the sandbox's netd (browser-wire's DEVICE_UPLINK_PATH), and netd
@@ -127,3 +128,13 @@ export const RemoteTerminalOpenedSchema = RemoteTokenSchema.extend({
     path: z.string(),
 });
 export type RemoteTerminalOpened = z.infer<typeof RemoteTerminalOpenedSchema>;
+
+// Windows' lock screen and administrator prompts (schemas/device-remote.ts has what the service is): the computer's own
+// answer, passed on as it came. `remote.service` reads it; `remote.changeService` installs (or updates) or removes it
+// through one UAC prompt on that computer, and answers the status read after it, with `declined` or `error` saying why
+// nothing changed.
+export const RemoteServiceSchema = RemoteServiceResultSchema;
+export type RemoteService = RemoteServiceResult;
+
+export const RemoteServiceChangeInputSchema = RemoteDeviceInputSchema.extend({ action: z.enum(["install", "uninstall"]) });
+export type RemoteServiceChangeInput = z.infer<typeof RemoteServiceChangeInputSchema>;

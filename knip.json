@@ -72,7 +72,9 @@
                 // The native app's Rust core has no package.json either: its schema writer and live-frame recorder
                 // are scripts run by hand.
                 "_editor/mobile-core/scripts/*.mjs",
-                "_editor/mobile-core/fixtures/*.mjs"
+                "_editor/mobile-core/fixtures/*.mjs",
+                // cast-core's WAN bench reads its reports with node, run by its matrix.sh (cast-core's README).
+                "_sandbox/castd/crates/cast-core/examples/wanbench/*.mjs"
             ],
             "ignore": [
                 "_tools/extension-example/seed/**",

@@ -30,6 +30,19 @@ pub trait AudioSource: Send + 'static {
     fn close(&mut self);
 }
 
+/// A platform's source picked at run time (a daemon's `Box<dyn AudioSource>`) is a source too.
+impl AudioSource for Box<dyn AudioSource> {
+    fn open(&mut self) -> Result<(), String> {
+        (**self).open()
+    }
+    fn read(&mut self, pcm: &mut [i16]) -> Result<(), String> {
+        (**self).read(pcm)
+    }
+    fn close(&mut self) {
+        (**self).close()
+    }
+}
+
 #[cfg(feature = "opus")]
 pub use opus::spawn;
 
@@ -208,6 +221,10 @@ mod opus {
                 .any(|c| c.audio.load(Ordering::Relaxed))
         };
         loop {
+            // The pipeline stopped (`video::Video::stop`): so does the sound.
+            if hub.is_stopped() {
+                return;
+            }
             if !want() {
                 std::thread::sleep(Duration::from_millis(200));
                 continue;
@@ -226,7 +243,7 @@ mod opus {
                 }
                 let captured = Instant::now();
                 checked += 1;
-                if checked.is_multiple_of(50) && !want() {
+                if checked.is_multiple_of(50) && (!want() || hub.is_stopped()) {
                     break;
                 }
                 if pcm.iter().all(|&s| s == 0) {

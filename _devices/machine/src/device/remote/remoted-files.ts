@@ -19,6 +19,8 @@ export const remotedStatusPath = join(baseDir, "remoted-status.json");
 // One link's uplink as remoted reads it. `id` is the link's key here (its sandbox URL); `url` is where that sandbox's
 // daemon answers, resolved as the link's own socket resolves it (loopback when the sandbox runs on this machine).
 // `generation` grows on every remoteStart, which is what makes remoted dial again an uplink the sandbox withdrew.
+// `iceServers` are the sandbox's STUN servers (`stun:host:port`) remoted gathers its screens' outside address from;
+// left out when the sandbox sent none, and remoted then offers its host candidates alone.
 const UplinkSchema = z.object({
     id: z.string().min(1),
     url: z.string().min(1),
@@ -27,6 +29,7 @@ const UplinkSchema = z.object({
     mediaKey: z.string().min(1),
     allow: RemoteAllowSchema,
     generation: z.int().nonnegative(),
+    iceServers: z.array(z.string()).optional(),
 });
 export type RemotedUplink = z.infer<typeof UplinkSchema>;
 

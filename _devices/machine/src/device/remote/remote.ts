@@ -293,8 +293,8 @@ const beginUplink = async (state: RemoteState, link: RemoteLink, input: RemoteSt
     await writeConfig(state, (config) => {
         const generation = Math.max(config.uplinks.find((uplink) => uplink.id === id)?.generation ?? 0, state.generations.get(id) ?? 0) + 1;
         state.generations.set(id, generation);
-        const { device, uplinkToken, mediaKey } = input;
-        return withUplink(config, { id, url: base, device, uplinkToken, mediaKey, allow, generation });
+        const { device, uplinkToken, mediaKey, iceServers } = input;
+        return withUplink(config, { id, url: base, device, uplinkToken, mediaKey, allow, generation, ...(iceServers === undefined ? {} : { iceServers }) });
     });
     if (binary !== undefined) {
         runRemoted(state, binary);

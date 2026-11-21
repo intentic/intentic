@@ -18,12 +18,33 @@ path = "src/lib.rs"
 name = "intentic-remoted"
 path = "src/main.rs"
 
+[features]
+default = ["nvenc", "openh264"]
+# openh264 (Cisco's, BSD) as the software encoder, built from source: what a screen falls back to where no hardware
+# encoder passes its self-test. A Windows build always has it (below).
+openh264 = ["cast-core/openh264"]
+# NVIDIA's encoder (Linux): the driver's libnvidia-encode and libcuda are opened at runtime, so the binary runs where
+# there is none; built against the ffnvcodec headers (bindgen).
+nvenc = ["cast-core/nvenc"]
+# x264 as the software encoder (links libx264, GPL-2.0): for measuring against castd, never in a shipped build.
+x264 = ["cast-core/x264"]
+# BGRX to I420 with libyuv instead of cast-core's portable converter (links libyuv).
+libyuv = ["cast-core/libyuv"]
+# A screen's sound through PulseAudio (or PipeWire's pulse server), Opus-encoded (links libpulse-simple and libopus).
+pulse = ["cast-core/pulse", "opus"]
+opus = ["cast-core/opus"]
+
 [dependencies]
 anyhow = "1"
+# The media socket's upgrade (cast-core serves it on axum's WebSocket), on the stream hyper already holds.
+axum = { version = "0.8", default-features = false, features = ["ws", "http1", "tokio"] }
 base64 = "0.22"
 # The terminal socket's messages, the device paths and close codes: one definition with the editor and netd.
 browser-wire = { path = "../../_sandbox/netd/crates/browser-wire" }
 bytes = "1"
+# castd's streaming engine (capture traits, the shared encoder, rate control, the media socket, peers), with no C
+# library of its own unless a feature above asks for one.
+cast-core = { path = "../../_sandbox/castd/crates/cast-core", default-features = false }
 env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
 flate2 = "1"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
@@ -50,6 +71,35 @@ tunnel = { path = "../../_sandbox/netd/crates/tunnel" }
 # Each terminal's screen as a terminal would hold it, for the snapshot a viewer joining or catching up is drawn from.
 vt100 = "0.16"
 webpki-roots = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# An X display's capture, input, cursor and clipboard (castd's), on a person's session or a virtual desktop.
+cast-x11 = { path = "../../_sandbox/castd/crates/cast-x11" }
+libc = "0.2"
+x11rb = { version = "0.13", features = ["randr"] }
+
+[target.'cfg(windows)'.dependencies]
+# The Windows platform: DXGI duplication, NVENC and Media Foundation's encoders on D3D11, SendInput, the clipboard and
+# WASAPI loopback. Its software encoder (openh264) and its Opus (opus1, libopus in Rust) are built from source and link
+# nothing of the system's, so a Windows build always has both.
+cast-win = { path = "../../_sandbox/castd/crates/cast-win" }
+cast-core = { path = "../../_sandbox/castd/crates/cast-core", default-features = false, features = ["openh264", "opus1"] }
+parking_lot = "0.12"
+# The lock screen and admin prompts service (src/service/windows): the service manager, the SYSTEM token moved into
+# the console session, access lists, the Ctrl+Alt+Del policy.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_JobObjects",
+    "Win32_System_Pipes",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Services",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 hyper = { version = "1", features = ["client", "http1"] }

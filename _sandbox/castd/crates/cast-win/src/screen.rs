@@ -23,6 +23,8 @@ pub struct Screen {
     pub input: Option<cast_core::input::Input>,
     /// The clipboard watcher, stopped with the screen.
     pub clipboard: Option<crate::clipboard::Clipboard>,
+    /// How the picture is made now and why, when it is not duplicated: what `/info` and `/stats` report.
+    pub status: crate::session::StatusCell,
 }
 
 impl Screen {
@@ -39,6 +41,16 @@ impl Screen {
 
 /// Opens monitor `id` for `hub`, starting from `base` (fps, quality, the bitrate's range).
 pub fn open(id: &str, hub: &Arc<Hub>, base: VideoConfig) -> Result<Screen, String> {
+    open_with(id, hub, base, None)
+}
+
+/// As [`open`], capturing and typing through the lock screen and admin prompts helper whenever `helper` reaches it.
+pub fn open_with(
+    id: &str,
+    hub: &Arc<Hub>,
+    base: VideoConfig,
+    helper: Option<Arc<dyn crate::helper::Finder>>,
+) -> Result<Screen, String> {
     crate::init_process();
     let display = displays::find(id).ok_or_else(|| format!("no monitor {id} on this computer"))?;
     let choice = crate::select::choose(&display);
@@ -47,8 +59,9 @@ pub fn open(id: &str, hub: &Arc<Hub>, base: VideoConfig) -> Result<Screen, Strin
     }
     log::info!("{}: encoded with {}", display.name, choice.label);
     hub.set_scale(display.scale);
-    let source = DxgiSource::new(id, hub.clone(), choice.sink);
+    let source = DxgiSource::with_helper(id, hub.clone(), choice.sink, helper.clone());
     let geometry = source.geometry.clone();
+    let status = source.status.clone();
     let mut video = base;
     video.encoder = choice.encoders;
     // Hardware encoders are one engine each (video.rs never stripes for them); openh264 gets threads of its own.
@@ -62,7 +75,19 @@ pub fn open(id: &str, hub: &Arc<Hub>, base: VideoConfig) -> Result<Screen, Strin
             None
         }
     };
-    let input = match crate::input::spawn(geometry.clone(), clipboard.clone(), display.scale) {
+    let input = match &helper {
+        Some(finder) => {
+            crate::follow_input_desktop();
+            cast_core::input::spawn(crate::helper::client::Forward {
+                monitor: id.to_string(),
+                finder: finder.clone(),
+                local: crate::input::Sink::new(geometry.clone(), clipboard.clone(), display.scale),
+                clipboard: clipboard.clone(),
+            })
+        }
+        None => crate::input::spawn(geometry.clone(), clipboard.clone(), display.scale),
+    };
+    let input = match input {
         Ok(i) => Some(i),
         Err(e) => {
             log::warn!("{}: no input ({e})", display.name);
@@ -78,6 +103,7 @@ pub fn open(id: &str, hub: &Arc<Hub>, base: VideoConfig) -> Result<Screen, Strin
         name: display.name,
         input,
         clipboard,
+        status,
     })
 }
 

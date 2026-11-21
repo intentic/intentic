@@ -11,6 +11,13 @@
 //! connect is settled by the authenticated socket: the SDP castd answers carries its DTLS fingerprint and ICE password,
 //! so only the viewer that holds the socket's token can complete the handshake.
 //!
+//! The pictures may ride a video track instead of `media` (2026-11-20): where the viewer's offer carries a receive-only
+//! H.264 video section and the pictures are one stream, the peer opens with that track carrying them as RTP
+//! ([`accept_with`], [`Peer::track`]). The browser's own jitter buffer and decoder show them, a lost packet is asked for
+//! again (NACK) without holding back the frames behind it on a channel, a decoder that lost the stream asks for a
+//! keyframe (PLI), and transport-wide feedback drives str0m's congestion control, whose estimate castd's bitrate
+//! follows ([`Feedback`]). Everything else stays on the channels.
+//!
 //! A device daemon on a computer behind a NAT starts the port with full ICE instead ([`start_with`], [`Ice::Full`]):
 //! its answer adds the server-reflexive candidates STUN servers named, it takes the viewer's trickled candidates
 //! (`rtcCandidate`), and it sends checks of its own, so a viewer behind a NAT of its own can be reached too. The answers
@@ -22,7 +29,7 @@ mod port;
 pub mod stun;
 pub mod viewer;
 
-pub use peer::{Peer, PeerEvent, ToPeer, accept};
+pub use peer::{Feedback, Peer, PeerEvent, Pictures, TRACK_SHARE, ToPeer, accept, accept_with};
 use port::{Datagram, Service};
 pub use port::{Gathered, start, start_with};
 

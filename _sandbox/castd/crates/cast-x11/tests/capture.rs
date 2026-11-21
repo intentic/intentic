@@ -1,8 +1,8 @@
 //! cast-x11's capture against a real X server, with nothing but this test drawing on it: XDamage reports what the
 //! test filled, and the pixels come back the same whichever way they are read: in place from Xvfb's `-shmem`
 //! framebuffer, with MIT-SHM GetImage (how a person's own Xorg `:0` is read), and with plain GetImage (a server that
-//! cannot share memory). Then RandR resizes the screen and the capture sees it must be rebuilt. Needs Xvfb, and stands
-//! down with its reason without it (`CASTD_TEST_XVFB`).
+//! cannot share memory). Then RandR resizes the screen and the capture sees it must be rebuilt, and the desktop thread
+//! says where the pointer moved. Needs Xvfb, and stands down with its reason without it (`CASTD_TEST_XVFB`).
 
 use cast_core::capture::{Capture, ScreenSource};
 use cast_core::geometry::{Band, Rect};
@@ -43,7 +43,9 @@ fn xvfb(bin: &Path, mut range: std::ops::Range<u32>, shmem: bool) -> Xvfb {
         .expect("a free display");
     let mut cmd = Command::new(bin);
     cmd.arg(format!(":{n}"))
-        .args(["-screen", "0", "320x240x24", "-nolisten", "tcp"]);
+        // -noreset: a server that resets when its last client leaves (the readiness probe below) refuses the next
+        // connection while it does, which made the two tests flaky side by side.
+        .args(["-screen", "0", "320x240x24", "-nolisten", "tcp", "-noreset"]);
     if shmem {
         cmd.arg("-shmem");
     }
@@ -224,4 +226,53 @@ fn randr_resizes_the_screen_and_the_capture_sees_it() {
             true
         )
     );
+}
+
+#[test]
+fn the_desktop_thread_says_where_the_pointer_moves() {
+    use cast_core::hub::{Hub, Joining, Out};
+    use x11rb::protocol::xtest::ConnectionExt as _;
+    let Some(bin) = xvfb_binary() else {
+        eprintln!("cast-x11 pointer test stands down: needs Xvfb (CASTD_TEST_XVFB)");
+        return;
+    };
+    let x = xvfb(&bin, 400..450, false);
+    let hub = Hub::new(1.0, None);
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    hub.add_client(tx, Joining::default());
+    let _clipboard = cast_x11::desktop::spawn_with(Some(x.1.clone()), hub.clone(), false)
+        .expect("the desktop thread");
+    // Something other than a viewer moves the pointer: XTEST, as a person's mouse would.
+    let (conn, n) = x11rb::rust_connection::RustConnection::connect(Some(&x.1)).unwrap();
+    let root = conn.setup().roots[n].root;
+    let until = Instant::now() + Duration::from_secs(5);
+    let mut said = Vec::new();
+    while !said
+        .iter()
+        .any(|t: &String| t == r#"{"type":"pointer","x":123,"y":45}"#)
+    {
+        assert!(
+            Instant::now() < until,
+            "no pointer message for the move, only {said:?}"
+        );
+        conn.xtest_fake_input(
+            x11rb::protocol::xproto::MOTION_NOTIFY_EVENT,
+            0,
+            x11rb::CURRENT_TIME,
+            root,
+            123,
+            45,
+            0,
+        )
+        .unwrap();
+        conn.sync().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        while let Ok(out) = rx.try_recv() {
+            if let Out::Pointer(text) = out {
+                said.push(text);
+            }
+        }
+    }
+    hub.stopped
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 }

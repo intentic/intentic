@@ -1105,6 +1105,13 @@ release only through `keyring upgrade`, which downloads and checks the new binar
 the person), and only then swaps it, keeping `.previous` and putting it back if the new one does not answer; the new
 binary's `service install` then runs as an administrator, so the service's own copy follows.
 
+The administrator's yes is asked one way for everything this agent installs that needs it
+([`admin/elevated.ts`](src/admin/elevated.ts), 2026-11-20, factored out of the keyring's setup when remote access's lock-screen
+service came to need the same): `Start-Process -Verb RunAs -WindowStyle Hidden -Wait` under PowerShell on Windows, each
+argument quoted as the program reads it back (Start-Process quotes nothing, so a path under a profile with a space would
+otherwise split), or `pkexec` on Linux; ten minutes for the person to answer, and UAC's "canceled by the user" (or
+pkexec's 126 and 127) read as a no rather than a failure.
+
 On Windows the service's startup task and the helper's logon task run at normal priority (Task Scheduler's 5,
 2026-11-18), where this agent's own task stays below normal: a person waits on every answer the two carry, and a
 computer busy with containers starved them past the desktop app's deadline, so Passwords read as not answering and
@@ -1215,8 +1222,9 @@ some link wants it, and enforces the switches ([`device/remote/`](src/device/rem
   (`remoteTerminal`). Each link's uplink allows what that link's grant says. A grant pushed with one of them changed
   rewrites the uplink's `allow` at once, and remoted re-reads its config within half a second, so terminals that stay
   allowed are not cut; all three off drops the uplink.
-- **The procedures.** `remoteStart({ device, uplinkToken, mediaKey })` and `remoteStop()`, called by the daemon alone and
-  only on an agent advertising `remote`. `remoteStart` is refused as `FORBIDDEN`, naming the three switches, while all
+- **The procedures.** `remoteStart({ device, uplinkToken, mediaKey, iceServers? })` and `remoteStop()`, called by the
+  daemon alone and only on an agent advertising `remote`; `iceServers` (the sandbox's `remoteIceServers` URLs) only to
+  one advertising `remote-ice` as well, since the input is strict and an older agent would refuse the call. `remoteStart` is refused as `FORBIDDEN`, naming the three switches, while all
   three are off, and as `PRECONDITION_FAILED`, saying why, when no remoted can be had. Otherwise it writes the link's
   uplink under the next `generation`, starts remoted if it is not running, waits up to 10 s for its status to show the
   uplink `up` at that generation (not an `up` left from its last start), and answers remoted's version, what is allowed, the monitors and the environments. Past 10 s it answers
@@ -1230,7 +1238,8 @@ some link wants it, and enforces the switches ([`device/remote/`](src/device/rem
   agent advertises `remote` only where one can be had: the override, one in `bin/`, or a published platform.
 - **The files.** `remoted.json` (0600, written whole by rename) holds `paused`, `notBefore` and one uplink per link:
   `id` (the link's sandbox URL), `url` (that sandbox's daemon as the link's own socket resolves it, loopback when it
-  runs here), `device`, `uplinkToken`, `mediaKey`, `allow` and `generation`. An uplink not `up` for 30 s has its address
+  runs here), `device`, `uplinkToken`, `mediaKey`, `allow`, `generation` and, when the sandbox sent them, `iceServers` (the
+  STUN servers remoted gathers its screens' outside address from; without them it offers host candidates only). An uplink not `up` for 30 s has its address
   resolved again, and rewritten if it moved. remoted prints a status line on stdout whenever anything in it changes, and
   the agent keeps the latest as `remoted-status.json`.
 - **The supervisor** ([`remote/remoted.ts`](src/device/remote/remoted.ts)) runs `intentic-remoted run --config <path>
@@ -1249,6 +1258,27 @@ some link wants it, and enforces the switches ([`device/remote/`](src/device/rem
   (`remote-person`).
 - **Before sign-in** remoted runs as it does after it, so terminals work; nothing is promised of the screen, and no
   notice is put up.
+- **The lock screen and administrator prompts** (2026-11-20, Windows). remoted in the person's session cannot see or
+  drive the secure desktop: the sign-in and lock screen, Ctrl+Alt+Del, UAC prompts. remoted's own Windows service can,
+  and installing it needs an administrator, so it is opt-in: the device procedure `remoteService({ action })`
+  ([`remote/remoted-service.ts`](src/device/remote/remoted-service.ts)), advertised as `remote-service` by a Windows
+  agent that advertises `remote`. `status` runs `intentic-remoted service status` as the agent; `install` runs
+  `intentic-remoted service install --client <bin/intentic-remoted>` (fetched first if it is not there, so the service
+  serves the remoted this agent starts; again to update it) through ONE UAC prompt the person at the computer answers,
+  waited on for up to ten minutes, then reads `status` again unelevated; the elevated run's own answer comes back
+  through a file (`--result`), read for the reason when it failed. `uninstall` first runs `service uninstall`
+  unelevated, which asks the running service through its helper to remove itself (taking the privilege away needs
+  nobody's yes, and the person may not be at the computer), and goes through the prompt only when that cannot be done
+  (remoted's exit 3). It answers `{ supported, reason?, installed,
+  state?, version?, agentVersion?, outOfDate, helper?, declined?, error? }`: `version` is the service's, `agentVersion`
+  what `intentic-remoted version` says of the agent's own remoted, and `outOfDate` that both are known and differ; a
+  no at the prompt is `declined: true`, and a prompt that could not be shown, was not answered in time, or ran and did
+  not leave the service as asked is `error`, in a sentence, beside the status read after it. One prompt is up at a
+  time (a second change meanwhile is `CONFLICT`), none before anyone has signed in, and every change is audited
+  (`remoteService`). Off Windows it answers `supported: false` without running anything. Who may ask: the daemon only,
+  for a person with Full access to its sandbox, as for the switches; never a tool, so no agent can put a UAC prompt in
+  front of the person, and no switch gates it, since the switches already bound what people may do through it.
+  `uninstall` of this agent does not remove the service yet.
 
 ### Uninstall
 

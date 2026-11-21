@@ -4,6 +4,7 @@
 //! selections.
 
 pub mod capture;
+pub mod connect;
 pub mod desktop;
 pub mod input;
 pub mod keys;

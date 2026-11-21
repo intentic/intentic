@@ -1,7 +1,8 @@
 //! cast-win-pattern: content for a bench to capture, in a window of its own on one monitor, for a few seconds, then
 //! gone. It never takes focus (WS_EX_NOACTIVATE) and leaves nothing behind.
 //!
-//! `pattern [--monitor N|ID] [--mode still|scroll|video|noise] [--seconds 20] [--fps 60]`
+//! `pattern [--monitor N|ID] [--mode still|scroll|video|noise] [--seconds 20] [--fps 60] [--size WxH]`
+//! - `--size`: a window of that size in the monitor's middle instead of the whole monitor (a computer someone is using).
 //! - `still`: a page of text, drawn once.
 //! - `scroll`: the page scrolling 8 px a frame, as castd's scroll fixture does.
 //! - `video`: a picture panning and a box bouncing across it, smooth motion as a film has.
@@ -38,7 +39,17 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(20.0);
     let fps: f64 = arg("--fps").and_then(|s| s.parse().ok()).unwrap_or(60.0);
-    let (w, h) = (d.width() as usize, d.height() as usize);
+    let (w, h) = arg("--size")
+        .and_then(|s| {
+            let (a, b) = s.split_once('x')?;
+            Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))
+        })
+        .map_or((d.width(), d.height()), |(a, b)| (a.min(d.width()), b.min(d.height())));
+    let (left, top) = (
+        d.rect.left + (d.width() - w) as i32 / 2,
+        d.rect.top + (d.height() - h) as i32 / 2,
+    );
+    let (w, h) = (w as usize, h as usize);
 
     extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
         // SAFETY: the default handling of a window this process made.
@@ -60,8 +71,8 @@ fn main() {
             w!("cast-win-pattern"),
             w!("cast-win pattern"),
             WS_POPUP,
-            d.rect.left,
-            d.rect.top,
+            left,
+            top,
             w as i32,
             h as i32,
             None,

@@ -21,7 +21,13 @@ rtc?: boolean,
  * drives, castd encodes at the quality a link that is no network allows, and, where it asked for
  * [`MEDIA_LOSSLESS_QUERY`], sends it `clip`ped frames and `lossless` rectangles. Absent otherwise.
  */
-local?: boolean, } | { "type": "cursor", cursor: MediaCursor, } | { "type": "clipboard", content: ClipboardContent, } | { "type": "stats", rttMs: number, targetKbps: number, fps: number, queueMs: number, } | { "type": "pong", t: number, } | { "type": "error", message: string, } | { "type": "rtcAnswer", sdp: string, } | { "type": "rtcClosed", reason: string, };
+local?: boolean, 
+/**
+ * The pictures after this hello ride the peer's video track as RTP (the offer had one and castd took it), not
+ * `media`: the browser's own jitter buffer and decoder show them, NACK and PLI repair them, and castd's
+ * bitrate follows the track's congestion control. Only in a hello on the peer; absent, video is on `media`.
+ */
+track?: boolean, } | { "type": "cursor", cursor: MediaCursor, } | { "type": "pointer", x: number, y: number, } | { "type": "clipboard", content: ClipboardContent, } | { "type": "stats", rttMs: number, targetKbps: number, fps: number, queueMs: number, } | { "type": "pong", t: number, } | { "type": "error", message: string, } | { "type": "rtcAnswer", sdp: string, } | { "type": "rtcClosed", reason: string, };
 
 /**
  * What the editor sends on a browser view socket, each a JSON text message. Nothing that drives the page is sent

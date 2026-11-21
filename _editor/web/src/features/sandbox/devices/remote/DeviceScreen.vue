@@ -16,6 +16,7 @@ import { type RemoteMonitor, useRemoteApi } from "../../../../models/sandbox/dev
 import ConnectionBadge from "./ConnectionBadge.vue";
 import SendKeysMenu from "./SendKeysMenu.vue";
 import { useFullscreenLock } from "./fullscreenLock";
+import { useRemoteCursor } from "./remoteCursor";
 import { askedBox, placePicture, type ScreenScale } from "./screenFit";
 import { useScreenInput } from "./screenInput";
 import { useDeviceScreen } from "./useDeviceScreen";
@@ -37,10 +38,14 @@ const rootEl = ref<HTMLElement | null>(null);
 const stageEl = ref<HTMLElement | null>(null);
 const zoomEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLCanvasElement | null>(null);
+// Where the pictures are shown when they ride the peer's video track (useDeviceScreen asks for one); the canvas keeps
+// its place under it, since every point the person sends is measured against it.
+const videoEl = ref<HTMLVideoElement | null>(null);
 
 const screen = useDeviceScreen(() => device, monitor, { api: useRemoteApi() });
 const { picture, status } = screen;
 watch(canvasEl, (canvas) => picture.attach(canvas));
+watch(videoEl, (video) => picture.attachVideo(video));
 
 // Watching without touching: the computer's own grant, or the person's choice here.
 const viewOnly = ref(false);
@@ -99,6 +104,8 @@ watch(
 );
 
 const cursor = computed(() => (lock.pointerLocked.value ? `none` : driving.value ? picture.cursor.value : `default`));
+// The computer's own pointer where it is not this viewer's (remoteCursor.ts).
+const sprite = useRemoteCursor({ pointer: picture.pointer, look: picture.cursorLook, size: pictureSize, box, driving, stage: stageEl });
 // The kept cursor while the pointer is locked, on the stage.
 const lockedDot = computed(() => {
     const at = input.lockedCursor.value;
@@ -241,7 +248,18 @@ const toolbarShown = ref(false);
             @focus="input.focus()"
         >
             <div ref="zoomEl" class="absolute left-0 top-0" :class="scrollBox ? '' : 'h-full w-full'" :style="[scrollBox, input.zoom.value]">
-                <canvas ref="canvasEl" class="absolute" :style="[canvasBox, snapStyle, { cursor }]" />
+                <canvas ref="canvasEl" class="absolute" :class="picture.tracked.value ? 'invisible' : ''" :style="[canvasBox, snapStyle, { cursor }]" />
+                <video
+                    v-show="picture.tracked.value"
+                    ref="videoEl"
+                    class="absolute"
+                    :style="[canvasBox, { cursor }]"
+                    muted
+                    autoplay
+                    playsinline
+                    disablepictureinpicture
+                    :aria-label="t(`sandbox.deviceScreen.stageLabel`, { name })"
+                />
             </div>
             <!-- Typing, an input method, a paste and a phone's keyboard land here and go to the computer (screenInput.ts). -->
             <!-- allow(inputs): never seen, a field only so the person's browser has somewhere to type; the design system's fields are for what a reader sees -->
@@ -262,6 +280,18 @@ const toolbarShown = ref(false);
                 class="pointer-events-none absolute z-[2] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/60 shadow"
                 :style="input.trackpadDot.value"
             />
+            <div v-if="sprite && !lockedDot" class="pointer-events-none absolute z-[2]" :style="{ left: `${sprite.left}px`, top: `${sprite.top}px` }">
+                <img
+                    v-if="sprite.image"
+                    :src="sprite.image.url"
+                    alt=""
+                    class="max-w-none"
+                    :style="{ width: `${sprite.image.width}px`, transform: `translate(${-sprite.image.hotX}px, ${-sprite.image.hotY}px)` }"
+                />
+                <svg v-else width="12" height="19" viewBox="0 0 12 19" aria-hidden="true" class="drop-shadow">
+                    <path d="M0.5 0.5 L0.5 16 L4.5 12.2 L7.2 18.2 L9.4 17.2 L6.8 11.4 L11.5 11.4 Z" fill="black" stroke="white" stroke-width="1" />
+                </svg>
+            </div>
             <div
                 v-if="lockedDot"
                 class="pointer-events-none absolute z-[2] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/70"

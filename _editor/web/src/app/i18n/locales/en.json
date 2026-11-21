@@ -11885,7 +11885,20 @@
             "switchTerminalNote": "A shell on this computer, running as you, in any of its environments.",
             "switchFailed": "Couldn’t change the switch",
             "on": "On",
-            "off": "Off"
+            "off": "Off",
+            "serviceTitle": "Lock screen and admin prompts",
+            "serviceNote": "Lets people see and use the sign-in and lock screen, Ctrl+Alt+Del and administrator (UAC) prompts. Needs an administrator’s yes on this computer, once.",
+            "serviceNotSetUp": "Not set up",
+            "serviceSetUp": "Set up",
+            "serviceOlder": "Set up, older version",
+            "serviceInstall": "Set up",
+            "serviceUpdate": "Update",
+            "serviceRemove": "Remove",
+            "serviceWaiting": "Waiting for the administrator’s yes on {name}…",
+            "serviceDeclined": "The administrator’s yes wasn’t given on {name}, so nothing changed.",
+            "serviceOlderAgent": "Update the agent on {name} to set this up.",
+            "serviceFailed": "Couldn’t change the lock-screen service",
+            "serviceUnsupported": "Not available on this computer."
         },
         "deviceScreen": {
             "direct": "Direct",

@@ -6,11 +6,13 @@ import type {
     RemoteIceServer,
     RemoteOpenTerminalInput,
     RemoteScreen,
+    RemoteService,
+    RemoteServiceChangeInput,
     RemoteStatus,
     RemoteTerminalOpened,
     RemoteToken,
 } from "@intentic/sandbox-contract/schemas/remote-access";
-import type { RemoteStartInput } from "@intentic/sandbox-contract/schemas/device-remote";
+import type { RemoteServiceAction, RemoteStartInput } from "@intentic/sandbox-contract/schemas/device-remote";
 import { parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import { errorMessage } from "@intentic/base/errors";
 import { ORPCError } from "@orpc/server";
@@ -32,7 +34,11 @@ import { RemotedRefused, type RemotedControl } from "./remoted-control.js";
    Who may: Full access (the owner, a maintainer) drives and opens terminals, as for every other act on the owner's
    devices from the editor (devices.routes.ts `requireMaintainer`); a member below it is refused at the route
    (remote.routes.ts), and `full: false` (a read-only screen, no terminals) is kept for a caller the routes may admit
-   later. The computer's own switches bound both. Every open and close is in the audit log. */
+   later. The computer's own switches bound both. Every open and close is in the audit log.
+
+   A Windows computer's lock screen and administrator prompts need remoted's own Windows service there (the device
+   contract's `remoteService`): anyone who may see the device reads whether it is set up, and Full access alone sets it
+   up, updates or removes it, which the person at that computer still has to say yes to. Each change is audited. */
 
 // A token opens sockets this long; the editor asks `refresh` before it lapses, and an open socket outlives its newest
 // token by the media grace (browser-wire's MEDIA_TOKEN_GRACE_SECONDS).
@@ -62,6 +68,8 @@ export interface RemoteLink {
     readonly refusal: (device: string) => string | undefined;
     readonly online: (device: string) => boolean;
     readonly start: (device: string, input: RemoteStartInput) => Promise<RemoteInfo>;
+    // remoted's Windows service on the device, read or changed by its agent; throws, saying why, on one that cannot.
+    readonly service: (device: string, action: RemoteServiceAction) => Promise<RemoteService>;
     // The card's switches, before remoted has said.
     readonly cardAllows: (device: string) => Promise<RemoteAllow>;
     // The connection's own environment and its card's distros with a connection of their own (remote-environments.ts).
@@ -85,6 +93,8 @@ export interface RemoteAccess {
     readonly attachTerminal: (device: string, session: string, caller: RemoteCaller) => Promise<RemoteTerminalOpened>;
     readonly refresh: (device: string, session: string, caller: RemoteCaller) => Promise<RemoteToken>;
     readonly closeTerminal: (device: string, session: string, caller: RemoteCaller) => Promise<void>;
+    readonly service: (device: string, caller: RemoteCaller) => Promise<RemoteService>;
+    readonly changeService: (device: string, action: RemoteServiceChangeInput["action"], caller: RemoteCaller) => Promise<RemoteService>;
     // A member's access went: every remoted ends its viewers' sockets and refuses the tokens minted before now, and the
     // viewers still entitled dial again with fresh ones.
     readonly dropViewers: (reason: string) => Promise<void>;
@@ -149,11 +159,27 @@ const record = (held: Held, caller: RemoteCaller, action: string, device: string
 // Why nothing can start on the device right now, or undefined.
 const refusalOf = (held: Held, device: string): string | undefined => (held.netd?.supported() === true ? held.deps.link.refusal(device) : NETD_TOO_OLD);
 
-// The agent starts remoted with the device's pair and waits for its uplink; then netd must hear it too.
-const start = async (held: Held, device: string, uplinkId: string, keys: RemoteKeys, uplinks: NetdUplinks): Promise<RemoteInfo> => {
+// The setting's servers as the URLs remoted gathers from (`stun:host:port`), each once. Pure.
+export const iceUrlsOf = (servers: readonly RemoteIceServer[]): string[] => [...new Set(servers.flatMap((server) => server.urls))];
+
+// The agent starts remoted with the device's pair and the setting's STUN servers, and waits for its uplink; then netd
+// must hear it too.
+const start = async (
+    held: Held,
+    device: string,
+    uplinkId: string,
+    keys: RemoteKeys,
+    uplinks: NetdUplinks,
+    iceServers: readonly string[],
+): Promise<RemoteInfo> => {
     let info: RemoteInfo;
     try {
-        info = await held.deps.link.start(device, { device: uplinkId, uplinkToken: keys.uplinkToken, mediaKey: keys.mediaKey });
+        info = await held.deps.link.start(device, {
+            device: uplinkId,
+            uplinkToken: keys.uplinkToken,
+            mediaKey: keys.mediaKey,
+            iceServers: [...iceServers],
+        });
     } catch (error) {
         // Refused (every switch off, most often): nothing of this pair is let dial, and a later start mints a new one.
         uplinks.withdraw(uplinkId);
@@ -168,12 +194,19 @@ const start = async (held: Held, device: string, uplinkId: string, keys: RemoteK
     return info;
 };
 
-const startOnce = (held: Held, device: string, uplinkId: string, keys: RemoteKeys, uplinks: NetdUplinks): Promise<RemoteInfo> => {
+const startOnce = (
+    held: Held,
+    device: string,
+    uplinkId: string,
+    keys: RemoteKeys,
+    uplinks: NetdUplinks,
+    iceServers: readonly string[],
+): Promise<RemoteInfo> => {
     const already = held.starting.get(device);
     if (already !== undefined) {
         return already;
     }
-    const started = start(held, device, uplinkId, keys, uplinks).finally(() => held.starting.delete(device));
+    const started = start(held, device, uplinkId, keys, uplinks, iceServers).finally(() => held.starting.delete(device));
     held.starting.set(device, started);
     return started;
 };
@@ -186,10 +219,12 @@ const ensure = async (held: Held, device: string): Promise<{ readonly uplinkId: 
         throw conflict(refused ?? NETD_TOO_OLD);
     }
     const uplinkId = uplinkIdOf(device);
+    // The setting is read before anything is registered: two opens racing still register the uplink once.
+    const iceServers = iceUrlsOf(await held.deps.iceServers());
     const keys = held.deps.keys.of(uplinkId);
     uplinks.register(uplinkId, digestOf(keys.uplinkToken));
     const said = uplinks.connected(uplinkId) ? await held.deps.control(uplinkId).info() : undefined;
-    const info = said ?? (await startOnce(held, device, uplinkId, keys, uplinks));
+    const info = said ?? (await startOnce(held, device, uplinkId, keys, uplinks, iceServers));
     held.running.set(device, { uplinkId, info });
     return { uplinkId, info };
 };
@@ -312,6 +347,29 @@ const closeTerminal = async (held: Held, device: string, session: string, caller
     record(held, caller, "terminal.close", device, { session });
 };
 
+// The device's agent asked about remoted's Windows service; whatever stopped it from answering is the person's reason.
+const askService = async (held: Held, device: string, action: RemoteServiceAction): Promise<RemoteService> => {
+    try {
+        return await held.deps.link.service(device, action);
+    } catch (error) {
+        throw conflict(errorMessage(error));
+    }
+};
+
+// Set up (or updated) or removed through the prompt on the computer, and recorded however it ended.
+const changeService = async (held: Held, device: string, action: RemoteServiceChangeInput["action"], caller: RemoteCaller): Promise<RemoteService> => {
+    requireFull(caller, action === "install" ? "set up the lock-screen service" : "remove the lock-screen service");
+    try {
+        const answer = await askService(held, device, action);
+        const outcome = answer.declined === true ? "declined" : answer.error === undefined ? "done" : "failed";
+        record(held, caller, `service.${action}`, device, { outcome, installed: answer.installed });
+        return answer;
+    } catch (error) {
+        record(held, caller, `service.${action}`, device, { outcome: "failed", reason: errorMessage(error) });
+        throw error;
+    }
+};
+
 // Withdraws the uplink of every device that went away.
 const sweep = (held: Held): void => {
     for (const [device, { uplinkId }] of held.running) {
@@ -350,6 +408,9 @@ export const createRemoteAccess = (deps: RemoteAccessDeps): RemoteAccess => {
         attachTerminal: (device, session, caller) => attachTerminal(held, device, session, caller),
         refresh: (device, session, caller) => refresh(held, device, session, caller),
         closeTerminal: (device, session, caller) => closeTerminal(held, device, session, caller),
+        // Anyone who may see the device reads it (the routes decide who that is).
+        service: (device) => askService(held, device, "status"),
+        changeService: (device, action, caller) => changeService(held, device, action, caller),
         // Every uplink netd holds up, those an earlier daemon started included.
         dropViewers: async (reason) => {
             const up = (held.netd?.registered() ?? []).filter((uplinkId) => held.netd?.connected(uplinkId) === true);

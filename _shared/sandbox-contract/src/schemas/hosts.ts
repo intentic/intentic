@@ -204,6 +204,12 @@ export const DeviceFeatureSchema = z.enum([
     // intentic-remoted, which the agent starts and keeps (schemas/device-remote.ts). Advertised only where a remoted can
     // exist here: a release built for this platform, or one already beside the agent.
     "remote",
+    // (2026-11-20) `remoteStart` takes `iceServers`, which the agent writes into each uplink of remoted.json for remoted's
+    // own STUN gathering. Without it the daemon leaves them out: the input schema is strict.
+    "remote-ice",
+    // (2026-11-20) `remoteService`: remoted's Windows service for the lock screen and administrator prompts, read,
+    // installed and removed (schemas/device-remote.ts). Advertised by a Windows agent that advertises `remote`.
+    "remote-service",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -222,6 +228,8 @@ export const DEVICE_FEATURE_SANDBOX_MOVE: DeviceFeature = "sandbox-move";
 export const DEVICE_FEATURE_FILE_COPY: DeviceFeature = "file-copy";
 export const DEVICE_FEATURE_STACKS: DeviceFeature = "stacks";
 export const DEVICE_FEATURE_REMOTE: DeviceFeature = "remote";
+export const DEVICE_FEATURE_REMOTE_ICE: DeviceFeature = "remote-ice";
+export const DEVICE_FEATURE_REMOTE_SERVICE: DeviceFeature = "remote-service";
 // What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

@@ -165,10 +165,11 @@ test.skipIf(!posix.runs)(posix.title("remoteStart writes the link's uplink 0600,
     expect(JSON.stringify([logged, audited])).not.toContain("token-1");
     expect(JSON.stringify([logged, audited])).not.toContain(KEY);
 
-    // Started again for the same link, the uplink takes the new token under the next generation, in the same remoted.
-    await held.start(link(ALPHA, grant({ remoteView: "on" })), input("token-2"));
-    expect((await config())?.uplinks.map(({ uplinkToken, generation }) => ({ uplinkToken, generation }))).toEqual([
-        { uplinkToken: "token-2", generation: 2 },
+    // Started again for the same link, the uplink takes the new token under the next generation, in the same remoted,
+    // and the sandbox's STUN servers when it sends them (none were sent above, and the uplink held none).
+    await held.start(link(ALPHA, grant({ remoteView: "on" })), { ...input("token-2"), iceServers: ["stun:stun.example.test:3478"] });
+    expect((await config())?.uplinks.map(({ uplinkToken, generation, iceServers }) => ({ uplinkToken, generation, iceServers }))).toEqual([
+        { uplinkToken: "token-2", generation: 2, iceServers: ["stun:stun.example.test:3478"] },
     ]);
     expect(held.status()?.pid).toBe(pid);
 });

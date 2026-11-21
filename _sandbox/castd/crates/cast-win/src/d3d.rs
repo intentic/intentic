@@ -224,6 +224,21 @@ impl Device {
 /// The NT handle of a shared texture, closed when dropped (each device that opened it keeps its own reference).
 pub struct Shared(HANDLE);
 
+// SAFETY: an NT handle, usable from any thread.
+unsafe impl Send for Shared {}
+
+impl Shared {
+    /// A handle this process owns (one another process duplicated into it), closed when dropped.
+    pub fn from_raw(handle: u64) -> Shared {
+        Shared(HANDLE(handle as isize as *mut core::ffi::c_void))
+    }
+
+    /// The handle, still owned by this `Shared`.
+    pub fn raw(&self) -> HANDLE {
+        self.0
+    }
+}
+
 impl Drop for Shared {
     fn drop(&mut self) {
         // SAFETY: the handle CreateSharedHandle gave this struct.

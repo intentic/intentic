@@ -49,6 +49,9 @@ pub struct GdiCapture {
     display: Display,
     last_retry: Instant,
     rebuild: bool,
+    /// The screen's status, when its owner reports one: `gdi`, and the display off when it is.
+    status: Option<crate::session::StatusCell>,
+    display_off: bool,
 }
 
 /// How often a GDI capture standing in for duplication checks whether duplication works again.
@@ -59,6 +62,7 @@ impl GdiCapture {
         display: &Display,
         hub: Arc<Hub>,
         retry: Option<Arc<AtomicBool>>,
+        status: Option<crate::session::StatusCell>,
     ) -> Result<GdiCapture, String> {
         let (w, h) = (display.width() & !1, display.height() & !1);
         if w == 0 || h == 0 {
@@ -93,7 +97,20 @@ impl GdiCapture {
             display: display.clone(),
             last_retry: Instant::now(),
             rebuild: false,
+            status,
+            display_off: false,
         };
+        if let Some(cell) = &me.status {
+            // Keep the reason the source gave (duplication refused or not offered); a forced GDI says so.
+            let mut next = cell.lock().clone();
+            if next.via != "gdi" {
+                next = crate::session::CaptureStatus {
+                    reason: Some("GDI, as CAST_WIN_CAPTURE or the source asked".into()),
+                    ..crate::session::CaptureStatus::new("gdi")
+                };
+            }
+            crate::session::report(cell, &display.name, next);
+        }
         let t = Instant::now();
         while me.shared.lock().rects.is_empty() && t.elapsed() < Duration::from_secs(1) {
             std::thread::sleep(Duration::from_millis(5));
@@ -140,6 +157,23 @@ impl Capture for GdiCapture {
             && self.last_retry.elapsed() >= RETRY_EVERY
         {
             self.last_retry = Instant::now();
+            // GDI reads a display Windows turned off as black: say so rather than pass it off as the desktop.
+            let off = crate::session::display() == crate::session::Display::Off;
+            if off != self.display_off
+                && let Some(cell) = &self.status
+            {
+                self.display_off = off;
+                let blocked = crate::session::Blocked::DisplayOff;
+                let next = if off {
+                    crate::session::CaptureStatus::blocked("gdi", blocked, None)
+                } else {
+                    crate::session::CaptureStatus {
+                        reason: Some("desktop duplication refused; GDI stands in".into()),
+                        ..crate::session::CaptureStatus::new("gdi")
+                    }
+                };
+                crate::session::report(cell, &self.display.name, next);
+            }
             if duplication_works(&self.display) {
                 log::info!(
                     "{}: desktop duplication works again; leaving GDI",

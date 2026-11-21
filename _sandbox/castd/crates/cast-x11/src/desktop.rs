@@ -1,5 +1,6 @@
-//! The X cursor's shape and two-way clipboard, on an X connection of their own (voxl's, extended to HTML and to
-//! PRIMARY). Setting the clipboard takes CLIPBOARD (and PRIMARY, for text) and answers once the server has registered
+//! The X cursor's shape and position and the two-way clipboard, on an X connection of their own (voxl's, extended to
+//! HTML and to PRIMARY, and to the pointer's position, `Hub::pointer_at`, on XInput 2's raw motion where the server has
+//! it). Setting the clipboard takes CLIPBOARD (and PRIMARY, for text) and answers once the server has registered
 //! castd as owner, so a Ctrl+V injected right after pastes the new contents. A copy in the window (any other owner)
 //! is fetched in every format castd carries and sent to the viewers (`Hub::clipboard_changed`); the cursor goes to
 //! `Hub::set_cursor`.
@@ -14,6 +15,7 @@ use std::sync::mpsc;
 use x11rb::connection::Connection;
 use x11rb::protocol::Event;
 use x11rb::protocol::xfixes::{self, ConnectionExt as _};
+use x11rb::protocol::xinput::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::{
     self, AtomEnum, ConnectionExt as _, EventMask, PropMode, WindowClass,
 };
@@ -81,8 +83,19 @@ struct Fetch {
     incr: Option<Vec<u8>>,
 }
 
+/// The cursor and clipboard thread on `display`, the cursor hidden on the display while it runs (castd's Xvfb).
 pub fn spawn(display: Option<String>, hub: Arc<Hub>) -> Result<ClipboardHandle, String> {
-    let (conn, n) = RustConnection::connect(display.as_deref()).map_err(|e| e.to_string())?;
+    spawn_with(display, hub, true)
+}
+
+/// The cursor and clipboard thread; `hide_cursor` false leaves the pointer drawn on the display, for a person's own
+/// session, whose server keeps it out of what GetImage reads. The thread ends once the hub is stopped.
+pub fn spawn_with(
+    display: Option<String>,
+    hub: Arc<Hub>,
+    hide_cursor: bool,
+) -> Result<ClipboardHandle, String> {
+    let (conn, n) = crate::connect::connect(display.as_deref())?;
     let root = conn.setup().roots[n].root;
     conn.xfixes_query_version(5, 0)
         .map_err(|e| e.to_string())?
@@ -119,9 +132,12 @@ pub fn spawn(display: Option<String>, hub: Arc<Hub>) -> Result<ClipboardHandle, 
     };
     conn.xfixes_select_cursor_input(root, xfixes::CursorNotifyMask::DISPLAY_CURSOR)
         .map_err(|e| e.to_string())?;
+    let follows_pointer = select_raw_motion(&conn, root);
     // Viewers draw the cursor themselves. Xvfb's software cursor is painted into the framebuffer castd reads, which
     // would show a second, lagging cursor and turn every pointer move into an encode, so hide it while connected.
-    conn.xfixes_hide_cursor(root).map_err(|e| e.to_string())?;
+    if hide_cursor {
+        conn.xfixes_hide_cursor(root).map_err(|e| e.to_string())?;
+    }
     conn.xfixes_select_selection_input(
         root,
         atoms.clipboard,
@@ -141,7 +157,15 @@ pub fn spawn(display: Option<String>, hub: Arc<Hub>) -> Result<ClipboardHandle, 
             let mut fetch: Option<Fetch> = None;
             let mut cursor_serial = None;
             send_cursor(&conn, &hub, &mut cursor_serial);
+            // The pointer moved since it was last asked where it is, and when that was: raw motion comes as fast as the
+            // mouse reports (up to 1000 a second), so the position is asked at most every POINTER_EVERY.
+            let mut pointer_moved = follows_pointer;
+            let mut pointer_asked = std::time::Instant::now() - POINTER_EVERY;
             loop {
+                // The pipeline stopped: the connection closes, which shows the cursor again and lets the selections go.
+                if hub.is_stopped() {
+                    return;
+                }
                 let mut drain = [0u8; 64];
                 while matches!(read(&wake_r, &mut drain), Ok(n) if n > 0) {}
                 while let Ok((content, done)) = rx.try_recv() {
@@ -159,11 +183,22 @@ pub fn spawn(display: Option<String>, hub: Arc<Hub>) -> Result<ClipboardHandle, 
                 let ev = match conn.poll_for_event() {
                     Ok(Some(ev)) => ev,
                     Ok(None) => {
+                        let mut wait = 1000u16;
+                        if pointer_moved {
+                            let since = pointer_asked.elapsed();
+                            if since >= POINTER_EVERY {
+                                pointer_moved = false;
+                                pointer_asked = std::time::Instant::now();
+                                send_pointer(&conn, root, &hub);
+                            } else {
+                                wait = (POINTER_EVERY - since).as_millis() as u16 + 1;
+                            }
+                        }
                         let mut p = [
                             PollFd::new(conn.stream().as_fd(), PollFlags::POLLIN),
                             PollFd::new(wake_r.as_fd(), PollFlags::POLLIN),
                         ];
-                        let _ = poll(&mut p, 1000u16);
+                        let _ = poll(&mut p, wait);
                         continue;
                     }
                     Err(e) => {
@@ -173,6 +208,7 @@ pub fn spawn(display: Option<String>, hub: Arc<Hub>) -> Result<ClipboardHandle, 
                 };
                 match ev {
                     Event::XfixesCursorNotify(_) => send_cursor(&conn, &hub, &mut cursor_serial),
+                    Event::XinputRawMotion(_) => pointer_moved = true,
                     Event::XfixesSelectionNotify(e) => {
                         if e.selection == atoms.clipboard
                             && e.owner != win
@@ -495,6 +531,38 @@ pub fn css_cursor(name: &str) -> Option<&'static str> {
         "none" => "none",
         _ => return None,
     })
+}
+
+/// How often at most the pointer's position is asked and said: a frame's time at 125 frames a second.
+const POINTER_EVERY: std::time::Duration = std::time::Duration::from_millis(8);
+
+/// Asks for XInput 2's raw motion on the root window (every pointer device's moves, whoever or whatever made them, the
+/// person at the screen or XTEST), and says whether the server sends it. Without it the viewers hear no `pointer`.
+fn select_raw_motion(conn: &RustConnection, root: u32) -> bool {
+    let supported = conn
+        .xinput_xi_query_version(2, 0)
+        .ok()
+        .and_then(|c| c.reply().ok())
+        .is_some_and(|v| v.major_version >= 2);
+    if !supported {
+        log::info!("no XInput 2 on this display: viewers are not told where the pointer is");
+        return false;
+    }
+    let mask = xinput::EventMask {
+        deviceid: xinput::Device::ALL_MASTER.into(),
+        mask: vec![xinput::XIEventMask::RAW_MOTION],
+    };
+    conn.xinput_xi_select_events(root, &[mask])
+        .ok()
+        .and_then(|c| c.check().ok())
+        .is_some()
+}
+
+/// Tells the viewers where the pointer is now (root coordinates; the hub takes a crop's origin off).
+fn send_pointer(conn: &RustConnection, root: u32, hub: &Hub) {
+    if let Ok(Ok(at)) = conn.query_pointer(root).map(|c| c.reply()) {
+        hub.pointer_at(i32::from(at.root_x), i32::from(at.root_y));
+    }
 }
 
 fn send_cursor(conn: &RustConnection, hub: &Hub, last_serial: &mut Option<u32>) {

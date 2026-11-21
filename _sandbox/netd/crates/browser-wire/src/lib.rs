@@ -564,10 +564,14 @@ pub const MEDIA_LOOPBACK: &str = "loopback";
 ///   decoder conceals a lost one; a late one is worth nothing.
 /// - `input`, viewer to castd, ordered and reliable: every JSON message the viewer would send on the socket. Keys, acks
 ///   and clipboard writes must all arrive, in order.
-pub const RTC_CHANNELS: [(&str, bool, Option<u16>); 3] = [
+/// - `pointer`, castd to viewer, unordered with no retransmits: `pointer`, where the pointer is now. Only the newest
+///   counts, so a lost one is replaced by the next and none waits behind a picture. Optional (2026-11-20): a castd that
+///   predates it ignores the channel, and a viewer that does not open it hears `pointer` on `media` instead.
+pub const RTC_CHANNELS: [(&str, bool, Option<u16>); 4] = [
     ("media", true, None),
     ("audio", false, Some(0)),
     ("input", true, None),
+    ("pointer", false, Some(0)),
 ];
 
 /// The largest DataChannel message either side sends. A video message longer than this is cut into chunks, each a
@@ -805,10 +809,13 @@ pub enum BrowserMediaClientMessage {
     Ping {
         t: f64,
     },
-    /// An SDP offer for a peer connection straight to castd, which the viewer makes with the [`RTC_CHANNELS`] and no
-    /// media, only where `hello` said `rtc`. castd answers `rtcAnswer`, or `rtcClosed` when it cannot take one. Once its
-    /// `media` channel is open castd says `hello` there and moves the stream onto the channels; until then, and again
-    /// whenever the peer fails, the stream stays on this socket.
+    /// An SDP offer for a peer connection straight to castd, which the viewer makes with the [`RTC_CHANNELS`], only where
+    /// `hello` said `rtc`. castd answers `rtcAnswer`, or `rtcClosed` when it cannot take one. Once its `media` channel is
+    /// open castd says `hello` there and moves the stream onto the channels; until then, and again whenever the peer
+    /// fails, the stream stays on this socket. The offer may also carry one receive-only video section offering H.264
+    /// (packetization mode 1) with NACK, PLI and transport-wide congestion control: a castd that takes it sends the
+    /// pictures as RTP on that track instead of on `media` and says so in that hello (`track`); one that does not, an
+    /// older castd among them, leaves the section silent and the pictures on `media`.
     RtcOffer {
         sdp: String,
     },
@@ -863,10 +870,24 @@ pub enum BrowserMediaServerMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         local: Option<bool>,
+        /// The pictures after this hello ride the peer's video track as RTP (the offer had one and castd took it), not
+        /// `media`: the browser's own jitter buffer and decoder show them, NACK and PLI repair them, and castd's
+        /// bitrate follows the track's congestion control. Only in a hello on the peer; absent, video is on `media`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        track: Option<bool>,
     },
     /// The pointer's look changed.
     Cursor {
         cursor: MediaCursor,
+    },
+    /// Where the pointer is on the picture, in picture pixels (outside it when the pointer is on another part of the
+    /// screen), each time it moves there: the person at the computer, an app warping it, or this viewer's own moves
+    /// as they landed. At most one a captured frame's worth of time; on the peer it rides `pointer` where the viewer
+    /// opened that channel. A viewer that does not know it passes it over.
+    Pointer {
+        x: i32,
+        y: i32,
     },
     /// The remote clipboard changed (the page copied, or Ctrl+C in it): for the person's own clipboard.
     Clipboard {
@@ -1183,6 +1204,7 @@ mod tests {
                 read_only: false,
                 rtc: None,
                 local: None,
+                track: None,
             })
             .unwrap(),
             r#"{"type":"hello","width":2560,"height":1600,"scale":2.0,"codec":"avc1.42c033","audio":{"codec":"opus","sampleRate":48000,"channels":2},"readOnly":false}"#
@@ -1197,10 +1219,32 @@ mod tests {
                 read_only: false,
                 rtc: None,
                 local: Some(true),
+                track: None,
             })
             .unwrap(),
             r#"{"type":"hello","width":1280,"height":880,"scale":1.0,"codec":"avc1.640028","readOnly":false,"local":true}"#
         );
+        // On the peer, when the pictures move onto its video track.
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::Hello {
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+                codec: "avc1.42c028".into(),
+                audio: None,
+                read_only: true,
+                rtc: Some(true),
+                local: None,
+                track: Some(true),
+            })
+            .unwrap(),
+            r#"{"type":"hello","width":1920,"height":1080,"scale":1.0,"codec":"avc1.42c028","readOnly":true,"rtc":true,"track":true}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserMediaServerMessage::Pointer { x: -3, y: 1079 }).unwrap(),
+            r#"{"type":"pointer","x":-3,"y":1079}"#
+        );
+
         assert_eq!(
             serde_json::to_string(&BrowserMediaServerMessage::Cursor {
                 cursor: MediaCursor {
@@ -1296,7 +1340,7 @@ mod tests {
         let mut labels: Vec<&str> = RTC_CHANNELS.iter().map(|(label, _, _)| *label).collect();
         labels.sort_unstable();
         labels.dedup();
-        assert_eq!(labels, ["audio", "input", "media"]);
+        assert_eq!(labels, ["audio", "input", "media", "pointer"]);
         // A chunk's index and count are one byte each: 255 chunks still hold an 8 MB keyframe.
         assert!(255 * (RTC_MESSAGE_MAX - MEDIA_HEADER_LEN) >= 8_000_000);
         assert!(RTC_MESSAGE_MAX <= 256 * 1024);

@@ -83,15 +83,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin> MediaClient<S> {
         token: &str,
         reach: crate::media::Reach,
     ) -> Result<MediaClient<S>, String> {
+        Self::over_at(stream, browser_wire::BROWSER_MEDIA_PATH, session, token, reach).await
+    }
+
+    /// The same at another path than castd's (`/media`, where a device's intentic-remoted serves its screens).
+    pub async fn over_at(
+        stream: S,
+        path: &str,
+        session: &str,
+        token: &str,
+        reach: crate::media::Reach,
+    ) -> Result<MediaClient<S>, String> {
         let lossless = if reach.lossless {
             format!("&{}=1", browser_wire::MEDIA_LOSSLESS_QUERY)
         } else {
             String::new()
         };
-        let url = format!(
-            "ws://castd{}/{session}?token={token}{lossless}",
-            browser_wire::BROWSER_MEDIA_PATH
-        );
+        let url = format!("ws://castd{path}/{session}?token={token}{lossless}");
         let mut req = url.into_client_request().map_err(|e| e.to_string())?;
         if reach.local {
             req.headers_mut().insert(

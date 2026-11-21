@@ -4,7 +4,7 @@
 //! never an error: the socket and castd outlive any viewer's mistake.
 
 use crate::clipboard::ClipContent;
-use crate::hub::{Client, Joining, Out, WantSize};
+use crate::hub::{Client, Hub, Joining, Out, WantSize};
 use crate::input::{InputEvent, Mods, is_altgr_character};
 use crate::server::App;
 use axum::extract::ws::{Message, WebSocket};
@@ -35,6 +35,9 @@ enum CarrierChange {
     ToSocket(String),
 }
 
+/// Least time between two keyframes a track's PLIs bring.
+const PLI_EVERY: Duration = Duration::from_millis(500);
+
 /// How long a socket castd ends may take to send its close frame before its writer is stopped anyway.
 const CLOSE_WITHIN: Duration = Duration::from_secs(1);
 
@@ -46,8 +49,34 @@ pub struct Reach {
     pub lossless: bool,
 }
 
+/// What a daemon that serves people's sockets for several sandboxes checks while one runs, beside the token it checked
+/// at the upgrade (intentic-remoted: its switches, the person's pause, its drops). castd's sockets run without one: the
+/// token and the hub's drops are all it asks.
+pub trait Guard: Send + Sync + 'static {
+    /// Whether this viewer's input (keys, pointer, scroll, clipboard, a resize) reaches the screen now. While it is
+    /// not, the viewer is a watcher.
+    fn input_allowed(&self) -> bool;
+    /// A fresh token's expiry, when it holds for this socket with `read_only` access as at the upgrade; None
+    /// refreshes nothing. Replaces castd's own check of the token against its key and session.
+    fn refresh(&self, token: &str, read_only: bool) -> Option<u64>;
+    /// The viewer's client exists: the guard may end it later with [`Client::end`] (access revoked, a drop).
+    fn joined(&self, client: &Arc<Client>);
+}
+
 pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, reach: Reach) {
+    serve_guarded(socket, app, claims, reach, None).await
+}
+
+/// [`serve`], with a [`Guard`] the socket asks before input and token refreshes.
+pub async fn serve_guarded(
+    socket: WebSocket,
+    app: App,
+    claims: crate::token::Claims,
+    reach: Reach,
+    guard: Option<Arc<dyn Guard>>,
+) {
     use futures_util::{SinkExt, StreamExt};
+    let guard = guard.as_deref();
     let hub = app.hub.clone();
     let read_only = claims.ro;
     let (mut sink, mut stream) = socket.split();
@@ -63,6 +92,9 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
         },
     );
     client.token_exp.store(claims.exp, Ordering::Relaxed);
+    if let Some(guard) = guard {
+        guard.joined(&client);
+    }
     log::info!(
         "viewer {} connected{}{}",
         client.id,
@@ -77,6 +109,9 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
     client.send(Out::Hello(hub.hello(&client)));
     if let Some(cursor) = hub.cursor.lock().clone() {
         client.send(Out::Text(cursor));
+    }
+    if let Some(pointer) = hub.pointer_message() {
+        client.send(Out::Pointer(pointer));
     }
     hub.wake();
     let writer = {
@@ -95,11 +130,20 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
                         // A fresh hello on the carrier the stream now rides, ahead of anything queued, and a keyframe
                         // after it: the viewer believes pictures only from the carrier of the hello it heard last.
                         client.restart_video();
+                        // The hello says whether the pictures ride the peer's track, so the track is the client's first.
+                        *client.track.lock() = match &change {
+                            CarrierChange::ToPeer(peer) => peer.track(),
+                            CarrierChange::ToSocket(_) => None,
+                        };
                         let hello = hub.hello(&client);
                         epoch = Instant::now();
                         match change {
                             CarrierChange::ToPeer(peer) => {
-                                log::info!("viewer {}: the stream moves onto its peer connection", client.id);
+                                log::info!(
+                                    "viewer {}: the stream moves onto its peer connection{}",
+                                    client.id,
+                                    if client.on_track().is_some() { ", its pictures onto the video track" } else { "" }
+                                );
                                 client.on_peer.store(true, Ordering::Relaxed);
                                 peer.send(crate::rtc::ToPeer::Text(hello));
                                 carrier = Carrier::Peer(peer);
@@ -137,13 +181,14 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
                 }
                 // A peer that has ended drops what it is handed until its reader moves the stream back.
                 if let Carrier::Peer(peer) = &carrier {
-                    if !for_peer(m, epoch, peer, &mut sink).await {
+                    let track = client.on_track().is_some();
+                    if !for_peer(m, epoch, peer, track, &mut sink).await {
                         break;
                     }
                     continue;
                 }
                 let msg = match m {
-                    Out::Text(t) | Out::Hello(t) => Message::Text(t.into()),
+                    Out::Text(t) | Out::Hello(t) | Out::Pointer(t) => Message::Text(t.into()),
                     Out::Media(media) => Message::Binary(media.bytes_since(epoch).into()),
                     Out::Clipped(media, clip) => {
                         Message::Binary(media.clipped_since(epoch, clip).into())
@@ -186,7 +231,10 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
                         rtt_ms: f64::from(c.min_rtt_ms.load(Ordering::Relaxed)),
                         target_kbps: hub.target_kbps.load(Ordering::Relaxed),
                         fps: f64::from(frames) / since.as_secs_f64(),
-                        queue_ms: c.delay.lock().queue_ms.max(0.0),
+                        queue_ms: c
+                            .on_track()
+                            .map_or_else(|| c.delay.lock().queue_ms, |t| t.queue_ms())
+                            .max(0.0),
                     };
                     if let Ok(t) = serde_json::to_string(&stats) {
                         c.send(Out::Text(t));
@@ -203,7 +251,7 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
             // castd ended it (`Client::end`): the daemon dropped its viewers, or its token lapsed.
             _ = client.ending.notified() => break,
             event = peer.next() => {
-                peer.handle(event, &app, &client, &carrier_tx, &mut rtts);
+                peer.handle(event, &app, &client, &carrier_tx, &mut rtts, guard);
                 continue;
             }
         };
@@ -211,8 +259,8 @@ pub async fn serve(socket: WebSocket, app: App, claims: crate::token::Claims, re
             Message::Text(t) => match serde_json::from_str::<BrowserMediaClientMessage>(t.as_str())
             {
                 Ok(m) => {
-                    if let Some(m) = peer.signal(m, &client, &carrier_tx) {
-                        handle(&app, &client, m);
+                    if let Some(m) = peer.signal(m, &hub, &client, &carrier_tx) {
+                        act(&app, &client, m, guard);
                     }
                 }
                 Err(e) => log::debug!(
@@ -291,9 +339,15 @@ impl Rtts {
 }
 
 /// Sends `m` over the peer, or on the socket what the peer does not carry: pings, which keep the socket alive, and a
-/// JSON message longer than a DataChannel message (a copied image), which nothing orders against the pictures. False
-/// once the socket is gone.
-async fn for_peer<S>(m: Out, epoch: Instant, peer: &crate::rtc::Peer, sink: &mut S) -> bool
+/// JSON message longer than a DataChannel message (a copied image), which nothing orders against the pictures. Video
+/// goes on the peer's track when `track`, else on `media`. False once the socket is gone.
+async fn for_peer<S>(
+    m: Out,
+    epoch: Instant,
+    peer: &crate::rtc::Peer,
+    track: bool,
+    sink: &mut S,
+) -> bool
 where
     S: futures_util::Sink<Message> + Unpin,
 {
@@ -310,19 +364,20 @@ where
             return sink.send(Message::Text(t.into())).await.is_ok();
         }
         Out::Text(t) | Out::Hello(t) => ToPeer::Text(t),
+        Out::Pointer(t) => ToPeer::Pointer(t),
         // The writer sends a close on the socket before it asks the carrier.
         Out::Close(..) => return false,
-        Out::Media(media) => {
-            let bytes = media.bytes_since(epoch);
-            if media.header.kind == crate::header::KIND_AUDIO {
-                ToPeer::Audio(bytes)
-            } else {
-                ToPeer::Video(bytes)
-            }
+        Out::Media(media) if media.header.kind == crate::header::KIND_AUDIO => {
+            ToPeer::Audio(media.bytes_since(epoch))
         }
-        // Queued before the stream moved: a peer carries none of them (`Client::exacting`), and the restart that moved
-        // it starts the viewer's picture over from a keyframe anyway.
-        Out::Clipped(media, _) => ToPeer::Video(media.bytes_since(epoch)),
+        // Queued before the stream moved, a clipped one too: a peer carries none of them (`Client::exacting`), and the
+        // restart that moved it starts the viewer's picture over from a keyframe anyway.
+        Out::Media(media) | Out::Clipped(media, _) if track => ToPeer::Frame {
+            unit: media.payload.clone(),
+            captured: media.captured,
+            key: media.header.flags & crate::header::FLAG_KEY != 0,
+        },
+        Out::Media(media) | Out::Clipped(media, _) => ToPeer::Video(media.bytes_since(epoch)),
         Out::Lossless(..) => return true,
     };
     peer.send(to_peer);
@@ -360,6 +415,7 @@ impl PeerSide {
         client: &Arc<Client>,
         carrier: &mpsc::UnboundedSender<CarrierChange>,
         rtts: &mut Rtts,
+        guard: Option<&dyn Guard>,
     ) {
         use crate::rtc::PeerEvent;
         match event {
@@ -367,6 +423,21 @@ impl PeerSide {
                 if let Some(peer) = self.pending.take() {
                     self.carrying = true;
                     let _ = carrier.send(CarrierChange::ToPeer(peer));
+                }
+            }
+            // The track's decoder lost the stream: as the channel's `keyframe` asks, but not again while the last
+            // keyframe may still be on its way (a decoder waiting for one asks every few hundred milliseconds).
+            PeerEvent::Keyframe => {
+                if self.carrying && app.hub.last_keyframe.lock().elapsed() >= PLI_EVERY {
+                    client.started.store(false, Ordering::Relaxed);
+                    client.needs_keyframe.store(true, Ordering::Relaxed);
+                    app.hub.wake();
+                }
+            }
+            // While a track carries the pictures nothing acks them: RTCP's round trip is the viewer's.
+            PeerEvent::Rtt(ms) => {
+                if self.carrying {
+                    rtts.push(client, ms);
                 }
             }
             PeerEvent::Input(text) => {
@@ -381,7 +452,7 @@ impl PeerSide {
                         if let BrowserMediaClientMessage::Ack { id, decode_ms } = &m {
                             rtts.acked(client, *id, *decode_ms);
                         }
-                        handle(app, client, m);
+                        act(app, client, m, guard);
                     }
                     Err(e) => log::debug!(
                         "viewer {}: ignoring a peer message castd cannot read: {e}",
@@ -406,13 +477,14 @@ impl PeerSide {
     fn signal(
         &mut self,
         m: BrowserMediaClientMessage,
+        hub: &Hub,
         client: &Arc<Client>,
         carrier: &mpsc::UnboundedSender<CarrierChange>,
     ) -> Option<BrowserMediaClientMessage> {
         use BrowserMediaClientMessage as M;
         match m {
             M::RtcOffer { sdp } => {
-                self.offer(&sdp, client, carrier);
+                self.offer(&sdp, client, carrier, pictures(hub));
                 None
             }
             // ICE-lite (castd's) learns the viewer's address from its checks and ignores these; full ICE takes them, up
@@ -446,11 +518,12 @@ impl PeerSide {
         sdp: &str,
         client: &Arc<Client>,
         carrier: &mpsc::UnboundedSender<CarrierChange>,
+        pictures: crate::rtc::Pictures,
     ) {
         // A fresh offer replaces whatever peer there was: the viewer made a new connection.
         self.close(carrier, "the viewer offered another peer connection");
         let (events_tx, events_rx) = mpsc::unbounded_channel();
-        match crate::rtc::accept(sdp, events_tx) {
+        match crate::rtc::accept_with(sdp, events_tx, pictures) {
             Ok((answer, peer)) => {
                 log::info!("viewer {}: answering its peer connection", client.id);
                 self.events = Some(events_rx);
@@ -463,6 +536,21 @@ impl PeerSide {
             }
             Err(reason) => refuse(client, &reason),
         }
+    }
+}
+
+/// What the pictures are, for an offer that asks for them on a video track: a track carries one H.264 stream, so a
+/// picture cut into stripes stays on `media`; the stream's profile picks the payload type; the track's congestion
+/// control starts at the bitrate castd aims for now and probes up to its ceiling.
+fn pictures(hub: &Hub) -> crate::rtc::Pictures {
+    let codec = hub.codec.lock().clone();
+    crate::rtc::Pictures {
+        trackable: hub.stripes.lock().len() <= 1,
+        profile: codec
+            .strip_prefix("avc1.")
+            .and_then(|hex| u8::from_str_radix(hex.get(..2)?, 16).ok()),
+        start_kbps: hub.target_kbps.load(Ordering::Relaxed),
+        max_kbps: hub.ceiling_kbps.load(Ordering::Relaxed),
     }
 }
 
@@ -520,6 +608,10 @@ fn to_screen(app: &App, x: f64, y: f64) -> Option<(i32, i32)> {
 
 /// Acts on one message from a viewer.
 pub fn handle(app: &App, c: &Arc<Client>, m: BrowserMediaClientMessage) {
+    act(app, c, m, None)
+}
+
+fn act(app: &App, c: &Arc<Client>, m: BrowserMediaClientMessage, guard: Option<&dyn Guard>) {
     use BrowserMediaClientMessage as M;
     let hub = &app.hub;
     // Watching needs only these; everything else acts on the window, which a read-only viewer may not.
@@ -536,7 +628,7 @@ pub fn handle(app: &App, c: &Arc<Client>, m: BrowserMediaClientMessage) {
             | M::RtcClose
             | M::Token { .. }
     );
-    if c.read_only && !watching {
+    if (c.read_only || guard.is_some_and(|g| !g.input_allowed())) && !watching {
         return;
     }
     match m {
@@ -672,7 +764,14 @@ pub fn handle(app: &App, c: &Arc<Client>, m: BrowserMediaClientMessage) {
         }
         // Signalling is the socket's (`PeerSide::signal`), never an action on the window.
         M::RtcOffer { .. } | M::RtcCandidate { .. } | M::RtcClose => {}
-        M::Token { token } => refresh(app, c, &token),
+        M::Token { token } => match guard {
+            Some(guard) => {
+                if let Some(exp) = guard.refresh(&token, c.read_only) {
+                    c.token_exp.fetch_max(exp, Ordering::Relaxed);
+                }
+            }
+            None => refresh(app, c, &token),
+        },
     }
 }
 

@@ -253,7 +253,8 @@ mod tests {
             serde_json::json!({"uplink": "link-a", "kind": "terminal", "session": "t-1", "readOnly": true, "since": 1})
         );
         assert_eq!(json["terminals"], 2);
-        assert_eq!(json["monitors"], serde_json::json!([]));
+        // Whatever screens this computer has (a virtual desktop wherever Xvfb is installed): a list either way.
+        assert!(json["monitors"].is_array());
     }
 
     #[test]

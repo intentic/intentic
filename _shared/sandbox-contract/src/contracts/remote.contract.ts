@@ -5,6 +5,8 @@ import {
     RemoteOpenScreenInputSchema,
     RemoteOpenTerminalInputSchema,
     RemoteScreenSchema,
+    RemoteServiceChangeInputSchema,
+    RemoteServiceSchema,
     RemoteSessionInputSchema,
     RemoteStatusSchema,
     RemoteTerminalOpenedSchema,
@@ -77,4 +79,26 @@ export const remoteContract = {
         })
         .input(RemoteSessionInputSchema)
         .output(OkSchema),
+    // Windows' lock screen and administrator prompts (schemas/device-remote.ts): read by anyone who can see the device,
+    // changed only with Full access.
+    service: watchRoute
+        .route({
+            method: "GET",
+            path: "/system/devices/{device}/remote/service",
+            summary: "Whether a Windows computer's lock screen and administrator prompts can be reached remotely",
+            description:
+                "Whether remote access's own Windows service is installed on the computer, its state and version, and whether it is older than the computer's agent. Without it a remote screen cannot show or use the sign-in and lock screen, Ctrl+Alt+Del or administrator prompts. Changes nothing.",
+        })
+        .input(RemoteDeviceInputSchema)
+        .output(RemoteServiceSchema),
+    changeService: remoteRoute
+        .route({
+            method: "POST",
+            path: "/system/devices/{device}/remote/service",
+            summary: "Set up, update or remove a Windows computer's lock-screen service",
+            description:
+                "Installs (or updates) or removes remote access's own Windows service on the computer. Windows asks the person at that computer for an administrator's yes, and this waits for the answer, up to ten minutes; a no comes back as `declined` with nothing changed. Full access only. Recorded in the audit log.",
+        })
+        .input(RemoteServiceChangeInputSchema)
+        .output(RemoteServiceSchema),
 };

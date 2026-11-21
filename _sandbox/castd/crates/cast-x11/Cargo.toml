@@ -14,3 +14,7 @@ libc = "0.2"
 log = "0.4"
 nix = { version = "0.31", features = ["fs", "poll"] }
 x11rb = { version = "0.13", features = ["shm", "damage", "xfixes", "xtest", "xinput", "randr"] }
+
+[dev-dependencies]
+# The hub a viewer's messages go out through, in the pointer test.
+tokio = { version = "1", features = ["sync"] }

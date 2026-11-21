@@ -5,7 +5,8 @@
 //! ```json
 //! { "paused": false, "notBefore": 0,
 //!   "uplinks": [{ "id": "…", "url": "https://…", "device": "…", "uplinkToken": "…", "mediaKey": "<base64url>",
-//!                 "allow": { "view": false, "control": false, "terminal": true }, "generation": 1 }] }
+//!                 "allow": { "view": false, "control": false, "terminal": true }, "generation": 1,
+//!                 "iceServers": ["stun:stun.cloudflare.com:3478"] }] }
 //! ```
 //!
 //! With `--sandbox-url` and `--device` on the command line (a person running it by hand, a test), the file holds one
@@ -39,6 +40,20 @@ impl Allow {
     }
 }
 
+/// A STUN (or TURN) server as RTCPeerConnection takes it: the sandbox's `remoteIceServers` setting, which both ends
+/// of a screen's peer connection gather candidates from. remoted asks the `stun:` ones for its server-reflexive address.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IceServer {
+    pub urls: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential: Option<String>,
+}
+
+/// The STUN server remoted asks when no uplink names any: the sandbox setting's own default.
+pub const DEFAULT_STUN: &str = "stun:stun.cloudflare.com:3478";
+
 /// One linked sandbox's uplink.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +72,10 @@ pub struct UplinkConfig {
     /// Bumped by the agent on every start it was asked for: an uplink the sandbox withdrew dials again only once this moves.
     #[serde(default)]
     pub generation: u64,
+    /// The sandbox's STUN servers (its `remoteIceServers` setting's URLs, `stun:host:port`), which remoted asks for
+    /// its screens' server-reflexive address. Absent (an older agent, a sandbox that sent none): host candidates only.
+    #[serde(default)]
+    pub ice_servers: Option<Vec<String>>,
 }
 
 impl UplinkConfig {
@@ -106,6 +125,8 @@ struct OneUplinkFile {
     allow: Allow,
     #[serde(default)]
     generation: u64,
+    #[serde(default)]
+    ice_servers: Option<Vec<String>>,
 }
 
 /// The uplink the command line names, whose secrets the file holds at its top level.
@@ -140,6 +161,7 @@ pub fn parse(text: &str, named: Option<&Named>) -> anyhow::Result<Config> {
                     media_key: file.media_key,
                     allow: file.allow,
                     generation: file.generation,
+                    ice_servers: file.ice_servers,
                 }],
             }
         }
@@ -284,6 +306,20 @@ mod tests {
         );
         assert_eq!(config.uplinks[0].generation, 2);
         assert_eq!(config.uplinks[0].key(), Some(vec![7_u8; 32]));
+    }
+
+    #[test]
+    fn an_uplinks_stun_servers_are_read_and_absent_ones_are_none() {
+        let with = uplink("a").replace(
+            r#""generation":2"#,
+            r#""generation":2,"iceServers":["stun:stun.example:3478","turn:relay.example"]"#,
+        );
+        let config = parse(&format!(r#"{{"uplinks":[{with},{}]}}"#, uplink("b")), None).unwrap();
+        assert_eq!(
+            config.uplinks[0].ice_servers.as_deref(),
+            Some(&["stun:stun.example:3478".to_owned(), "turn:relay.example".to_owned()][..])
+        );
+        assert_eq!(config.uplinks[1].ice_servers, None);
     }
 
     #[test]

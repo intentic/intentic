@@ -114,6 +114,8 @@ pub enum Out {
     Ping(u64),
     /// The socket's close frame, its code and words: the last thing a viewer castd ends is sent (`Client::end`).
     Close(u16, String),
+    /// A `pointer` message: JSON on the socket, the unordered `pointer` channel on a peer.
+    Pointer(String),
 }
 
 pub struct Inflight {
@@ -173,6 +175,9 @@ pub struct Client {
     pub lossless: bool,
     /// Its stream rides a peer connection now, where no copy goes.
     pub on_peer: AtomicBool,
+    /// Its pictures ride that peer's video track (rtc's `Peer::track`), and what the track says of its link: no acks
+    /// come, so its bitrate and whether it is behind are the track's congestion control's word.
+    pub track: Mutex<Option<Arc<crate::rtc::Feedback>>>,
     /// Where its picture is exact (exact.rs), kept by the encode thread.
     pub exact: Mutex<Exact>,
     /// How many pictures a second its display shows, as its last `resize` said (0: never said).
@@ -296,6 +301,37 @@ impl Client {
         }
     }
 
+    /// The track carrying its pictures, while one does.
+    pub fn on_track(&self) -> Option<Arc<crate::rtc::Feedback>> {
+        self.track.lock().clone()
+    }
+
+    /// Whether it cannot keep up: too many frames, or too old a frame, unacknowledged (`rate::behind`); on a track,
+    /// further ahead of its link's share than a round trip and 120 ms, the bound acks give a frame's age.
+    pub fn behind(&self, interval_ms: f64) -> bool {
+        if let Some(track) = self.on_track() {
+            return track.queue_ms() > self.rtt_ms() + 120.0;
+        }
+        let (n, age) = self.backlog();
+        crate::rate::behind(n, age as f64, self.rtt_ms(), interval_ms)
+    }
+
+    /// Whether its track has run further ahead of its link's share than the capture should add to: two frames' worth,
+    /// and never less than 60 ms. A viewer whose pictures are on a channel never has (its acks gate it instead).
+    pub fn track_full(&self, interval_ms: f64) -> bool {
+        self.on_track()
+            .is_some_and(|t| t.queue_ms() > (2.0 * interval_ms).max(60.0))
+    }
+
+    /// Whether what it was sent has all arrived (on a track: caught up with its share), so a skipped viewer may
+    /// restart.
+    pub fn drained(&self, interval_ms: f64) -> bool {
+        match self.on_track() {
+            Some(track) => track.queue_ms() < interval_ms,
+            None => self.backlog().0 == 0,
+        }
+    }
+
     /// Restart video for this viewer: a keyframe first, old acks void.
     pub fn restart_video(&self) {
         self.inflight.lock().clear();
@@ -304,19 +340,26 @@ impl Client {
         self.needs_keyframe.store(true, Ordering::Relaxed);
     }
 
-    /// This viewer as the bitrate policy sees it.
+    /// This viewer as the bitrate policy sees it: what its acks say, or on a track what its congestion control says.
     pub fn viewer(&self) -> Viewer {
-        let (_, age) = self.backlog();
-        Viewer {
+        let mut v = Viewer {
             id: self.id,
             started: self.started.load(Ordering::Relaxed),
             internal: self.internal,
             last_input: self.last_input.load(Ordering::Relaxed),
             delivered_kbps: self.delivered.lock().rate_bps / 1000.0,
             queue_ms: self.delay.lock().queue_ms,
-            backlog_age_ms: age as f64,
+            backlog_age_ms: self.backlog().1 as f64,
             rtt_ms: self.rtt_ms(),
+            estimate_kbps: None,
+        };
+        if let Some(track) = self.on_track() {
+            v.estimate_kbps = track.estimate_kbps();
+            v.delivered_kbps = v.estimate_kbps.unwrap_or(0.0);
+            v.queue_ms = track.queue_ms();
+            v.backlog_age_ms = 0.0;
         }
+        v
     }
 }
 
@@ -343,6 +386,9 @@ pub struct Stats {
     pub damage_wait_us: AtomicU64,
     pub send_lat_us: AtomicU64,
 }
+
+/// What hears that a capture failed for good, in words (`Hub::fatal`).
+pub type Fatal = Box<dyn FnOnce(String) + Send>;
 
 pub struct Hub {
     pub epoch: Instant,
@@ -373,6 +419,8 @@ pub struct Hub {
     pub stripes: Mutex<Vec<(u32, u32)>>,
     /// Adaptive bitrate cap applied by the encoder (kbit/s).
     pub target_kbps: AtomicU32,
+    /// The most the network bitrate may reach (`--max-kbps`): what a track's congestion control probes toward.
+    pub ceiling_kbps: AtomicU32,
     /// The viewer the bitrate follows now (0: none), chosen by the capture thread.
     pub steering: AtomicU64,
     /// That viewer is on this computer's loopback: motion is encoded at the local quality.
@@ -381,6 +429,8 @@ pub struct Hub {
     pub fps: AtomicU32,
     /// The latest cursor message, replayed to new viewers.
     pub cursor: Mutex<Option<String>>,
+    /// Where the pointer was last said to be, in picture pixels, and that `pointer` message, replayed to new viewers.
+    pointer: Mutex<Option<((i32, i32), String)>>,
     /// Wakes the capture thread (acks, joins, keyframe requests).
     pub waker: crate::wake::Wake,
     /// Where viewers' input goes: the platform's input thread (input.rs), once it started.
@@ -405,6 +455,12 @@ pub struct Hub {
     /// How long past its newest token's expiry a viewer's socket stays open (browser-wire's
     /// MEDIA_TOKEN_GRACE_SECONDS, in ms; a test's own).
     pub token_grace_ms: AtomicU64,
+    /// Set once the pipeline was asked to stop (`video::Video::stop`): the capture, encode and audio threads end, and
+    /// nothing exits the process. A daemon that serves screens on demand stops one after its last viewer left.
+    pub stopped: AtomicBool,
+    /// Called (once) instead of ending the process when the capture fails for good: a daemon serving several screens,
+    /// and terminals beside them, ends that screen alone. castd sets none, and a failed capture ends castd.
+    pub on_fatal: Mutex<Option<Fatal>>,
 }
 
 /// The close code castd ends a socket with, by browser-wire's name for it (`MEDIA_CLOSE_CODES`).
@@ -435,11 +491,13 @@ impl Hub {
             encoder: Mutex::new("x264"),
             audio,
             target_kbps: AtomicU32::new(0),
+            ceiling_kbps: AtomicU32::new(0),
             steering: AtomicU64::new(0),
             local_steering: AtomicBool::new(false),
             fps: AtomicU32::new(0),
             stripes: Mutex::new(Vec::new()),
             cursor: Mutex::new(None),
+            pointer: Mutex::new(None),
             waker: crate::wake::Wake::new().expect("wake pipe"),
             input: Mutex::new(None),
             resize_req: Mutex::new(None),
@@ -450,6 +508,8 @@ impl Hub {
             not_before: AtomicU64::new(0),
             not_before_rw: AtomicU64::new(0),
             token_grace_ms: AtomicU64::new(browser_wire::MEDIA_TOKEN_GRACE_SECONDS * 1000),
+            stopped: AtomicBool::new(false),
+            on_fatal: Mutex::new(None),
         })
     }
 
@@ -495,6 +555,25 @@ impl Hub {
         self.waker.signal();
     }
 
+    /// The capture failed for good: the daemon's `on_fatal` hears why (and the pipeline stops), or, with none set,
+    /// the process ends, as castd always has.
+    pub fn fatal(&self, why: String) {
+        log::error!("{why}");
+        let hook = self.on_fatal.lock().take();
+        match hook {
+            Some(hook) => {
+                self.stopped.store(true, Ordering::Relaxed);
+                hook(why);
+            }
+            None => crate::exit(1),
+        }
+    }
+
+    /// Whether the pipeline was asked to stop.
+    pub fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
+    }
+
     pub fn drain_wake(&self) {
         self.waker.drain();
     }
@@ -521,6 +600,7 @@ impl Hub {
             local: joining.local,
             lossless: joining.lossless,
             on_peer: AtomicBool::new(false),
+            track: Mutex::new(None),
             exact: Mutex::new(Exact::default()),
             display_hz: AtomicU32::new(0),
             video: AtomicBool::new(false),
@@ -679,6 +759,7 @@ impl Hub {
             read_only: c.read_only,
             rtc: crate::rtc::offered().then_some(true),
             local: c.local.then_some(true),
+            track: c.on_track().map(|_| true),
         })
         .expect("hello serializes")
     }
@@ -715,6 +796,38 @@ impl Hub {
         );
     }
 
+    /// The pointer is at (`x`, `y`) on the screen (screen pixels): every viewer hears where that is on the picture when
+    /// it moved, and a viewer that joins later hears it first. A platform calls it as the pointer moves (cast-x11 on
+    /// raw motion, cast-win on duplication's pointer updates), as often as it likes: only a move is sent.
+    pub fn pointer_at(&self, x: i32, y: i32) {
+        let (ox, oy) = self
+            .crop
+            .lock()
+            .map_or((0, 0), |c| (c.x as i32, c.y as i32));
+        let at = (x - ox, y - oy);
+        let msg = BrowserMediaServerMessage::Pointer { x: at.0, y: at.1 };
+        let Ok(text) = serde_json::to_string(&msg) else {
+            return;
+        };
+        {
+            let mut last = self.pointer.lock();
+            if last.as_ref().is_some_and(|(was, _)| *was == at) {
+                return;
+            }
+            *last = Some((at, text.clone()));
+        }
+        for c in self.clients.lock().iter() {
+            if !c.internal {
+                c.send(Out::Pointer(text.clone()));
+            }
+        }
+    }
+
+    /// The last `pointer` message, for a viewer that just joined.
+    pub fn pointer_message(&self) -> Option<String> {
+        self.pointer.lock().as_ref().map(|(_, text)| text.clone())
+    }
+
     /// The pointer's shape changed: every viewer draws the new one, and a viewer that joins later gets it first.
     pub fn set_cursor(&self, cursor: MediaCursor) {
         let msg = BrowserMediaServerMessage::Cursor { cursor };
@@ -722,5 +835,54 @@ impl Hub {
             *self.cursor.lock() = Some(text);
         }
         self.broadcast(&msg, |_| true);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_pointer_is_said_in_picture_pixels_once_a_move_and_again_to_a_viewer_that_joins() {
+        let hub = Hub::new(1.0, None);
+        *hub.crop.lock() = Some(Rect {
+            x: 100,
+            y: 50,
+            w: 640,
+            h: 480,
+        });
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        hub.add_client(tx, Joining::default());
+        // castd's own viewer (a recording) hears none.
+        let (own_tx, mut own) = mpsc::unbounded_channel();
+        hub.add_client(
+            own_tx,
+            Joining {
+                internal: true,
+                ..Joining::default()
+            },
+        );
+        hub.pointer_at(110, 60);
+        hub.pointer_at(110, 60);
+        // Off the crop to its left: still said, outside the picture.
+        hub.pointer_at(90, 60);
+        let said: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|m| match m {
+                Out::Pointer(text) => Some(text),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            said,
+            [
+                r#"{"type":"pointer","x":10,"y":10}"#,
+                r#"{"type":"pointer","x":-10,"y":10}"#
+            ]
+        );
+        assert!(own.try_recv().is_err());
+        assert_eq!(
+            hub.pointer_message().as_deref(),
+            Some(r#"{"type":"pointer","x":-10,"y":10}"#)
+        );
     }
 }

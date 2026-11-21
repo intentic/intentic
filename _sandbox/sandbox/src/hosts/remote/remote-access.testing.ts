@@ -1,9 +1,9 @@
 import type { AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
-import type { RemoteTerminal } from "@intentic/sandbox-contract/schemas/remote-access";
+import type { RemoteService, RemoteTerminal } from "@intentic/sandbox-contract/schemas/remote-access";
 import type { FromNode } from "@intentic/sandbox-contract/netd-wire";
 import { createRemoteAccess, type RemoteAccess, type RemoteLink } from "./remote-access.js";
 import { netdUplinks, type NetdUplinks } from "./netd-uplinks.js";
-import type { RemoteAllow, RemoteStartInput } from "@intentic/sandbox-contract/schemas/device-remote";
+import type { RemoteAllow, RemoteServiceAction, RemoteStartInput } from "@intentic/sandbox-contract/schemas/device-remote";
 import { HOST_NATIVE_ENVIRONMENT, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import type { RemoteInfo } from "./remote-device.js";
 import type { ConnectionEnvironments } from "./remote-environments.js";
@@ -25,10 +25,14 @@ export const infoWith = (allow: RemoteAllow = ALL_ON): RemoteInfo => ({
     environments: ["native", "wsl:archlinux"],
 });
 
-// A device link whose agent answers `start` with `info` (or refuses with `refused`), and says the uplink came up.
+// A device link whose agent answers `start` with `info` (or refuses with `refused`), and says the uplink came up; and
+// asked about remoted's Windows service, answers with `service` (or refuses with `refused` too).
 export interface FakeLink extends RemoteLink {
     readonly starts: RemoteStartInput[];
+    readonly services: { readonly device: string; readonly action: RemoteServiceAction }[];
 }
+
+export const SERVICE_NOT_SET_UP: RemoteService = { supported: true, installed: false, outOfDate: false, agentVersion: "1.431.0" };
 
 export const fakeLink = (
     options: {
@@ -39,11 +43,14 @@ export const fakeLink = (
         readonly connect?: (uplinkId: string) => void;
         // The card's distros connected with an agent of their own; by default the key says the environment.
         readonly ownConnections?: readonly string[];
+        readonly service?: RemoteService;
     } = {},
 ): FakeLink => {
     const starts: RemoteStartInput[] = [];
+    const services: { readonly device: string; readonly action: RemoteServiceAction }[] = [];
     return {
         starts,
+        services,
         refusal: (device) => (options.offline === true ? `"${device}" is not connected right now` : undefined),
         online: () => options.offline !== true,
         start: async (_device, input) => {
@@ -53,6 +60,13 @@ export const fakeLink = (
             }
             options.connect?.(input.device);
             return options.info ?? infoWith();
+        },
+        service: async (device, action) => {
+            services.push({ device, action });
+            if (options.refused !== undefined) {
+                throw new Error(options.refused);
+            }
+            return options.service ?? SERVICE_NOT_SET_UP;
         },
         cardAllows: async () => options.card ?? ALL_ON,
         environments: (device): ConnectionEnvironments => ({

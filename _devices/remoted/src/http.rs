@@ -6,14 +6,15 @@
 //! | Route | Answer |
 //! |---|---|
 //! | `GET /health` | `{ok, version}` |
-//! | `GET /info` | `{version, monitors, environments, encoders, allow, paused}` |
+//! | `GET /info` | `{version, monitors, environments, encoders, screen, allow, paused}`; `screen` says how screens are reached here |
 //! | `POST /terminals` | `{session, environment?, shell?, cwd?, cols?, rows?}` → 201 the terminal as listed; 400, 403, 409, 429, 500 |
 //! | `GET /terminals` | `[{session, title, environment, createdAt, viewers}]` |
 //! | `DELETE /terminals/<session>` | `{ok: true}`, or 404 |
 //! | `POST /viewers/drop[?read_write=1]` | `{dropped: n}`: castd's drop, for this uplink's viewers |
-//! | `GET /stats` | `{uptimeS, terminals, viewers, uplinks}` |
+//! | `GET /stats` | `{uptimeS, terminals, viewers, screens: [{monitor, viewers, encoder, capture?}], uplinks}` |
+//! | `GET /screenshot/<session>` | a running screen's picture as viewers get it, PNG; 403 viewing off, 404 not running |
 //! | `GET /terminal/<session>?token=` | the terminal socket (upgrade); 401 without a token, 403 refused |
-//! | `GET /media/<session>?token=` | 501 until phase 2 |
+//! | `GET /media/<session>?token=` | a screen's media socket (upgrade, media/mod.rs); 401, 403, 404 (no such screen) |
 
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -102,6 +103,7 @@ async fn route(request: Request<Incoming>, daemon: Arc<Daemon>, uplink: String) 
         ),
         (&Method::GET, ["info"]) => info(&daemon, &uplink).await,
         (&Method::GET, ["stats"]) => stats(&daemon),
+        (&Method::GET, ["screenshot", session]) => media::screenshot(&daemon, &uplink, session).await,
         (&Method::GET, ["terminals"]) => {
             answer(StatusCode::OK, &json!(daemon.terminals.list(&uplink)))
         }
@@ -130,7 +132,10 @@ async fn route(request: Request<Incoming>, daemon: Arc<Daemon>, uplink: String) 
             let session = (*session).to_owned();
             terminal(request, daemon, uplink, session)
         }
-        (&Method::GET, ["media", _]) => refusal(StatusCode::NOT_IMPLEMENTED, media::NOT_YET),
+        (&Method::GET, ["media", session]) => {
+            let session = (*session).to_owned();
+            media::upgrade(request, daemon, uplink, session).await
+        }
         _ => refusal(StatusCode::NOT_FOUND, "no such route"),
     }
 }
@@ -144,9 +149,10 @@ async fn info(daemon: &Daemon, uplink: &str) -> Answer {
         StatusCode::OK,
         &json!({
             "version": crate::VERSION,
-            "monitors": media::monitors(),
+            "monitors": daemon.screens.platform().monitors(),
             "environments": crate::environments::list().await,
-            "encoders": media::encoders(),
+            "encoders": daemon.screens.platform().encoders(),
+            "screen": daemon.screens.platform().describe(),
             "allow": allow,
             "paused": daemon.paused(),
         }),
@@ -160,6 +166,7 @@ fn stats(daemon: &Daemon) -> Answer {
             "uptimeS": daemon.started.elapsed().as_secs(),
             "terminals": daemon.terminals.count(),
             "viewers": daemon.viewers(),
+            "screens": daemon.screens.running(),
             "uplinks": daemon.status.line().uplinks,
         }),
     )

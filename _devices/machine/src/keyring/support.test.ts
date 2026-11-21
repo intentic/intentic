@@ -1,6 +1,7 @@
 import { NOT_ON_MAC,KeyringUnavailable } from "@intentic/keyring";
 import { supportOf,keyringLine } from "./keyring-status.js";
-import { approvalRefused, elevatedCommand, elevatedScriptCommand, NEEDS_ADMIN, nobodyToAsk, serviceDown } from "./service.js";
+import { approvalRefused, elevatedScriptCommand } from "../admin/elevated.js";
+import { elevatedCommand, NEEDS_ADMIN, nobodyToAsk, serviceDown } from "./service.js";
 
 /* Whether Passwords can be set up here, and how its one administrator's yes is asked: UAC on Windows, pkexec on Linux.
    Neither prompt is shown here. */

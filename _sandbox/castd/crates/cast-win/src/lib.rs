@@ -6,6 +6,10 @@
 //!   H.264 encoders (Intel Quick Sync, AMD, NVIDIA's own) the same way; openh264 (cast-core) in software.
 //! - [`select`]: which of them a monitor is encoded with, each proven by a self-test first.
 //! - [`input`]: SendInput; [`clipboard`]: the clipboard both ways; [`audio`]: WASAPI loopback.
+//! - [`helper`]: the lock screen and admin prompts helper, SYSTEM in the session, which duplicates and types into the
+//!   secure desktop for remoted, and remoted's link to it.
+//! - [`session`]: why a desktop cannot be captured now (locked, a secure desktop, the display off, another session on
+//!   the screen), and each screen's [`session::CaptureStatus`].
 #![cfg(windows)]
 
 pub mod audio;
@@ -15,12 +19,14 @@ pub mod cursor;
 pub mod d3d;
 pub mod displays;
 pub mod gdi;
+pub mod helper;
 pub mod input;
 pub mod mft;
 pub mod nvenc;
 pub mod placeholder;
 pub mod screen;
 pub mod select;
+pub mod session;
 
 /// Makes the process per-monitor DPI aware (v2), so every coordinate (DXGI's desktop, the cursor, SendInput's virtual
 /// desktop) is in physical pixels, and `DuplicateOutput1` is allowed. Call it before anything opens a window or asks
@@ -62,15 +68,19 @@ pub fn follow_input_desktop() {
 /// Whether the desktop receiving input is the person's own (`Default`): false on a secure desktop (a lock screen's
 /// sign-in, a UAC prompt, Ctrl+Alt+Del), which a process that is not SYSTEM cannot open at all.
 pub fn input_desktop_is_default() -> bool {
+    input_desktop_name().is_some_and(|d| d.eq_ignore_ascii_case("Default"))
+}
+
+/// The name of the desktop receiving input (`Default`, `Winlogon`, `Screen-saver`); None when this process may not
+/// open it, which for a process that is not SYSTEM means a secure desktop.
+pub fn input_desktop_name() -> Option<String> {
     use windows::Win32::System::StationsAndDesktops::{
         CloseDesktop, DESKTOP_CONTROL_FLAGS, DESKTOP_READOBJECTS, GetUserObjectInformationW,
         OpenInputDesktop, UOI_NAME,
     };
     // SAFETY: a desktop handle closed below, and a name buffer of its stated size.
     unsafe {
-        let Ok(d) = OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_READOBJECTS) else {
-            return false;
-        };
+        let d = OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_READOBJECTS).ok()?;
         let mut name = [0u16; 64];
         let mut need = 0u32;
         let ok = GetUserObjectInformationW(
@@ -82,7 +92,7 @@ pub fn input_desktop_is_default() -> bool {
         )
         .is_ok();
         let _ = CloseDesktop(d);
-        ok && displays::from_wide(&name).eq_ignore_ascii_case("Default")
+        ok.then(|| displays::from_wide(&name))
     }
 }
 

@@ -11885,7 +11885,20 @@
             "switchTerminalNote": "Una shell en este ordenador, ejecutándose como tú, en cualquiera de sus entornos.",
             "switchFailed": "No se pudo cambiar el interruptor",
             "on": "Activado",
-            "off": "Desactivado"
+            "off": "Desactivado",
+            "serviceTitle": "Pantalla de bloqueo y avisos de administrador",
+            "serviceNote": "Permite ver y usar la pantalla de inicio de sesión y de bloqueo, Ctrl+Alt+Supr y los avisos de administrador (UAC). Necesita una vez el sí de un administrador en este ordenador.",
+            "serviceNotSetUp": "Sin configurar",
+            "serviceSetUp": "Configurado",
+            "serviceOlder": "Configurado, versión anterior",
+            "serviceInstall": "Configurar",
+            "serviceUpdate": "Actualizar",
+            "serviceRemove": "Quitar",
+            "serviceWaiting": "Esperando el sí de un administrador en {name}…",
+            "serviceDeclined": "Ningún administrador dio el sí en {name}, así que no cambió nada.",
+            "serviceOlderAgent": "Actualiza el agente de {name} para configurarlo.",
+            "serviceFailed": "No se pudo cambiar el servicio de pantalla de bloqueo",
+            "serviceUnsupported": "No disponible en este ordenador."
         },
         "deviceScreen": {
             "direct": "Directa",

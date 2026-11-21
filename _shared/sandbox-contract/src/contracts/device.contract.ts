@@ -9,7 +9,7 @@ import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
 import { DialLoopbackSchema, StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
 import { CopyFileResultSchema, CopyFileSchema } from "../schemas/device-files.js";
-import { RemoteStartInputSchema, RemoteStartResultSchema } from "../schemas/device-remote.js";
+import { RemoteServiceInputSchema, RemoteServiceResultSchema, RemoteStartInputSchema, RemoteStartResultSchema } from "../schemas/device-remote.js";
 import {
     KeyringCaptureItemSchema,
     KeyringCaptureResultSchema,
@@ -107,4 +107,10 @@ export const deviceContract = {
     // `remoteStop` drops this link's uplink, and remoted with it when no other link holds one.
     remoteStart: oc.input(RemoteStartInputSchema).output(RemoteStartResultSchema),
     remoteStop: oc.output(OkSchema),
+    // Windows' lock screen and administrator prompts for people's remote access (2026-11-20, schemas/device-remote.ts):
+    // intentic-remoted's own Windows service read, installed or removed, the last two through one UAC prompt on the
+    // computer, which this call waits on (ten minutes at most). Only the daemon calls it, for a person with Full access,
+    // and only on an agent advertising `remote-service`; the machine refuses an install (FORBIDDEN) while all three people
+    // switches are off on this link.
+    remoteService: oc.input(RemoteServiceInputSchema).output(RemoteServiceResultSchema),
 };

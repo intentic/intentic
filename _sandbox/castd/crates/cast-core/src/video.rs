@@ -100,23 +100,48 @@ struct Pipeline {
     encode: std::thread::JoinHandle<()>,
 }
 
+/// The running pipeline: its capture thread, which owns the encode thread. Dropping it leaves the pipeline running
+/// (castd's runs for the process's life); [`Video::stop`] ends it.
+pub struct Video {
+    hub: Arc<Hub>,
+    capture: std::thread::JoinHandle<()>,
+}
+
+impl Video {
+    /// Ends the capture and encode threads and waits for them: the hub's viewers stay connected and hear nothing more.
+    /// A daemon serving a screen on demand calls it once the last viewer left.
+    pub fn stop(self) {
+        self.hub.stopped.store(true, Ordering::Relaxed);
+        self.hub.wake();
+        let _ = self.capture.join();
+    }
+
+    /// Whether the capture thread has ended (stopped, or failed through `Hub::on_fatal`).
+    pub fn finished(&self) -> bool {
+        self.capture.is_finished()
+    }
+}
+
 /// Runs the pipeline on a thread named `capture`. With a source that resizes (RandR, no crop), a viewer's size request
 /// ends the capture loop: the encoder drains, the screen is resized and the pipeline is rebuilt at the new size, and
-/// viewers get the new geometry and a keyframe.
+/// viewers get the new geometry and a keyframe. A capture that fails for good goes to [`Hub::fatal`]: castd ends, a
+/// daemon with `on_fatal` set ends this pipeline alone.
 pub fn spawn(
     cfg: VideoConfig,
     hub: Arc<Hub>,
     mut source: Box<dyn ScreenSource>,
-) -> Result<(), String> {
+) -> Result<Video, String> {
     *hub.resize_limits.lock() = if cfg.crop.is_some() {
         None
     } else {
         source.resize_limits()
     };
     let mut p = build(&cfg, &hub, source.as_mut())?;
-    std::thread::Builder::new()
+    let thread_hub = hub.clone();
+    let capture = std::thread::Builder::new()
         .name("capture".into())
         .spawn(move || {
+            let hub = thread_hub;
             loop {
                 let Pipeline {
                     mut cap,
@@ -125,23 +150,32 @@ pub fn spawn(
                     ret_rx,
                     encode,
                 } = p;
-                if let Err(e) = capture_loop(
+                let ended = capture_loop(
                     cap.as_mut(),
                     format,
                     cfg.clone(),
                     hub.clone(),
                     job_tx,
                     ret_rx,
-                ) {
-                    if cap.geometry_changed() {
+                );
+                let failed = match ended {
+                    Err(_) if hub.is_stopped() => None,
+                    Err(e) if cap.geometry_changed() => {
                         log::info!("capture geometry changed: {e}");
-                    } else {
-                        log::error!("capture loop ended: {e}");
-                        crate::exit(1);
+                        None
                     }
-                }
+                    Err(e) => Some(format!("capture loop ended: {e}")),
+                    Ok(()) => None,
+                };
                 drop(cap);
                 let _ = encode.join();
+                if let Some(why) = failed {
+                    return hub.fatal(why);
+                }
+                if hub.is_stopped() {
+                    log::info!("capture stopped");
+                    return;
+                }
                 if let Some(crop) = hub.crop_req.lock().take() {
                     *hub.crop.lock() = Some(crop);
                 }
@@ -157,15 +191,12 @@ pub fn spawn(
 
                 p = match build(&cfg, &hub, source.as_mut()) {
                     Ok(p) => p,
-                    Err(e) => {
-                        log::error!("video restart failed: {e}");
-                        crate::exit(1);
-                    }
+                    Err(e) => return hub.fatal(format!("video restart failed: {e}")),
                 };
             }
         })
         .map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(Video { hub, capture })
 }
 
 fn build(
@@ -311,14 +342,35 @@ fn wait(cap: &dyn Capture, hub: &Hub, timeout_ms: i32) {
     }
 }
 
-/// Whether the steering viewer can take another frame. Only it gates the capture: anyone else who falls behind is
+/// What holds the next capture back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Flow {
+    Open,
+    /// The steering viewer's acks are behind; a keyframe still goes.
+    Acks,
+    /// The steering viewer's track has run too far ahead of its link's share: the frame is dropped at the source, a
+    /// keyframe too (one sent into a full link only waits there longer), up to `TRACK_HOLD_MAX`.
+    Track,
+}
+
+/// Longest a track that ran ahead holds a keyframe back: past it one goes, however far ahead.
+const TRACK_HOLD_MAX: Duration = Duration::from_secs(1);
+
+/// What may hold the next capture back. Only the steering viewer gates the capture: anyone else who falls behind is
 /// skipped by the encode loop instead. A viewer silent for 4 s (a dead socket, a tab the browser froze) is reset to
-/// wait for a keyframe, so it stops counting as behind.
-fn flow_ok(hub: &Hub, interval_ms: f64) -> bool {
+/// wait for a keyframe, so it stops counting as behind. A viewer whose pictures ride a track acks nothing: what gates it
+/// is how far the track runs ahead of its link's share (`Client::track_full`).
+fn flow(hub: &Hub, interval_ms: f64) -> Flow {
     let steer = hub.steering.load(Ordering::Relaxed);
-    let mut ok = true;
+    let mut flow = Flow::Open;
     for c in hub.video_clients() {
         if c.internal {
+            continue;
+        }
+        if c.on_track().is_some() {
+            if c.id == steer && c.track_full(interval_ms) {
+                flow = Flow::Track;
+            }
             continue;
         }
         let (n, age) = c.backlog();
@@ -333,10 +385,10 @@ fn flow_ok(hub: &Hub, interval_ms: f64) -> bool {
             continue;
         }
         if c.id == steer && rate::behind(n, age as f64, c.rtt_ms(), interval_ms) {
-            ok = false;
+            flow = Flow::Acks;
         }
     }
-    ok
+    flow
 }
 
 /// Least time between two keyframes a lagging viewer's recovery may ask for: each one is a burst for every viewer.
@@ -583,15 +635,22 @@ fn capture_loop(
     let mut paintover_left = 0u32;
     let mut rc = RateCtl::new(cfg.max_kbps as f64, cfg.min_kbps as f64);
     let mut local = false;
+    hub.ceiling_kbps.store(cfg.max_kbps, Ordering::Relaxed);
     hub.local_steering.store(false, Ordering::Relaxed);
     hub.target_kbps.store(rc.target as u32, Ordering::Relaxed);
     let mut had_clients = false;
     let mut full_next = true;
     let mut refiner = Refiner::new(w.div_ceil(16) * h.div_ceil(16), w.div_ceil(16));
     let mut fresh = FreshContent::new();
+    // Since when the flow has held the capture back (a track's keyframe waits at most TRACK_HOLD_MAX).
+    let mut held_since: Option<Instant> = None;
 
     loop {
-        if hub.resize_req.lock().is_some() || hub.crop_req.lock().is_some() || cap.needs_rebuild() {
+        if hub.is_stopped()
+            || hub.resize_req.lock().is_some()
+            || hub.crop_req.lock().is_some()
+            || cap.needs_rebuild()
+        {
             return Ok(());
         }
         let interval = Duration::from_secs_f64(1.0 / fps as f64);
@@ -659,6 +718,7 @@ fn capture_loop(
             rc.set_ceiling(ceiling as f64, local);
             hub.local_steering.store(local, Ordering::Relaxed);
         }
+        rc.note_encoded(hub.stats.bytes.load(Ordering::Relaxed), Instant::now());
         rc.update(steer);
         hub.target_kbps.store(rc.target as u32, Ordering::Relaxed);
         // The pace is the driving viewer's (its last input), else the steering one's; with neither (a restart's viewers
@@ -758,11 +818,18 @@ fn capture_loop(
                 continue;
             }
         }
-        if !want_key && !flow_ok(&hub, interval_ms) {
+        let held = match flow(&hub, interval_ms) {
+            Flow::Open => false,
+            Flow::Acks => !want_key,
+            Flow::Track => !want_key || held_since.is_some_and(|at| at.elapsed() < TRACK_HOLD_MAX),
+        };
+        if held {
+            held_since.get_or_insert_with(Instant::now);
             hub.stats.flow_blocked.fetch_add(1, Ordering::Relaxed);
             wait(cap, &hub, 4);
             continue;
         }
+        held_since = None;
         // Need a free buffer (the encoder may still hold the other).
         if pool[next_idx].is_none() {
             match ret_rx.recv_timeout(Duration::from_millis(50)) {
@@ -1475,10 +1542,9 @@ fn encode_loop(
                 c.skipping.store(false, Ordering::Relaxed);
                 c.inflight.lock().clear();
             } else if !c.internal && c.id != steer {
-                let (backlog, age) = c.backlog();
                 if c.skipping.load(Ordering::Relaxed) {
                     // Skipped until what it has drains; then it waits for a keyframe like a new viewer.
-                    if backlog == 0 {
+                    if c.drained(interval_ms) {
                         c.started.store(false, Ordering::Relaxed);
                         c.needs_keyframe.store(true, Ordering::Relaxed);
                         hub.wake();
@@ -1486,7 +1552,8 @@ fn encode_loop(
                     hub.stats.skipped.fetch_add(1, Ordering::Relaxed);
                     continue;
                 }
-                if rate::behind(backlog, age as f64, c.rtt_ms(), interval_ms) {
+                if c.behind(interval_ms) {
+                    let (backlog, age) = c.backlog();
                     log::debug!(
                         "viewer {} fell behind ({backlog} frames, {age} ms); skipping",
                         c.id
@@ -1496,7 +1563,8 @@ fn encode_loop(
                     continue;
                 }
             }
-            {
+            // A track's pictures are never acked: its congestion control stands for the acks.
+            if c.on_track().is_none() {
                 let mut q = c.inflight.lock();
                 if q.len() > 600 {
                     // Only the steering viewer can get here: it gates the capture, so this is a leak, not a link.

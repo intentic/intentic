@@ -219,6 +219,21 @@ it("turns castd's cursor into the stage's CSS, and hands a copy to the clipboard
     expect(copies).toEqual([{ text: `copied` }]);
 });
 
+it("keeps where castd says the pointer is and its look, for the view to draw the computer's own", async () => {
+    const { fake, picture, offer } = setup();
+    offer();
+    await waitFor(() => expect(fake.dials()).toHaveLength(1));
+    fake.open();
+    fake.castd(hello);
+    fake.castd({ type: `pointer`, x: 12, y: -1 });
+    fake.castd({ type: `cursor`, cursor: { css: `text`, png: `iVBO`, hotX: 1, hotY: 2 } });
+    expect([picture.pointer.value, picture.cursorLook.value]).toEqual([{ x: 12, y: -1 }, { css: `text`, png: `iVBO`, hotX: 1, hotY: 2 }]);
+    // A hello on the socket (no track): the pictures stay the canvas's.
+    expect(picture.tracked.value).toBe(false);
+    picture.stop();
+    expect([picture.pointer.value, picture.cursorLook.value]).toEqual([undefined, undefined]);
+});
+
 it("hands no copy to the clipboard from a read-only socket", async () => {
     const { fake, copies, offer } = setup();
     offer(true);

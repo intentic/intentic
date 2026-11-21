@@ -77,6 +77,27 @@ export interface OpenTerminal {
     readonly rows: number;
 }
 
+/**
+ * Windows' lock screen and administrator prompts on the computer: whether remoted's own Windows service is set up
+ * there, and at the computer's agent's version or an older one. An install or a removal answers the same, read after
+ * the UAC prompt on the computer was answered: `declined` when the administrator's yes was not given, `error` in a
+ * sentence when it did not do what it was asked.
+ */
+export interface RemoteServiceState {
+    readonly supported: boolean;
+    readonly reason?: string | undefined;
+    readonly installed: boolean;
+    // `running`, `stopped`, `starting`, `stopping`.
+    readonly state?: string | undefined;
+    readonly version?: string | undefined;
+    readonly agentVersion?: string | undefined;
+    readonly outOfDate: boolean;
+    readonly declined?: boolean | undefined;
+    readonly error?: string | undefined;
+}
+
+export type RemoteServiceChange = `install` | `uninstall`;
+
 export interface RemoteApi {
     readonly status: (device: string) => Promise<RemoteStatus>;
     readonly openScreen: (device: string, monitor?: string) => Promise<RemoteScreenGrant>;
@@ -84,6 +105,13 @@ export interface RemoteApi {
     readonly attachTerminal: (device: string, session: string) => Promise<RemoteGrant>;
     readonly refresh: (device: string, session: string) => Promise<RemoteToken>;
     readonly closeTerminal: (device: string, session: string) => Promise<void>;
+}
+
+/** The lock-screen service's two calls, apart from the screen's and the terminals' so a fake of either stays whole. */
+export interface RemoteServiceApi {
+    readonly service: (device: string) => Promise<RemoteServiceState>;
+    // Waits on the person at the computer answering its UAC prompt, ten minutes at most.
+    readonly changeService: (device: string, action: RemoteServiceChange) => Promise<RemoteServiceState>;
 }
 
 export const remoteApi: RemoteApi = {
@@ -103,9 +131,18 @@ export const remoteApi: RemoteApi = {
     },
 };
 
+const remoteServiceApi: RemoteServiceApi = {
+    service: (device) => sandboxRpc.remote.service({ device }),
+    changeService: (device, action) => sandboxRpc.remote.changeService({ device, action }),
+};
+
 /** The api a component reaches the computer through; a test or a kit page provides its own. */
 const REMOTE_API: InjectionKey<RemoteApi> = Symbol(`remoteApi`);
 export const useRemoteApi = (): RemoteApi => (hasInjectionContext() ? inject(REMOTE_API, remoteApi) : remoteApi);
+
+/** The lock-screen service's calls a component makes; a test provides its own under this key. */
+export const REMOTE_SERVICE_API: InjectionKey<RemoteServiceApi> = Symbol(`remoteServiceApi`);
+export const useRemoteServiceApi = (): RemoteServiceApi => (hasInjectionContext() ? inject(REMOTE_SERVICE_API, remoteServiceApi) : remoteServiceApi);
 
 /** The session is gone from the computer (closed there, or the computer restarted remoted): nothing to attach to. */
 export const sessionGone = (error: SandboxHttpError | Error): boolean => error instanceof SandboxHttpError && error.status === 404;
@@ -125,6 +162,26 @@ export const useRemoteStatus = (device: MaybeRefOrGetter<string | undefined>) =>
         enabled: computed(() => toValue(device) !== undefined),
         refetchInterval: STATUS_POLL_MS,
         // A refusal is the answer (the sentence it carries is the reason shown); asking again at once says it twice.
+        retry: false,
+    });
+    return query;
+};
+
+const remoteServiceKey = (device: string): unknown[] => rpcKey(`remote.service`, { device });
+
+// The service changes when someone sets it up or removes it, after which the row reads it again: a slow poll catches a
+// change made at the computer itself.
+const SERVICE_POLL_MS = 60_000;
+
+/** Whether the computer's lock-screen service is set up; idle while `device` is undefined. */
+export const useRemoteService = (device: MaybeRefOrGetter<string | undefined>) => {
+    const api = useRemoteServiceApi();
+    const { query } = useSandboxQuery({
+        queryKey: computed(() => remoteServiceKey(toValue(device) ?? ``)),
+        queryFn: () => api.service(toValue(device) ?? ``),
+        enabled: computed(() => toValue(device) !== undefined),
+        refetchInterval: SERVICE_POLL_MS,
+        // A refusal is the answer, as for the status above.
         retry: false,
     });
     return query;

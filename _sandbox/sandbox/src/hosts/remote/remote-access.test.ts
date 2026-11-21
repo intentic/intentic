@@ -2,9 +2,9 @@ import { createHmac } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { netdUplinks } from "./netd-uplinks.js";
-import { createRemoteAccess } from "./remote-access.js";
+import { createRemoteAccess, iceUrlsOf } from "./remote-access.js";
 import { digestOf } from "./remote-keys.js";
-import { ALL_ON, fakeLink, fakeRemoted, infoWith, memoryKeys, NOW, remoteHarness } from "./remote-access.testing.js";
+import { ALL_ON, fakeLink, fakeRemoted, infoWith, memoryKeys, NOW, remoteHarness, SERVICE_NOT_SET_UP } from "./remote-access.testing.js";
 
 const owner = { actor: { kind: "member", email: "owner@example.com", role: "owner" }, full: true } as const;
 const viewer = { actor: { kind: "member", email: "vic@example.com", role: "viewer" }, full: false } as const;
@@ -37,7 +37,10 @@ describe("opening a screen", () => {
         const [first, second] = await Promise.all([remote.openScreen("rog", undefined, owner), remote.openScreen("rog", "0", owner)]);
         expect([...keys.made.keys()]).toEqual(["rog"]);
         const pair = keys.made.get("rog") ?? { uplinkToken: "", mediaKey: "" };
-        expect(link.starts).toEqual([{ device: "rog", uplinkToken: pair.uplinkToken, mediaKey: pair.mediaKey }]);
+        // The setting's STUN servers go with the pair, for remoted's own gathering.
+        expect(link.starts).toEqual([
+            { device: "rog", uplinkToken: pair.uplinkToken, mediaKey: pair.mediaKey, iceServers: ["stun:stun.example.test:3478"] },
+        ]);
         expect(netd.told).toEqual([{ kind: "deviceUplink", device: "rog", tokenSha256: digestOf(pair.uplinkToken) }]);
         // The primary monitor unless one is asked for.
         expect(first).toEqual({
@@ -240,4 +243,56 @@ test("what an earlier daemon left registered without keys here is withdrawn, and
     await remote.dropViewers("a member's access was revoked");
     // rog and the stale uplink are up; omen's is not, and is not asked.
     expect(remoted.drops).toEqual(["a member's access was revoked", "a member's access was revoked"]);
+});
+
+describe("the STUN servers remoted is handed", () => {
+    test("are the setting's URLs, each once, and none for an empty setting", () => {
+        expect(
+            iceUrlsOf([
+                { urls: ["stun:a.example:3478", "stun:b.example:3478"] },
+                { urls: ["stun:a.example:3478"], username: "u", credential: "c" },
+            ]),
+        ).toEqual(["stun:a.example:3478", "stun:b.example:3478"]);
+        expect(iceUrlsOf([])).toEqual([]);
+    });
+});
+
+describe("a Windows computer's lock-screen service", () => {
+    const installed = { supported: true, installed: true, state: "running", version: "1.431.0", agentVersion: "1.431.0", outOfDate: false, helper: null };
+
+    test("is read for anyone, asking the agent for its status and recording nothing", async () => {
+        const { remote, link, audit } = remoteHarness();
+        expect(await remote.service("rog", viewer)).toEqual(SERVICE_NOT_SET_UP);
+        expect(link.services).toEqual([{ device: "rog", action: "status" }]);
+        expect(audit).toEqual([]);
+    });
+
+    test("is set up and removed with Full access alone, each recorded with how it ended", async () => {
+        const { remote, link, audit } = remoteHarness({ service: installed });
+        expect(await refusal(remote.changeService("rog", "install", viewer))).toEqual({
+            code: "FORBIDDEN",
+            message: "only someone with Full access to this sandbox can set up the lock-screen service on the owner's computers",
+        });
+        expect(link.services).toEqual([]);
+        expect(await remote.changeService("rog", "install", owner)).toEqual(installed);
+        expect(link.services).toEqual([{ device: "rog", action: "install" }]);
+        expect(audit.map((event) => [event.action, event.target, event.details])).toEqual([
+            ["device.remote.service.install", "rog", { outcome: "done", installed: true }],
+        ]);
+    });
+
+    test("a no on the computer is recorded as declined; a computer that cannot be asked is a conflict in its words", async () => {
+        const declined = remoteHarness({ service: { ...SERVICE_NOT_SET_UP, declined: true } });
+        expect(await declined.remote.changeService("rog", "uninstall", owner)).toMatchObject({ declined: true });
+        expect(declined.audit.map((event) => event.details)).toEqual([{ outcome: "declined", installed: false }]);
+        const old = remoteHarness({ refused: `The agent on "rog" cannot set up the lock screen and administrator prompts: it is not on Windows, or too old.` });
+        expect(await refusal(old.remote.service("rog", owner))).toEqual({
+            code: "CONFLICT",
+            message: `The agent on "rog" cannot set up the lock screen and administrator prompts: it is not on Windows, or too old.`,
+        });
+        await refusal(old.remote.changeService("rog", "install", owner));
+        expect(old.audit.map((event) => [event.action, event.details])).toEqual([
+            ["device.remote.service.install", { outcome: "failed", reason: `The agent on "rog" cannot set up the lock screen and administrator prompts: it is not on Windows, or too old.` }],
+        ]);
+    });
 });

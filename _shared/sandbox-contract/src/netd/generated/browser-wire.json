@@ -388,7 +388,7 @@
           "type": "object"
         },
         {
-          "description": "An SDP offer for a peer connection straight to castd, which the viewer makes with the [`RTC_CHANNELS`] and no\nmedia, only where `hello` said `rtc`. castd answers `rtcAnswer`, or `rtcClosed` when it cannot take one. Once its\n`media` channel is open castd says `hello` there and moves the stream onto the channels; until then, and again\nwhenever the peer fails, the stream stays on this socket.",
+          "description": "An SDP offer for a peer connection straight to castd, which the viewer makes with the [`RTC_CHANNELS`], only where\n`hello` said `rtc`. castd answers `rtcAnswer`, or `rtcClosed` when it cannot take one. Once its `media` channel is\nopen castd says `hello` there and moves the stream onto the channels; until then, and again whenever the peer\nfails, the stream stays on this socket. The offer may also carry one receive-only video section offering H.264\n(packetization mode 1) with NACK, PLI and transport-wide congestion control: a castd that takes it sends the\npictures as RTP on that track instead of on `media` and says so in that hello (`track`); one that does not, an\nolder castd among them, leaves the section silent and the pictures on `media`.",
           "properties": {
             "sdp": {
               "type": "string"
@@ -492,6 +492,10 @@
       "media": {
         "maxRetransmits": null,
         "ordered": true
+      },
+      "pointer": {
+        "maxRetransmits": 0,
+        "ordered": false
       }
     },
     "rtcMessageMax": 32768,
@@ -626,6 +630,13 @@
               "format": "double",
               "type": "number"
             },
+            "track": {
+              "description": "The pictures after this hello ride the peer's video track as RTP (the offer had one and castd took it), not\n`media`: the browser's own jitter buffer and decoder show them, NACK and PLI repair them, and castd's\nbitrate follows the track's congestion control. Only in a hello on the peer; absent, video is on `media`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "type": {
               "const": "hello",
               "type": "string"
@@ -660,6 +671,29 @@
           "required": [
             "type",
             "cursor"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Where the pointer is on the picture, in picture pixels (outside it when the pointer is on another part of the\nscreen), each time it moves there: the person at the computer, an app warping it, or this viewer's own moves\nas they landed. At most one a captured frame's worth of time; on the peer it rides `pointer` where the viewer\nopened that channel. A viewer that does not know it passes it over.",
+          "properties": {
+            "type": {
+              "const": "pointer",
+              "type": "string"
+            },
+            "x": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "y": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
           ],
           "type": "object"
         },

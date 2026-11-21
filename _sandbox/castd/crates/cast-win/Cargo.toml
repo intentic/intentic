@@ -17,6 +17,8 @@ browser-wire = { path = "../../../netd/crates/browser-wire" }
 log = "0.4"
 parking_lot = "0.12"
 png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 windows-core = "0.62"
 windows = { version = "0.62", features = [
     "Win32_Devices_Display",
@@ -31,13 +33,18 @@ windows = { version = "0.62", features = [
     "Win32_Media_MediaFoundation",
     "Win32_Media_Multimedia",
     "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_DataExchange",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_System_IO",
     "Win32_System_Ole",
+    "Win32_System_Pipes",
     "Win32_System_Power",
+    "Win32_System_RemoteDesktop",
     "Win32_System_StationsAndDesktops",
     "Win32_System_SystemInformation",
     "Win32_System_SystemServices",

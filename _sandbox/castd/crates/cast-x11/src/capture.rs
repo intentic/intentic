@@ -135,7 +135,7 @@ impl Capturer {
     /// The same, with MIT-SHM only when `shm` allows it (and the server offers it).
     pub fn open(display: Option<&str>, crop: Option<Rect>, shm: bool) -> Result<Self, String> {
         let (conn, screen_num) =
-            RustConnection::connect(display).map_err(|e| format!("X connect: {e}"))?;
+            crate::connect::connect(display).map_err(|e| format!("X connect: {e}"))?;
         let screen = &conn.setup().roots[screen_num];
         let root = screen.root;
         let depth = screen.root_depth;

@@ -1,5 +1,6 @@
-//! The command line: `intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]`, and
-//! `intentic-remoted version`. The machine agent starts it with `--parent-stdin`, so it ends when the agent does.
+//! The command line: `intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]`,
+//! `intentic-remoted version`, and on Windows `service …` and `desktop-helper` (the lock screen and admin prompts
+//! service, [`remoted::service`]). The machine agent starts `run` with `--parent-stdin`, so it ends when the agent does.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ intentic-remoted: people's terminals on this computer, served to the sandboxes t
 usage:
   intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]
   intentic-remoted version
+  intentic-remoted service status|install|uninstall   (Windows: the lock screen and admin prompts service)
 
   --config <file>       the uplinks, their secrets and switches (JSON, written 0600 by intentic-machine); read again
                         whenever it changes
@@ -78,6 +80,8 @@ fn main() {
             print!("{USAGE}");
             return;
         }
+        Some("service") => std::process::exit(remoted::service::main(&args[1..])),
+        Some("desktop-helper") => std::process::exit(remoted::service::helper_main()),
         _ => {}
     }
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -121,6 +125,9 @@ async fn run(args: Args, first: config::Config) -> i32 {
     let why = ended(args.parent_stdin).await;
     log::info!("stopping: {why}");
     daemon.terminals.end_all(None, "remoted stopped");
+    // The screens' input lets go of every key and restores the keymap; a virtual desktop remoted started ends.
+    let screens = daemon.screens.clone();
+    let _ = tokio::task::spawn_blocking(move || screens.stop_all()).await;
     let deadline = tokio::time::Instant::now() + END_PATIENCE;
     while daemon.terminals.count() > 0 && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(50)).await;

@@ -11885,7 +11885,20 @@
             "switchTerminalNote": "Un shell sur cet ordinateur, exécuté en votre nom, dans n’importe lequel de ses environnements.",
             "switchFailed": "Impossible de modifier l’interrupteur",
             "on": "Activé",
-            "off": "Désactivé"
+            "off": "Désactivé",
+            "serviceTitle": "Écran de verrouillage et invites administrateur",
+            "serviceNote": "Permet de voir et d’utiliser l’écran de connexion et de verrouillage, Ctrl+Alt+Suppr et les invites administrateur (UAC). Nécessite une fois l’accord d’un administrateur sur cet ordinateur.",
+            "serviceNotSetUp": "Non configuré",
+            "serviceSetUp": "Configuré",
+            "serviceOlder": "Configuré, version plus ancienne",
+            "serviceInstall": "Configurer",
+            "serviceUpdate": "Mettre à jour",
+            "serviceRemove": "Supprimer",
+            "serviceWaiting": "En attente de l’accord d’un administrateur sur {name}…",
+            "serviceDeclined": "Aucun administrateur n’a donné son accord sur {name}, rien n’a donc changé.",
+            "serviceOlderAgent": "Mettez à jour l’agent de {name} pour configurer ceci.",
+            "serviceFailed": "Impossible de modifier le service d’écran de verrouillage",
+            "serviceUnsupported": "Indisponible sur cet ordinateur."
         },
         "deviceScreen": {
             "direct": "Direct",

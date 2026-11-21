@@ -45,7 +45,8 @@ engine on Windows and Linux:
   and a real X server (a person's `:0`) with MIT-SHM GetImage.
 - **[cast-win](crates/cast-win)**, the Windows platform: DXGI Desktop Duplication kept on the GPU, NVENC and Media
   Foundation's hardware encoders reading the captured textures in place, openh264 in software, SendInput, the
-  clipboard, the pointer's shape and WASAPI loopback. Empty on any other target; remoted's Windows build links it.
+  clipboard, the pointer's shape and WASAPI loopback; why a desktop cannot be captured, and the SYSTEM helper that
+  sees the secure desktop for remoted's Windows service. Empty on any other target; remoted's Windows build links it.
 - **castd**, this package: the command line ([src/config.rs](src/config.rs)), the binary that wires the two together,
   and `castd-bench`. Same flags, same socket, same image tree as before the split (2026-11-20).
 
@@ -87,6 +88,9 @@ Exactly browser-wire's protocol (`_sandbox/netd/crates/browser-wire/src/lib.rs`)
   smooth XI2 scroll motion, pixel for pixel; on a stock Xvfb it sends wheel clicks (Chromium on X11 scrolls 120 CSS px
   a click, `--scroll-px-per-notch`) and carries what a click could not express to the next event, never dropping it.
 - **`cursor`** carries the X cursor as a PNG with its hotspot, and a CSS keyword where the X name is a standard one.
+- **`pointer`** says where the pointer is on the picture as it moves (XInput 2 raw motion on the display, then a
+  `QueryPointer`, at most every 8 ms), so a viewer can draw the computer's own pointer when something other than its
+  own hand moved it: an app warping it, or the person at a connected computer (cast-core's README).
 - **`stats`** about once a second: the round trip (WebSocket pings castd sends), the bitrate aimed for, frames sent in
   the last second, and how long acks queue beyond their minimum.
 
@@ -135,22 +139,29 @@ A viewer on the sandbox's own network can reach castd without the edge: a public
   ([stun.rs](crates/cast-core/src/rtc/stun.rs)), later ones from that address follow. Behind a port publish castd sees its own
   address, not the one the viewer sent to, so str0m is told the first candidate of the source's family. With the
   flags, `hello` says `rtc: true`.
-- **Signalling on the media socket**: the viewer's `rtcOffer` (its SDP, with browser-wire's `RTC_CHANNELS` and no
-  media), castd's `rtcAnswer`, and `rtcClosed` when castd cannot take one or lets one go. `rtcCandidate` is accepted
+- **Signalling on the media socket**: the viewer's `rtcOffer` (its SDP, with browser-wire's `RTC_CHANNELS` and,
+  where it asks for the pictures on a track, one receive-only video section), castd's `rtcAnswer`, and `rtcClosed` when castd cannot take one or lets one go. `rtcCandidate` is accepted
   and ignored, and `rtcClose` from the viewer hands the stream back. The socket's token is the authentication: the
   answer carries castd's DTLS fingerprint and ICE password, so only the viewer holding the socket can finish the
   handshake, and str0m checks every check's integrity.
 - **The stream moves with a hello.** Once the peer's `media` and `input` channels are open, castd says `hello` on
   `media`, restarts the viewer's video with a keyframe, and sends there what the socket carried: JSON on `media` in
   order with the pictures, video on `media` (chunked past browser-wire's `RTC_MESSAGE_MAX`, byte 14 the index and 15
-  the count), sound on `audio`. The socket keeps WebSocket pings and any JSON longer than a message. When the peer
+  the count) or on the video track, sound on `audio`. The socket keeps WebSocket pings and any JSON longer than a message. When the peer
   fails (no channels within 20 s, nothing heard for 15 s, ICE disconnected for 5 s, a channel closed, `rtcClose`),
   castd says `rtcClosed` and `hello` on the socket and the stream is back there. While the peer carries it, castd times
   the round trip by its acks (send to ack, less the decode time the ack reports), not by the socket's pings.
 - **Reliability per channel** (browser-wire's `RTC_CHANNELS`): `media` ordered and reliable, since castd's H.264 has
   no intra refresh, so a lost delta spoils the picture until a keyframe ten to fifty times its size, where a LAN
   retransmit costs a few milliseconds and castd's ack window already bounds what can queue; `audio` unordered with no
-  retransmits; `input` ordered and reliable (a long paste arrives as binary chunks joined in order).
+  retransmits; `input` ordered and reliable (a long paste arrives as binary chunks joined in order); `pointer`
+  unordered with no retransmits, only the newest position counting (a viewer that does not open it hears `pointer` on
+  `media`).
+- **The pictures on a video track** (2026-11-21): a viewer whose offer carries a receive-only H.264 video section gets
+  the pictures as RTP there instead of on `media`, its hello on the peer saying `track` (cast-core's README has the
+  design and the measurements across an impaired link). A connected computer's screen asks for it; the editor's own
+  browser windows do not, so castd's LAN path is the one measured above. An older viewer offers no section and an older
+  castd leaves it silent; either way the pictures stay on `media`.
 - (2026-11-20) str0m with its `rust-crypto` provider, not the default aws-lc-rs: no cmake or C toolchain, nothing new in
   the image, so it is always built rather than a feature to leave out. Rejected: full ICE with STUN-learned candidates, which a container behind its host's NAT cannot use for a
   viewer on the same network anyway, and which castd's published host candidates make unnecessary; unordered video
@@ -237,12 +248,18 @@ for, since RandR can only shrink it.
 `cargo test --workspace` runs the unit tests (token test vector, key names, header layout, the steering policy, scroll
 carry, crop clipping, MP4, STUN routing, chunking, a local viewer's clips and copy pacing), cast-core's tests that need
 no X ([rtc.rs](crates/cast-core/tests/rtc.rs): a str0m viewer against castd's peer port, ICE, DTLS, SCTP and the three
-channels over loopback UDP; the pipeline on a painted in-memory screen; the router on an in-memory stream), cast-x11's
-capture against an Xvfb of its own in each of its three read paths, and [tests/integration.rs](tests/integration.rs),
+channels over loopback UDP, and [rtc_track.rs](crates/cast-core/tests/rtc_track.rs) the pictures on a video track and
+the ends that do not ask for one; the pipeline on a painted in-memory screen; the router on an in-memory stream), cast-x11's
+capture against an Xvfb of its own in each of its three read paths (and its pointer messages), and [tests/integration.rs](tests/integration.rs),
 which also moves a viewer's stream onto a peer connection and back and holds a local viewer's exact copy against the
 screen: Xvfb `-shmem`, Chromium in kiosk mode on
 [tests/fixtures/page.html](tests/fixtures/page.html), and castd, driven as a viewer over the Unix socket. It stands
 down with its reason when Xvfb or Chromium is missing (`CASTD_TEST_XVFB`, `CASTD_TEST_CHROME`).
+
+`cargo run --release -p cast-core --example wanbench --features x264,openh264` with
+[examples/wanbench/run.sh](crates/cast-core/examples/wanbench/run.sh) measures what a person sees across an impaired
+link: cast-core serving a stamped synthetic picture to a headless Chrome in a network namespace of its own, the link
+between them shaped with netem and tbf (cast-core's README).
 
 `castd-bench --socket … --session … --key-file …` connects as one viewer, acks every frame, and prints JSON: frames per
 second, kbps, and capture-to-arrival latency percentiles off the headers; `--resize WxH@S` and `--scroll-px N` drive the
