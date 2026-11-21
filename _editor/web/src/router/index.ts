@@ -101,11 +101,11 @@ export const openInPage = async (path: string): Promise<void> => {
     await router.push(settled === true ? path : settled);
 };
 
-// The root: Home for everyone who has one (lib/routes/firstScreens.ts), the landing inside the sandbox open for a guest
-// of a box and for the Android app, which draws the board itself.
+// The root: Home on a desktop for everyone who has one (lib/routes/firstScreens.ts), the landing inside the sandbox open
+// for a guest of a box, on a phone, and for the Android app, which draws the board itself.
 const rootRedirect = (): string => {
     const { isGuest, homeOnly } = useTier();
-    return rootLanding({ isGuest: isGuest.value, homeOnly: homeOnly.value }, embedded(), activeSandboxId.value);
+    return rootLanding({ isGuest: isGuest.value, homeOnly: homeOnly.value }, embedded() || useDevice().mobile.value, activeSandboxId.value);
 };
 
 // A sandbox's bare address is its first screen. The reader's standing is known only in the sandbox open, so another's

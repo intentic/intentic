@@ -451,8 +451,10 @@ flowchart LR
 - **Routes.** `/login` sits outside the shell; `/setup` and `/start/hosted` are only redirects to Home's ask for a new
   sandbox (`router/setupRoutes.ts`, below), kept for old links. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup` (`router/shellGates.ts`). The bare address opens
-  **Home** (`/home`, the master view below) for everyone but a guest of a box, whose way in is its chat, and the
-  Android app's WebView, which keeps the board it draws itself (`lib/routes/firstScreens.ts` `rootLanding`). `/home` alone
+  **Home** (`/home`, the master view below) on a desktop, for everyone but a guest of a box, whose way in is its chat.
+  A phone and the Android app's WebView open on the board of the sandbox open last instead (`lib/routes/firstScreens.ts`
+  `rootLanding`; _2026-11-21: on a phone Home is only a list of sandboxes, and the owner wanted the rail and the
+  chats_). `/home` alone
   also opens signed out, with its first run and no account registry or plan reads. Its Add sandbox action asks for
   sign-in and returns to `/home?add=sandbox`, the address of Home's new sandbox (below). The shell renders `ShellDesktop.vue`
   (rail, side panel and terminal) or `ShellMobile.vue` (one screen at a time). An account with nothing to
@@ -466,8 +468,9 @@ flowchart LR
   `settings/:tab?`, the same Settings hub, open while there is an account. There it leaves out Notifications (a
   sandbox's), and Data hands deleting the account to the workspace, which knows every sandbox it must leave first. The
   routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
-- **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. The first screen is Home's list of
-  sandboxes; a sandbox's own first screen is its agents board, with the desktop's rail down its left
+- **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. The first screen is the agents
+  board of the sandbox open last (Home's list of sandboxes only with none open yet; `rootLanding`), with the desktop's
+  rail down its left
   (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`): the sandbox's
   logo on top, which opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
   section, the terminal, the Sandbox hub and the + that adds a capability, at a finger's size (`phoneRailFrame` in
@@ -736,10 +739,12 @@ pnpm --filter @intentic/web typecheck
 
 `/home` is the first screen (since 2026-10-25): every sandbox at once, where sandboxes are made and from which each is
 entered. It keeps the shared shell and shows one home conversation for the selected sandbox. The desktop rail lists
-connected sandboxes with personal attention counts; on phones the list opens each sandbox’s chat at `/home/:sandbox`.
+connected sandboxes with personal attention counts; on phones, where the first screen is the board of the sandbox open
+last, the list (reached from the Menu page's mark) opens each sandbox’s chat at `/home/:sandbox`.
 Home draws **no top bar** over the chat, by decision: the chat is the page. Single clicks on a tile switch
 sandboxes; double clicks and Enter go inside, to the screen that sandbox was last left on or its agents board
-(`models/sandbox/sandboxScreen.ts` `sandboxEntryPath`); on a phone an edge swipe leads from a sandbox's chat back to
+(`models/sandbox/sandboxScreen.ts` `sandboxEntryPath`), never the phone's Menu page, which a sandbox is left from
+(`isScreen`; _2026-11-21: kept as the screen, "Open" under Home's chat went to the Menu and its back arrow to the chat_); on a phone an edge swipe leads from a sandbox's chat back to
 the list. Inside a sandbox, Home has **no rail tile** either, also by decision: the way back out is the quiet mark on
 the sandbox switcher's Sandboxes header (on a phone, the Menu page's), and `Mod+Alt+H`. The master view's own rail is
 `shell/rail/MasterRail.vue`. Going in is never `/`: that is Home itself

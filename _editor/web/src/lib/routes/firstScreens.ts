@@ -1,4 +1,4 @@
-import { homePath, isSandboxPage, legacyTarget, page, parseAppPath } from "@intentic/sandbox-contract/app-routes";
+import { homePath, isSandboxPage, legacyTarget, page, type PageName, parseAppPath } from "@intentic/sandbox-contract/app-routes";
 import { sandboxOfAddress, toHome, toInside } from "./links";
 
 // WHERE THE APP OPENS, AND WHERE A SANDBOX OPENS. Two answers since 2026-10-25, when Home (the master view, every
@@ -27,32 +27,44 @@ export const sandboxLanding = (sandbox: string, tier: LandingTier): string => {
 };
 
 /**
- * The bare address. Home for everyone who has one to stand on: the person's own master view, before and after their
- * first sandbox. A plain guest's way in is the chat of the box it was let into, as before. The Android app draws the
- * board itself (router/nativeHandoff.ts), so its WebView keeps opening there. With no sandbox to open, Home it is.
+ * The bare address. On a desktop, Home for everyone who has one to stand on: the person's own master view, before and
+ * after their first sandbox. A plain guest's way in is the chat of the box it was let into, as before. A phone opens
+ * inside the sandbox open last, on its board with the rail down its side (2026-11-21): there Home is a list of
+ * sandboxes and nothing else, a screen the desktop's rail folded away on 2026-11-09, and the owner opening the app on a
+ * phone wants the rail and the chats. The Android app draws the board itself (router/nativeHandoff.ts), so its WebView
+ * opens there too. With no sandbox to open, Home it is, a phone's included: its list is where one is picked.
  */
-export const rootLanding = (tier: LandingTier, embedded: boolean, sandbox: string | undefined): string => {
-    if (sandbox !== undefined && (embedded || (tier.isGuest && !tier.homeOnly))) {
+export const rootLanding = (tier: LandingTier, boardFirst: boolean, sandbox: string | undefined): string => {
+    if (sandbox !== undefined && (boardFirst || (tier.isGuest && !tier.homeOnly))) {
         return sandboxLanding(sandbox, tier);
     }
     return HOME_PATH;
 };
 
 /**
+ * Whether a page is one a sandbox is opened back onto: any page of the sandbox's own but the phone's Menu. The Menu is
+ * the rail's contents laid out as a page, and the place a sandbox is left from (another sandbox picked, the way back to
+ * Home), so it was nearly always the screen kept. Opened back onto it, "Open <sandbox>" under Home's chat showed the
+ * list of sandboxes with that one marked, and the Menu's back arrow stepped back to the chat: a loop with no way in
+ * (2026-11-21).
+ */
+export const isScreen = (name: PageName): boolean => isSandboxPage(name) && name !== `menu`;
+
+/**
  * A screen of a sandbox, as its address inside that sandbox: one already there, or one written before frames (an older
  * build's memory, or a caller that still names the page that way) read as that sandbox's. An account page, Home, the
- * bare address or another sandbox's page is no screen of this one.
+ * bare address, the phone's Menu or another sandbox's page is no screen of this one.
  */
 export const insideScreen = (sandbox: string, address: string): string | undefined => {
     const parsed = parseAppPath(address);
     if (parsed !== undefined) {
         const shown = parsed.page?.name;
-        return parsed.frame.kind === `inside` && sandboxOfAddress(parsed.frame.sandbox) === sandbox && shown !== undefined && isSandboxPage(shown)
+        return parsed.frame.kind === `inside` && sandboxOfAddress(parsed.frame.sandbox) === sandbox && shown !== undefined && isScreen(shown)
             ? address
             : undefined;
     }
     const legacy = legacyTarget(address);
-    return legacy === undefined || legacy.frame !== `inside` ? undefined : toInside(sandbox, legacy.link);
+    return legacy === undefined || legacy.frame !== `inside` || !isScreen(legacy.link.page) ? undefined : toInside(sandbox, legacy.link);
 };
 
 /** Where opening a sandbox goes: the screen it was last left on, when that was a screen of its own, else its first screen. */

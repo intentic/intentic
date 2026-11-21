@@ -6,8 +6,8 @@ import { here, linkOf, page, type RouteRead } from "./links";
 
 /**
  * A sandbox's board on a phone, in the form addresses had before frames: what the Android app's bridge reads
- * (router/nativeHandoff.ts). A link to the board is `here(page.agents())`. The app's own first screen is Home's list of
- * sandboxes (lib/routes/firstScreens.ts), except in the Android app, which draws this board.
+ * (router/nativeHandoff.ts). A link to the board is `here(page.agents())`. It is a phone's first screen too, the board of
+ * the sandbox open last (lib/routes/firstScreens.ts `rootLanding`); Home's list of sandboxes only with none open.
  */
 export const PHONE_HOME = legacyPathOf(page.agents());
 

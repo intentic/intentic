@@ -205,6 +205,21 @@ describe(`what counts as a sandbox's screen`, () => {
         expect(sandboxEntryPath(`sb1`)).toBe(insidePath(`sb1`, page.agents()));
     });
 
+    // The phone's Menu is where a sandbox is left from. Kept as its screen, "Open" under Home's chat went back to the
+    // Menu, whose back arrow went back to the chat, round and round (2026-11-21).
+    it(`passes the phone's Menu by, keeping the screen before it`, async () => {
+        await go(insidePath(`sb1`, page.workspace(`src/a.ts`)));
+        await go(insidePath(`sb1`, page.menu()));
+
+        expect(sandboxEntryPath(`sb1`)).toBe(insidePath(`sb1`, page.workspace(`src/a.ts`)));
+    });
+
+    it(`opens a sandbox an older build left on the Menu on its board`, () => {
+        session.set(`intentic.sandboxScreen.sb2`, insidePath(`sb2`, page.menu()));
+
+        expect(sandboxEntryPath(`sb2`)).toBe(insidePath(`sb2`, page.agents()));
+    });
+
     it(`records a page of the sandbox seen in Home's frame as its screen inside it`, async () => {
         await go(homePath(`sb1`, page.workspace(`src/a.ts`, { query: { agent: `cnv_1` } })));
 

@@ -14,10 +14,11 @@ import { useEdgeBack } from "./edgeBack";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { embedded } from "../app/environments/nativeApp";
 
-// Mobile chrome: one screen at a time. Home (/home) is the first, the list of sandboxes, each opening its home
-// conversation (/home/:sandbox, back to the list by an edge swipe; no bar over the chat, by decision). A sandbox's own
-// first screen is its board (/agents), with the rail down its left (MobileRail.vue) holding every other place, Home
-// among them only as the quiet mark on the Menu page's sandboxes header (MobileMenu.vue), never a tile; a conversation
+// Mobile chrome: one screen at a time. The first is the board (/agents) of the sandbox open last, with the rail down its
+// left (MobileRail.vue) holding every other place (lib/routes/firstScreens.ts `rootLanding`). Home (/home), the list
+// of sandboxes, each opening its home conversation (/home/:sandbox, back to the list by an edge swipe; no bar over the
+// chat, by decision), is reached only from the quiet mark on the Menu page's sandboxes header (MobileMenu.vue), and is
+// the first screen only with no sandbox open yet; a conversation
 // (/agents/:id) is the board's drill-down, back by its own arrow. Everything else is a full-screen page the rail opened, with the way back drawn at its top. h-dvh tracks the
 // browser's UI chrome. No tab bar, chat column, or docked terminal: chat and terminal are full-screen routes.
 // Inside the Android app's WebView (app/environments/nativeApp.ts) the board, a conversation and the menu are the app's

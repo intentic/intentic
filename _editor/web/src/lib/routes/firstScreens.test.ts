@@ -18,9 +18,10 @@ test(`a guest of a box still opens on its chat, the only screen it has there`, (
     expect(rootLanding(GUEST, false, BOX)).toBe(insidePath(BOX, page.chat()));
 });
 
-test(`the Android app keeps opening on the board it draws itself`, () => {
+test(`a phone and the Android app open inside the sandbox open last, on its board`, () => {
     expect(rootLanding(MEMBER, true, BOX)).toBe(insidePath(BOX, page.agents()));
     expect(rootLanding(GUEST, true, BOX)).toBe(insidePath(BOX, page.chat()));
+    expect(rootLanding(HOME_ONLY, true, BOX)).toBe(homePath(BOX));
 });
 
 test(`with no sandbox to open, Home is the landing for everyone`, () => {
@@ -58,6 +59,8 @@ test.each([
     `/s/${BOX}/account`,
     `/s/other/workspace`,
     `/s/${BOX}`,
+    `/s/${BOX}/menu`,
+    `/menu`,
 ])(`%s is no screen of the sandbox, so opening it lands on its board`, (remembered) => {
     expect(sandboxEntry(BOX, remembered, MEMBER)).toBe(insidePath(BOX, page.agents()));
 });

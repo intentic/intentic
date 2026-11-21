@@ -4,7 +4,7 @@ import { onNavigation } from "../../workbench/navigation/navigation";
 import { readWindowState, writeWindowState } from "../../workbench/window/windowStore";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useTier } from "../../client/sandbox/useTier";
-import { insideScreen, type LandingTier, sandboxEntry } from "../../lib/routes/firstScreens";
+import { insideScreen, isScreen, type LandingTier, sandboxEntry } from "../../lib/routes/firstScreens";
 import { type HomeSection, homeSection, sectionLink, sectionOfPage, showsSection } from "../../lib/routes/homeSection";
 import { frameOf, isSandboxPage, linkOf, pageOf, routeSandbox, routeSegment, segmentOf, toHome, toInside } from "../../lib/routes/links";
 
@@ -127,13 +127,14 @@ export const routeChoosesSandbox = (): void => {
     routeChoosing = true;
 };
 
-// The screen a route shows, as its address inside its sandbox: a page of the sandbox's own, in either frame.
+// The screen a route shows, as its address inside its sandbox: a page of the sandbox's own, in either frame. Not the
+// phone's Menu (firstScreens.ts `isScreen`), which a sandbox is left from: passing through it keeps the screen before.
 const screenOf = (to: RouteLocationNormalized, sandboxId: string): string | undefined => {
     const shown = pageOf(to);
     if (frameOf(to) === `inside`) {
-        return shown === undefined || !isSandboxPage(shown) ? undefined : to.fullPath;
+        return shown === undefined || !isScreen(shown) ? undefined : to.fullPath;
     }
-    const link = shown === undefined || !isSandboxPage(shown) ? undefined : linkOf(to.fullPath);
+    const link = shown === undefined || !isScreen(shown) ? undefined : linkOf(to.fullPath);
     return link === undefined ? undefined : toInside(sandboxId, link);
 };
 
