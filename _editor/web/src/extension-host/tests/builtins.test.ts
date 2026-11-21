@@ -188,3 +188,13 @@ describe(`ext-activity`, () => {
         expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
     });
 });
+
+describe(`core Run view`, () => {
+    const run = () => coreViews().find((view) => view.id === `run`)!;
+    it(`activates once the workspace holds a repository`, () => {
+        expect(run().detect([richRepo], []).map((activation) => activation.key)).toEqual([`run`]);
+    });
+    it(`stays off the rail in a workspace of documents alone`, () => {
+        expect(run().detect(noRepos, richCapabilities)).toEqual([]);
+    });
+});

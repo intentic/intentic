@@ -120,8 +120,9 @@ const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), it
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully.
 const know = (): RailGroup => ({ id: `know`, label: t(`views.registry.know`), items: [signal(`documentation`)] });
 
-// The Work band. Run follows the Workspace, a tile of its own and always there: starting what the files make, here or
-// natively on one of the owner's computers, is part of the loop the band serves, not news. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
+// The Work band. Run follows the Workspace, a tile of its own and always there once the workspace holds a repository:
+// starting what the files make, here or natively on one of the owner's computers, is part of the loop the band serves,
+// not news. A workspace of documents alone detects no Run tile (core-views/coreViews.ts), so `always` has nothing to keep. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
 // window. A signal tile a reader pins to keep: it comes onto the rail by itself while one of the machines is being worked
 // on (its turning mark) or a port is held, which is exactly when it has to be in sight. The live app, Browsers and the
 // sandbox's own Desktop are not in any band: they are live surfaces, not places, so they are behind the one Browsers tool

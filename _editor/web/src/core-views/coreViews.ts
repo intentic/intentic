@@ -12,8 +12,10 @@ export const coreViews = (): readonly ViewRegistration[] => [
         id: RUN_VIEW_ID,
         label: t(`run.view.title`),
         surface: `rail`,
-        // Every workspace has one: what its repositories run and where, or, before any of them says, how to make one runnable.
-        detect: () => [{ key: RUN_VIEW_ID, title: t(`run.view.title`), icon: `play` }],
+        // A workspace with software in it: at least one repository (a git repository, or a workspace root Start can run).
+        // There it says what runs and where, or, before any repository says, how to make one runnable. A workspace of
+        // documents alone has nothing to run and nothing to make runnable, so it gets no Run tile.
+        detect: (repos) => (repos.length === 0 ? [] : [{ key: RUN_VIEW_ID, title: t(`run.view.title`), icon: `play` }]),
         view: async () => (await import(`../features/run/RunView.vue`)).default,
     },
     {
