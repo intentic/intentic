@@ -4,118 +4,25 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 import PageHero from "../components/content/PageHero.astro";
 import OsInstaller from "../components/download/OsInstaller.astro";
-import OsStackFigure from "../components/figures/OsStackFigure.astro";
-import OsUpdateFigure from "../components/figures/OsUpdateFigure.astro";
-import OsIsolationFigure from "../components/figures/OsIsolationFigure.astro";
-import OsEditionsFigure from "../components/figures/OsEditionsFigure.astro";
-import OsPairingFigure from "../components/figures/OsPairingFigure.astro";
 
 /* INTENTIC OS: the dedicated operating system for autonomous coding agents.
    A minimal, immutable Linux host based on Fedora bootc, Kata microVMs, and the ic host authority. */
-
-const jumpLinks = {
-    label: "Explore",
-    links: [
-        { href: "#editions", label: "Editions" },
-        { href: "#isolation", label: "Isolation" },
-        { href: "#architecture", label: "The Stack" },
-        { href: "#updates", label: "Atomic Updates" },
-        { href: "#setup", label: "Zero-Touch Setup" },
-        { href: "#installer", label: "Download ISO" },
-    ],
-};
 ---
 
 <BaseLayout breadcrumbs={[{ name: "Intentic OS", path: "/os/" }]}>
     <Nav />
     <main class="flex-1">
-        <!-- Hero: The claim, key badges, and jump navigation -->
         <PageHero
             eyebrow="Intentic OS"
             heading="An immutable Linux OS built for autonomous coding agents."
             sub="Bare-metal performance, atomic bootc deployments, hardware-isolated sandboxes, and zero-touch setup on any x86-64 PC or server."
-            jumpLinks={jumpLinks}
         >
             <div class="mt-8 flex flex-wrap items-center gap-4">
                 <a href="#installer" class="btn btn-primary">Download the ISO</a>
-                <a href="#editions" class="btn btn-secondary">Explore Architecture</a>
-            </div>
-
-            <div class="mt-8 flex flex-wrap gap-2 text-3xs font-mono text-subtle">
-                <span class="border border-line bg-surface px-2.5 py-1">bootc A/B deployments</span>
-                <span class="border border-line bg-surface px-2.5 py-1">greenboot auto-rollback</span>
-                <span class="border border-line bg-surface px-2.5 py-1">runc &middot; kata microVMs</span>
-                <span class="border border-line bg-surface px-2.5 py-1">sway kiosk</span>
-                <span class="border border-line bg-surface px-2.5 py-1 text-gold">TPM 2.0 full-disk encryption</span>
+                <a href="/docs/architecture/" class="btn btn-secondary">Explore Architecture</a>
             </div>
         </PageHero>
 
-        <!-- 1. Editions: Headless Server vs Sway Kiosk -->
-        <section id="editions" class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
-            <div class="max-w-3xl">
-                <span class="eyebrow">Editions</span>
-                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Headless server or dedicated desktop kiosk.</h2>
-                <p class="mt-2 text-sm text-muted">
-                    Ships as a pure headless server for homelabs and mini-PCs, or a Sway Wayland desktop kiosk with compositor-enforced amber window borders.
-                </p>
-            </div>
-
-            <OsEditionsFigure />
-        </section>
-
-        <!-- 2. Dual-Runtime Isolation -->
-        <section id="isolation" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
-            <div class="max-w-3xl">
-                <span class="eyebrow">Isolation</span>
-                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Fast containers for dev loops. Kata microVMs for untrusted code.</h2>
-                <p class="mt-2 text-sm text-muted">
-                    Sub-second <code class="font-mono text-3xs text-subtle">runc</code> container starts for everyday coding, or true hardware microVMs for untrusted tasks. Both enforce bounded swap.
-                </p>
-            </div>
-
-            <OsIsolationFigure />
-        </section>
-
-        <!-- 3. The Stack Architecture -->
-        <section id="architecture" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
-            <div class="max-w-3xl">
-                <span class="eyebrow">Architecture</span>
-                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">A deterministic floor. The agent controls the machine without root.</h2>
-                <p class="mt-2 text-sm text-muted">
-                    Sandboxes run on bare metal. The steward sandbox manages host devices via <code class="font-mono text-3xs text-subtle">ic</code> authority with no raw Docker socket.
-                </p>
-            </div>
-
-            <OsStackFigure />
-        </section>
-
-        <!-- 4. Atomic Updates & Self-Healing -->
-        <section id="updates" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
-            <div class="max-w-3xl">
-                <span class="eyebrow">Reliability</span>
-                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Atomic updates in background. Self-healing on failure.</h2>
-                <p class="mt-2 text-sm text-muted">
-                    OS updates stage in background while workspaces run. Failed health checks automatically trigger greenboot to roll back to the prior image.
-                </p>
-            </div>
-
-            <OsUpdateFigure />
-        </section>
-
-        <!-- 5. Zero-Touch Setup & Pairing -->
-        <section id="setup" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-20">
-            <div class="max-w-3xl">
-                <span class="eyebrow">First Boot</span>
-                <h2 class="display mt-2 text-2xl font-semibold sm:text-3xl">Zero questions during install. Paired in 60 seconds.</h2>
-                <p class="mt-2 text-sm text-muted">
-                    Flash to USB, boot, and pair via local network or console code. Unattended disk partitioning and TPM 2.0 encryption with zero prompts.
-                </p>
-            </div>
-
-            <OsPairingFigure />
-        </section>
-
-        <!-- 6. Download & Install -->
         <section id="installer" class="mx-auto max-w-7xl border-t border-line px-6 py-16 lg:py-24">
             <OsInstaller />
         </section>
