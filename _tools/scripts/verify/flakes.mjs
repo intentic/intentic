@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { git } from "../lib/git.mjs";
 import { SUITE_TIMEOUTS, suiteKindOf } from "../../constants/src/test-suites.mjs";
-import { junitCases, SOURCE_CONDITION, taskOf, unhandledErrors } from "./failure-units.mjs";
+import { junitCases, logTail, SOURCE_CONDITION, taskOf, unhandledErrors } from "./failure-units.mjs";
 
 // Entries the ledger keeps, newest first.
 export const FLAKES_KEPT = 300;
@@ -44,7 +44,11 @@ const readOr = (path) => {
 
 const CEILING = fileURLToPath(new URL("../lib/memory-ceiling.mjs", import.meta.url));
 
-// One `bun test` of exact files in one package and one budget; answers its cases and the errors between tests.
+// Lines of a re-run's own output kept for a test that failed it: the only record of why, since nothing else is printed.
+const RERUN_LOG_LINES = 80;
+
+// One `bun test` of exact files in one package and one budget; answers its cases, the errors between tests, and the tail
+// of what it printed (with a spawn that never started said as such).
 const rerun = (root, directory, kind, files) => {
     const scratch = mkdtempSync(join(tmpdir(), "flake-rerun-"));
     try {
@@ -67,9 +71,12 @@ const rerun = (root, directory, kind, files) => {
             ],
             { cwd: join(root, directory), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
         );
+        const output = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+        const ended = run.error !== undefined ? `could not start: ${run.error.message}` : `exited ${run.status ?? run.signal}`;
         return {
             cases: run.signal === null && run.status !== null ? junitCases(readOr(report)) : [],
-            errors: unhandledErrors(`${run.stdout ?? ""}${run.stderr ?? ""}`),
+            errors: unhandledErrors(output),
+            log: [...logTail(output, RERUN_LOG_LINES), `bun test ${ended}`],
         };
     } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -91,11 +98,19 @@ export const rerunFailures = (root, tasks, units) => {
     const flaky = new Set();
     for (const [key, members] of groups) {
         const kind = key.split("\n")[1];
-        const { cases, errors } = rerun(root, members[0].task.directory ?? "", kind, [...new Set(members.map(({ parts }) => parts.file))]);
+        const files = [...new Set(members.map(({ parts }) => parts.file))];
+        const { cases, errors, log } = rerun(root, members[0].task.directory ?? "", kind, files);
         for (const { unit, parts } of members) {
             if (passedAgain(parts, cases, errors)) {
                 flaky.add(unit);
             }
+        }
+        // A test that fails alone is charged with it (the gate fails, the nightly evicts it), so the reason is printed
+        // here: the run's output is captured for its errors and was otherwise dropped, leaving a verdict with no cause.
+        if (members.some(({ unit }) => !flaky.has(unit))) {
+            console.log(`::group::re-run alone in ${members[0].task.directory ?? "."}: ${files.join(" ")}`);
+            console.log(log.join("\n"));
+            console.log("::endgroup::");
         }
     }
     return { flaky: units.filter((unit) => flaky.has(unit)), still: units.filter((unit) => !flaky.has(unit)) };
