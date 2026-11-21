@@ -90,8 +90,27 @@ browser's own WebRTC pipeline shows it (hardware decoder, jitter buffer); everyt
   last second, which a burst of loss does, and the pictures then wait for the viewer to ask again (turned off
   2026-11-21, measured below). A decoder that lost the stream asks with PLI or FIR, which castd answers with a
   keyframe at most every 500 ms (one may still be on its way).
+- **Copies** (2026-11-21, `Copies` in [src/rtc/peer.rs](src/rtc/peer.rs)): on a long, lossy link every packet goes out
+  twice, the copy on the retransmission stream right behind it without being asked for (str0m's
+  `StreamTx::set_proactive_rtx`, below). Chrome hands an H.264 picture to its decoder only once every packet before it
+  has arrived, so each lost packet held the picture, and every one behind it, until its resend came a round trip later:
+  at 200 ms a fifth to two fifths of the time frozen. With a copy behind each packet a loss holds nothing unless the
+  copy is lost too. They go on where the round trip is 80 ms or more (the shortest str0m measured over 10 s) and the
+  link loses 0.3% or more (the mean of str0m's per-second figures over 10 s, leaving out any second past 10%, which is
+  a queue overflowing as a cap falls and the congestion control's to answer), and off below 60 ms or 0.1%, never
+  sooner than 10 s after going on. str0m paces the copies and its estimate counts them as it does the pictures, so
+  while they go the encoder and the bucket below are given half the estimate (`Feedback::media_kbps`). All or none:
+  copying every other packet gave much less than half the gain (one run each at 200 ms and 2%: 30% of the time frozen,
+  against 4% with every packet copied and 42% with none). `CAST_TRACK_COPIES=1` or `0` in the environment turns them
+  on or off for the whole session, for measuring.
+- **str0m** is a fork until upstream ships that call: castd's and remoted's `Cargo.toml` patch crates.io's str0m with
+  [intentic/str0m](https://github.com/intentic/str0m) at one commit of its `proactive-rtx` branch, which is str0m's
+  main of 2026-11-21 (20 commits past 0.25.0, among them a NACKed packet resent at most once a round trip, a floor
+  under the loss-based estimate, and fixes for malformed transport feedback) and the one commit adding
+  `set_proactive_rtx`, proposed upstream as [algesten/str0m#1171](https://github.com/algesten/str0m/pull/1171). Once a
+  str0m release has it, the patch goes.
 - **Keyframes**: on a track a keyframe, and a frame of new content after a lull, may take what the slowest track's
-  link carries in 200 ms (`KEY_WINDOW` in [src/video.rs](src/video.rs), never below 160 kbit) instead of a channel's
+  link carries for pictures in 200 ms (half its estimate while the copies go) (`KEY_WINDOW` in [src/video.rs](src/video.rs), never below 160 kbit) instead of a channel's
   four times the cap: nothing acks the pictures behind it, so a larger one only fills the bottleneck's buffer. The
   encoder gets it through `VideoEncoder::set_rate_key`: a full VBV buffer of that size for x264, NVENC and VA-API;
   openh264 has no VBV and picks an IDR's QP from bits per pixel, so it is given a bitrate whose second is the budget,
@@ -99,7 +118,8 @@ browser's own WebRTC pipeline shows it (hardware decoder, jitter buffer); everyt
   Mbit/s); Media Foundation is given the cap.
 - **Rate**: transport-wide feedback drives str0m's congestion control (Google's: delay gradient, loss, probing),
   started at the bitrate castd aims for or 2 Mbit/s, whichever is higher, and probing toward `--max-kbps`. While a
-  track's viewer steers, the encoder is given `TRACK_SHARE` (0.85) of its estimate, the rest left for
+  track's viewer steers, the encoder is given `TRACK_SHARE` (0.85) of its estimate (of half of it while the copies
+  go), the rest left for
   retransmissions, scaled down further while the encoder puts out more than that share (openh264 at its QP ceiling on
   content too busy for the link), and to 0.7 of it while what was sent runs ahead (below).
 - **Pace**: nothing acks a track's pictures. castd counts what it sent against a bucket that the share drains, never
@@ -314,11 +334,9 @@ Weighed for repairing a loss without waiting a round trip, and not built:
   most of the packets, so at 200 ms and 2% the picture would still wait on a round trip several times a second; it
   needs a descriptor writer and layering in every encoder for perhaps half the stalls, and was left.
 - **Proactive resends**, each packet sent again on the RTX stream right after it, so a picture waits only when both
-  copies are lost: measured once with a str0m patched to do it (`StreamTx::set_duplicates`, not kept) and the encoder
-  given half the share: at 200 ms and 2%, 8.1% frozen against 34 to 44%, 37 pictures a second against 14 to 17, NACKs
-  from 678 to 99; at 100 ms and 2%, 41 pictures a second against 27. But doubling what crossed the link made the
-  3 Mbit/s step collapse the estimate (p95 2.1 s). It needs str0m to offer it (str0m has no way to resend unasked) and
-  a rate that makes room for it only where loss and round trip call for it: the largest gain left for 200 ms links.
+  copies are lost: measured once with a str0m patched to do it and the encoder given half the share (at 200 ms and 2%,
+  8.1% frozen against 34 to 44%), but the 3 Mbit/s step collapsed the estimate (p95 2.1 s). Since built, as the
+  copies above, and measured below.
 
 **The stuck picture** did not come back: 40 LAN runs of the track, 30 s each, every picture's stamp read, no PLI, no
 keyframe, the longest gap between pictures 33 to 67 ms in 38 of them and 333 and 367 ms in two the host loaded.
@@ -330,7 +348,7 @@ swapping and its cores busy: the bench's own process stalled, most likely the fi
 **Left**, as of this measurement:
 
 - 200 ms links with 2 to 5% loss, still frozen a fifth to two fifths of the time: proactive resends (above), or the
-  descriptor with a reference structure that skips a lost frame.
+  descriptor with a reference structure that skips a lost frame. Since done: the copies, measured below.
 - At 200 ms a cap's fall still leaves 1.5 to 2 s of stale pictures while resends repair the burst; a keyframe once a
   burst would take longer to repair than to replace was not tried.
 - openh264's keyframes stay about 1.5 times the budget (its QP for an IDR tops out at 40).
@@ -338,6 +356,100 @@ swapping and its cores busy: the bench's own process stalled, most likely the fi
   16 s behind it and the peer then failed (the page measured nothing). Holding video off the socket while an offer
   is pending would fix it.
 - The estimate climbs back slowly after a cap lifts: about 3.5 Mbit/s 15 s after the cap went back to 10.
+
+### Copies of every packet on long, lossy links, measured (2026-11-21, evening)
+
+The copies (above, under Repair) and str0m's main in place of 0.25.0, measured as the tables above were (`matrix.sh`,
+45 s a run after 4 s of warm-up, each under `quiet --pin 4`, Chrome for Testing 156 headless, openh264 at 1280x720), in
+this sandbox on `rog` with 0.4 to 1.5 cores busy elsewhere. "Before" is the cast-core this work started from (str0m
+0.25.0 from crates.io), "after" this one, each run twice. Sent is what the encoder put out, the pictures alone: while
+the copies go, about twice that crossed the link. Twice is the share of the run the packets went out twice.
+
+| Link (RTT, loss each way) | Path | Glass p50 / p95 / p99 (ms) | Shown /s | Freezes /min (frozen) | Keyframes | Sent (kbit/s) | Twice |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| LAN (no impairment) | track, before | 15.5 / 23 / 24.4 | 54.2 | 0 (0%) | 0 | 3737 | – |
+| LAN (no impairment) | track, before, again | 15.3 / 22.9 / 24.4 | 54.3 | 0 (0%) | 0 | 3723 | – |
+| LAN (no impairment) | track, after | 15.5 / 22.9 / 24.6 | 54.4 | 0 (0%) | 0 | 3737 | 0% |
+| LAN (no impairment) | track, after, again | 15.4 / 22.8 / 24.1 | 54.6 | 0 (0%) | 0 | 3730 | 0% |
+| 40 ms, 0.5% | track, before | 40.1 / 82 / 135.8 | 46.5 | 1.3 (0.6%) | 0 | 3604 → 2485 → 3714 | – |
+| 40 ms, 0.5% | track, before, again | 39.1 / 57.8 / 92 | 43.6 | 2.7 (6.4%) | 0 | 3619 → 1889 → 3058 | – |
+| 40 ms, 0.5% | track, after | 38.9 / 65 / 107 | 47.8 | 1.3 (0.7%) | 0 | 3618 → 2177 → 2643 | 0% |
+| 40 ms, 0.5% | track, after, again | 39.3 / 59.2 / 94.8 | 46.1 | 1.3 (0.6%) | 0 | 3763 → 2027 → 3928 | 0% |
+| 40 ms, 2% | track, before | 41.3 / 99.5 / 182.4 | 34.5 | 5.3 (5.6%) | 0 | 3640 → 2529 → 3279 | – |
+| 40 ms, 2% | track, before, again | 40.6 / 82.2 / 123.7 | 36.5 | 2.7 (3.7%) | 0 | 3603 → 2295 → 3383 | – |
+| 40 ms, 2% | track, after | 39.4 / 79.2 / 119.8 | 38.2 | 1.3 (0.6%) | 0 | 3594 → 2260 → 2080 | 0% |
+| 40 ms, 2% | track, after, again | 38.8 / 70.2 / 118.5 | 39.3 | 0 (0%) | 0 | 3647 → 2106 → 2252 | 0% |
+| 40 ms, 5% | track, before | 43.7 / 112.1 / 197.1 | 25.7 | 13.3 (7.3%) | 0 | 3739 → 2306 → 2983 | – |
+| 40 ms, 5% | track, before, again | 44.2 / 96.5 / 292.9 | 24.8 | 13.3 (15%) | 1 | 3825 → 2190 → 3269 | – |
+| 40 ms, 5% | track, after | 40.7 / 85.1 / 196.3 | 29.6 | 12 (5.6%) | 0 | 3320 → 1900 → 2337 | 0% |
+| 40 ms, 5% | track, after, again | 42.4 / 107.2 / 215.6 | 25.9 | 14.7 (6.7%) | 0 | 3615 → 2112 → 2445 | 0% |
+| 100 ms, 0.5% | track, before | 71 / 124.7 / 163.4 | 40.8 | 5.3 (5.2%) | 0 | 3678 → 2365 → 2820 | – |
+| 100 ms, 0.5% | track, before, again | 70.7 / 94.6 / 162 | 40.6 | 4 (3.1%) | 0 | 3708 → 2138 → 3431 | – |
+| 100 ms, 0.5% | track, after | 71.3 / 95 / 150.7 | 47.6 | 5.3 (3%) | 0 | 3563 → 801 → 1563 | 100% |
+| 100 ms, 0.5% | track, after, again | 71.6 / 100.9 / 225.2 | 47.3 | 5.3 (3.4%) | 0 | 3545 → 1013 → 1194 | 100% |
+| 100 ms, 2% | track, before | 72.4 / 159 / 248.3 | 24.8 | 12 (17%) | 1 | 3731 → 2182 → 3248 | – |
+| 100 ms, 2% | track, before, again | 73.2 / 167.9 / 327.8 | 24.9 | 12 (8.3%) | 0 | 3897 → 2305 → 3059 | – |
+| 100 ms, 2% | track, after | 70.1 / 91.4 / 117.7 | 48 | 4 (2.9%) | 0 | 3491 → 792 → 937 | 100% |
+| 100 ms, 2% | track, after, again | 71 / 95.7 / 194.9 | 43.8 | 4 (2.7%) | 0 | 3629 → 639 → 722 | 100% |
+| 100 ms, 5% | track, before | 141.9 / 280.8 / 889.5 | 15.2 | 28 (24.1%) | 1 | 3874 → 2357 → 3541 | – |
+| 100 ms, 5% | track, before, again | 121 / 216.5 / 323 | 19.5 | 24 (11.1%) | 0 | 3736 → 2082 → 2940 | – |
+| 100 ms, 5% | track, after | 69.8 / 87.9 / 159.8 | 46.6 | 5.3 (2.1%) | 0 | 2287 → 1049 → 1104 | 100% |
+| 100 ms, 5% | track, after, again | 69.7 / 90.9 / 193.4 | 43.6 | 1.3 (0.9%) | 0 | 1932 → 561 → 681 | 100% |
+| 200 ms, 0.5% | track, before | 126.1 / 247.9 / 952.4 | 28 | 80 (37.2%) | 0 | 3828 → 2344 → 3499 | – |
+| 200 ms, 0.5% | track, before, again | 125.7 / 291.6 / 1272.8 | 27.7 | 66.7 (37%) | 0 | 3890 → 2545 → 3484 | – |
+| 200 ms, 0.5% | track, after | 126.1 / 172 / 280.4 | 46.3 | 5.3 (3.6%) | 0 | 3719 → 1081 → 1666 | 100% |
+| 200 ms, 0.5% | track, after, again | 124.2 / 148.4 / 207.2 | 46.4 | 4 (2.8%) | 0 | 3515 → 725 → 1356 | 100% |
+| 200 ms, 2% | track, before | 139.1 / 597 / 1593.9 | 12.8 | 70.7 (44.2%) | 1 | 3846 → 2332 → 3417 | – |
+| 200 ms, 2% | track, before, again | 171.5 / 513.5 / 2084.7 | 12.8 | 73.3 (45.1%) | 1 | 3813 → 2520 → 3168 | – |
+| 200 ms, 2% | track, after | 124.3 / 147.8 / 165.1 | 44.5 | 5.3 (4.2%) | 0 | 3645 → 693 → 765 | 100% |
+| 200 ms, 2% | track, after, again | 123.4 / 147.5 / 232.3 | 44.4 | 8 (4.4%) | 0 | 3369 → 770 → 898 | 100% |
+| 200 ms, 5% | track, before | 298.4 / 451.2 / 1777.7 | 13.2 | 53.3 (28.1%) | 0 | 3878 → 2067 → 2722 | – |
+| 200 ms, 5% | track, before, again | 308.5 / 497.8 / 1137.7 | 11.7 | 33.3 (29.7%) | 1 | 3838 → 2274 → 3397 | – |
+| 200 ms, 5% | track, after | 124 / 155.8 / 217.5 | 39.9 | 20 (8.3%) | 0 | 2462 → 581 → 620 | 100% |
+| 200 ms, 5% | track, after, again | 122.4 / 145.5 / 213.3 | 40.6 | 20 (8.9%) | 0 | 2381 → 689 → 645 | 100% |
+
+- **100 and 200 ms**: the copies went on in every run within the warm-up (3 s of str0m's figures) and stayed on. The picture froze 1 to 9% of
+  the time against 3 to 45% before, and 40 to 48 pictures a second were shown against 12 to 41. At 200 ms and 2% the
+  99th percentile fell from 1.6 to 2.1 s to 0.17 to 0.23 s, and at 200 ms and 5% the median from 300 ms to 123 (the
+  link's 100 ms one way, and the frame). The viewer's NACKs went from 170 to 1900 a run to 50 to 110.
+- **The cap's fall** holds most of what freezes are left: every freeze at 100 ms with 0.5 and 2%, and 0.8 to 1.3 s of
+  the 1.3 to 4 s at 200 ms, came in the three seconds after it, against 0.9 to 6.6 s in those seconds before. Nothing
+  collapsed: the glass's 95th percentile in the 3 Mbit/s step stayed at 0.09 to 0.26 s (0.11 to 2.1 s before), though
+  the estimate sat lower there, 1.5 to 3.0 Mbit/s on average against 2.6 to 3.2.
+- **The cost is bitrate**: half the estimate goes to the copies, and openh264 at its QP ceiling on this content puts
+  out more than that half, so frames are dropped at the source. In the 3 Mbit/s step the pictures got 0.6 to 1.1
+  Mbit/s against 2.1 to 2.5, and in the last third, after the cap lifted, 0.6 to 1.7 against 2.7 to 3.5: what castd
+  sends grows the estimate, and it sends less (above, the estimate's slow climb).
+- **LAN and 40 ms**: the copies never went on (the round trip is under 80 ms), and the two are the same within the
+  runs' spread, str0m's main in place of 0.25.0 included: 15.4 / 22.9 ms and 54 pictures a second on a LAN both ways;
+  at 40 ms 0 to 0.7% frozen against 0.6 to 6.4% with 0.5 and 2% loss, 5.6 to 6.7% against 7.3 to 15% with 5%.
+- **Without the copies, and with half**, one run each at 2%: str0m's main with the copies forced off
+  (`CAST_TRACK_COPIES=0`) froze 7.3% of the time at 100 ms and 41.6% at 200 ms, as 0.25.0 did; every other packet
+  copied (a build of str0m that took a share) 3.9% and 29.9%, and 36.1% at 200 ms and 5%; every packet, above, 2.7 to
+  2.9% and 4.2 to 4.4%. At 200 ms, where the copies matter most, half of them bought a third of the gain (and 30
+  pictures a second against 44), so it is all or none.
+- **Brave 158** (1.100.58 for Linux, headless: `CHROME=…/brave` before `matrix.sh`), one run each, tells the same:
+
+| Link (RTT, loss each way) | Path | Glass p50 / p95 / p99 (ms) | Shown /s | Freezes /min (frozen) | Keyframes | Sent (kbit/s) | Twice |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| LAN (no impairment) | track, before | 15.3 / 22.8 / 24.1 | 54.1 | 0 (0%) | 0 | 3725 | – |
+| LAN (no impairment) | track, after | 15.4 / 23 / 24.2 | 54.1 | 0 (0%) | 0 | 3725 | 0% |
+| 100 ms, 2% | track, before | 73.9 / 172.6 / 293.5 | 25.2 | 8 (4.4%) | 0 | 3707 → 2308 → 3552 | – |
+| 100 ms, 2% | track, after | 71.1 / 93.3 / 140.5 | 44.9 | 6.7 (2.7%) | 0 | 3486 → 650 → 726 | 100% |
+| 200 ms, 2% | track, before | 168 / 358.1 / 2127 | 13.7 | 72 (38.6%) | 0 | 3822 → 2326 → 3033 | – |
+| 200 ms, 2% | track, after | 124.7 / 148.6 / 203.1 | 46 | 8 (4.7%) | 0 | 3694 → 897 → 1610 | 100% |
+
+**Left**, as of this measurement:
+
+- The bitrate the copies cost: on content openh264 fits into half the estimate they cost only the link's spare
+  capacity, and on content it cannot (this bench's scrolling page), frames are dropped at the source. A share of the
+  copies paid for less than its share of the gain (above); FEC, or the dependency descriptor, might repair for less.
+- The estimate's slow climb after a cap lifts, slower with the copies (above).
+- A frame's last packet lost when no frame follows (a still screen after one change): the viewer notices the gap only
+  when a later packet comes, which on a quiet screen may be long. The copies cover it where they are on; elsewhere a
+  copy of each frame's last packet alone would, and was not tried.
+- 40 ms with 5% loss, 6 to 7% frozen with the copies off there; they were not measured at 40 ms.
+- Starting on a bad link and openh264's keyframes, as above.
 
 ## VA-API
 

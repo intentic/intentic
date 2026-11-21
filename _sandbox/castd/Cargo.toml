@@ -61,3 +61,11 @@ codegen-units = 4
 # (main.rs's hook), since a window whose picture stopped is better restarted by the daemon than left frozen.
 panic = "unwind"
 debug = 1
+
+# str0m from intentic's fork, pinned to a commit: str0m's main of 2026-11-21 (20 commits past 0.25.0, among them a
+# NACKed packet resent at most once a round trip and a floor under the loss-based estimate) and one commit of ours,
+# StreamTx::set_proactive_rtx, which a video track turns on across long, lossy links (cast-core's README, under
+# "Copies"). Proposed upstream as https://github.com/algesten/str0m/pull/1171: once a str0m release on crates.io has it, drop this
+# and require that release. _devices/remoted's Cargo.toml pins the same commit.
+[patch.crates-io]
+str0m = { git = "https://github.com/intentic/str0m", rev = "6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07" }

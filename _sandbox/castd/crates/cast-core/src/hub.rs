@@ -354,7 +354,7 @@ impl Client {
             estimate_kbps: None,
         };
         if let Some(track) = self.on_track() {
-            v.estimate_kbps = track.estimate_kbps();
+            v.estimate_kbps = track.media_kbps();
             v.delivered_kbps = v.estimate_kbps.unwrap_or(0.0);
             v.queue_ms = track.queue_ms();
             v.backlog_age_ms = 0.0;

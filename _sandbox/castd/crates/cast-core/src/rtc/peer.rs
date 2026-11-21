@@ -8,7 +8,7 @@ use browser_wire::RTC_MESSAGE_MAX;
 use bytes::Bytes;
 use parking_lot::Mutex;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use str0m::bwe::{Bitrate, BweKind};
@@ -80,6 +80,10 @@ pub struct Pictures {
 #[derive(Debug, Default)]
 pub struct Feedback {
     estimate_kbps: AtomicU32,
+    /// Whether the track's packets go out twice ([`Copies`]).
+    copies: AtomicBool,
+    /// The share of packets the link loses as [`Copies`] reads it, in millionths; 0 before it read any.
+    loss_ppm: AtomicU32,
     queued: Mutex<Bucket>,
     /// Since when the oldest packet str0m has yet to send on the track (a picture's or a resend's) has waited in its
     /// pacer; None while it holds none.
@@ -103,13 +107,40 @@ impl Feedback {
         }
     }
 
+    /// What of the estimate the pictures may take, kbit/s: all of it, or half while the track's packets go out twice
+    /// ([`Feedback::copies`]): str0m paces the copies and the estimate counts them as it does the pictures, so pictures
+    /// sent at the whole estimate would leave them no room. None until there is an estimate.
+    pub fn media_kbps(&self) -> Option<f64> {
+        let estimate = self.estimate_kbps()?;
+        Some(if self.copies() {
+            estimate / 2.0
+        } else {
+            estimate
+        })
+    }
+
+    /// Whether the track's packets go out twice, each again on the RTX stream right behind it ([`Copies`]).
+    pub fn copies(&self) -> bool {
+        self.copies.load(Ordering::Relaxed)
+    }
+
+    /// The share of packets the link loses, as the copies' policy reads it ([`Copies`]); 0 until it read some.
+    pub fn loss(&self) -> f64 {
+        f64::from(self.loss_ppm.load(Ordering::Relaxed)) / 1e6
+    }
+
     fn set_estimate(&self, kbps: u32) {
         self.drain(Instant::now());
         self.estimate_kbps.store(kbps.max(1), Ordering::Relaxed);
     }
 
+    fn set_copies(&self, on: bool) {
+        self.drain(Instant::now());
+        self.copies.store(on, Ordering::Relaxed);
+    }
+
     fn drain_bytes_per_ms(&self) -> f64 {
-        self.estimate_kbps().unwrap_or(0.0) * TRACK_SHARE / 8.0
+        self.media_kbps().unwrap_or(0.0) * TRACK_SHARE / 8.0
     }
 
     fn drain(&self, now: Instant) {
@@ -222,6 +253,20 @@ const DUE_AT_ONCE: usize = 1024;
 const DUE_FOR: Duration = Duration::from_millis(5);
 /// How often str0m reports the round trip and the track's counters.
 const STATS_EVERY: Duration = Duration::from_millis(500);
+/// When a track's packets go out twice ([`Copies`]): from a round trip this long and this share of packets lost, off
+/// again below the lower pair, and never sooner than [`COPIES_HOLD`] after going on.
+const COPIES_ON_RTT: Duration = Duration::from_millis(80);
+const COPIES_OFF_RTT: Duration = Duration::from_millis(60);
+const COPIES_ON_LOSS: f64 = 0.003;
+const COPIES_OFF_LOSS: f64 = 0.001;
+const COPIES_HOLD: Duration = Duration::from_secs(10);
+/// A second that lost more than this was a queue overflowing (a link's cap falling), which the congestion control
+/// answers, not the steady loss copies are for: the copies' policy leaves it out (measured on the bench: 17 to 57% in
+/// the seconds after its cap fell, and at most 5.4% in any second of 2% random loss).
+const BURST_LOSS: f64 = 0.1;
+/// How many of str0m's stats samples (one every [`STATS_EVERY`]) the copies' policy reads, and the fewest it decides on.
+const COPIES_WINDOW: usize = 20;
+const COPIES_SAMPLES_MIN: usize = 6;
 /// The RTP header extension id castd offers the playout delay under (renumbered to the viewer's on answering): a
 /// zero delay tells the viewer's jitter buffer to show each picture as soon as it is whole.
 const PLAYOUT_DELAY_EXT: u8 = 6;
@@ -353,6 +398,84 @@ struct Track {
     /// A picture could not be written: every one after it would be decoded against the wrong reference, with nothing
     /// lost on the wire to say so, so none goes until the keyframe asked for.
     broken: bool,
+    /// Whether its packets go out twice.
+    copies: Copies,
+}
+
+/// Whether a track's packets go out twice: each again on the RTX stream right behind it, unasked (str0m's proactive
+/// RTX). A browser hands an H.264 picture to its decoder only once every packet before it has arrived (libwebrtc's
+/// packet buffer), so a lost packet holds the picture, and every one behind it, until the resend its NACK asked for
+/// arrives, a round trip later: on a long link with steady loss the picture stalls at every loss. With a copy right
+/// behind each packet a loss holds nothing unless the copy is lost too. The copies take their part of the congestion
+/// estimate, which the encoder leaves them ([`Feedback::media_kbps`]), so they go on only where the round trip is long
+/// and loss steady, and off again once either is not.
+#[derive(Debug, Default)]
+struct Copies {
+    /// str0m's last [`COPIES_WINDOW`] stats samples, oldest first: the share of packets lost in the second before each
+    /// (from transport-wide feedback), and the round trip.
+    samples: VecDeque<(Option<f32>, Option<Duration>)>,
+    /// Since when the copies have been on.
+    on_since: Option<Instant>,
+    /// On or off for the whole session whatever the link (`CAST_TRACK_COPIES=1` or `0`, for measuring).
+    forced: Option<bool>,
+}
+
+impl Copies {
+    fn new() -> Self {
+        let forced = match std::env::var("CAST_TRACK_COPIES").as_deref() {
+            Ok("1") => Some(true),
+            Ok("0") => Some(false),
+            _ => None,
+        };
+        Copies {
+            forced,
+            ..Copies::default()
+        }
+    }
+
+    /// Takes a stats sample at `now`: whether the packets go out twice, when that changes.
+    fn update(&mut self, loss: Option<f32>, rtt: Option<Duration>, now: Instant) -> Option<bool> {
+        self.samples.push_back((loss, rtt));
+        while self.samples.len() > COPIES_WINDOW {
+            self.samples.pop_front();
+        }
+        if self.forced.is_some() {
+            return None;
+        }
+        let (loss, rtt) = (self.loss()?, self.rtt()?);
+        match self.on_since {
+            None if rtt >= COPIES_ON_RTT && loss >= COPIES_ON_LOSS => {
+                self.on_since = Some(now);
+                Some(true)
+            }
+            Some(since)
+                if (rtt < COPIES_OFF_RTT || loss < COPIES_OFF_LOSS)
+                    && now.saturating_duration_since(since) >= COPIES_HOLD =>
+            {
+                self.on_since = None;
+                Some(false)
+            }
+            _ => None,
+        }
+    }
+
+    /// The share of packets the link loses: the mean of the window's per-second figures, less any second past
+    /// [`BURST_LOSS`]. None until [`COPIES_SAMPLES_MIN`] seconds count.
+    fn loss(&self) -> Option<f64> {
+        let losses: Vec<f64> = self
+            .samples
+            .iter()
+            .filter_map(|(loss, _)| loss.map(f64::from))
+            .filter(|loss| *loss <= BURST_LOSS)
+            .collect();
+        (losses.len() >= COPIES_SAMPLES_MIN)
+            .then(|| losses.iter().sum::<f64>() / losses.len() as f64)
+    }
+
+    /// The round trip: the shortest the window saw, which queueing does not lengthen.
+    fn rtt(&self) -> Option<Duration> {
+        self.samples.iter().filter_map(|(_, rtt)| *rtt).min()
+    }
 }
 
 async fn run(mut r: Running) {
@@ -425,7 +548,8 @@ async fn drive(r: &mut Running, started: Instant) -> String {
                         }
                         if !open && channels.media.is_some() && channels.input.is_some() {
                             open = true;
-                            channels.track = open_track(&mut r.rtc, channels.video, &r.pictures);
+                            channels.track =
+                                open_track(&mut r.rtc, channels.video, &r.pictures, &r.feedback);
                             let _ = r.track.set(channels.track.is_some());
                             let _ = r.events.send(PeerEvent::Open);
                         }
@@ -463,6 +587,21 @@ async fn drive(r: &mut Running, started: Instant) -> String {
                     Event::PeerStats(stats) => {
                         if let Some(rtt) = stats.rtt.filter(|_| channels.track.is_some()) {
                             let _ = r.events.send(PeerEvent::Rtt(rtt.as_millis() as u32));
+                        }
+                        if let Some(track) = channels.track.as_mut() {
+                            let now = Instant::now();
+                            let changed =
+                                track
+                                    .copies
+                                    .update(stats.egress_loss_fraction, stats.rtt, now);
+                            if let Some(loss) = track.copies.loss() {
+                                r.feedback
+                                    .loss_ppm
+                                    .store((loss * 1e6).round() as u32, Ordering::Relaxed);
+                            }
+                            if let Some(on) = changed {
+                                set_copies(&mut r.rtc, track, &r.feedback, on);
+                            }
                         }
                     }
                     _ => {}
@@ -534,7 +673,12 @@ async fn drive(r: &mut Running, started: Instant) -> String {
 /// The track the pictures go on, as the peer opens: the offer's receive-only video section, when castd's pictures are
 /// one H.264 stream and the viewer named an H.264 payload type in packetization mode 1 (the profile the stream is,
 /// where it named one). None leaves the pictures on `media`.
-fn open_track(rtc: &mut Rtc, video: Option<Mid>, pictures: &Pictures) -> Option<Track> {
+fn open_track(
+    rtc: &mut Rtc,
+    video: Option<Mid>,
+    pictures: &Pictures,
+    feedback: &Feedback,
+) -> Option<Track> {
     let mid = video.filter(|_| pictures.trackable)?;
     let writer = rtc.writer(mid)?;
     let h264: Vec<_> = writer
@@ -563,11 +707,30 @@ fn open_track(rtc: &mut Rtc, video: Option<Mid>, pictures: &Pictures) -> Option<
     }
 
     log::info!("rtc: the pictures ride the video track ({mid}, payload type {pt})");
-    Some(Track {
+    let mut track = Track {
         mid,
         pt,
         broken: false,
-    })
+        copies: Copies::new(),
+    };
+    if track.copies.forced == Some(true) {
+        set_copies(rtc, &mut track, feedback, true);
+    }
+    Some(track)
+}
+
+/// Sends the track's packets twice from now on, or once, and leaves the copies their part of the estimate.
+fn set_copies(rtc: &mut Rtc, track: &mut Track, feedback: &Feedback, on: bool) {
+    if let Some(tx) = rtc.direct_api().stream_tx_by_mid(track.mid, None) {
+        tx.set_proactive_rtx(on);
+    }
+    feedback.set_copies(on);
+    log::info!(
+        "rtc: the track's packets go out {} (round trip {:?}, loss {:.2}%)",
+        if on { "twice" } else { "once" },
+        track.copies.rtt(),
+        track.copies.loss().unwrap_or(0.0) * 100.0,
+    );
 }
 
 /// One picture onto the track: its RTP time is its capture time ([`Feedback::rtp_of`]), and it asks the viewer for no
@@ -710,5 +873,100 @@ mod tests {
         f.written(31_875);
         let ms = f.queue_ms();
         assert!((99.0..=100.0).contains(&ms), "{ms}");
+    }
+
+    #[test]
+    fn copies_take_their_part_of_the_estimate() {
+        let f = Feedback::default();
+        f.set_estimate(3000);
+        assert_eq!(f.media_kbps(), Some(3000.0));
+        f.set_copies(true);
+        assert!(f.copies());
+        assert_eq!(f.media_kbps(), Some(1500.0));
+        // The bucket drains at the pictures' share: 85% of 1500 kbit/s is 159.375 bytes a millisecond.
+        f.written(15_900);
+        let ms = f.queue_ms();
+        assert!((99.0..=100.0).contains(&ms), "{ms}");
+    }
+
+    /// Feeds `copies` a stats sample every 500 ms from `at` (moved on past them): the decisions it took, by sample.
+    fn feed(
+        copies: &mut Copies,
+        at: &mut Instant,
+        samples: impl IntoIterator<Item = (f32, u64)>,
+    ) -> Vec<(usize, bool)> {
+        let mut decided = vec![];
+        for (i, (loss, rtt_ms)) in samples.into_iter().enumerate() {
+            *at += STATS_EVERY;
+            let rtt = Some(Duration::from_millis(rtt_ms));
+            if let Some(on) = copies.update(Some(loss), rtt, *at) {
+                decided.push((i, on));
+            }
+        }
+        decided
+    }
+
+    #[test]
+    fn copies_go_on_where_the_round_trip_is_long_and_loss_steady() {
+        let mut at = Instant::now();
+        // 200 ms and 2%: on once there are enough samples to judge by, then left on.
+        let mut copies = Copies::default();
+        let decided = feed(&mut copies, &mut at, [(0.02, 200); 30]);
+        assert_eq!(decided, [(COPIES_SAMPLES_MIN - 1, true)]);
+        // 100 ms and 0.5%, as seconds of 400 packets see it, and a cap's fall: its burst does not count.
+        let mut copies = Copies::default();
+        let seconds = [
+            0.005, 0.0025, 0.0075, 0.3, 0.55, 0.005, 0.0, 0.005, 0.0025, 0.01,
+        ];
+        let decided = feed(&mut copies, &mut at, seconds.map(|loss| (loss, 100)));
+        assert_eq!(decided, [(COPIES_SAMPLES_MIN + 1, true)]);
+    }
+
+    #[test]
+    fn copies_stay_off_on_a_short_round_trip_or_a_burst_of_loss() {
+        let mut at = Instant::now();
+        for rtt in [1, 20, 40, 79] {
+            let mut copies = Copies::default();
+            assert!(
+                feed(&mut copies, &mut at, [(0.05, rtt); 30]).is_empty(),
+                "{rtt} ms"
+            );
+        }
+        // A link's cap falls at 200 ms: three samples (a second and a half) of heavy loss, none otherwise.
+        let mut copies = Copies::default();
+        let mut samples = vec![(0.0, 200); 30];
+        samples[10..13].fill((0.3, 200));
+        assert!(feed(&mut copies, &mut at, samples).is_empty());
+        // The round trip is the shortest seen: a queue that lengthens it for a while does not count.
+        let mut copies = Copies::default();
+        let mut samples = vec![(0.02, 40); 30];
+        samples[5..15].fill((0.02, 300));
+        assert!(feed(&mut copies, &mut at, samples).is_empty());
+    }
+
+    #[test]
+    fn copies_go_off_when_the_loss_stops_but_not_before_their_hold() {
+        let mut at = Instant::now();
+        let mut copies = Copies::default();
+        assert_eq!(feed(&mut copies, &mut at, [(0.02, 200); 6]), [(5, true)]);
+        // The loss stops at once: off when the window has forgotten it, and the copies have held 10 s.
+        let decided = feed(&mut copies, &mut at, [(0.0, 200); 40]);
+        assert_eq!(decided.len(), 1, "{decided:?}");
+        let (i, on) = decided[0];
+        assert!(!on);
+        assert_eq!(STATS_EVERY * (i as u32 + 1), COPIES_HOLD);
+        // A loss between the two thresholds changes nothing either way.
+        let decided = feed(&mut copies, &mut at, [(0.0015, 200); 40]);
+        assert!(decided.is_empty(), "{decided:?}");
+    }
+
+    #[test]
+    fn forced_copies_hold_whatever_the_link() {
+        let mut at = Instant::now();
+        let mut copies = Copies {
+            forced: Some(true),
+            ..Copies::default()
+        };
+        assert!(feed(&mut copies, &mut at, [(0.05, 200); 30]).is_empty());
     }
 }

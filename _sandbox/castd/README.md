@@ -162,6 +162,9 @@ A viewer on the sandbox's own network can reach castd without the edge: a public
   design and the measurements across an impaired link). A connected computer's screen asks for it; the editor's own
   browser windows do not, so castd's LAN path is the one measured above. An older viewer offers no section and an older
   castd leaves it silent; either way the pictures stay on `media`.
+- (2026-11-21) str0m from intentic's fork, pinned to a commit by `Cargo.toml`'s `[patch.crates-io]`, for the copies a
+  video track sends across long, lossy links (cast-core's README, under Copies); the image build fetches it from GitHub
+  beside the registry. The patch goes once a str0m release has `StreamTx::set_proactive_rtx`.
 - (2026-11-20) str0m with its `rust-crypto` provider, not the default aws-lc-rs: no cmake or C toolchain, nothing new in
   the image, so it is always built rather than a feature to leave out. Rejected: full ICE with STUN-learned candidates, which a container behind its host's NAT cannot use for a
   viewer on the same network anyway, and which castd's published host candidates make unnecessary; unordered video

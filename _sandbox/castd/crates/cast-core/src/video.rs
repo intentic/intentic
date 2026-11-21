@@ -1048,7 +1048,7 @@ fn capture_loop(
                 key_kbit: clients
                     .iter()
                     .filter(|c| !c.internal)
-                    .filter_map(|c| c.on_track()?.estimate_kbps())
+                    .filter_map(|c| c.on_track()?.media_kbps())
                     .min_by(f64::total_cmp)
                     .map(key_budget_kbit),
                 mb_dirty: mb_map,

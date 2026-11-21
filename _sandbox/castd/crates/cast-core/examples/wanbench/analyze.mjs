@@ -80,6 +80,9 @@ const analyze = (file) => {
     frozenPct: r((100 * freezes.ms) / (seconds * 1000), 1),
     keyframes: server.length > 0 ? server.at(-1).keyframes - server[0].keyframes : null,
     sentKbps: r(mean(server.map((s) => s.sent_kbps))),
+    // How much of the run the track's packets went out twice, and the loss the policy read (the last it read).
+    copies: r(mean(server.filter((s) => s.copies != null).map((s) => Number(s.copies))), 2),
+    lossPct: r(100 * (server.findLast((s) => s.loss != null)?.loss ?? Number.NaN), 2),
     steps: capSteps(report, frames, seconds),
     browser: browserStats(page),
   };
@@ -92,7 +95,7 @@ if (asJson) {
   for (const row of rows) {
     const steps = row.steps.map((s) => `${s.capKbps}:${s.sentKbps}/${s.targetKbps} (${s.p50}/${s.p95})`).join(` `);
     console.log(
-      `${row.file.padEnd(28)} ${row.mode.padEnd(5)} p50 ${row.p50} p95 ${row.p95} p99 ${row.p99} ms | ${row.fps} fps | freezes ${row.freezesPerMin}/min (${row.frozenPct}% frozen) | key ${row.keyframes} | sent ${row.sentKbps} kbps | ${steps} | ${JSON.stringify(row.browser)}`,
+      `${row.file.padEnd(28)} ${row.mode.padEnd(5)} p50 ${row.p50} p95 ${row.p95} p99 ${row.p99} ms | ${row.fps} fps | freezes ${row.freezesPerMin}/min (${row.frozenPct}% frozen) | key ${row.keyframes} | sent ${row.sentKbps} kbps | copies ${row.copies} (loss ${row.lossPct}%) | ${steps} | ${JSON.stringify(row.browser)}`,
     );
   }
 }

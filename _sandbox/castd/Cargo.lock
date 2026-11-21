@@ -1159,8 +1159,7 @@ dependencies = [
 [[package]]
 name = "is"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72dd0494853a6c3769c87adc610e8b228fd8c65c41cc4d2717ff6151ee2d6c73"
+source = "git+https://github.com/intentic/str0m?rev=6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07#6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07"
 dependencies = [
  "crc",
  "serde",
@@ -2065,8 +2064,7 @@ dependencies = [
 [[package]]
 name = "str0m"
 version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "357c7e453c033c8bb59e912312f9f9ff07c2a9ce7268bcb94f0c828a5b47e58f"
+source = "git+https://github.com/intentic/str0m?rev=6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07#6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07"
 dependencies = [
  "arrayvec",
  "base64ct",
@@ -2086,8 +2084,7 @@ dependencies = [
 [[package]]
 name = "str0m-proto"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6a9a46a0f013add7a1d0d53d9bc92c85c1ac95243140fe0d073fb6e57c99b63"
+source = "git+https://github.com/intentic/str0m?rev=6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07#6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07"
 dependencies = [
  "base64ct",
  "dimpl",
@@ -2100,8 +2097,7 @@ dependencies = [
 [[package]]
 name = "str0m-rust-crypto"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "298554811ee24adbfee0bf8628c2e220989543c83c55c3869437dc1f3a43e340"
+source = "git+https://github.com/intentic/str0m?rev=6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07#6efe5a115384b7eb57e7caefbfaa5a3ed3c3bc07"
 dependencies = [
  "aes",
  "aes-gcm",

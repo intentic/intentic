@@ -156,8 +156,8 @@ fn paint_loop(shared: Arc<Mutex<Shared>>, wake: Arc<Wake>, w: usize, h: usize, f
         let by = h / 2 + (frame / 3) % (h / 2 - 96);
         for yy in by..by + 96 {
             let at = yy * row + bx * 4;
-            for p in s.px[at..at + 96 * 4].chunks_exact_mut(4) {
-                p.copy_from_slice(&[0x20, 0x80, 0xe0, 0]);
+            for p in s.px[at..at + 96 * 4].as_chunks_mut::<4>().0 {
+                *p = [0x20, 0x80, 0xe0, 0];
             }
         }
         stamp(&mut s.px, w, ms, counter);

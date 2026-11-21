@@ -20,8 +20,9 @@ pub struct Viewer {
     /// Age of its oldest unacknowledged frame.
     pub backlog_age_ms: f64,
     pub rtt_ms: f64,
-    /// What its pictures' video track's congestion control estimates the link carries (kbit/s), for a viewer whose
-    /// pictures ride a track: it sends no acks, and the estimate is the bitrate's measure instead. None otherwise.
+    /// What its pictures' video track's congestion control estimates the link carries (kbit/s), less the part copies
+    /// of its packets take while they go out twice (`Feedback::media_kbps`), for a viewer whose pictures ride a track:
+    /// it sends no acks, and the estimate is the bitrate's measure instead. None otherwise.
     pub estimate_kbps: Option<f64>,
 }
 

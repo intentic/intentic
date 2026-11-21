@@ -114,6 +114,9 @@ struct Sample {
     /// The track's congestion estimate and its modelled queue, when the pictures ride one.
     estimate_kbps: Option<f64>,
     queue_ms: Option<f64>,
+    /// Whether the track's packets go out twice, and the loss its policy reads off the link.
+    copies: Option<bool>,
+    loss: Option<f64>,
 }
 
 struct Run {
@@ -372,6 +375,11 @@ async fn sample(b: Bench, hub: Arc<Hub>) {
                 .as_ref()
                 .and_then(|c| c.on_track())
                 .map(|t| t.queue_ms()),
+            copies: client
+                .as_ref()
+                .and_then(|c| c.on_track())
+                .map(|t| t.copies()),
+            loss: client.as_ref().and_then(|c| c.on_track()).map(|t| t.loss()),
         };
         last_bytes = bytes;
         let mut run = b.run.lock();

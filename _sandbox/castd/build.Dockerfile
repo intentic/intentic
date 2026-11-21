@@ -33,8 +33,10 @@ COPY --from=browser-wire . /src/_sandbox/netd/crates/browser-wire
 WORKDIR /src/_sandbox/castd
 COPY . .
 # PKG_CONFIG_PATH puts the patched x264 ahead of Debian's; build.rs embeds /opt/castd/lib as castd's rpath. The image
-# gets the binaries stripped (the release profile keeps line tables, for profiling a local build).
+# gets the binaries stripped (the release profile keeps line tables, for profiling a local build). str0m comes from git
+# (Cargo.toml's [patch.crates-io], pinned by rev in Cargo.lock), fetched beside the registry and cached the same way.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/_sandbox/castd/target \
     PKG_CONFIG_PATH=/opt/castd/lib/pkgconfig cargo build --release --locked --bins \
     && install -s -D -m 0755 target/release/castd /opt/castd/bin/castd \
