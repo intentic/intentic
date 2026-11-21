@@ -9,15 +9,16 @@ import AgentConflictReport from "./AgentConflictReport.vue";
 import AgentIgnoredReport from "./AgentIgnoredReport.vue";
 import AgentScratchReport from "./AgentScratchReport.vue";
 import ReviewDependencyNotes from "./ReviewDependencyNotes.vue";
+import ReviewExtensionNotes from "./ReviewExtensionNotes.vue";
 import ReviewUncarriedNotes from "./ReviewUncarriedNotes.vue";
 import type { useAgentChanges } from "../useAgentChanges";
 import { useOwnerHold } from "../../../../models/conversations/review/settingsRefusal";
 import type { OwnerHold } from "../../../../models/conversations/review/ownerHold";
 
 // Everything the review says above its two columns (AgentReviewPanel): a failed read, a refused land and what it left,
-// work no land carries, scratch, ignored outputs, and the dependencies landing takes on. All of it sits in one box that
-// stops short of the screen and scrolls past that, so however much there is to say (a long scratch list, a dependency
-// in every package of a monorepo) the file list and its diff keep the rest.
+// work no land carries, scratch, ignored outputs, the dependencies landing takes on and the extensions it turns on. All
+// of it sits in one box that stops short of the screen and scrolls past that, so however much there is to say (a long
+// scratch list, a dependency in every package of a monorepo) the file list and its diff keep the rest.
 
 const t = useT();
 
@@ -117,5 +118,8 @@ const mainBranch = computed(() => changes.conflicts.value?.find((conflict) => co
 
         <!-- What landing this work takes on: a quiet line per manifest, folded into one past a few. -->
         <ReviewDependencyNotes :repos="changes.repos.value" />
+
+        <!-- What landing this work turns on: a land is the yes to the workspace extensions it carries. -->
+        <ReviewExtensionNotes :extensions="changes.review.value?.extensions ?? []" />
     </div>
 </template>

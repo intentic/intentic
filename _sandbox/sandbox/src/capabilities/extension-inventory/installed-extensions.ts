@@ -89,8 +89,9 @@ const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: Ex
 };
 
 // Workspace-extension directories, plus ones that failed to be one; `taken` holds every id other sources answer for.
-// A collision is reported like a parse failure, and the owner's approval stands in for the install moment a folder
-// never has: one not approved with the powers it declares now is pending, and still holds its id.
+// A collision is reported like a parse failure, and the owner's approval (a land that carried it, or the Approve press)
+// stands in for the install moment a folder never has: one not approved with the powers it declares now is pending, and
+// still holds its id.
 const workspaceExtensions = async (
     services: ExtensionHost,
     enabledOf: (manifest: ExtensionManifest) => boolean,

@@ -245,6 +245,14 @@ export const ExtensionSummarySchema = z.object({
     dev: ExtensionDevSchema.optional().describe(
         "Set while an extension installed from a repository is pointed at a source checkout in this workspace, for working on the extension itself: its code is served from there instead of the pinned copy. `commit` keeps naming the pinned version, which is what updates and the registry compare against.",
     ),
+    // A workspace folder has no commit to pin (`commit` reads "workspace"), so a land or an edit moving its code is
+    // seen by this instead: the editor loads it again when it moves.
+    revision: z
+        .string()
+        .optional()
+        .describe(
+            "For an extension written in this workspace: a short fingerprint of what the browser runs of it, its declaration and its built bundle. It changes whenever either does, which is how a screen tells the copy it loaded is behind. Absent for other sources.",
+        ),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 // The dev-mode verbs address an installed extension any of the ways a person names one.

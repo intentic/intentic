@@ -42,6 +42,7 @@ import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { projectDirOf } from "../system/project-dir.js";
 import { startMemoryKillFollower } from "../agent/tools/jobs/memory-kills.js";
 import { countLandsForRuns } from "../hosts/runs/run-builds.js";
+import { startLandedExtensions } from "../extensions/landed-extensions.js";
 import { continueAfterContextStops } from "../loops/context-continue.js";
 
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
@@ -301,6 +302,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // A land may be what a subagent waiting after that one was held for (child-after.ts).
     shutdown.push(services.events.subscribe("workspace", afterLanded));
     shutdown.push(countLandsForRuns(services));
+    // A land is the owner's yes to the workspace extensions it carried (extensions/landed-extensions.ts).
+    shutdown.push(startLandedExtensions(services));
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
     startContainerFeeds({ role, services, logger, shutdown });
     startLinks({ role, services, logger, shutdown });

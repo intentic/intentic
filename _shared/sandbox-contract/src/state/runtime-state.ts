@@ -83,7 +83,9 @@ const RUNTIME_DOMAINS = [
 
     // A standing yes written or taken back outside a need's answer: a permission card's pass, a release, a purge. They
     // live under the auth root, which no file push watches, and the Allowed list must move with the card that wrote one.
-    { domain: "grants", invalidates: [["grants"]] },
+    // A workspace extension's approval is one of them, so the extensions list (and the editor's extension host, which
+    // loads what it lets run) moves with it too.
+    { domain: "grants", invalidates: [["grants"], ["extensions"]] },
 
     // Somebody asked the owner for more access, or a request was answered (auth/members/access-requests.ts): the owner's
     // list beside the roster moves, and so does the asker's own "asked" (GET /members/self). Like grants, they live under

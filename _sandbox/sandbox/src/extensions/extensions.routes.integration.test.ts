@@ -104,6 +104,8 @@ test("a workspace extension waits for approval, then lists like any other and se
         source: "workspace",
         commit: "workspace",
         enabled: true,
+        // What the editor's extension host tells new code by, since `commit` only names the source.
+        revision: expect.stringMatching(/^[0-9a-f]{12}$/),
     });
     expect(list.invalid).toEqual([{ dir: "scratch", error: expect.stringContaining("no intentic-extension.json") }]);
 
@@ -115,6 +117,10 @@ test("a workspace extension waits for approval, then lists like any other and se
     expect((await app.request("/extensions/acme.hello/bundle", { headers: { "if-none-match": etag } })).status).toBe(304);
     await writeFile(join(dir, "dist", "index.js"), "export const activate = () => { /* v2 */ };");
     expect((await app.request("/extensions/acme.hello/bundle", { headers: { "if-none-match": etag } })).status).toBe(200);
+    // A rebuilt (or landed) bundle reads as new code on the row too, so a page that loaded the old one loads it again.
+    const rebuilt = (await client.extensions.list()).extensions.find((extension) => extension.id === "acme.hello")?.revision;
+    expect(rebuilt).toMatch(/^[0-9a-f]{12}$/);
+    expect(rebuilt).not.toBe(list.extensions.find((extension) => extension.id === "acme.hello")?.revision);
 });
 
 test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {

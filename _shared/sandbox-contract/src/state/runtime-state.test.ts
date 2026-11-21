@@ -37,8 +37,9 @@ describe(`staleRuntimeQueryKeys`, () => {
         expect(staleRuntimeQueryKeys([`activity`])).toEqual([[`activity`], [`activity-status`]]);
     });
 
-    it(`re-reads the Allowed list when a card's yes is written or taken back, which no file push carries`, () => {
-        expect(staleRuntimeQueryKeys([`grants`])).toEqual([[`grants`]]);
+    it(`re-reads the Allowed list and the extensions when a yes is written or taken back, which no file push carries`, () => {
+        // An approved workspace extension is one of those yeses, and what it lets run is the extensions list.
+        expect(staleRuntimeQueryKeys([`grants`])).toEqual([[`grants`], [`extensions`]]);
     });
 
     it(`re-reads each paired-machine roster on its own door's push, and the sync state on a device's`, () => {

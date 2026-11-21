@@ -1,7 +1,7 @@
 import { GitRepoParamSchema } from "./git-view.js";
 import { z } from "zod";
 import { AgentProviderSchema } from "../agent.js";
-import { LandConflictSchema, LandedMessageSchema } from "../agents.js";
+import { LandConflictSchema, LandedMessageSchema, LandingExtensionsSchema } from "../agents.js";
 import { CommandRunSchema } from "../ci.js";
 import { RefNameSchema } from "../internal.js";
 import { MainBranchSchema } from "../shared.js";
@@ -462,8 +462,6 @@ export const AgentRepoChangesSchema = z.object({
         ),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
-// The review, plus why the last land refused: a conflict is found when the turn ends but resolved later on this
-// surface, so it rides here rather than only in the land response, and refreshes on every land.
 // A workspace repo this conversation's copy does not carry, where the copy nonetheless holds files at its path: what a
 // turn wrote into a folder that was no checkout of its own, which therefore reached no branch.
 export const OutsideCheckoutSchema = z.object({
@@ -476,7 +474,8 @@ export const OutsideCheckoutSchema = z.object({
     files: z.number().describe("How many files the copy holds at its path. A floor past a thousand, which is where the count stops."),
 });
 export type OutsideCheckout = z.infer<typeof OutsideCheckoutSchema>;
-
+// The review, plus why the last land refused: a conflict is found when the turn ends but resolved later on this
+// surface, so it rides here rather than only in the land response, and refreshes on every land.
 export const AgentChangesSchema = z.object({
     repos: z.array(AgentRepoChangesSchema).describe("One entry per repository the conversation touched."),
     // Disambiguates two opposite reasons for an empty list: nothing written, versus everything already committed.
@@ -555,6 +554,7 @@ export const AgentChangesSchema = z.object({
         .describe(
             "Repositories of your workspace this conversation's copy does not carry, where it nonetheless wrote files at their path. Nothing written there is on its branch, so no merge brings it; an `unborn` one is taken into the copy, with those files, on the conversation's next turn after its first commit. Absent when there are none.",
         ),
+    extensions: LandingExtensionsSchema,
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 

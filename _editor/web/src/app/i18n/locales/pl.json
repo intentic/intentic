@@ -304,6 +304,9 @@
             "markersLeft": "{count} plik ma znaczniki konfliktu do dokończenia. | {count} pliki mają znaczniki konfliktu do dokończenia. | {count} plików ma znaczniki konfliktu do dokończenia.",
             "strandedWork": "Praca w {repos} nie jest na gałęzi agenta, więc nie zostanie scalona.",
             "outsideWork": "{count} plik w {repos} jest poza kopią tej rozmowy, więc nie zostanie scalony. | {count} pliki w {repos} są poza kopią tej rozmowy, więc nie zostaną scalone. | {count} plików w {repos} jest poza kopią tej rozmowy, więc nie zostaną scalone.",
+            "landingTurnsOnExtension": "Scalenie włącza rozszerzenie {id}, które może: {powers}",
+            "landingRepowersExtension": "Scalenie pozwala rozszerzeniu {id} także: {powers}",
+            "landingReapprovesExtension": "Scalenie ponownie włącza rozszerzenie {id}, bez nowych uprawnień.",
             "outsideTitle": "Dlaczego nie ma go w kopii",
             "outsideUnborn": "Brak commitów: gdy pojawi się pierwszy, następna tura włączy go razem z tymi plikami",
             "outsideUnreadable": "Git nie może odczytać tego repozytorium",
@@ -7799,7 +7802,7 @@
             "removed": "Usunięto {manifest}.",
             "removing": "Usuwanie {manifest}",
             "runningNotListed": "Działa, ale nie jest wypisane",
-            "waitingCaption": "Napisane w tej przestrzeni roboczej. Żaden jego kod nie działa, dopóki nie zatwierdzisz tego, o co prosi.",
+            "waitingCaption": "Napisane bezpośrednio w tej przestrzeni roboczej, nie scalone. Żaden jego kod nie działa, dopóki nie zatwierdzisz tego, o co prosi.",
             "waitingForApproval": "Czeka na twoje zatwierdzenie",
             "whatItAsksFor": "O co prosi:"
         },

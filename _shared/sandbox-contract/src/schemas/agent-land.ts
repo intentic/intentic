@@ -1,5 +1,5 @@
-// What a land answers and takes: the conflicts that stopped it, its outcome, and the modes and spans a land can be asked
-// for. Apart from agents.ts, which re-exports every name here, so a conversation's summary and the land press's own
+// What a land answers and takes: the conflicts that stopped it, its outcome, the modes and spans a land can be asked
+// for, and the workspace extensions it would turn on. Apart from agents.ts, which re-exports every name here, so a conversation's summary and the land press's own
 // shapes are not one file.
 import { z } from "zod";
 
@@ -96,3 +96,22 @@ export const AgentLandSchema = z.object({
     span: AgentSpanSchema.optional().describe("How much of the work to take. Leave it out for everything not yet merged."),
     force: z.boolean().optional().describe("Go ahead despite a check that would otherwise refuse."),
 });
+
+// The workspace extensions a land would turn on, on the review before the press: a land is the yes to the extensions it
+// carries (the daemon's extensions/landed-extensions.ts). Judged against the approvals as they stand now.
+export const LandingExtensionsSchema = z
+    .array(
+        z.object({
+            id: z.string().describe("The extension, as publisher.name."),
+            dir: z.string().describe("Its folder under .intentic/config/workspace-extensions/."),
+            powers: z
+                .array(z.string())
+                .describe("What merging lets it do that it was not approved for, one plain sentence each. Empty when it asks for nothing new."),
+            approvedBefore: z.boolean().describe("Whether it ran here before, approved for fewer powers."),
+        }),
+    )
+    .optional()
+    .describe(
+        "Extensions written in this workspace that merging this work turns on: new ones, and ones asking for powers they were not approved for. A merge is the yes to them, so their code runs in your browser and the sandbox from then on, until you switch one off or take the yes back. Absent when there are none.",
+    );
+export type LandingExtensions = NonNullable<z.infer<typeof LandingExtensionsSchema>>;

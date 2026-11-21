@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { keyedLock } from "@intentic/base/async";
 import type { ProcessContribution } from "@intentic/extension-manifest";
 import { EXTENSION_PROCESS_ENV } from "@intentic/sandbox-contract/extension-protocol";
 import type { Services } from "../composition.js";
@@ -117,9 +118,18 @@ export const reconcileListenerProcesses = async (services: Services): Promise<vo
     }
 };
 
+// Which workspace extensions wait for approval moves both ways at once now: a land's files reach the watcher, which
+// stops what the pending ones run, as the land's own approval starts them (landed-extensions.ts). Run one after the
+// other, the stop never reads the list from before the yes and then stops what the yes just started.
+// allow(module-state): one queue for the daemon's one process supervisor, holding nothing once it drains
+const pendingTurns = keyedLock<"pending">();
+export const whilePendingSettles = <T>(task: () => Promise<T>): Promise<T> => pendingTurns("pending", task);
+
 // Stops whatever a workspace extension left running once it waits for approval again, including a process it has
 // since renamed. A key another extension declares is spared: the dashed ids make a bare prefix match ambiguous.
-export const stopPendingExtensionProcesses = async (services: Services): Promise<void> => {
+export const stopPendingExtensionProcesses = (services: Services): Promise<void> => whilePendingSettles(() => stopPending(services));
+
+const stopPending = async (services: Services): Promise<void> => {
     try {
         const inventory = await extensionInventory(services);
         if (inventory.pending.length === 0) {

@@ -1,12 +1,14 @@
 import { activeLocale } from "@intentic/ui/i18n";
 import { watch } from "vue";
 import { useCapabilities } from "../models/capabilities/useCapabilities";
+import { useExtensions } from "../models/extensions/useExtensions";
 import { usePanels } from "../models/extensions/usePanels";
 import { activeSandboxId } from "../app/storage/activeSandbox";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import type { HostBindings } from "./apiImpl";
 import { extensionHostStarted } from "../workbench/views/extensionStatuses";
-import { loadExtensions, retireExtensions } from "./loader";
+import { extensionsLoaded, extensionsReconciling, loadedListAt, loadedWorkspace, loadExtensions, retireExtensions } from "./loader";
+import { workspaceDrifted } from "./workspaceDrift";
 
 let started = false;
 // Host bindings, captured at boot so a later reconcile can rerun the loader without rebuilding them.
@@ -64,6 +66,21 @@ export function useExtensionHost(): void {
         void reloadExtensions().finally(() => {
             loading = false;
             loadedFor = activeSandboxId.value;
+        });
+    });
+
+    // A land that turned on, changed or removed one of the workspace's own extensions shows without a reload: the list
+    // moves (the file push for its folder, the grants push for its approval) and the host loads again. Only a list read
+    // after the last pass speaks for what came since; a hydrated one is from a previous visit.
+    const { extensions, listedAt } = useExtensions();
+    watch(extensions, (listed) => {
+        const behind = extensionsLoaded.value && !extensionsReconciling.value && loadedFor === activeSandboxId.value && listedAt.value > loadedListAt.value;
+        if (loading || !behind || !workspaceDrifted(loadedWorkspace.value, listed)) {
+            return;
+        }
+        loading = true;
+        void reloadExtensions().finally(() => {
+            loading = false;
         });
     });
 

@@ -33,9 +33,11 @@ flowchart LR
 | --- | --- | --- |
 | Built in | baked into the sandbox image at `/opt/extensions` | ships with intentic |
 | Installed | a git checkout pinned to a full commit sha, from a registry | the owner installed it; updates show a diff of new powers first |
-| Workspace | a folder an agent wrote under `.intentic/config` | inert until the owner approves the powers it declares |
+| Workspace | a folder an agent wrote under `.intentic/config` | runs once a land carries it; one written straight into the workspace waits for the owner to approve the powers it declares |
 
 A workspace extension's approval is a digest of its declared powers, kept in `/history` where no workspace write reaches ([`extension-approvals.ts`](../../_sandbox/sandbox/src/capabilities/extension-inventory/extension-approvals.ts)). Editing its code under the same powers keeps the approval; asking for more voids it. The owner can switch any extension off except automations, whose engine fires on its own.
+
+A land is the approval for the extensions it carries ([`landed-extensions.ts`](../../_sandbox/sandbox/src/extensions/landed-extensions.ts)). On every land that reaches the workspace, pressed or automatic, the daemon reads which folders under `workspace-extensions/` the root repository's delta touched, and approves each one now waiting whose manifest in the workspace declares the same powers as the landed commit's. It then starts it the way the Approve press does and writes an Activity row naming the powers it gained. Review & land lists the same extensions before the press (`AgentChanges.extensions`), and the editor loads them without a reload: the approval pushes the extensions list, and a workspace row carries a `revision` of its manifest and bundle that the extension host compares with what it loaded ([`workspaceDrift.ts`](../../_editor/web/src/extension-host/workspaceDrift.ts)). An extension written straight into the workspace, or edited there to ask for more since the land, still waits for the Approve press. (2026-11-21: before, a landed extension waited for that press as well, so the owner decided the same change twice, once at the land and again in Extensions.)
 
 A registry ([`_shared/registry`](../../_shared/registry)) is a git repository of curated listings; the official one is `github.com/intentic/registry`, and [`_tools/registry-scan`](../../_tools/registry-scan) proposes and re-checks its entries.
 

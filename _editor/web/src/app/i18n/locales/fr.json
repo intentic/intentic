@@ -304,6 +304,9 @@
             "markersLeft": "{count} fichier a des marques de conflit à finir. | {count} fichiers ont des marques de conflit à finir.",
             "strandedWork": "Le travail dans {repos} n'est pas sur la branche de l'agent, il ne sera donc pas intégré.",
             "outsideWork": "{count} fichier dans {repos} est hors de la copie de cette conversation et ne sera donc pas intégré. | {count} fichiers dans {repos} sont hors de la copie de cette conversation et ne seront donc pas intégrés.",
+            "landingTurnsOnExtension": "L’intégration active l’extension {id}, qui peut : {powers}",
+            "landingRepowersExtension": "L’intégration permet aussi à l’extension {id} de : {powers}",
+            "landingReapprovesExtension": "L’intégration réactive l’extension {id}, sans rien demander de nouveau.",
             "outsideTitle": "Pourquoi il n'est pas extrait",
             "outsideUnborn": "Aucun commit pour l'instant : dès qu'il en aura un, le tour suivant l'intégrera avec ces fichiers",
             "outsideUnreadable": "Git ne peut pas lire ce dépôt",
@@ -8353,7 +8356,7 @@
             "removed": "{manifest} retirée.",
             "removing": "Suppression de {manifest}",
             "runningNotListed": "En marche mais non listée",
-            "waitingCaption": "Écrite dans cet espace de travail. Rien de son code ne s'exécute tant que vous n'avez pas approuvé ce qu'elle demande.",
+            "waitingCaption": "Écrite directement dans cet espace de travail, sans intégration. Rien de son code ne s'exécute tant que vous n'avez pas approuvé ce qu'elle demande.",
             "waitingForApproval": "En attente de votre approbation",
             "whatItAsksFor": "Ce qu'elle demande :"
         },

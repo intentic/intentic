@@ -7,7 +7,7 @@ import type {
     OutsideCheckout,
     ScratchPath,
 } from "@intentic/sandbox-contract/schemas/git/git";
-import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
+import type { LandConflict, LandingExtensions } from "@intentic/sandbox-contract/schemas/agents";
 import { defaultGit } from "@intentic/base/git";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
@@ -23,12 +23,14 @@ import { agentIgnoredOutputs, agentRepoChanges, agentRepoModules, agentRepoRevie
 import { intoOf, landTargetOf } from "../land-target.js";
 import { dirtyPaths, outstandingConflicts } from "../land.js";
 import { commitsCarrying, historySpanStart } from "../landed-history.js";
+import { landingExtensionsOf } from "./review-extensions.js";
 
 // What a conversation's review reads, against main as it stands: the rows still its own, what main absorbed, the scratch
 // its live copy keeps, the ignored files it wrote, the conflicts a land would meet, and the commits that carried what
 // already landed.
 
-export type ReviewDeps = Pick<Services, "agentWorktrees" | "branchCheckouts" | "agents" | "logger">;
+// `config.historyRoot` holds the approvals the extensions landing would turn on are judged against (review-extensions.ts).
+export type ReviewDeps = Pick<Services, "agentWorktrees" | "branchCheckouts" | "agents" | "logger"> & { readonly config: Pick<Services["config"], "historyRoot"> };
 
 // The review's `scratch`: repos with none left out, and the field absent when no repo has any.
 const scratchField = (scratch: NonNullable<AgentChanges["scratch"]>): Pick<AgentChanges, "scratch"> => {
@@ -204,7 +206,24 @@ export const reviewOf = async (
         Promise.all(entry.placement.repos.map(async (composed) => ({ repo: composed.repo, outputs: await ignoredOf(deps, entry, composed) }))),
         outsideOf(deps, entry),
     ]);
-    return { ...review, ...ignoredField(outputs), ...opt("outside", outside.length > 0 ? outside : undefined) };
+    // Off the memo, like the two above: the approvals it is judged against live outside every tree the memo watches.
+    const extensions = await extensionsOf(deps, entry, review);
+    return {
+        ...review,
+        ...ignoredField(outputs),
+        ...opt("outside", outside.length > 0 ? outside : undefined),
+        ...opt("extensions", extensions.length > 0 ? extensions : undefined),
+    };
+};
+
+// What landing would turn on, read beside the rows and never in their way: an unreadable approval ledger shows none.
+const extensionsOf = async (deps: ReviewDeps, entry: IsolatedAgent, review: AgentChanges): Promise<LandingExtensions> => {
+    try {
+        return await landingExtensionsOf(deps, entry, review.repos);
+    } catch (error) {
+        deps.logger.warn({ err: error, id: entry.id }, "agents diff: the extensions this land turns on are unreadable");
+        return [];
+    }
 };
 
 // Reads the same rows the review filters out to absorbed, from the same pass over the tree, so the two can't disagree.

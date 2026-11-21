@@ -17,4 +17,9 @@ describe(`codeRevisionOf`, () => {
     it(`falls back to the pinned commit while the checkout is held, since that is what runs`, () => {
         expect(codeRevisionOf({ commit, dev: { path: `extensions/maintenance`, held: `not built yet` } })).toBe(commit);
     });
+
+    it(`reads a workspace folder's fingerprint, since its commit only names the source and a land moves its code`, () => {
+        expect(codeRevisionOf({ commit: `workspace`, revision: `0123456789ab` })).toBe(`0123456789ab`);
+        expect(codeRevisionOf({ commit: `workspace`, revision: `ba9876543210` })).not.toBe(`0123456789ab`);
+    });
 });

@@ -103,7 +103,7 @@ export const extensionsContract = {
             path: "/extensions/{id}/approve",
             summary: "Let a workspace extension run",
             description:
-                "Approves an extension written in this workspace with the powers it declares now: its background processes start, its backend loads, and what it contributes is wired from the next turn. Editing its code keeps the approval; declaring a power it did not have puts it back in the pending list. Owner and maintainers only.",
+                "Approves an extension written in this workspace with the powers it declares now: its background processes start, its backend loads, and what it contributes is wired from the next turn. Editing its code keeps the approval; declaring a power it did not have puts it back in the pending list. A land approves the extensions it carries by itself, so this is for one written straight into the workspace. Owner and maintainers only.",
         })
         .meta({ panel: false, control: "never" })
         .input(ExtensionApproveInputSchema)

@@ -18,6 +18,7 @@ import { bundleLinkProblem } from "./bundleLinks";
 import { type BundlePass, bundleModule, bundlePass, type Linked } from "./bundleCache";
 import { activeSandboxId } from "../app/storage/activeSandbox";
 import { codeRevisionOf } from "../features/extensions/codeRevision";
+import { runningWorkspace } from "./workspaceDrift";
 import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
 import { type ReportFields, reportClient } from "../app/clientDiagnostics";
 
@@ -56,6 +57,11 @@ export { extensionsLoaded };
 // since: the persisted cache paints one from a previous visit, and it may name what has been removed after.
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const loadedListAt = shallowRef(0);
+
+// The workspace's own extensions the last pass ran, each by its code revision (workspaceDrift.ts): a list that names them
+// otherwise is a land or an edit the host loads again by itself (useExtensionHost.ts).
+// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
+export const loadedWorkspace = shallowRef<ReadonlyMap<string, string>>(new Map());
 
 // Whether a load pass is under way; a list that names an extension this record lacks is then the pass catching up,
 // not an install from elsewhere waiting for a reload. Counted, since a relocale can overlap a reconcile.
@@ -202,6 +208,7 @@ export const retireExtensions = (): void => {
     deactivateAllExtensions();
     extensionStatuses.value = [];
     loadedCommits.value = new Map();
+    loadedWorkspace.value = new Map();
     loadedListAt.value = 0;
     extensionsLoaded.value = false;
 };
@@ -253,6 +260,7 @@ const loadPass = async (host: HostBindings): Promise<void> => {
     }
     extensionStatuses.value = [...listedStatuses, ...unlistedStatuses];
     loadedCommits.value = new Map(summaries.map((summary) => [summary.id, codeRevisionOf(summary)]));
+    loadedWorkspace.value = runningWorkspace(summaries);
     loadedListAt.value = listedAt;
     extensionsLoaded.value = true;
     // A pinned bundle fetched this pass is kept once the list, read again, still names the commit it was fetched for.

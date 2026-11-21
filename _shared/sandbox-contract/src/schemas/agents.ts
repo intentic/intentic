@@ -954,4 +954,4 @@ export const AgentFileDiffQuerySchema = z.object({
     repo: z.string().min(1).describe("Which repository."),
     path: z.string().min(1).describe("Which file, relative to that repository."),
 });
-export { LandConflictReasonSchema, type LandConflictReason, LandConflictPathSchema, LandConflictSchema, type LandConflict, LandResultSchema, type LandResult, LandModeSchema, type LandMode, AgentSpanSchema, type AgentSpan, AgentLandSchema } from "./agent-land.js";
+export { LandConflictReasonSchema, type LandConflictReason, LandConflictPathSchema, LandConflictSchema, type LandConflict, LandResultSchema, type LandResult, LandModeSchema, type LandMode, AgentSpanSchema, type AgentSpan, AgentLandSchema, LandingExtensionsSchema, type LandingExtensions } from "./agent-land.js";

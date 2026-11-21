@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
@@ -11,7 +12,8 @@ import { extensionDir, workspaceExtensionsRoot, extensionProcessKey } from "../c
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { approveExtension } from "../capabilities/extension-inventory/extension-approvals.js";
-import { devSummaryOf } from "../capabilities/extension-inventory/extension-dev.js";
+import { bundleRevisionOf, devSummaryOf } from "../capabilities/extension-inventory/extension-dev.js";
+import { approveAndConverge } from "./extension-approve.js";
 import { createExtensionDevRoutes } from "./extension-dev.routes.js";
 import { writeExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
 import { reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
@@ -37,6 +39,16 @@ import { listenerOwnership } from "./listener/listener-state.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 import { publicAddressOf } from "../env.config.js";
 import { opt } from "../opt.js";
+
+// A workspace folder's `revision`: its declaration and its built bundle, fingerprinted together, so a land or an edit that
+// moves either reads as new code to the editor's extension host. Other sources say theirs by commit or `dev`.
+const workspaceRevisionOf = async (extension: InstalledExtension): Promise<string | undefined> => {
+    if (extension.source !== "workspace") {
+        return undefined;
+    }
+    const bundle = (await bundleRevisionOf(extension.dir, extension.manifest.entry)) ?? "";
+    return createHash("sha256").update(JSON.stringify(extension.manifest)).update(bundle).digest("hex").slice(0, 12);
+};
 
 // Installed extensions (git-installed ∪ image-baked) resolved to manifests and settings; boots the web extension host.
 // A checkout whose manifest no longer parses is skipped here; its capability row still shows status until re-added.
@@ -150,6 +162,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     ...opt("previous", previous),
                     ...(installed ? { updatePolicy: resolveUpdatePolicy(policies[identity]) } : {}),
                     ...opt("dev", await devSummaryOf(extension)),
+                    ...opt("revision", await workspaceRevisionOf(extension)),
                 };
             };
             const extensions: ExtensionSummary[] = [];
@@ -204,13 +217,8 @@ export const createExtensionsRoutes = (services: Services) => {
             if (extension.approval.digest !== input.digest) {
                 throw new ORPCError("CONFLICT", { message: "the powers it declares changed since they were shown, read them again" });
             }
-            await approveExtension(services.config.historyRoot, extension.id, extension.manifest);
             // Converges the way switching one on does: its processes now, its gateway and backend on the new set.
-            if (extension.enabled) {
-                await startAutoStartProcesses(services, extension);
-            }
-            void reconcileListenerProcesses(services);
-            services.extensionBackend.restart();
+            await approveAndConverge(services, [extension]);
             return { ok: true } as const;
         }),
         // A read, ungated: knowing what a removal would cost is not itself a change, and the refusal for an extension

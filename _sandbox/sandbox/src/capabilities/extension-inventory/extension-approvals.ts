@@ -7,9 +7,10 @@ import { defineDocument } from "../../store/evolution/documents.js";
 import { openApprovalLedger } from "../../store/open-document.js";
 import { invalidateContributions } from "../contributions.js";
 
-/* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then. Kept under
- * the history root: an agent can write the extension's folder, so its approval must sit where no workspace write
- * reaches. Code edited under the same powers keeps the yes; a ledger this build cannot read approves nothing. */
+/* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then: given by the
+ * Approve press, or by a land that carried the extension (extensions/landed-extensions.ts). Kept under the history root:
+ * an agent can write the extension's folder, so its approval must sit where no workspace write reaches. Code edited under
+ * the same powers keeps the yes; a ledger this build cannot read approves nothing. */
 
 const LedgerSchema = z.object({
     approved: z.record(z.string(), z.object({ digest: z.string(), powers: z.record(z.string(), z.string()), approvedAt: z.number() })),
