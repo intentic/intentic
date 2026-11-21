@@ -17,7 +17,7 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { createGitDirReaper } from "./git-dir-reaper.js";
-import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
+import { largeFilesConfig, leaveOutOfSnapshot } from "./large-files.js";
 import { collectScopes, cutScopes, retentionBases } from "./restore-point-retention.js";
 import { defaultRunner, type HistoryGitRunner, type WorkspaceHistoryOptions } from "./history-git.js";
 import { bareIn, sanitizeLabel, type Scope, type ScopeCommit, scopeNamer } from "./history-scopes.js";
@@ -140,7 +140,7 @@ export const createWorkspaceHistory = (
         await ensureScope(scope);
         await healGitPointer(scope);
         const run = { cwd: scope.worktree, env: scopeEnv(scope) };
-        await leaveOutLargeFiles(git, scope, run, logger);
+        await leaveOutOfSnapshot(git, scope, run, logger);
         try {
             await git([...largeFilesConfig(scope.gitDir), "-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"], run);
         } catch (error) {

@@ -1,6 +1,6 @@
 import { lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { extname, join, resolve } from "node:path";
 import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract/schemas/git/git";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
@@ -54,6 +54,12 @@ export const isByproductName = (name: string): boolean => BYPRODUCT_NAMES.has(na
 // Bytes: the size GitHub starts warning at, past which a new file is a dump or a download rather than source.
 export const OVERSIZED_BYTES = 50 * 1024 * 1024;
 
+// A wholly new folder past either of these is no change a person wrote: build output an ignore rule stopped hiding (4,992
+// files once, 2026-11-21), an unpacked archive, a download. Left out of every stage-everything, so neither Save nor an
+// unattended commit puts it into history, and listed as the one row it is rather than as thousands.
+export const BULK_FILES = 2_000;
+export const BULK_BYTES = 256 * 1024 * 1024;
+
 // Hidden files a workspace root keeps on purpose; any other new one there is scratch, since a root holding repositories
 // is no project of its own. Visible files stay work: a report written at the top is often the very thing asked for.
 const KEPT_ROOT_FILES = new Set([".editorconfig", ".gitattributes", ".gitignore", ".ignore", ".mcp.json"]);
@@ -64,12 +70,17 @@ export interface ScratchScope {
     readonly root: boolean;
     // That root when its projects are the repositories inside it, so no dotfile new at its top configures one.
     readonly container: boolean;
+    // The shared main tree itself, where a new folder past BULK_FILES or BULK_BYTES is nobody's writing. Not a
+    // conversation's copy: a big folder an agent made there (fixtures, a vendored library) is its work, and rides its land.
+    readonly bulk?: boolean;
 }
 
-// `workspaceRoot` is the main tree's root, whichever checkout of `repo` is being captured.
-export const scratchScopeOf = async (repo: string, workspaceRoot: string): Promise<ScratchScope> => ({
+// `workspaceRoot` is the main tree's root, whichever checkout of `repo` is being captured; `dir`, when given, is that
+// checkout, which is the main tree's own when it is the repo's place in the workspace.
+export const scratchScopeOf = async (repo: string, workspaceRoot: string, dir?: string): Promise<ScratchScope> => ({
     root: repo === "root",
     container: repo === "root" && (await currentRepos(workspaceRoot)).length > 0,
+    bulk: dir !== undefined && resolve(dir) === resolve(repo === "root" ? workspaceRoot : join(workspaceRoot, repo)),
 });
 
 // Last segment of a repository-relative path; a directory's trailing slash is not a segment.
@@ -245,18 +256,35 @@ const judgeInside = async (
         return undefined;
     };
     const sizes = await sizesOfBounded(dir, inside);
+    const bulk = scope.bulk === true ? bulkOf(inside, outerOf, sizes) : new Set<string>();
     for (const path of inside) {
         const outer = outerOf(path);
-        const verdict = outer === undefined ? undefined : insideVerdict(path, outer, sizes.get(path) ?? 0, scope, found, committed);
+        const verdict = outer === undefined || bulk.has(outer) ? undefined : insideVerdict(path, outer, sizes.get(path) ?? 0, scope, found, committed);
         if (verdict !== undefined) {
             found.set(verdict[0], verdict[1]);
         }
     }
+    for (const outer of bulk) {
+        found.set(outer, "bulk");
+    }
+};
+
+// The new folders holding more files or bytes than BULK_FILES or BULK_BYTES, counted off the listing already sized.
+const bulkOf = (inside: readonly string[], outerOf: (path: string) => string | undefined, sizes: ReadonlyMap<string, number>): ReadonlySet<string> => {
+    const totals = new Map<string, { files: number; bytes: number }>();
+    for (const path of inside) {
+        const outer = outerOf(path);
+        if (outer !== undefined && !isDirectoryRow(path)) {
+            const total = totals.get(outer) ?? { files: 0, bytes: 0 };
+            totals.set(outer, { files: total.files + 1, bytes: total.bytes + (sizes.get(path) ?? 0) });
+        }
+    }
+    return new Set([...totals].filter(([, total]) => total.files > BULK_FILES || total.bytes > BULK_BYTES).map(([outer]) => outer));
 };
 
 // The untracked paths of the checkout at `dir` that no capture stages, one entry per scratch tree, sorted by path.
 export const scratchOf = (dir: string, scope: ScratchScope, git: GitRunner = defaultGit): Promise<ScratchPath[]> =>
-    readOnFeed(`scratch\u0000${String(scope.root)}\u0000${String(scope.container)}`, dir, git, () => readScratch(dir, scope, git));
+    readOnFeed(`scratch\u0000${String(scope.root)}\u0000${String(scope.container)}\u0000${String(scope.bulk === true)}`, dir, git, () => readScratch(dir, scope, git));
 
 const readScratch = async (dir: string, scope: ScratchScope, git: GitRunner): Promise<ScratchPath[]> => {
     // Collapsed: a wholly new directory is one row however much it holds, so this stays small over any scratch tree.

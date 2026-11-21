@@ -104,7 +104,7 @@ export type LandingDeps = Pick<
 >;
 
 // What settling a conversation's land books reads: its record, its checkouts, and the branch checkouts it lands onto.
-export type BooksDeps = Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "branchCheckouts" | "logger">;
+export type BooksDeps = Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "branchCheckouts" | "logger" | "activity">;
 
 // The hand-off a land makes that needs the whole daemon, bound by the caller that has it.
 export interface LandingHooks {

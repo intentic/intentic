@@ -4,6 +4,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { VERSIONED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
+import { keptHiddenBlock } from "../../store/git/kept-hidden-excludes.js";
 import { skillLinkExcludeBlock } from "../../store/git/skill-link-excludes.js";
 import { textFile } from "../../store/plain-files/text-file.js";
 
@@ -77,11 +78,12 @@ const trackedStateExcludes = (): string[] => {
 };
 
 // Converges the root exclude list onto both consumers (the /work repo's git dir and the history root scope) so history
-// and the Changes review agree; skips a target whose git dir does not exist yet.
+// and the Changes review agree; skips a target whose git dir does not exist yet. The two marked blocks the root's own
+// file carries (skill links, files kept hidden after a land) survive the rewrite and are copied onto the scope.
 export const syncRootExcludes = async (historyRoot: string, repoIds: readonly string[]): Promise<void> => {
     const rootGitDir = repoGitDir(historyRoot, "root");
     const base = `${rootExcludes(repoIds).join("\n")}\n`;
-    let links = "";
+    let blocks = "";
     for (const gitDir of [rootGitDir, join(historyRoot, "scopes", "root.git")]) {
         try {
             await access(join(gitDir, "info"));
@@ -90,11 +92,11 @@ export const syncRootExcludes = async (historyRoot: string, repoIds: readonly st
         }
         const target = join(gitDir, "info", "exclude");
         const content = await textFile(target).update((current) => {
-            const next = `${base}${gitDir === rootGitDir ? skillLinkExcludeBlock(current) : links}`;
+            const next = `${base}${gitDir === rootGitDir ? `${keptHiddenBlock(current)}${skillLinkExcludeBlock(current)}` : blocks}`;
             return next === current ? undefined : next;
         });
         if (gitDir === rootGitDir) {
-            links = skillLinkExcludeBlock(content);
+            blocks = `${keptHiddenBlock(content)}${skillLinkExcludeBlock(content)}`;
         }
     }
 };

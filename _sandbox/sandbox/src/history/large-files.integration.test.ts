@@ -7,7 +7,8 @@ import { promisify } from "node:util";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createWorkspaceHistory } from "./history.js";
-import { literalPattern, MAX_SNAPSHOT_FILE_BYTES } from "./large-files.js";
+import { literalPattern } from "../store/git/kept-hidden-excludes.js";
+import { MAX_SNAPSHOT_FILE_BYTES } from "./large-files.js";
 
 const exec = promisify(execFile);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });

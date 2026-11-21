@@ -331,7 +331,8 @@
             "ridesNextLand": "Va en la próxima integración",
             "root": "un archivo oculto nuevo en la raíz de un espacio de trabajo de repositorios",
             "size": "{count} archivo, {size} | {count} archivos, {size}",
-            "title": "{count} ruta quedó fuera de la integración por parecer temporal | {count} rutas quedaron fuera de la integración por parecer temporales"
+            "title": "{count} ruta quedó fuera de la integración por parecer temporal | {count} rutas quedaron fuera de la integración por parecer temporales",
+            "bulk": "a folder too large to be part of the work"
         },
         "agentIgnoredReport": {
             "afterTurn": "Copiar cuando termine este turno",
@@ -13814,6 +13815,23 @@
             "savedAs": "Guardado como",
             "changesFrom": "el {count} cambio de {who} | los {count} cambios de {who}"
         },
+        "scratchFolder": {
+            "hidden": "A new hidden folder",
+            "byproduct": "A log, dump or backup",
+            "checkout": "A project checkout of its own",
+            "oversized": "Larger than source code gets",
+            "root": "A new dotfile at the top of the workspace",
+            "bulk": "Too large to save with your changes",
+            "size": "{files} file · {size} | {files} files · {size}",
+            "delete": "Delete",
+            "deleteLabel": "Delete {path}",
+            "deleteQuestion": "Delete {files} file ({size}) in {path}? | Delete {files} files ({size}) in {path}?",
+            "deleteWhole": "Delete {path}?",
+            "alsoDeletes": "It also deletes {count} folder left out of saves ({size}). | It also deletes {count} folders left out of saves ({size}).",
+            "leftOutTitle": "Left out of saves",
+            "leftOutHint": "Saving leaves these out. Delete them if you don't need them.",
+            "fileTag": "not saved"
+        },
         "specialPaths": {
             "noSearchSetupSync": "Sin búsqueda, instalación ni sync",
             "noSignIn": "Sin iniciar sesión",
@@ -14069,7 +14087,8 @@
             "comments": "Comentarios",
             "text": "Texto",
             "branchView": "Una rama, solo lectura",
-            "branchReadOnly": "Inicia un agente desde ella para cambiarla"
+            "branchReadOnly": "Inicia un agente desde ella para cambiarla",
+            "discarding": "Discarding… (taking a restore point first)"
         },
         "fileVerbs": {
             "invalidName": "Nombre no válido.",

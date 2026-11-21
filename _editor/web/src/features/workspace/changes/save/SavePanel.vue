@@ -19,6 +19,7 @@ import FixWithAgent from "../../../../parts/fleet/FixWithAgent.vue";
 import { useSaveActions } from "./useSaveActions";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
+import { alsoDeletesLine, folderLine } from "../scratchWords";
 import CommitField from "../commit/CommitField.vue";
 import MainLineBanner from "../MainLineBanner.vue";
 import IndexRunLine from "../commit/IndexRunLine.vue";
@@ -180,7 +181,9 @@ const blockedByConflicts = computed(() => scannable.value.some((repo: RepoChange
 const savingNow = computed(() => changes.committing.value.length > 0);
 // A run's own line (runLine.ts) has the bar's reading room, and says more than "Saving…" does.
 const runLine = useRunLine();
-const saveReady = computed(() => pending.value > 0 && !blockedByConflicts.value && !changes.actionBusy.value && !savingNow.value);
+// A discard running (this tab's, or another's the daemon reports) holds Save too: the rows it is removing are still listed.
+const discarding = actions.discarding;
+const saveReady = computed(() => pending.value > 0 && !blockedByConflicts.value && !changes.actionBusy.value && !savingNow.value && !discarding.value);
 // The count Save carries, read off the save's own record while it runs: its own staging reaches the change feed
 // mid-run, and a count changing under the spinner resizes the button for nothing.
 const saveCount = computed<number>(() => changes.press.value?.face.count ?? pending.value);
@@ -328,6 +331,10 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>
                 <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
             </p>
+            <!-- A discard waits on its restore point and shows nothing for minutes otherwise; the daemon reports it too, so a reload keeps this line. -->
+            <p v-if="discarding" class="flex items-center gap-1.5 px-3 py-2 text-2xs text-muted" aria-live="polite">
+                <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>{{ t(`workspace.words.discarding`) }}
+            </p>
             <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">{{ t(`workspace.savePanel.looking`) }}</p>
             <p
                 v-else-if="changes.loaded.value && pending === 0 && !changes.landing.value"
@@ -370,7 +377,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                             v-if="canShip"
                             type="button"
                             :class="rowGlyph(HEAD_ACTION)"
-                            :disabled="changes.actionBusy.value || savingNow"
+                            :disabled="changes.actionBusy.value || savingNow || discarding"
                             @click="undoGroup(group)"
                             v-tooltip.top="{ title: t(`workspace.savePanel.changes`, { discard: words.discard }), note: t(`workspace.savePanel.backToLastVersion`) }"
                             :aria-label="`${t(`workspace.savePanel.changes`, { discard: words.discard })}: ${group.title}`"
@@ -399,12 +406,13 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                             <span v-if="file.status !== `modified`" class="shrink-0 text-2xs" :class="STATUS_MARK[file.status].tone">{{
                                 STATUS_WORD[file.status]
                             }}</span>
+                            <span v-if="file.scratch" class="shrink-0 text-2xs text-subtle">{{ t(`workspace.scratchFolder.fileTag`) }}</span>
                         </button>
                         <button
                             v-if="canShip"
                             type="button"
                             :class="rowGlyph(ROW_ACTION, `max-md:ml-2`)"
-                            :disabled="changes.actionBusy.value"
+                            :disabled="changes.actionBusy.value || discarding"
                             @click="actions.ask(file)"
                             v-tooltip.top="t(`workspace.savePanel.changes`, { discard: words.discard })"
                             :aria-label="`${words.discard} ${file.label}`"
@@ -413,6 +421,36 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         </button>
                     </div>
                 </template>
+            </section>
+
+            <!-- One row a scratch folder, however many files it holds: Save leaves them out, so they are not counted above,
+                 and the way to be rid of them is here. -->
+            <section v-if="actions.folders.value.length > 0" class="px-1">
+                <p class="flex items-center gap-1.5 py-1.5 pl-1 text-xs font-medium text-content">
+                    <span :class="LEAD"><Icon name="filter" class="text-2xs text-subtle" /></span>{{ t(`workspace.scratchFolder.leftOutTitle`) }}
+                </p>
+                <p class="pl-6 pr-2 pb-1 text-2xs text-subtle">{{ t(`workspace.scratchFolder.leftOutHint`) }}</p>
+                <div v-for="folder in actions.folders.value" :key="folder.key" class="ui-row-select flex items-center gap-1 rounded pr-1">
+                    <div class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-5 max-md:min-h-11">
+                        <span :class="LEAD"><Icon name="folder" class="text-2xs text-subtle" /></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-xs text-content" dir="rtl" v-tooltip.top.overflow="folder.label"><bdi>{{ folder.label }}</bdi></p>
+                            <p class="truncate text-2xs text-muted" v-tooltip.top.overflow="folderLine(folder.entry)">{{ folderLine(folder.entry) }}</p>
+                        </div>
+                    </div>
+                    <Button
+                        v-if="canShip"
+                        size="small"
+                        tier="boring"
+                        tone="danger"
+                        class="shrink-0"
+                        :disabled="changes.actionBusy.value || discarding"
+                        :aria-label="t(`workspace.scratchFolder.deleteLabel`, { path: folder.label })"
+                        @click="actions.ask(folder)"
+                    >
+                        {{ t(`workspace.scratchFolder.delete`) }}
+                    </Button>
+                </div>
             </section>
 
             <!-- Said, not hidden: Save still records these, so a list that silently stopped at 500 would undercount what the press does. -->
@@ -439,7 +477,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
         >
             <!-- The question can name a long path, which wraps rather than running out of the box. -->
             <template #description>
-                <span class="break-words">{{ words.discard }} {{ actions.discardAsk.value?.what }}?</span>
+                <span class="break-words">{{ actions.discardAsk.value?.question ?? `${words.discard} ${actions.discardAsk.value?.what}?` }}</span>
             </template>
             <div v-if="actions.discardAsk.value" class="flex flex-col gap-3">
                 <p v-if="actions.discardAsk.value.partial" class="text-warning">
@@ -469,13 +507,18 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         </li>
                     </ul>
                 </div>
+                <p v-if="alsoDeletesLine(actions.discardAsk.value.folders)" class="text-danger">
+                    {{ alsoDeletesLine(actions.discardAsk.value.folders) }}
+                </p>
                 <p class="text-2xs text-subtle">
                     <Icon name="shield" class="mr-0.5 text-[0.6rem]" />{{ t(`workspace.savePanel.versionHowThingsNow`) }} {{ words.restorePoints }}.
                 </p>
             </div>
             <template #footer>
                 <Button tier="quiet" :label="t(`workspace.savePanel.keep`)" @click="actions.dismiss()" />
-                <Button tier="accent" tone="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
+                <Button tier="accent" tone="danger" :disabled="discarding" @click="actions.runDiscard()">{{
+                    actions.discardAsk.value?.question === undefined ? words.discard : t(`workspace.scratchFolder.delete`)
+                }}</Button>
             </template>
         </Modal>
     </div>

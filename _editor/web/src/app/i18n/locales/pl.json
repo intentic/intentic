@@ -331,7 +331,8 @@
             "ridesNextLand": "Trafi do następnego scalenia",
             "root": "nowy ukryty plik w katalogu głównym przestrzeni złożonej z repozytoriów",
             "size": "{count} plik, {size} | {count} pliki, {size} | {count} plików, {size}",
-            "title": "{count} ścieżka pominięta przy scalaniu jako plik roboczy | {count} ścieżki pominięte przy scalaniu jako pliki robocze | {count} ścieżek pominiętych przy scalaniu jako pliki robocze"
+            "title": "{count} ścieżka pominięta przy scalaniu jako plik roboczy | {count} ścieżki pominięte przy scalaniu jako pliki robocze | {count} ścieżek pominiętych przy scalaniu jako pliki robocze",
+            "bulk": "a folder too large to be part of the work"
         },
         "agentIgnoredReport": {
             "afterTurn": "Skopiujesz po zakończeniu tej tury",
@@ -13192,6 +13193,23 @@
             "savedAs": "Zapisane jako",
             "changesFrom": "{count} zmianę od: {who} | {count} zmiany od: {who} | {count} zmian od: {who}"
         },
+        "scratchFolder": {
+            "hidden": "A new hidden folder",
+            "byproduct": "A log, dump or backup",
+            "checkout": "A project checkout of its own",
+            "oversized": "Larger than source code gets",
+            "root": "A new dotfile at the top of the workspace",
+            "bulk": "Too large to save with your changes",
+            "size": "{files} file · {size} | {files} files · {size}",
+            "delete": "Delete",
+            "deleteLabel": "Delete {path}",
+            "deleteQuestion": "Delete {files} file ({size}) in {path}? | Delete {files} files ({size}) in {path}?",
+            "deleteWhole": "Delete {path}?",
+            "alsoDeletes": "It also deletes {count} folder left out of saves ({size}). | It also deletes {count} folders left out of saves ({size}).",
+            "leftOutTitle": "Left out of saves",
+            "leftOutHint": "Saving leaves these out. Delete them if you don't need them.",
+            "fileTag": "not saved"
+        },
         "specialPaths": {
             "noSearchSetupSync": "Bez wyszukiwania, instalacji, sync",
             "noSignIn": "Bez logowania",
@@ -13439,7 +13457,8 @@
             "comments": "Komentarze",
             "text": "Tekst",
             "branchView": "Gałąź, tylko do odczytu",
-            "branchReadOnly": "Uruchom z niej agenta, aby ją zmienić"
+            "branchReadOnly": "Uruchom z niej agenta, aby ją zmienić",
+            "discarding": "Discarding… (taking a restore point first)"
         },
         "fileVerbs": {
             "invalidName": "Nieprawidłowa nazwa.",

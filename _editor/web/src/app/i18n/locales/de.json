@@ -331,7 +331,8 @@
             "ridesNextLand": "Kommt mit dem nächsten Landen",
             "root": "eine neue versteckte Datei auf oberster Ebene eines Workspace aus Repositories",
             "size": "{count} Datei, {size} | {count} Dateien, {size}",
-            "title": "{count} Pfad bleibt als Arbeitsrest beim Landen außen vor | {count} Pfade bleiben als Arbeitsreste beim Landen außen vor"
+            "title": "{count} Pfad bleibt als Arbeitsrest beim Landen außen vor | {count} Pfade bleiben als Arbeitsreste beim Landen außen vor",
+            "bulk": "a folder too large to be part of the work"
         },
         "agentIgnoredReport": {
             "afterTurn": "Kopieren, sobald dieser Zug endet",
@@ -13814,6 +13815,23 @@
             "savedAs": "Gespeichert als",
             "changesFrom": "die {count} Änderung von {who} | die {count} Änderungen von {who}"
         },
+        "scratchFolder": {
+            "hidden": "A new hidden folder",
+            "byproduct": "A log, dump or backup",
+            "checkout": "A project checkout of its own",
+            "oversized": "Larger than source code gets",
+            "root": "A new dotfile at the top of the workspace",
+            "bulk": "Too large to save with your changes",
+            "size": "{files} file · {size} | {files} files · {size}",
+            "delete": "Delete",
+            "deleteLabel": "Delete {path}",
+            "deleteQuestion": "Delete {files} file ({size}) in {path}? | Delete {files} files ({size}) in {path}?",
+            "deleteWhole": "Delete {path}?",
+            "alsoDeletes": "It also deletes {count} folder left out of saves ({size}). | It also deletes {count} folders left out of saves ({size}).",
+            "leftOutTitle": "Left out of saves",
+            "leftOutHint": "Saving leaves these out. Delete them if you don't need them.",
+            "fileTag": "not saved"
+        },
         "specialPaths": {
             "noSearchSetupSync": "Keine Suche, Einrichtung, Sync",
             "noSignIn": "Ohne Anmeldung",
@@ -14069,7 +14087,8 @@
             "comments": "Kommentare",
             "text": "Text",
             "branchView": "Ein Branch, schreibgeschützt",
-            "branchReadOnly": "Starten Sie einen Agenten darauf, um ihn zu ändern"
+            "branchReadOnly": "Starten Sie einen Agenten darauf, um ihn zu ändern",
+            "discarding": "Discarding… (taking a restore point first)"
         },
         "fileVerbs": {
             "invalidName": "Ungültiger Name.",

@@ -260,9 +260,9 @@ export const GitOperationStateSchema = z.object({
 export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
 // Judged by shape alone: the names scratch arrives under are made up fresh every time, so no list of names could hold.
 export const ScratchReasonSchema = z
-    .enum(["hidden", "byproduct", "checkout", "oversized", "root"])
+    .enum(["hidden", "byproduct", "checkout", "oversized", "root", "bulk"])
     .describe(
-        "Why it looks like scratch. A new hidden directory that is not one a project keeps on purpose (like `.github`). A log, dump, backup or editor leftover. A git checkout of its own. A new file past the size source code reaches. Or a new dotfile at the top of a workspace whose projects are the repositories inside it.",
+        "Why it looks like scratch. A new hidden directory that is not one a project keeps on purpose (like `.github`). A log, dump, backup or editor leftover. A git checkout of its own. A new file past the size source code reaches. A new dotfile at the top of a workspace whose projects are the repositories inside it. Or a new folder holding more files, or more bytes, than any change a person writes: build output an ignore rule stopped hiding, an unpacked archive, a download.",
     );
 export type ScratchReason = z.infer<typeof ScratchReasonSchema>;
 export const ScratchPathSchema = z.object({
@@ -362,6 +362,12 @@ export const OriginAgentSchema = z.object({
     ),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
+// Sandbox-wide and read at response time, not from the memoized scan: a discard waits on its restore point, and a
+// press that showed nothing for minutes was pressed again after a reload (2026-11-21).
+const runningIn = (what: string, doing: string) =>
+    z.array(z.string()).optional().describe(
+        `Repositories with ${what} running right now. The sandbox's answer rather than any one tab's, so a reload, a second window and another device all know. Absent means nothing is ${doing}.`,
+    );
 // Aggregated review set across every repo (root + every discovered repo).
 export const GitChangesSchema = z.object({
     repos: z
@@ -377,14 +383,8 @@ export const GitChangesSchema = z.object({
         .describe(
             "Who each conversation named above is, keyed by id, so a caller need not look them up. Absent when nothing in the review can be attributed.",
         ),
-    // Sandbox-wide, not per-tab, so a reload or another device still knows a commit is running. Read at response time,
-    // not from the memoized scan. Absent means nothing is committing.
-    committing: z
-        .array(z.string())
-        .optional()
-        .describe(
-            "Repositories with a commit running right now. The sandbox's answer rather than any one tab's, so a reload, a second window and another device all know. Absent means nothing is committing.",
-        ),
+    committing: runningIn("a commit", "committing"),
+    discarding: runningIn("a discard (its restore point being taken, or the files going)", "being discarded"),
 });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 // Re-read inside the same lock the commit used, so the caller redraws from here instead of a full rescan. `changes`

@@ -402,8 +402,46 @@ test("stage and unstage record no checkpoint and no user write; discard does bot
     expect(writes).toBe(0);
 
     expect(await client.git.discard({ repo: "root", paths: ["a.ts"] })).toEqual({ ok: true });
-    expect(snapshots).toEqual(["user before discard in root"]);
+    // Twice: outside the repo lock, where waiting on a snapshot in progress holds nothing up, then under it, where the
+    // tree is already hashed (a real history writes no second checkpoint for a tree that did not change in between).
+    expect(snapshots).toEqual(["user before discard in root", "user before discard in root"]);
     expect(writes).toBe(1);
+});
+
+test("a discard waiting on its restore point reads as discarding, keeps the repo free, and a second press joins it", async () => {
+    let snapshots = 0;
+    const { promise: hashing, resolve: hashed } = Promise.withResolvers<void>();
+    const { promise: waiting, resolve: reached } = Promise.withResolvers<void>();
+    const discards: (readonly string[] | undefined)[] = [];
+    const base = services();
+    const client = clientFor(
+        createApp(
+            services({
+                // The first restore point queues behind a snapshot hashing thousands of files.
+                history: fakeHistory({
+                    snapshot: async () => {
+                        snapshots += 1;
+                        if (snapshots === 1) {
+                            reached();
+                            await hashing;
+                        }
+                        return undefined;
+                    },
+                }),
+                git: { ...base.git, discardPaths: async (_dir, paths) => void discards.push(paths) },
+            }),
+        ),
+    );
+    const first = client.git.discard({ repo: "root", paths: ["old-web/"] });
+    await waiting;
+    const second = client.git.discard({ repo: "root", paths: ["old-web/"] });
+    expect((await client.git.changes()).discarding).toEqual(["root"]);
+    // The repo lock is free meanwhile: a stage (a land or a turn's start alike) is not queued behind the wait.
+    expect(await client.git.stage({ repo: "root", paths: ["a.ts"] })).toEqual({ ok: true });
+    hashed();
+    expect(await Promise.all([first, second])).toEqual([{ ok: true }, { ok: true }]);
+    expect(discards).toEqual([["old-web/"]]);
+    expect((await client.git.changes()).discarding).toBeUndefined();
 });
 
 test("an empty target stages the whole repo in one command, naming nothing", async () => {

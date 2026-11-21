@@ -229,18 +229,21 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
         await git(dir, ["clean", "-q", "-f", "-f", "-d"]);
         return;
     }
+    // A folder (its path ends in a slash: a scratch entry, which can hold thousands of files) is discarded whole by one
+    // git run over it, rather than through a status row per file inside.
+    await discardFolders(dir, paths.filter((path) => path.endsWith("/")), head, git);
+    const targets = new Set<string>(paths.filter((path) => !path.endsWith("/")));
+    if (targets.size === 0) {
+        return;
+    }
     // A staged rename spans two paths; discarding either leg must undo both, so `from` is read off the staged side.
     const { staged } = await changedFiles(dir, git);
-    const targets = new Set<string>(paths);
     for (const change of staged) {
         if (change.from !== undefined && targets.has(change.path)) {
             targets.add(change.from);
         }
     }
     const list = [...targets];
-    if (list.length === 0) {
-        return;
-    }
     // Unstages targets first so the re-scan sees plain worktree-vs-HEAD states (a rename decomposes into two).
     await overPaths(
         dir,
@@ -258,6 +261,22 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
     await overPaths(dir, untracked, (chunk) => ["clean", "-q", "-f", "-f", "-d", "--", ...chunk], git);
     // A path-scoped clean deletes files and leaves the directories they emptied, which git then cannot see at all.
     await pruneEmptiedDirs(dir, untracked);
+};
+
+// Each folder back to HEAD: unstaged, what HEAD holds under it restored, everything else under it deleted.
+const discardFolders = async (dir: string, folders: readonly string[], head: string | undefined, git: GitRunner): Promise<void> => {
+    if (folders.length === 0) {
+        return;
+    }
+    await overPaths(dir, folders, head === undefined ? (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk] : (chunk) => ["reset", "-q", "--", ...chunk], git);
+    for (const folder of head === undefined ? [] : folders) {
+        // A folder HEAD holds nothing under has nothing to restore, and `checkout` would refuse its pathspec.
+        if ((await git(dir, ["ls-tree", "--name-only", "HEAD", "--", folder])).stdout.trim() !== "") {
+            await git(dir, ["checkout", "-q", "-f", "HEAD", "--", folder]);
+        }
+    }
+    await overPaths(dir, folders, (chunk) => ["clean", "-q", "-f", "-f", "-d", "--", ...chunk], git);
+    await pruneEmptiedDirs(dir, folders.map((folder) => folder.slice(0, -1)));
 };
 
 // Git tracks no directories, so a removal's emptied parents are debris nothing else would ever report. Scoped to

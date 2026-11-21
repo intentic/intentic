@@ -591,6 +591,33 @@ test("discardPaths removes the directories its deletions emptied, and none that 
     expect(existsSync(join(dir, "notes/keep.md"))).toBe(true);
 });
 
+test("discardPaths takes a folder whole: a scratch row's thousands of files in one run, a tracked edit under it restored", async () => {
+    const dir = await tempRepo();
+    await mkdir(join(dir, "web/www/assets"), { recursive: true });
+    await writeFile(join(dir, "web/index.html"), "<html>\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "web");
+    await Promise.all(Array.from({ length: 300 }, (_, index) => writeFile(join(dir, `web/www/assets/m${index}.imodel`), "x")));
+    await writeFile(join(dir, "web/index.html"), "edited\n");
+    await mkdir(join(dir, "old-web/pkg"), { recursive: true });
+    await writeFile(join(dir, "old-web/pkg/client.wasm"), "w");
+    await writeFile(join(dir, "keep.txt"), "mine\n");
+    const runs: string[] = [];
+    const counted = async (cwd: string, args: readonly string[], env?: Readonly<Record<string, string>>) => {
+        runs.push(args[0] ?? "");
+        return defaultGit(cwd, args, env);
+    };
+
+    await discardPaths(dir, ["web/", "old-web/"], counted);
+
+    expect(await readFile(join(dir, "web/index.html"), "utf8")).toBe("<html>\n");
+    expect(existsSync(join(dir, "web/www"))).toBe(false);
+    expect(existsSync(join(dir, "old-web"))).toBe(false);
+    expect(await sh(dir, "status", "--porcelain", "-uall")).toBe("?? keep.txt");
+    // No status read of the 300 files: one run each to unstage, look up, restore and clean.
+    expect(runs.filter((run) => run === "status")).toEqual([]);
+});
+
 test("pruneEmptiedDirs stops at the first level that still holds anything, and at the repo root", async () => {
     const base = await mkdtemp(join(tmpdir(), "intentic-prune-"));
     tempDirs.push(base);

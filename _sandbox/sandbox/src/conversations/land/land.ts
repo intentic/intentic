@@ -18,6 +18,7 @@ import { reconcileLockfile } from "./lockfile-reconcile.js";
 import { applies, changesByPath, changesNamedIn, type DeltaChange, deltaChangeOf, deltaChanges, gitSaid, refusal } from "./patch/apply-refusal.js";
 import { type RederiveWrite, rederiveWrites, UNDERIVED } from "./rederive.js";
 import { planThreeWay, type ThreeWay, unwrittenThreeWay, writeThreeWay } from "./patch/three-way.js";
+import { hiddenBeforeWrites, settleWrites, type Unhidden } from "./unhidden/unhidden.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -51,6 +52,8 @@ export interface LandOutcome extends LandResult {
     // A landed tip moved with nothing written: a net-zero delta (an edit and its revert). The books must keep it or a
     // later land re-reports the delta, but `changed` stays false: nothing reached a tree, so nothing is announced.
     readonly advanced?: true;
+    // Ignored files the delta's new ignore rules would have put on show, moved along a rename or kept hidden (unhidden/unhidden.ts).
+    readonly unhidden?: readonly Unhidden[];
 }
 
 export interface LockfileFailure {
@@ -614,14 +617,16 @@ export const landAgent = async (
                 if (conflicts.length > 0) {
                     return { landed: false, changed, repos: [...entry.placement.repos], diff, conflicts, ...target };
                 }
+                const hidden = into === undefined ? await hiddenBeforeWrites(plannings.map(({ plan }) => (plan.write?.onto === undefined ? plan.write : undefined)), git) : [];
                 const written = await writePlans(plannings.map(({ plan }) => plan), run.patchDir, git);
                 const resolving = written.resolving.length > 0 ? { resolving: written.resolving } : {};
+                const unhidden = opt("unhidden", await settleWrites(hidden, new Set(written.conflicts.map(({ repo }) => repo)), git));
                 if (written.conflicts.length > 0) {
-                    return { landed: false, changed, repos: written.repos, diff, conflicts: written.conflicts, ...resolving, ...target };
+                    return { landed: false, changed, repos: written.repos, diff, conflicts: written.conflicts, ...resolving, ...unhidden, ...target };
                 }
                 // Every write went through: the main tree derives its own files from them, after this land (rederive.ts).
                 const rederive = opt("rederive", into === undefined ? rederiveWrites(plannings.map(({ plan }) => (plan.write?.onto === undefined ? plan.write : undefined))) : undefined);
-                return { landed: !held, changed, repos: written.repos, diff, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...rederive, ...target };
+                return { landed: !held, changed, repos: written.repos, diff, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...rederive, ...unhidden, ...target };
             },
         );
         return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };

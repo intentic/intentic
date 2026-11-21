@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { OVERSIZED_BYTES, scratchOf, scratchScopeOf, withScratchExcluded } from "./scratch.js";
+import { BULK_BYTES, BULK_FILES, OVERSIZED_BYTES, scratchOf, scratchScopeOf, withScratchExcluded } from "./scratch.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -134,13 +134,43 @@ test("at a workspace root holding repositories, a new dotfile at the top is scra
 
 test("a workspace root is a container only while it holds a repository, and only the root repo is one", async () => {
     const dir = await tempRepo();
-    expect(await scratchScopeOf("root", dir)).toEqual({ root: true, container: false });
+    expect(await scratchScopeOf("root", dir)).toEqual({ root: true, container: false, bulk: false });
 
     await mkdir(join(dir, "app"), { recursive: true });
     await sh(join(dir, "app"), "init", "-q");
 
-    expect(await scratchScopeOf("root", dir)).toEqual({ root: true, container: true });
-    expect(await scratchScopeOf("app", dir)).toEqual({ root: false, container: false });
+    expect(await scratchScopeOf("root", dir)).toEqual({ root: true, container: true, bulk: false });
+    expect(await scratchScopeOf("app", dir)).toEqual({ root: false, container: false, bulk: false });
+    // Only the repo's own place in the workspace is the main tree, where a bulk folder is left out.
+    expect((await scratchScopeOf("app", dir, join(dir, "app"))).bulk).toBe(true);
+    expect((await scratchScopeOf("app", dir, join(dir, "..", "worktrees", "c1", "app"))).bulk).toBe(false);
+});
+
+test("in the main tree, a new folder of more files or bytes than a person writes is scratch whole, as one row, and a stage-everything leaves it", async () => {
+    const dir = await tempRepo();
+    // Build output an ignore rule stopped hiding: thousands of small files, one of them a by-product it swallows.
+    await Promise.all(Array.from({ length: BULK_FILES + 1 }, (_, index) => put(dir, `old-web/www/assets/m${index}.imodel`, "x")));
+    await put(dir, "old-web/www/build.log", "log");
+    // A few files heavier than BULK_BYTES between them, sparse so the suite writes nothing.
+    await put(dir, "renders/a.exr", "");
+    await truncate(join(dir, "renders/a.exr"), BULK_BYTES / 2 + 1);
+    await put(dir, "renders/b.exr", "");
+    await truncate(join(dir, "renders/b.exr"), BULK_BYTES / 2 + 1);
+    await put(dir, "src/feature.ts", "export {};\n");
+
+    // A conversation's copy carries its big folders as its work.
+    expect((await scratchOf(dir, PROJECT)).map(({ path, reason }) => [path, reason])).toEqual([
+        ["old-web/www/build.log", "byproduct"],
+        ["renders/a.exr", "oversized"],
+        ["renders/b.exr", "oversized"],
+    ]);
+    const scratch = await scratchOf(dir, { ...PROJECT, bulk: true });
+    expect(scratch).toEqual([
+        { path: "old-web/", reason: "bulk", files: BULK_FILES + 2, bytes: BULK_FILES + 1 + 3 },
+        { path: "renders/", reason: "bulk", files: 2, bytes: BULK_BYTES + 2 },
+    ]);
+    await withScratchExcluded(scratch, (pathspecArgs) => exec("git", ["-C", dir, "add", "-A", ...pathspecArgs]));
+    expect(await sh(dir, "diff", "--cached", "--name-only")).toBe("src/feature.ts");
 });
 
 test("a stage-everything with the scratch excluded never stages it, and stages the rest, deletions included", async () => {

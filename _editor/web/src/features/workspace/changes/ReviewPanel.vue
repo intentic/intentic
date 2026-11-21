@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { workspaceView, scopeKey, scopeFields } from "../../../app/workspaceScope";
 import { DISCARDABLE_SIDES, discardOutcome, scopedPaths } from "@intentic/sandbox-contract/schemas/git/git-scope";
-import { isScratch, type GitChange, type GitDiffSide, type RepoChanges, type RepoTarget } from "@intentic/sandbox-contract/schemas/git/git";
+import { isScratch, type GitChange, type GitDiffSide, type RepoChanges, type RepoTarget, type ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
 import type { LandedMessage, LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import {
     Button,
     type ButtonTier,
     ChangeStatusMark,
     clipboardOf,
-    ConfirmDialog,
     ContextMenu,
     formatElapsed,
     Notice,
@@ -68,12 +67,17 @@ import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../../models/workspace/changes/changeModules";
 import { truncatedOn, truncatedTotal } from "../../../models/workspace/changes/truncation";
+import { inScratchFolder, scratchFolders, truncatedRecordable } from "../../../models/workspace/changes/scratchFolders";
+import { deleteQuestion } from "./scratchWords";
 import type { OpenMode } from "../../../models/workspace/tabs/workspaceTabs";
 import { useChangeGrouping } from "../../../models/workspace/changes/useChangeGrouping";
 import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../../models/workspace/changes/changeWeight";
 import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import MainLineBanner from "./MainLineBanner.vue";
+import ScratchLeftOut from "./ScratchLeftOut.vue";
+import DiscardCard from "./DiscardCard.vue";
+import type { DiscardTarget } from "./discardTarget";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
@@ -338,7 +342,8 @@ const soleSide = (repo: RepoChanges): SideView | undefined => {
 // Only repos with changes get a row; a clean repo says nothing here (the empty state says it once, for the
 // tree). Read through `sidesOf`, so the origin filter also drops repos that agent never touched, unless something
 // there is staged.
-const dirty = computed(() => scannable.value.filter((repo) => sidesOf(repo).length > 0));
+// A repo holding nothing but scratch folders is listed too, for the rows that offer to delete them.
+const dirty = computed(() => scannable.value.filter((repo) => sidesOf(repo).length > 0 || scratchFolders(repo).length > 0));
 
 // Whether a side's rows group under their package (useChangeGrouping, mirrored in Settings ▸ Appearance) —
 // a monorepo path's truncated-away half becomes the header instead. Changes only how the list reads, not what it does.
@@ -536,13 +541,17 @@ const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.co
 // repos this box would actually commit — a run in a repo the filter excludes isn't this button's concern.
 const committingNow = computed(() => commitTarget.value.filter((repo) => changes.committing.value.includes(repo)));
 const commitRunning = computed(() => committingNow.value.length > 0);
+// A discard running in a repo the commit would record: the rows it is removing are still listed, so a commit now would
+// race it. This tab's press and the daemon's word (a reload, a second tab) both count, as for a commit.
+const discardingNow = computed(() => commitTarget.value.filter((repo) => changes.discarding.value.includes(repo)));
 const commitReady = computed(
     () =>
         commitTarget.value.length > 0 &&
         commitMessage.value.trim().length > 0 &&
         !blockedByConflicts.value &&
         !changes.actionBusy.value &&
-        !commitRunning.value,
+        !commitRunning.value &&
+        discardingNow.value.length === 0,
 );
 // A plain Commit carries its staged count beside the label; the stage-first press says "all" instead.
 const commitLabel = computed(() => (stagesFirst.value ? t(`workspace.reviewPanel.commitAll`) : t(`workspace.reviewPanel.commit`)));
@@ -640,6 +649,9 @@ const commitBlocker = computed<string | undefined>(() => {
     // Checked ahead of "nothing to commit": mid-commit the rows are still listed, so this is the honest reason, not a count about to change.
     if (commitRunning.value) {
         return t(`workspace.reviewPanel.stillCommitting`, { repos: committingNow.value.join(`, `) });
+    }
+    if (discardingNow.value.length > 0) {
+        return t(`workspace.words.discarding`);
     }
     if (commitTarget.value.length === 0) {
         return t(`workspace.reviewPanel.nothingToCommit`);
@@ -775,23 +787,12 @@ const openRowMenu = (event: MouseEvent, row: Row, change: GitChange): void => {
     rowMenu.value?.show(event);
 };
 
-// A modal confirm, like every other destructive git action here. The target is resolved when the user arms
-// it, so the prompt's wording and the action can never disagree with a poll landing in between.
-interface DiscardTarget {
-    // The whole heading, one message per scope ("Discard every uncommitted change in intentic?", "Discard 3 selected
-    // files?"), so a translation words each question itself instead of wrapping an English phrase.
-    readonly question: string;
-    // Untracked paths are deleted, not reverted: git holds no copy of them, so this is the one part not recoverable
-    // from git.
-    readonly deletes: readonly string[];
-    // Distinct tracked paths returning to their last committed state.
-    readonly restores: number;
-    // True wherever the daemon truncated: the discard covers the whole scope, but these counts and the deletion
-    // list can only speak for the rows the panel was given, so this says when they're a floor, not the total.
-    readonly partial: boolean;
-    readonly groups: readonly RepoTarget[];
-}
+// A modal confirm, like every other destructive git action here (DiscardCard.vue). The target is resolved when the user
+// arms it, so the prompt's wording and the action can never disagree with a poll landing in between.
 const pendingDiscard = ref<DiscardTarget | undefined>(undefined);
+// A discard running in `repo`, from this tab's press or the daemon's own report. A second press while one runs is
+// refused here and again in useChanges, since a restore point can take minutes and shows nothing meanwhile.
+const discardingIn = (repo: string): boolean => changes.discarding.value.includes(repo);
 
 // What discarding a selection does, read as the daemon's discard reads it: a staged rename picked by either leg takes
 // both, and a path the last commit does not hold (untracked, newly added, a rename's new leg) leaves the disk.
@@ -808,6 +809,9 @@ const selectionOutcome = (group: RepoTarget): { readonly deletes: readonly strin
 
 const askDiscardRow = (row: Row, change: GitChange): void => {
     const groups = byRepo(actingRows(row, false));
+    if (groups.some((group) => discardingIn(group.repo))) {
+        return;
+    }
     const outcomes = groups.map(selectionOutcome);
     const deletes = outcomes.flatMap((outcome) => outcome.deletes);
     const restores = outcomes.reduce((total, outcome) => total + outcome.restores, 0);
@@ -822,6 +826,7 @@ const askDiscardRow = (row: Row, change: GitChange): void => {
         restores,
         // A selection is exactly as long as the rows clicked, so it's never a floor.
         partial: false,
+        folders: [],
         groups,
     };
 };
@@ -855,16 +860,39 @@ const discardable = (repo: RepoChanges): boolean =>
 // status), so the question lists exactly what the action touches: both legs of a rename the filter's origin landed
 // either leg of, the new leg named among the files that leave the disk.
 const askDiscardRepo = (repo: RepoChanges): void => {
+    if (discardingIn(repo.repo)) {
+        return;
+    }
     const group = originFilter.value === undefined ? { repo: repo.repo } : scoped(repo.repo);
-    const paths = scopedPaths(repo, DISCARDABLE_SIDES, group.scope ?? {}, repo.origins ?? {});
+    // The rows under a scratch folder are counted and named by the folder, never one by one.
+    const paths = scopedPaths(repo, DISCARDABLE_SIDES, group.scope ?? {}, repo.origins ?? {}).filter((path) => !inScratchFolder(repo, path));
     const { deletes, restores } = discardOutcome(repo, paths);
-    const partial = truncatedTotal(repo) > 0;
+    const partial = truncatedRecordable(repo) > 0;
     pendingDiscard.value = {
         question: discardRepoQuestion(repo.repo, paths.length, partial),
         deletes,
         restores: restores.length,
         partial,
+        // Only a whole-repository discard reaches them: a scope narrowed to a chip's files does not.
+        folders: originFilter.value === undefined ? scratchFolders(repo) : [],
         groups: [group],
+    };
+};
+
+// One scratch folder, deleted whole: the daemon takes its directory path and everything under it, so the request names
+// that one path however many files it holds, and the card says how many instead of listing them.
+const askDiscardFolder = (repo: RepoChanges, entry: ScratchPath): void => {
+    if (discardingIn(repo.repo)) {
+        return;
+    }
+    pendingDiscard.value = {
+        question: deleteQuestion(entry, repo.repo === `root` ? entry.path : `${repo.repo}/${entry.path}`),
+        deletes: [],
+        restores: 0,
+        partial: false,
+        folders: [],
+        verb: t(`workspace.scratchFolder.delete`),
+        groups: [{ repo: repo.repo, paths: [entry.path] }],
     };
 };
 
@@ -999,12 +1027,13 @@ const doSync = (): void =>
 const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover/repo:opacity-100 max-md:opacity-100`;
 
 // Counts every side the row is showing (so a filter narrows it too), plus the daemon-truncated remainder.
-const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, truncatedTotal(repo));
+// Not the rows a scratch folder stands for (listed or cut), which have their own row and which no save records.
+const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, truncatedRecordable(repo));
 
 // A count earns its pixels only where the rows it counts are NOT all on screen already — folded, multi-sided,
 // or truncated. Expanded, single-sided and complete, the figure is deleted: the rows are right there to count.
 const showRepoCount = (repo: RepoChanges): boolean =>
-    repoCount(repo) > 0 && (collapsed.value.has(repo.repo) || sidesSplit(repo) || truncatedTotal(repo) > 0);
+    repoCount(repo) > 0 && (collapsed.value.has(repo.repo) || sidesSplit(repo) || truncatedRecordable(repo) > 0);
 
 // Each rank that is actually DRAWN (side, module) pushes the rows below it one 16px step (see LEAD); a rank that isn't
 // drawn costs nothing, so a shallow list (one repo, one side, no grouping) stays shallow instead of indenting for
@@ -1428,7 +1457,7 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                         v-if="discardable(group)"
                         type="button"
                         :class="rowGlyph(`muted`, ROW_ACTION, DISCARD_GAP)"
-                        :disabled="changes.actionBusy.value"
+                        :disabled="changes.actionBusy.value || discardingIn(group.repo)"
                         @click="askDiscardRepo(group)"
                         v-tooltip.top="t(`workspace.reviewPanel.discardAll`)"
                         :aria-label="t(`workspace.reviewPanel.discardAllChangesIn`)"
@@ -1446,6 +1475,11 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                     :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: group.repo })"
                     @dismiss="changes.dismissFailure(group.repo)"
                 />
+
+                <!-- A discard waits on its restore point and shows nothing for minutes otherwise; the daemon reports it too, so a reload keeps this line. -->
+                <p v-if="discardingIn(group.repo)" class="mx-1 mb-1.5 mt-0.5 flex items-center gap-1.5 text-2xs text-muted" aria-live="polite">
+                    <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>{{ t(`workspace.words.discarding`) }}
+                </p>
 
                 <!-- Conflicts come from operations left by an external terminal. -->
                 <Notice v-if="group.operation" tone="warning" size="sm" class="mx-1 mb-1.5 mt-0.5">
@@ -1471,19 +1505,12 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                 </Notice>
 
                 <!-- Untracked paths shaped like scratch: every stage-everything leaves them out, so Commit all does too. -->
-                <div
+                <ScratchLeftOut
                     v-if="group.scratch !== undefined"
-                    class="mx-1 mb-1.5 mt-0.5 flex items-start gap-1.5 rounded-md border border-border bg-overlay px-2 py-1.5"
-                >
-                    <span :class="LEAD" class="h-4"><Icon name="filter" class="text-2xs text-subtle" /></span>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-2xs font-medium text-content">
-                            {{ t(`workspace.reviewPanel.scratchLeftOut`, { count: group.scratch.length }, group.scratch.length) }}
-                        </p>
-                        <p class="break-all font-mono text-2xs text-muted">{{ group.scratch.map((entry) => entry.path).join(`, `) }}</p>
-                        <p class="text-2xs text-subtle">{{ t(`workspace.reviewPanel.scratchLeftOutHint`) }}</p>
-                    </div>
-                </div>
+                    :scratch="group.scratch"
+                    :busy="changes.actionBusy.value || discardingIn(group.repo)"
+                    @delete="askDiscardFolder(group, $event)"
+                />
 
                 <!-- No empty-repo guard needed here — `dirty` is the list, and a repo with no rows isn't in it. -->
                 <div v-if="!collapsed.has(group.repo)" class="pb-1">
@@ -1603,7 +1630,7 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                                                 DISCARD_GAP,
                                             )
                                         "
-                                        :disabled="changes.actionBusy.value"
+                                        :disabled="changes.actionBusy.value || discardingIn(group.repo)"
                                         @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
                                         v-tooltip.top="t(`ui.action.discard`)"
                                         :aria-label="t(`workspace.reviewPanel.discard2`, { path: change.path })"
@@ -1615,11 +1642,11 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                         </template>
                     </template>
                     <!-- The daemon's per-repo cap, said plainly so the list doesn't read as complete when it isn't. -->
-                    <p v-if="truncatedTotal(group) > 0" class="py-1 pl-5 pr-2 text-2xs text-subtle">
+                    <p v-if="truncatedRecordable(group) > 0" class="py-1 pl-5 pr-2 text-2xs text-subtle">
                         {{
                             t(`workspace.reviewPanel.moreShowingFirstStage`, {
-                                group: truncatedTotal(group),
-                                group2: repoCount(group) - truncatedTotal(group),
+                                group: truncatedRecordable(group),
+                                group2: repoCount(group) - truncatedRecordable(group),
                             })
                         }}
                     </p>
@@ -1627,45 +1654,12 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
             </div>
         </div>
 
-        <!-- Tracked and untracked discard outcomes are reported separately. -->
-        <ConfirmDialog
-            :open="pendingDiscard !== undefined"
-            :header="t(`workspace.reviewPanel.discardChanges`)"
-            :confirm-label="t(`ui.action.discard`)"
-            :confirm-disabled="changes.actionBusy.value"
+        <DiscardCard
+            :target="pendingDiscard"
+            :disabled="changes.actionBusy.value || (pendingDiscard?.groups ?? []).some((group) => discardingIn(group.repo))"
             @cancel="pendingDiscard = undefined"
             @confirm="confirmDiscard"
-        >
-            <!-- The question can name a long path, which wraps rather than running out of the box. -->
-            <template #description>
-                <span class="break-words">{{ pendingDiscard?.question }}</span>
-            </template>
-            <div v-if="pendingDiscard" class="flex flex-col gap-3">
-                <!-- The counts are a floor when daemon truncation hides additional files. -->
-                <p v-if="pendingDiscard.partial" class="text-warning">
-                    {{ t(`workspace.reviewPanel.moreFilesPendingHere`) }}
-                </p>
-                <!-- The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read carefully. -->
-                <p v-if="pendingDiscard.restores > 0" class="text-muted">
-                    {{ pendingDiscard.partial ? t(`workspace.words.atLeast`) : `` }}
-                    {{ t(`workspace.reviewPanel.filesReturn`, { count: pendingDiscard.restores }, pendingDiscard.restores) }}
-                </p>
-                <div v-if="pendingDiscard.deletes.length > 0">
-                    <p class="text-danger">
-                        {{ pendingDiscard.partial ? t(`workspace.words.atLeast`) : `` }}
-                        {{ t(`workspace.reviewPanel.untrackedLeave`, { count: pendingDiscard.deletes.length }, pendingDiscard.deletes.length) }}
-                    </p>
-                    <ul class="mt-1 max-h-24 overflow-auto">
-                        <li v-for="path in pendingDiscard.deletes" :key="path" class="truncate font-mono text-2xs text-muted" dir="rtl">
-                            <bdi>{{ path }}</bdi>
-                        </li>
-                    </ul>
-                </div>
-                <p class="text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />{{ t(`workspace.reviewPanel.restorePointSavedFirst2`) }}
-                </p>
-            </div>
-        </ConfirmDialog>
+        />
 
         <!-- The same card the chat tab strip raises for a session, mounted at body so it clears this sidebar's narrow column. -->
         <HoverCard ref="hoverCard" />

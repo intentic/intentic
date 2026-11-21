@@ -1,7 +1,9 @@
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import { listedUnstaged } from "../../../models/workspace/changes/scratchFolders";
 
 // Sides in git's order (conflicts block everything, then staged, then unstaged); an empty section renders
 // nothing. The origin filter is applied here once, so every row, verb and count downstream inherits it for free.
+// A scratch folder's untracked files are not rows at all: its one row stands for them (ReviewPanel's scratch block).
 // Except on Staged: that side is exactly what Commit records whenever it holds anything, so hiding part of it let a
 // filtered commit take files nobody could see.
 export interface SideView {
@@ -22,7 +24,7 @@ export const sideViews = (
             [
                 { side: `conflicted` as const, label: t(`workspace.reviewPanel.conflicts`), changes: repo.conflicted },
                 { side: `staged` as const, label: t(`workspace.reviewPanel.staged2`), changes: repo.staged },
-                { side: `unstaged` as const, label: t(`workspace.reviewPanel.unstaged`), changes: repo.unstaged },
+                { side: `unstaged` as const, label: t(`workspace.reviewPanel.unstaged`), changes: listedUnstaged(repo) },
             ].flatMap((section) => {
                 const shown = section.side === `staged` ? section.changes : section.changes.filter((change) => matches(repo, change));
                 return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];

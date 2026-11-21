@@ -25,7 +25,7 @@ import { refusalSummary } from "../workspace/push/refusalSummary";
 import { outgoingWork } from "../workspace/push/outgoingWork";
 import { landingAgents, landingLineOf, landingNow, type LandingAgent } from "./landing";
 import { spliceRepoChanges } from "../workspace/changes/spliceRepoChanges";
-import { truncatedTotal } from "../workspace/changes/truncation";
+import { recordableTotal } from "../workspace/changes/scratchFolders";
 import { dropEditBuffers } from "../workspace/files/useEditBuffers";
 import { usePushRun } from "../workspace/push/usePushRun";
 import { runIndexJob } from "./indexRuns";
@@ -98,10 +98,12 @@ interface ScopedTask {
 }
 
 // A busy span and per-repo failures over one sandbox's repositories; a switch starts the panel clean.
-const states = sandboxRef(() => new Map<string, { busy: boolean; failures: ReadonlyMap<string, ActionFailure> }>());
+// `discarding` is the repos THIS tab has a discard running in, from the press until its request answers: the daemon
+// reports the same fact sandbox-wide (GitChanges.discarding), and the two are read together (useChanges).
+const states = sandboxRef(() => new Map<string, { busy: boolean; failures: ReadonlyMap<string, ActionFailure>; discarding: readonly string[] }>());
 const actionState = (view: ViewScope) => {
     const key = scopeKey(view);
-    if (!states.value.has(key)) { states.value.set(key, { busy: false, failures: new Map() }); }
+    if (!states.value.has(key)) { states.value.set(key, { busy: false, failures: new Map(), discarding: [] }); }
     return states.value.get(key)!;
 };
 // Signed-in member's tier on the active sandbox, read once for the module; runBatch checks it before sending.
@@ -305,15 +307,30 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
 
 // Discards a selection: tracked content resets to HEAD, untracked files are deleted; an empty target discards the whole
 // repo.
-const discardGroups = (groups: readonly RepoTarget[], view: ViewScope = SHARED_SCOPE): Promise<void> =>
-    runBatch(
-        groups.map((group) => ({
-            scope: group.repo,
-            action: t(`workspace.useChanges.discardFailed`),
-            run: async (): Promise<void> => {
-                await sandboxRpc.git.discard({ repo: group.repo, ...targetBody(group) }, { context: { gitView: view } });
-            },
-        })),
+// A discard waits on its restore point, which can take minutes, and shows nothing in that time, so a press can be made
+// twice: after a reload, from a second tab. A repo already being discarded, here or on the daemon's own word, is not sent
+// again.
+const discardingRepos = (held: GitChanges | undefined, local: readonly string[]): readonly string[] => [
+    ...new Set([...local, ...(held?.discarding ?? [])]),
+];
+const discardGroups = (groups: readonly RepoTarget[], view: ViewScope = SHARED_SCOPE): Promise<void> => {
+    const state = actionState(view);
+    const running = discardingRepos(queryClient.getQueryData<GitChanges>(changesKey(view)), state.discarding);
+    return runBatch(
+        groups
+            .filter((group) => !running.includes(group.repo))
+            .map((group) => ({
+                scope: group.repo,
+                action: t(`workspace.useChanges.discardFailed`),
+                run: async (): Promise<void> => {
+                    state.discarding = [...state.discarding, group.repo];
+                    try {
+                        await sandboxRpc.git.discard({ repo: group.repo, ...targetBody(group) }, { context: { gitView: view } });
+                    } finally {
+                        state.discarding = state.discarding.filter((repo) => repo !== group.repo);
+                    }
+                },
+            })),
         () => {
             // Stale edit buffers would resurrect discarded files on save; the tree's whole prefix, since its scope is
             // part of its key.
@@ -322,6 +339,7 @@ const discardGroups = (groups: readonly RepoTarget[], view: ViewScope = SHARED_S
         },
         view,
     );
+};
 
 // Ends a halted merge/rebase/cherry-pick/revert left by a terminal; nothing this app runs leaves a repo in
 // that state. Checkpointed daemon-side first, since the discarded conflict resolution is real work.
@@ -474,7 +492,8 @@ const syncAll = (targets: readonly SyncTarget[], view: ViewScope = SHARED_SCOPE)
     );
 
 // Polls while another tab's (or this tab's pre-reload) commit is running — this tab's own splices in directly.
-// Needed since a refused or no-op commit moves no ref, so the ref watcher alone would never end "Committing…".
+// Needed since a refused or no-op commit moves no ref, so the ref watcher alone would never end "Committing…". A discard
+// somewhere else is watched the same way, since nothing tells this tab when it ends.
 const COMMIT_WATCH_MS = 1000;
 
 export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
@@ -491,7 +510,11 @@ export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
         enabled: computed(() => !landingNow.value),
         // Reads the cached response rather than closing over the query it configures.
         refetchInterval: (cached) =>
-            commitPress(toValue(view)) === undefined && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : isShared(toValue(view)) ? false : 10_000,
+            (commitPress(toValue(view)) === undefined && (cached.state.data?.committing?.length ?? 0) > 0) || (cached.state.data?.discarding?.length ?? 0) > 0
+                ? COMMIT_WATCH_MS
+                : isShared(toValue(view))
+                  ? false
+                  : 10_000,
     });
 
     // Also includes repos git couldn't scan (empty lists plus an `error`) and repos that are merely out of sync;
@@ -502,10 +525,9 @@ export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
     // that a landing still names.
     const originAgents = computed<Readonly<Record<string, OriginAgent>>>(() => query.data.value?.originAgents ?? {});
     // Includes conflicts (they block every commit, so an undercount hides exactly the state needing attention)
-    // and rows truncated past the per-repo budget: the count is how much work exists, not how much shipped.
-    const count = computed(() =>
-        repos.value.reduce((total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + truncatedTotal(repo), 0),
-    );
+    // and rows truncated past the per-repo budget: the count is how much work exists, not how much shipped. Not scratch,
+    // which every save leaves out, so the number on a Save press is the number it records (scratchFolders.ts).
+    const count = computed(() => repos.value.reduce((total, repo) => total + recordableTotal(repo), 0));
     // What a plain Commit would record across every repo; decides the button's "Commit"/"Commit all" label.
     // Includes truncated staged rows too, since the commit records the whole index, not just what's listed.
     const stagedCount = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length + (repo.truncated?.staged ?? 0), 0));
@@ -514,6 +536,9 @@ export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
     // Union of this tab's own in-flight commits and the daemon's; a repo in either is still being recorded.
     // Committing rows stay listed (dimmed, verbs disabled) rather than assumed gone before the commit returns.
     const committing = computed<readonly string[]>(() => [...new Set([...(press.value?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
+    // The same union for a discard: this tab's own press, and the daemon's word that one is running (a reload, a second tab).
+    // Rows stay listed meanwhile; the panels say it and hold their presses rather than let a second one through.
+    const discarding = computed<readonly string[]>(() => discardingRepos(query.data.value, actionState(toValue(view)).discarding));
     // What is being carried into this tree as this view reads it: the roster's lands, then the last one to end until this
     // view's review has answered (or failed) since, the read that shows its files.
     const arriving = computed<readonly LandingAgent[]>(() => {
@@ -530,6 +555,7 @@ export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
         originAgents,
         count,
         committing,
+        discarding,
         // This tab's commit while it runs, the press as pressed included.
         press,
         stagedCount,

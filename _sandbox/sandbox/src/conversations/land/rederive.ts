@@ -9,7 +9,10 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { runCheck } from "../../workload/run-check.js";
+import type { ActivityStore } from "../../activity/activity-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import type { LandOutcome } from "./land.js";
+import { unhiddenSentences } from "./unhidden/unhidden.js";
 
 // Exclude merge=derived files from land/rebase deltas; regenerate them from landed sources in the destination tree with its dependencies.
 // After the land lease releases, run only derived writers under the repo lock, serializing per tree and coalescing bursts of lands.
@@ -92,6 +95,8 @@ const rederive = async (main: string, repo: string, paths: readonly string[], ru
 export interface RederiveDeps {
     readonly agentWorktrees: Pick<AgentWorktrees, "withRepoLock">;
     readonly logger: Pick<Logger, "info" | "warn">;
+    // Where afterLand tells the owner what it did with files an ignore-rule change put on show; a door without one logs it.
+    readonly activity?: Pick<ActivityStore, "append">;
 }
 
 // Per main checkout: the paths lands wrote that no run has taken yet, the run draining them while one is going, and
@@ -236,15 +241,30 @@ export const withRederivedRepo = async <T>(
 export const derivedChanges = async (dir: string, git: GitRunner): Promise<readonly string[]> =>
     materializedPaths((await git(dir, ["diff", "--name-only", "--no-renames", "-z", "HEAD", ...DERIVED])).stdout);
 
+// The land's account of the files it moved or kept hidden, on the activity feed; one that cannot be written leaves the
+// land standing and the log holding the account.
+const tellUnhidden = async (deps: RederiveDeps, id: string, content: string): Promise<void> => {
+    try {
+        await deps.activity?.append({ direction: "system", type: "land.unhidden", content, conversationId: id });
+    } catch (error) {
+        deps.logger.warn({ err: error, id }, "land: the unhidden files' activity row could not be written");
+    }
+};
+
 /** Said by every door a land goes through, once its lease is released: pnpm's reason for a lockfile it could not write;
  *  and the derived files it left out handed to that tree's writers, in the background (scheduleRederive). */
 export const afterLand = (
     deps: RederiveDeps,
     id: string,
-    outcome: { readonly lockfileFailures?: readonly { readonly repo: string; readonly reason: string }[]; readonly rederive?: readonly RederiveWrite[] },
+    outcome: Pick<LandOutcome, "lockfileFailures" | "rederive" | "unhidden">,
 ): void => {
     for (const { repo, reason } of outcome.lockfileFailures ?? []) {
         deps.logger.warn({ id, repo, reason }, "agents: lockfile could not be regenerated for a changed manifest");
+    }
+    for (const unhidden of outcome.unhidden ?? []) {
+        const content = unhiddenSentences(unhidden).join(" ");
+        deps.logger.info({ id, repo: unhidden.repo, moved: unhidden.moved, kept: unhidden.kept }, `land: ${content}`);
+        void tellUnhidden(deps, id, content);
     }
     if (outcome.rederive !== undefined && outcome.rederive.length > 0) {
         scheduleRederive(deps, id, outcome.rederive);

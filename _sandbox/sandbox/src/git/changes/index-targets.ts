@@ -29,7 +29,7 @@ export const createIndexTargets = (services: Pick<Services, "git" | "agentOrigin
     };
     // What a stage-everything leaves out of this repo right now (scratch.ts): the scan shows it, the stage honors it.
     const scratchIn = async (repo: string, dir: string): Promise<ScratchPath[]> =>
-        services.git.scratchOf(dir, await scratchScopeOf(repo, services.workspace.root));
+        services.git.scratchOf(dir, await scratchScopeOf(repo, services.workspace.root, dir));
     // A repo row's `scratch`, read only when something is untracked: a scan runs about once a second while files land.
     const scratchRow = async (repo: string, dir: string, worktree: readonly GitChange[]): Promise<Pick<RepoChanges, "scratch">> => {
         if (!worktree.some((change) => change.status === "added")) {

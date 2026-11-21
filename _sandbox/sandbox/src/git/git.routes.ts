@@ -19,6 +19,7 @@ import { MAX_REPO_CHANGES } from "./changes/changes.js";
 import { createChipStaging } from "./changes/chip-staging.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { createIndexTargets, ownWork } from "./changes/index-targets.js";
+import { createDiscardRuns } from "./ops/discard-runs.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { callerSigner, withRequester } from "./attribution/commit-attribution.js";
 import { gitFailureReason } from "./git.js";
@@ -141,8 +142,10 @@ export const routesInView = (services: Services, view?: GitView) => {
     const clearChip = (repo: string, dir: string, origin: string): Promise<void> =>
         chips.clear(repo, dir, origin, async () => (await services.git.changedFiles(dir)).head);
 
-    // Repos mid-commit; held here (not per-tab) so a reload or second tab agrees; empty again on restart.
+    // Repos mid-commit or mid-discard; held here (not per-tab) so a reload or second tab agrees; empty again on restart.
     const committing = new Set<string>();
+    const discards = createDiscardRuns();
+    const runningNow = () => ({ ...opt("committing", committing.size > 0 ? [...committing] : undefined), ...opt("discarding", discards.repos().length > 0 ? discards.repos() : undefined) });
     const whileCommitting = async <T>(repo: string, run: () => Promise<T>): Promise<T> => {
         committing.add(repo);
         try {
@@ -338,16 +341,10 @@ export const routesInView = (services: Services, view?: GitView) => {
             const dir = await services.branchCheckouts.refresh(input.repo, input.branch);
             return branchLandings(dir, main, input.before);
         }),
-        // Review set plus `committing`, read after the scan settles (not merged into the memoized result), so a commit
-        // that starts or ends during the coalesce window still shows on this response.
-        changes: i.changes.handler(async () => {
-            const scanned = await coalescedScan();
-            return { ...scanned, ...(committing.size > 0 ? { committing: [...committing] } : {}) };
-        }),
-        viewChanges: i.viewChanges.handler(async () => {
-            const scanned = await coalescedScan();
-            return { ...scanned, ...(committing.size > 0 ? { committing: [...committing] } : {}) };
-        }),
+        // Review set plus what is running, read after the scan settles (not merged into the memoized result), so a commit or
+        // discard that starts or ends during the coalesce window still shows.
+        changes: i.changes.handler(async () => ({ ...(await coalescedScan()), ...runningNow() })),
+        viewChanges: i.viewChanges.handler(async () => ({ ...(await coalescedScan()), ...runningNow() })),
         // `side` is the clicked row's own comparison, not a convenience: for a partially staged file, HEAD↔worktree
         // matches neither list. Agent reviews use their own ref-vs-worktree route (no index to split).
         fileDiff: i.fileDiff.handler(async ({ input }) => {
@@ -545,23 +542,25 @@ export const routesInView = (services: Services, view?: GitView) => {
                 return result;
             }),
         ),
-        discard: i.discard.handler(({ input, context }) =>
-            onRepo(input.repo, async (dir) => {
-                // Snapshot before discard: git can't walk this back (untracked deleted, no reflog for worktree state).
-                await checkpoint(dir, `before discard in ${input.repo}`);
-                // Named before the tree moves, so landed work going with it is read as this person's doing, not an agent's.
-                services.agents.noteRemover({
-                    kind: "person",
-                    ...opt("email", context.identity?.email),
-                    ...opt("name", context.identity?.name),
+        // A second press on the same target joins the first (discard-runs.ts). The restore point is taken twice: first
+        // outside the repo lock, where waiting on a snapshot already hashing holds up no land or turn (189 s once), then
+        // under it, quick by then, so nothing written in between goes unrecorded.
+        discard: i.discard.handler(async ({ input, context }) => {
+            await discards.run(input.repo, JSON.stringify([input.paths, input.scope]), async () => {
+                await checkpoint(await repoDir(input.repo), `before discard in ${input.repo}`);
+                await onRepo(input.repo, async (dir) => {
+                    // Snapshot before discard: git can't walk this back (untracked deleted, no reflog for worktree state).
+                    await checkpoint(dir, `before discard in ${input.repo}`);
+                    // Named before the tree moves, so landed work going with it is read as this person's doing, not an agent's.
+                    services.agents.noteRemover({ kind: "person", ...opt("email", context.identity?.email), ...opt("name", context.identity?.name) });
+                    await targets.discardTarget(input.repo, dir, input);
+                    invalidateScan();
+                    // Worktree changed, so record it like any other user write.
+                    notifyWrite();
                 });
-                await targets.discardTarget(input.repo, dir, input);
-                invalidateScan();
-                // Worktree changed, so record it like any other user write.
-                notifyWrite();
-                return { ok: true } as const;
-            }),
-        ),
+            });
+            return { ok: true } as const;
+        }),
         // A push run (git/ops/push-run.ts), watched in its terminal and polled below; outside the repo lock, writing no file.
         push: i.push.handler(async ({ input, context }) => {
             await pushRuns.start(input.repo, await repoDir(input.repo), { ...opt("branch", input.branch), ...opt("by", context.identity) });

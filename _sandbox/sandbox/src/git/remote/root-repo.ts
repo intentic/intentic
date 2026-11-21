@@ -248,7 +248,7 @@ export const commitWorktreeRemainder = async (
     const main = repo === "root" ? workspaceRoot : join(workspaceRoot, repo);
     // allow(silent-catch): a repo whose main line cannot be read locks nothing; a branch another checkout holds still counts.
     await detachFromSharedLine(dir, await latchedMainBranch(main, git).catch(() => undefined), git);
-    const scratch = await scratchOf(dir, await scratchScopeOf(repo, workspaceRoot), git);
+    const scratch = await scratchOf(dir, await scratchScopeOf(repo, workspaceRoot, dir), git);
     await stageAll(dir, scratch, git).catch(skippedPaths);
     // Back to HEAD in the index only: the tree keeps them, uncommitted, for the commit that owes them.
     await unstagePaths(dir, repo === "root" ? [...leave, ...(await stagedGeneratedSkills(dir, git))] : leave, git);

@@ -28,6 +28,7 @@ const REASONS: Readonly<Record<ScratchReason, () => string>> = {
     checkout: () => t(`agents.agentScratchReport.checkout`),
     oversized: () => t(`agents.agentScratchReport.oversized`),
     root: () => t(`agents.agentScratchReport.root`),
+    bulk: () => t(`agents.agentScratchReport.bulk`),
 };
 
 // Undefined for a checkout of its own, which the daemon does not walk.

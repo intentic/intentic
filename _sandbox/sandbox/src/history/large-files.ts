@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import type { HistoryGitRunner } from "./history.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { readTextIfExists } from "@intentic/base/fs";
+import { commonExcludeOf, literalPattern, mirrorKeptHidden } from "../store/git/kept-hidden-excludes.js";
 
 // Files past this size stay out of history snapshots. A snapshot stores a full copy of every file it records, so a
 // folder of films dropped into /work (30 GB of them, once) was hashed and written a second time onto the history
@@ -21,16 +22,6 @@ const STAT_CONCURRENCY = 32;
 export const largeFilesList = (gitDir: string): string => join(gitDir, "info", "large-files");
 
 export const largeFilesConfig = (gitDir: string): readonly string[] => ["-c", `core.excludesFile=${largeFilesList(gitDir)}`];
-
-// A gitignore line matching exactly `path` (worktree-relative) and nothing else: anchored, every wildcard and escape
-// character escaped, trailing spaces kept. A name with a line break cannot be written as a pattern, and is recorded.
-export const literalPattern = (path: string): string | undefined => {
-    if (/[\n\r]/u.test(path)) {
-        return undefined;
-    }
-    const escaped = path.replaceAll(/[\\*?[\]!#]/gu, (char) => `\\${char}`).replace(/ +$/u, (spaces) => spaces.replaceAll(" ", "\\ "));
-    return `/${escaped}`;
-};
 
 const unescapePattern = (line: string): string => line.slice(1).replaceAll(/\\(.)/gu, "$1");
 
@@ -49,7 +40,7 @@ const nulList = (stdout: string): string[] => stdout.split("\0").filter((path) =
  * the copies already taken stay in older snapshots, and no new ones are made. A failure leaves the list as it was,
  * and the snapshot goes ahead without it.
  */
-export const leaveOutLargeFiles = async (
+const leaveOutLargeFiles = async (
     git: HistoryGitRunner,
     scope: { readonly name: string; readonly gitDir: string; readonly worktree: string },
     run: { readonly cwd: string; readonly env: Readonly<Record<string, string>> },
@@ -96,4 +87,26 @@ export const leaveOutLargeFiles = async (
     } catch (error) {
         logger.warn({ err: error, scope: scope.name }, "history: could not size up large files; snapshotting without leaving them out");
     }
+};
+
+/**
+ * Everything a snapshot of `scope` leaves out, brought up to date before its `add -A`: its large files, and in a
+ * project's scope the files a land kept hidden (store/git/kept-hidden-excludes.ts), which the root's scope gets from
+ * syncRootExcludes. Unmirrored, the snapshot would hash every one of them: thousands of build files, for minutes.
+ */
+export const leaveOutOfSnapshot = async (
+    git: HistoryGitRunner,
+    scope: { readonly name: string; readonly gitDir: string; readonly worktree: string },
+    run: { readonly cwd: string; readonly env: Readonly<Record<string, string>> },
+    logger: Logger,
+): Promise<void> => {
+    try {
+        const exclude = scope.name === "root" ? undefined : await commonExcludeOf(scope.worktree);
+        if (exclude !== undefined) {
+            await mirrorKeptHidden(exclude, join(scope.gitDir, "info", "exclude"));
+        }
+    } catch (error) {
+        logger.warn({ err: error, scope: scope.name }, "history: could not carry the files kept hidden onto the scope");
+    }
+    await leaveOutLargeFiles(git, scope, run, logger);
 };

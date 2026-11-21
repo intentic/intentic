@@ -420,7 +420,8 @@ it(`a lit You chip stays on screen after the last agent's work leaves, so cleari
     expect(buttonNamed(el, `Commit all`)).toBeInstanceOf(HTMLButtonElement);
 });
 
-// "Commit all" over nothing but scratch stages nothing, and git records nothing; the message the owner typed stays.
+// "Commit all" that records nothing (the daemon's own answer, here with scratch beside a change that moved away in the
+// meantime); the message the owner typed stays. Scratch alone no longer offers the press at all: it is not counted.
 it(`keeps the typed message and says so when a commit recorded nothing`, async () => {
     const el = await mount();
     const scratchOnly = {
@@ -431,11 +432,12 @@ it(`keeps the typed message and says so when a commit recorded nothing`, async (
         unstaged: [{ path: `debug.log`, status: `added` as const }],
         scratch: [{ path: `debug.log`, reason: `byproduct` as const }],
     };
-    await answer({ repos: [scratchOnly] });
+    const standing = { ...scratchOnly, unstaged: [...scratchOnly.unstaged, { path: `main.ts`, status: `modified` as const }] };
+    await answer({ repos: [standing] });
     commitMessage.value = `chore: keep this`;
     await settle();
     // As the daemon answers it: nothing recorded, and the repo's rows as they still stand.
-    commit.mockResolvedValueOnce({ committed: false, changes: scratchOnly });
+    commit.mockResolvedValueOnce({ committed: false, changes: standing });
     buttonNamed(el, `Commit all`)?.click();
     await settle();
     expect(indexRunStart).toHaveBeenCalledWith({ repo: `root`, op: `commit`, message: `chore: keep this`, target: {} });
@@ -607,4 +609,125 @@ test(`the normal Changes panel stages and commits in its selected branch`, async
     await settle();
     expect(indexRunStart).toHaveBeenCalledWith({ repo: `app`, op: `commit`, message: `feat: branch work`, target: {}, view });
     expect(useChanges().failures.value.size).toBe(0);
+});
+
+// A land once unhid ~5,000 build files. Each was a row of its own, the list stopped at 500, and the one decision the owner
+// had (delete the folder) took a scroll through thousands of names.
+const BUILD_BYTES = Math.round(1.2 * 1024 ** 3);
+const buildTree = (extra: Partial<GitChanges> = {}): GitChanges => ({
+    repos: [
+        {
+            repo: `root`,
+            branch: `main`,
+            conflicted: [],
+            staged: [],
+            unstaged: [
+                { path: `src/app.ts`, status: `modified` },
+                { path: `build/a.wasm`, status: `added` },
+                { path: `build/b.br`, status: `added` },
+            ],
+            // 4,992 files under build/: two listed, the rest cut by the daemon's own budget.
+            truncated: { staged: 0, unstaged: 4990 },
+            scratch: [{ path: `build/`, reason: `bulk`, files: 4992, bytes: BUILD_BYTES }],
+        },
+    ],
+    ...extra,
+});
+
+it(`offers no Commit all over scratch alone, which no save records`, async () => {
+    const el = await mount();
+    await answer({
+        repos: [
+            { repo: `root`, branch: `main`, conflicted: [], staged: [], unstaged: [{ path: `debug.log`, status: `added` }], scratch: [{ path: `debug.log`, reason: `byproduct` }] },
+        ],
+    });
+    expect(useChanges().count.value).toBe(0);
+    expect(buttonNamed(el, `Commit all`)).toBeUndefined();
+});
+
+it(`lists a scratch folder as one row with its size, its reason and a Delete, and counts only what a save records`, async () => {
+    const el = await mount();
+    await answer(buildTree());
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`build/`);
+    expect(text).toContain(`4,992 files · 1.2 GB`);
+    expect(text).toContain(`Too large to save with your changes`);
+    // Its files are not rows: neither the listed two nor the cut remainder.
+    expect(text).not.toContain(`a.wasm`);
+    expect(text).toContain(`app.ts`);
+    expect(buttonNamed(el, `Delete`)).toBeInstanceOf(HTMLButtonElement);
+    // src/app.ts alone: the folder accounts for every row the daemon cut.
+    expect(useChanges().count.value).toBe(1);
+});
+
+it(`asks with the folder's count and size, then discards exactly that folder's path`, async () => {
+    await mount();
+    await answer(buildTree());
+    buttons()
+        .find((button) => button.getAttribute(`aria-label`) === `Delete build/`)
+        ?.click();
+    await settle();
+    const text = document.body.textContent ?? ``;
+    expect(text).toContain(`Delete 4,992 files (1.2 GB) in build/?`);
+    expect(text).not.toContain(`a.wasm`);
+
+    buttons()
+        .find((button) => button.getAttribute(`aria-label`) === `Delete`)
+        ?.click();
+    await settle();
+    expect(discard).toHaveBeenCalledTimes(1);
+    expect(discard).toHaveBeenCalledWith({ repo: `root`, paths: [`build/`] }, { context: { gitView: {} } });
+});
+
+it(`a whole-repository discard counts the folder instead of naming its files`, async () => {
+    await mount();
+    await answer(buildTree());
+    buttons()
+        .find((button) => button.getAttribute(`aria-label`) === `Discard all changes in this repo`)
+        ?.click();
+    await settle();
+    const text = document.body.textContent ?? ``;
+    expect(text).toContain(`It also deletes 1 folder left out of saves (4,992 files · 1.2 GB).`);
+    expect(text).toContain(`1 file return`.replace(`return`, `returns`));
+    expect(text).not.toContain(`a.wasm`);
+});
+
+// The complaint: pressed, nothing for three minutes, pressed again after a reload. The daemon says it is running, so a
+// tab that never saw the press shows it, holds the presses and polls until it ends.
+it(`shows a discard the daemon reports, holds the presses for that repo, and sends no second request`, async () => {
+    const el = await mount();
+    await answer(buildTree({ discarding: [`root`] }));
+    expect(el.textContent).toContain(`Discarding… (taking a restore point first)`);
+    expect(useChanges().discarding.value).toEqual([`root`]);
+    const deleteFolder = buttons().find((button) => button.getAttribute(`aria-label`) === `Delete build/`);
+    expect(deleteFolder?.disabled).toBe(true);
+    deleteFolder?.click();
+    await settle();
+    expect(document.body.textContent).not.toContain(`Delete 4,992 files`);
+
+    await useChanges().discardGroups([{ repo: `root`, paths: [`build/`] }]);
+    expect(discard).not.toHaveBeenCalled();
+});
+
+it(`merges this tab's own running discard with the daemon's, and ignores a second press on the same repo`, async () => {
+    await mount();
+    await answer(buildTree());
+    let finish!: () => void;
+    discard.mockImplementationOnce(
+        () =>
+            new Promise<{ ok: true }>((resolve) => {
+                finish = () => resolve({ ok: true });
+            }),
+    );
+    const first = useChanges().discardGroups([{ repo: `root`, paths: [`build/`] }]);
+    await settle();
+    expect(useChanges().discarding.value).toEqual([`root`]);
+
+    await useChanges().discardGroups([{ repo: `root`, paths: [`build/`] }]);
+    expect(discard).toHaveBeenCalledTimes(1);
+
+    finish();
+    await first;
+    await settle();
+    expect(useChanges().discarding.value).toEqual([]);
 });
