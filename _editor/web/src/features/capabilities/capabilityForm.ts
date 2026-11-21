@@ -47,7 +47,9 @@ const splicedAtCaret = (current: string, event: ClipboardEvent, pasted: string):
 // Who already holds a name being added. Every tile's connections, not just the open one's: ids are one namespace and
 // the daemon's add is an upsert, so a name checked against the open tile alone let a Windows PC be saved over a Linux PC
 // of the same name, platform and all. `elsewhere` is that holder when it is another tile's, where the usual "open it
-// above" would point at nothing. Nothing is held while editing: the name is the connection's own.
+// above" would point at nothing. Nothing is held while editing: the name is the connection's own. Nor by the name this
+// form's own add went out under (`pressed`): the daemon lists a connection once it is stored, before its add finishes
+// streaming, so the list read mid-add holds the very connection being added.
 export interface NameHolder {
     readonly taken: boolean;
     readonly elsewhere: CapabilitySummary | undefined;
@@ -57,8 +59,9 @@ const nameHolder = (
     editing: CapabilitySummary | undefined,
     capabilities: readonly CapabilitySummary[],
     instances: readonly CapabilitySummary[],
+    pressed: string | undefined,
 ): NameHolder => {
-    const holder = editing === undefined ? capabilities.find((capability) => capability.id === name) : undefined;
+    const holder = editing === undefined && name !== pressed ? capabilities.find((capability) => capability.id === name) : undefined;
     const ownTile = holder !== undefined && instances.some((instance) => instance.id === holder.id);
     return { taken: holder !== undefined, elsewhere: ownTile ? undefined : holder };
 };
@@ -116,6 +119,31 @@ const linkedPicker =
         form.touched.clear();
     };
 
+// Fills the form from a registry pick in <PluginRegistryBrowse>, name included.
+const registryPicker =
+    (form: Pick<LinkedFill, `name` | `nameEdited` | `values`>) =>
+    (answers: { name: string; url: string; ref: string; path: string; token: string }): void => {
+        form.name.value = answers.name;
+        form.nameEdited.value = true;
+        Object.assign(form.values, { url: answers.url, ref: answers.ref, path: answers.path, token: answers.token });
+    };
+
+// The submit's press, under the name it is about to write: that name stays put (a suggestion would otherwise move on to
+// the next free one under the add) and stops counting as taken, since the list re-read mid-add lists it. A write that
+// failed hands it back, so a name the daemon turned out to hold for another connection is said as taken again; unless
+// the form has moved on to another press since, whose name is not this one's to hand back.
+const presser = (pressedAs: Ref<string | undefined>, nameEdited: Ref<boolean>) => ({
+    pressed: (id: string): void => {
+        pressedAs.value = id;
+        nameEdited.value = true;
+    },
+    unpressed: (id: string): void => {
+        if (pressedAs.value === id) {
+            pressedAs.value = undefined;
+        }
+    },
+});
+
 /**
  * Whether the open card is added by its own press (a linked sandbox's pairing, the fleet's Allow), so the form's by-hand
  * Add stays hidden: until the Advanced fold is opened or a pairing's answers are in the form, and never on an edit.
@@ -139,8 +167,11 @@ export const useCapabilityForm = (host: FormHost) => {
     // Repaired save name (spaces/punctuation to hyphens); every consumer of the name reads this, not the raw input.
     const savedName = computed(() => cleanName(name.value));
     const namePreview = computed(() => (savedName.value !== `` && savedName.value !== name.value.trim() ? savedName.value : undefined));
+    // The name this form's add went out under (presser), until the form is seeded again: counted as a collision with
+    // itself, every add said "already exists" under its own name from the moment the daemon stored it (2026-11-21).
+    const pressedAs = ref<string>();
     // A typed name that matches an existing connection, on any tile, is refused rather than silently overwritten.
-    const nameHeld = computed(() => nameHolder(savedName.value, editing.value, capabilities.value, instances.value));
+    const nameHeld = computed(() => nameHolder(savedName.value, editing.value, capabilities.value, instances.value, pressedAs.value));
     const nameCollision = computed(() => nameHeld.value.taken);
     const nameProblem = computed(() => nameError(name.value));
     const values = reactive<FormValues>({});
@@ -174,6 +205,7 @@ export const useCapabilityForm = (host: FormHost) => {
     const clear = (): void => {
         name.value = ``;
         nameEdited.value = false;
+        pressedAs.value = undefined;
         for (const bag of [values, pasteNotes]) {
             for (const key of Object.keys(bag)) {
                 delete bag[key];
@@ -317,15 +349,7 @@ export const useCapabilityForm = (host: FormHost) => {
                 Object.assign(values, preset.grants);
             }
         },
-        // Fills the form from a registry pick in <PluginRegistryBrowse>.
-        applyRegistryPick: (answers: { name: string; url: string; ref: string; path: string; token: string }): void => {
-            name.value = answers.name;
-            nameEdited.value = true;
-            values[`url`] = answers.url;
-            values[`ref`] = answers.ref;
-            values[`path`] = answers.path;
-            values[`token`] = answers.token;
-        },
+        applyRegistryPick: registryPicker({ name, nameEdited, values }),
         // Fills the form from an imported FortiClient connection, whose credentials FortiClient encrypts: `needs` marks
         // what still needs typing, and an open edit's old password must not silently apply to the imported gateway.
         pickForticlient: (connection: ForticlientConnection): void => {
@@ -369,6 +393,7 @@ export const useCapabilityForm = (host: FormHost) => {
                 shaking.value = true;
             });
         },
+        ...presser(pressedAs, nameEdited),
         // A pending add is the one path that leaves the form up, so it resets down to the next free name.
         startOver: (entry: CapabilityCatalogEntry): void => {
             clear();

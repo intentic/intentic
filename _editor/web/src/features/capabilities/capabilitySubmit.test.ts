@@ -183,6 +183,42 @@ describe(`an add`, () => {
         expect(failure.value).toEqual({ tone: `danger`, title: `Could not add the capability.`, detail: `host key verification failed` });
         expect(walk.leaveTile.mock.calls).toEqual([]);
     });
+
+    // 2026-11-21: the daemon stores the connection, and the page re-reads the list, before the add's stream ends; the
+    // form read its own add as a second connection under that name ("already exists"), as if Add had gone out twice.
+    it(`never calls its own connection, listed while the add still writes, a taken name`, async () => {
+        const { form, add, submit, walk, state } = submitOn(SSH, { state: `active` });
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
+        // Typed, as a pairing's card id is: a name nobody chose would follow the list instead of colliding.
+        form.name.value = `ops`;
+        form.nameEdited.value = true;
+        let land: () => void = () => undefined;
+        add.mockImplementationOnce(async (input) => {
+            state.capabilities.value = [connection(input.id, input.kind, input.config, { state: `active` })];
+            await new Promise<void>((resolve) => (land = resolve));
+        });
+
+        const pressed = submit();
+        expect([add.mock.calls.length, form.nameCollision.value, form.name.value]).toEqual([1, false, `ops`]);
+
+        land();
+        await pressed;
+        expect([form.nameCollision.value, walk.leaveTile.mock.calls]).toEqual([false, [[`docker`]]]);
+    });
+
+    it(`says the name is taken once an add that stored it failed, since the connection is there to open`, async () => {
+        const { form, add, submit, state } = submitOn(SSH, { state: `active` });
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
+        form.name.value = `ops`;
+        add.mockImplementationOnce(async (input) => {
+            state.capabilities.value = [connection(input.id, input.kind, input.config, { state: `error` })];
+            throw new Error(`apply failed`);
+        });
+
+        await submit();
+
+        expect(form.nameCollision.value).toBe(true);
+    });
 });
 
 describe(`an edit`, () => {

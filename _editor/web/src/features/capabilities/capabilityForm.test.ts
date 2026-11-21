@@ -207,6 +207,46 @@ describe(`the name`, () => {
         expect(form.nameHeld.value).toEqual({ taken: true, elsewhere: undefined });
         expect(takenNameWords(`office`, form.nameHeld.value, [VPN])).toBe(`"office" already exists: open it above to change it, or pick another name.`);
     });
+
+    // 2026-11-21: the daemon lists a connection once it is stored, before its add's stream ends, so the list read mid-add
+    // held the very connection being added: every add said "already exists" under its own name until the page moved on,
+    // as if the press had gone out twice, and a name nobody typed slid to the next free one under it.
+    it(`is no collision with the add it went out under, mid-write or landed, until a fresh form`, async () => {
+        const { state, form } = formOn(VPN);
+        expect(form.name.value).toBe(`vpn`);
+
+        form.pressed(`vpn`);
+        listed(state, [connection(`vpn`, `vpn`, { provider: `wireguard` })]);
+        await nextTick();
+        expect([form.name.value, form.nameCollision.value, form.nameHeld.value.taken]).toEqual([`vpn`, false, false]);
+
+        // Another connection's name is still refused; coming back to the pressed one is not.
+        form.name.value = `office`;
+        listed(state, [...state.capabilities.value, office]);
+        expect(form.nameCollision.value).toBe(true);
+        form.name.value = `vpn`;
+        expect(form.nameCollision.value).toBe(false);
+
+        form.startOver(VPN);
+        expect(form.name.value).toBe(`vpn-2`);
+        form.name.value = `vpn`;
+        expect(form.nameCollision.value).toBe(true);
+    });
+
+    it(`says the name is taken again once the write it went out under failed, unless another press has it now`, () => {
+        const { state, form } = formOn(VPN);
+        listed(state, [office]);
+        form.name.value = `office`;
+
+        form.pressed(`office`);
+        expect(form.nameCollision.value).toBe(false);
+        form.unpressed(`office`);
+        expect(form.nameCollision.value).toBe(true);
+
+        form.pressed(`office`);
+        form.unpressed(`elsewhere`);
+        expect(form.nameCollision.value).toBe(false);
+    });
 });
 
 describe(`a box's objections`, () => {

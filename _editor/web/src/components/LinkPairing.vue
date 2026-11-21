@@ -130,7 +130,9 @@ const pair = async (): Promise<void> => {
             <div class="flex flex-col gap-3">
                 <p class="text-2xs text-subtle">{{ t(`capabilities.linkPairing.explain`) }}</p>
                 <p v-if="others.length === 0" class="text-xs text-muted">{{ t(`capabilities.linkPairing.noOthers`) }}</p>
-                <form v-else class="flex flex-col gap-3" @submit.prevent="pair">
+                <!-- Stopped here: on the Capabilities page this sits inside the card's own form, and a submit bubbles, so one
+                     press of Link also pressed that form's Add with nothing in it yet (refused, its fold flung open in red). -->
+                <form v-else class="flex flex-col gap-3" @submit.prevent.stop="pair">
                     <div class="flex flex-wrap items-center gap-2">
                         <Picker
                             v-model="farId"

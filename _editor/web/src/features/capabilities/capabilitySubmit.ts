@@ -40,7 +40,10 @@ export interface SubmitHost {
     readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
     readonly editing: Readonly<Ref<CapabilitySummary | undefined>>;
     readonly capabilities: Readonly<Ref<readonly CapabilitySummary[]>>;
-    readonly form: Pick<CapabilityForm, `values` | `keptSecrets` | `savedName` | `attempted` | `canSubmit` | `touchAll` | `refuse` | `startOver`>;
+    readonly form: Pick<
+        CapabilityForm,
+        `values` | `keptSecrets` | `savedName` | `attempted` | `canSubmit` | `touchAll` | `refuse` | `startOver` | `pressed` | `unpressed`
+    >;
     // The streamed apply (useCapabilities.add): each frame as it arrives, throwing on an error frame.
     readonly add: (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => Promise<void>;
     readonly walk: Pick<ReturnType<typeof useSetupWalk>, `onwardFrom` | `leaveTile`>;
@@ -125,6 +128,9 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
         const wasEditing = editing.value !== undefined;
         // Decided against the walk's queue before this add removes the tile from it.
         const next = walk.onwardFrom(entry);
+        // The daemon lists the connection once it is stored, before the add's stream ends: the form's own name is no
+        // collision while it writes, nor after it landed, until the page moves on.
+        form.pressed(input.id);
         const ended = await save.run({
             what: wasEditing ? t(`capabilities.capabilitySubmit.saving`, { name: input.id }) : t(`capabilities.capabilitySubmit.adding`, { name: input.id }),
             failed: (caught) =>
@@ -147,6 +153,7 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
             },
         });
         if (ended?.state !== `done`) {
+            form.unpressed(input.id);
             return;
         }
         // A key made for this form is spent once the connection is saved with it (SshKeyField keeps it until then).
