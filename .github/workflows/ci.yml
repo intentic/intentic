@@ -22,12 +22,18 @@ on:
         description: Build and push the web image under a CI-only tag, without deploying
         type: boolean
         default: false
+      # Set by the `autofix` job after it pushes a fix, never by hand: GitHub starts no run for that push (see autofix).
+      before:
+        description: Measure and release main as a push from this commit would (the autofix job sets it after pushing a fix)
+        type: string
+        default: ''
 
-# Supersede PR runs, but give main pushes per-SHA workflow groups so they neither cancel nor queue behind each other's releases.
+# Supersede PR runs, but give main pushes (and the run autofix dispatches for its fix, which stands in for a push) per-SHA
+# workflow groups so they neither cancel nor queue behind each other's releases.
 # Measurement jobs cancel per ref/job; publishing/deploy jobs remain uninterrupted and require successful gates, never cancelled ones.
 # Serialize releases with the release job's own concurrency group. Fast push bursts may measure only the newest commit.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'push' || inputs.before != '') && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The DEFAULT every job inherits is read-only on both counts: `packages: read` is what pulling a ghcr
@@ -173,7 +179,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_PR: ${{ github.event.pull_request.base.sha }}
-          BASE_PUSH: ${{ github.event.before }}
+          BASE_PUSH: ${{ github.event.before || inputs.before }}
           HEAD_SHA: ${{ github.sha }}
           REF: ${{ github.ref }}
         run: |
@@ -335,12 +341,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_PR: ${{ github.event.pull_request.base.sha }}
-          BASE_PUSH: ${{ github.event.before }}
+          BASE_PUSH: ${{ github.event.before || inputs.before }}
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
             pull_request) base="$BASE_PR" ;;
-            push) base="$BASE_PUSH" ;;
+            push | workflow_dispatch) base="$BASE_PUSH" ;;
             *) base="" ;;
           esac
           if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
@@ -382,8 +388,13 @@ jobs:
   # (`continue-on-error`, and every step ends 0), so a fixer that broke costs a missing fix and nothing else.
   #
   # The push uses this job's GITHUB_TOKEN with `contents: write`, the only write in this file outside the
-  # publishers. GitHub starts no workflow run from a GITHUB_TOKEN push, so the fix commit is never measured by
-  # CI on its own and cannot start this job again; the next human push's run measures it with everything else. The
+  # publishers. GitHub starts no workflow run from a GITHUB_TOKEN push, and the push leaves main ahead of the commit
+  # this run measured, so this run's release plan finds main moved and publishes nothing. Left there, a green push
+  # whose formatting needed fixing released nothing until somebody pushed again (v1.429.0 sat for a day that way,
+  # run 44899062439). So after the push the job dispatches this workflow at main (`actions: write`; a dispatch is the
+  # one event GITHUB_TOKEN may start a run with) and hands it the push's own `before`: that run measures the whole
+  # push plus the fix from the same base, and the gates below that publish on a push publish on it too. It never
+  # loops: this job runs on a push only, so the dispatched run fixes nothing and dispatches nothing. The
   # checkout keeps no credential (`persist-credentials: false`, as zizmor's artipacked rule asks of every checkout
   # but release.yml's two): the token reaches git only on the push's own command line, as a header it does not
   # write anywhere, in the one step that pushes.
@@ -399,6 +410,7 @@ jobs:
     timeout-minutes: 15
     continue-on-error: true
     permissions:
+      actions: write
       contents: write
       packages: read
     container:
@@ -468,6 +480,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FIXED: ${{ github.sha }}
+          BEFORE: ${{ github.event.before }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -uo pipefail
@@ -483,6 +496,14 @@ jobs:
           git diff --stat HEAD^ HEAD | tee -a "$GITHUB_STEP_SUMMARY"
           if git -c "$header" push "$remote" "HEAD:refs/heads/main"; then
             echo "pushed $(git rev-parse --short HEAD) \`style: apply formatters (CI)\` onto ${FIXED:0:9}" | tee -a "$GITHUB_STEP_SUMMARY"
+            if curl --fail --silent --show-error --request POST \
+              --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/vnd.github+json" \
+              --data "{\"ref\":\"main\",\"inputs\":{\"before\":\"$BEFORE\"}}" \
+              "https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/dispatches"; then
+              echo "dispatched CI at main from ${BEFORE:0:9}: that run measures this push with the fix, and releases it" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "the fix is on main but dispatching its CI run failed, so nothing releases it until the next push (or run CI at main by hand with \`before\` = ${BEFORE})" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "the push was refused (main moved, or a protection rule refuses this token), so the fix is not on main" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
@@ -576,12 +597,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_PR: ${{ github.event.pull_request.base.sha }}
-          BASE_PUSH: ${{ github.event.before }}
+          BASE_PUSH: ${{ github.event.before || inputs.before }}
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "pull_request" ]; then
             base="$BASE_PR"
-          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$BASE_PUSH" ]; then
             base=$(git merge-base origin/main HEAD)
             if [ "$base" = "$(git rev-parse HEAD)" ]; then
               base=$(git rev-parse HEAD^)
@@ -1478,7 +1499,7 @@ jobs:
   images:
     needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
@@ -1548,7 +1569,7 @@ jobs:
   images-dry:
     needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images-recipe == 'true'
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
       && !(needs.preflight.result == 'success'
@@ -1610,7 +1631,7 @@ jobs:
     # Gated on preflight and the release the way `images` is: the release's sandbox-arm64 builds this half on a
     # releasing push.
     if: |
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
@@ -1740,7 +1761,7 @@ jobs:
   images-platform:
     needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, e2e-compat, netd-check]
     if: |
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
       && needs.preflight.result == 'success'
       && needs.migrations.result == 'success'
@@ -1861,7 +1882,7 @@ jobs:
   release:
     needs: [preflight, verify-core, verify-providers, verify-machine, netd-check, ci-base, ci-desktop]
     if: |
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-providers.result == 'success'

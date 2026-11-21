@@ -110,7 +110,8 @@ finding and never runs typecheck, build or test (`pnpm verify` does, by hand). I
 `_tools/checks/manifest.mjs` lists in `CI_BLOCKING` (lockfile, workflow policy, release inputs, wire contract, shell
 quoting and the rest, each with its reason) fails the job; every other finding, lint and the ratchet included, becomes
 an annotation and a step-summary block, and main's `autofix` job commits the mechanical fixes (rustfmt, `oxlint --fix`)
-as `style: apply formatters (CI)`.
+as `style: apply formatters (CI)`, then dispatches a CI run for it, which measures and releases that push in
+place of the run the fix moved main ahead of.
 
 When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches the default
 branch of every workspace repository mapped to a connected GitHub or GitLab account. A failure streak begins at the
