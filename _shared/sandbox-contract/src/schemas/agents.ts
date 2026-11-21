@@ -84,6 +84,9 @@ export type AgentActivity = z.infer<typeof AgentActivitySchema>;
 export const AgentChecklistSchema = z.object({
     done: z.number().describe("Items it has completed."),
     total: z.number().describe("Items on the list. Never zero: a conversation that kept no list carries no clause at all."),
+    // Optional because only the live list knows it: the reading kept across a daemon restart (`unfinished.steps`)
+    // counts what was left open, not what was in hand.
+    doing: z.number().optional().describe("Items it has marked in progress and not yet completed. Absent when nothing is, or when the list was read back after a restart."),
 });
 export type AgentChecklist = z.infer<typeof AgentChecklistSchema>;
 // Which "needs you" flags are raised, the fleet badge aggregates these across all agents.

@@ -113,7 +113,7 @@ describe(`the header and the rail`, () => {
         const working: readonly AgentStatus[] = [`running`, `resuming`, `landing`];
         const quiet: readonly AgentStatus[] = [`idle`, `stopped`, `landed`, `stopping`];
         expect(working.map(title)).toEqual([`text-link`, `text-link`, `text-link`]);
-        expect(title(`awaiting`)).toBe(`text-accent`);
+        expect(title(`awaiting`)).toBe(`text-info`);
         expect(title(`error`)).toBe(`text-danger`);
         expect(quiet.map(title)).toEqual([``, ``, ``, ``]);
     });

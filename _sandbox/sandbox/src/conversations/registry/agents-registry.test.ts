@@ -2370,7 +2370,8 @@ describe("agents registry", () => {
                     kind: "frame",
                     frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]),
                 });
-                expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
+                // `doing` is what lets the rim mark the item in hand; it stays off a list with nothing in progress.
+                expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3, doing: 1 });
             });
 
             it("reads a settled turn's completed list as whole", async () => {

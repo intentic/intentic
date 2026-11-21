@@ -50,8 +50,9 @@ export const statusIcon = (status: ConversationStatus): StatusGlyph => {
     if (status === `streaming`) {
         return { name: `spinner`, spin: true, class: `text-2xs text-link` };
     }
+    // The card corner's ink for the same ask (agentStatusMeta): info blue, apart from a working gold.
     if (status === `awaiting`) {
-        return { name: `exclamation-circle`, class: `text-2xs text-accent` };
+        return { name: `exclamation-circle`, class: `text-2xs text-info` };
     }
     if (status === `error`) {
         return { name: `exclamation-triangle`, class: `text-2xs text-danger` };
@@ -83,7 +84,7 @@ export const statusTabClass = (status: ConversationStatus): string => {
         return `text-link`;
     }
     if (status === `awaiting`) {
-        return `text-accent`;
+        return `text-info`;
     }
     if (status === `error`) {
         return `text-danger`;

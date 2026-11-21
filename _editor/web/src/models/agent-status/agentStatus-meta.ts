@@ -39,7 +39,9 @@ const statusMeta = () =>
         // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
         // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
         landing: { icon: `spinner`, spin: true, label: useVocabulary().value.landing, class: `text-link` },
-        awaiting: { icon: `exclamation-circle`, label: t(`shared.needs`), class: `text-accent` },
+        // Info blue, not the accent: the accent is also what a running card's gold says, and a card that waits on the
+        // reader must read apart from one at work, here and on its rim (tileRim) alike.
+        awaiting: { icon: `exclamation-circle`, label: t(`shared.needs`), class: `text-info` },
         landed: { icon: `check-circle`, label: useVocabulary().value.landed, class: `text-success` },
         // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
         // attention hue, since the user chose this.

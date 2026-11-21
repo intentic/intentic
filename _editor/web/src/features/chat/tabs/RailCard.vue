@@ -106,8 +106,7 @@ const chipHint = computed((): Tip | undefined =>
                 >
                     <SegmentRing
                         v-if="rim !== undefined"
-                        :segments="rim.segments"
-                        :filled="rim.filled"
+                        v-bind="rim.ring"
                         :size="24"
                         :stroke="1.5"
                         class="absolute inset-0 size-full"

@@ -586,51 +586,96 @@ describe("a spent allowance", () => {
 // render from it and may not disagree.
 describe(`tileRim`, () => {
     const at = (over: Partial<RimAgent> = {}): RimAgent => ({ status: `idle`, attention: none, ...over });
+    const ring = (over: Partial<RimAgent> = {}) => tileRim(at(over), { quiet: false }).ring;
 
     // THE COMPLAINT THIS ANSWERS: a finished session that kept no list wore a context arc, half-empty, and read as
-    // unfinished in a lane of finished work. No list is one segment, the session's own ending.
+    // unfinished in a lane of finished work. No list is one item, the work itself, lit once the card is finished.
     it(`closes a finished session's rim whole when it kept no list`, () => {
-        expect(tileRim(at(), { quiet: false })).toEqual({ segments: 1, filled: 1, tone: `text-accent` });
+        expect(tileRim(at(), { quiet: false })).toEqual({
+            ring: { segments: 1, filled: 1, active: 0, asking: false, seal: `closed` },
+            tone: `text-accent`,
+        });
     });
 
-    it(`leaves a listless rim open while the session works or has not started`, () => {
-        expect(tileRim(at({ status: `running` }), { quiet: false })).toMatchObject({ segments: 1, filled: 0 });
-        expect(tileRim(at({ status: `draft` }), { quiet: false })).toMatchObject({ segments: 1, filled: 0 });
+    it(`holds a listless session's work in hand while a turn works on it, and nothing before it starts`, () => {
+        expect(ring({ status: `running` })).toMatchObject({ segments: 1, filled: 0, active: 1, seal: `open` });
+        expect(ring({ status: `draft` })).toMatchObject({ segments: 1, filled: 0, active: 0, seal: `open` });
     });
 
-    // A rim closes on the card filing in Finished, not on the turn merely resting: a parked question, a stop and a
-    // break all rest, and none of them is finished work.
-    it(`leaves the rim open on a card that waits on the reader`, () => {
-        expect(tileRim(at({ status: `awaiting` }), { quiet: false })).toMatchObject({ filled: 0 });
-        expect(tileRim(at({ status: `stopped` }), { quiet: false })).toMatchObject({ filled: 0 });
-        expect(tileRim(at({ status: `error`, checklist: { done: 2, total: 2 } }), { quiet: false })).toMatchObject({ segments: 3, filled: 2 });
+    // A card that broke, was stopped or waits for its time is not at work: a part-lit rim there read as running. The
+    // daemon keeps the list's last marks, so `doing` is still set on such a card and must be ignored.
+    it(`holds nothing in hand on a card no turn is working on`, () => {
+        for (const status of [`error`, `stopped`, `interrupted`] as const) {
+            expect(ring({ status })).toMatchObject({ active: 0, seal: `open` });
+            expect(ring({ status, checklist: { done: 2, total: 5, doing: 1 } })).toMatchObject({ filled: 2, active: 0 });
+            expect(ring({ status, checklist: { done: 2, total: 2 } })).toMatchObject({ filled: 2, seal: `open` });
+        }
     });
 
     it(`draws a receipt's rim in quiet ink`, () => {
         expect(tileRim(at(), { quiet: true }).tone).toBe(`text-subtle`);
     });
 
-    // ITEMS PLUS ONE, AND THE LAST IS THE SESSION'S OWN ENDING. A list emptied by a turn still running leaves one
-    // segment bare; only the finished card closes the ring.
-    it(`holds the last segment back until the session is finished`, () => {
+    // ONE SEGMENT PER ITEM: five items are five ticks, and the session's ending is the seal, not a sixth.
+    it(`keeps one segment per item, the item in hand part-lit`, () => {
+        expect(ring({ status: `running`, checklist: { done: 2, total: 5, doing: 1 } })).toEqual({
+            segments: 5,
+            filled: 2,
+            active: 1,
+            asking: false,
+            seal: `open`,
+        });
+    });
+
+    // An older daemon sends no `doing`, and a list between items has nothing marked: no item reads as in hand.
+    it(`marks nothing in hand that the agent did not mark`, () => {
+        expect(ring({ status: `running`, checklist: { done: 2, total: 5 } })).toMatchObject({ active: 0 });
+    });
+
+    // WORKING AND ASKED READ APART: the same item, in the info ink while the session waits on an answer.
+    it(`says when the item in hand waits on the reader`, () => {
+        expect(ring({ status: `awaiting`, checklist: { done: 2, total: 5, doing: 1 } })).toMatchObject({ active: 1, asking: true });
+        expect(ring({ status: `running`, attention: { ...none, permission: true }, checklist: { done: 2, total: 5, doing: 1 } })).toMatchObject({
+            asking: true,
+        });
+    });
+
+    // Asked between items, the next one is what the answer holds up.
+    it(`holds the next item in hand while it asks with nothing marked`, () => {
+        expect(ring({ status: `awaiting`, checklist: { done: 2, total: 5 } })).toMatchObject({ filled: 2, active: 1, asking: true });
+    });
+
+    // A rim seals on the card filing in Finished, not on the turn merely resting: a parked question, a stop and a
+    // break all rest, and none of them is finished work.
+    it(`leaves the seal open on a card that is not finished`, () => {
+        expect(ring({ status: `awaiting` })).toMatchObject({ filled: 0, seal: `open` });
+        expect(ring({ status: `stopped` })).toMatchObject({ filled: 0, seal: `open` });
+        expect(ring({ status: `error`, checklist: { done: 2, total: 2 } })).toMatchObject({ segments: 2, filled: 2, seal: `open` });
+    });
+
+    // A list emptied by a turn still running is wrap-up: the seal is what is in hand, in the info ink if it asks.
+    it(`holds the seal in hand once the list is done and the session is not`, () => {
         const whole = { checklist: { done: 3, total: 3 } };
-        expect(tileRim(at({ ...whole, status: `running` }), { quiet: false })).toMatchObject({ segments: 4, filled: 3 });
-        expect(tileRim(at({ ...whole, status: `idle` }), { quiet: false })).toMatchObject({ segments: 4, filled: 4 });
+        expect(ring({ ...whole, status: `running` })).toEqual({ segments: 3, filled: 3, active: 0, asking: false, seal: `active` });
+        expect(ring({ ...whole, status: `awaiting` })).toMatchObject({ seal: `active`, asking: true });
+        expect(ring({ ...whole, status: `idle` })).toMatchObject({ segments: 3, filled: 3, seal: `closed` });
     });
 
     // A land spends no model and has no list left to move, and files in Finished from the press (laneOf).
     it(`counts a landing card as finished`, () => {
-        expect(tileRim(at({ checklist: { done: 2, total: 2 }, status: `landing` }), { quiet: false })).toMatchObject({ segments: 3, filled: 3 });
+        expect(ring({ checklist: { done: 2, total: 2 }, status: `landing` })).toMatchObject({ segments: 2, filled: 2, seal: `closed` });
     });
 
-    // A partly-done list on a finished card is the one gap Finished should show: the list was left short.
-    it(`leaves a finished but unfinished list short of its last two segments`, () => {
-        expect(tileRim(at({ checklist: { done: 2, total: 3 } }), { quiet: false })).toMatchObject({ segments: 4, filled: 2 });
+    // A partly-done list on a finished card: the session ended, so the seal closes, and the open ticks say the list was
+    // left short. Nothing is in hand on finished work, whatever the list was last marked.
+    it(`seals a finished card whose list was left short, showing what was left`, () => {
+        expect(ring({ checklist: { done: 2, total: 3, doing: 1 } })).toEqual({ segments: 3, filled: 2, active: 0, asking: false, seal: `closed` });
     });
 
-    // The daemon promises done <= total; a frame that broke it would otherwise light more segments than exist.
+    // The daemon promises done <= total and doing <= what is left; a frame that broke either would light more than exists.
     it(`cannot light more segments than the list has`, () => {
-        expect(tileRim(at({ checklist: { done: 9, total: 3 } }), { quiet: false })).toMatchObject({ segments: 4, filled: 4 });
+        expect(ring({ checklist: { done: 9, total: 3 } })).toMatchObject({ segments: 3, filled: 3 });
+        expect(ring({ status: `running`, checklist: { done: 2, total: 3, doing: 4 } })).toMatchObject({ filled: 2, active: 1 });
     });
 });
 

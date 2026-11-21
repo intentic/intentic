@@ -33,7 +33,11 @@ const cacheClock = (state: ConversationState | undefined): AgentSummary["promptC
 const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined): AgentChecklist | undefined => {
     const live = state?.turn.checklist;
     if (live !== undefined) {
-        return live.length === 0 ? undefined : { done: live.filter((item) => item.status === "completed").length, total: live.length };
+        if (live.length === 0) {
+            return undefined;
+        }
+        const doing = live.filter((item) => item.status === "in_progress").length;
+        return { done: live.filter((item) => item.status === "completed").length, total: live.length, ...opt("doing", doing > 0 ? doing : undefined) };
     }
     // The only reading that survives a daemon restart, and only for a turn that ended with work open: `unfinished` is
     // persisted, the runtime list is not.

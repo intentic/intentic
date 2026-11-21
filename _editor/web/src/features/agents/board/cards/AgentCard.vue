@@ -315,8 +315,8 @@ const diffShown = computed(() => !maker.value && props.agent.diff !== undefined 
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The tile's glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
 // a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
-// `tileRim` draws one reading on it: the agent's own checklist, plus a segment for the session's ending, which is the
-// whole rim for a session that kept no list. Context and cost stay off it: a fill percentage drawn as an arc read as
+// `tileRim` draws one reading on it: the agent's own checklist, a segment per item with the one in hand marked, and a
+// bead for the session's ending. Context and cost stay off it: a fill percentage drawn as an arc read as
 // unfinished work on every finished card, and "$3.26 of what?" has no denominator to draw against.
 // Plain ink on a receipt, where the reading is history rather than a live gauge.
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
@@ -610,8 +610,8 @@ const grab = (event: PointerEvent): void => {
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
             <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
             <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center self-start rounded-full">
-                <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`); `size-full` so it scales with the rem-sized tile under a larger browser font instead of the glyph spilling onto it. -->
-                <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0 size-full" :class="rim.tone" />
+                <!-- A tick per checklist item, the one in hand part-lit (blue while it asks you), and the session's ending as a bead at 12 o'clock, closed once it is finished (`tileRim`); `size-full` so it scales with the rem-sized tile under a larger browser font instead of the glyph spilling onto it. -->
+                <SegmentRing v-bind="rim.ring" :size="22" :stroke="1.5" class="absolute inset-0 size-full" :class="rim.tone" />
                 <IdentityTile :session="agent" :children="family ?? null" class="h-4.5 w-4.5 text-xs" />
             </span>
             <input
