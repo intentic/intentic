@@ -53,7 +53,10 @@ pub fn find(skip: &[String]) -> Option<Found> {
     };
     for entry in dir.flatten() {
         let name = entry.file_name();
-        let Some(pid) = name.to_str().filter(|n| n.bytes().all(|b| b.is_ascii_digit())) else {
+        let Some(pid) = name
+            .to_str()
+            .filter(|n| n.bytes().all(|b| b.is_ascii_digit()))
+        else {
             continue;
         };
         let Some(uid) = owner(&entry.path()) else {
@@ -185,7 +188,10 @@ mod tests {
             Some("/run/user/1000/gdm/Xauthority")
         );
         assert!(!env.contains_key("HOME"));
-        assert!(!env.contains_key("WAYLAND_DISPLAY"), "an empty value says nothing");
+        assert!(
+            !env.contains_key("WAYLAND_DISPLAY"),
+            "an empty value says nothing"
+        );
     }
 
     #[test]

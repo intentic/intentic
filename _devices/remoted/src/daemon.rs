@@ -10,8 +10,8 @@ use std::time::Instant;
 use tokio::sync::watch;
 
 use crate::config::{Config, UplinkConfig};
-use crate::status::{Person, PersonKind, Status};
 use crate::media::Screens;
+use crate::status::{Person, PersonKind, Status};
 use crate::term::Terminals;
 use crate::term::socket::{DROPPED, Gate, Revocation};
 use crate::token::{self, Claims, Refused};
@@ -293,7 +293,9 @@ impl Daemon {
                 let closed = self.revoke(|open| {
                     open.uplink == id && matches!(open.kind, PersonKind::View | PersonKind::Control)
                 });
-                log::info!("uplink {id}: watching screens switched off ({closed} viewer(s) closed)");
+                log::info!(
+                    "uplink {id}: watching screens switched off ({closed} viewer(s) closed)"
+                );
             }
         }
     }

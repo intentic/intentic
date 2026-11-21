@@ -50,10 +50,16 @@ impl DupOut for PipeOut {
         let _ = self.pipe.send(&FromHelper::Fallback { id: self.id, why });
     }
     fn cursor(&self, cursor: MediaCursor) {
-        let _ = self.pipe.send(&FromHelper::Cursor { id: self.id, cursor });
+        let _ = self.pipe.send(&FromHelper::Cursor {
+            id: self.id,
+            cursor,
+        });
     }
     fn status(&self, status: CaptureStatus) {
-        let _ = self.pipe.send(&FromHelper::Status { id: self.id, status });
+        let _ = self.pipe.send(&FromHelper::Status {
+            id: self.id,
+            status,
+        });
     }
 }
 
@@ -160,10 +166,16 @@ pub fn serve(pipe: Arc<Pipe>, peer: u32, options: &Options) -> Result<(), String
                 version: options.version.clone(),
             })?;
             if protocol != PROTOCOL {
-                return Err(format!("process {peer} speaks protocol {protocol}, this helper {PROTOCOL}"));
+                return Err(format!(
+                    "process {peer} speaks protocol {protocol}, this helper {PROTOCOL}"
+                ));
             }
         }
-        other => return Err(format!("process {peer} began with {other:?} rather than a hello")),
+        other => {
+            return Err(format!(
+                "process {peer} began with {other:?} rather than a hello"
+            ));
+        }
     }
     // SAFETY: a handle on the client's process, to duplicate mirrors into; closed below.
     let process = unsafe { OpenProcess(PROCESS_DUP_HANDLE, false, peer) }
@@ -231,10 +243,25 @@ pub fn serve(pipe: Arc<Pipe>, peer: u32, options: &Options) -> Result<(), String
 }
 
 /// Starts duplicating `monitor` and duplicates its mirror's handle into the client's process.
-fn open(pipe: &Arc<Pipe>, process: HANDLE, id: u64, monitor: &str) -> Result<(Running, u64, (u32, u32)), String> {
-    let display = crate::displays::find(monitor).ok_or_else(|| format!("no monitor {monitor} here"))?;
-    let out = Arc::new(PipeOut { pipe: pipe.clone(), id });
-    let started = capture::start(&display, out, Arc::new(Mutex::new(CursorState::default())), true).map_err(|e| match e {
+fn open(
+    pipe: &Arc<Pipe>,
+    process: HANDLE,
+    id: u64,
+    monitor: &str,
+) -> Result<(Running, u64, (u32, u32)), String> {
+    let display =
+        crate::displays::find(monitor).ok_or_else(|| format!("no monitor {monitor} here"))?;
+    let out = Arc::new(PipeOut {
+        pipe: pipe.clone(),
+        id,
+    });
+    let started = capture::start(
+        &display,
+        out,
+        Arc::new(Mutex::new(CursorState::default())),
+        true,
+    )
+    .map_err(|e| match e {
         Open::Unsupported(why) => format!("desktop duplication is not offered here ({why})"),
         Open::Failed(why) => why,
     })?;
@@ -260,7 +287,11 @@ fn open(pipe: &Arc<Pipe>, process: HANDLE, id: u64, monitor: &str) -> Result<(Ru
 }
 
 /// Types an event on `monitor`'s input thread, started on first use with the monitor's place on the desktop.
-fn type_input(inputs: &Mutex<HashMap<String, cast_core::input::Input>>, monitor: &str, ev: InputEvent) {
+fn type_input(
+    inputs: &Mutex<HashMap<String, cast_core::input::Input>>,
+    monitor: &str,
+    ev: InputEvent,
+) {
     let mut inputs = inputs.lock();
     if !inputs.contains_key(monitor) {
         let Some(display) = crate::displays::find(monitor) else {
@@ -298,8 +329,8 @@ fn same_secret(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::proto::WireMods;
+    use super::*;
 
     fn key(client: u64, key: &str, code: &str, action: KeyAction) -> Input {
         Input::Key {
@@ -316,15 +347,39 @@ mod tests {
     #[test]
     fn ctrl_alt_delete_is_a_secure_attention_sequence() {
         let mut chord = Chord::default();
-        assert_eq!(chord.judge(&key(1, "Control", "ControlLeft", KeyAction::Down)), Verdict::Type);
-        assert_eq!(chord.judge(&key(1, "Alt", "AltLeft", KeyAction::Down)), Verdict::Type);
+        assert_eq!(
+            chord.judge(&key(1, "Control", "ControlLeft", KeyAction::Down)),
+            Verdict::Type
+        );
+        assert_eq!(
+            chord.judge(&key(1, "Alt", "AltLeft", KeyAction::Down)),
+            Verdict::Type
+        );
         // Another viewer's Delete is its own.
-        assert_eq!(chord.judge(&key(2, "Delete", "Delete", KeyAction::Down)), Verdict::Type);
-        assert_eq!(chord.judge(&key(1, "Delete", "Delete", KeyAction::Down)), Verdict::Sas);
-        assert_eq!(chord.judge(&key(1, "Delete", "Delete", KeyAction::Up)), Verdict::Swallow);
-        assert_eq!(chord.judge(&key(1, "Alt", "AltLeft", KeyAction::Up)), Verdict::Type);
-        assert_eq!(chord.judge(&key(1, "Delete", "Delete", KeyAction::Down)), Verdict::Type);
-        assert_eq!(chord.judge(&key(1, "Delete", "Delete", KeyAction::Up)), Verdict::Type);
+        assert_eq!(
+            chord.judge(&key(2, "Delete", "Delete", KeyAction::Down)),
+            Verdict::Type
+        );
+        assert_eq!(
+            chord.judge(&key(1, "Delete", "Delete", KeyAction::Down)),
+            Verdict::Sas
+        );
+        assert_eq!(
+            chord.judge(&key(1, "Delete", "Delete", KeyAction::Up)),
+            Verdict::Swallow
+        );
+        assert_eq!(
+            chord.judge(&key(1, "Alt", "AltLeft", KeyAction::Up)),
+            Verdict::Type
+        );
+        assert_eq!(
+            chord.judge(&key(1, "Delete", "Delete", KeyAction::Down)),
+            Verdict::Type
+        );
+        assert_eq!(
+            chord.judge(&key(1, "Delete", "Delete", KeyAction::Up)),
+            Verdict::Type
+        );
     }
 
     #[test]

@@ -317,7 +317,12 @@ mod tests {
         let config = parse(&format!(r#"{{"uplinks":[{with},{}]}}"#, uplink("b")), None).unwrap();
         assert_eq!(
             config.uplinks[0].ice_servers.as_deref(),
-            Some(&["stun:stun.example:3478".to_owned(), "turn:relay.example".to_owned()][..])
+            Some(
+                &[
+                    "stun:stun.example:3478".to_owned(),
+                    "turn:relay.example".to_owned()
+                ][..]
+            )
         );
         assert_eq!(config.uplinks[1].ice_servers, None);
     }

@@ -112,7 +112,10 @@ pub fn plan() -> Result<Plan, Missing> {
 fn find_session() -> Option<(String, Vec<String>)> {
     for (name, command) in SESSIONS {
         if which(command[0]).is_some() {
-            return Some(((*name).to_owned(), command.iter().map(|c| (*c).to_owned()).collect()));
+            return Some((
+                (*name).to_owned(),
+                command.iter().map(|c| (*c).to_owned()).collect(),
+            ));
         }
     }
     // Something else the display managers know of (a session the list does not name).
@@ -253,7 +256,12 @@ impl Desktop {
         write_authority(&authority, number)?;
         let keeper = Keeper::start()?;
         let mut server = start_server(&keeper, plan, number, &authority, &dir)?;
-        if let Err(e) = wait_for_server(&display, &authority, &mut server, &dir.join(format!("{number}.log"))) {
+        if let Err(e) = wait_for_server(
+            &display,
+            &authority,
+            &mut server,
+            &dir.join(format!("{number}.log")),
+        ) {
             end(&mut server);
             return Err(e);
         }
@@ -326,7 +334,10 @@ impl Desktop {
         let (conn, n) = cast_x11::connect::connect(Some(&self.display)).ok()?;
         use x11rb::connection::Connection;
         let root = &conn.setup().roots[n];
-        Some((u32::from(root.width_in_pixels), u32::from(root.height_in_pixels)))
+        Some((
+            u32::from(root.width_in_pixels),
+            u32::from(root.height_in_pixels),
+        ))
     }
 }
 
@@ -342,7 +353,8 @@ impl Drop for Desktop {
         }
         let deadline = Instant::now() + Duration::from_secs(3);
         while Instant::now() < deadline
-            && (matches!(self.session.try_wait(), Ok(None)) || matches!(self.server.try_wait(), Ok(None)))
+            && (matches!(self.session.try_wait(), Ok(None))
+                || matches!(self.server.try_wait(), Ok(None)))
         {
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -432,10 +444,19 @@ fn forget_stale(dir: &Path) {
         let name = entry.file_name().to_string_lossy().into_owned();
         let number = name
             .strip_prefix("Xauthority-")
-            .or_else(|| name.strip_prefix("session-").and_then(|n| n.strip_suffix(".log")))
+            .or_else(|| {
+                name.strip_prefix("session-")
+                    .and_then(|n| n.strip_suffix(".log"))
+            })
             .or_else(|| name.strip_suffix(".log"))
-            .or_else(|| name.strip_prefix("xorg-dummy-").and_then(|n| n.strip_suffix(".conf")))
-            .or_else(|| name.strip_prefix("Xorg-").and_then(|n| n.strip_suffix(".log")));
+            .or_else(|| {
+                name.strip_prefix("xorg-dummy-")
+                    .and_then(|n| n.strip_suffix(".conf"))
+            })
+            .or_else(|| {
+                name.strip_prefix("Xorg-")
+                    .and_then(|n| n.strip_suffix(".log"))
+            });
         if let Some(number) = number
             && !Path::new(&format!("/tmp/.X{number}-lock")).exists()
         {
@@ -487,14 +508,16 @@ fn write_authority(path: &Path, number: u32) -> Result<(), String> {
 /// the *thread* that forked a child ends, not the process: started from one of tokio's blocking threads, which end after
 /// ten idle seconds, the X server was killed under its viewers (seen on z440, 2026-11-20).
 struct Keeper {
-    asks: Option<std::sync::mpsc::Sender<(Command, std::sync::mpsc::Sender<std::io::Result<Child>>)>>,
+    asks:
+        Option<std::sync::mpsc::Sender<(Command, std::sync::mpsc::Sender<std::io::Result<Child>>)>>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Keeper {
     fn start() -> Result<Keeper, String> {
         let (asks, asked) =
-            std::sync::mpsc::channel::<(Command, std::sync::mpsc::Sender<std::io::Result<Child>>)>();
+            std::sync::mpsc::channel::<(Command, std::sync::mpsc::Sender<std::io::Result<Child>>)>(
+            );
         let thread = std::thread::Builder::new()
             .name("virtual-desktop".into())
             .spawn(move || {
@@ -587,7 +610,8 @@ fn start_server(
         }
     };
     // The server's own words go to a file beside its cookie: the reason it gives when it does not start.
-    let log = std::fs::File::create(dir.join(format!("{number}.log"))).map_err(|e| e.to_string())?;
+    let log =
+        std::fs::File::create(dir.join(format!("{number}.log"))).map_err(|e| e.to_string())?;
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -620,7 +644,12 @@ fn wait_for_server(
     loop {
         if let Ok(Some(status)) = server.try_wait() {
             let words = std::fs::read_to_string(log).unwrap_or_default();
-            let tail: Vec<&str> = words.lines().filter(|l| !l.trim().is_empty()).rev().take(3).collect();
+            let tail: Vec<&str> = words
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .rev()
+                .take(3)
+                .collect();
             return Err(format!(
                 "the X server exited ({status}): {}",
                 tail.into_iter().rev().collect::<Vec<_>>().join(" / ")
@@ -654,13 +683,21 @@ fn settled(mut session: Child, name: &str, log: &Path) -> Result<Child, String> 
     while Instant::now() < deadline {
         if let Ok(Some(status)) = session.try_wait() {
             let words = std::fs::read_to_string(log).unwrap_or_default();
-            let tail: Vec<&str> = words.lines().filter(|l| !l.trim().is_empty()).rev().take(2).collect();
+            let tail: Vec<&str> = words
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .rev()
+                .take(2)
+                .collect();
             return Err(format!(
                 "the desktop session ({name}) exited at once ({status}){}",
                 if tail.is_empty() {
                     String::new()
                 } else {
-                    format!(": {}", tail.into_iter().rev().collect::<Vec<_>>().join(" / "))
+                    format!(
+                        ": {}",
+                        tail.into_iter().rev().collect::<Vec<_>>().join(" / ")
+                    )
                 }
             ));
         }
@@ -696,14 +733,21 @@ fn start_session(
         .env_remove("SESSION_MANAGER")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(std::fs::File::create(log).map(Stdio::from).unwrap_or_else(|_| Stdio::null()));
+        .stderr(
+            std::fs::File::create(log)
+                .map(Stdio::from)
+                .unwrap_or_else(|_| Stdio::null()),
+        );
     if let Some(home) = super::session::home_of(unsafe { libc::geteuid() }) {
         c.current_dir(&home).env("HOME", home);
     }
     tie_to_remoted(&mut c, true);
-    keeper
-        .spawn(c)
-        .map_err(|e| format!("the desktop session ({}) did not start: {e}", argv.join(" ")))
+    keeper.spawn(c).map_err(|e| {
+        format!(
+            "the desktop session ({}) did not start: {e}",
+            argv.join(" ")
+        )
+    })
 }
 
 #[cfg(test)]
@@ -720,7 +764,10 @@ mod tests {
         assert_eq!(Distro::from_os_release(debian), Distro::Debian);
         assert_eq!(Distro::from_os_release(ubuntu).xvfb(), "xvfb");
         assert_eq!(Distro::from_os_release(mint), Distro::Debian);
-        assert_eq!(Distro::from_os_release(fedora).xvfb(), "xorg-x11-server-Xvfb");
+        assert_eq!(
+            Distro::from_os_release(fedora).xvfb(),
+            "xorg-x11-server-Xvfb"
+        );
         assert_eq!(Distro::from_os_release(arch).xvfb(), "xorg-server-xvfb");
         assert_eq!(Distro::from_os_release("ID=gentoo\n"), Distro::Other);
     }
@@ -736,7 +783,10 @@ mod tests {
         assert_eq!(data.len(), 16);
         assert_eq!(cast_x11::connect::cookie(&path, 94), None);
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

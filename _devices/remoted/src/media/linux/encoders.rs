@@ -72,13 +72,19 @@ fn pick() -> Picked {
     let mut primary = None;
     for (name, test) in hardware() {
         if forced_software {
-            notes.push((name.to_owned(), "left out (INTENTIC_REMOTED_ENCODER=software)".to_owned()));
+            notes.push((
+                name.to_owned(),
+                "left out (INTENTIC_REMOTED_ENCODER=software)".to_owned(),
+            ));
             continue;
         }
         let started = std::time::Instant::now();
         match test() {
             Ok(kind) => {
-                log::info!("encoder {name}: self-test passed ({} ms)", started.elapsed().as_millis());
+                log::info!(
+                    "encoder {name}: self-test passed ({} ms)",
+                    started.elapsed().as_millis()
+                );
                 notes.push((name.to_owned(), "ok".to_owned()));
                 primary.get_or_insert(kind);
             }
@@ -114,7 +120,9 @@ fn hardware() -> Vec<(&'static str, Test)> {
         Ok(Arc::new(kind) as Arc<dyn EncoderKind>)
     }));
     #[cfg(not(feature = "nvenc"))]
-    out.push(("nvenc", || Err("this build has no NVENC (the `nvenc` feature)".into())));
+    out.push(("nvenc", || {
+        Err("this build has no NVENC (the `nvenc` feature)".into())
+    }));
     out.push(("vaapi", || {
         Err("not built: intentic-remoted has no VA-API encoder yet".into())
     }));

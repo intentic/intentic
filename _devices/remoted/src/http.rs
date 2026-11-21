@@ -103,7 +103,9 @@ async fn route(request: Request<Incoming>, daemon: Arc<Daemon>, uplink: String) 
         ),
         (&Method::GET, ["info"]) => info(&daemon, &uplink).await,
         (&Method::GET, ["stats"]) => stats(&daemon),
-        (&Method::GET, ["screenshot", session]) => media::screenshot(&daemon, &uplink, session).await,
+        (&Method::GET, ["screenshot", session]) => {
+            media::screenshot(&daemon, &uplink, session).await
+        }
         (&Method::GET, ["terminals"]) => {
             answer(StatusCode::OK, &json!(daemon.terminals.list(&uplink)))
         }

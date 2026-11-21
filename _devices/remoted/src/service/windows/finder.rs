@@ -47,9 +47,12 @@ pub fn same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
 
 impl ServiceFinder {
     fn connect(&self) -> Result<Arc<Link>, String> {
-        let secret = std::fs::read_to_string(home().join("secret")).map_err(|e| format!("the service's secret: {e}"))?;
+        let secret = std::fs::read_to_string(home().join("secret"))
+            .map_err(|e| format!("the service's secret: {e}"))?;
         // The service's helper runs as SYSTEM; one run by hand for a test (another home) is the user's own.
-        let owner = std::env::var_os("INTENTIC_REMOTED_SERVICE_HOME").is_none().then_some(SERVICE_OWNERS);
+        let owner = std::env::var_os("INTENTIC_REMOTED_SERVICE_HOME")
+            .is_none()
+            .then_some(SERVICE_OWNERS);
         Link::connect(&self.name, secret.trim(), Some(&binary()), owner)
     }
 

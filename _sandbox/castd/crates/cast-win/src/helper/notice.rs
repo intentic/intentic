@@ -39,7 +39,9 @@ pub fn spawn(watched: Arc<AtomicUsize>) {
             loop {
                 let desktop = crate::input_desktop_name();
                 let want = watched.load(Ordering::Relaxed) > 0
-                    && desktop.as_deref().is_some_and(|d| !d.eq_ignore_ascii_case("Default"));
+                    && desktop
+                        .as_deref()
+                        .is_some_and(|d| !d.eq_ignore_ascii_case("Default"));
                 let same = matches!((&showing, &desktop), (Some((on, _)), Some(d)) if on == d);
                 if (!want || !same)
                     && let Some((_, stop)) = showing.take()
@@ -81,7 +83,12 @@ fn show(stop: &AtomicBool) {
                 SetTextColor(dc, COLORREF(0x00ff_ffff));
                 let mut text = crate::displays::wide(TEXT);
                 text.pop();
-                DrawTextW(dc, &mut text, &mut r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                DrawTextW(
+                    dc,
+                    &mut text,
+                    &mut r,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                );
                 let _ = EndPaint(hwnd, &ps);
             }
             return LRESULT(0);
@@ -91,8 +98,13 @@ fn show(stop: &AtomicBool) {
     }
     // GENERIC_ALL: this thread draws there.
     // SAFETY: the input desktop, set as this thread's before it makes any window; closed when the thread is done.
-    let Ok(desk) = (unsafe { OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_ACCESS_FLAGS(0x1000_0000)) })
-    else {
+    let Ok(desk) = (unsafe {
+        OpenInputDesktop(
+            DESKTOP_CONTROL_FLAGS(0),
+            false,
+            DESKTOP_ACCESS_FLAGS(0x1000_0000),
+        )
+    }) else {
         return;
     };
     // SAFETY: as above.

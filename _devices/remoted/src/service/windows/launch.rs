@@ -11,21 +11,24 @@ use super::{HelperState, Installed, binary, home, scm, secure};
 use std::io::{BufRead, BufReader, Write};
 use std::os::windows::io::FromRawHandle;
 use std::time::{Duration, Instant};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, SetHandleInformation, WAIT_TIMEOUT};
+use windows::Win32::Foundation::{
+    CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, SetHandleInformation, WAIT_TIMEOUT,
+};
 use windows::Win32::Security::{
-    DuplicateTokenEx, SECURITY_ATTRIBUTES, SecurityImpersonation, SetTokenInformation, TOKEN_ALL_ACCESS,
-    TOKEN_DUPLICATE, TOKEN_QUERY, TokenPrimary, TokenSessionId,
+    DuplicateTokenEx, SECURITY_ATTRIBUTES, SecurityImpersonation, SetTokenInformation,
+    TOKEN_ALL_ACCESS, TOKEN_DUPLICATE, TOKEN_QUERY, TokenPrimary, TokenSessionId,
 };
 use windows::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation, SetInformationJobObject,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    SetInformationJobObject,
 };
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
 use windows::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_SUSPENDED, CreateProcessAsUserW, GetCurrentProcess, GetExitCodeProcess,
-    OpenProcessToken, PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOW, TerminateProcess,
-    WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CreateProcessAsUserW, GetCurrentProcess,
+    GetExitCodeProcess, OpenProcessToken, PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES,
+    STARTUPINFOW, TerminateProcess, WaitForSingleObject,
 };
 use windows::core::{PCWSTR, PWSTR};
 
@@ -50,21 +53,33 @@ pub fn prepare() -> Result<Prepared, String> {
     if std::fs::metadata(&log_path).is_ok_and(|m| m.len() > 2 << 20) {
         let _ = std::fs::rename(&log_path, home.join("service.log.1"));
     }
-    if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+    if let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
         let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
             .target(env_logger::Target::Pipe(Box::new(file)))
             .try_init();
     }
     log::info!("intentic-remoted {} service starting", crate::VERSION);
-    let installed = Installed::read().ok_or("service.json is missing: install the service again")?;
+    let installed =
+        Installed::read().ok_or("service.json is missing: install the service again")?;
     let secret = secure::random_secret()?;
     let path = home.join("secret");
     let _ = std::fs::remove_file(&path);
     // Made empty, its access list set (SYSTEM, administrators, and the user to read), then written through the handle
     // opened before: the secret is never in a file anyone else may read.
     let mut file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    secure::set_acl(&path, &format!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;{})", installed.user_sid))?;
-    file.write_all(secret.as_bytes()).map_err(|e| e.to_string())?;
+    secure::set_acl(
+        &path,
+        &format!(
+            "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;{})",
+            installed.user_sid
+        ),
+    )?;
+    file.write_all(secret.as_bytes())
+        .map_err(|e| e.to_string())?;
     drop(file);
     Ok(Prepared {
         config: HelperConfig {
@@ -102,7 +117,11 @@ impl Drop for Helper {
             }
             let mut code = 0u32;
             let _ = GetExitCodeProcess(self.process, &mut code);
-            log::info!("helper {} in session {} ended ({code:#x})", self.pid, self.session);
+            log::info!(
+                "helper {} in session {} ended ({code:#x})",
+                self.pid,
+                self.session
+            );
             let _ = CloseHandle(self.process);
             let _ = CloseHandle(self.job);
         }
@@ -183,10 +202,20 @@ fn pipe(child_reads: bool) -> Result<(HANDLE, HANDLE), String> {
     let (mut read, mut write) = (HANDLE::default(), HANDLE::default());
     // SAFETY: out-pointers for the two ends.
     unsafe { CreatePipe(&mut read, &mut write, Some(&sa), 0) }.map_err(|e| e.to_string())?;
-    let (child, ours) = if child_reads { (read, write) } else { (write, read) };
+    let (child, ours) = if child_reads {
+        (read, write)
+    } else {
+        (write, read)
+    };
     // SAFETY: the service's own end is not inherited.
-    unsafe { SetHandleInformation(ours, HANDLE_FLAG_INHERIT.0, windows::Win32::Foundation::HANDLE_FLAGS(0)) }
-        .map_err(|e| e.to_string())?;
+    unsafe {
+        SetHandleInformation(
+            ours,
+            HANDLE_FLAG_INHERIT.0,
+            windows::Win32::Foundation::HANDLE_FLAGS(0),
+        )
+    }
+    .map_err(|e| e.to_string())?;
     Ok((child, ours))
 }
 
@@ -199,7 +228,14 @@ fn launch(session: u32, config: &HelperConfig) -> Result<Helper, String> {
     unsafe {
         OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, &mut own)
             .map_err(|e| format!("the service's token: {e}"))?;
-        let dup = DuplicateTokenEx(own, TOKEN_ALL_ACCESS, None, SecurityImpersonation, TokenPrimary, &mut token);
+        let dup = DuplicateTokenEx(
+            own,
+            TOKEN_ALL_ACCESS,
+            None,
+            SecurityImpersonation,
+            TokenPrimary,
+            &mut token,
+        );
         let _ = CloseHandle(own);
         dup.map_err(|e| format!("DuplicateTokenEx: {e}"))?;
         if let Err(e) = SetTokenInformation(
@@ -231,7 +267,9 @@ fn launch(session: u32, config: &HelperConfig) -> Result<Helper, String> {
         hStdError: stderr_child,
         ..Default::default()
     };
-    let mut command: Vec<u16> = format!("\"{}\" desktop-helper\0", binary().display()).encode_utf16().collect();
+    let mut command: Vec<u16> = format!("\"{}\" desktop-helper\0", binary().display())
+        .encode_utf16()
+        .collect();
     let mut pi = PROCESS_INFORMATION::default();
     // The helper's process may be asked its image path by the user (remoted checks it), and nothing more.
     let process_sa = secure::Descriptor::new(&format!(

@@ -6,17 +6,21 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use windows::Win32::Foundation::{ERROR_CALL_NOT_IMPLEMENTED, ERROR_SERVICE_DOES_NOT_EXIST, NO_ERROR};
+use windows::Win32::Foundation::{
+    ERROR_CALL_NOT_IMPLEMENTED, ERROR_SERVICE_DOES_NOT_EXIST, NO_ERROR,
+};
 use windows::Win32::System::Services::{
-    ChangeServiceConfig2W, ChangeServiceConfigW, CloseServiceHandle, ControlService, CreateServiceW, DeleteService,
-    ENUM_SERVICE_TYPE, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, RegisterServiceCtrlHandlerExW,
-    SC_ACTION, SC_ACTION_RESTART, SC_HANDLE, SC_MANAGER_ALL_ACCESS, SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO,
+    ChangeServiceConfig2W, ChangeServiceConfigW, CloseServiceHandle, ControlService,
+    CreateServiceW, DeleteService, ENUM_SERVICE_TYPE, OpenSCManagerW, OpenServiceW,
+    QueryServiceStatusEx, RegisterServiceCtrlHandlerExW, SC_ACTION, SC_ACTION_RESTART, SC_HANDLE,
+    SC_MANAGER_ALL_ACCESS, SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO,
     SERVICE_ACCEPT_SESSIONCHANGE, SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP, SERVICE_ALL_ACCESS,
-    SERVICE_AUTO_START, SERVICE_CONFIG_DESCRIPTION, SERVICE_CONFIG_FAILURE_ACTIONS, SERVICE_CONTROL_INTERROGATE,
-    SERVICE_CONTROL_SESSIONCHANGE, SERVICE_CONTROL_SHUTDOWN, SERVICE_CONTROL_STOP, SERVICE_DESCRIPTIONW,
-    SERVICE_ERROR_NORMAL, SERVICE_FAILURE_ACTIONSW, SERVICE_NO_CHANGE, SERVICE_QUERY_STATUS, SERVICE_RUNNING,
-    SERVICE_START_PENDING, SERVICE_STATUS, SERVICE_STATUS_CURRENT_STATE, SERVICE_STATUS_HANDLE,
-    SERVICE_STATUS_PROCESS, SERVICE_STOP_PENDING, SERVICE_STOPPED, SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
+    SERVICE_AUTO_START, SERVICE_CONFIG_DESCRIPTION, SERVICE_CONFIG_FAILURE_ACTIONS,
+    SERVICE_CONTROL_INTERROGATE, SERVICE_CONTROL_SESSIONCHANGE, SERVICE_CONTROL_SHUTDOWN,
+    SERVICE_CONTROL_STOP, SERVICE_DESCRIPTIONW, SERVICE_ERROR_NORMAL, SERVICE_FAILURE_ACTIONSW,
+    SERVICE_NO_CHANGE, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START_PENDING,
+    SERVICE_STATUS, SERVICE_STATUS_CURRENT_STATE, SERVICE_STATUS_HANDLE, SERVICE_STATUS_PROCESS,
+    SERVICE_STOP_PENDING, SERVICE_STOPPED, SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
     SetServiceStatus, StartServiceCtrlDispatcherW, StartServiceW,
 };
 use windows::core::{PCWSTR, PWSTR};
@@ -54,7 +58,8 @@ fn process_status(service: &Sc) -> Option<SERVICE_STATUS_PROCESS> {
     let mut buf = vec![0u8; std::mem::size_of::<SERVICE_STATUS_PROCESS>()];
     let mut need = 0u32;
     // SAFETY: a buffer the size of the struct asked for.
-    unsafe { QueryServiceStatusEx(service.0, SC_STATUS_PROCESS_INFO, Some(&mut buf), &mut need) }.ok()?;
+    unsafe { QueryServiceStatusEx(service.0, SC_STATUS_PROCESS_INFO, Some(&mut buf), &mut need) }
+        .ok()?;
     // SAFETY: the buffer holds one SERVICE_STATUS_PROCESS, read unaligned.
     Some(unsafe { std::ptr::read_unaligned(buf.as_ptr().cast::<SERVICE_STATUS_PROCESS>()) })
 }
@@ -84,7 +89,9 @@ fn stop(s: &Sc) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while Instant::now() < deadline {
         match process_status(s) {
-            Some(p) if p.dwCurrentState != SERVICE_STOPPED => std::thread::sleep(Duration::from_millis(200)),
+            Some(p) if p.dwCurrentState != SERVICE_STOPPED => {
+                std::thread::sleep(Duration::from_millis(200))
+            }
             _ => return,
         }
     }
@@ -100,7 +107,11 @@ fn copy_binary(from: &std::path::Path, to: &std::path::Path) -> Result<(), Strin
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    Err(format!("copying {} to {}: {last}", from.display(), to.display()))
+    Err(format!(
+        "copying {} to {}: {last}",
+        from.display(),
+        to.display()
+    ))
 }
 
 /// Installs (or updates) the service and starts it. Needs an administrator.
@@ -119,7 +130,10 @@ pub fn install(clients: &[PathBuf]) -> Result<(), String> {
     let home = home();
     std::fs::create_dir_all(home.join("bin")).map_err(|e| format!("{}: {e}", home.display()))?;
     // SYSTEM and administrators may change it; everyone else may read and run it, never write.
-    secure::set_acl(&home, "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)")?;
+    secure::set_acl(
+        &home,
+        "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)",
+    )?;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     if !crate::service::windows::finder::same_file(&me, &binary()) {
         copy_binary(&me, &binary())?;
@@ -224,8 +238,16 @@ pub fn install(clients: &[PathBuf]) -> Result<(), String> {
     };
     // SAFETY: an open service and structs that outlive the calls.
     unsafe {
-        let _ = ChangeServiceConfig2W(s.0, SERVICE_CONFIG_DESCRIPTION, Some(std::ptr::from_ref(&desc).cast()));
-        let _ = ChangeServiceConfig2W(s.0, SERVICE_CONFIG_FAILURE_ACTIONS, Some(std::ptr::from_ref(&failure).cast()));
+        let _ = ChangeServiceConfig2W(
+            s.0,
+            SERVICE_CONFIG_DESCRIPTION,
+            Some(std::ptr::from_ref(&desc).cast()),
+        );
+        let _ = ChangeServiceConfig2W(
+            s.0,
+            SERVICE_CONFIG_FAILURE_ACTIONS,
+            Some(std::ptr::from_ref(&failure).cast()),
+        );
     }
     // SAFETY: an open service, no arguments.
     unsafe { StartServiceW(s.0, None) }.map_err(|e| format!("starting the service: {e}"))?;
@@ -287,7 +309,9 @@ pub fn uninstall() -> Result<(), String> {
 /// manager removes it once it stopped), the Ctrl+Alt+Del policy restored, and its folder deleted by a `cmd` started to
 /// outlive it (a running program cannot delete its own file).
 pub fn remove_self() {
-    match manager(SC_MANAGER_ALL_ACCESS).and_then(|m| service(&m, SERVICE_ALL_ACCESS).map_err(|e| e.to_string())) {
+    match manager(SC_MANAGER_ALL_ACCESS)
+        .and_then(|m| service(&m, SERVICE_ALL_ACCESS).map_err(|e| e.to_string()))
+    {
         // SAFETY: this service's own handle.
         Ok(s) => match unsafe { DeleteService(s.0) } {
             Ok(()) => log::info!("the service is marked for removal"),
@@ -302,7 +326,10 @@ pub fn remove_self() {
         log::warn!("restoring SoftwareSASGeneration: {e}");
     }
     let home = home();
-    let parent = home.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let parent = home
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     // Waits out this process's end, removes the folder, then the Intentic folder above it if nothing else is there.
     let script = format!(
         "ping -n 4 127.0.0.1 >nul & rmdir /s /q \"{}\" & rmdir \"{}\" 2>nul",
@@ -343,7 +370,11 @@ fn report(state: SERVICE_STATUS_CURRENT_STATE, exit: u32) {
         dwWin32ExitCode: exit,
         dwServiceSpecificExitCode: 0,
         dwCheckPoint: 0,
-        dwWaitHint: if state == SERVICE_RUNNING || state == SERVICE_STOPPED { 0 } else { 10_000 },
+        dwWaitHint: if state == SERVICE_RUNNING || state == SERVICE_STOPPED {
+            0
+        } else {
+            10_000
+        },
     };
     // SAFETY: the handle the service manager gave this service.
     unsafe {
@@ -395,7 +426,9 @@ unsafe extern "system" fn handler(
 unsafe extern "system" fn service_main(_argc: u32, _argv: *mut PWSTR) {
     let name = wide(SERVICE);
     // SAFETY: the service's name and the handler above, which lives for the process.
-    let Ok(handle) = (unsafe { RegisterServiceCtrlHandlerExW(PCWSTR(name.as_ptr()), Some(handler), None) }) else {
+    let Ok(handle) =
+        (unsafe { RegisterServiceCtrlHandlerExW(PCWSTR(name.as_ptr()), Some(handler), None) })
+    else {
         return;
     };
     let _ = STATUS.set(handle.0 as isize);

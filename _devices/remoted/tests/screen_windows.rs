@@ -43,7 +43,15 @@ fn media_key() -> String {
 
 fn viewer_token(subject: &str, ro: bool) -> String {
     let now = token::now_ms();
-    token::sign(&KEY, &Claims { s: subject.to_owned(), exp: now + 600_000, ro, iat: now })
+    token::sign(
+        &KEY,
+        &Claims {
+            s: subject.to_owned(),
+            exp: now + 600_000,
+            ro,
+            iat: now,
+        },
+    )
 }
 
 /// The fake sandbox's end of one uplink.
@@ -55,13 +63,17 @@ struct Uplink {
 
 impl Uplink {
     async fn stream(&self) -> Stream {
-        self.opener.open().await.expect("a stream opens down the uplink")
+        self.opener
+            .open()
+            .await
+            .expect("a stream opens down the uplink")
     }
 
     async fn call(&self, method: &str, path: &str) -> (u16, Value) {
-        let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(self.stream().await))
-            .await
-            .expect("an HTTP/1.1 connection opens on a stream");
+        let (mut sender, connection) =
+            hyper::client::conn::http1::handshake(TokioIo::new(self.stream().await))
+                .await
+                .expect("an HTTP/1.1 connection opens on a stream");
         tokio::spawn(connection);
         let request = hyper::Request::builder()
             .method(method)
@@ -72,14 +84,18 @@ impl Uplink {
         let response = sender.send_request(request).await.expect("remoted answers");
         let status = response.status().as_u16();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     /// A GET's status and body as bytes (a screenshot).
     async fn bytes(&self, path: &str) -> (u16, Bytes) {
-        let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(self.stream().await))
-            .await
-            .expect("an HTTP/1.1 connection opens on a stream");
+        let (mut sender, connection) =
+            hyper::client::conn::http1::handshake(TokioIo::new(self.stream().await))
+                .await
+                .expect("an HTTP/1.1 connection opens on a stream");
         tokio::spawn(connection);
         let request = hyper::Request::builder()
             .uri(path)
@@ -88,11 +104,21 @@ impl Uplink {
             .unwrap();
         let response = sender.send_request(request).await.expect("remoted answers");
         let status = response.status().as_u16();
-        (status, response.into_body().collect().await.unwrap().to_bytes())
+        (
+            status,
+            response.into_body().collect().await.unwrap().to_bytes(),
+        )
     }
 
     async fn viewer(&self, session: &str, token: &str) -> Result<MediaClient<Stream>, String> {
-        MediaClient::over_at(self.stream().await, "/media", session, token, cast_core::media::Reach::default()).await
+        MediaClient::over_at(
+            self.stream().await,
+            "/media",
+            session,
+            token,
+            cast_core::media::Reach::default(),
+        )
+        .await
     }
 }
 
@@ -127,13 +153,18 @@ async fn take(tcp: TcpStream) -> Option<Uplink> {
         }
         Ok(response)
     };
-    let socket = tokio_tungstenite::accept_hdr_async_with_config(tcp, check, Some(tunnel::socket_config()))
-        .await
-        .ok()?;
+    let socket =
+        tokio_tungstenite::accept_hdr_async_with_config(tcp, check, Some(tunnel::socket_config()))
+            .await
+            .ok()?;
     let (closing, closed) = watch::channel(None);
     let (session, pumping) = tunnel::pump(socket, Liveness::Pings, closed);
     let (opener, _driving) = tunnel::mux::client(session);
-    Some(Uplink { opener, _closing: closing, _pumping: pumping })
+    Some(Uplink {
+        opener,
+        _closing: closing,
+        _pumping: pumping,
+    })
 }
 
 fn config(port: u16) -> Value {
@@ -169,7 +200,11 @@ impl Remoted {
             .args(["run", "--config"])
             .arg(&config)
             .arg("--parent-stdin")
-            .env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or_else(|_| "remoted=debug,cast_win=info,cast_core=info,info".into()))
+            .env(
+                "RUST_LOG",
+                std::env::var("RUST_LOG")
+                    .unwrap_or_else(|_| "remoted=debug,cast_win=info,cast_core=info,info".into()),
+            )
             .env("INTENTIC_REMOTED_NO_RTC", "1")
             .envs(env.iter().map(|(k, v)| (*k, v.as_str())))
             .stdin(Stdio::piped())
@@ -199,7 +234,10 @@ fn binary() -> PathBuf {
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_intentic-remoted").map(PathBuf::from) {
         return path;
     }
-    if let Some(path) = option_env!("CARGO_BIN_EXE_intentic-remoted").map(PathBuf::from).filter(|p| p.is_file()) {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_intentic-remoted")
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+    {
         return path;
     }
     let suite = std::env::current_exe().unwrap();
@@ -246,7 +284,10 @@ impl Helper {
     }
 
     fn env(&self) -> Vec<(&'static str, String)> {
-        vec![("INTENTIC_REMOTED_SERVICE_HOME", self.home.display().to_string())]
+        vec![(
+            "INTENTIC_REMOTED_SERVICE_HOME",
+            self.home.display().to_string(),
+        )]
     }
 }
 
@@ -260,20 +301,35 @@ impl Drop for Helper {
 
 /// This user's SID, as `whoami` says it.
 fn user_sid() -> String {
-    let out = std::process::Command::new("whoami").args(["/user", "/fo", "csv", "/nh"]).output().unwrap();
+    let out = std::process::Command::new("whoami")
+        .args(["/user", "/fo", "csv", "/nh"])
+        .output()
+        .unwrap();
     let line = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-    line.rsplit(',').next().unwrap_or_default().trim_matches('"').to_owned()
+    line.rsplit(',')
+        .next()
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_owned()
 }
 
 async fn ack(viewer: &mut MediaClient<Stream>, id: u32) {
-    let _ = viewer.send(&browser_wire::BrowserMediaClientMessage::Ack { id, decode_ms: Some(1.0) }).await;
+    let _ = viewer
+        .send(&browser_wire::BrowserMediaClientMessage::Ack {
+            id,
+            decode_ms: Some(1.0),
+        })
+        .await;
 }
 
 async fn hello(viewer: &mut MediaClient<Stream>) -> (u32, u32) {
     let deadline = Instant::now() + PATIENCE;
     while Instant::now() < deadline {
-        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello { width, height, .. })) =
-            viewer.recv(Duration::from_secs(1)).await
+        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello {
+            width,
+            height,
+            ..
+        })) = viewer.recv(Duration::from_secs(1)).await
         {
             return (width, height);
         }
@@ -282,7 +338,11 @@ async fn hello(viewer: &mut MediaClient<Stream>) -> (u32, u32) {
 }
 
 /// Reads (and acks) video frames until `wanted` arrived or `within` passed: how many, and whether the first was a key.
-async fn frames(viewer: &mut MediaClient<Stream>, wanted: usize, within: Duration) -> (usize, bool) {
+async fn frames(
+    viewer: &mut MediaClient<Stream>,
+    wanted: usize,
+    within: Duration,
+) -> (usize, bool) {
     let deadline = Instant::now() + within;
     let (mut got, mut first_key) = (0, None);
     while got < wanted && Instant::now() < deadline {
@@ -308,9 +368,17 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 fn cpu_seconds(child: &Child) -> f64 {
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn GetProcessTimes(process: *mut std::ffi::c_void, created: *mut u64, exited: *mut u64, kernel: *mut u64, user: *mut u64) -> i32;
+        fn GetProcessTimes(
+            process: *mut std::ffi::c_void,
+            created: *mut u64,
+            exited: *mut u64,
+            kernel: *mut u64,
+            user: *mut u64,
+        ) -> i32;
     }
-    let Some(handle) = child.raw_handle() else { return 0.0 };
+    let Some(handle) = child.raw_handle() else {
+        return 0.0;
+    };
     let (mut c, mut e, mut k, mut u) = (0u64, 0u64, 0u64, 0u64);
     // SAFETY: the live child's process handle and four FILETIMEs (two u32 each, as a u64) to fill.
     let ok = unsafe { GetProcessTimes(handle as *mut _, &mut c, &mut e, &mut k, &mut u) };
@@ -338,23 +406,40 @@ fn pick(info: &Value) -> String {
 async fn a_monitor_is_streamed_at_its_native_size() {
     let (port, mut uplinks) = sandbox().await;
     let remoted = Remoted::start(&config(port)).await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (status, info) = uplink.call("GET", "/info").await;
     assert_eq!(status, 200);
     assert_eq!(info["screen"]["mode"], "dxgi", "{info}");
     let monitor = pick(&info);
-    let size = info["monitors"].as_array().unwrap().iter().find(|m| m["id"] == monitor.as_str()).map(|m| {
-        (m["width"].as_u64().unwrap() as u32 & !1, m["height"].as_u64().unwrap() as u32 & !1)
-    });
+    let size = info["monitors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == monitor.as_str())
+        .map(|m| {
+            (
+                m["width"].as_u64().unwrap() as u32 & !1,
+                m["height"].as_u64().unwrap() as u32 & !1,
+            )
+        });
     let session = format!("screen-{monitor}");
-    let mut viewer = uplink.viewer(&session, &viewer_token(&format!("media/{session}"), false)).await.unwrap();
+    let mut viewer = uplink
+        .viewer(&session, &viewer_token(&format!("media/{session}"), false))
+        .await
+        .unwrap();
     assert_eq!(Some(hello(&mut viewer).await), size, "{info}");
     let (got, first_key) = frames(&mut viewer, 1, Duration::from_secs(20)).await;
     assert_eq!(got, 1, "no frame of {monitor}");
     assert!(first_key, "the first frame is a keyframe");
     let (_, stats) = uplink.call("GET", "/stats").await;
     assert_eq!(stats["screens"][0]["monitor"], monitor.as_str(), "{stats}");
-    let encoder = stats["screens"][0]["encoder"].as_str().unwrap_or_default().to_owned();
+    let encoder = stats["screens"][0]["encoder"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
     assert!(!encoder.is_empty(), "{stats}");
     assert!(stats["screens"][0]["capture"]["via"].is_string(), "{stats}");
     let (status, png) = uplink.bytes(&format!("/screenshot/{session}")).await;
@@ -371,11 +456,17 @@ async fn a_monitor_is_streamed_through_the_helper() {
     let helper = Helper::start();
     let (port, mut uplinks) = sandbox().await;
     let remoted = Remoted::start_with(&config(port), &helper.env()).await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (_, info) = uplink.call("GET", "/info").await;
     let monitor = pick(&info);
     let session = format!("screen-{monitor}");
-    let mut viewer = uplink.viewer(&session, &viewer_token(&format!("media/{session}"), false)).await.unwrap();
+    let mut viewer = uplink
+        .viewer(&session, &viewer_token(&format!("media/{session}"), false))
+        .await
+        .unwrap();
     hello(&mut viewer).await;
     let (got, first_key) = frames(&mut viewer, 1, Duration::from_secs(20)).await;
     assert_eq!(got, 1, "no frame of {monitor} through the helper");
@@ -394,20 +485,30 @@ async fn a_monitor_is_streamed_through_the_helper() {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn measure() {
-    let seconds: u64 = std::env::var("REMOTED_MEASURE_SECONDS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
-    let pattern = std::env::var("REMOTED_MEASURE_PATTERN").expect("REMOTED_MEASURE_PATTERN: the path of cast-win's pattern.exe");
+    let seconds: u64 = std::env::var("REMOTED_MEASURE_SECONDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    let pattern = std::env::var("REMOTED_MEASURE_PATTERN")
+        .expect("REMOTED_MEASURE_PATTERN: the path of cast-win's pattern.exe");
     let helper = std::env::var_os("REMOTED_MEASURE_HELPER").map(|_| Helper::start());
     let (port, mut uplinks) = sandbox().await;
     let started = Instant::now();
     let env = helper.as_ref().map(Helper::env).unwrap_or_default();
     let remoted = Remoted::start_with(&config(port), &env).await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (_, info) = uplink.call("GET", "/info").await;
     println!("info: {info}");
     let monitor = pick(&info);
     let opened = Instant::now();
     let session = format!("screen-{monitor}");
-    let mut viewer = uplink.viewer(&session, &viewer_token(&format!("media/{session}"), false)).await.unwrap();
+    let mut viewer = uplink
+        .viewer(&session, &viewer_token(&format!("media/{session}"), false))
+        .await
+        .unwrap();
     let size = hello(&mut viewer).await;
     let (got, _) = frames(&mut viewer, 1, PATIENCE).await;
     assert_eq!(got, 1);
@@ -432,13 +533,18 @@ async fn measure() {
         if let Ok(window) = std::env::var("REMOTED_MEASURE_SIZE") {
             args.extend(["--size".to_owned(), window]);
         }
-        let mut painter = std::process::Command::new(&pattern).args(&args).spawn().expect("pattern.exe starts");
+        let mut painter = std::process::Command::new(&pattern)
+            .args(&args)
+            .spawn()
+            .expect("pattern.exe starts");
         let _ = frames(&mut viewer, usize::MAX, Duration::from_millis(1500)).await;
         let cpu0 = cpu_seconds(&remoted.child);
         let window = Instant::now();
         let (mut latencies, mut bytes, mut count, mut keys) = (Vec::new(), 0usize, 0usize, 0usize);
         while window.elapsed() < Duration::from_secs(seconds) {
-            if let Some(Received::Media { header, len, at, .. }) = viewer.recv(Duration::from_millis(200)).await
+            if let Some(Received::Media {
+                header, len, at, ..
+            }) = viewer.recv(Duration::from_millis(200)).await
                 && header.kind == KIND_VIDEO
             {
                 count += 1;
@@ -475,7 +581,12 @@ async fn measure() {
 }
 
 /// One key of a step, as the editor sends it.
-async fn key(viewer: &mut MediaClient<Stream>, key: &str, code: &str, action: Option<browser_wire::KeyAction>) {
+async fn key(
+    viewer: &mut MediaClient<Stream>,
+    key: &str,
+    code: &str,
+    action: Option<browser_wire::KeyAction>,
+) {
     viewer
         .send(&browser_wire::BrowserMediaClientMessage::Key {
             key: key.into(),
@@ -503,12 +614,18 @@ async fn drive() {
     std::fs::create_dir_all(&shots).unwrap();
     let (port, mut uplinks) = sandbox().await;
     let remoted = Remoted::start(&config(port)).await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (_, info) = uplink.call("GET", "/info").await;
     println!("screen: {}", info["screen"]);
     let monitor = pick(&info);
     let session = format!("screen-{monitor}");
-    let mut viewer = uplink.viewer(&session, &viewer_token(&format!("media/{session}"), false)).await.unwrap();
+    let mut viewer = uplink
+        .viewer(&session, &viewer_token(&format!("media/{session}"), false))
+        .await
+        .unwrap();
     hello(&mut viewer).await;
     frames(&mut viewer, 1, PATIENCE).await;
     for step in steps.split(';').map(str::trim).filter(|s| !s.is_empty()) {
@@ -532,15 +649,27 @@ async fn drive() {
                 );
             }
             "wait" => {
-                frames(&mut viewer, usize::MAX, Duration::from_millis(arg.parse().unwrap_or(1000))).await;
+                frames(
+                    &mut viewer,
+                    usize::MAX,
+                    Duration::from_millis(arg.parse().unwrap_or(1000)),
+                )
+                .await;
             }
             "key" => {
                 let (k, code) = arg.split_once(':').unwrap_or((arg, ""));
                 key(&mut viewer, k, code, None).await;
             }
-            "type" => viewer.send(&BrowserMediaClientMessage::Text { text: arg.into() }).await.unwrap(),
+            "type" => viewer
+                .send(&BrowserMediaClientMessage::Text { text: arg.into() })
+                .await
+                .unwrap(),
             "cad" => {
-                let chord = [("Control", "ControlLeft"), ("Alt", "AltLeft"), ("Delete", "Delete")];
+                let chord = [
+                    ("Control", "ControlLeft"),
+                    ("Alt", "AltLeft"),
+                    ("Delete", "Delete"),
+                ];
                 for (k, c) in chord {
                     key(&mut viewer, k, c, Some(KeyAction::Down)).await;
                 }

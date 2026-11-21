@@ -28,7 +28,12 @@ const H: u32 = 48;
 
 impl Capture for Memory {
     fn area(&self) -> cast_core::geometry::Rect {
-        cast_core::geometry::Rect { x: 0, y: 0, w: W, h: H }
+        cast_core::geometry::Rect {
+            x: 0,
+            y: 0,
+            w: W,
+            h: H,
+        }
     }
     fn screen(&self) -> (u32, u32) {
         (W, H)
@@ -59,7 +64,10 @@ impl Capture for Memory {
 struct Source(Arc<Counts>);
 
 impl ScreenSource for Source {
-    fn open(&mut self, _crop: Option<cast_core::geometry::Rect>) -> Result<Box<dyn Capture>, String> {
+    fn open(
+        &mut self,
+        _crop: Option<cast_core::geometry::Rect>,
+    ) -> Result<Box<dyn Capture>, String> {
         Ok(Box::new(Memory {
             counts: self.0.clone(),
             px: vec![0x80; (W * H * 4) as usize],
@@ -173,18 +181,35 @@ async fn eventually(what: &str, check: impl Fn() -> bool) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_screen_opens_once_for_its_viewers_and_stops_after_the_last_lingered_out() {
     let counts = Arc::new(Counts::default());
-    let screens = Screens::new(Arc::new(Painted(counts.clone())), Duration::from_millis(200));
+    let screens = Screens::new(
+        Arc::new(Painted(counts.clone())),
+        Duration::from_millis(200),
+    );
     let (a, b) = tokio::join!(screens.join("one"), screens.join("one"));
     let (a, b) = (a.unwrap(), b.unwrap());
-    assert!(Arc::ptr_eq(a.screen(), b.screen()), "both viewers share one pipeline");
+    assert!(
+        Arc::ptr_eq(a.screen(), b.screen()),
+        "both viewers share one pipeline"
+    );
     assert_eq!(counts.opened.load(Ordering::SeqCst), 1);
-    let running: Vec<_> = screens.running().into_iter().map(|r| (r.monitor, r.viewers)).collect();
+    let running: Vec<_> = screens
+        .running()
+        .into_iter()
+        .map(|r| (r.monitor, r.viewers))
+        .collect();
     assert_eq!(running, vec![("one".to_owned(), 2)]);
-    assert!(screens.join("two").await.is_err(), "a monitor the platform refuses");
+    assert!(
+        screens.join("two").await.is_err(),
+        "a monitor the platform refuses"
+    );
 
     drop(a);
     tokio::time::sleep(Duration::from_millis(400)).await;
-    assert_eq!(counts.stopped.load(Ordering::SeqCst), 0, "one viewer still watches");
+    assert_eq!(
+        counts.stopped.load(Ordering::SeqCst),
+        0,
+        "one viewer still watches"
+    );
 
     // The last leaves and another comes back within the linger: the same pipeline, warm.
     drop(b);
@@ -241,7 +266,10 @@ async fn a_failed_capture_ends_its_screen_alone_and_tells_its_viewers_why() {
     let (code, words) = client.ended().unwrap();
     assert_eq!(code, SCREEN_FAILED);
     assert!(words.contains("the test pulled the monitor out"), "{words}");
-    eventually("the screen's stops ran", || counts.stopped.load(Ordering::SeqCst) == 1).await;
+    eventually("the screen's stops ran", || {
+        counts.stopped.load(Ordering::SeqCst) == 1
+    })
+    .await;
     assert!(!seat.screen().alive());
 
     // The process lives on, and the next viewer opens the screen again.
@@ -263,11 +291,26 @@ fn a_session_names_a_screen_only_when_the_platform_lists_it() {
 
 #[test]
 fn a_stun_url_names_its_host_and_port() {
-    assert_eq!(stun_host("stun:stun.cloudflare.com:3478").as_deref(), Some("stun.cloudflare.com:3478"));
-    assert_eq!(stun_host("stun:stun.example").as_deref(), Some("stun.example:3478"));
-    assert_eq!(stun_host("stun:stun.example:19302?transport=udp").as_deref(), Some("stun.example:19302"));
-    assert_eq!(stun_host("stun:[2001:db8::1]").as_deref(), Some("[2001:db8::1]:3478"));
-    assert_eq!(stun_host("stun:[2001:db8::1]:5000").as_deref(), Some("[2001:db8::1]:5000"));
+    assert_eq!(
+        stun_host("stun:stun.cloudflare.com:3478").as_deref(),
+        Some("stun.cloudflare.com:3478")
+    );
+    assert_eq!(
+        stun_host("stun:stun.example").as_deref(),
+        Some("stun.example:3478")
+    );
+    assert_eq!(
+        stun_host("stun:stun.example:19302?transport=udp").as_deref(),
+        Some("stun.example:19302")
+    );
+    assert_eq!(
+        stun_host("stun:[2001:db8::1]").as_deref(),
+        Some("[2001:db8::1]:3478")
+    );
+    assert_eq!(
+        stun_host("stun:[2001:db8::1]:5000").as_deref(),
+        Some("[2001:db8::1]:5000")
+    );
     assert_eq!(stun_host("turn:relay.example:3478"), None);
     assert_eq!(stun_host("stuns:secure.example"), None);
     assert_eq!(stun_host("stun:"), None);

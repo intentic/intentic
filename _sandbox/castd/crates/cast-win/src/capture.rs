@@ -44,10 +44,10 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Dxgi::{
-    DXGI_ERROR_NOT_CURRENTLY_AVAILABLE, DXGI_ERROR_SESSION_DISCONNECTED,
-    DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
-    DXGI_OUTDUPL_MOVE_RECT, DXGI_OUTDUPL_POINTER_SHAPE_INFO, IDXGIOutput, IDXGIOutput1,
-    IDXGIOutput5, IDXGIOutputDuplication, IDXGIResource,
+    DXGI_ERROR_NOT_CURRENTLY_AVAILABLE, DXGI_ERROR_SESSION_DISCONNECTED, DXGI_ERROR_UNSUPPORTED,
+    DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, DXGI_OUTDUPL_MOVE_RECT,
+    DXGI_OUTDUPL_POINTER_SHAPE_INFO, IDXGIOutput, IDXGIOutput1, IDXGIOutput5,
+    IDXGIOutputDuplication, IDXGIResource,
 };
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITORINFO};
 use windows::core::Interface;
@@ -132,7 +132,10 @@ impl DupOut for LocalOut {
         self.wake.signal();
     }
     fn fallback(&self, why: String) {
-        log::warn!("{}: {why}; capturing with GDI until desktop duplication works again", self.name);
+        log::warn!(
+            "{}: {why}; capturing with GDI until desktop duplication works again",
+            self.name
+        );
         self.gdi.store(true, Ordering::Relaxed);
         self.shared.lock().unsupported = true;
         self.wake.signal();
@@ -248,7 +251,13 @@ impl DxgiSource {
         Ok(d)
     }
 
-    fn local_out(&self, display: &Display, shared: &Arc<Mutex<Shared>>, wake: &Arc<Wake>, via_helper: bool) -> LocalOut {
+    fn local_out(
+        &self,
+        display: &Display,
+        shared: &Arc<Mutex<Shared>>,
+        wake: &Arc<Wake>,
+        via_helper: bool,
+    ) -> LocalOut {
         LocalOut {
             name: display.name.clone(),
             shared: shared.clone(),
@@ -365,7 +374,10 @@ pub(crate) fn start(
             // A desktop this process may not see now (locked, a UAC prompt, the display off): open anyway, showing the
             // placeholder until it is back.
             Err(e) if e.code() == E_ACCESSDENIED || e.code() == DXGI_ERROR_SESSION_DISCONNECTED => {
-                log::info!("{}: the desktop cannot be duplicated now ({e})", display.name);
+                log::info!(
+                    "{}: the desktop cannot be duplicated now ({e})",
+                    display.name
+                );
                 break None;
             }
             Err(e) if e.code() == DXGI_ERROR_UNSUPPORTED => {
@@ -474,7 +486,9 @@ enum Producer {
         thread: Option<std::thread::JoinHandle<()>>,
     },
     /// The helper's duplication thread: closed on its side when the lease is dropped.
-    Helper { _lease: crate::helper::client::Lease },
+    Helper {
+        _lease: crate::helper::client::Lease,
+    },
 }
 
 /// A staging texture on the capture's device and the BGRA buffer rows are read back into.
@@ -501,8 +515,18 @@ impl DxgiCapture {
             stop: started.stop,
             thread: Some(started.thread),
         };
-        DxgiCapture::assemble(display, dev, sink, source, mirror, started.size, wake, shared, producer)
-            .map_err(Open::Failed)
+        DxgiCapture::assemble(
+            display,
+            dev,
+            sink,
+            source,
+            mirror,
+            started.size,
+            wake,
+            shared,
+            producer,
+        )
+        .map_err(Open::Failed)
     }
 
     /// The monitor duplicated by the lock screen and admin prompts helper: its mirror opened here from the handle it
@@ -526,7 +550,17 @@ impl DxgiCapture {
             size.0,
             size.1
         );
-        DxgiCapture::assemble(display, dev, sink, source, mirror, size, wake, shared, Producer::Helper { _lease: lease })
+        DxgiCapture::assemble(
+            display,
+            dev,
+            sink,
+            source,
+            mirror,
+            size,
+            wake,
+            shared,
+            Producer::Helper { _lease: lease },
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -911,7 +945,9 @@ impl DupThread {
                 Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => {
                     // Nothing new: a still screen, or a display Windows turned off (it composes nothing then, and the
                     // last picture would read as live).
-                    if last_frame.elapsed() > DISPLAY_CHECK && last_display_check.elapsed() > DISPLAY_CHECK {
+                    if last_frame.elapsed() > DISPLAY_CHECK
+                        && last_display_check.elapsed() > DISPLAY_CHECK
+                    {
                         last_display_check = Instant::now();
                         if session::display() == session::Display::Off {
                             drop(dup);
@@ -993,7 +1029,11 @@ impl DupThread {
     fn while_display_off(&self) -> Option<IDXGIOutputDuplication> {
         log::info!("{}: the display is off", self.name);
         self.placeholder(Blocked::DisplayOff.words());
-        self.out.status(CaptureStatus::blocked("placeholder", Blocked::DisplayOff, None));
+        self.out.status(CaptureStatus::blocked(
+            "placeholder",
+            Blocked::DisplayOff,
+            None,
+        ));
         while session::display() == session::Display::Off {
             if self.stop.load(Ordering::Relaxed) {
                 return None;
@@ -1019,7 +1059,8 @@ impl DupThread {
             let display = displays::displays().into_iter().find(|d| d.id == self.id);
             let Some(display) = display else {
                 if started.elapsed() > GONE_AFTER {
-                    self.out.gone(format!("the monitor {} was unplugged", self.name));
+                    self.out
+                        .gone(format!("the monitor {} was unplugged", self.name));
                     return None;
                 }
                 std::thread::sleep(Duration::from_millis(250));
@@ -1048,8 +1089,11 @@ impl DupThread {
                     }
                     let state = session::State::now();
                     let blocked = state.blocked(self.secure_visible);
-                    if e.code() == DXGI_ERROR_UNSUPPORTED && started.elapsed() > Duration::from_secs(2) {
-                        self.out.fallback(format!("desktop duplication is not offered here ({e})"));
+                    if e.code() == DXGI_ERROR_UNSUPPORTED
+                        && started.elapsed() > Duration::from_secs(2)
+                    {
+                        self.out
+                            .fallback(format!("desktop duplication is not offered here ({e})"));
                         return None;
                     }
                     // Refused with nothing Windows says explaining it: the person's own desktop showing, the session
@@ -1059,7 +1103,10 @@ impl DupThread {
                         && blocked == Blocked::Unknown
                         && started.elapsed() > Duration::from_secs(2)
                     {
-                        log::warn!("{}: duplication refused although nothing blocks it: {state:?}", self.name);
+                        log::warn!(
+                            "{}: duplication refused although nothing blocks it: {state:?}",
+                            self.name
+                        );
                         self.out.fallback(format!(
                             "desktop duplication refused ({e}) with the person's own desktop showing"
                         ));
@@ -1071,16 +1118,27 @@ impl DupThread {
                         }
                         shown = Some(blocked);
                         self.placeholder(blocked.words());
-                        self.out.status(CaptureStatus::blocked("placeholder", blocked, Some(words)));
+                        self.out.status(CaptureStatus::blocked(
+                            "placeholder",
+                            blocked,
+                            Some(words),
+                        ));
                     }
                     if shown.is_some() && self.out.hand_over() {
-                        log::info!("{}: the lock screen and admin prompts helper is here; handing over", self.name);
+                        log::info!(
+                            "{}: the lock screen and admin prompts helper is here; handing over",
+                            self.name
+                        );
                         self.out.rebuild();
                         return None;
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(if shown.is_some() { 250 } else { 50 }));
+            std::thread::sleep(Duration::from_millis(if shown.is_some() {
+                250
+            } else {
+                50
+            }));
         }
     }
 

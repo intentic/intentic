@@ -4,16 +4,17 @@
 use std::path::Path;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LocalFree};
 use windows::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetNamedSecurityInfoW,
-    SDDL_REVISION_1, SE_FILE_OBJECT,
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+    GetNamedSecurityInfoW, SDDL_REVISION_1, SE_FILE_OBJECT,
 };
 use windows::Win32::Security::{
-    DACL_SECURITY_INFORMATION, GetTokenInformation, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, PSID, SetFileSecurityW, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    DACL_SECURITY_INFORMATION, GetTokenInformation, OWNER_SECURITY_INFORMATION,
+    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SetFileSecurityW,
+    TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
 };
 use windows::Win32::System::Registry::{
-    HKEY, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_DWORD, RegCloseKey, RegDeleteValueW, RegOpenKeyExW,
-    RegQueryValueExW, RegSetValueExW,
+    HKEY, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_DWORD, RegCloseKey,
+    RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
 };
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows::core::PCWSTR;
@@ -24,7 +25,10 @@ fn wide(s: &str) -> Vec<u16> {
 
 fn wide_path(p: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
-    p.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+    p.as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 /// Whether this process runs elevated (an administrator's yes was given).
@@ -96,8 +100,13 @@ pub fn set_acl(path: &Path, sddl: &str) -> Result<(), String> {
     let mut sd = PSECURITY_DESCRIPTOR::default();
     // SAFETY: a zero-terminated SDDL string, the descriptor it makes (freed below), and a zero-terminated path.
     unsafe {
-        ConvertStringSecurityDescriptorToSecurityDescriptorW(PCWSTR(text.as_ptr()), SDDL_REVISION_1, &mut sd, None)
-            .map_err(|e| format!("{sddl:?}: {e}"))?;
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            PCWSTR(text.as_ptr()),
+            SDDL_REVISION_1,
+            &mut sd,
+            None,
+        )
+        .map_err(|e| format!("{sddl:?}: {e}"))?;
         let ok = SetFileSecurityW(
             PCWSTR(name.as_ptr()),
             DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
@@ -108,7 +117,11 @@ pub fn set_acl(path: &Path, sddl: &str) -> Result<(), String> {
         if ok {
             Ok(())
         } else {
-            Err(format!("the access list of {}: {}", path.display(), std::io::Error::last_os_error()))
+            Err(format!(
+                "the access list of {}: {}",
+                path.display(),
+                std::io::Error::last_os_error()
+            ))
         }
     }
 }
@@ -122,7 +135,12 @@ impl Descriptor {
         let mut sd = PSECURITY_DESCRIPTOR::default();
         // SAFETY: a zero-terminated SDDL string and an out-pointer, freed by Drop.
         unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(PCWSTR(text.as_ptr()), SDDL_REVISION_1, &mut sd, None)
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                PCWSTR(text.as_ptr()),
+                SDDL_REVISION_1,
+                &mut sd,
+                None,
+            )
         }
         .map_err(|e| format!("{sddl:?}: {e}"))?;
         Ok(Descriptor(sd))
@@ -149,7 +167,9 @@ impl Drop for Descriptor {
 
 /// 32 random bytes as hex, from the system's generator.
 pub fn random_secret() -> Result<String, String> {
-    use windows::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
+    use windows::Win32::Security::Cryptography::{
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
+    };
     let mut bytes = [0u8; 32];
     // SAFETY: a buffer to fill.
     let r = unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
@@ -166,7 +186,15 @@ fn policy_key(access: windows::Win32::System::Registry::REG_SAM_FLAGS) -> Result
     let key = wide(POLICY_KEY);
     let mut h = HKEY::default();
     // SAFETY: a zero-terminated subkey and an out-pointer.
-    let r = unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, PCWSTR(key.as_ptr()), None, access, &mut h) };
+    let r = unsafe {
+        RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key.as_ptr()),
+            None,
+            access,
+            &mut h,
+        )
+    };
     if r.0 != 0 {
         return Err(format!("HKLM\\{POLICY_KEY}: error {}", r.0));
     }
@@ -202,7 +230,13 @@ pub fn set_sas_policy(value: Option<u32>) -> Result<(), String> {
     // SAFETY: the key opened above and a zero-terminated value name; closed after.
     let r = unsafe {
         let r = match value {
-            Some(v) => RegSetValueExW(h, PCWSTR(name.as_ptr()), None, REG_DWORD, Some(&v.to_le_bytes())),
+            Some(v) => RegSetValueExW(
+                h,
+                PCWSTR(name.as_ptr()),
+                None,
+                REG_DWORD,
+                Some(&v.to_le_bytes()),
+            ),
             None => RegDeleteValueW(h, PCWSTR(name.as_ptr())),
         };
         let _ = RegCloseKey(h);

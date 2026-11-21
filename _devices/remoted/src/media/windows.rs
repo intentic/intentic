@@ -54,7 +54,11 @@ impl Windows {
     /// helper now.
     fn secure_desktop(&self) -> serde_json::Value {
         let mut status = crate::service::windows_status();
-        let connected = self.helper.as_ref().and_then(|h| h.current()).map(|l| l.version.clone());
+        let connected = self
+            .helper
+            .as_ref()
+            .and_then(|h| h.current())
+            .map(|l| l.version.clone());
         status["connected"] = serde_json::json!(connected.is_some());
         if let Some(version) = connected {
             status["helperVersion"] = serde_json::json!(version);
@@ -166,7 +170,9 @@ impl Platform for Windows {
 
     fn screen_status(&self, monitor: &str) -> Option<serde_json::Value> {
         let statuses = self.statuses.lock().unwrap_or_else(PoisonError::into_inner);
-        statuses.get(monitor).map(|cell| serde_json::json!(*cell.lock()))
+        statuses
+            .get(monitor)
+            .map(|cell| serde_json::json!(*cell.lock()))
     }
 
     fn open(&self, monitor: &str, hub: &Arc<Hub>, base: VideoConfig) -> Result<Opened, String> {

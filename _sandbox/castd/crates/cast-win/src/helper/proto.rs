@@ -30,17 +30,47 @@ pub enum ToHelper {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "camelCase")]
 pub enum FromHelper {
-    Welcome { protocol: u32, version: String },
-    Refused { why: String },
+    Welcome {
+        protocol: u32,
+        version: String,
+    },
+    Refused {
+        why: String,
+    },
     /// The duplication's mirror: an NT handle valid in remoted's process, the texture's size.
-    Opened { id: u64, handle: u64, width: u32, height: u32 },
-    OpenFailed { id: u64, why: String },
-    Rects { id: u64, rects: Vec<[u32; 4]> },
-    Rebuild { id: u64 },
-    Gone { id: u64, why: String },
-    Fallback { id: u64, why: String },
-    Cursor { id: u64, cursor: MediaCursor },
-    Status { id: u64, status: CaptureStatus },
+    Opened {
+        id: u64,
+        handle: u64,
+        width: u32,
+        height: u32,
+    },
+    OpenFailed {
+        id: u64,
+        why: String,
+    },
+    Rects {
+        id: u64,
+        rects: Vec<[u32; 4]>,
+    },
+    Rebuild {
+        id: u64,
+    },
+    Gone {
+        id: u64,
+        why: String,
+    },
+    Fallback {
+        id: u64,
+        why: String,
+    },
+    Cursor {
+        id: u64,
+        cursor: MediaCursor,
+    },
+    Status {
+        id: u64,
+        status: CaptureStatus,
+    },
     /// The service is removing itself.
     Uninstalling,
 }

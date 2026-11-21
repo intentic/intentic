@@ -29,8 +29,8 @@ pub fn connect(display: Option<&str>) -> Result<(RustConnection, usize), String>
         return RustConnection::connect(display).map_err(|e| e.to_string());
     };
     let socket = format!("/tmp/.X11-unix/X{number}");
-    let stream = std::os::unix::net::UnixStream::connect(&socket)
-        .map_err(|e| format!("{socket}: {e}"))?;
+    let stream =
+        std::os::unix::net::UnixStream::connect(&socket).map_err(|e| format!("{socket}: {e}"))?;
     let (stream, _) = DefaultStream::from_unix_stream(stream).map_err(|e| e.to_string())?;
     let (name, data) = cookie(&file, number).unwrap_or_default();
     let conn = RustConnection::connect_to_stream_with_auth_info(stream, screen, name, data)
@@ -54,7 +54,10 @@ pub fn local_display(display: &str) -> Option<(u16, usize)> {
 /// entry for that number or for every display).
 pub fn cookie(file: &Path, number: u16) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut bytes = Vec::new();
-    std::fs::File::open(file).ok()?.read_to_end(&mut bytes).ok()?;
+    std::fs::File::open(file)
+        .ok()?
+        .read_to_end(&mut bytes)
+        .ok()?;
     let host = std::fs::read_to_string("/proc/sys/kernel/hostname")
         .map(|h| h.trim().as_bytes().to_vec())
         .unwrap_or_default();
@@ -141,9 +144,27 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("cast-x11-xauth-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("Xauthority");
-        let mut bytes = entry(256, b"otherhost", b"0", b"MIT-MAGIC-COOKIE-1", b"wrong-host");
-        bytes.extend(entry(256, b"h", b"1", b"MIT-MAGIC-COOKIE-1", b"display-one"));
-        bytes.extend(entry(256, b"h", b"0", b"XDM-AUTHORIZATION-1", b"other-scheme"));
+        let mut bytes = entry(
+            256,
+            b"otherhost",
+            b"0",
+            b"MIT-MAGIC-COOKIE-1",
+            b"wrong-host",
+        );
+        bytes.extend(entry(
+            256,
+            b"h",
+            b"1",
+            b"MIT-MAGIC-COOKIE-1",
+            b"display-one",
+        ));
+        bytes.extend(entry(
+            256,
+            b"h",
+            b"0",
+            b"XDM-AUTHORIZATION-1",
+            b"other-scheme",
+        ));
         std::fs::write(&file, &bytes).unwrap();
         assert_eq!(
             cookie(&file, 1),

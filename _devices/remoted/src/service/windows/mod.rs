@@ -23,7 +23,8 @@ pub fn home() -> PathBuf {
     if let Some(dir) = std::env::var_os("INTENTIC_REMOTED_SERVICE_HOME") {
         return PathBuf::from(dir);
     }
-    let base = std::env::var_os("ProgramData").map_or_else(|| PathBuf::from(r"C:\ProgramData"), PathBuf::from);
+    let base = std::env::var_os("ProgramData")
+        .map_or_else(|| PathBuf::from(r"C:\ProgramData"), PathBuf::from);
     base.join("Intentic").join("Remoted")
 }
 
@@ -110,7 +111,9 @@ fn uninstall_through_helper() -> Result<(), String> {
         return Ok(());
     }
     let finder = finder::finder().ok_or("the helper is switched off here")?;
-    let link = finder.link().ok_or("the helper is not reachable from this session")?;
+    let link = finder
+        .link()
+        .ok_or("the helper is not reachable from this session")?;
     link.uninstall()?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
     while std::time::Instant::now() < deadline {

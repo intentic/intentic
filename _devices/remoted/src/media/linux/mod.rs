@@ -29,8 +29,8 @@ use x11rb::connection::Connection;
 use x11rb::protocol::randr::ConnectionExt as _;
 use x11rb::protocol::xproto::ConnectionExt as _;
 
-use super::platform::{Opened, Platform};
 use super::Monitor;
+use super::platform::{Opened, Platform};
 
 /// How long what was found about the session is trusted before it is looked at again.
 const LOOK_EVERY: Duration = Duration::from_secs(3);
@@ -158,7 +158,9 @@ fn find_mode(skip: &[String]) -> Mode {
                 desktop: None,
             };
         }
-        log::warn!("INTENTIC_REMOTED_SCREEN={forced}: expected `virtual` or `x11:<display>`; looking instead");
+        log::warn!(
+            "INTENTIC_REMOTED_SCREEN={forced}: expected `virtual` or `x11:<display>`; looking instead"
+        );
     }
     // remoted's own environment first: started from inside a session, it is that session's.
     let own_desktop = std::env::var("XDG_CURRENT_DESKTOP").ok();
@@ -274,7 +276,13 @@ pub fn x11_monitors(display: &str) -> Result<(Vec<Monitor>, (u32, u32)), String>
 pub fn monitor_id(name: &str, index: usize) -> String {
     let id: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .take(57)
         .collect();
     if id.trim_matches('_').is_empty() {
@@ -298,9 +306,7 @@ impl ScreenSource for MonitorScreen {
             .iter()
             .find(|m| m.id == self.id)
             .ok_or_else(|| format!("monitor {} is no longer connected", self.id))?;
-        let whole = monitor.x == 0
-            && monitor.y == 0
-            && (monitor.width, monitor.height) == size;
+        let whole = monitor.x == 0 && monitor.y == 0 && (monitor.width, monitor.height) == size;
         let crop = (!whole).then(|| Rect {
             x: monitor.x.max(0) as u32,
             y: monitor.y.max(0) as u32,
@@ -364,7 +370,12 @@ impl Platform for Linux {
     }
 
     fn shutdown(&self) {
-        let desktop = self.state.lock().expect("linux screens poisoned").desktop.take();
+        let desktop = self
+            .state
+            .lock()
+            .expect("linux screens poisoned")
+            .desktop
+            .take();
         drop(desktop);
     }
 
@@ -402,7 +413,9 @@ impl Platform for Linux {
             Mode::Virtual(Err(missing)) => Err(missing.words),
             Mode::Virtual(Ok(plan)) => {
                 if monitor != VIRTUAL_ID {
-                    return Err(format!("no screen {monitor} on this computer's virtual desktop"));
+                    return Err(format!(
+                        "no screen {monitor} on this computer's virtual desktop"
+                    ));
                 }
                 if !state.desktop.as_mut().is_some_and(|d| d.alive()) {
                     state.desktop = None;

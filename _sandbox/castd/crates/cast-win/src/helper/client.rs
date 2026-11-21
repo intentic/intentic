@@ -46,14 +46,19 @@ impl Link {
         if let Some(want) = server_owners {
             let owner = pipe.owner_sid().ok_or("the pipe's owner is unknown")?;
             if !want.contains(&owner.as_str()) {
-                return Err(format!("the pipe is owned by {owner}, not by any of {want:?}"));
+                return Err(format!(
+                    "the pipe is owned by {owner}, not by any of {want:?}"
+                ));
             }
         }
-        if let (Some(theirs), Some(ours)) =
-            (pipe::process_session(pid), pipe::process_session(std::process::id()))
-            && theirs != ours
+        if let (Some(theirs), Some(ours)) = (
+            pipe::process_session(pid),
+            pipe::process_session(std::process::id()),
+        ) && theirs != ours
         {
-            return Err(format!("the helper (pid {pid}) is in session {theirs}, not {ours}"));
+            return Err(format!(
+                "the helper (pid {pid}) is in session {theirs}, not {ours}"
+            ));
         }
         if let Some(want) = server_image {
             // A process the user may not open (a SYSTEM one with the default access list) cannot be asked: the owner
@@ -98,7 +103,10 @@ impl Link {
             .name("helper-link".into())
             .spawn(move || reading.read())
             .map_err(|e| e.to_string())?;
-        log::info!("the lock screen and admin prompts helper is connected (pid {pid}, {})", link.version);
+        log::info!(
+            "the lock screen and admin prompts helper is connected (pid {pid}, {})",
+            link.version
+        );
         Ok(link)
     }
 
@@ -114,7 +122,9 @@ impl Link {
             }
         };
         self.alive.store(false, Ordering::Relaxed);
-        log::warn!("the lock screen and admin prompts helper went away ({why}); screens capture by themselves");
+        log::warn!(
+            "the lock screen and admin prompts helper went away ({why}); screens capture by themselves"
+        );
         for (_, waiter) in self.waiting.lock().drain() {
             let _ = waiter.send(Err("the helper went away".into()));
         }
@@ -147,15 +157,28 @@ impl Link {
             }
             FromHelper::Rects { id, rects } => {
                 if let Some(out) = self.route(id) {
-                    let rects: Vec<(u32, u32, u32, u32)> = rects.into_iter().map(|[a, b, c, d]| (a, b, c, d)).collect();
+                    let rects: Vec<(u32, u32, u32, u32)> =
+                        rects.into_iter().map(|[a, b, c, d]| (a, b, c, d)).collect();
                     out.rects(&rects);
                 }
             }
             FromHelper::Rebuild { id } => self.route(id).into_iter().for_each(|out| out.rebuild()),
-            FromHelper::Gone { id, why } => self.route(id).into_iter().for_each(|out| out.gone(why.clone())),
-            FromHelper::Fallback { id, why } => self.route(id).into_iter().for_each(|out| out.fallback(why.clone())),
-            FromHelper::Cursor { id, cursor } => self.route(id).into_iter().for_each(|out| out.cursor(cursor.clone())),
-            FromHelper::Status { id, status } => self.route(id).into_iter().for_each(|out| out.status(status.clone())),
+            FromHelper::Gone { id, why } => self
+                .route(id)
+                .into_iter()
+                .for_each(|out| out.gone(why.clone())),
+            FromHelper::Fallback { id, why } => self
+                .route(id)
+                .into_iter()
+                .for_each(|out| out.fallback(why.clone())),
+            FromHelper::Cursor { id, cursor } => self
+                .route(id)
+                .into_iter()
+                .for_each(|out| out.cursor(cursor.clone())),
+            FromHelper::Status { id, status } => self
+                .route(id)
+                .into_iter()
+                .for_each(|out| out.status(status.clone())),
             FromHelper::Welcome { .. } | FromHelper::Refused { .. } | FromHelper::Uninstalling => {}
         }
     }

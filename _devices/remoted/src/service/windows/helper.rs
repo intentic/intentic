@@ -12,7 +12,8 @@ use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
 
 pub fn main() -> i32 {
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).try_init();
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .try_init();
     let mut line = String::new();
     if std::io::stdin().lock().read_line(&mut line).is_err() {
         return 2;
@@ -27,7 +28,11 @@ pub fn main() -> i32 {
     // The service holds stdin: when it goes, so does the helper.
     std::thread::spawn(|| {
         let mut rest = String::new();
-        while std::io::stdin().lock().read_line(&mut rest).is_ok_and(|n| n > 0) {
+        while std::io::stdin()
+            .lock()
+            .read_line(&mut rest)
+            .is_ok_and(|n| n > 0)
+        {
             rest.clear();
         }
         std::process::exit(0);
@@ -121,7 +126,10 @@ fn check(peer: u32, session: u32, clients: &[std::path::PathBuf]) -> Result<(), 
     }
     let image = pipe::process_image(peer).ok_or("its image is unknown")?;
     if !clients.iter().any(|c| pipe::same_path(&image, c)) {
-        return Err(format!("it runs {}, which the service was not installed for", image.display()));
+        return Err(format!(
+            "it runs {}, which the service was not installed for",
+            image.display()
+        ));
     }
     Ok(())
 }

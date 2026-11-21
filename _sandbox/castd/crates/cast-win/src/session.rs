@@ -74,7 +74,8 @@ pub fn display() -> Display {
 fn watch_display() {
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::Power::{
-        DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, POWERBROADCAST_SETTING, PowerSettingRegisterNotification,
+        DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, POWERBROADCAST_SETTING,
+        PowerSettingRegisterNotification,
     };
     use windows::Win32::System::SystemServices::GUID_CONSOLE_DISPLAY_STATE;
     use windows::Win32::UI::WindowsAndMessaging::DEVICE_NOTIFY_CALLBACK;
@@ -111,7 +112,10 @@ fn watch_display() {
             )
         };
         if r.0 != 0 {
-            log::debug!("the display's state is not watched (PowerSettingRegisterNotification: {})", r.0);
+            log::debug!(
+                "the display's state is not watched (PowerSettingRegisterNotification: {})",
+                r.0
+            );
         }
     });
 }
@@ -169,7 +173,9 @@ impl State {
     /// What blocks capture, given that duplication was refused. `secure_visible` is whether this process can see a
     /// secure desktop (it runs as SYSTEM), so a desktop other than `Default` does not block it.
     pub fn blocked(&self, secure_visible: bool) -> Blocked {
-        if (self.console != u32::MAX && self.console != self.session && !self.remote) || !self.connected {
+        if (self.console != u32::MAX && self.console != self.session && !self.remote)
+            || !self.connected
+        {
             return Blocked::NotOnScreen;
         }
         if self.display == Display::Off {
@@ -199,7 +205,8 @@ fn session_info(session: u32) -> (bool, Option<bool>) {
     let mut bytes = 0u32;
     // SAFETY: Windows allocates the answer, freed below; it is read only when it is at least a WTSINFOEXW.
     unsafe {
-        if WTSQuerySessionInformationW(None, session, WTSSessionInfoEx, &mut buf, &mut bytes).is_err()
+        if WTSQuerySessionInformationW(None, session, WTSSessionInfoEx, &mut buf, &mut bytes)
+            .is_err()
             || buf.is_null()
         {
             return (true, None);
@@ -337,17 +344,34 @@ mod tests {
     #[test]
     fn a_refusal_is_explained_most_specific_first() {
         assert_eq!(state().blocked(false), Blocked::Unknown);
-        let other = State { console: 2, ..state() };
+        let other = State {
+            console: 2,
+            ..state()
+        };
         assert_eq!(other.blocked(false), Blocked::NotOnScreen);
-        let off = State { display: Display::Off, locked: Some(true), ..state() };
+        let off = State {
+            display: Display::Off,
+            locked: Some(true),
+            ..state()
+        };
         assert_eq!(off.blocked(false), Blocked::DisplayOff);
-        let secure = State { input_desktop: None, locked: Some(true), ..state() };
+        let secure = State {
+            input_desktop: None,
+            locked: Some(true),
+            ..state()
+        };
         assert_eq!(secure.blocked(false), Blocked::SecureDesktop);
         // SYSTEM sees the secure desktop: that is not what blocks it.
         assert_eq!(secure.blocked(true), Blocked::Unknown);
-        let locked = State { locked: Some(true), ..state() };
+        let locked = State {
+            locked: Some(true),
+            ..state()
+        };
         assert_eq!(locked.blocked(false), Blocked::Locked);
-        let gone = State { connected: false, ..state() };
+        let gone = State {
+            connected: false,
+            ..state()
+        };
         assert_eq!(gone.blocked(false), Blocked::NotOnScreen);
     }
 }

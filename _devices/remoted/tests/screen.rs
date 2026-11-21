@@ -62,7 +62,10 @@ struct Uplink {
 
 impl Uplink {
     async fn stream(&self) -> Stream {
-        self.opener.open().await.expect("a stream opens down the uplink")
+        self.opener
+            .open()
+            .await
+            .expect("a stream opens down the uplink")
     }
 
     async fn call(&self, method: &str, path: &str) -> (u16, Value) {
@@ -80,7 +83,10 @@ impl Uplink {
         let response = sender.send_request(request).await.expect("remoted answers");
         let status = response.status().as_u16();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     /// A viewer on `screen-<monitor>`, or the status its upgrade was refused with.
@@ -127,9 +133,10 @@ async fn take(tcp: TcpStream) -> Option<Uplink> {
         }
         Ok(response)
     };
-    let socket = tokio_tungstenite::accept_hdr_async_with_config(tcp, check, Some(tunnel::socket_config()))
-        .await
-        .ok()?;
+    let socket =
+        tokio_tungstenite::accept_hdr_async_with_config(tcp, check, Some(tunnel::socket_config()))
+            .await
+            .ok()?;
     let (closing, closed) = watch::channel(None);
     let (session, pumping) = tunnel::pump(socket, Liveness::Pings, closed);
     let (opener, _driving) = tunnel::mux::client(session);
@@ -172,7 +179,11 @@ struct Remoted {
 
 impl Remoted {
     async fn start(first: &Value, env: &[(&str, String)]) -> Self {
-        let dir = std::env::temp_dir().join(format!("remoted-screen-{}-{}", std::process::id(), first_free()));
+        let dir = std::env::temp_dir().join(format!(
+            "remoted-screen-{}-{}",
+            std::process::id(),
+            first_free()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let config = dir.join("remoted.json");
         write_config(&config, first);
@@ -181,7 +192,10 @@ impl Remoted {
             .args(["run", "--config"])
             .arg(&config)
             .arg("--parent-stdin")
-            .env("RUST_LOG", "remoted=debug,cast_core=info,cast_x11=info,info")
+            .env(
+                "RUST_LOG",
+                "remoted=debug,cast_core=info,cast_x11=info,info",
+            )
             .env("INTENTIC_REMOTED_NO_RTC", "1")
             .env_remove("WAYLAND_DISPLAY")
             .stdin(Stdio::piped())
@@ -266,7 +280,9 @@ impl Drop for Xvfb {
 }
 
 fn xvfb_path() -> Option<PathBuf> {
-    let path = PathBuf::from(std::env::var("REMOTED_TEST_XVFB").unwrap_or_else(|_| "/usr/bin/Xvfb".into()));
+    let path = PathBuf::from(
+        std::env::var("REMOTED_TEST_XVFB").unwrap_or_else(|_| "/usr/bin/Xvfb".into()),
+    );
     path.exists().then_some(path)
 }
 
@@ -288,7 +304,16 @@ fn start_xvfb(width: u32, height: u32) -> Option<Xvfb> {
         }
         let display = format!(":{n}");
         let child = std::process::Command::new(&xvfb)
-            .args([&display, "-screen", "0", &format!("{width}x{height}x24"), "-nolisten", "tcp", "-ac", "-noreset"])
+            .args([
+                &display,
+                "-screen",
+                "0",
+                &format!("{width}x{height}x24"),
+                "-nolisten",
+                "tcp",
+                "-ac",
+                "-noreset",
+            ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -297,7 +322,10 @@ fn start_xvfb(width: u32, height: u32) -> Option<Xvfb> {
         let started = Instant::now();
         let mut lost = false;
         while x11rb::connect(Some(&x.display)).is_err() {
-            assert!(started.elapsed() < Duration::from_secs(10), "Xvfb did not start");
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "Xvfb did not start"
+            );
             if matches!(x.child.try_wait(), Ok(Some(_))) {
                 lost = true;
                 break;
@@ -325,7 +353,8 @@ impl Painter {
         let (conn, n) = cast_x11::connect::connect(Some(display)).expect("the painter connects");
         let root = conn.setup().roots[n].root;
         let gc = conn.generate_id().unwrap();
-        conn.create_gc(gc, root, &xproto::CreateGCAux::new()).unwrap();
+        conn.create_gc(gc, root, &xproto::CreateGCAux::new())
+            .unwrap();
         Painter { conn, root, gc }
     }
 
@@ -348,7 +377,9 @@ impl Painter {
                 0,
                 xproto::WindowClass::INPUT_OUTPUT,
                 x11rb::COPY_FROM_PARENT,
-                &xproto::CreateWindowAux::new().override_redirect(1).background_pixel(0x0020_3040),
+                &xproto::CreateWindowAux::new()
+                    .override_redirect(1)
+                    .background_pixel(0x0020_3040),
             )
             .unwrap();
         painter.conn.map_window(window).unwrap();
@@ -362,7 +393,16 @@ impl Painter {
             .change_gc(self.gc, &xproto::ChangeGCAux::new().foreground(rgb))
             .unwrap();
         self.conn
-            .poly_fill_rectangle(self.root, self.gc, &[xproto::Rectangle { x, y, width: w, height: h }])
+            .poly_fill_rectangle(
+                self.root,
+                self.gc,
+                &[xproto::Rectangle {
+                    x,
+                    y,
+                    width: w,
+                    height: h,
+                }],
+            )
             .unwrap();
         self.conn.flush().unwrap();
     }
@@ -375,7 +415,13 @@ impl Painter {
     /// A RandR 1.5 monitor over part of the screen: a second monitor as a person's dual-head would list.
     fn add_monitor(&self, name: &str, x: i16, y: i16, w: u16, h: u16) {
         use x11rb::protocol::randr::{ConnectionExt as _, MonitorInfo};
-        let atom = self.conn.intern_atom(false, name.as_bytes()).unwrap().reply().unwrap().atom;
+        let atom = self
+            .conn
+            .intern_atom(false, name.as_bytes())
+            .unwrap()
+            .reply()
+            .unwrap()
+            .atom;
         self.conn
             .randr_set_monitor(
                 self.root,
@@ -400,7 +446,11 @@ impl Painter {
 
 /// Reads until a video frame arrives, acking each as a browser does; answers the frames read and whether the first
 /// was a keyframe.
-async fn frames(viewer: &mut MediaClient<Stream>, wanted: usize, within: Duration) -> (usize, bool) {
+async fn frames(
+    viewer: &mut MediaClient<Stream>,
+    wanted: usize,
+    within: Duration,
+) -> (usize, bool) {
     let deadline = Instant::now() + within;
     let mut got = 0;
     let mut first_key = None;
@@ -420,7 +470,10 @@ async fn frames(viewer: &mut MediaClient<Stream>, wanted: usize, within: Duratio
 
 async fn ack(viewer: &mut MediaClient<Stream>, id: u32) {
     let _ = viewer
-        .send(&browser_wire::BrowserMediaClientMessage::Ack { id, decode_ms: Some(1.0) })
+        .send(&browser_wire::BrowserMediaClientMessage::Ack {
+            id,
+            decode_ms: Some(1.0),
+        })
         .await;
 }
 
@@ -428,8 +481,11 @@ async fn ack(viewer: &mut MediaClient<Stream>, id: u32) {
 async fn hello(viewer: &mut MediaClient<Stream>) -> (u32, u32) {
     let deadline = Instant::now() + PATIENCE;
     while Instant::now() < deadline {
-        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello { width, height, .. })) =
-            viewer.recv(Duration::from_secs(1)).await
+        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello {
+            width,
+            height,
+            ..
+        })) = viewer.recv(Duration::from_secs(1)).await
         {
             return (width, height);
         }
@@ -465,7 +521,9 @@ async fn closed(viewer: &mut MediaClient<Stream>, within: Duration) -> bool {
     let deadline = Instant::now() + within;
     while Instant::now() < deadline {
         let asked = Instant::now();
-        if viewer.recv(Duration::from_secs(2)).await.is_none() && asked.elapsed() < Duration::from_millis(1800) {
+        if viewer.recv(Duration::from_secs(2)).await.is_none()
+            && asked.elapsed() < Duration::from_millis(1800)
+        {
             return true;
         }
     }
@@ -490,7 +548,10 @@ async fn a_screen_is_streamed_typed_into_shared_gated_and_stopped() {
         ],
     )
     .await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
 
     let (status, info) = uplink.call("GET", "/info").await;
     assert_eq!(status, 200);
@@ -501,7 +562,12 @@ async fn a_screen_is_streamed_typed_into_shared_gated_and_stopped() {
         remoted.end().await;
         return;
     }
-    let ids: Vec<&str> = info["monitors"].as_array().unwrap().iter().map(|m| m["id"].as_str().unwrap()).collect();
+    let ids: Vec<&str> = info["monitors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_str().unwrap())
+        .collect();
     assert!(ids.contains(&"TEST-RIGHT"), "{info}");
 
     // Refusals before any upgrade: a token for something else, a screen there is not.
@@ -546,29 +612,54 @@ async fn a_screen_is_streamed_typed_into_shared_gated_and_stopped() {
     assert!(got >= 3, "the watcher got {got} frames");
     move_to(&mut watcher, 300.0, 300.0).await;
     settle(&mut watcher, Duration::from_millis(500)).await;
-    assert_eq!(painter.pointer(), (650, 20), "a watcher's pointer moved the display");
+    assert_eq!(
+        painter.pointer(),
+        (650, 20),
+        "a watcher's pointer moved the display"
+    );
     let (_, stats) = uplink.call("GET", "/stats").await;
-    assert_eq!(stats["screens"].as_array().map(Vec::len), Some(1), "{stats}");
+    assert_eq!(
+        stats["screens"].as_array().map(Vec::len),
+        Some(1),
+        "{stats}"
+    );
     assert_eq!(stats["screens"][0]["monitor"], "TEST-RIGHT", "{stats}");
     assert_eq!(stats["screens"][0]["viewers"], 2, "{stats}");
     // What the picture runs on, one of those /info lists (asked again: the encoder probe may have finished since).
     let encoder = stats["screens"][0]["encoder"].as_str().unwrap_or_default();
     let (_, now) = uplink.call("GET", "/info").await;
-    assert!(now["encoders"].as_array().unwrap().iter().any(|e| e == encoder), "{stats} / {now}");
+    assert!(
+        now["encoders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e == encoder),
+        "{stats} / {now}"
+    );
 
     // Control switched off: the driver watches.
     remoted.rewrite(&config(port, true, false));
     tokio::time::sleep(Duration::from_millis(1500)).await;
     move_to(&mut driver, 100.0, 100.0).await;
     settle(&mut driver, Duration::from_millis(500)).await;
-    assert_eq!(painter.pointer(), (650, 20), "input reached the display with control off");
+    assert_eq!(
+        painter.pointer(),
+        (650, 20),
+        "input reached the display with control off"
+    );
 
     // Viewing switched off: both sockets close.
     remoted.rewrite(&config(port, false, false));
     painting.store(false, std::sync::atomic::Ordering::Relaxed);
     paints.join().unwrap();
-    assert!(closed(&mut driver, Duration::from_secs(10)).await, "the driver's socket stayed open");
-    assert!(closed(&mut watcher, Duration::from_secs(10)).await, "the watcher's socket stayed open");
+    assert!(
+        closed(&mut driver, Duration::from_secs(10)).await,
+        "the driver's socket stayed open"
+    );
+    assert!(
+        closed(&mut watcher, Duration::from_secs(10)).await,
+        "the watcher's socket stayed open"
+    );
     // And the pipeline stops once its linger passed.
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -585,9 +676,22 @@ async fn a_screen_is_streamed_typed_into_shared_gated_and_stopped() {
 /// Whether this computer can start a virtual desktop: Xvfb and a window manager remoted knows.
 fn can_start_a_desktop() -> bool {
     xvfb_path().is_some()
-        && ["startxfce4", "openbox-session", "openbox", "icewm", "fluxbox", "twm", "xfwm4"]
-            .iter()
-            .any(|wm| std::env::var("PATH").unwrap_or_default().split(':').any(|d| std::path::Path::new(d).join(wm).exists()))
+        && [
+            "startxfce4",
+            "openbox-session",
+            "openbox",
+            "icewm",
+            "fluxbox",
+            "twm",
+            "xfwm4",
+        ]
+        .iter()
+        .any(|wm| {
+            std::env::var("PATH")
+                .unwrap_or_default()
+                .split(':')
+                .any(|d| std::path::Path::new(d).join(wm).exists())
+        })
 }
 
 /// The virtual desktop remoted starts when there is no display: opened on the first viewer, resized to the viewer's
@@ -603,10 +707,16 @@ async fn a_virtual_desktop_outlives_its_viewers_and_follows_the_viewers_box() {
     let (port, mut uplinks) = sandbox().await;
     let remoted = Remoted::start(
         &config(port, true, true),
-        &[("INTENTIC_REMOTED_SCREEN", "virtual".into()), ("INTENTIC_REMOTED_LINGER_MS", "300".into())],
+        &[
+            ("INTENTIC_REMOTED_SCREEN", "virtual".into()),
+            ("INTENTIC_REMOTED_LINGER_MS", "300".into()),
+        ],
     )
     .await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (_, info) = uplink.call("GET", "/info").await;
     if info["encoders"].as_array().is_none_or(|e| e.is_empty()) {
         eprintln!("remoted's virtual desktop test stands down: this build has no H.264 encoder");
@@ -621,31 +731,57 @@ async fn a_virtual_desktop_outlives_its_viewers_and_follows_the_viewers_box() {
     assert_eq!(frames(&mut viewer, 1, PATIENCE).await.0, 1);
     // The viewer's box (CSS pixels at its scale) becomes the desktop's size.
     viewer
-        .send(&browser_wire::BrowserMediaClientMessage::Resize { width: 640, height: 400, scale: 2.0, hz: None })
+        .send(&browser_wire::BrowserMediaClientMessage::Resize {
+            width: 640,
+            height: 400,
+            scale: 2.0,
+            hz: None,
+        })
         .await
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello { width, height, .. })) =
-            viewer.recv(Duration::from_millis(500)).await
+        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello {
+            width,
+            height,
+            ..
+        })) = viewer.recv(Duration::from_millis(500)).await
             && (width, height) == (1280, 800)
         {
             break;
         }
-        assert!(Instant::now() < deadline, "the desktop did not take the viewer's box");
+        assert!(
+            Instant::now() < deadline,
+            "the desktop did not take the viewer's box"
+        );
     }
     let (_, info) = uplink.call("GET", "/info").await;
-    let display = info["screen"]["running"].as_str().expect("a running desktop").to_owned();
+    let display = info["screen"]["running"]
+        .as_str()
+        .expect("a running desktop")
+        .to_owned();
     viewer.close().await;
 
     // Long enough for the pipeline to stop and the thread that opened the desktop to be retired.
     tokio::time::sleep(Duration::from_secs(12)).await;
     let (_, stats) = uplink.call("GET", "/stats").await;
-    assert_eq!(stats["screens"], json!([]), "the pipeline stopped after its linger: {stats}");
+    assert_eq!(
+        stats["screens"],
+        json!([]),
+        "the pipeline stopped after its linger: {stats}"
+    );
     let (_, info) = uplink.call("GET", "/info").await;
-    assert_eq!(info["screen"]["running"], display.as_str(), "the desktop ended with its viewers: {info}");
+    assert_eq!(
+        info["screen"]["running"],
+        display.as_str(),
+        "the desktop ended with its viewers: {info}"
+    );
     let mut again = uplink.viewer("screen-virtual", &token).await.unwrap();
-    assert_eq!(hello(&mut again).await, (1280, 800), "the desktop kept its size");
+    assert_eq!(
+        hello(&mut again).await,
+        (1280, 800),
+        "the desktop kept its size"
+    );
     assert_eq!(frames(&mut again, 1, PATIENCE).await.0, 1);
     again.close().await;
     remoted.end().await;
@@ -671,7 +807,9 @@ async fn fake_stun() -> std::net::SocketAddr {
         while let Ok((n, from)) = socket.recv_from(&mut buf).await {
             if let Some(id) = stun::binding_request_id(&buf[..n]) {
                 let mapped = std::net::SocketAddr::new(OUTSIDE.into(), from.port());
-                let _ = socket.send_to(&stun::binding_success_for(id, mapped), from).await;
+                let _ = socket
+                    .send_to(&stun::binding_success_for(id, mapped), from)
+                    .await;
             }
         }
     });
@@ -695,20 +833,33 @@ async fn a_screens_peer_connection_takes_the_uplinks_stun_servers_and_carries_th
         return;
     };
     let Some(host) = route_out() else {
-        eprintln!("remoted's peer test stands down: no route out of this computer for a host candidate");
+        eprintln!(
+            "remoted's peer test stands down: no route out of this computer for a host candidate"
+        );
         return;
     };
     let stun_server = fake_stun().await;
     let (port, mut uplinks) = sandbox().await;
     let remoted = Remoted::start(
-        &with_ice(port, true, true, Some(vec![format!("stun:{stun_server}"), "turn:relay.example".into()])),
+        &with_ice(
+            port,
+            true,
+            true,
+            Some(vec![
+                format!("stun:{stun_server}"),
+                "turn:relay.example".into(),
+            ]),
+        ),
         &[
             ("INTENTIC_REMOTED_SCREEN", format!("x11:{}", x.display)),
             ("INTENTIC_REMOTED_NO_RTC", String::new()),
         ],
     )
     .await;
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (_, info) = uplink.call("GET", "/info").await;
     if info["encoders"].as_array().is_none_or(|e| e.is_empty()) {
         eprintln!("remoted's peer test stands down: this build has no H.264 encoder");
@@ -717,11 +868,15 @@ async fn a_screens_peer_connection_takes_the_uplinks_stun_servers_and_carries_th
     }
     let monitor = info["monitors"][0]["id"].as_str().unwrap().to_owned();
     let session = format!("screen-{monitor}");
-    let mut viewer = uplink.viewer(&session, &viewer_token(&format!("media/{session}"), false)).await.unwrap();
+    let mut viewer = uplink
+        .viewer(&session, &viewer_token(&format!("media/{session}"), false))
+        .await
+        .unwrap();
     let deadline = Instant::now() + PATIENCE;
     let rtc = loop {
-        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello { rtc, .. })) =
-            viewer.recv(Duration::from_secs(1)).await
+        if let Some(Received::Json(browser_wire::BrowserMediaServerMessage::Hello {
+            rtc, ..
+        })) = viewer.recv(Duration::from_secs(1)).await
         {
             break rtc;
         }
@@ -729,25 +884,37 @@ async fn a_screens_peer_connection_takes_the_uplinks_stun_servers_and_carries_th
     };
     assert_eq!(rtc, Some(true), "the hello offers a peer connection");
 
-    let (mut peer, offer) = cast_core::rtc::viewer::RtcViewer::offer(host).await.unwrap();
+    let (mut peer, offer) = cast_core::rtc::viewer::RtcViewer::offer(host)
+        .await
+        .unwrap();
     viewer
         .send(&browser_wire::BrowserMediaClientMessage::RtcOffer { sdp: offer })
         .await
         .unwrap();
     let answer = loop {
         match viewer.recv(Duration::from_secs(1)).await {
-            Some(Received::Json(browser_wire::BrowserMediaServerMessage::RtcAnswer { sdp })) => break sdp,
+            Some(Received::Json(browser_wire::BrowserMediaServerMessage::RtcAnswer { sdp })) => {
+                break sdp;
+            }
             Some(Received::Json(browser_wire::BrowserMediaServerMessage::RtcClosed { reason })) => {
                 panic!("the offer was refused: {reason}")
             }
-            Some(Received::Media { header, .. }) if header.kind == KIND_VIDEO => ack(&mut viewer, header.id).await,
+            Some(Received::Media { header, .. }) if header.kind == KIND_VIDEO => {
+                ack(&mut viewer, header.id).await
+            }
             _ => {}
         }
         assert!(Instant::now() < deadline, "no rtcAnswer");
     };
     assert!(!answer.contains("a=ice-lite"), "a full agent: {answer}");
-    assert!(answer.contains(&format!("{host} ")) && answer.contains("typ host"), "the host candidate: {answer}");
-    assert!(answer.contains(&format!("{OUTSIDE} ")) && answer.contains("typ srflx"), "the STUN server's word: {answer}");
+    assert!(
+        answer.contains(&format!("{host} ")) && answer.contains("typ host"),
+        "the host candidate: {answer}"
+    );
+    assert!(
+        answer.contains(&format!("{OUTSIDE} ")) && answer.contains("typ srflx"),
+        "the STUN server's word: {answer}"
+    );
     peer.answer(&answer).unwrap();
 
     // The peer opens and the stream moves onto it: a hello on `media`, then pictures while the screen changes.
@@ -757,13 +924,18 @@ async fn a_screens_peer_connection_takes_the_uplinks_stun_servers_and_carries_th
     let mut i = 0u32;
     let deadline = Instant::now() + Duration::from_secs(20);
     while pictures < 3 {
-        assert!(Instant::now() < deadline, "the stream did not cross the peer (hello {said_hello}, {pictures} pictures)");
+        assert!(
+            Instant::now() < deadline,
+            "the stream did not cross the peer (hello {said_hello}, {pictures} pictures)"
+        );
         painter.fill(10 + (i % 300) as i16, 10, 50, 50, 0x0040_80c0 + i);
         i += 1;
         // The socket keeps reading, as a browser's does, for pings and anything the peer does not carry.
         let _ = viewer.recv(Duration::from_millis(1)).await;
         match peer.recv(Duration::from_millis(50)).await {
-            Some(cast_core::rtc::viewer::Arrived::Text(text)) => said_hello |= text.contains("\"hello\""),
+            Some(cast_core::rtc::viewer::Arrived::Text(text)) => {
+                said_hello |= text.contains("\"hello\"")
+            }
             Some(cast_core::rtc::viewer::Arrived::Media(bytes, _)) if said_hello => {
                 if let Some(header) = cast_core::header::Header::read(&bytes)
                     && header.kind == KIND_VIDEO
@@ -775,7 +947,10 @@ async fn a_screens_peer_connection_takes_the_uplinks_stun_servers_and_carries_th
             _ => {}
         }
     }
-    assert!(peer.checks_heard > 0, "remoted sent no checks of its own: not full ICE");
+    assert!(
+        peer.checks_heard > 0,
+        "remoted sent no checks of its own: not full ICE"
+    );
     remoted.end().await;
 }
 
@@ -790,8 +965,18 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 /// CPU seconds a process (and its threads) used so far.
 fn cpu_seconds(pid: u32) -> f64 {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
-    let fields: Vec<&str> = stat.rsplit_once(')').map(|(_, rest)| rest).unwrap_or("").split_whitespace().collect();
-    let ticks = |i: usize| fields.get(i).and_then(|f| f.parse::<f64>().ok()).unwrap_or(0.0);
+    let fields: Vec<&str> = stat
+        .rsplit_once(')')
+        .map(|(_, rest)| rest)
+        .unwrap_or("")
+        .split_whitespace()
+        .collect();
+    let ticks = |i: usize| {
+        fields
+            .get(i)
+            .and_then(|f| f.parse::<f64>().ok())
+            .unwrap_or(0.0)
+    };
     let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
     (ticks(11) + ticks(12)) / hz
 }
@@ -802,8 +987,15 @@ fn virtual_display() -> Option<(String, PathBuf)> {
     let dir = std::env::var_os("XDG_RUNTIME_DIR")
         .map(|d| PathBuf::from(d).join("intentic-remoted"))
         .unwrap_or_else(|| PathBuf::from(format!("/tmp/intentic-remoted-{uid}")));
-    let entry = std::fs::read_dir(&dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().starts_with("Xauthority-"))?;
-    let number = entry.file_name().to_string_lossy().trim_start_matches("Xauthority-").to_owned();
+    let entry = std::fs::read_dir(&dir)
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().starts_with("Xauthority-"))?;
+    let number = entry
+        .file_name()
+        .to_string_lossy()
+        .trim_start_matches("Xauthority-")
+        .to_owned();
     Some((format!(":{number}"), entry.path()))
 }
 
@@ -814,7 +1006,10 @@ fn virtual_display() -> Option<(String, PathBuf)> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn measure() {
-    let seconds: u64 = std::env::var("REMOTED_MEASURE_SECONDS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
+    let seconds: u64 = std::env::var("REMOTED_MEASURE_SECONDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
     let (port, mut uplinks) = sandbox().await;
     let started = Instant::now();
     let existing = std::env::var("REMOTED_MEASURE_DISPLAY").ok();
@@ -822,14 +1017,28 @@ async fn measure() {
         Some(display) => format!("x11:{display}"),
         None => "virtual".into(),
     };
-    let remoted = Remoted::start(&config(port, true, true), &[("INTENTIC_REMOTED_SCREEN", screen)]).await;
+    let remoted = Remoted::start(
+        &config(port, true, true),
+        &[("INTENTIC_REMOTED_SCREEN", screen)],
+    )
+    .await;
     let pid = remoted.child.id().unwrap();
-    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv()).await.unwrap().unwrap();
+    let uplink = tokio::time::timeout(PATIENCE, uplinks.recv())
+        .await
+        .unwrap()
+        .unwrap();
     let (_, info) = uplink.call("GET", "/info").await;
     println!("info: {info}");
-    let monitor = info["monitors"][0]["id"].as_str().unwrap_or_else(|| panic!("no screen here: {}", info["screen"])).to_owned();
+    let monitor = info["monitors"][0]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no screen here: {}", info["screen"]))
+        .to_owned();
     if existing.is_none() {
-        assert_eq!(monitor, "virtual", "no virtual desktop here: {}", info["screen"]);
+        assert_eq!(
+            monitor, "virtual",
+            "no virtual desktop here: {}",
+            info["screen"]
+        );
     }
     let opened = Instant::now();
     let session = format!("screen-{monitor}");
@@ -853,11 +1062,15 @@ async fn measure() {
             display
         }
     };
-    let xvfb_pid: Option<u32> = std::fs::read_to_string(format!("/tmp/.X{}-lock", display.trim_start_matches(':')))
-        .ok()
-        .and_then(|s| s.trim().parse().ok());
+    let xvfb_pid: Option<u32> =
+        std::fs::read_to_string(format!("/tmp/.X{}-lock", display.trim_start_matches(':')))
+            .ok()
+            .and_then(|s| s.trim().parse().ok());
     let mut lines = Vec::new();
-    for (name, hz, whole) in [("box 400x300 moving at 60 Hz", 60u64, false), ("whole screen repainted at 30 Hz", 30, true)] {
+    for (name, hz, whole) in [
+        ("box 400x300 moving at 60 Hz", 60u64, false),
+        ("whole screen repainted at 30 Hz", 30, true),
+    ] {
         settle(&mut viewer, Duration::from_millis(800)).await;
         let painting = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let paints = {
@@ -872,7 +1085,9 @@ async fn measure() {
                     if whole {
                         // Bands of changing colour: the encoder sees new content everywhere, every frame.
                         for band in 0..12u32 {
-                            let rgb = ((i * 37 + band * 91) & 0xff) << 16 | ((i * 11 + band * 7) & 0xff) << 8 | (band * 20);
+                            let rgb = ((i * 37 + band * 91) & 0xff) << 16
+                                | ((i * 11 + band * 7) & 0xff) << 8
+                                | (band * 20);
                             painter.fill(0, (band * 90) as i16, 1920, 90, rgb);
                         }
                     } else {
@@ -896,7 +1111,9 @@ async fn measure() {
         let mut bytes = 0usize;
         let mut count = 0usize;
         while window.elapsed() < Duration::from_secs(seconds) {
-            if let Some(Received::Media { header, len, at, .. }) = viewer.recv(Duration::from_millis(200)).await
+            if let Some(Received::Media {
+                header, len, at, ..
+            }) = viewer.recv(Duration::from_millis(200)).await
                 && header.kind == KIND_VIDEO
             {
                 count += 1;

@@ -83,7 +83,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> MediaClient<S> {
         token: &str,
         reach: crate::media::Reach,
     ) -> Result<MediaClient<S>, String> {
-        Self::over_at(stream, browser_wire::BROWSER_MEDIA_PATH, session, token, reach).await
+        Self::over_at(
+            stream,
+            browser_wire::BROWSER_MEDIA_PATH,
+            session,
+            token,
+            reach,
+        )
+        .await
     }
 
     /// The same at another path than castd's (`/media`, where a device's intentic-remoted serves its screens).

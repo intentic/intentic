@@ -44,7 +44,9 @@ fn main() {
             let (a, b) = s.split_once('x')?;
             Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))
         })
-        .map_or((d.width(), d.height()), |(a, b)| (a.min(d.width()), b.min(d.height())));
+        .map_or((d.width(), d.height()), |(a, b)| {
+            (a.min(d.width()), b.min(d.height()))
+        });
     let (left, top) = (
         d.rect.left + (d.width() - w) as i32 / 2,
         d.rect.top + (d.height() - h) as i32 / 2,

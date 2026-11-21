@@ -296,9 +296,16 @@ impl Screens {
 
     /// A running screen's recorder (its screenshots), when the screen runs now.
     pub fn recorder(&self, monitor: &str) -> Option<Arc<cast_core::record::Recorder>> {
-        let slot = self.slots.lock().expect("screens poisoned").get(monitor).cloned()?;
+        let slot = self
+            .slots
+            .lock()
+            .expect("screens poisoned")
+            .get(monitor)
+            .cloned()?;
         let held = slot.try_lock().ok()?;
-        held.as_ref().filter(|screen| screen.alive()).map(|screen| screen.recorder.clone())
+        held.as_ref()
+            .filter(|screen| screen.alive())
+            .map(|screen| screen.recorder.clone())
     }
 
     /// Takes a seat on `monitor`'s screen, opening it when nobody watches it yet. Two viewers arriving together open it
@@ -440,7 +447,9 @@ fn start_audio(audio: Option<Box<dyn cast_core::audio::AudioSource>>, hub: &Arc<
 #[cfg(not(any(feature = "opus", windows)))]
 fn start_audio(audio: Option<Box<dyn cast_core::audio::AudioSource>>, _hub: &Arc<Hub>) {
     if audio.is_some() {
-        log::info!("this intentic-remoted was built without Opus: the screen goes without its sound");
+        log::info!(
+            "this intentic-remoted was built without Opus: the screen goes without its sound"
+        );
     }
 }
 
@@ -514,7 +523,10 @@ pub async fn upgrade(
     session: String,
 ) -> Answer {
     let Some(uplink) = daemon.uplink(&uplink_id) else {
-        return refusal(StatusCode::SERVICE_UNAVAILABLE, "this uplink is being closed");
+        return refusal(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "this uplink is being closed",
+        );
     };
     let query = request.uri().query().unwrap_or("").to_owned();
     let Some(token) = crate::http::param(&query, "token") else {
@@ -570,7 +582,11 @@ pub async fn upgrade(
             };
             log::info!(
                 "uplink {uplink_id}: a person {} screen {monitor}",
-                if kind == PersonKind::Control { "controls" } else { "watches" }
+                if kind == PersonKind::Control {
+                    "controls"
+                } else {
+                    "watches"
+                }
             );
             let screen = seat.screen().clone();
             let app = cast_core::server::App {
@@ -611,21 +627,34 @@ pub async fn upgrade(
 /// nobody watches is not opened for it.
 pub async fn screenshot(daemon: &Daemon, uplink_id: &str, session: &str) -> Answer {
     let Some(uplink) = daemon.uplink(uplink_id) else {
-        return refusal(StatusCode::SERVICE_UNAVAILABLE, "this uplink is being closed");
+        return refusal(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "this uplink is being closed",
+        );
     };
     if !uplink.allow.view {
-        return refusal(StatusCode::FORBIDDEN, "watching this computer's screens is switched off for this sandbox");
+        return refusal(
+            StatusCode::FORBIDDEN,
+            "watching this computer's screens is switched off for this sandbox",
+        );
     }
     let Some(monitor) = session.strip_prefix(SESSION_PREFIX) else {
         return refusal(StatusCode::NOT_FOUND, "no such screen on this computer");
     };
     let Some(recorder) = daemon.screens.recorder(monitor) else {
-        return refusal(StatusCode::NOT_FOUND, "that screen is not running (nobody is watching it)");
+        return refusal(
+            StatusCode::NOT_FOUND,
+            "that screen is not running (nobody is watching it)",
+        );
     };
     use http_body_util::BodyExt;
     let response = cast_core::record::screenshot(axum::extract::State(recorder)).await;
     let (parts, body) = response.into_parts();
-    let bytes = body.collect().await.map(|b| b.to_bytes()).unwrap_or_default();
+    let bytes = body
+        .collect()
+        .await
+        .map(|b| b.to_bytes())
+        .unwrap_or_default();
     Response::from_parts(parts, Full::new(bytes))
 }
 
@@ -664,14 +693,18 @@ async fn start_rtc(daemon: &Daemon) {
                 ice: cast_core::rtc::Ice::Full,
                 stun,
             };
-            match tokio::time::timeout(Duration::from_secs(3), cast_core::rtc::start_with(config)).await {
+            match tokio::time::timeout(Duration::from_secs(3), cast_core::rtc::start_with(config))
+                .await
+            {
                 Ok(Ok(gathered)) => log::info!(
                     "taking peer connections: host {:?}, reflexive {:?}",
                     gathered.host,
                     gathered.reflexive
                 ),
                 Ok(Err(e)) => log::warn!("no peer connections: {e}; viewers stay on their sockets"),
-                Err(_) => log::warn!("the peer port took over 3 s to start; viewers stay on their sockets"),
+                Err(_) => log::warn!(
+                    "the peer port took over 3 s to start; viewers stay on their sockets"
+                ),
             }
         })
         .await;
@@ -693,7 +726,9 @@ async fn stun_servers(config: &crate::config::Config) -> Vec<std::net::SocketAdd
         let Some(with_port) = stun_host(&url) else {
             continue;
         };
-        match tokio::time::timeout(Duration::from_secs(2), tokio::net::lookup_host(&with_port)).await {
+        match tokio::time::timeout(Duration::from_secs(2), tokio::net::lookup_host(&with_port))
+            .await
+        {
             Ok(Ok(addresses)) => {
                 for address in addresses.filter(|a| a.is_ipv4()).take(1) {
                     if !out.contains(&address) {
@@ -734,9 +769,9 @@ pub fn stun_host(url: &str) -> Option<String> {
         return None;
     }
     let bracketed = host.starts_with('[');
-    let has_port = host
-        .rsplit_once(':')
-        .is_some_and(|(before, port)| port.parse::<u16>().is_ok() && (!bracketed || before.ends_with(']')));
+    let has_port = host.rsplit_once(':').is_some_and(|(before, port)| {
+        port.parse::<u16>().is_ok() && (!bracketed || before.ends_with(']'))
+    });
     Some(if has_port {
         host.to_owned()
     } else {

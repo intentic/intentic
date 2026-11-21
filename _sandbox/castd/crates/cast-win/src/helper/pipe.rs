@@ -88,7 +88,10 @@ impl Pipe {
             let _ = LocalFree(Some(HLOCAL(sd.0)));
         }
         if handle.is_invalid() {
-            return Err(format!("CreateNamedPipe {name}: {}", std::io::Error::last_os_error()));
+            return Err(format!(
+                "CreateNamedPipe {name}: {}",
+                std::io::Error::last_os_error()
+            ));
         }
         Ok(Pipe {
             handle,
@@ -160,7 +163,9 @@ impl Pipe {
     /// The SID (`S-1-5-18` for SYSTEM) that owns the pipe: who created its server end. A process cannot make an object
     /// owned by another account, so a pipe owned by SYSTEM was made by SYSTEM.
     pub fn owner_sid(&self) -> Option<String> {
-        use windows::Win32::Security::Authorization::{ConvertSidToStringSidW, GetSecurityInfo, SE_KERNEL_OBJECT};
+        use windows::Win32::Security::Authorization::{
+            ConvertSidToStringSidW, GetSecurityInfo, SE_KERNEL_OBJECT,
+        };
         use windows::Win32::Security::{OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID};
         let mut owner = PSID::default();
         let mut sd = PSECURITY_DESCRIPTOR::default();
@@ -180,7 +185,9 @@ impl Pipe {
                 return None;
             }
             let mut text = windows::core::PWSTR::null();
-            let out = ConvertSidToStringSidW(owner, &mut text).ok().and_then(|()| text.to_string().ok());
+            let out = ConvertSidToStringSidW(owner, &mut text)
+                .ok()
+                .and_then(|()| text.to_string().ok());
             if !text.is_null() {
                 let _ = LocalFree(Some(HLOCAL(text.0.cast())));
             }
@@ -200,7 +207,10 @@ impl Pipe {
     fn write_all(&self, mut buf: &[u8]) -> Result<(), String> {
         while !buf.is_empty() {
             // SAFETY: the rest of the buffer, alive until the write completes (the call waits for it).
-            let n = self.overlapped(|ov| unsafe { WriteFile(self.handle, Some(buf), None, Some(ov)) }, None)?;
+            let n = self.overlapped(
+                |ov| unsafe { WriteFile(self.handle, Some(buf), None, Some(ov)) },
+                None,
+            )?;
             if n == 0 {
                 return Err("the pipe took nothing".into());
             }
@@ -214,7 +224,10 @@ impl Pipe {
         while at < buf.len() {
             let rest = &mut buf[at..];
             // SAFETY: the rest of the buffer, alive until the read completes (the call waits for it).
-            let n = self.overlapped(|ov| unsafe { ReadFile(self.handle, Some(rest), None, Some(ov)) }, None)?;
+            let n = self.overlapped(
+                |ov| unsafe { ReadFile(self.handle, Some(rest), None, Some(ov)) },
+                None,
+            )?;
             if n == 0 {
                 return Err("the pipe closed".into());
             }
@@ -262,7 +275,9 @@ impl Pipe {
         let started = call(&mut ov);
         let result = match started {
             Err(e) if Some(e.code()) == done => Ok(0),
-            Err(e) if e.code() != ERROR_IO_PENDING.to_hresult() => Err(format!("{e} ({:?})", e.code().0 & 0xFFFF)),
+            Err(e) if e.code() != ERROR_IO_PENDING.to_hresult() => {
+                Err(format!("{e} ({:?})", e.code().0 & 0xFFFF))
+            }
             _ => {
                 let mut n = 0u32;
                 // SAFETY: the OVERLAPPED the call was given, alive until it completes (this waits for it).
@@ -302,10 +317,17 @@ pub fn process_image(pid: u32) -> Option<PathBuf> {
         let p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; 1024];
         let mut len = buf.len() as u32;
-        let r = QueryFullProcessImageNameW(p, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len);
+        let r = QueryFullProcessImageNameW(
+            p,
+            PROCESS_NAME_WIN32,
+            windows::core::PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        );
         let _ = CloseHandle(p);
         r.ok()?;
-        Some(PathBuf::from(String::from_utf16_lossy(&buf[..len as usize])))
+        Some(PathBuf::from(String::from_utf16_lossy(
+            &buf[..len as usize],
+        )))
     }
 }
 
@@ -313,7 +335,8 @@ pub fn process_image(pid: u32) -> Option<PathBuf> {
 pub fn process_session(pid: u32) -> Option<u32> {
     let mut session = 0u32;
     // SAFETY: a plain query.
-    unsafe { windows::Win32::System::RemoteDesktop::ProcessIdToSessionId(pid, &mut session) }.ok()?;
+    unsafe { windows::Win32::System::RemoteDesktop::ProcessIdToSessionId(pid, &mut session) }
+        .ok()?;
     Some(session)
 }
 
