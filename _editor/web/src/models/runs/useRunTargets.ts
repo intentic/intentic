@@ -17,8 +17,9 @@ type DeviceRunsAnswer = ProcedureOutput<`runs.active`>;
 // A run is `devices run` in a terminal the daemon opens, so starting one opens that terminal: the build, the push and
 // the start are watched there, the same lines an agent reads.
 
-export function useRunTargets() {
-    const { query, error } = useSandboxQuery(rpcQuery(`runs.targets`));
+// `enabled` lets a surface that is not always worth the read (the rail's Run tile, for a reader who may not run) hold it off.
+export function useRunTargets(enabled: Ref<boolean> = ref(true)) {
+    const { query, error } = useSandboxQuery({ ...rpcQuery(`runs.targets`), enabled });
 
     // Undefined while unread, so a row can tell "declares nothing" from "not read yet".
     const repos = computed<RunTargetsList[`repos`] | undefined>(() => query.data.value?.repos);
@@ -105,6 +106,9 @@ const stopKey = (repo: string, target: string, device: string): string => `stop:
 
 // How often what runs on the computers is asked again while the Run view shows them, and a log open there.
 const RUNS_POLL_MS = 4000;
+// How often the rail's Run tile asks, with the view closed: its count may trail a program by this much, which a tile can,
+// and every connected computer is asked each time, which a tile on screen all day must not do every few seconds.
+export const RUNS_RAIL_POLL_MS = 30_000;
 const LOG_POLL_MS = 1500;
 // The most of a log kept on screen.
 const LOG_KEEP_LINES = 500;
@@ -112,7 +116,7 @@ const LOG_KEEP_LINES = 500;
 // What runs on every computer named, while `active`: the Run view's lanes. One read answering for all of them, each
 // computer asked at once, under the same procedure's prefix so a press's relist reaches it; a computer that could not
 // answer says so in its own entry rather than failing the others.
-export function useEveryDeviceRuns(devices: Ref<readonly string[]>, active: Ref<boolean>) {
+export function useEveryDeviceRuns(devices: Ref<readonly string[]>, active: Ref<boolean>, pollMs = RUNS_POLL_MS) {
     const { query } = useSandboxQuery({
         queryKey: computed(() => rpcKey(`runs.active`, { devices: [...devices.value] })),
         queryFn: async (): Promise<Readonly<Record<string, DeviceRunsAnswer>>> => {
@@ -128,7 +132,7 @@ export function useEveryDeviceRuns(devices: Ref<readonly string[]>, active: Ref<
             return Object.fromEntries(lists);
         },
         enabled: computed(() => active.value && devices.value.length > 0),
-        refetchInterval: RUNS_POLL_MS,
+        refetchInterval: pollMs,
     });
     return {
         // Undefined until the computer has answered once.

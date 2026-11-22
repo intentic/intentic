@@ -22,58 +22,27 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { projectScope, setProjectScope, withinScope } from "../../app/projectScope";
-import { usePanels } from "../../models/extensions/usePanels";
 import { composeAgent } from "../../models/fleet/agentActions";
 import { runFileFix } from "../../models/runs/runFixes";
-import { useEveryDeviceRuns, useRunTargets } from "../../models/runs/useRunTargets";
 import { useWorkspaceTabs } from "../../models/workspace/tabs/useWorkspaceTabs";
 import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
-import { usePreviewTargets } from "../preview/usePreviewTargets";
 import { RUN_ACTIONS, useRunActions } from "./runActions";
 import RunLane from "./RunLane.vue";
-import { narrowLanes, type RunRepo, runLanesOf, runningCount } from "./runLanes";
+import { narrowLanes, runningCount } from "./runLanes";
+import { useRunLanes } from "./useRunLanes";
 
 const t = useT();
 const route = useRoute();
 const router = useRouter();
 
-const { repos: declared, devices, error: readError } = useRunTargets();
-const { allPanels } = usePanels();
 // Mounted is shown: the live sandbox apps and the computers' lists are read while the view is up, and no longer.
 const visible = ref(true);
-const live = usePreviewTargets(visible);
+const { declared, readError, repos, live, lanes: allLanes } = useRunLanes(visible);
 const { openFile } = useWorkspaceTabs();
 
-// Every repository with something to run: what its .intentic/run.json declares (a file that does not parse included,
-// so its error is said), else the one run Start finds in its own files.
-const repos = computed<readonly RunRepo[]>(() => {
-    const files = new Map((declared.value ?? []).map((entry) => [entry.repo, entry]));
-    const started = allPanels.value.filter((panel) => panel.start !== undefined).map((panel) => panel.repo);
-    return [...new Set([...files.keys(), ...started])].map((repo) => ({
-        repo,
-        declared: files.get(repo),
-        panel: allPanels.value.find((panel) => panel.repo === repo),
-    }));
-});
 // The open project's repositories; the rest are counted on its chip.
 const inProject = computed(() => repos.value.filter(({ repo }) => withinScope(repo)));
 const projectHidden = computed(() => repos.value.length - inProject.value.length);
-
-// The computers that can say what runs on them, asked together on a clock while the view is up.
-const listed = computed(() => devices.value.filter((device) => device.online && device.programs).map((device) => device.id));
-const { runsOn } = useEveryDeviceRuns(listed, visible);
-
-// Every lane of the open project, then narrowed to the picked repository: the picker counts what each one runs.
-const allLanes = computed(() =>
-    runLanesOf({
-        repos: repos.value,
-        live: live.targets.value,
-        devices: devices.value,
-        runsOn,
-        // A program no repository is known for is the workspace's, shown while no project narrows it.
-        inScope: (repo) => (repo === undefined ? projectScope.value === undefined : withinScope(repo)),
-    }),
-);
 
 // The picked repository lives in the address (`?repo=`), so a link from the Workspace opens on it and Back works; one the
 // workspace no longer has falls back to every repository.

@@ -1438,7 +1438,9 @@
             "open": "Open",
             "apps": "Apps",
             "webDetail": "A page in your own browser",
-            "more": "Open app"
+            "more": "Open app",
+            "startIn": "Start an app in {section}",
+            "runDetail": "In the sandbox or on your computers"
         },
         "phone": {
             "toggle": "Phone frame",
@@ -14844,6 +14846,10 @@
             "reaches": "reaches port {ports} | reaches ports {ports}",
             "nothingToRun": "Nothing in this workspace says how to run it yet",
             "nothingToRunLine": "Declare what runs, and where, in a repository's .intentic/run.json, or let an agent work it out."
+        },
+        "badge": {
+            "failed": "{count} stopped with an error | {count} stopped with an error",
+            "starting": "{count} starting | {count} starting"
         }
     }
 }

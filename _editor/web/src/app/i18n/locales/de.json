@@ -1438,7 +1438,9 @@
             "open": "Offen",
             "apps": "Apps",
             "webDetail": "Eine Seite in deinem eigenen Browser",
-            "more": "App öffnen"
+            "more": "App öffnen",
+            "startIn": "App starten unter {section}",
+            "runDetail": "In der Sandbox oder auf deinen Computern"
         },
         "phone": {
             "toggle": "Handyrahmen",
@@ -14844,6 +14846,10 @@
             "reaches": "erreicht Port {ports} | erreicht Ports {ports}",
             "nothingToRun": "In diesem Workspace steht noch nirgends, wie er ausgeführt wird",
             "nothingToRunLine": "Legen Sie in der .intentic/run.json eines Repositorys fest, was wo läuft, oder lassen Sie es einen Agenten herausfinden."
+        },
+        "badge": {
+            "failed": "{count} mit Fehler beendet | {count} mit Fehler beendet",
+            "starting": "{count} startet | {count} starten"
         }
     }
 }

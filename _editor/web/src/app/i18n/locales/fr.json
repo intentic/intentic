@@ -1438,7 +1438,9 @@
             "open": "Ouvert",
             "apps": "Apps",
             "webDetail": "Une page dans votre propre navigateur",
-            "more": "Ouvrir une app"
+            "more": "Ouvrir une app",
+            "startIn": "Lancer une app dans {section}",
+            "runDetail": "Dans la sandbox ou sur vos ordinateurs"
         },
         "phone": {
             "toggle": "Cadre de téléphone",
@@ -14844,6 +14846,10 @@
             "reaches": "atteint le port {ports} | atteint les ports {ports}",
             "nothingToRun": "Rien dans cet espace de travail ne dit encore comment l'exécuter",
             "nothingToRunLine": "Déclarez ce qui s'exécute, et où, dans le .intentic/run.json d'un dépôt, ou laissez un agent le trouver."
+        },
+        "badge": {
+            "failed": "{count} arrêté sur une erreur | {count} arrêtés sur une erreur",
+            "starting": "{count} en démarrage | {count} en démarrage"
         }
     }
 }

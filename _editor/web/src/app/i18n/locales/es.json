@@ -1438,7 +1438,9 @@
             "open": "Abierta",
             "apps": "Apps",
             "webDetail": "Una página en tu propio navegador",
-            "more": "Abrir app"
+            "more": "Abrir app",
+            "startIn": "Iniciar una app en {section}",
+            "runDetail": "En el sandbox o en tus ordenadores"
         },
         "phone": {
             "toggle": "Marco de teléfono",
@@ -14844,6 +14846,10 @@
             "reaches": "alcanza el puerto {ports} | alcanza los puertos {ports}",
             "nothingToRun": "Nada en este espacio de trabajo dice aún cómo ejecutarlo",
             "nothingToRunLine": "Declara qué se ejecuta y dónde en el .intentic/run.json de un repositorio, o deja que un agente lo averigüe."
+        },
+        "badge": {
+            "failed": "{count} se detuvo con un error | {count} se detuvieron con un error",
+            "starting": "{count} iniciándose | {count} iniciándose"
         }
     }
 }

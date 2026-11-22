@@ -1,10 +1,12 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, type ComputedRef, watch } from "vue";
+import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { SHARED_SCOPE } from "../../app/workspaceScope";
 import { useTier } from "../../client/sandbox/useTier";
 import { extensionsLoaded } from "../../extension-host/loader";
+import { runBadgeOf } from "../../features/run/runBadge";
+import { useRunLanes } from "../../features/run/useRunLanes";
 import { devicesWorking } from "../../features/sandbox/devices/runners/deviceWork";
 import { pushBadge } from "../../features/workspace/push/pushBadge";
 import { here, page } from "../../lib/routes/links";
@@ -13,6 +15,7 @@ import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useChanges } from "../../models/changes/useChanges";
 import { usePanels } from "../../models/extensions/usePanels";
 import { agentsBadge } from "../../models/fleet/board/agentsTile";
+import { RUNS_RAIL_POLL_MS } from "../../models/runs/useRunTargets";
 import { useSyncHealth } from "../../models/sandbox/devices/useDevices";
 import { outgoingMark, outgoingSummary } from "../../models/workspace/push/outgoingWork";
 import {
@@ -22,6 +25,7 @@ import {
     detectActivations,
     extensionPath,
     railRank,
+    RUN_VIEW_ID,
     sectionReachable,
 } from "../../workbench/views/registry";
 import { useVocabulary } from "../../workbench/views/vocabulary";
@@ -116,6 +120,14 @@ function useDevicesTile(): ComputedRef<SectionTile> {
     });
 }
 
+// THE RUN TILE'S BADGE (runBadge.ts): what runs, and what stopped with an error, read off the Run view's own lanes while
+// the tile is there for a reader who may run things; the computers asked seldom (RUNS_RAIL_POLL_MS), and as often as the
+// view asks while it is open.
+function useRunBadge(shown: Ref<boolean>): ComputedRef<ViewBadge | undefined> {
+    const { lanes } = useRunLanes(shown, RUNS_RAIL_POLL_MS);
+    return computed(() => (shown.value ? runBadgeOf(lanes.value) : undefined));
+}
+
 // EVERY SECTION TILE, ranked by RAIL_GROUPS: the core sections (Agents, the Workspace, Devices for a shipping tier), then
 // one tile per rail-surface extension activation, less whatever this reader cannot open. `leading` is a shell's own
 // extra (the desktop's docked Chat tile), ranked with the rest. Which of these a rail draws is the rail's business: the
@@ -129,6 +141,14 @@ export function useSectionTiles(leading: () => readonly SectionTile[] = () => []
     const words = useVocabulary();
     const workspaceBadge = useWorkspaceBadge();
     const devicesTile = useDevicesTile();
+    const activations = computed(() => detectActivations(panels.value, capabilities.value));
+    // Run is ship-tier work (it starts programs on the owner's computers), so only that tier pays for its count.
+    const runShown = computed(() => canShip.value && activations.value.some(({ extension }) => extension.id === RUN_VIEW_ID));
+    const runBadge = useRunBadge(runShown);
+    const railTile = (active: ActiveExtension): SectionTile => {
+        const tile = extensionTile(active);
+        return active.extension.id === RUN_VIEW_ID && runBadge.value !== undefined ? { ...tile, badge: runBadge.value } : tile;
+    };
     const tiles = computed<readonly SectionTile[]>(() => {
         // The badge from agentsTile.ts. RailIcon draws by section identity; these
         // generic names remain the fallback vocabulary.
@@ -143,10 +163,10 @@ export function useSectionTiles(leading: () => readonly SectionTile[] = () => []
                 agents,
                 workspaceBadge.value === undefined ? workspace : { ...workspace, badge: workspaceBadge.value },
                 ...(canShip.value ? [devicesTile.value] : []),
-                ...detectActivations(panels.value, capabilities.value)
+                ...activations.value
                     // Only rail-surface extensions get a tile; per-repo panels open from the Workspace tree instead.
                     .filter(({ extension }) => extension.surface === `rail`)
-                    .map(extensionTile),
+                    .map(railTile),
             ]
                 // A section this reader cannot open belongs on no rail and in no menu.
                 .filter((tile) => sectionReachable(tile.to))

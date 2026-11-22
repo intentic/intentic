@@ -1438,7 +1438,9 @@
             "open": "Otwarte",
             "apps": "Aplikacje",
             "webDetail": "Strona w Twojej własnej przeglądarce",
-            "more": "Otwórz aplikację"
+            "more": "Otwórz aplikację",
+            "startIn": "Uruchom aplikację: {section}",
+            "runDetail": "W sandboxie albo na Twoich komputerach"
         },
         "phone": {
             "toggle": "Ramka telefonu",
@@ -14844,6 +14846,10 @@
             "reaches": "sięga portu {ports} | sięga portów {ports} | sięga portów {ports}",
             "nothingToRun": "Nic w tym workspace nie mówi jeszcze, jak go uruchomić",
             "nothingToRunLine": "Zadeklaruj, co i gdzie działa, w .intentic/run.json repozytorium, albo pozwól agentowi to ustalić."
+        },
+        "badge": {
+            "failed": "{count} zatrzymał się z błędem | {count} zatrzymały się z błędem | {count} zatrzymało się z błędem",
+            "starting": "{count} uruchamia się | {count} uruchamiają się | {count} uruchamia się"
         }
     }
 }

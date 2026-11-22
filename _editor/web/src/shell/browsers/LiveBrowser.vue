@@ -51,6 +51,8 @@ import DesktopTab from "../../features/desktop/DesktopTab.vue";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
 import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useTier } from "../../client/sandbox/useTier";
+import { runViewLink, useRunReachable } from "../../models/runs/runView";
+import { navigation } from "../../workbench/navigation/navigation";
 import { useT } from "@intentic/ui/i18n";
 import { useWindowTools } from "../../features/browsers/windowTools";
 import DownloadsButton from "../../features/browsers/downloads/DownloadsButton.vue";
@@ -831,6 +833,22 @@ const openLauncher = (anchor: HTMLElement): void => {
 };
 
 const WEB_ITEM = `web`;
+// The way to the Run view, ending the Apps group: where what is not running yet is started, here or on a computer.
+const RUN_ITEM = `run`;
+const runReachable = useRunReachable();
+const runItem = computed(() =>
+    runReachable.value
+        ? [
+              {
+                  key: RUN_ITEM,
+                  label: t(`browsers.launcher.startIn`, { section: t(`run.view.title`) }),
+                  detail: t(`browsers.launcher.runDetail`),
+                  icon: `play` as const,
+                  elsewhere: true,
+              },
+          ]
+        : [],
+);
 const pinnedKeys = computed(() => new Set(pinned.value.map(tabKey)));
 const appItems = computed(() =>
     targets.value.map((target) => {
@@ -867,7 +885,7 @@ const launchGroups = computed<readonly LaunchGroup[]>(() => [
     { label: ``, items: [{ key: WEB_ITEM, label: t(`browsers.browsers.newTab`), detail: t(`browsers.launcher.webDetail`), icon: `globe` }] },
     {
         label: t(`browsers.launcher.apps`),
-        items: appItems.value,
+        items: [...appItems.value, ...runItem.value],
         empty: noAppsLine(appsRead.value),
     },
     ...(deskItems.value.length === 0 ? [] : [{ label: t(`shared.desktop`), items: deskItems.value }]),
@@ -879,6 +897,10 @@ const launch = (key: string): void => {
     launcherOpen.value = false;
     if (key === WEB_ITEM) {
         openTab();
+        return;
+    }
+    if (key === RUN_ITEM) {
+        void navigation().push(runViewLink());
         return;
     }
     showTab(parseTabKey(key));

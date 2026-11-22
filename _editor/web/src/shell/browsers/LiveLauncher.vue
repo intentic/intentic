@@ -16,6 +16,9 @@ export interface LaunchItem {
     readonly tint?: string | undefined;
     // Already on the strip: picking it brings it to front.
     readonly open?: boolean;
+    // A way to another section rather than something this view opens (Run, where an app is started): drawn with the
+    // arrow that says the press leaves, and not counted as something the group has to offer.
+    readonly elsewhere?: boolean;
 }
 
 export interface LaunchGroup {
@@ -33,6 +36,8 @@ const t = useT();
 // The page leaves out what is empty (its search box is already the way to the web); the menu keeps every heading so
 // the reader learns where things will appear.
 const shown = computed(() => (variant === `page` ? groups.filter((group) => group.items.length > 0) : groups));
+// A group's empty line still explains it when all it offers is a way elsewhere.
+const offersNothing = (group: LaunchGroup): boolean => group.items.every((item) => item.elsewhere === true);
 </script>
 
 <template>
@@ -54,8 +59,9 @@ const shown = computed(() => (variant === `page` ? groups.filter((group) => grou
                     <span v-if="item.detail" class="block truncate text-3xs text-muted">{{ item.detail }}</span>
                 </span>
                 <span v-if="item.open" class="shrink-0 text-3xs text-subtle">{{ t(`browsers.launcher.open`) }}</span>
+                <Icon v-else-if="item.elsewhere" name="arrow-right" class="shrink-0 text-3xs text-subtle" />
             </button>
-            <p v-if="group.items.length === 0 && group.empty" class="px-2 py-1 text-2xs text-muted">{{ group.empty }}</p>
+            <p v-if="offersNothing(group) && group.empty" class="px-2 py-1 text-2xs text-muted">{{ group.empty }}</p>
         </template>
     </div>
 
@@ -75,6 +81,7 @@ const shown = computed(() => (variant === `page` ? groups.filter((group) => grou
                         <span class="block truncate text-xs text-content">{{ item.label }}</span>
                         <span v-if="item.detail" class="block truncate text-3xs text-muted">{{ item.detail }}</span>
                     </span>
+                    <Icon v-if="item.elsewhere" name="arrow-right" class="shrink-0 text-3xs text-subtle" />
                 </button>
             </div>
         </section>
