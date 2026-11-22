@@ -494,6 +494,8 @@ export class TurnClient {
                     host.transcript.attachRun(head, bubble);
                     return { ...turn, run: head.run };
                 },
+                // Drawn in a pane, it goes ahead of a run nobody is looking at where streams are rationed.
+                watched: () => host.transcript.panes.value > 0,
             },
             controller,
             host.box.value,
@@ -1257,7 +1259,7 @@ export class TurnClient {
             const end = await followRun(
                 host.conversationId,
                 undefined,
-                { entry: (entry, context, replay) => host.transcript.push(entry, context, replay), attached },
+                { entry: (entry, context, replay) => host.transcript.push(entry, context, replay), attached, watched: () => host.transcript.panes.value > 0 },
                 controller,
                 host.box.value,
                 after,

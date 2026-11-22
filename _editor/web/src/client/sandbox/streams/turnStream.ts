@@ -4,7 +4,7 @@ import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events
 import { watchdogRecoveryDelay } from "../connection";
 import { SandboxHttpError } from "../sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../sandboxRpc";
-import { acquireStreamSlot } from "../../../lib/streamBudget";
+import { acquireStreamSlot, type StreamClaim } from "../../../lib/streamBudget";
 import type { ChatAttachment } from "../../../models/conversations/transcript/transcript";
 
 // Attach reads a running turn's rows from the daemon and every change after (/agent/attach); the side channel
@@ -50,6 +50,10 @@ export interface RunRenderer {
     // One entry after the head. `replay` marks an entry already delivered to an earlier attach of this stream (at
     // or below the head's seq).
     entry(entry: AttachEntry, turn: TurnContext, replay: boolean): void;
+    // Whether somebody is looking at this run now (a pane draws its chat). Where streams are rationed (streamBudget.ts),
+    // a run that is takes the stream of one that is not, which attaches again once a permit frees; absent, the follow
+    // neither takes nor gives one up.
+    readonly watched?: () => boolean;
 }
 
 // What an attach asks for: the conversation, and the run it means or the run it means to follow on from, where known.
@@ -102,7 +106,8 @@ interface Silence {
     readonly dispose: () => void;
 }
 
-const watchSilence = (controller: AbortController): Silence => {
+// `handedOff` ends this attach too: its permit went to a run somebody is watching (streamBudget.ts StreamClaim).
+const watchSilence = (controller: AbortController, handedOff: AbortSignal): Silence => {
     const silence = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const arm = (delayMs = ATTACH_SILENCE_MS): void => {
@@ -122,7 +127,7 @@ const watchSilence = (controller: AbortController): Silence => {
     // Armed from before the connect, so a connect that hangs on a dead tunnel trips it too.
     arm();
     return {
-        signal: anySignal(controller.signal, silence.signal),
+        signal: anySignal(controller.signal, silence.signal, handedOff),
         heard: () => {
             if (!silence.signal.aborted) {
                 arm();
@@ -137,8 +142,8 @@ const watchSilence = (controller: AbortController): Silence => {
 // browser's per-origin connection limit (streamBudget.ts). Undefined means stopped while queued. The stop is checked
 // again once the permit is held, since waiting for it suspends and a stop landing then must not be missed: attaching
 // on an already-aborted signal would hang forever, since that event already fired.
-const takeSlot = async (signal: AbortSignal): Promise<(() => void) | undefined> => {
-    const slot = await acquireStreamSlot(`attach`, signal);
+const takeSlot = async (signal: AbortSignal, claim: StreamClaim | undefined): Promise<(() => void) | undefined> => {
+    const slot = await acquireStreamSlot(`attach`, signal, claim);
     if (slot !== undefined && signal.aborted) {
         slot();
         return undefined;
@@ -171,6 +176,63 @@ const drain = async (
         return undefined;
     }
     return undefined;
+};
+
+// What reading one attach came to: the follow's end if the run ended there, and whether it brought any entry.
+interface AttachRead {
+    readonly ended: boolean | undefined;
+    readonly delivered: boolean;
+}
+
+// How one attach went: no permit came before a stop (`stopped`); the follow is over (`end`); attach again at once
+// (`again`); or wait first, after a drop before anything engaged was retried (`retry`) or a stream that ended with nothing
+// new (`quiet`).
+type AttachOutcome =
+    | { readonly kind: `stopped` }
+    | { readonly kind: `end`; readonly end: FollowEnd }
+    | { readonly kind: `again` }
+    | { readonly kind: `retry` }
+    | { readonly kind: `quiet` };
+
+// One attach of a follow: a permit, the stream opened and read to its end, the permit given back however it ended. A
+// `watched` follow takes the permit of one nobody is watching rather than queue behind it, and gives its own up to one
+// that is (streamBudget.ts StreamClaim): handed off, it closes and attaches again once a permit frees, its next head
+// bringing it level.
+const attachOnce = async (
+    open: (attempt: Silence) => Promise<AttachOpening>,
+    read: (frames: AsyncIterable<AttachFrame>, heard: () => void) => Promise<AttachRead>,
+    controller: AbortController,
+    watched: (() => boolean) | undefined,
+): Promise<AttachOutcome> => {
+    const handedOff = new AbortController();
+    const claim = watched === undefined ? undefined : { wanted: watched, giveUp: () => handedOff.abort() };
+    const slot = controller.signal.aborted ? undefined : await takeSlot(controller.signal, claim);
+    if (slot === undefined) {
+        return { kind: `stopped` };
+    }
+    const attempt = watchSilence(controller, handedOff.signal);
+    // Handed off: nothing failed, so neither an end nor a backoff, only the wait for a permit.
+    const handed = (): boolean => handedOff.signal.aborted && !controller.signal.aborted;
+    try {
+        const opening = await open(attempt);
+        if (!(`frames` in opening)) {
+            if (handed()) {
+                return { kind: `again` };
+            }
+            return `end` in opening ? { kind: `end`, end: opening.end } : { kind: `retry` };
+        }
+        const { ended, delivered } = await read(opening.frames, attempt.heard);
+        if (ended !== undefined) {
+            return { kind: `end`, end: ended };
+        }
+        // The stream ended without `end`. One that delivered rows, one cut for silence (a dead connection, not a quiet
+        // run) and one handed off each attach again at once.
+        return delivered || attempt.cut() || handed() ? { kind: `again` } : { kind: `quiet` };
+    } finally {
+        // However this attach ended: settled, superseded, torn, handed off, or returned mid-loop.
+        attempt.dispose();
+        slot();
+    }
 };
 
 // Renders a run by attaching, re-attaching on drops, until the daemon sends `end` or the run 404s (finished,
@@ -221,49 +283,36 @@ export const followRun = async (
         }
         return undefined;
     };
+    const open = (attempt: Silence): Promise<AttachOpening> => openAttach(attachInput(conversationId, run, after), controller, attempt, at, attached);
+    const read = async (frames: AsyncIterable<AttachFrame>, heard: () => void): Promise<AttachRead> => {
+        const before = delivered;
+        const ended = await drain(frames, heard, applyFrame);
+        return { ended, delivered: delivered !== before };
+    };
     for (;;) {
-        const slot = controller.signal.aborted ? undefined : await takeSlot(controller.signal);
-        if (slot === undefined) {
+        const outcome = await attachOnce(open, read, controller, renderer.watched);
+        if (outcome.kind === `stopped`) {
             return attached;
         }
-        const attempt = watchSilence(controller);
-        const opening = await openAttach(attachInput(conversationId, run, after), controller, attempt, at, attached);
-        if (!(`frames` in opening)) {
-            // Slot releases before the follow ends or backs off.
-            attempt.dispose();
-            slot();
-            if (`end` in opening) {
-                return opening.end;
-            }
-            // A stop during the wait ends it there and then (the loop's head reads the abort), rather than after up to
-            // the ladder's cap of a backoff nobody is waiting for.
-            await sleep(ladder.next(), { signal: controller.signal });
-            continue;
+        if (outcome.kind === `end`) {
+            return outcome.end;
         }
-        ladder.reset();
-        const before = delivered;
-        let ended: boolean | undefined;
-        try {
-            ended = await drain(opening.frames, attempt.heard, applyFrame);
-        } finally {
-            // Slot releases however this attach ended: settled, superseded, torn, or returned mid-loop.
-            attempt.dispose();
-            slot();
-        }
-        if (ended !== undefined) {
-            return ended;
-        }
-        // Reached only when the stream ended without `end`. One cut for silence was a dead connection, not a quiet run,
-        // so like one that delivered rows it attaches again at once. No new entries otherwise means nothing more is
-        // coming (done, or a stream that never ends); back off, and give up after a few empty rounds.
-        if (delivered !== before || attempt.cut()) {
+        if (outcome.kind === `again`) {
+            ladder.reset();
             idleRounds = 0;
             continue;
         }
-        idleRounds += 1;
-        if (idleRounds >= 3) {
-            return attached;
+        if (outcome.kind === `quiet`) {
+            // No new entries means nothing more is coming (done, or a stream that never ends): back off, and give up
+            // after a few empty rounds.
+            ladder.reset();
+            idleRounds += 1;
+            if (idleRounds >= 3) {
+                return attached;
+            }
         }
+        // A stop during the wait ends it there and then (the loop's head reads the abort), rather than after up to the
+        // ladder's cap of a backoff nobody is waiting for.
         await sleep(ladder.next(), { signal: controller.signal });
     }
 };

@@ -56,6 +56,11 @@ export class TranscriptClock {
     // Whether this transcript is visible; unwatched, a batch settles whole rather than typing. Default true.
     readonly watched = ref(true);
 
+    // How many panes draw this transcript now (usePaneAttach), focused or not. Unlike `watched`, which reads true for a
+    // chat no pane ever drew, this says nobody is looking: where streams are rationed, a run drawn here takes the stream
+    // of one that is not (streamBudget.ts StreamClaim).
+    readonly panes = ref(0);
+
     // Entries awaiting the next tick, paired with their turn since the buffer outlives any one stream.
     private readonly inbox: { readonly entry: AttachEntry; readonly turn: TurnContext; readonly replay: boolean }[] = [];
 

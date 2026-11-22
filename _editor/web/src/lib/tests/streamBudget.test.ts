@@ -259,6 +259,114 @@ describe(`acquireStreamSlot`, () => {
         }
     });
 
+    describe(`a full pool serving the stream somebody is watching`, () => {
+        // The incident: two chats nobody was looking at held both attach permits on plain-HTTP loopback, and the chat on
+        // screen waited behind them for the whole turn, its question shown only by a reload (2026-11-22).
+        const claimed = (wanted: boolean) => ({ wanted: () => wanted, giveUp: jest.fn() });
+        // What a permit request has come to so far, read without awaiting it.
+        const settledWith = <T>(promise: Promise<T>) => {
+            let value: T | undefined;
+            let settled = false;
+            void promise.then((resolved) => {
+                value = resolved;
+                settled = true;
+            });
+            return { settled: () => settled, value: () => value };
+        };
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            setStreamCapacity(() => 1);
+            setStreamOverflow(() => false);
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it(`takes the permit of a stream nobody is watching, which is told to give it up`, async () => {
+            const idle = claimed(false);
+            const idleRelease = await acquireStreamSlot(`attach`, undefined, idle);
+            const watched = settledWith(acquireStreamSlot(`attach`, undefined, claimed(true)));
+
+            await advanceTimersByTimeAsync(499);
+            expect(watched.settled()).toBe(false);
+            await advanceTimersByTimeAsync(1);
+            expect(watched.value()).toEqual(expect.any(Function));
+            expect(idle.giveUp).toHaveBeenCalledTimes(1);
+
+            // The permit changed hands, so the one that gave it up frees nothing: the pool still holds one stream.
+            idleRelease?.();
+            const third = settledWith(take());
+            await advanceTimersByTimeAsync(0);
+            expect(third.settled()).toBe(false);
+            // The watched stream's own release is the one that frees it.
+            watched.value()?.();
+            await advanceTimersByTimeAsync(0);
+            expect(third.value()).toEqual(expect.any(Function));
+        });
+
+        it(`never takes a permit from a stream somebody is watching, or from one that made no claim`, async () => {
+            const shown = claimed(true);
+            await acquireStreamSlot(`attach`, undefined, shown);
+            const waiting = settledWith(acquireStreamSlot(`attach`, undefined, claimed(true)));
+            await advanceTimersByTimeAsync(10_000);
+            expect(waiting.settled()).toBe(false);
+            expect(shown.giveUp).not.toHaveBeenCalled();
+
+            resetStreamBudget();
+            setStreamCapacity(() => 1);
+            setStreamOverflow(() => false);
+            // A terminal or a command stream says nothing of itself, and keeps what it holds.
+            await take();
+            const behindUnclaimed = settledWith(acquireStreamSlot(`attach`, undefined, claimed(true)));
+            await advanceTimersByTimeAsync(10_000);
+            expect(behindUnclaimed.settled()).toBe(false);
+        });
+
+        it(`takes nothing for a stream nobody is watching either: it waits its turn as before`, async () => {
+            const idle = claimed(false);
+            await acquireStreamSlot(`attach`, undefined, idle);
+            const alsoIdle = settledWith(acquireStreamSlot(`attach`, undefined, claimed(false)));
+            await advanceTimersByTimeAsync(10_000);
+            expect(alsoIdle.settled()).toBe(false);
+            expect(idle.giveUp).not.toHaveBeenCalled();
+        });
+
+        it(`takes over once the chat waiting is shown, not only when it first asked`, async () => {
+            const idle = claimed(false);
+            await acquireStreamSlot(`attach`, undefined, idle);
+            let shown = false;
+            const waiting = settledWith(acquireStreamSlot(`attach`, undefined, { wanted: () => shown, giveUp: jest.fn() }));
+            await advanceTimersByTimeAsync(7_000);
+            expect(waiting.settled()).toBe(false);
+            shown = true;
+            await advanceTimersByTimeAsync(500);
+            expect(waiting.value()).toEqual(expect.any(Function));
+            expect(idle.giveUp).toHaveBeenCalledTimes(1);
+        });
+
+        it(`kicks nobody when a free permit serves the watched stream`, async () => {
+            const idle = claimed(false);
+            setStreamCapacity(() => 2);
+            await acquireStreamSlot(`attach`, undefined, idle);
+            expect(await acquireStreamSlot(`attach`, undefined, claimed(true))).toEqual(expect.any(Function));
+            await advanceTimersByTimeAsync(10_000);
+            expect(idle.giveUp).not.toHaveBeenCalled();
+        });
+
+        it(`stands down a watched waiter that is stopped, taking nothing`, async () => {
+            const idle = claimed(false);
+            await acquireStreamSlot(`attach`, undefined, idle);
+            const controller = new AbortController();
+            const waiting = acquireStreamSlot(`attach`, controller.signal, claimed(true));
+            controller.abort();
+            expect(await waiting).toBeUndefined();
+            await advanceTimersByTimeAsync(10_000);
+            expect(idle.giveUp).not.toHaveBeenCalled();
+        });
+    });
+
     it(`answers the free path without queuing: the abort gap there is the caller's to close`, async () => {
         // On the unbounded path, an abort during the synchronous acquire can't be observed here; closing that gap is
         // the

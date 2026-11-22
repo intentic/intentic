@@ -35,22 +35,35 @@ const inFlight = (turn: CardTurn): boolean => turn !== undefined && turn !== fal
 // it possibly dead; a shorter one only re-attaches a turn the card says is running.
 const LONG_SLEEP_MS = 5 * 60_000;
 
-export const usePaneAttach = (pane: PaneAttachHost): void => {
-    // An effect rather than a mount step, since a pane's conversation and focus both move: the chat it leaves must stop
-    // animating there (TranscriptClock.watched).
+// Which chat this pane draws, as the chat itself knows it: only the focused pane animates (TranscriptClock.watched), and
+// every pane drawing a chat counts (TranscriptClock.panes), which serves its live stream ahead of chats nobody is looking
+// at. An effect rather than a mount step, since a pane's conversation and focus both move: the chat it leaves stops both.
+const drawChat = (pane: PaneAttachHost): void => {
     watch(
         [pane.conversation, pane.focused],
         ([chat, focused], previous) => {
             const left = previous?.[0];
-            if (left !== undefined && left !== chat) {
-                left.transcript.watched.value = false;
+            if (left !== chat) {
+                if (left !== undefined) {
+                    left.transcript.watched.value = false;
+                    left.transcript.panes.value -= 1;
+                }
+                chat.transcript.panes.value += 1;
             }
             chat.transcript.watched.value = focused;
         },
         { immediate: true },
     );
-    // A pane that goes away (a split closed, the panel docked) leaves nothing claiming to be watched.
-    onBeforeUnmount(() => (pane.conversation().transcript.watched.value = false));
+    // A pane that goes away (a split closed, the panel docked) leaves nothing claiming to be watched or drawn.
+    onBeforeUnmount(() => {
+        const { transcript } = pane.conversation();
+        transcript.watched.value = false;
+        transcript.panes.value -= 1;
+    });
+};
+
+export const usePaneAttach = (pane: PaneAttachHost): void => {
+    drawChat(pane);
 
     const { agentById } = useAgents();
     // The daemon's own card for the chat: this box's roster, or the polled one of the box the chat lives in; never the

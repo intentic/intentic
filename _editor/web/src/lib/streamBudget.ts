@@ -23,6 +23,10 @@ const POOLS: Record<StreamKind, number> = {
 // Time between checks for an alternate transport while a pool is full.
 const OVERFLOW_MS = 5_000;
 
+// How often a stream somebody is watching, waiting on a full pool, looks for one nobody is watching to take the permit
+// of. A free permit is granted at once, so the first look never kicks a stream that a free permit would have spared.
+const HANDOFF_MS = 500;
+
 // A WebKit engine that isn't Blink: WebKitGTK (the Linux app) and Safari. Blink and Gecko reach the certified loopback
 // name over h2.
 const WEBKIT_ENGINE = ((agent: string): boolean => /AppleWebKit/.test(agent) && !/Chrome|Chromium|Edg\//.test(agent))(
@@ -220,19 +224,136 @@ const once = (release: () => void): (() => void) => {
 // Reads the signal fresh each call rather than a value captured before an await.
 const aborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
 
+/* WHO A FULL POOL SERVES FIRST. Permits went first come, first served, so a chat open in a tab nobody shows could hold
+   one for its whole turn while the chat on screen waited behind it with no end: on plain-HTTP loopback (two attach
+   permits, nowhere to overflow to) a new agent drew its prompt and a working line for five minutes, never a row, and its
+   question only by a reload (2026-11-22). A stream that says whether it is watched (a claim) is served by that: one
+   that is takes the permit of one that is not, which closes and asks again, catching up whole from its next head. */
+
+/** What a stream says of itself when it asks for a permit; a stream that says nothing never yields and never takes. */
+export interface StreamClaim {
+    // Whether somebody is looking at what it carries now; read whenever a permit is contested, since that moves.
+    readonly wanted: () => boolean;
+    // Its permit went to a stream somebody is watching: the caller closes its connection and asks again. Its own release
+    // frees nothing by then, since the permit is the other stream's.
+    readonly giveUp: () => void;
+}
+
+// A permit this window holds for a stream that made a claim, kept findable so a watched stream can take it over.
+interface Holding {
+    readonly stream: StreamKind;
+    readonly scope: string;
+    readonly claim: StreamClaim;
+    // The permit's own release; undefined once released or handed over.
+    release: (() => void) | undefined;
+}
+
+// This window's only: another window's permits are its Web Locks, which nothing here can hand over.
+const holdings = new Set<Holding>();
+
+// The caller's release for a permit it now holds: findable while held if it made a claim, released exactly once.
+const holding = (stream: StreamKind, scope: string, release: () => void, claim: StreamClaim | undefined): (() => void) => {
+    if (claim === undefined) {
+        return once(release);
+    }
+    const kept: Holding = { stream, scope, claim, release };
+    holdings.add(kept);
+    return (): void => {
+        holdings.delete(kept);
+        const own = kept.release;
+        kept.release = undefined;
+        own?.();
+    };
+};
+
+// Takes the permit of a stream of this kind and scope nobody is watching, telling it to give up; undefined when every
+// one held here is watched or made no claim. The permit changes hands without ever being free, so no other waiter can
+// slip in between.
+const takeUnwatched = (stream: StreamKind, scope: string): (() => void) | undefined => {
+    for (const kept of holdings) {
+        const release = kept.release;
+        if (kept.stream !== stream || kept.scope !== scope || release === undefined || kept.claim.wanted()) {
+            continue;
+        }
+        kept.release = undefined;
+        holdings.delete(kept);
+        kept.claim.giveUp();
+        return release;
+    }
+    return undefined;
+};
+
+// While `signal` stands, looks every HANDOFF_MS for a permit to take over, whenever its claim says it is watched; the
+// permit it took, or undefined once the signal ends the look.
+const handedOver = (stream: StreamKind, scope: string, claim: StreamClaim, signal: AbortSignal): Promise<(() => void) | undefined> =>
+    new Promise((resolve) => {
+        const stop = (taken: (() => void) | undefined): void => {
+            clearInterval(timer);
+            signal.removeEventListener(`abort`, ended);
+            resolve(taken);
+        };
+        const ended = (): void => stop(undefined);
+        const timer = setInterval(() => {
+            const taken = claim.wanted() ? takeUnwatched(stream, scope) : undefined;
+            if (taken !== undefined) {
+                stop(taken);
+            }
+        }, HANDOFF_MS);
+        signal.addEventListener(`abort`, ended, { once: true });
+    });
+
+// One round of asking the browser's primitive for a permit (until OVERFLOW_MS), which a claimed stream races against
+// taking one over. Whichever it ends up with it keeps; one it got as well goes straight back.
+const takeRound = async (
+    stream: StreamKind,
+    scope: string,
+    permits: number,
+    signal: AbortSignal | undefined,
+    claim: StreamClaim | undefined,
+): Promise<(() => void) | undefined> => {
+    const ask = (on: AbortSignal | undefined): Promise<(() => void) | undefined> =>
+        globalThis.navigator?.locks === undefined
+            ? takeCounter(stream, on, OVERFLOW_MS)
+            : takeLock(
+                  Array.from({ length: permits }, (_, index) => `intentic.stream.${scope}.${stream}.${index}`),
+                  on,
+                  OVERFLOW_MS,
+              );
+    if (claim === undefined) {
+        return ask(signal);
+    }
+    // Checked here as well: the round's own signal stands in for the caller's, whose abort may already have fired.
+    if (aborted(signal)) {
+        return undefined;
+    }
+    const round = new AbortController();
+    const end = (): void => round.abort();
+    signal?.addEventListener(`abort`, end, { once: true });
+    const asked = ask(round.signal);
+    const handed = handedOver(stream, scope, claim, round.signal);
+    await Promise.race([asked, handed]);
+    end();
+    signal?.removeEventListener(`abort`, end);
+    const [own, given] = await Promise.all([asked, handed]);
+    if (own !== undefined) {
+        given?.();
+        return own;
+    }
+    return given;
+};
+
 // Takes a permit from whichever primitive the browser provides and resolves what a refusal means; the policy
 // is written once here for both.
-const takePermit = async (stream: StreamKind, signal: AbortSignal | undefined): Promise<(() => void) | undefined> => {
+const takePermit = async (stream: StreamKind, signal: AbortSignal | undefined, claim: StreamClaim | undefined): Promise<(() => void) | undefined> => {
     for (;;) {
         const permits = permitsOf(stream);
         if (permits === Number.POSITIVE_INFINITY) {
             return () => undefined;
         }
-        const names = Array.from({ length: permits }, (_, index) => `intentic.stream.${scopeOf()}.${stream}.${index}`);
-        const release =
-            globalThis.navigator?.locks === undefined ? await takeCounter(stream, signal, OVERFLOW_MS) : await takeLock(names, signal, OVERFLOW_MS);
+        const scope = scopeOf();
+        const release = await takeRound(stream, scope, permits, signal, claim);
         if (release !== undefined) {
-            return once(release);
+            return holding(stream, scope, release, claim);
         }
         if (aborted(signal)) {
             return undefined;
@@ -247,8 +368,9 @@ const takePermit = async (stream: StreamKind, signal: AbortSignal | undefined): 
 };
 
 // Acquires a permit for one long-lived stream; call the release when the stream ends. A caller with a signal
-// must re-check it after awaiting: an abort landing in that gap is not covered here.
-export const acquireStreamSlot = async (stream: StreamKind = `attach`, signal?: AbortSignal): Promise<(() => void) | undefined> => {
+// must re-check it after awaiting: an abort landing in that gap is not covered here. A `claim` lets a full pool serve the
+// stream somebody is watching first (StreamClaim).
+export const acquireStreamSlot = async (stream: StreamKind = `attach`, signal?: AbortSignal, claim?: StreamClaim): Promise<(() => void) | undefined> => {
     // An already-aborted signal never fires again; a caller that queued on one would wait forever.
     if (aborted(signal)) {
         return undefined;
@@ -257,7 +379,7 @@ export const acquireStreamSlot = async (stream: StreamKind = `attach`, signal?: 
     if (permits === Number.POSITIVE_INFINITY) {
         return () => undefined;
     }
-    return takePermit(stream, signal);
+    return takePermit(stream, signal, claim);
 };
 
 // Test seam: resets state and moves the lock names to a fresh scope, since Web Locks belong to the browser or
@@ -269,6 +391,7 @@ export const resetStreamBudget = (): void => {
     held.attach = 0;
     waiting.events.length = 0;
     waiting.attach.length = 0;
+    holdings.clear();
     permitsOf = () => Number.POSITIVE_INFINITY;
     resets += 1;
     const scope = `reset-${resets}`;

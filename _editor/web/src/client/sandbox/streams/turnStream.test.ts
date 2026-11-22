@@ -1,6 +1,7 @@
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+import { resetStreamBudget, setStreamCapacity, setStreamOverflow } from "../../../lib/streamBudget";
 import { ATTACH_SILENCE_MS, followRun, type RunRenderer, type TurnContext } from "./turnStream";
 
 // The daemon's attach, as a suite scripts it: each call takes the next opening off the list.
@@ -117,5 +118,67 @@ describe(`followRun`, () => {
         expect(attach).toHaveBeenCalledTimes(1);
         controller.abort();
         await advanceTimersByTimeAsync(0);
+    });
+});
+
+describe(`followRun where the transport rations streams`, () => {
+    // Plain-HTTP loopback: no tunnel to overflow to, so a full pool used to make the chat on screen wait behind chats
+    // nobody was looking at for as long as their turns ran (2026-11-22: a new agent's question, unseen until a reload).
+    beforeEach(() => {
+        resetStreamBudget();
+        setStreamCapacity(() => 1);
+        setStreamOverflow(() => false);
+    });
+
+    afterEach(() => {
+        resetStreamBudget();
+    });
+
+    // A run's attach that engages and then stays open on keep-alives until its connection is cut.
+    const heldOpen = (conversationId: string, options?: AttachOptions): AsyncIterable<AttachFrame> =>
+        (async function* () {
+            yield { kind: `attached`, run: `run-${conversationId}`, startedAt: 0, seq: 0, rows: [] } satisfies AttachFrame;
+            const keepAlive = setInterval(() => options?.context?.heard?.(), 5_000);
+            try {
+                await new Promise((_resolve, reject) => options?.signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), { once: true }));
+            } finally {
+                clearInterval(keepAlive);
+            }
+        })();
+
+    it(`gives a run nobody is watching's stream to the run on screen, and catches the first up once it frees`, async () => {
+        const opened: string[] = [];
+        attach.mockImplementation(async (input, options) => {
+            // SAFETY: every attach this suite makes names its conversation (attachInput).
+            const { conversationId } = input as { readonly conversationId: string };
+            opened.push(conversationId);
+            return heldOpen(conversationId, options);
+        });
+        const behind = { ...renderer, attached: jest.fn(() => ({ ...TURN, run: `run-behind` })), watched: () => false };
+        const shown = { ...renderer, attached: jest.fn(() => ({ ...TURN, run: `run-shown` })), watched: () => true };
+        const behindStop = new AbortController();
+        const shownStop = new AbortController();
+        let behindEnded = false;
+        void followRun(`behind`, `run-behind`, behind, behindStop, undefined).then(() => (behindEnded = true));
+        await advanceTimersByTimeAsync(0);
+        expect(opened).toEqual([`behind`]);
+
+        let shownEnded = false;
+        void followRun(`shown`, `run-shown`, shown, shownStop, undefined).then(() => (shownEnded = true));
+        await advanceTimersByTimeAsync(500);
+        // The chat on screen streams; the one behind it closed for it, and waits for a permit rather than ending.
+        expect(opened).toEqual([`behind`, `shown`]);
+        expect(shown.attached).toHaveBeenCalledTimes(1);
+        expect(behindEnded).toBe(false);
+
+        // Its turn over, the permit goes back to the run behind it, which attaches again for its rows as they stand.
+        shownStop.abort();
+        await advanceTimersByTimeAsync(0);
+        expect(shownEnded).toBe(true);
+        expect(opened).toEqual([`behind`, `shown`, `behind`]);
+        expect(behind.attached).toHaveBeenCalledTimes(2);
+        behindStop.abort();
+        await advanceTimersByTimeAsync(0);
+        expect(behindEnded).toBe(true);
     });
 });
