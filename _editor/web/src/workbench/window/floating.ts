@@ -255,9 +255,9 @@ export const raiseFloating = (panel: FloatingPanel): void => {
     }
 };
 
-// Last remembered position and size for a panel's floating window, kept in localStorage (not session) so it survives
-// restarts; written only by that window itself.
-interface Frame {
+// Last remembered position and size for a floating window (a panel's, a computer's screen's: screenPlaces.ts), kept in
+// localStorage (not session) so it survives restarts; written only by that window itself.
+export interface Frame {
     readonly left: number;
     readonly top: number;
     readonly width: number;
@@ -279,10 +279,10 @@ const onSomeScreen = (frame: Frame): boolean =>
     window.screen.isExtended !== false ||
     (frame.left < window.screen.availWidth && frame.top < window.screen.availHeight && frame.left + frame.width > 0 && frame.top + frame.height > 0);
 
-const rememberedFrame = (panel: FloatingPanel): Frame | undefined => {
+export const rememberedFrame = (key: string): Frame | undefined => {
     let stored: string | null = null;
     try {
-        stored = localStorage.getItem(frameKey(panel));
+        stored = localStorage.getItem(key);
     } catch {
         return undefined; // Storage access can throw when site data is disabled.
     }
@@ -303,23 +303,23 @@ const rememberedFrame = (panel: FloatingPanel): Frame | undefined => {
 
 // Skips saving a frame smaller than MIN_FRAME: a window mid-close reports zeros, which is worse to remember than
 // nothing.
-const rememberOwnFrame = (panel: FloatingPanel): void => {
+export const rememberOwnFrame = (key: string): void => {
     if (window.outerWidth < MIN_FRAME || window.outerHeight < MIN_FRAME) {
         return;
     }
     try {
-        localStorage.setItem(frameKey(panel), [window.screenX, window.screenY, window.outerWidth, window.outerHeight].join(`,`));
+        localStorage.setItem(key, [window.screenX, window.screenY, window.outerWidth, window.outerHeight].join(`,`));
     } catch {
         // Storage unavailable or over quota; the window opens at its default frame next time.
     }
 };
 
 // `popup=1` is required for Chrome to open a separate window instead of a tab.
-const features = (frame: Frame): string =>
+export const popupFeatures = (frame: Frame): string =>
     `popup=1,width=${Math.round(frame.width)},height=${Math.round(frame.height)},left=${Math.round(frame.left)},top=${Math.round(frame.top)}`;
 
 // Default placement when nothing is remembered: centred on the screen this window is on.
-const centred = (size: { width: number; height: number }): Frame => ({
+export const centred = (size: { width: number; height: number }): Frame => ({
     width: size.width,
     height: size.height,
     left: window.screenX + Math.max(0, (window.outerWidth - size.width) / 2),
@@ -360,11 +360,11 @@ export const claimFloating = (panel: FloatingPanel, close: () => void): (() => v
         );
     let dropLiveness = (): void => undefined;
     // Position changes fire no event, so the frame is written when it can matter: a resize, and every way out.
-    const remember = (): void => rememberOwnFrame(panel);
+    const remember = (): void => rememberOwnFrame(frameKey(panel));
 
     // pagehide is alike for a reload, a close and bfcache: hold the place, say so.
     const unloading = (): void => {
-        rememberOwnFrame(panel);
+        rememberOwnFrame(frameKey(panel));
         post({ kind: `unloading`, panel, id });
     };
     // Back from bfcache as this same realm: the lock may have gone with the freeze, so it is taken again, and the claim
@@ -395,7 +395,7 @@ export const claimFloating = (panel: FloatingPanel, close: () => void): (() => v
             own.value = undefined;
         }
         dropLiveness();
-        rememberOwnFrame(panel);
+        rememberOwnFrame(frameKey(panel));
         post({ kind: `gone`, panel, id });
     };
     const handBack = (): void => {
@@ -575,7 +575,7 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
     const shows = showsPanel(panel);
 
     const openingSize = (): { width: number; height: number } => {
-        const remembered = rememberedFrame(panel);
+        const remembered = rememberedFrame(frameKey(panel));
         return remembered === undefined ? size() : { width: remembered.width, height: remembered.height };
     };
 
@@ -588,11 +588,11 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
             }
             return true;
         }
-        const frame = rememberedFrame(panel) ?? centred(size());
+        const frame = rememberedFrame(frameKey(panel)) ?? centred(size());
         // Useful only within one browsing context group; oldest-claim is what actually caps duplicates across tabs.
         // Inside the desktop app the same call is answered with a window of the app's own (windows.rs) and returns
         // null, exactly like a refused popup: the panel stays here until that window announces itself.
-        const win = window.open(floatingPath(panel), `intentic-${panel}`, features(at === undefined ? frame : { ...frame, ...at }));
+        const win = window.open(floatingPath(panel), `intentic-${panel}`, popupFeatures(at === undefined ? frame : { ...frame, ...at }));
         win?.focus(); // null when the popup blocker refused; the panel stays where it is.
         return win !== null || desktopApp() !== undefined;
     };

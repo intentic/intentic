@@ -22,6 +22,9 @@ import { openInWorkspace } from "../../models/workspace/files/openFileRef";
 import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { navigation } from "../../workbench/navigation/navigation";
+import { isPage } from "../../lib/routes/links";
+import { screenRoute, selectedKey } from "../../models/sandbox/devices/deviceLinks";
+import { SCREEN_SIDE_VIEW, ScreenAtSchema } from "../../models/sandbox/devices/remote/screenPlaces";
 import { handOffToMainWindow } from "../../workbench/window/mainWindow";
 import { browsersSlot } from "../../workbench/window/panelSlots";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
@@ -62,6 +65,34 @@ const fallbackName = (tab: LiveTab): string => {
 
 // The glyph a tab of the view wears, as on the view's own strip: what kind of thing it is.
 const ICONS = { preview: `eye`, web: `globe`, desktop: `screen`, app: `window-maximize` } as const satisfies Record<LiveTab[`kind`], IconName>;
+
+// A computer's screen, live, beside whichever section is open (opened from its full page's toolbar), and back onto that
+// page whole by "Open in Devices".
+const registerScreenSideView = (): Disposable =>
+    registerSideView({
+        id: SCREEN_SIDE_VIEW,
+        owner: `builtin`,
+        get label() {
+            return t(`sandbox.deviceRemote.screen`);
+        },
+        describe: (input) => {
+            const name = ScreenAtSchema.safeParse(input).data?.name ?? ``;
+            return { title: name, icon: `screen`, tip: { title: t(`sandbox.deviceScreen.stageLabel`, { name }) } };
+        },
+        home: (input) => {
+            const at = ScreenAtSchema.safeParse(input).data;
+            return at === undefined
+                ? undefined
+                : { label: t(`sandbox.words.devicesSection`), open: () => void navigation().push(screenRoute(at.machine, at.device, at.monitor)) };
+        },
+        kept: true,
+        component: async () => (await import(`../../features/sandbox/devices/remote/SideDeviceScreen.vue`)).default,
+        // Its full page open in the section: one picture of a computer on screen, and one stream from it.
+        lent: (input) => {
+            const route = navigation().currentRoute.value;
+            return isPage(route, `devices`) && selectedKey(route.query[`screen`]) === input[`device`];
+        },
+    });
 
 // The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
 // chat). Each names its home, the section its thing belongs to, so a peek can be moved there whole.
@@ -150,5 +181,5 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         lent: () => browsersSlot.value !== null,
     });
 
-    return [file, browsers];
+    return [file, browsers, registerScreenSideView()];
 };

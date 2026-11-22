@@ -12,6 +12,7 @@ import {
     type PageLink,
     type PageName,
     parseAppPath,
+    SANDBOX_SEGMENT,
     sandboxOfSegment,
     sandboxSegment,
     topPath,
@@ -169,6 +170,9 @@ export const toHome = (sandbox?: string, link?: PageLink): string => homePath(sa
 
 /** A floating window's address: one panel of one sandbox, named by its id. */
 export const toFloating = (sandbox: string, panel: FloatingPanel): string => floatingPath(segmentOf(sandbox), panel);
+
+/** A computer's screen in a window of its own, of one sandbox (ScreenWindow.vue), its sandbox as an address writes it. */
+export const screenWindowPath = (segment: string): string => `/${SANDBOX_SEGMENT}/${encodeURIComponent(segment)}/floating/screen`;
 
 /** A page that is no sandbox's: `/login`, `/invite/<token>`. */
 export const toTop = (name: TopPageName, params?: Readonly<Record<string, string | undefined>>, query?: LinkQuery): string =>

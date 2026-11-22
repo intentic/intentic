@@ -49,9 +49,10 @@ export interface SideViewEntry {
     readonly shared?: true;
     // Rendered with `input` (and `jump`, for a view that scrolls to a line) bound.
     readonly component: () => Promise<Component>;
-    // Whether the main area is showing this very thing right now (Browsers while you stand on /browsers): its tab
-    // steps aside until the main area lets go of it, rather than showing an empty frame.
-    readonly lent?: () => boolean;
+    // Whether the main area is showing this very thing right now (Browsers while you stand on /browsers, a computer's
+    // screen while its full page is open): its tab steps aside until the main area lets go of it, rather than showing an
+    // empty frame or the same thing twice.
+    readonly lent?: (input: SideInput) => boolean;
 }
 
 // allow(module-state): what side views exist is the app's and its extensions', not one sandbox's
@@ -135,7 +136,7 @@ const panel = useSidePanel();
 
 // The tabs the strip draws: every tab but one whose thing the main area is showing right now. A tab whose side view is
 // not registered (yet, or any more) still draws, so it can say so and be closed.
-export const shownSideTabs = computed<readonly SideTab[]>(() => panel.tabs.value.filter((tab) => sideViewOf(tab.view)?.lent?.() !== true));
+export const shownSideTabs = computed<readonly SideTab[]>(() => panel.tabs.value.filter((tab) => sideViewOf(tab.view)?.lent?.(tab.input) !== true));
 
 // The tab on screen: the one focused, unless it stepped aside, then the last one still drawn.
 export const shownSideActive = computed<string | undefined>(() => {

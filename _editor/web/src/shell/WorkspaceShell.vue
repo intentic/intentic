@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { loadChunk, useDevice } from "@intentic/ui";
-import { computed, defineAsyncComponent, onMounted, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../models/fleet/board/agentsTile";
 import { watchDeviceReturns } from "../features/sandbox/devices/useDeviceReturns";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "../workbench/window/mainWindow";
+import { onScreenHome } from "../models/sandbox/devices/remote/screenPlaces";
+import { screenRoute } from "../models/sandbox/devices/deviceLinks";
 import { openInWorkspace, openWorkspaceRef } from "../models/workspace/files/openFileRef";
 import { openBrowsersBeside } from "../workbench/browsers/browsersSurface";
 import { parseTabKey } from "../workbench/browsers/browsersPaths";
@@ -86,6 +88,8 @@ useMainWindow((errand) => {
         void router.push(errand.path);
     }
 });
+// A computer's screen handed back from a window of its own ("Bring back", screenPlaces.ts): onto its full page here.
+onUnmounted(onScreenHome((at) => void router.push(screenRoute(at.machine, at.device, at.monitor))));
 
 // Route guards only fire on navigation, not a live resize, so growing past the breakpoint on a
 // mobile-only page (menu, terminal) bounces to the workspace; shrinking off full-screen chat lands on the same

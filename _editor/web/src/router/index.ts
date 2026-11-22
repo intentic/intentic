@@ -9,7 +9,7 @@ import {
     type RouteRecordRaw,
     START_LOCATION,
 } from "vue-router";
-import { FLOATING_PANELS, HOME_SEGMENT, SANDBOX_SEGMENT, TOP_PAGES, topPath } from "@intentic/sandbox-contract/app-routes";
+import { FLOATING_PANELS, HOME_SEGMENT, legacySandbox, SANDBOX_SEGMENT, TOP_PAGES, topPath } from "@intentic/sandbox-contract/app-routes";
 import { asyncView } from "../components/asyncView";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
@@ -42,7 +42,7 @@ import { installNavigation } from "../workbench/navigation/navigation";
 import { HOME_PATH, rootLanding, sandboxLanding } from "../lib/routes/firstScreens";
 import { embedded } from "../app/environments/nativeApp";
 import { activeSandboxId } from "../app/storage/activeSandbox";
-import { here, linkOf, page, routeSandbox } from "../lib/routes/links";
+import { here, linkOf, page, routeSandbox, screenWindowPath } from "../lib/routes/links";
 import { activeConversation, pageRoutes } from "./pageRoutes";
 import { legacyFloatingRoutes, legacyRoutes } from "./legacyRoutes";
 
@@ -198,6 +198,25 @@ const routes: RouteRecordRaw[] = [
         // The shell's own gate, settled as the shell settles it: nothing to open is Home, never a setup page.
         beforeEnter: [requireAuth, settleGate, selectRouteSandbox],
         component: () => import(`../shell/window/FloatingSection.vue`),
+    },
+    {
+        // A computer's screen in a window of its own (models/sandbox/devices/remote/screenPlaces.ts), of one sandbox, no
+        // shell around it: the machine, the connection and the monitor ride the query.
+        path: `/${SANDBOX_SEGMENT}/:sandbox/floating/screen`,
+        name: `screen-window`,
+        beforeEnter: [requireAuth, settleGate, selectRouteSandbox],
+        component: () => import(`../features/sandbox/devices/remote/ScreenWindow.vue`),
+    },
+    {
+        // As the screen's window is opened: the desktop app builds a window of its own only for `/floating/<word>`, which
+        // names no sandbox, so the sandbox rides the query and is put back in the path here.
+        // allow(route-literal): the address the desktop app's new-window handler recognises (windows/hosted.rs).
+        path: `/floating/screen`,
+        redirect: (to) => {
+            const sandbox = legacySandbox(to.fullPath);
+            const query = Object.fromEntries(Object.entries(to.query).filter(([key]) => key !== `sandbox`));
+            return sandbox === undefined ? { path: HOME_PATH } : { path: screenWindowPath(sandbox), query };
+        },
     },
     // A floating window's address before frames, which a desktop app still asks for.
     ...legacyFloatingRoutes([requireAuth, settleGate]),

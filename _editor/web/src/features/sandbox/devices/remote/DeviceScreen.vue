@@ -1,8 +1,9 @@
 <!-- One of the owner's computers' screens, live, to see and use from here (useDeviceScreen.ts on the media path every
      live picture in the editor takes). The toolbar says how it is connected and holds what remote desktop needs beside the
      picture: which monitor, how it is scaled, watching without touching, the chords a browser cannot send, sound, the
-     pointer held in the picture, and full screen with every key going to the far computer. On a phone or tablet a
-     finger is its mouse or its trackpad, and its on-screen keyboard types over there. -->
+     pointer held in the picture, full screen with every key going to the far computer, and the moves to wherever else
+     it can be drawn (screenPlaces.ts: a tab beside any section, a window of its own, back from that window). On a phone
+     or tablet a finger is its mouse or its trackpad, and its on-screen keyboard types over there. -->
 <script setup lang="ts">
 import { Button, Icon, Picker, SegmentedControl, toneWash, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -14,6 +15,7 @@ import { useBusySince, useLineWithElapsed } from "../../../../components/progres
 import { usePixelSnap } from "../../../../models/browsers/media/pixelSnap";
 import { windowOf } from "../../../../models/browsers/media/pixelRatio";
 import { type RemoteMonitor, useRemoteApi } from "../../../../models/sandbox/devices/remote/remoteApi";
+import type { ScreenMoves } from "../../../../models/sandbox/devices/remote/screenPlaces";
 import ConnectionBadge from "./ConnectionBadge.vue";
 import SendKeysMenu from "./SendKeysMenu.vue";
 import { useFullscreenLock } from "./fullscreenLock";
@@ -22,13 +24,27 @@ import { askedBox, placePicture, type ScreenScale } from "./screenFit";
 import { useScreenInput } from "./screenInput";
 import { useDeviceScreen } from "./useDeviceScreen";
 
-const { device, name, monitors, back } = defineProps<{
+const {
+    device,
+    name,
+    monitors,
+    place = `page`,
+    back,
+    visible = true,
+    moves,
+} = defineProps<{
     // The connection whose screen this is (`rog`).
     device: string;
     // The computer, as its page names it.
     name: string;
     monitors: readonly RemoteMonitor[];
-    back: RouteLocationRaw;
+    // Where it is drawn: its full page in Devices, a tab beside a section, or a window of its own.
+    place?: `page` | `beside` | `window`;
+    // The full page's way back to the computer's page.
+    back?: RouteLocationRaw;
+    // False for a tab behind another: the computer stops sending until it is in front again.
+    visible?: boolean;
+    moves?: ScreenMoves;
 }>();
 const monitor = defineModel<string | undefined>("monitor");
 
@@ -43,7 +59,7 @@ const canvasEl = ref<HTMLCanvasElement | null>(null);
 // its place under it, since every point the person sends is measured against it.
 const videoEl = ref<HTMLVideoElement | null>(null);
 
-const screen = useDeviceScreen(() => device, monitor, { api: useRemoteApi() });
+const screen = useDeviceScreen(() => device, monitor, { api: useRemoteApi(), shown: () => visible });
 const { picture, status } = screen;
 watch(canvasEl, (canvas) => picture.attach(canvas));
 watch(videoEl, (video) => picture.attachVideo(video));
@@ -76,6 +92,16 @@ watch(stageEl, (element, before) => {
     }
 });
 onScopeDispose(() => observer.disconnect());
+
+// A tab beside a section is often a third of the window: there the toolbar keeps its words for the tips, and below
+// that drops the scale (fitted is the one that reads in so little room).
+const narrow = computed(() => mobile.value || (stage.value.width > 0 && stage.value.width < 720));
+const scaled = computed(() => !mobile.value && !(stage.value.width > 0 && stage.value.width < 520));
+watch(scaled, (on) => {
+    if (!on) {
+        scale.value = `fit`;
+    }
+});
 
 const shown = computed(() => monitors.find((each) => each.id === monitor.value) ?? monitors.find((each) => each.primary) ?? monitors[0]);
 const pictureSize = computed(() => picture.painted.value ?? (picture.hello.value === undefined ? undefined : { width: picture.hello.value.width, height: picture.hello.value.height }));
@@ -158,6 +184,22 @@ watch(lock.fullscreen, (on) => {
     input.focus();
 });
 const soundLabel = computed(() => (picture.sound.muted.value ? t(`browsers.media.unmute`) : t(`browsers.media.mute`)));
+
+// The browser's popup blocker refused the window: said for a few seconds where full screen's line goes, the screen
+// staying where it is.
+const blocked = ref(false);
+let blockedTimer: number | undefined;
+const toWindow = (): void => {
+    if (moves?.window?.() === false) {
+        blocked.value = true;
+        window.clearTimeout(blockedTimer);
+        blockedTimer = window.setTimeout(() => (blocked.value = false), 6000);
+    }
+};
+onScopeDispose(() => {
+    window.clearTimeout(noteTimer);
+    window.clearTimeout(blockedTimer);
+});
 // The toolbar in full screen: hidden until the pointer reaches the top edge.
 const toolbarShown = ref(false);
 </script>
@@ -166,15 +208,18 @@ const toolbarShown = ref(false);
     <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-terminal">
         <!-- In full screen the toolbar waits behind the top edge; a pointer reaching it brings it down. -->
         <div v-if="lock.fullscreen.value" class="absolute inset-x-0 top-0 z-20 h-1.5" @pointerenter="toolbarShown = true" />
+        <!-- `.view-header`, so the desktop app's window buttons take their corner from this bar when it reaches it. -->
         <header
-            class="z-20 flex min-h-10 shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1"
+            class="view-header view-header-wrap z-20 flex min-h-10 shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1"
             :class="lock.fullscreen.value ? ['absolute inset-x-0 top-0 shadow-lg transition-transform', toolbarShown ? '' : '-translate-y-full'] : ''"
             @pointerleave="toolbarShown = false"
         >
-            <RouterLink :to="back" :class="ui.textButton({ size: `xs` }, `inline-flex shrink-0 items-center`)">
+            <RouterLink v-if="back" :to="back" :class="ui.textButton({ size: `xs` }, `inline-flex shrink-0 items-center`)">
                 <Icon name="chevron-right" class="rotate-180 text-2xs" aria-hidden="true" />
                 <span class="max-w-32 truncate">{{ name }}</span>
             </RouterLink>
+            <!-- A window of its own has nothing around it to say whose screen it is; beside, the tab says so. -->
+            <span v-else-if="place === 'window'" class="max-w-40 shrink-0 truncate pl-1 text-xs font-medium text-content">{{ name }}</span>
             <Picker
                 v-if="monitors.length > 1"
                 :model-value="shown?.id"
@@ -185,7 +230,7 @@ const toolbarShown = ref(false);
                 @update:model-value="(id: string | undefined) => (monitor = id)"
             />
             <span v-else-if="shown" class="min-w-0 truncate text-xs text-muted">{{ shown.name }}</span>
-            <ConnectionBadge :picture="picture" :status="status" :compact="mobile" />
+            <ConnectionBadge :picture="picture" :status="status" :compact="narrow" />
             <span
                 v-if="screen.readOnly.value"
                 :class="toneWash(`neutral`, `shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-2xs font-medium`)"
@@ -194,7 +239,7 @@ const toolbarShown = ref(false);
             >
 
             <div class="ml-auto flex shrink-0 items-center gap-1">
-                <SegmentedControl v-if="!mobile" v-model="scale" :options="scales" size="xs" />
+                <SegmentedControl v-if="scaled" v-model="scale" :options="scales" size="xs" />
                 <button
                     v-if="!screen.readOnly.value"
                     type="button"
@@ -204,7 +249,7 @@ const toolbarShown = ref(false);
                     @click="viewOnly = !viewOnly"
                 >
                     <Icon name="eye" class="text-2xs" aria-hidden="true" />
-                    <span v-if="!mobile">{{ t(`sandbox.deviceScreen.viewOnly`) }}</span>
+                    <span v-if="!narrow">{{ t(`sandbox.deviceScreen.viewOnly`) }}</span>
                 </button>
                 <SendKeysMenu v-if="!screen.readOnly.value" :disabled="!driving" @send="input.sendChord" />
                 <!-- The computer's sound, where it sends any: on until muted (mediaSound.ts). -->
@@ -230,6 +275,38 @@ const toolbarShown = ref(false);
                     @click="lock.pointerLocked.value ? lock.unlockPointer() : lock.lockPointer()"
                 >
                     <Icon :name="lock.pointerLocked.value ? `lock` : `unlock`" class="text-xs" />
+                </button>
+                <!-- Where else it can be drawn, beside full screen: in a tab beside any section, in a window of its own, and
+                     from that window back into the app's. -->
+                <button
+                    v-if="moves?.beside && !mobile"
+                    type="button"
+                    :class="ui.iconButton({ size: `md`, round: true })"
+                    :aria-label="t(`sandbox.deviceScreen.openBeside`)"
+                    v-tooltip.bottom="{ title: t(`sandbox.deviceScreen.openBeside`), note: t(`sandbox.deviceScreen.openBesideNote`) }"
+                    @click="moves?.beside?.()"
+                >
+                    <Icon name="split-columns" class="text-xs" />
+                </button>
+                <button
+                    v-if="moves?.window && !mobile"
+                    type="button"
+                    :class="ui.iconButton({ size: `md`, round: true })"
+                    :aria-label="t(`sandbox.deviceScreen.newWindow`)"
+                    v-tooltip.bottom="{ title: t(`sandbox.deviceScreen.newWindow`), note: t(`sandbox.deviceScreen.newWindowNote`) }"
+                    @click="toWindow"
+                >
+                    <Icon name="external-link" class="text-xs" />
+                </button>
+                <button
+                    v-if="moves?.home"
+                    type="button"
+                    :class="ui.iconButton({ size: `md`, round: true })"
+                    :aria-label="t(`sandbox.deviceScreen.bringBack`)"
+                    v-tooltip.bottom="{ title: t(`sandbox.deviceScreen.bringBack`), note: t(`sandbox.deviceScreen.bringBackNote`) }"
+                    @click="moves?.home?.()"
+                >
+                    <Icon name="sign-in" class="text-xs" />
                 </button>
                 <button
                     v-if="lock.canFullscreen"
@@ -318,10 +395,13 @@ const toolbarShown = ref(false);
                 </div>
             </div>
 
-            <!-- Where the keys go now, and the way out, as full screen starts. -->
-            <div v-if="fullscreenNote" class="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4">
+            <!-- Where the keys go now, and the way out, as full screen starts; or why no window opened. -->
+            <div v-if="fullscreenNote || blocked" class="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4">
                 <span class="rounded-md bg-card/90 px-3 py-1.5 text-xs text-content shadow-lg">
-                    {{ lock.keysCaptured.value ? t(`sandbox.deviceScreen.keysCaptured`, { name }) : t(`sandbox.deviceScreen.keysNotCaptured`) }}
+                    <template v-if="fullscreenNote">{{
+                        lock.keysCaptured.value ? t(`sandbox.deviceScreen.keysCaptured`, { name }) : t(`sandbox.deviceScreen.keysNotCaptured`)
+                    }}</template>
+                    <template v-else>{{ t(`sandbox.deviceScreen.windowBlocked`) }}</template>
                 </span>
             </div>
 

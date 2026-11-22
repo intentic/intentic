@@ -11965,7 +11965,14 @@
             "keysCaptured": "Todas las teclas van a {name}. Mantén Esc para salir de pantalla completa.",
             "keysNotCaptured": "Este navegador se queda atajos como Alt+Tab; el menú Teclas los envía. Esc sale de pantalla completa.",
             "keyboard": "Teclado",
-            "trackpad": "Trackpad"
+            "trackpad": "Trackpad",
+            "openBeside": "Abrir al lado",
+            "openBesideNote": "Sigue al cambiar de vista",
+            "newWindow": "Nueva ventana",
+            "newWindowNote": "Arrástrala a cualquier pantalla",
+            "bringBack": "Traer de vuelta",
+            "bringBackNote": "A la ventana principal",
+            "windowBlocked": "El navegador bloqueó la nueva ventana. Permite las ventanas emergentes en este sitio y vuelve a intentarlo."
         }
     },
     "settings": {

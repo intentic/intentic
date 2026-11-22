@@ -41,7 +41,7 @@ const PoppablePanels = defineAsyncComponent(() => loadChunk(() => import(`./wind
 // Listening for the agent's name (chat/wake), in a desktop-sized main window on a sandbox: the same chunk rule, since a
 // phone never listens.
 const WakeListener = defineAsyncComponent(() => loadChunk(() => import(`../features/chat/wake/WakeListener.vue`)));
-const listensForWake = computed(() => !mobile.value && floatingWindowPanel.value === undefined && localFace() === undefined);
+const listensForWake = computed(() => fullWindow && !mobile.value && floatingWindowPanel.value === undefined && localFace() === undefined);
 
 const liveness = useSandboxLiveness();
 const route = useRoute();
@@ -120,6 +120,7 @@ startBrowserAgents();
 
 <template>
 <!-- Mobile docks neither panel normally — chat is its own route, the terminal its own tab — but a floating window is always the exception. -->
-    <PoppablePanels v-if="!mobile || floatingWindowPanel !== undefined" />
+    <!-- Not in a computer's screen's own window, which draws none of the three (ScreenWindow.vue). -->
+    <PoppablePanels v-if="windowRole !== `screen` && (!mobile || floatingWindowPanel !== undefined)" />
     <WakeListener v-if="listensForWake" />
 </template>

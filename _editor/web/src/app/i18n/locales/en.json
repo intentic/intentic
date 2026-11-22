@@ -11965,7 +11965,14 @@
             "keysCaptured": "Every key goes to {name}. Hold Esc to leave full screen.",
             "keysNotCaptured": "This browser keeps shortcuts like Alt+Tab; the Keys menu sends them. Esc leaves full screen.",
             "keyboard": "Keyboard",
-            "trackpad": "Trackpad"
+            "trackpad": "Trackpad",
+            "openBeside": "Open beside",
+            "openBesideNote": "Stays while you switch views",
+            "newWindow": "New window",
+            "newWindowNote": "Drag it to any screen",
+            "bringBack": "Bring back",
+            "bringBackNote": "Into the main window",
+            "windowBlocked": "The browser blocked the new window. Allow pop-ups for this site, then try again."
         }
     },
     "settings": {

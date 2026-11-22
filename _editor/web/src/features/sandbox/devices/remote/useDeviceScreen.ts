@@ -36,6 +36,9 @@ export interface DeviceScreen {
 
 export interface DeviceScreenSeams {
     readonly api: RemoteApi;
+    // Whether the picture is where anyone could see it, besides the window being on screen: a side tab behind another
+    // is not. Absent, always.
+    readonly shown?: () => boolean;
     readonly base?: () => string | undefined;
     readonly picture?: (options: MediaPictureOptions) => MediaPicture;
 }
@@ -126,7 +129,7 @@ export const useDeviceScreen = (device: () => string, monitor: Ref<string | unde
     });
 
     // Nobody looking (another tab in front, the window in the tray): the computer stops sending until someone is.
-    watch(onScreen, (seen) => picture.setVisible(seen), { immediate: true });
+    watch(() => onScreen.value && (seams.shown?.() ?? true), (seen) => picture.setVisible(seen), { immediate: true });
     watch(monitor, () => void open());
     void open();
 

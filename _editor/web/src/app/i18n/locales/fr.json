@@ -11965,7 +11965,14 @@
             "keysCaptured": "Toutes les touches vont à {name}. Maintenez Échap pour quitter le plein écran.",
             "keysNotCaptured": "Ce navigateur garde des raccourcis comme Alt+Tab ; le menu Touches les envoie. Échap quitte le plein écran.",
             "keyboard": "Clavier",
-            "trackpad": "Pavé tactile"
+            "trackpad": "Pavé tactile",
+            "openBeside": "Ouvrir à côté",
+            "openBesideNote": "Reste en changeant de vue",
+            "newWindow": "Nouvelle fenêtre",
+            "newWindowNote": "Déplaçable sur un autre écran",
+            "bringBack": "Ramener",
+            "bringBackNote": "Dans la fenêtre principale",
+            "windowBlocked": "Le navigateur a bloqué la nouvelle fenêtre. Autorisez les fenêtres pop-up pour ce site, puis réessayez."
         }
     },
     "settings": {

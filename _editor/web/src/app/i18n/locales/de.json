@@ -11965,7 +11965,14 @@
             "keysCaptured": "Jede Taste geht an {name}. Halte Esc gedrückt, um das Vollbild zu verlassen.",
             "keysNotCaptured": "Dieser Browser behält Kürzel wie Alt+Tab; das Menü Tasten sendet sie. Esc verlässt das Vollbild.",
             "keyboard": "Tastatur",
-            "trackpad": "Trackpad"
+            "trackpad": "Trackpad",
+            "openBeside": "Daneben öffnen",
+            "openBesideNote": "Bleibt beim Wechseln der Ansicht",
+            "newWindow": "Neues Fenster",
+            "newWindowNote": "Auf jeden Bildschirm ziehen",
+            "bringBack": "Zurückholen",
+            "bringBackNote": "Ins Hauptfenster",
+            "windowBlocked": "Der Browser hat das neue Fenster blockiert. Erlaube Pop-ups für diese Seite und versuche es erneut."
         }
     },
     "settings": {

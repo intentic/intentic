@@ -19,9 +19,9 @@ export interface ClaimedLink {
 // and one in an agent's reply was clicked twelve times running. The main area when it is what shows the thing (a lent
 // tab, Browsers while the reader stands on /browsers), else the side panel. Asked of the document the press came
 // from, since a popped-out chat draws its own side panel.
-const pointAtClaimed = (view: string, doc: Document): void => {
+const pointAtClaimed = (view: string, input: SideInput, doc: Document): void => {
     void afterPaint().then(() => {
-        flashElement(doc.querySelector(sideViewOf(view)?.lent?.() === true ? `main` : `.side-tabs`));
+        flashElement(doc.querySelector(sideViewOf(view)?.lent?.(input) === true ? `main` : `.side-tabs`));
     });
 };
 
@@ -30,7 +30,7 @@ const pointAtClaimed = (view: string, doc: Document): void => {
 export const openClaimed = (claimed: Pick<ClaimedLink, `view` | `input`>, from?: Element | null): boolean => {
     const opened = revealSideView(claimed.view, claimed.input);
     if (opened) {
-        pointAtClaimed(claimed.view, from?.ownerDocument ?? document);
+        pointAtClaimed(claimed.view, claimed.input, from?.ownerDocument ?? document);
     }
     return opened;
 };

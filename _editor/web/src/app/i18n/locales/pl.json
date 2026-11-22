@@ -11360,7 +11360,14 @@
             "keysCaptured": "Wszystkie klawisze trafiają do {name}. Przytrzymaj Esc, aby wyjść z pełnego ekranu.",
             "keysNotCaptured": "Ta przeglądarka zatrzymuje skróty jak Alt+Tab; menu Klawisze je wysyła. Esc zamyka pełny ekran.",
             "keyboard": "Klawiatura",
-            "trackpad": "Gładzik"
+            "trackpad": "Gładzik",
+            "openBeside": "Otwórz obok",
+            "openBesideNote": "Zostaje przy zmianie widoku",
+            "newWindow": "Nowe okno",
+            "newWindowNote": "Przeciągnij na dowolny ekran",
+            "bringBack": "Przywróć",
+            "bringBackNote": "Do głównego okna",
+            "windowBlocked": "Przeglądarka zablokowała nowe okno. Zezwól na wyskakujące okna dla tej strony i spróbuj ponownie."
         }
     },
     "settings": {
