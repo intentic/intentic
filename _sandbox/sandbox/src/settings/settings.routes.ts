@@ -18,7 +18,7 @@ import { memberOf } from "./member-of.js";
 import { fileMemberGettingStarted, memberGettingStartedDocument, type MemberGettingStarted } from "./member-getting-started.js";
 import { settingsDocument } from "./settings-store.js";
 import { createCommitIdentityRoutes } from "./commit-identity.routes.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/config-commits/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
 import { requireAgentDomainRollout } from "../workload/domain/agent-domain-rollout.js";
 import { errorMessage } from "@intentic/base/errors";

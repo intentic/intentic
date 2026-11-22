@@ -2,7 +2,7 @@ import { safetyContract } from "@intentic/sandbox-contract/contracts/safety.cont
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/config-commits/settings-versions.js";
 import { stateRelPath } from "../state-paths.js";
 
 /* The Safety page's two reads and its one write: the policy document, and the log of what it decided. */

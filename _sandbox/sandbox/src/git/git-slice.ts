@@ -88,7 +88,7 @@ export interface GitSlice {
         readonly indexEntries: (dir: string, paths: readonly string[]) => Promise<IndexEntries>;
         readonly writeIndexEntries: (dir: string, entries: ReadonlyMap<string, string | undefined>) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: CommitSigner, git?: GitRunner) => Promise<boolean>;
-        // Exactly `paths`, whatever else is staged or dirty; false when they match HEAD (seams/settings-versions.ts).
+        // Exactly `paths`, whatever else is staged or dirty; false when they match HEAD (seams/config-commits/settings-versions.ts).
         readonly commitOnly: (
             dir: string,
             paths: readonly string[],

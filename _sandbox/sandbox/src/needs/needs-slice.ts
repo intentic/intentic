@@ -19,7 +19,7 @@ import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { approveDraft, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
 import { composeEnvironment } from "../environment/overlay.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
-import { versionedRepoWrite } from "../seams/settings-versions.js";
+import { versionedRepoWrite } from "../seams/config-commits/settings-versions.js";
 import { deliverWake } from "../seams/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";

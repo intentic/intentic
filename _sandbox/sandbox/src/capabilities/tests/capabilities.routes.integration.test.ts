@@ -159,7 +159,7 @@ test("capabilities.add refuses an id another tile's connection holds, and still 
     expect((await capabilities.get("notes"))?.config).toEqual({ url: "https://notes.example.org/mcp" });
 });
 
-// The page's own writes are committed as they land (seams/settings-versions.ts): left uncommitted, capabilities.json
+// The page's own writes are committed as they land (seams/config-commits/settings-versions.ts): left uncommitted, capabilities.json
 // read as the owner's edits and a land touching it was refused.
 test("a connection added or removed on its page is committed on its own, leaving nothing for the owner to save", async () => {
     const workspace = tempWorkspace([]);

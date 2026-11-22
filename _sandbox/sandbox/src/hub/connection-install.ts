@@ -4,7 +4,7 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { composeEnvironment } from "../environment/overlay.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/config-commits/settings-versions.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import type { CapabilityCtx } from "../capabilities/capability.js";
 import { registry } from "../capabilities/registry.js";

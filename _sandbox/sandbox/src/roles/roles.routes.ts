@@ -4,7 +4,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/config-commits/settings-versions.js";
 import { stateRelPath } from "../state-paths.js";
 import { assistantsOf, reachableRoles } from "./role-reach.js";
 import { rolesDocument } from "./roles-store.js";

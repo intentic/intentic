@@ -5,7 +5,7 @@ import type { OrpcContext } from "../app-env.js";
 import { noteAudit } from "../audit/audit-http.js";
 import { actorOf } from "../auth/principal.js";
 import type { Services } from "../composition.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/config-commits/settings-versions.js";
 import { settingsDocument } from "../settings/settings-store.js";
 import { documentFilename, renderDocument } from "./drafts.js";
 import { markdownToDocx } from "./docx.js";

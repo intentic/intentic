@@ -12,7 +12,7 @@ import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment } from "../environment/overlay.js";
 import type { HostHub } from "../hosts/host-peer.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/config-commits/settings-versions.js";
 import { entryId } from "./adapter-shared.js";
 import { hostCapabilities } from "./assistants.js";
 import { hermesAuthKeys } from "./hermes.js";

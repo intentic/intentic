@@ -20,6 +20,7 @@ import { admitByGrant, grantsOf } from "./auth/grants.js";
 import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./app-env.js";
 import { auditRequests } from "./audit/audit-http.js";
+import { commitConfigWrites } from "./seams/config-commits/config-write-commits.js";
 import { createRouter } from "./router.js";
 import { verifySyncToken } from "./peers/desktop-sync.js";
 import { logContext } from "./logger.js";
@@ -249,6 +250,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // An organisation's locks, for every credential alike, the owner's included (org/org-locks.middleware.ts).
     app.use("*", orgLocks(services.orgPolicy));
+
+    // A page's or a card's write to a tracked config file is committed as it lands (seams/config-commits/config-write-commits.ts), below
+    // authentication and the locks, so a refused request costs no git call.
+    app.use("*", commitConfigWrites(services));
 
     // Every raw route, each under its declaration and in RAW_ROUTES order, so none exists without a policy and the
     // contract alone decides which of two overlapping routes answers (raw-routes.ts); app-raw-routes.ts is every table.

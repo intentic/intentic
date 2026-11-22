@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import type { Services } from "../composition.js";
-import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import type { Services } from "../../composition.js";
+import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 
 // A settings page's own write (a role's card or kit, a connection's manifest entry, the Agent tab's settings.json), or
 // an AGENTS.md rule the owner approved on a card (needs/kinds/instruction-need.ts), committed on its own as it lands.
@@ -12,6 +12,8 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 // opting in: the owner never edited these files, the app did, so nothing of theirs is swept into history by it.
 // Exactly the paths written, never whatever else is dirty or staged, and under the repo lock, so a land queues behind
 // it. Best-effort: a workspace whose own `.git` ignores `.intentic` refuses the stage, and the file stays as it was.
+// Every other page and card that writes a tracked config file (automations, workflows, extensions, skills, areas, the
+// environment, engine channels…) is committed by the route table in config-write-commits.ts instead of a wrapper here.
 
 // The commit itself goes through the git slice rather than an import of git/: every settings page sits above git/ in
 // the daemon, and git/ reaches back up to most of them.

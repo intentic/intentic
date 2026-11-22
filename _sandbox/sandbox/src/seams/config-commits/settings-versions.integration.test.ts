@@ -6,14 +6,14 @@ import { STATE_DIR } from "@intentic/constants";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import type { OrpcContext } from "../app-env.js";
-import type { Services } from "../composition.js";
-import { fileSafetyPolicyStore } from "../safety/safety-policy-store.js";
-import { createSafetyRoutes } from "../safety/safety.routes.js";
-import { createSettingsRoutes } from "../settings/settings.routes.js";
-import { fileSandboxSettingsStore, settingsDocument } from "../settings/settings-store.js";
+import type { OrpcContext } from "../../app-env.js";
+import type { Services } from "../../composition.js";
+import { fileSafetyPolicyStore } from "../../safety/safety-policy-store.js";
+import { createSafetyRoutes } from "../../safety/safety.routes.js";
+import { createSettingsRoutes } from "../../settings/settings.routes.js";
+import { fileSandboxSettingsStore, settingsDocument } from "../../settings/settings-store.js";
 import { versionedRepoWrite, versionedSettingsWrite, versionSettingsWrite } from "./settings-versions.js";
-import { commitOnly } from "../git/changes/changes-index.js";
+import { commitOnly } from "../../git/changes/changes-index.js";
 
 // A real repository: what matters is what git holds afterwards, a commit of exactly the settings page's write, with the
 // owner's own work around it left dirty and staged just as it was.
