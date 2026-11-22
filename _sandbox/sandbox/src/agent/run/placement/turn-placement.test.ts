@@ -463,7 +463,7 @@ describe("a runner's mirror", () => {
             { repo: "root", base: "a".repeat(40) },
         ]);
         const opened = runnerPlacement(
-            {} as never,
+            { conversations: { holdings: () => new Map() } } as never,
             { conversationId: "c", snapshot: { conversationId: "c", index: 0 }, runner: "box" },
             {
                 compose: async () => mirror,

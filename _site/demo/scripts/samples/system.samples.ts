@@ -41,4 +41,5 @@ export const systemSamples: GroupSamples<`system`> = ({ host }) => ({
     manifestProblems: undefined,
     repairManifest: { path: `${STATE_DIR}/config/settings.json`, key: `autoLnad`, to: `autoLand` },
     killTerminal: { name: `agent-checkout-stripe` },
+    reach: undefined,
 });

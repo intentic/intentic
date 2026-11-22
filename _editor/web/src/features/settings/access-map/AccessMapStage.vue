@@ -131,7 +131,7 @@ const orgWord = (org: AccountGraph[`you`][`orgs`][number]): string =>
                     :pinned="pinned === YOU_ID"
                     :now
                     :picture
-                    @point="(on) => emit(`point`, on ? YOU_ID : undefined)"
+                    @point="(on: boolean) => emit(`point`, on ? (YOU_ID as string) : undefined)"
                     @press="emit(`press`, YOU_ID)"
                 />
                 <ul v-if="graph.you.orgs.length > 0" class="flex flex-col gap-0.5 px-1">

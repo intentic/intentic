@@ -68,7 +68,7 @@ it("moves a computer into a window of its own, taking its tab from beside the se
     openScreenBeside({ machine: `marta`, device: `marta`, name: `marta` });
     const focus = jest.fn();
     // SAFETY: the opener reads only `closed` and `focus` off the window it opened.
-    const opened = { closed: false, focus } as Window;
+    const opened = { closed: false, focus } as unknown as Window;
     withOpen(opened, (asked) => {
         expect(openScreenWindow({ ...ROG, monitor: `1` }, { width: 1920, height: 1080 })).toBe(true);
         expect(asked).toHaveLength(1);
