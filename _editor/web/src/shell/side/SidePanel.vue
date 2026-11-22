@@ -155,13 +155,19 @@ const chatSeam = computed<number>({
     set: (px) => {
         const before = layout.chatWidth.value;
         layout.setChatWidth(toAppPx(px));
-        if (!fills.value) {
+        // Tucked, the chat trades width with the section beyond the strip, not with the hidden column.
+        if (!fills.value && !tucked.value) {
             layout.setBesideWidth(layout.besideWidth.value - (layout.chatWidth.value - before));
         }
     },
 });
 const chatSeamMax = computed(() =>
-    Math.max(MIN_CHAT_WIDTH, layout.chatWidth.value + (fills.value ? roomBesideChat() : layout.besideWidth.value) - MIN_PANE_PX),
+    Math.max(
+        MIN_CHAT_WIDTH,
+        layout.chatWidth.value +
+            (tucked.value ? roomBesideChat() - TUCKED_STRIP_PX : fills.value ? roomBesideChat() : layout.besideWidth.value) -
+            MIN_PANE_PX,
+    ),
 );
 // Split, both shrink with a window too narrow for their sum, the chat in proportion to its width but never under its
 // floor, so its composer keeps its controls; what was opened gives way first. Filling, the chat holds its width.
@@ -488,9 +494,10 @@ onBeforeUnmount(() => {
             :style="chatStyle"
         >
             <div ref="chatSlot" class="contents"></div>
-            <!-- Between the two columns: the chat's width, traded with the column beside it. -->
+            <!-- Between the two columns: the chat's width, traded with the column beside it; tucked, between the strip and
+                 the chat, sizing the chat alone. -->
             <ResizeSeam
-                v-if="beside && !tucked"
+                v-if="beside"
                 v-model="chatSeam"
                 place="edge"
                 pane="after"

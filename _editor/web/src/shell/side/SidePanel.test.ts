@@ -269,6 +269,14 @@ describe(`tucked away`, () => {
         expect(host.querySelector(`.stub-body`)).toBe(body);
     });
 
+    it(`keeps the chat's own edge to resize while tucked, between the strip and the chat`, async () => {
+        openBeside(`stub`, { n: 1 });
+        setTucked(true);
+        const host = await mount();
+
+        expect(host.querySelector(`.side-chat > [role="separator"]`)).not.toBeNull();
+    });
+
     it(`stands the strip at the window's edge while the chat lives elsewhere`, async () => {
         chatInSidePanel.value = false;
         openBeside(`stub`, { n: 1 });
