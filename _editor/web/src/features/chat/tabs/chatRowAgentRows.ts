@@ -3,6 +3,8 @@ import type { MenuItem } from "primevue/menuitem";
 import type { Ref } from "vue";
 import { useRouter } from "vue-router";
 import { useTier } from "../../../client/sandbox/useTier";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { here, page } from "../../../lib/routes/links";
 import { changesToRead } from "../../../models/agent-status/agentStatus-attention";
 import type { Conversation } from "../../../models/conversations/session/conversation";
@@ -10,10 +12,13 @@ import { draftFreshSession } from "../../../models/fleet/freshSession";
 import {
     type AgentMenuActions,
     type AgentMenuFacts,
+    AUTO_APPROVE_ROUTE,
+    autoApproveRows,
     copySessionName,
     filingRows,
     freshRows,
     landRows,
+    pressAutoApprove,
     sessionNameRows,
     watchRows,
 } from "../../../models/fleet/presses/agentMenu";
@@ -34,16 +39,22 @@ export interface ChatRowAgentRows {
     // Copy session name, beside the chat's own Rename and Share.
     readonly name: MenuItem[];
     readonly watch: MenuItem[];
+    // Auto-approve, for this chat and every chat open beside it.
+    readonly autoApprove: MenuItem[];
     // Archive or Restore, beside the chat's own Close.
     readonly filing: MenuItem[];
 }
 
-const NONE: ChatRowAgentRows = { review: [], fresh: [], name: [], watch: [], filing: [] };
+const NONE: ChatRowAgentRows = { review: [], fresh: [], name: [], watch: [], autoApprove: [], filing: [] };
 
-/** The agent rows for a chat's menu; `anchor` is the row pressed, whose own document the clipboard is asked of. */
-export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
-    const { agentById, archive, restore, stopWatching } = useAgents();
+/**
+ * The agent rows for a chat's menu; `anchor` is the row pressed, whose own document the clipboard is asked of, and
+ * `beside` the chats open in columns together, which the auto-approve row marks with the one pressed.
+ */
+export const useChatRowAgentRows = (anchor: Ref<Element | undefined>, beside: () => readonly string[]) => {
+    const { agentById, archive, restore, stopWatching, setAutoApprove } = useAgents();
     const { canShip } = useTier();
+    const { can } = useAccess();
     const router = useRouter();
     const act: AgentMenuActions = {
         land: (agent, chosen) => void landFromMenu(agent, chosen),
@@ -52,6 +63,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
         stopWatching,
         restore,
         archive: (ids) => archive(ids),
+        setAutoApprove: (ids, on) => pressAutoApprove(setAutoApprove, ids, on),
     };
     // The agent's review page, as "View changes" with the diff icon wherever it is offered (changesToRead), and only when
     // it has something on it. No drill-in into the chat: this row IS the chat.
@@ -65,12 +77,18 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
         if (agent === undefined) {
             return NONE;
         }
-        const facts: AgentMenuFacts = { here: true, canShip: canShip.value };
+        const marks = supportsRoute(AUTO_APPROVE_ROUTE) && can(AUTO_APPROVE_ROUTE);
+        const facts: AgentMenuFacts = {
+            here: true,
+            canShip: canShip.value,
+            autoApprove: marks ? { selected: beside().flatMap((id) => agentById(id) ?? []) } : undefined,
+        };
         return {
             review: [...reviewRows(agent), ...landRows(agent, facts, act)],
             fresh: freshRows(agent, facts, act),
             name: sessionNameRows(agent, act),
             watch: watchRows(agent, facts, act),
+            autoApprove: autoApproveRows(agent, facts, act),
             filing: filingRows(agent, facts, act, commandShortcut(`chat.archive`)),
         };
     };

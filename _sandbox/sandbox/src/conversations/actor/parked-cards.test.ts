@@ -157,18 +157,27 @@ test("a card raised on no conversation names none, and outlives every conversati
 // person could have allowed once, and nothing else.
 describe("a conversation's standing yes", () => {
     const denied = { kind: "permission", requestId: "", decision: "deny" } as const;
+    // `allowed` holds the conversations allowed everything, `marked` those marked to auto-approve, which answer a hard
+    // rule's card too (roles/standing-answer.ts reads the real grants the same way).
     const standingCards = () => {
         const allowed = new Set<string>();
+        const marked = new Set<string>();
         const kept: { conversationId: string; by: string | undefined }[] = [];
-        const registry = parkedCards(memoryFleet().conversations, {
-            allowed: async (conversationId) => allowed.has(conversationId),
-            allow: async (conversationId, by) => {
-                allowed.add(conversationId);
-                kept.push({ conversationId, by });
+        const lines: Record<string, unknown>[] = [];
+        const registry = parkedCards(
+            memoryFleet().conversations,
+            {
+                allowed: async (conversationId, hardRule) => marked.has(conversationId) || (!hardRule && allowed.has(conversationId)),
+                allow: async (conversationId, by) => {
+                    allowed.add(conversationId);
+                    kept.push({ conversationId, by });
+                },
+                failed: () => {},
             },
-            failed: () => {},
-        });
-        return { registry, allowed, kept };
+            undefined,
+            (fields) => void lines.push(fields),
+        );
+        return { registry, allowed, marked, kept, lines };
     };
     const live = () => new AbortController().signal;
 
@@ -261,6 +270,64 @@ describe("a conversation's standing yes", () => {
         expect(failures).toHaveLength(1);
         expect(registry.resolve({ kind: "permission", requestId: id, decision: "once" })).toBe("settled");
         expect((await settled).reply).toMatchObject({ decision: "once" });
+    });
+
+    // The auto-approve mark (schemas/auto-approve.ts): wider than everything, so a hard rule's card goes too, but never one
+    // whose yes reaches other conversations, nor one addressed to a named person.
+    test("the auto-approve mark answers a hard rule's card, never a restart's or a named person's", async () => {
+        const { registry, marked } = standingCards();
+        marked.add("c-1");
+        const hard = registry.create("permission", denied, "c-1", { alwaysAsks: true });
+        expect(await registry.waitsOnPerson(hard.id)).toBe(false);
+        expect((await hard.wait(live())).reply).toMatchObject({ decision: "everything" });
+
+        const restart = registry.create("permission", denied, "c-1", { alwaysAsks: true, reachesOthers: true });
+        const named = registry.create("permission", denied, "c-1", { mayAnswer: () => undefined });
+        expect(await registry.waitsOnPerson(restart.id)).toBe(true);
+        expect(await registry.waitsOnPerson(named.id)).toBe(true);
+        const controller = new AbortController();
+        const waits = [restart.wait(controller.signal), named.wait(controller.signal)];
+        controller.abort();
+        for (const settled of await Promise.all(waits)) {
+            expect(settled.resolved.reply).toBeUndefined();
+        }
+    });
+
+    // A mark put on while cards wait answers them then, not only the ones raised after it.
+    test("asked again once a conversation is marked, its waiting cards settle, a hard rule's too, and nobody else's", async () => {
+        const { registry, marked, lines } = standingCards();
+        const routine = registry.create("permission", denied, "c-1");
+        const hard = standingOn(registry, "c-1").create("permission", denied, undefined, { alwaysAsks: true });
+        const restart = registry.create("permission", denied, "c-1", { alwaysAsks: true, reachesOthers: true });
+        const elsewhere = registry.create("permission", denied, "c-2");
+        const controller = new AbortController();
+        const settled = [routine, hard, restart, elsewhere].map((card) => card.wait(controller.signal));
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        marked.add("c-1");
+        await registry.restand("ada@corp.com");
+
+        expect((await settled[0])?.reply).toMatchObject({ decision: "everything" });
+        expect((await settled[1])?.reply).toMatchObject({ decision: "everything" });
+        // Whoever put the mark on answered them, on the card's own log line.
+        expect(lines.filter((fields) => fields["by"] === "ada@corp.com").map((fields) => fields["requestId"])).toEqual([routine.id, hard.id]);
+        controller.abort();
+        expect((await settled[2])?.resolved.reply).toBeUndefined();
+        expect((await settled[3])?.resolved.reply).toBeUndefined();
+    });
+
+    test("everything pressed on a card in a conversation leaves its waiting hard rule's card for a person", async () => {
+        const { registry } = standingCards();
+        const routine = registry.create("permission", denied, "c-1");
+        const hard = registry.create("permission", denied, "c-1", { alwaysAsks: true });
+        const controller = new AbortController();
+        const hardSettled = hard.wait(controller.signal);
+        const routineSettled = routine.wait(controller.signal);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        registry.resolve({ kind: "permission", requestId: routine.id, decision: "everything" }, OWNER_CALLER);
+        expect((await routineSettled).reply).toMatchObject({ decision: "everything" });
+        controller.abort();
+        expect((await hardSettled).resolved.reply).toBeUndefined();
     });
 
     test("on a card no standing yes may answer, everything is the allow-once it can be, and nothing is kept", async () => {

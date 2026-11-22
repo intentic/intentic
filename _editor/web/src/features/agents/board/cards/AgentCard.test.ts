@@ -856,6 +856,18 @@ it(`marks words left unsent in a running conversation with a pencil among its co
     expect(el.querySelector(`[data-unsent-mark]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
 });
 
+// The auto-approve mark in the corner: its own reads plainly, one followed from the session that started it fainter, and
+// a card without either wears nothing.
+it(`wears the auto-approve mark in its corner, saying whose it is`, () => {
+    const own = mount({ ...ready(`running`), autoApprove: `own` }).querySelector(`[data-auto-approve]`);
+    expect(own?.getAttribute(`data-auto-approve`)).toBe(`own`);
+    expect(own?.getAttribute(`aria-label`)).toMatch(/^Auto-approves every permission, your hard rules included/);
+    expect(mount({ ...ready(`running`), autoApprove: `inherited` }).querySelector(`[data-auto-approve]`)?.getAttribute(`aria-label`)).toMatch(
+        /because the session that started it does/,
+    );
+    expect(mount(ready(`running`)).querySelector(`[data-auto-approve]`)).toBeNull();
+});
+
 // On desktop a double-click opens the agent's page, after its two clicks opened the chat; only where that page has
 // something on it (changesToRead), never onto one saying nothing changed. Without, it goes into the chat instead.
 it(`opens the agent's page on a double-click`, () => {

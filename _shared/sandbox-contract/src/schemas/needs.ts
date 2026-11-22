@@ -399,6 +399,12 @@ export const ConversationGrantSchema = z.object({
         .boolean()
         .default(false)
         .describe("Whether every request an allow-once could settle is allowed without asking, until somebody takes it back."),
+    // Put on from the conversation's card, read live by the card registry (schemas/auto-approve.ts): wider than
+    // `everything`, it answers the owner's hard rules too, and the conversations this one starts follow it.
+    autoApprove: z
+        .boolean()
+        .default(false)
+        .describe("Whether every permission it or a subagent it starts asks for is approved without asking, the owner's hard rules included."),
     // Answered on a credential gateway card, read live by the gateway as each request its rules would ask about arrives.
     rules: z
         .array(BrokerRulePassSchema)
@@ -450,6 +456,7 @@ export const StandingGrantsSchema = z.object({
             installs: z.boolean().default(false).describe("Whether its own dependency installs run without asking."),
             secrets: z.array(z.string()).default([]).describe("Secrets it may send past their host guard without asking."),
             everything: z.boolean().default(false).describe("Whether every request an allow-once could settle is allowed without asking."),
+            autoApprove: z.boolean().default(false).describe("Whether it and its subagents are approved without asking, the owner's hard rules included."),
             rules: z.array(BrokerRulePassSchema).default([]).describe("Credential gateway rules that no longer ask before its requests."),
             by: z.string().optional().describe("Who last allowed one of those."),
             updatedAt: z.number().optional().describe("When one of those last changed, in milliseconds."),
@@ -472,11 +479,11 @@ export type StandingGrants = z.infer<typeof StandingGrantsSchema>;
 export const ConversationGrantRevokeSchema = z.object({
     conversationId: z.string(),
     kind: z
-        .enum(["release", "install", "secret", "everything", "rule"])
+        .enum(["release", "install", "secret", "everything", "auto-approve", "rule"])
         .describe(
-            "Which kind of yes: a credential's release, letting its installs run unasked, a secret sent past its host guard, allowing everything, or a credential gateway rule that stopped asking.",
+            "Which kind of yes: a credential's release, letting its installs run unasked, a secret sent past its host guard, allowing everything, its auto-approve mark, or a credential gateway rule that stopped asking.",
         ),
-    what: z.string().describe("The released credential or secret it named, or the rule's identity; empty for installs and everything."),
+    what: z.string().describe("The released credential or secret it named, or the rule's identity; empty for installs, everything and auto-approve."),
     capability: z.string().optional().describe("For a rule, the capability whose rule it is; a rule's identity alone does not say."),
 });
 export type ConversationGrantRevoke = z.infer<typeof ConversationGrantRevokeSchema>;

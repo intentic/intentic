@@ -50,6 +50,7 @@ import { activityLine, agentDisplayTitle, agentStandingMeta, agentStatusMeta, co
 import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
 import CardStamps from "../../../../parts/fleet/CardStamps.vue";
+import AutoApproveMark from "../../../../parts/fleet/AutoApproveMark.vue";
 import { useCardStamps } from "../../../../models/fleet/board/useCardStamps";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
 import { reachLine } from "../../../../models/fleet/board/reachLine";
@@ -674,6 +675,7 @@ const grab = (event: PointerEvent): void => {
                      started draws no standing (cornerStandingShown), so there the pencil is the corner's only mark. -->
                 <AgentCardWhen :agent="agent" :clock="clock" :activity-text="activityText" />
                 <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" below class="text-sm" />
+                <AutoApproveMark v-if="agent.autoApprove" :mark="agent.autoApprove" class="text-sm" />
                 <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" below class="text-base" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span

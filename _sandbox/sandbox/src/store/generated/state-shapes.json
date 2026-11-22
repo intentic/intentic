@@ -43,6 +43,10 @@
     {
       "type": "{ by?: string; everything?: boolean; installs?: boolean; rules?: { capability: string; rule: string; said: string }[]; secrets?: string[]; updatedAt: number }",
       "since": "v1.425.0"
+    },
+    {
+      "type": "{ autoApprove?: boolean; by?: string; everything?: boolean; installs?: boolean; rules?: { capability: string; rule: string; said: string }[]; secrets?: string[]; updatedAt: number }",
+      "since": "unreleased"
     }
   ],
   "auth:credential-gates.json": [

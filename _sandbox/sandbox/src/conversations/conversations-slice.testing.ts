@@ -17,6 +17,7 @@ import { noIsolation } from "./worktrees/isolation.testing.js";
 import { createBranchCheckouts } from "./worktrees/branches/branch-checkouts.js";
 import { createLogger } from "../logger.js";
 import { parkedCards } from "./actor/parked-cards.js";
+import { grantsStanding, supervisorIn } from "../roles/standing-answer.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
 import { createFilesInFlight } from "./files-in-flight.js";
 import type { ConversationsSlice } from "./conversations-slice.js";
@@ -70,7 +71,16 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
     // history root.
     const conversationsDb = openConversationsDb(IN_MEMORY);
     const units = conversationUnits(context.historyRoot, { ...sqliteAgentsStore(conversationsDb), recreated: false });
-    const { agents, conversations } = memoryFleet(fleetStoreOver(conversationsDb, units));
+    // The auto-approve marks its cards wear, followed from the suite's own grants as the daemon follows its file.
+    const { agents, conversations } = memoryFleet(fleetStoreOver(conversationsDb, units), {
+        marks: {
+            marked: async () => {
+                const grants = await context.self().conversationGrants.all();
+                return new Set(Object.keys(grants).filter((id) => grants[id]?.autoApprove === true));
+            },
+            onChange: (listener) => context.self().conversationGrants.onChange(listener),
+        },
+    });
     // Real checkouts of branches, of whatever workspace the suite's services name (read at each call), so a suite on a
     // real repository reads a branch the way the daemon does. Under a history root of these services' own, never
     // written until a branch is checked out: the default test history root is every suite's, and a checkout another
@@ -86,8 +96,17 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
     return {
         agents,
         conversations,
-        // The cards a suite's turns park on, over the same actors, so a reply through the routes finds them.
-        cards: parkedCards(conversations),
+        // The cards a suite's turns park on, over the same actors, so a reply through the routes finds them; answered by
+        // the suite's own grants as the daemon's are by its file.
+        cards: parkedCards(
+            conversations,
+            grantsStanding(
+                () => context.self().conversationGrants,
+                supervisorIn((id) => agents.entry(id)),
+                // A suite's grants live in memory, which no read fails.
+                () => undefined,
+            ),
+        ),
         conversationsDb,
         conversationUnits: units,
         // Inert: every dispatched turn files what it was told, and no suite here reads it back.

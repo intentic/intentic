@@ -75,6 +75,11 @@ export const agentsDoors = {
     // As the registry does: `null` clears the conversation's own answer back to the sandbox's.
     autoLand: ({ id, autoLand }) =>
         agentAnswer(amendAgent(id, ({ autoLand: _held, ...card }) => (autoLand === null ? card : { ...card, autoLand }))),
+    // As the daemon does: the mark on, or off, each card named, worn as its own (a subagent following its parent's is the
+    // real registry's to draw).
+    autoApprove: ({ ids, on }) => ({
+        agents: ids.map((id) => agentAnswer(amendAgent(id, ({ autoApprove: _held, ...card }) => (on ? { ...card, autoApprove: `own` } : card)))),
+    }),
     breakPolicy: setBreakPolicy,
     keepWarm: keepWarmAgent,
     stopJob,

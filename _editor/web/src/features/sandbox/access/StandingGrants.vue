@@ -37,13 +37,16 @@ interface Item {
 // The reader's own yes reads as "you": in a box with one owner every row would otherwise repeat their address.
 const whoOf = (who: string): string => (who.toLowerCase() === user.value?.email?.toLowerCase() ? t(`needs.grants.you`) : who);
 
-// Each yes as what the conversation may now do, in the order a person scans for the risky ones: everything at once,
-// unasked installs, secrets past their host guard, credential requests that stopped asking, released secrets. None of
-// them widens access: what a role withholds a conversation gets only by being switched to another role.
+// Each yes as what the conversation may now do, in the order a person scans for the risky ones: the auto-approve mark,
+// everything at once, unasked installs, secrets past their host guard, credential requests that stopped asking, released
+// secrets. None of them widens access: what a role withholds a conversation gets only by being switched to another role.
 const itemsOf = (conversation: StandingConversation): readonly Item[] => {
     const at = (kind: ConversationGrantRevoke["kind"], what: string): ConversationGrantRevoke => ({ conversationId: conversation.conversationId, kind, what });
     return [
-        // Any permission card's "Allow everything in this conversation": the widest yes there is, so it leads.
+        // The auto-approve mark, put on from the conversation's card: wider than everything (hard rules, its subagents), so
+        // it leads.
+        ...(conversation.autoApprove ? [{ grant: at(`auto-approve`, ``), icon: `bolt` as const, label: t(`needs.grants.autoApprove`), wide: true }] : []),
+        // Any permission card's "Allow everything in this conversation".
         ...(conversation.everything ? [{ grant: at(`everything`, ``), icon: `unlock` as const, label: t(`needs.grants.everything`), wide: true }] : []),
         // An install card's "Allow installs for this conversation": the one yes that names no single thing.
         ...(conversation.installs ? [{ grant: at(`install`, ``), icon: `box` as const, label: t(`needs.grants.installs`) }] : []),

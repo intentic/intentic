@@ -16,6 +16,9 @@ import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js"
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import { type NightAnswers, type ParkedCards, parkedCards } from "./actor/parked-cards.js";
+import { grantsStanding, supervisorIn } from "../roles/standing-answer.js";
+import type { WallAnswersSource } from "./actor/wall-answers.js";
+import type { AutoApproveSource } from "./registry/auto-approve-marks.js";
 import { createLandedPresences } from "./land/landed-presence.js";
 import { type AgentOrigins, createAgentOrigins } from "./land/origins.js";
 import { createLandStandings } from "./land/standing.js";
@@ -102,22 +105,23 @@ export interface ConversationsParts {
     readonly metrics: () => Readonly<Record<string, Readonly<Record<string, number>>>>;
 }
 
-// The card registry every turn parks on. The conversation-wide yes answered on any permission card, read from the grant
-// store as each card parks; a settled card's "waiting on you" push replaced wherever it showed (push.ts `withdraw`); and
+// The card registry every turn parks on. The conversation-wide yes answered on any permission card and the auto-approve
+// mark, which the conversations it starts follow (roles/standing-answer.ts), read from the grant store as each card
+// parks; a settled card's "waiting on you" push replaced wherever it showed (push.ts `withdraw`); and
 // the owner's night hours, which answer an agent's own question while they sleep and nobody is at the editor
 // (agent/night).
 const sliceCards = (
-    conversations: ConversationActors,
+    { conversations, agents }: { readonly conversations: ConversationActors; readonly agents: Pick<AgentsRegistry, "entry"> },
     { whole, logger, cardSettled }: Pick<ConversationsDeps, "whole" | "logger" | "cardSettled">,
     night: NightAnswers | undefined,
 ): ParkedCards =>
     parkedCards(
         conversations,
-        {
-            allowed: (conversationId) => whole().conversationGrants.everythingAllowed(conversationId),
-            allow: (conversationId, by) => whole().conversationGrants.allowEverything(conversationId, by),
-            failed: (cause) => logger.warn({ err: cause }, "conversation grants: allow everything could not be read or kept"),
-        },
+        grantsStanding(
+            () => whole().conversationGrants,
+            supervisorIn((id) => agents.entry(id)),
+            (cause) => logger.warn({ err: cause }, "conversation grants: a standing answer could not be read or kept"),
+        ),
         (requestId, conversationId) => {
             if (conversationId !== undefined) {
                 cardSettled(requestId, conversationId);
@@ -127,6 +131,35 @@ const sliceCards = (
         (fields, message) => logger.info(fields, message),
         night,
     );
+
+// What the registry follows from outside it to project a card, each read once it loads and again as it changes: the
+// sandbox's answers to the walls a card's `next` is derived by (wall-answers.ts), and the auto-approve marks a card wears
+// (registry/auto-approve-marks.ts).
+const cardSources = ({ whole, logger }: Pick<ConversationsDeps, "whole" | "logger">) => ({
+    settings: {
+        get: () =>
+            whole()
+                .sandboxSettings.get()
+                .catch((error: Error) => {
+                    logger.warn({ err: error }, "agents: the sandbox's answers to a spent allowance and to low memory could not be read, cards keep the last ones");
+                    return undefined;
+                }),
+        onSet: (listener) => whole().sandboxSettings.onSet(listener),
+    } satisfies WallAnswersSource,
+    marks: {
+        marked: () =>
+            whole()
+                .conversationGrants.all()
+                .then(
+                    (grants) => new Set(Object.keys(grants).filter((id) => grants[id]?.autoApprove === true)),
+                    (error: Error) => {
+                        logger.warn({ err: error }, "agents: the auto-approve marks could not be read, cards keep the last ones");
+                        return undefined;
+                    },
+                ),
+        onChange: (listener) => whole().conversationGrants.onChange(listener),
+    } satisfies AutoApproveSource,
+});
 
 // Builds the conversations slice: one database for the registry and everything keyed by a conversation, so a fact
 // spanning its tables is one write.
@@ -170,19 +203,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
         { agents: agentsStore, journal: turnJournalRows(conversationsDb), transaction: conversationsDb.transaction, units },
         createLandStandings(agentWorktrees),
         landedPresences,
-        {
-            // The sandbox's answers to the walls a card's `next` is derived by (wall-answers.ts), read once the registry loads.
-            settings: {
-                get: () =>
-                    whole()
-                        .sandboxSettings.get()
-                        .catch((error: Error) => {
-                            logger.warn({ err: error }, "agents: the sandbox's answers to a spent allowance and to low memory could not be read, cards keep the last ones");
-                            return undefined;
-                        }),
-                onSet: (listener) => whole().sandboxSettings.onSet(listener),
-            },
-        },
+        cardSources({ whole, logger }),
     );
     // A conversation's card says since when anybody holds a draft for it (drafts/composer-drafts.ts).
     const drafts = registryDrafts(historyRoot, agents, (error, conversationId) =>
@@ -203,7 +224,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
             turns,
             turnEngine,
             conversations,
-            cards: sliceCards(conversations, { whole, logger, cardSettled }, night),
+            cards: sliceCards({ conversations, agents }, { whole, logger, cardSettled }, night),
             agentWorktrees,
             branchCheckouts,
             turnJournal: sqliteTurnJournal(conversationsDb),

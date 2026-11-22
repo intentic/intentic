@@ -94,6 +94,7 @@ export const standingGrants = async (deps: StandingGrantsDeps): Promise<Standing
             installs: grant?.installs === true,
             secrets: [...(grant?.secrets ?? [])],
             everything: grant?.everything === true,
+            autoApprove: grant?.autoApprove === true,
             rules: (grant?.rules ?? []).map((pass) => ({ ...pass })),
             ...opt("by", grant?.by),
             ...opt("updatedAt", grant?.updatedAt),
@@ -130,6 +131,9 @@ const revokeConversationGrant = async ({ conversationGrants, credentialGrants }:
     }
     if (input.kind === "everything") {
         return conversationGrants.revokeEverything(input.conversationId);
+    }
+    if (input.kind === "auto-approve") {
+        return conversationGrants.unmarkAutoApprove(input.conversationId);
     }
     if (input.kind === "rule") {
         // A rule's identity is its content, which two capabilities may share: without the capability there is no telling

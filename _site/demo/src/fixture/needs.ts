@@ -147,6 +147,7 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
             installs: true,
             secrets: [`stripe/secret-key`],
             everything: false,
+            autoApprove: false,
             rules: [{ capability: `github`, rule: `ask GET api.github.com/repos/*`, said: `GET api.github.com/repos/… with GitHub` }],
             by: `demo@intentic.dev`,
             updatedAt: now - minutes(42),
@@ -157,6 +158,7 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
             installs: false,
             secrets: [],
             everything: true,
+            autoApprove: false,
             rules: [],
             by: `demo@intentic.dev`,
             updatedAt: now - minutes(1),
@@ -175,6 +177,9 @@ const withoutGrant = (conversation: DemoGrantRow, grant: ConversationGrantRevoke
     }
     if (grant.kind === `everything`) {
         return { ...conversation, everything: false };
+    }
+    if (grant.kind === `auto-approve`) {
+        return { ...conversation, autoApprove: false };
     }
     if (grant.kind === `rule`) {
         return { ...conversation, rules: conversation.rules.filter((rule) => rule.capability !== grant.capability || rule.rule !== grant.what) };
@@ -200,6 +205,7 @@ export const revokeDemoGrant = (grant: GrantRevoke): void => {
             (conversation) =>
                 conversation.installs ||
                 conversation.everything ||
+                conversation.autoApprove ||
                 conversation.rules.length + conversation.secrets.length + conversation.releases.length > 0,
         );
 };

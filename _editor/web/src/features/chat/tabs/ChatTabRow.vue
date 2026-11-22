@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import CardStamps from "../../../parts/fleet/CardStamps.vue";
+import AutoApproveMark from "../../../parts/fleet/AutoApproveMark.vue";
 import ChildCount from "../../../parts/fleet/ChildCount.vue";
 import { boxNameOf } from "../../../models/fleet/fleetScope";
 import { editsRefusal } from "../../../models/agent-status/agentStatus-attention";
@@ -164,9 +165,10 @@ const closeRow = (event: Event): void => {
         </template>
         <!-- The board card's corner (AgentCard), in its order: words waiting in the composer as a pencil, then the stamps (three
              fit before the rest fold), both left of the standing, which keeps its seat whether or not anything was sent. -->
-        <template v-if="props.conversation.unsent.value || props.view.stamps.length > 0" #corner>
+        <template v-if="props.conversation.unsent.value || props.view.stamps.length > 0 || props.agent?.autoApprove" #corner>
             <span class="flex h-4 shrink-0 items-center gap-2 text-sm" data-corner>
                 <UnsentMark v-if="props.conversation.unsent.value" :preview="unsentWords" :at="props.conversation.draftAt.value" />
+                <AutoApproveMark v-if="props.agent?.autoApprove" :mark="props.agent.autoApprove" />
                 <CardStamps v-if="props.view.stamps.length > 0" :stamps="props.view.stamps" :agent="props.agent" :max="3" />
             </span>
         </template>

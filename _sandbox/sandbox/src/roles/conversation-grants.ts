@@ -11,7 +11,9 @@ import { openDocument } from "../store/open-document.js";
 // the yes is for the install that asked, and for every later one. `secrets` (a host guard card's "Allow <secret> anywhere
 // in this conversation"), `everything` (any permission card's "Allow everything in this conversation") and `rules` (a
 // credential gateway card's "Allow requests like this with <name> in this conversation") are read live too, by the host
-// guard, the card registry and the gateway. Every write that changes something is announced (`onChange`), so the list
+// guard, the card registry and the gateway. `autoApprove` is put on from the conversation's card rather than any card's
+// answer (POST /agents/auto-approve) and read live by the card registry, which lets it answer the owner's hard rules
+// too and lets the conversations this one starts follow it (standing-answer.ts). Every write that changes something is announced (`onChange`), so the list
 // where a person takes a yes back moves when a card answer writes one, not only when a need closes.
 
 export const conversationGrantsDocument = defineDocument({
@@ -43,6 +45,11 @@ export interface ConversationGrants {
     readonly everythingAllowed: (conversationId: string) => Promise<boolean>;
     // Whether there was one to take back.
     readonly revokeEverything: (conversationId: string) => Promise<boolean>;
+    // The auto-approve mark: every permission card it, or a subagent it starts, raises goes without asking, hard rules too.
+    readonly markAutoApprove: (conversationId: string, by: string | undefined) => Promise<void>;
+    readonly autoApproved: (conversationId: string) => Promise<boolean>;
+    // Whether there was one to take back.
+    readonly unmarkAutoApprove: (conversationId: string) => Promise<boolean>;
     // "Allow requests like this with <name> in this conversation": that capability's rule stops asking this conversation.
     readonly allowRule: (conversationId: string, pass: BrokerRulePass, by: string | undefined) => Promise<void>;
     readonly ruleAllowed: (conversationId: string, capability: string, rule: string) => Promise<boolean>;
@@ -59,6 +66,7 @@ const EMPTY = (now: number): ConversationGrant => ({
     installs: false,
     secrets: [],
     everything: false,
+    autoApprove: false,
     rules: [],
     updatedAt: now,
 });
@@ -68,12 +76,13 @@ const nothingLeft = (grant: ConversationGrant): boolean =>
     grant.secrets.length === 0 &&
     grant.rules.length === 0 &&
     !grant.installs &&
-    !grant.everything;
+    !grant.everything &&
+    !grant.autoApprove;
 
 const samePass = (pass: BrokerRulePass, capability: string, rule: string): boolean => pass.capability === capability && pass.rule === rule;
 
-// The two whole-conversation switches, set and taken back alike.
-type Switch = "installs" | "everything";
+// The whole-conversation switches, set and taken back alike.
+type Switch = "installs" | "everything" | "autoApprove";
 
 const without = (current: GrantsByConversation, conversationId: string, next: ConversationGrant): GrantsByConversation => {
     if (!nothingLeft(next)) {
@@ -197,6 +206,9 @@ const grantsOver = (store: GrantsFile, now: () => number): ConversationGrants =>
         allowEverything: (conversationId, by) => turnOn(conversationId, "everything", by),
         everythingAllowed: (conversationId) => isOn(conversationId, "everything"),
         revokeEverything: (conversationId) => turnOff(conversationId, "everything"),
+        markAutoApprove: (conversationId, by) => turnOn(conversationId, "autoApprove", by),
+        autoApproved: (conversationId) => isOn(conversationId, "autoApprove"),
+        unmarkAutoApprove: (conversationId) => turnOff(conversationId, "autoApprove"),
         allowRule: async (conversationId, pass, by) => {
             await file.update((current) => {
                 const grant = current[conversationId] ?? EMPTY(now());

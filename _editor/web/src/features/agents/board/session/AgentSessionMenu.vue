@@ -28,6 +28,7 @@ import { keptWarm, warmOffer } from "../../../../models/fleet/promptCache";
 import { isRemote } from "../../../../models/fleet/fleetScope";
 import { asksFirst, cleared } from "../../../../models/fleet/presses/foreignPress";
 import { downloadBundle } from "./agentBundle";
+import { AUTO_APPROVE_ROUTE, pressAutoApprove } from "../../../../models/fleet/presses/agentMenu";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
 // decisions live behind one glyph rather than permanently cluttering the toolbar.
@@ -57,7 +58,7 @@ const { changes, agentId, phone, retryLand = false, renameable, sessionName, str
 // and `identity` are the header's own presses, handed back to it.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: []; handOver: [] }>();
 
-const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm, setProceed } = useAgents();
+const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm, setProceed, setAutoApprove } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
 // The card, when a fresh session can be cut from its work (freshSession.canStartFresh), or a check booked for the end of
 // its turn still at work (canScheduleFresh); with the kinds it takes, each said as it goes.
@@ -129,6 +130,20 @@ const toggleProceed = (): void => {
         failed: t(`agents.agentSessionMenu.proceedFailed`),
         task: () => setProceed(agentId, next === sandboxProceeds.value ? null : next),
     });
+};
+
+// The auto-approve mark (sandbox-contract schemas/auto-approve.ts) on this one session, as its board card's menu puts it on
+// one or several at once: every permission it or its subagents ask for goes without asking, until it is taken off.
+const autoApproveOn = computed(() => agentById(agentId)?.autoApprove === `own`);
+const autoApproveHint = computed(() => {
+    if (autoApproveOn.value) {
+        return t(`agents.autoApprove.unmarkHint`);
+    }
+    return agentById(agentId)?.autoApprove === `inherited` ? t(`agents.autoApprove.inheritedHint`) : t(`agents.autoApprove.markHint`);
+});
+const toggleAutoApprove = (): void => {
+    emit(`selected`);
+    pressAutoApprove(setAutoApprove, [agentId], !autoApproveOn.value);
 };
 
 // Shown only on a card actually held at a wall that takes a standing answer: a spent allowance, or a message held because
@@ -383,6 +398,20 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                     proceedOn ? t(`agents.agentSessionMenu.askBeforeGoingAhead`) : t(`agents.agentSessionMenu.proceedWithoutAsking`)
                 }}</span>
                 <span class="text-2xs text-subtle">{{ proceedOn ? t(`agents.agentSessionMenu.proceedingHint`) : t(`agents.agentSessionMenu.proceedHint`) }}</span>
+            </span>
+        </button>
+        <button
+            v-if="marked && supportsRoute(AUTO_APPROVE_ROUTE) && can(AUTO_APPROVE_ROUTE)"
+            type="button"
+            :class="ITEM"
+            :disabled="archived"
+            data-auto-approve-row
+            @click="toggleAutoApprove"
+        >
+            <Icon :name="autoApproveOn ? 'shield' : 'bolt'" class="text-xs" :class="autoApproveOn ? 'text-subtle' : 'text-warning'" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{ autoApproveOn ? t(`agents.autoApprove.unmark`) : t(`agents.autoApprove.mark`) }}</span>
+                <span class="text-2xs text-subtle">{{ autoApproveHint }}</span>
             </span>
         </button>
         <!-- Only where a hold can be kept or is running: a cold cache or one this sandbox cannot replay has nothing to offer. -->

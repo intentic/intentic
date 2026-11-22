@@ -56,8 +56,11 @@ export interface Card<K extends AgentReply["kind"]> {
     readonly approves: (reply: Extract<AgentReply, { kind: K }>) => boolean;
     // Who may click, when the card is addressed to a named list rather than to whoever is looking.
     readonly mayAnswer?: MayAnswer;
-    // Asks every time: a standing "allow everything" never answers it. A card addressed by mayAnswer always asks too.
+    // Asks every time: a standing "allow everything" never answers it, only a conversation's auto-approve mark does. A card
+    // addressed by mayAnswer always asks too, and no mark answers it.
     readonly alwaysAsks?: boolean;
+    // What a yes does reaches other conversations (a sandbox restart stops their turns too): not even the mark answers it.
+    readonly reachesOthers?: boolean;
     // Pushed to the owner's devices even while they are active in the editor, for a card they must not miss.
     readonly insist?: boolean;
     // What the card lives for; its abort settles the card unanswered instead of leaving it parked with nobody waiting.
@@ -91,7 +94,11 @@ export const raiseRequest = async <K extends AgentReply["kind"]>(
         deps.observe(run.conversationId, event);
     };
     const alwaysAsks = card.alwaysAsks === true || card.mayAnswer !== undefined;
-    const { id, wait } = deps.cards.create(card.kind, card.onAbort, run.conversationId, { ...opt("mayAnswer", card.mayAnswer), alwaysAsks });
+    const { id, wait } = deps.cards.create(card.kind, card.onAbort, run.conversationId, {
+        ...opt("mayAnswer", card.mayAnswer),
+        alwaysAsks,
+        ...opt("reachesOthers", card.reachesOthers),
+    });
     const raised = card.raised(id);
     // The card says so itself, so its Allow menu never offers a yes that would not answer it.
     say(alwaysAsks && raised.kind === "permission" ? { ...raised, alwaysAsks: true } : raised);

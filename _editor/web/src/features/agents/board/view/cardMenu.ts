@@ -12,11 +12,14 @@ import { unregistered } from "../../../../models/agent-status/agentStatus-standi
 import {
     type AgentMenuActions,
     type AgentMenuFacts,
+    AUTO_APPROVE_ROUTE,
+    autoApproveRows,
     copySessionName,
     filingRows,
     freshRows,
     joinGroups,
     landRows,
+    pressAutoApprove,
     sessionNameRows,
     watchRows,
 } from "../../../../models/fleet/presses/agentMenu";
@@ -24,6 +27,7 @@ import { boxNameOf, isRemote, openInSandbox } from "../../../../models/fleet/fle
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { draftFreshSession } from "../../../../models/fleet/freshSession";
 import { useAgentDrag } from "../useAgentDrag";
+import { useAgents } from "../../../../models/fleet/useAgents";
 
 // One menu for every card (forty cards cost one node, and only one is ever open), since a card's surface is otherwise
 // all press and drag. It adds no actions, only a place to find the ones the card already offers, including glyphs that
@@ -142,6 +146,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
                   },
               ],
         watchRows(agent, facts, act),
+        autoApproveRows(agent, facts, act),
         [...filingRows(agent, facts, act), ...closeRows(agent, act)],
     ]);
 };
@@ -166,6 +171,9 @@ export interface MenuHost {
     };
     // The fleet store's writes.
     readonly agents: Pick<MenuActions, `stopWatching` | `restore` | `archive`>;
+    // The cards selected together with this one (the panes a Ctrl or Shift click opened), which the auto-approve row
+    // marks with it.
+    readonly selected: (agent: FleetAgent) => readonly FleetAgent[];
 }
 
 // The one menu's state: which card it was opened on, and the element that was pressed.
@@ -180,6 +188,7 @@ export const useCardMenu = (host: MenuHost) => {
     const { canShip } = useTier();
     const { can } = useAccess();
     const { pressLand } = useAgentDrag();
+    const { setAutoApprove } = useAgents();
     const act: MenuActions = {
         ...host.focus,
         ...host.agents,
@@ -188,6 +197,7 @@ export const useCardMenu = (host: MenuHost) => {
         copySessionName: (branch) => copySessionName(branch, menuAnchor.value),
         openInSandbox,
         startFresh: (agent, kind) => void draftFreshSession(agent, kind),
+        setAutoApprove: (ids, on) => pressAutoApprove(setAutoApprove, ids, on),
         // The menu closes on the press, so the read goes through the ledger: the file arriving is the answer, a refusal a
         // receipt (as the agent page's own row does, AgentSessionMenu).
         exportTranscript: (agent) => {
@@ -221,6 +231,7 @@ export const useCardMenu = (host: MenuHost) => {
             boxName: here || agent.sandboxId === undefined ? undefined : boxNameOf.value.get(agent.sandboxId),
             presses: ownPresses(),
             exportable: supportsRoute(BUNDLE_ROUTE) && can(BUNDLE_ROUTE),
+            autoApprove: here && supportsRoute(AUTO_APPROVE_ROUTE) && can(AUTO_APPROVE_ROUTE) ? { selected: host.selected(agent) } : undefined,
         };
         return menuItemsFor(agent, facts, act);
     });

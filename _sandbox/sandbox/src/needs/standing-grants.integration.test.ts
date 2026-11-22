@@ -31,6 +31,7 @@ test("a rule's pass outlasts the store that heard it, is listed, and taken back 
             installs: false,
             secrets: [],
             everything: false,
+            autoApprove: false,
             rules: [github],
             by: "ada@acme.dev",
             updatedAt: 100,
@@ -71,6 +72,7 @@ test("a file written before rule passes existed still reads, with none, and with
         installs: false,
         secrets: [],
         everything: false,
+        autoApprove: false,
         rules: [],
         updatedAt: 5,
     });

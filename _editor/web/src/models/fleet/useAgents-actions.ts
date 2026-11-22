@@ -7,7 +7,7 @@ import { summonChat } from "../conversations/run/summon";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { uuid } from "../../lib/uuid";
 import { agentById, type FleetAgent } from "./useAgents-fleet";
-import { optimistic, underClaim } from "./useAgents-provisional";
+import { optimistic, optimisticMany, underClaim } from "./useAgents-provisional";
 import { isSealed, sealedTitle } from "../agent-status/sealView";
 import { markSeen, registry } from "./useAgents-registry";
 
@@ -52,6 +52,16 @@ export const setBreakPolicy = (id: string, ending: TurnBreak, policy: TurnBreakP
 // stopping for a go-ahead; read as each turn is planned, so it holds from the next one.
 export const setProceed = (id: string, proceed: boolean | null): Promise<void> =>
     optimistic(id, { proceedWithoutAsking: proceed ?? undefined }, () => sandboxRpc.agents.proceed({ id, proceed }));
+
+// Puts the auto-approve mark on, or takes it off, several conversations in one write (sandbox-contract
+// schemas/auto-approve.ts): from then on their permission cards, and their subagents', settle as allowed without asking.
+// Drawn as their own mark at once; a card that only follows its parent's is put right by the daemon's answer.
+export const setAutoApprove = (ids: readonly string[], on: boolean): Promise<void> =>
+    optimisticMany(
+        ids,
+        () => ({ autoApprove: on ? `own` : undefined }),
+        async () => (await sandboxRpc.agents.autoApprove({ ids: [...ids], on })).agents,
+    );
 
 // Keeps this conversation's prompt cache warm until `until`, or stops (null); the daemon shortens `until` to what it can keep, so only a stop is drawn before it answers.
 export const setKeepWarm = (id: string, until: number | null): Promise<void> =>

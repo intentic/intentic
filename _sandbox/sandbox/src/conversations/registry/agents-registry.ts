@@ -22,6 +22,7 @@ import { nextOf } from "../actor/conversation-next.js";
 import { pressOf } from "./projection/turn-ending.js";
 import { limitHold, reportedFailure, switchedEntry } from "./limit-ending.js";
 import { type WallAnswersSource, wallAnswersFollower } from "../actor/wall-answers.js";
+import { type AutoApproveSource, autoApproveMarks } from "./auto-approve-marks.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
@@ -416,6 +417,9 @@ export interface AgentsRegistry {
     // Re-derives every live agent's land standing and publishes if any moved; called wherever the answer could have
     // changed outside the daemon. Once a feed is watched, free when nothing moved: no git runs at all.
     readonly refreshStandings: () => Promise<void>;
+    // Reads the auto-approve marks again (auto-approve-marks.ts) and publishes the cards they moved, so a write that put
+    // one on can answer with the cards as they read after it.
+    readonly reloadMarks: () => Promise<void>;
     // What can move a standing from outside the registry: a ref, or a file in a main checkout. Once given, a refresh
     // re-reads git only after the feed reported something the last probe read or an agent's own landing record changed;
     // until then, always.
@@ -542,10 +546,12 @@ export const createFleet = (
         rosterWindowMs = ROSTER_WINDOW_MS,
         refusalRecheckMs = REFUSAL_RECHECK_MS,
         settings,
-    }: { readonly rosterWindowMs?: number; readonly refusalRecheckMs?: number; readonly settings?: WallAnswersSource } = {},
+        marks: marksSource,
+    }: { readonly rosterWindowMs?: number; readonly refusalRecheckMs?: number; readonly settings?: WallAnswersSource; readonly marks?: AutoApproveSource } = {},
 ): Fleet => {
     // The answers each card's `next` is derived by: its own, else the sandbox's, followed as Settings changes them.
     const answers = wallAnswersFollower(settings);
+    const marks = autoApproveMarks(marksSource, (id) => entryOf(id), () => broadcast());
     let entries: PersistedAgent[] = [];
     // Entries changed since the last write, and the journal row of each turn opened since, which goes down with its
     // opening entry; both drained only once the write commits, so a failed one is retried by the next.
@@ -885,6 +891,7 @@ export const createFleet = (
             ...reportedFailure(entry.ending, status, limitHold(state)),
             ...opt("next", nextOf(state, entry, answers.of(entry.postures))),
             ...postures(entry.postures),
+            ...opt("autoApprove", marks.of(entry)),
             ...spentBy(entry.totals, state?.turn.usage ?? NO_USAGE, subagentCountsOf(conversations, entry.id).running),
             ...liveReadings(entry, state),
             // Only while its turn runs: a settled card must not name the run it just finished as under way.
@@ -936,6 +943,7 @@ export const createFleet = (
             entries = store.agents.load().map(restored).map(withHomeTitle);
             activateLoadedFleet(entries, conversations, broadcast, reprobe);
             await answers.follow(broadcast);
+            await marks.follow();
         },
         adopted: (ids) => {
             const arrived = new Set(ids);
@@ -952,6 +960,7 @@ export const createFleet = (
             broadcast();
         },
         refreshStandings,
+        reloadMarks: marks.reload,
         watchStandings: (changes) => {
             watched = true;
             probed.changed();

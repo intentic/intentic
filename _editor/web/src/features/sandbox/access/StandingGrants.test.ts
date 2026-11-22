@@ -62,6 +62,7 @@ const conversation = (conversationId: string, over: Partial<StandingConversation
     installs: false,
     secrets: [],
     everything: false,
+    autoApprove: false,
     rules: [],
     releases: [],
     ...over,
@@ -174,6 +175,18 @@ it(`revokes the one permission pressed, or every one a conversation holds`, asyn
         { conversationId: `c1`, kind: `install`, what: `` },
         { conversationId: `c1`, kind: `rule`, what: `ask GET x`, capability: `github` },
     ]);
+});
+
+// The auto-approve mark, put on from a conversation's card, leads its list (it reaches furthest) and comes off here too.
+it(`lists a conversation's auto-approve mark first, and takes it back by its own kind`, async () => {
+    fleet.value = [{ id: `c1`, title: `Checkout`, status: `idle` }];
+    standing.value = [conversation(`c1`, { autoApprove: true, installs: true })];
+    await mount();
+    expect(shown()).toContain(`Auto-approves every permission, hard rules included, and its subagents' too`);
+
+    buttons(`Revoke`)[0]?.click();
+    await settle();
+    expect(revoked).toEqual([{ conversationId: `c1`, kind: `auto-approve`, what: `` }]);
 });
 
 it(`offers Revoke all only where there is more than one thing to take back`, async () => {

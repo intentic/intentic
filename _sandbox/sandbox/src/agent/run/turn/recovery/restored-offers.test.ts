@@ -11,7 +11,7 @@ const permission = (over: Partial<PermissionRequest> = {}): PermissionRequest =>
 
 // The cards of a fleet whose conversation c-1 holds "allow everything in this conversation".
 const standingYes = () =>
-    parkedCards(memoryFleet().conversations, { allowed: async (conversationId) => conversationId === "c-1", allow: async () => {}, failed: () => {} });
+    parkedCards(memoryFleet().conversations, { allowed: async (conversationId, hardRule) => !hardRule && conversationId === "c-1", allow: async () => {}, failed: () => {} });
 
 describe("a card put back after a restart", () => {
     // 2026-10-20: a hard rule's card came back without its `alwaysAsks`, and the conversation's standing yes answered it.

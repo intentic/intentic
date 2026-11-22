@@ -18,8 +18,9 @@ export const fleetStoreOver = (db: ConversationsDb, units: Pick<ConversationUnit
 
 // A fleet over nothing: entries kept in an in-memory database (the real store, the real SQL), and land probes that
 // never find a standing or a presence to report. Pass the store over the database a suite's other stores share.
-export const memoryFleet = (store: FleetStore = fleetStoreOver(openConversationsDb(IN_MEMORY))): Fleet =>
-    createFleet(store, { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} }, noPresences());
+// `options` are what it follows from outside (the sandbox's settings, the auto-approve marks), none unless given.
+export const memoryFleet = (store: FleetStore = fleetStoreOver(openConversationsDb(IN_MEMORY)), options?: Parameters<typeof createFleet>[3]): Fleet =>
+    createFleet(store, { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} }, noPresences(), options);
 
 // A memory fleet that also hands every conversation event to `note` as it is sent, for suites pinning what a flow tells
 // a conversation, and in which order.

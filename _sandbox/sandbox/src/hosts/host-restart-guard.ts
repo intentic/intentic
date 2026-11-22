@@ -180,8 +180,10 @@ const askOwner = async (guards: HostGuardDeps, run: LiveRun, ended: AbortSignal,
                 ...opt("program", ask.call.commandLine === undefined ? undefined : { text: excerptProgram(ask.call.commandLine), language: "bash" as const, truncated: false, spans: [] }),
             }),
             approves: (answer) => answer.decision !== "deny",
-            // Other conversations' turns stop with it, so this conversation's own standing yes is not enough.
+            // Other conversations' turns stop with it, so nothing standing in this conversation answers it, not even its
+            // auto-approve mark.
             alwaysAsks: true,
+            reachesOthers: true,
             signal: ended,
         },
     );

@@ -811,7 +811,7 @@ it(`lists what conversations were allowed, each with Revoke`, async () => {
     document.body.innerHTML = ``;
 
     standing.value = [
-        { conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, rules: [], releases: [] },
+        { conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, autoApprove: false, rules: [], releases: [] },
     ];
     mount();
     await openPart(`Allowed`);
@@ -832,7 +832,7 @@ it(`lists the owner-wide yeses above the conversations, and takes each back by i
         { kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: Date.now() - 120_000, by: `ada@acme.dev` },
         { kind: `hook-set`, digest, hooks: [`PreToolUse (Bash): ./guard.sh`], at: Date.now() - 180_000 },
     ];
-    standing.value = [{ conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, rules: [], releases: [] }];
+    standing.value = [{ conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, autoApprove: false, rules: [], releases: [] }];
     mount();
     await openPart(`Allowed`);
 
@@ -995,7 +995,7 @@ it(`shares a link's records from its terms, and says so on its row`, async () =>
 
 it(`counts what stands on the Allowed tab, so it is seen from any part`, async () => {
     ownerWide.value = [{ kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: Date.now() - 120_000, by: `ada@acme.dev` }];
-    standing.value = [{ conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, rules: [], releases: [] }];
+    standing.value = [{ conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, autoApprove: false, rules: [], releases: [] }];
     mount();
     await settle();
     const allowed = [...document.body.querySelectorAll(`[role=tab]`)].find((button) => button.textContent?.trim().startsWith(`Allowed`));

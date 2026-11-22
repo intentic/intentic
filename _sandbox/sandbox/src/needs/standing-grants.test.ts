@@ -25,16 +25,17 @@ test("a conversation's grants and its releases come back as one row, newest chan
 
     expect(await standingGrants(deps)).toEqual({
         conversations: [
-            { conversationId: "conv-new", installs: false, secrets: ["github/token"], everything: true, rules: [], by: "bob@acme.dev", updatedAt: 300, releases: [] },
+            { conversationId: "conv-new", installs: false, secrets: ["github/token"], everything: true, autoApprove: false, rules: [], by: "bob@acme.dev", updatedAt: 300, releases: [] },
             {
                 conversationId: "conv-released",
                 installs: false,
                 secrets: [],
                 everything: false,
+                autoApprove: false,
                 rules: [],
                 releases: [{ subject: "reddit-work", approvedBy: "bob@acme.dev", at: 200 }],
             },
-            { conversationId: "conv-old", installs: false, secrets: ["vendor/token"], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
+            { conversationId: "conv-old", installs: false, secrets: ["vendor/token"], everything: false, autoApprove: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
         ],
         ownerWide: [],
         unreadable: [],
@@ -54,7 +55,7 @@ test("taking one back leaves the rest, and a conversation with nothing left drop
     expect(await revokeGrant(deps, { conversationId: "conv-2", kind: "release", what: "reddit-work" })).toBe(false);
 
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", installs: false, secrets: ["docs/token"], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
+        { conversationId: "conv-1", installs: false, secrets: ["docs/token"], everything: false, autoApprove: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
     ]);
     expect(deps.credentialGrants.has("conv-2", "reddit-work")).toBeUndefined();
 });
@@ -67,7 +68,7 @@ test("a conversation's unasked installs are listed with its other yeses and take
     await deps.conversationGrants.allowInstalls("conv-1", undefined);
     expect(await deps.conversationGrants.installsAllowed("conv-1")).toBe(true);
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", installs: true, secrets: ["docs/token"], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 200, releases: [] },
+        { conversationId: "conv-1", installs: true, secrets: ["docs/token"], everything: false, autoApprove: false, rules: [], by: "ada@acme.dev", updatedAt: 200, releases: [] },
     ]);
 
     expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "install", what: "" })).toBe(true);
@@ -75,7 +76,7 @@ test("a conversation's unasked installs are listed with its other yeses and take
     expect(await deps.conversationGrants.installsAllowed("conv-1")).toBe(false);
     // The secret's pass stands; only the installs yes went.
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", installs: false, secrets: ["docs/token"], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 200, releases: [] },
+        { conversationId: "conv-1", installs: false, secrets: ["docs/token"], everything: false, autoApprove: false, rules: [], by: "ada@acme.dev", updatedAt: 200, releases: [] },
     ]);
 });
 
@@ -99,6 +100,7 @@ test("everything and a secret's pass are listed and taken back on their own", as
             installs: false,
             secrets: ["github/token"],
             everything: true,
+            autoApprove: false,
             rules: [],
             by: "ada@acme.dev",
             updatedAt: 100,
@@ -113,6 +115,26 @@ test("everything and a secret's pass are listed and taken back on their own", as
 
     expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "secret", what: "github/token" })).toBe(true);
     expect((await standingGrants(deps)).conversations).toEqual([]);
+});
+
+// The auto-approve mark, put on from a conversation's card (POST /agents/auto-approve): listed beside "everything", which
+// it is wider than, and taken back alone from the same list.
+test("the auto-approve mark is listed with the other yeses and taken back on its own", async () => {
+    const { deps } = harness();
+    await deps.conversationGrants.markAutoApprove("conv-1", "ada@acme.dev");
+    await deps.conversationGrants.allowEverything("conv-1", "ada@acme.dev");
+    expect(await deps.conversationGrants.autoApproved("conv-1")).toBe(true);
+    expect((await standingGrants(deps)).conversations).toMatchObject([{ conversationId: "conv-1", everything: true, autoApprove: true, by: "ada@acme.dev" }]);
+
+    expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "auto-approve", what: "" })).toBe(true);
+    expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "auto-approve", what: "" })).toBe(false);
+    expect(await deps.conversationGrants.autoApproved("conv-1")).toBe(false);
+    expect((await standingGrants(deps)).conversations).toMatchObject([{ conversationId: "conv-1", everything: true, autoApprove: false }]);
+
+    // A conversation whose only yes was the mark drops out once it is taken off.
+    await deps.conversationGrants.markAutoApprove("conv-2", undefined);
+    expect(await deps.conversationGrants.unmarkAutoApprove("conv-2")).toBe(true);
+    expect((await standingGrants(deps)).conversations.map((row) => row.conversationId)).toEqual(["conv-1"]);
 });
 
 // Releases are announced by wrapping their store, so the Allowed list moves when one is made, taken back or forgotten;

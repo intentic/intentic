@@ -1168,6 +1168,19 @@
         },
         "beyondResults": {
             "showMore": "{count} weitere zeigen · {hidden} nicht angezeigt"
+        },
+        "autoApprove": {
+            "mark": "Alles automatisch erlauben",
+            "markSelected": "Ausgewählte Sitzungen automatisch erlauben ({count})",
+            "markHint": "Nie mehr um Erlaubnis fragen, hier und in seinen Subagenten, auch bei Ihren harten Regeln",
+            "unmark": "Nicht mehr automatisch erlauben",
+            "unmarkSelected": "Ausgewählte Sitzungen nicht mehr automatisch erlauben ({count})",
+            "unmarkHint": "Seine Berechtigungsanfragen warten wieder auf Sie",
+            "inheritedHint": "Bereits automatisch erlaubt durch die Sitzung, die sie gestartet hat",
+            "ownTip": "Erlaubt jede Berechtigung automatisch, auch Ihre harten Regeln. Im Menü dieser Sitzung wieder abschalten.",
+            "inheritedTip": "Erlaubt jede Berechtigung automatisch, weil die Sitzung, die sie gestartet hat, das tut.",
+            "label": "Automatisch erlauben",
+            "failed": "Automatisches Erlauben konnte nicht geändert werden"
         }
     },
     "app": {
@@ -6392,6 +6405,7 @@
         "grants": {
             "title": "Berechtigungen der Unterhaltung",
             "everything": "Darf alles tun, ohne Sie zu fragen",
+            "autoApprove": "Erlaubt jede Berechtigung automatisch, auch harte Regeln, und die seiner Subagenten",
             "installs": "Darf Pakete ohne Rückfrage installieren",
             "secret": "Darf {what} an jeden Host senden, nicht nur an den eigenen",
             "rule": "Darf Anfragen wie {what} ohne Rückfrage stellen",

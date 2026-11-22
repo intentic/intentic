@@ -1168,6 +1168,19 @@
         },
         "beyondResults": {
             "showMore": "Mostrar {count} más · {hidden} sin mostrar"
+        },
+        "autoApprove": {
+            "mark": "Aprobar todo automáticamente",
+            "markSelected": "Aprobar automáticamente las sesiones seleccionadas ({count})",
+            "markHint": "No volver a pedirte permiso aquí ni en sus subagentes, incluidas tus reglas estrictas",
+            "unmark": "Dejar de aprobar automáticamente",
+            "unmarkSelected": "Dejar de aprobar automáticamente las sesiones seleccionadas ({count})",
+            "unmarkHint": "Sus solicitudes de permiso vuelven a esperarte",
+            "inheritedHint": "Ya se aprueba automáticamente por la sesión que la inició",
+            "ownTip": "Aprueba automáticamente cada permiso, incluidas tus reglas estrictas. Quítalo desde el menú de esta sesión.",
+            "inheritedTip": "Aprueba automáticamente cada permiso, porque la sesión que la inició lo hace.",
+            "label": "Aprobación automática",
+            "failed": "No se pudo cambiar la aprobación automática"
         }
     },
     "app": {
@@ -6392,6 +6405,7 @@
         "grants": {
             "title": "Permisos de la conversación",
             "everything": "Puede hacer cualquier cosa sin preguntarte",
+            "autoApprove": "Aprueba automáticamente cada permiso, incluidas las reglas estrictas, y también los de sus subagentes",
             "installs": "Puede instalar paquetes sin preguntar",
             "secret": "Puede enviar {what} a cualquier host, no solo al suyo",
             "rule": "Puede hacer solicitudes como {what} sin preguntar",

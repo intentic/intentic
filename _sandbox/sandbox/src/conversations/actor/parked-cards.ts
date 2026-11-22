@@ -35,20 +35,26 @@ export interface RequestOptions {
     // The conversation whose standing yes may answer a permission card held conversationless (a runtime's own card, the
     // command gate's), filled in by the turn's own handle on the registry (standingOn).
     readonly standingFor?: string;
-    // A card that asks every time (an owner's hard rule, a restart other conversations feel): no standing yes answers it.
+    // A card that asks every time (an owner's hard rule, a restart other conversations feel): "allow everything" never
+    // answers it, and only a conversation's auto-approve mark may.
     readonly alwaysAsks?: boolean;
+    // What a yes does reaches other conversations (a sandbox restart stops their turns too): nothing standing in this
+    // one answers it, not even its auto-approve mark.
+    readonly reachesOthers?: boolean;
     // What night hours may answer this card with, where they may answer it at all (NightCard below): set only by an
     // agent's own clarifying question and a plan the agent chose to make.
     readonly night?: NightCard;
 }
 
-// "Allow everything in this conversation", answered on any permission card and kept per conversation
-// (roles/conversation-grants.ts): while it stands, every permission card raised there that a person could have
-// allowed once settles at once as `everything`, the card still drawn and frozen in the transcript so what ran is on
-// record. It never answers a card addressed to a named person or one that always asks, and it never turns a refusal
-// into a yes, since a refused call raises no card.
+// What answers a permission card without a person, kept per conversation (roles/conversation-grants.ts): "Allow
+// everything in this conversation", answered on any permission card, and the auto-approve mark, put on from the
+// conversation's card and followed by the conversations it starts (roles/standing-answer.ts). While either stands, a card it
+// answers settles at once as `everything`, still drawn and frozen in the transcript so what ran is on record. Only the
+// mark answers a card that always asks (`hardRule`, an owner's hard rule). Neither answers a card addressed to a named
+// person or one whose yes reaches other conversations, and neither turns a refusal into a yes, since a refused call
+// raises no card.
 export interface StandingYes {
-    readonly allowed: (conversationId: string) => Promise<boolean>;
+    readonly allowed: (conversationId: string, hardRule: boolean) => Promise<boolean>;
     readonly allow: (conversationId: string, by: string | undefined) => Promise<void>;
     // A grant that could not be read or kept: logged, and the card waits for a person as it would without one.
     readonly failed: (cause: unknown) => void;
@@ -107,12 +113,20 @@ const logSettled = (log: CardLog, about: CardAbout, { reply, answered, fromUser,
     log({ ...about, reason: cancelled ?? (fromUser ? `a reply of kind ${reply.kind} answered it` : "settled unanswered"), waitedMs }, `card: ${about.kind} cancelled`);
 };
 
-// Reads the standing yes for a card it may answer (`standingId`, the conversation it may answer it for): true when it
-// stands. Read as the card is raised, before anyone is told it waits; a grant that cannot be read answers nothing.
-const readStanding = (standing: StandingYes | undefined, standingId: string | undefined): Promise<boolean> =>
-    standingId === undefined || standing === undefined
+// Where a standing answer may reach a card: the conversation it may answer it for, and whether only the auto-approve mark
+// may (a card that always asks).
+interface StandingAt {
+    readonly conversationId: string;
+    readonly hardRule: boolean;
+}
+
+// Reads the standing answer for a card it may reach: true when one stands that answers it. Read as the card is raised,
+// before anyone is told it waits, and again for a card still waiting once a conversation is marked; a grant that cannot
+// be read answers nothing.
+const readStanding = (standing: StandingYes | undefined, at: StandingAt | undefined): Promise<boolean> =>
+    at === undefined || standing === undefined
         ? Promise.resolve(false)
-        : standing.allowed(standingId).catch((cause: unknown) => {
+        : standing.allowed(at.conversationId, at.hardRule).catch((cause: unknown) => {
               standing.failed(cause);
               return false;
           });
@@ -161,15 +175,24 @@ export interface ParkedCards {
     // person, false once it settled or one of those answered it. Undefined for a card this registry did not raise, or
     // raised so long ago it no longer remembers it, which nobody announces that late.
     readonly waitsOnPerson: (requestId: string) => Promise<boolean | undefined>;
+    // Asks again, for every card still waiting where a standing answer may reach, whether one answers it now (a
+    // conversation just marked to auto-approve), and settles each one that does; `by` is who put the mark on, for the
+    // card log.
+    readonly restand: (by: string | undefined) => Promise<void>;
 }
 
 /** How many cards the conversation's turn waits on an answer to; one answered leaves this count as its reply lands. */
 export const cardsParkedOn = (conversations: Pick<ConversationActors, "holdings">, conversationId: string): number =>
     conversations.holdings(PARKED).of(conversationId).length;
 
-// The conversation a standing yes may answer this card for, or undefined where none may.
-const standingConversation = (kind: AgentReply["kind"], conversationId: string | undefined, options: RequestOptions | undefined): string | undefined =>
-    kind === "permission" && options?.mayAnswer === undefined && options?.alwaysAsks !== true ? (conversationId ?? options?.standingFor) : undefined;
+// Where a standing answer may reach this card, or undefined where none may.
+const standingAt = (kind: AgentReply["kind"], conversationId: string | undefined, options: RequestOptions | undefined): StandingAt | undefined => {
+    const at = conversationId ?? options?.standingFor;
+    if (kind !== "permission" || at === undefined || options?.mayAnswer !== undefined || options?.reachesOthers === true) {
+        return undefined;
+    }
+    return { conversationId: at, hardRule: options?.alwaysAsks === true };
+};
 
 // The turn's own handle on the registry: a card it raises without naming a conversation may still be answered by this
 // conversation's standing yes, while it stays held where it always was.
@@ -202,6 +225,8 @@ export interface NightAnswers {
 
 // Who the card log names as having answered a card night hours settled.
 const NIGHT_HOURS = "night hours";
+// And one a conversation's auto-approve mark settled, where nobody's name came with it.
+const AUTO_APPROVE = "auto-approve";
 
 export interface NightOnCards {
     // The answer a card gets as it is raised, or undefined while night hours would not answer it.
@@ -282,19 +307,19 @@ interface SelfAnswers {
 const selfAnswers = (
     nights: NightOnCards,
     standing: StandingYes | undefined,
-    // Every parked card a standing yes may answer, which this card joins once it waits.
-    answerable: Map<string, string>,
-    card: { readonly id: string; readonly restored: boolean; readonly night: NightCard | undefined; readonly standingId: string | undefined },
+    // Every parked card a standing answer may reach, which this card joins once it waits.
+    answerable: Map<string, StandingAt>,
+    card: { readonly id: string; readonly restored: boolean; readonly night: NightCard | undefined; readonly standing: StandingAt | undefined },
 ): SelfAnswers => {
     // Asked before the frame goes out; a restored card was announced before the restart, so it is only watched.
     const atOnce = card.restored ? undefined : nights.onRaise(card.id, card.night);
-    const standsYes = atOnce === undefined ? readStanding(standing, card.standingId) : Promise.resolve(false);
+    const standsYes = atOnce === undefined ? readStanding(standing, card.standing) : Promise.resolve(false);
     return {
         atOnce,
         fate: { answeredAlone: atOnce === undefined ? standsYes : Promise.resolve(true), settled: false },
         listen: (settle) => {
-            if (card.standingId !== undefined && standing !== undefined) {
-                answerable.set(card.id, card.standingId);
+            if (card.standing !== undefined && standing !== undefined) {
+                answerable.set(card.id, card.standing);
             }
             void standsYes.then((yes) => {
                 if (yes) {
@@ -316,6 +341,36 @@ const asPersons = (reply: AgentReply): AgentReply => {
     return copy;
 };
 
+// The registry's side of the standing answers, besides reading one as a card is raised (selfAnswers): a person's
+// "everything" on one card, and a mark put on a conversation after its cards were raised.
+const standingOnCards = (conversations: Pick<ConversationActors, "holdings">, standing: StandingYes | undefined, answerable: ReadonlyMap<string, StandingAt>) => ({
+    // "Allow everything" pressed on a card: kept for its conversation where it may answer this card, and given to every
+    // card already waiting there that it answers; on a card it may not answer, the allow-once it can be.
+    everything: (parked: Parked, reply: Extract<AgentReply, { kind: "permission" }>, caller: Caller | undefined): void => {
+        const at = answerable.get(reply.requestId);
+        if (at === undefined || at.hardRule || standing === undefined) {
+            parked.settle({ ...reply, decision: "once" }, true, caller);
+            return;
+        }
+        parked.settle(reply, true, caller);
+        void standing.allow(at.conversationId, caller?.email).catch(standing.failed);
+        for (const [otherId, other] of answerable) {
+            if (other.conversationId === at.conversationId && !other.hardRule) {
+                conversations.holdings(PARKED).get(otherId)?.settle(everythingFor(otherId), true, caller);
+            }
+        }
+    },
+    restand: async (by: string | undefined): Promise<void> => {
+        const waiting = [...answerable];
+        const answers = await Promise.all(waiting.map(([, at]) => readStanding(standing, at)));
+        for (const [index, [cardId]] of waiting.entries()) {
+            if (answers[index] === true) {
+                conversations.holdings(PARKED).get(cardId)?.settle(everythingFor(cardId), true, undefined, by ?? AUTO_APPROVE);
+            }
+        }
+    },
+});
+
 // The cards parked in these actors' conversations, and in their conversationless bucket. `settled` hears every card
 // that stops waiting, answered (by a person or a standing yes) or aborted, as it stops: the one moment that is true
 // wherever the answer came from (this browser, another device, a stop), which is what withdrawing the card's push
@@ -327,8 +382,9 @@ export const parkedCards = (
     log: CardLog = () => undefined,
     night?: NightAnswers,
 ): ParkedCards => {
-    // Every parked card a standing yes may answer, by id, with the conversation it may answer it for.
-    const answerable = new Map<string, string>();
+    // Every parked card a standing answer may reach, by id, with where it may answer it.
+    const answerable = new Map<string, StandingAt>();
+    const standingSide = standingOnCards(conversations, standing, answerable);
     const nights = nightOnCards(night);
     const fates = recentFates();
     const park = <K extends AgentReply["kind"]>(
@@ -342,7 +398,7 @@ export const parkedCards = (
         const owner = conversationId ?? options?.standingFor;
         const about: CardAbout = { ...(owner === undefined ? {} : { conversationId: owner }), requestId: id, kind };
         // Asked now rather than once the raiser waits on the card, so the push announcing it waits for their answers.
-        const self = selfAnswers(nights, standing, answerable, { id, restored, night: options?.night, standingId: standingConversation(kind, conversationId, options) });
+        const self = selfAnswers(nights, standing, answerable, { id, restored, night: options?.night, standing: standingAt(kind, conversationId, options) });
         fates.keep(id, self.fate);
         const wait = (signal: AbortSignal): Promise<Settled<K>> =>
             new Promise((resolve) => {
@@ -415,23 +471,11 @@ export const parkedCards = (
                 parked.settle(asPersons(reply), true, caller);
                 return "settled";
             }
-            const standingId = answerable.get(reply.requestId);
-            // On a card no standing yes may answer, "everything" is the allow-once it can be.
-            if (standingId === undefined || standing === undefined) {
-                parked.settle({ ...reply, decision: "once" }, true, caller);
-                return "settled";
-            }
-            parked.settle(reply, true, caller);
-            void standing.allow(standingId, caller?.email).catch(standing.failed);
-            // The cards already waiting in the same conversation are answered by the same yes.
-            for (const [otherId, otherConversation] of answerable) {
-                if (otherConversation === standingId) {
-                    conversations.holdings(PARKED).get(otherId)?.settle(everythingFor(otherId), true, caller);
-                }
-            }
+            standingSide.everything(parked, reply, caller);
             return "settled";
         },
         conversationOf: (requestId) => conversations.holdings(PARKED).holder(requestId),
         waitsOnPerson: fates.waitsOnPerson,
+        restand: standingSide.restand,
     };
 };

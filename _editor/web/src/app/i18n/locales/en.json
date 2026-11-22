@@ -1168,6 +1168,19 @@
         },
         "beyondResults": {
             "showMore": "Show {count} more · {hidden} not shown"
+        },
+        "autoApprove": {
+            "mark": "Auto-approve everything",
+            "markSelected": "Auto-approve selected sessions ({count})",
+            "markHint": "Never ask you for permission here or in its subagents, your hard rules included",
+            "unmark": "Stop auto-approving",
+            "unmarkSelected": "Stop auto-approving selected sessions ({count})",
+            "unmarkHint": "Its permission cards wait for you again",
+            "inheritedHint": "Already auto-approved through the session that started it",
+            "ownTip": "Auto-approves every permission, your hard rules included. Take it off from this session's menu.",
+            "inheritedTip": "Auto-approves every permission, because the session that started it does.",
+            "label": "Auto-approve",
+            "failed": "Couldn't change auto-approve"
         }
     },
     "app": {
@@ -6392,6 +6405,7 @@
         "grants": {
             "title": "Conversation permissions",
             "everything": "May do anything without asking you",
+            "autoApprove": "Auto-approves every permission, hard rules included, and its subagents' too",
             "installs": "May install packages without asking",
             "secret": "May send {what} to any host, not only its own",
             "rule": "May make requests like {what} without asking",

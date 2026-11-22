@@ -48,6 +48,7 @@ const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & Men
     startFresh: jest.fn(),
     land: jest.fn(),
     exportTranscript: jest.fn(),
+    setAutoApprove: jest.fn(),
 });
 // The rows as a reader sees them: a label, or a rule between groups.
 const rows = (items: readonly MenuItem[]): string[] => items.map((item) => (item.separator === true ? `—` : String(item.label)));
@@ -285,7 +286,7 @@ describe(`the one menu`, () => {
         };
         const effects = effectScope();
         running.push(effects);
-        const menu = effects.run(() => useCardMenu({ mobile: ref(false), peeked: (id) => id === `a1`, focus, agents }))!;
+        const menu = effects.run(() => useCardMenu({ mobile: ref(false), peeked: (id) => id === `a1`, focus, agents, selected: (agent) => [agent] }))!;
         const show = jest.fn((_event: Event) => undefined);
         menu.cardMenu.value = { show };
         return { menu, show, focus };
@@ -357,5 +358,53 @@ describe(`the one menu`, () => {
         await nextTick();
         expect(writeText).toHaveBeenCalledTimes(2);
         Reflect.deleteProperty(navigator, `clipboard`);
+    });
+});
+
+// The auto-approve mark (sandbox-contract schemas/auto-approve.ts): one row, offered only where the reader may put it on,
+// going the way the card pressed says, and taking along every card selected with it (the panes a Ctrl or Shift click
+// opened) so several sessions are marked in one press.
+describe(`a card's auto-approve row`, () => {
+    const MARK = t(`agents.autoApprove.mark`);
+    const marking = (selected: readonly FleetAgent[]): MenuFacts => facts({ autoApprove: { selected } });
+    const rowOf = (items: readonly MenuItem[], label: string): MenuItem | undefined => items.find((item) => item.label === label);
+
+    it(`sits between the watch and the filing, marks this card alone, and is not offered without the reader's reach`, () => {
+        const act = actions();
+        const items = menuItemsFor(landed, marking([landed]), act);
+        expect(rows(items)).toEqual([OPEN_CHAT, `—`, t(`agents.agentsView.copySessionName`), `—`, MARK, `—`, t(`agents.agentsView.archive`)]);
+        expect(rowOf(items, MARK)).toMatchObject({ icon: `bolt`, hint: t(`agents.autoApprove.markHint`) });
+        press(items, MARK);
+        expect(act.setAutoApprove.mock.calls).toEqual([[[`a1`], true]]);
+        expect(rows(menuItemsFor(landed, facts(), actions()))).not.toContain(MARK);
+        // Filed away, or another box's: nothing here can mark it.
+        expect(rows(menuItemsFor({ ...landed, archivedAt: 5 }, marking([landed]), actions()))).not.toContain(MARK);
+        expect(rows(menuItemsFor(landed, { ...marking([landed]), here: false }, actions()))).not.toContain(MARK);
+    });
+
+    it(`takes the card's own mark off, and says a card following its parent's is already approved`, () => {
+        const act = actions();
+        const own = menuItemsFor({ ...landed, autoApprove: `own` }, marking([]), act);
+        expect(rowOf(own, t(`agents.autoApprove.unmark`))).toMatchObject({ icon: `shield`, hint: t(`agents.autoApprove.unmarkHint`) });
+        press(own, t(`agents.autoApprove.unmark`));
+        expect(act.setAutoApprove.mock.calls).toEqual([[[`a1`], false]]);
+        const inherited = menuItemsFor({ ...landed, autoApprove: `inherited` }, marking([]), actions());
+        expect(rowOf(inherited, MARK)).toMatchObject({ hint: t(`agents.autoApprove.inheritedHint`) });
+    });
+
+    it(`marks every card selected with the one pressed, and only that one when it is outside the selection`, () => {
+        const act = actions();
+        const others = [card(`a2`), card(`a3`, { autoApprove: `own` })];
+        const items = menuItemsFor(landed, marking([landed, ...others]), act);
+        const label = t(`agents.autoApprove.markSelected`, { count: 3 });
+        expect(rows(items)).toContain(label);
+        press(items, label);
+        expect(act.setAutoApprove.mock.calls).toEqual([[[`a1`, `a2`, `a3`], true]]);
+        // A marked card pressed takes the mark off them all.
+        const off = menuItemsFor({ ...landed, autoApprove: `own` }, marking([landed, ...others]), act);
+        press(off, t(`agents.autoApprove.unmarkSelected`, { count: 3 }));
+        expect(act.setAutoApprove.mock.calls[1]).toEqual([[`a1`, `a2`, `a3`], false]);
+        // A card not among the selected is marked alone.
+        expect(rows(menuItemsFor(landed, marking(others), actions()))).toContain(MARK);
     });
 });

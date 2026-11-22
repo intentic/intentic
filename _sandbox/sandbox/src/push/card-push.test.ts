@@ -57,9 +57,9 @@ const phone: PushStore = unstubbed<PushStore>("push", {
 
 // A standing yes read from its file, as conversation-grants.ts does: the answer comes back on a later turn of the loop.
 const standingFor = (allowed: ReadonlySet<string>): StandingYes => ({
-    allowed: async (conversationId) => {
+    allowed: async (conversationId, hardRule) => {
         await new Promise((resolve) => setImmediate(resolve));
-        return allowed.has(conversationId);
+        return !hardRule && allowed.has(conversationId);
     },
     allow: async () => undefined,
     failed: () => undefined,

@@ -82,6 +82,24 @@ export const optimistic = async (id: string, patch: Partial<AgentSummary>, write
     }
 };
 
+// `optimistic` for one write that answers several cards: each is drawn from `patchOf` until the write answers, and each
+// card the answer names replaces its roster entry.
+export const optimisticMany = async (
+    ids: readonly string[],
+    patchOf: (id: string) => Partial<AgentSummary>,
+    write: () => Promise<readonly AgentSummary[]>,
+): Promise<void> => {
+    const lifts = ids.map((id) => hold(id, undefined, { patch: patchOf(id) }));
+    try {
+        const answered = new Map((await write()).map((summary) => [summary.id, withNext(summary)]));
+        registry.value = registry.value.map((agent) => answered.get(agent.id) ?? agent);
+    } finally {
+        for (const lift of lifts) {
+            lift();
+        }
+    }
+};
+
 // The daemon's own entry for a card, never the drawn one: a claim is measured against what the daemon said.
 const rosterEntry = (id: string, at: string | undefined): AgentSummary | undefined =>
     at === undefined

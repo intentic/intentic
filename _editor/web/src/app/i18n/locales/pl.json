@@ -1168,6 +1168,19 @@
         },
         "beyondResults": {
             "showMore": "Pokaż {count} więcej · {hidden} niewyświetlonych"
+        },
+        "autoApprove": {
+            "mark": "Zatwierdzaj wszystko automatycznie",
+            "markSelected": "Zatwierdzaj automatycznie zaznaczone sesje ({count})",
+            "markHint": "Nigdy więcej nie pytaj cię o zgodę tutaj ani w jej subagentach, także przy twoich twardych regułach",
+            "unmark": "Przestań zatwierdzać automatycznie",
+            "unmarkSelected": "Przestań zatwierdzać automatycznie zaznaczone sesje ({count})",
+            "unmarkHint": "Jej prośby o zgodę znów czekają na ciebie",
+            "inheritedHint": "Już zatwierdzana automatycznie przez sesję, która ją uruchomiła",
+            "ownTip": "Automatycznie zatwierdza każdą zgodę, także twoje twarde reguły. Wyłącz to w menu tej sesji.",
+            "inheritedTip": "Automatycznie zatwierdza każdą zgodę, bo robi to sesja, która ją uruchomiła.",
+            "label": "Automatyczne zatwierdzanie",
+            "failed": "Nie udało się zmienić automatycznego zatwierdzania"
         }
     },
     "app": {
@@ -13902,6 +13915,7 @@
         "grants": {
             "title": "Uprawnienia rozmów",
             "everything": "Może robić wszystko bez pytania cię",
+            "autoApprove": "Automatycznie zatwierdza każdą zgodę, także twarde reguły, oraz zgody jej subagentów",
             "installs": "Może instalować pakiety bez pytania",
             "secret": "Może wysyłać {what} do dowolnego hosta, nie tylko do własnych",
             "rule": "Może wysyłać żądania takie jak {what} bez pytania",

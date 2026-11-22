@@ -147,7 +147,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
     // The row pressed, whose own document the clipboard is asked of (clipboardOf): the list may be in a popped-out window.
     const menuAnchor = ref<Element>();
 
-    const agentRowsOf = useChatRowAgentRows(menuAnchor);
+    const agentRowsOf = useChatRowAgentRows(menuAnchor, () => (split.value && menuId.value !== undefined && showing(menuId.value) ? panes.value : []));
     // One array for every closed menu: a fresh one each pass is a changed prop, and the menu redraws for it.
     const NO_ITEMS: MenuItem[] = [];
     const menuItems = computed<MenuItem[]>(() => {
@@ -171,7 +171,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
                 { label: t(`chat.chatTabList.share`), icon: `globe`, command: () => openShare(id) },
                 ...agent.name,
             ],
-            agent.watch,
+            [...agent.watch, ...agent.autoApprove],
             // Open Beside/Close Pane mirror Ctrl+click; unlike Close, they give back the column without ending the chat.
             !paneable.value
                 ? []

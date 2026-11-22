@@ -13,6 +13,7 @@ import { AgentPlacedSchema, AgentPlaceSchema } from "../schemas/agent-place.js";
 import { ComposerDraftsSchema, DraftClearSchema, DraftReactionsSchema, DraftWriteSchema, DraftWrittenSchema } from "../schemas/composer-drafts.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
 import { AgentProceedSchema } from "../schemas/proceed-without-asking.js";
+import { AgentAutoApproveSchema } from "../schemas/auto-approve.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
 // Every registered conversation-agent (AgentSummarySchema); an unknown {id} is NOT_FOUND across this whole family.
@@ -220,6 +221,19 @@ export const agentsContract = {
         .meta({ floor: "collaborator" })
         .input(AgentProceedSchema)
         .output(AgentSummarySchema),
+    // Never a program's, a panel's or a remote control's: a mark an agent could put on its own conversation would let it
+    // answer every card it raises, the owner's hard rules included. Legal mid-turn; it answers the cards already waiting.
+    autoApprove: procedure
+        .route({
+            method: "POST",
+            path: "/agents/auto-approve",
+            summary: "Stop asking for permission in these conversations",
+            description:
+                "Marks conversations, or takes their mark off, several at once. While a conversation is marked, every permission card raised in it or in a subagent it starts is approved the moment it is raised, cards already waiting included, the owner's hard rules on the sandbox and on their computers too. A card whose consequence reaches other conversations (restarting the sandbox) and one addressed to a named person still wait, and nothing the owner's policy refuses is allowed. Listed and taken back under Access ▸ Allowed too.",
+        })
+        .meta({ floor: "maintainer", control: "never", panel: false })
+        .input(AgentAutoApproveSchema)
+        .output(z.object({ agents: z.array(AgentSummarySchema).describe("Each conversation named, as its card reads with the mark on or off.") })),
     // Legal for a workspace conversation too, and only between turns in effect: a turn starting ends the hold.
     keepWarm: procedure
         .route({

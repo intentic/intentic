@@ -218,6 +218,8 @@ const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
         archive: familyArchive.requestIds,
         restore: (ids) => restore(withFamilies(ids)),
     },
+    // What's selected IS what's on screen: a card in a split is marked with every card beside it (inPane).
+    selected: (agent) => (inPane(agent.id) ? chatStrip.value.panes.flatMap((id) => agents.agentById(id) ?? []) : [agent]),
 });
 // The trays under the cards (ChildRows), which follow their children, fold and ring on their own clock (childRows.ts).
 provide(CHILD_ROWS, {
