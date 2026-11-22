@@ -1,5 +1,5 @@
 import { drawMap } from "./mapEdges";
-import type { Rect } from "./mapGeometry";
+import type { Rect } from "../../../lib/geometry/mapGeometry";
 import { type Lighting, lightingOf } from "./reachLighting";
 import { buildReachMap, type ReachCapability, type ReachInput } from "./reachModel";
 import type { MapLayout } from "./useMapLayout";

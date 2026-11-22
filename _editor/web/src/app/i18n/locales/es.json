@@ -12123,7 +12123,8 @@
             "voice": "Voz",
             "organisation": "Organización",
             "notificationsVoice": "Notificaciones y voz",
-            "projects": "Proyectos"
+            "projects": "Proyectos",
+            "access": "Mapa de acceso"
         },
         "group": {
             "account": "Cuenta",
@@ -12360,7 +12361,8 @@
                 "keybindings": "atajos de teclado, atajos, teclas rápidas, teclas",
                 "tokens": "clave de API, token de API, token de acceso personal, CLI, MCP",
                 "organisation": "organización, equipo, empresa, miembros, administrador",
-                "data": "privacidad, exportar, descargar, eliminar cuenta, RGPD"
+                "data": "privacidad, exportar, descargar, eliminar cuenta, RGPD",
+                "access": "acceso, alcance, grafo, mapa, sandboxes, ordenadores, servidores, enlaces, quién tiene acceso, permisos"
             },
             "displayName": "nombre, nombre de usuario, avatar, foto, imagen",
             "signIn": "inicio de sesión, iniciar sesión, cuenta de Google, correo, autenticación, contraseña",
@@ -12396,6 +12398,108 @@
             "projectPlaceholder": "github.com/owner/repo",
             "sandbox": "Sandbox",
             "claim": "Asignar"
+        },
+        "accessMap": {
+            "intro": "Todo lo que alcanza esta cuenta, tal como lo dice ahora cada sandbox en la que está. Señala cualquier cosa para ver con qué está conectada; púlsala para que siga resaltada.",
+            "sandboxes": "{count} sandbox | {count} sandboxes",
+            "devices": "{count} dispositivo | {count} dispositivos",
+            "servers": "{count} servidor | {count} servidores",
+            "readAgo": "Leído {ago}",
+            "readJustNow": "Leído hace un momento",
+            "reading": "Leyendo…",
+            "unread": "{count} no se puede leer ahora | {count} no se pueden leer ahora",
+            "reread": "Volver a leer",
+            "view": "Vista",
+            "viewMap": "Mapa",
+            "viewList": "Lista",
+            "narrow": "El mapa necesita una ventana más ancha, así que aquí está en palabras.",
+            "you": "Tú",
+            "columnSandboxes": "Sandboxes",
+            "columnReaches": "Lo que alcanzan",
+            "yours": "Tuyas",
+            "shared": "Compartidas contigo",
+            "beyond": "Fuera de tu cuenta",
+            "devicesGroup": "Ordenadores y teléfonos",
+            "serversGroup": "Servidores",
+            "cloud": "Nube de Intentic",
+            "orgAdmin": "{org} · administrador",
+            "orgMember": "{org} · miembro",
+            "read": "Leer",
+            "platformSays": "La plataforma aún te muestra como {tier}",
+            "people": "{count} persona más puede iniciar sesión aquí | {count} personas más pueden iniciar sesión aquí",
+            "fleetYours": "Sus agentes pueden crear sandboxes en tu cuenta",
+            "fleetOwner": "Sus agentes pueden crear sandboxes en la cuenta de su propietario",
+            "connected": "Conectado",
+            "notConnected": "Sin conexión",
+            "notYours": "no desde tus conversaciones",
+            "others": "Los agentes de {count} persona más también pueden | Los agentes de {count} personas más también pueden",
+            "empty": "Esta cuenta aún no está en ninguna sandbox.",
+            "pinned": "Resaltado. Púlsalo de nuevo, o Escape, para soltarlo.",
+            "letGo": "Soltar",
+            "state": {
+                "asleep": "Dormida",
+                "asleepAsOf": "Dormida · según lo leído {ago}",
+                "unreachable": "No responde",
+                "unreachableAsOf": "No responde · según lo leído {ago}",
+                "signin": "Aún sin sesión aquí",
+                "old": "Más antigua que esta página: actualízala para ver sus conexiones",
+                "locked": "No está abierta para ti",
+                "fresh": "Leído {ago}"
+            },
+            "tie": {
+                "handsTo": "Pasa trabajo a {name}",
+                "takesFrom": "Recibe trabajo de {name}",
+                "reaches": "Alcanza {name}",
+                "signsIn": "Inicia sesión en {name}",
+                "runsOn": "Se ejecuta en {name}",
+                "reachedFrom": "Desde {name}",
+                "signedInFrom": "Desde {name}, por SSH",
+                "hosts": "Ejecuta {name}"
+            },
+            "term": {
+                "tasks": "le pasa tareas",
+                "records": "lee sus registros",
+                "operate": "ejecuta comandos allí",
+                "approve": "cada tarea espera un sí",
+                "role": "con el rol {role}",
+                "runAs": "actuando como {service}",
+                "none": "nada activado"
+            },
+            "answer": {
+                "revoked": "revocado en el otro lado",
+                "silent": "no responde"
+            },
+            "grant": {
+                "shell": "ejecutar comandos",
+                "write": "cambiar archivos",
+                "screen": "ver la pantalla",
+                "control": "usar el ratón y el teclado",
+                "sandboxes": "gestionar sus sandboxes",
+                "destructive": "borrar cosas",
+                "programs": "ejecutar programas que se le envían",
+                "remoteView": "otras personas pueden verlo",
+                "remoteControl": "otras personas pueden tomar el control",
+                "remoteTerminal": "otras personas pueden abrir terminales"
+            },
+            "server": {
+                "as": "como {user}",
+                "admin": "con una contraseña de administrador"
+            },
+            "exposure": {
+                "heading": "Lee esto primero",
+                "machine": "Los agentes de {count} persona más en {sandbox} pueden actuar en {target}: {what} | Los agentes de {count} personas más en {sandbox} pueden actuar en {target}: {what}",
+                "server": "Los agentes de {count} persona más en {sandbox} pueden iniciar sesión en {target} | Los agentes de {count} personas más en {sandbox} pueden iniciar sesión en {target}",
+                "operate": "Los agentes de {count} persona más en {sandbox} pueden ejecutar comandos en {target} | Los agentes de {count} personas más en {sandbox} pueden ejecutar comandos en {target}",
+                "inbound": "{sandbox}, fuera de tu cuenta, puede pasar trabajo a {target}",
+                "fleet": "Los agentes de {count} persona más en {sandbox} pueden crear sandboxes en tu cuenta | Los agentes de {count} personas más en {sandbox} pueden crear sandboxes en tu cuenta",
+                "show": "Mostrar"
+            },
+            "legend": {
+                "yours": "Puedes usarlo",
+                "others": "Solo de otros",
+                "link": "Entre sandboxes",
+                "runs": "Se ejecuta en"
+            }
         }
     },
     "setup": {

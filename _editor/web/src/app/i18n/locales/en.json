@@ -12123,7 +12123,8 @@
             "voice": "Voice",
             "organisation": "Organisation",
             "notificationsVoice": "Notifications & voice",
-            "projects": "Projects"
+            "projects": "Projects",
+            "access": "Access map"
         },
         "group": {
             "account": "Account",
@@ -12360,7 +12361,8 @@
                 "keybindings": "keyboard shortcuts, hotkeys, shortcuts, keys",
                 "tokens": "api key, api token, personal access token, cli, mcp",
                 "organisation": "organization, team, company, members, admin",
-                "data": "privacy, export, download, delete account, gdpr"
+                "data": "privacy, export, download, delete account, gdpr",
+                "access": "access, reach, graph, map, sandboxes, computers, servers, links, who can reach, permissions"
             },
             "displayName": "name, username, avatar, photo, picture",
             "signIn": "login, log in, google account, email, authentication, password",
@@ -12396,6 +12398,108 @@
             "projectPlaceholder": "github.com/owner/repo",
             "sandbox": "Sandbox",
             "claim": "Claim"
+        },
+        "accessMap": {
+            "intro": "Everything this account reaches, as each sandbox it is in tells it now. Point at anything to see what it is tied to; press it to keep it lit.",
+            "sandboxes": "{count} sandbox | {count} sandboxes",
+            "devices": "{count} device | {count} devices",
+            "servers": "{count} server | {count} servers",
+            "readAgo": "Read {ago}",
+            "readJustNow": "Read just now",
+            "reading": "Reading…",
+            "unread": "{count} could not be read now | {count} could not be read now",
+            "reread": "Read again",
+            "view": "View",
+            "viewMap": "Map",
+            "viewList": "List",
+            "narrow": "The map needs a wider window, so here it is in words.",
+            "you": "You",
+            "columnSandboxes": "Sandboxes",
+            "columnReaches": "What they reach",
+            "yours": "Yours",
+            "shared": "Shared with you",
+            "beyond": "Outside your account",
+            "devicesGroup": "Computers & phones",
+            "serversGroup": "Servers",
+            "cloud": "Intentic cloud",
+            "orgAdmin": "{org} · admin",
+            "orgMember": "{org} · member",
+            "read": "Read",
+            "platformSays": "The platform still lists you as {tier}",
+            "people": "{count} other person can sign in here | {count} other people can sign in here",
+            "fleetYours": "Its agents can make sandboxes on your account",
+            "fleetOwner": "Its agents can make sandboxes on its owner's account",
+            "connected": "Connected",
+            "notConnected": "Not connected",
+            "notYours": "not from your conversations",
+            "others": "{count} other person's agents can too | {count} other people's agents can too",
+            "empty": "This account is in no sandbox yet.",
+            "pinned": "Kept lit. Press it again, or Escape, to let go.",
+            "letGo": "Let go",
+            "state": {
+                "asleep": "Asleep",
+                "asleepAsOf": "Asleep · as of {ago}",
+                "unreachable": "Not answering",
+                "unreachableAsOf": "Not answering · as of {ago}",
+                "signin": "Not signed in here yet",
+                "old": "Older than this page: update it to see its ties",
+                "locked": "Not open to you",
+                "fresh": "Read {ago}"
+            },
+            "tie": {
+                "handsTo": "Hands work to {name}",
+                "takesFrom": "Takes work from {name}",
+                "reaches": "Reaches {name}",
+                "signsIn": "Signs in to {name}",
+                "runsOn": "Runs on {name}",
+                "reachedFrom": "From {name}",
+                "signedInFrom": "From {name}, over SSH",
+                "hosts": "Runs {name}"
+            },
+            "term": {
+                "tasks": "hands it tasks",
+                "records": "reads its records",
+                "operate": "runs commands there",
+                "approve": "each task waits for a yes",
+                "role": "wearing {role}",
+                "runAs": "acting as {service}",
+                "none": "nothing switched on"
+            },
+            "answer": {
+                "revoked": "revoked on the other side",
+                "silent": "not answering"
+            },
+            "grant": {
+                "shell": "run commands",
+                "write": "change files",
+                "screen": "see the screen",
+                "control": "use the mouse and keyboard",
+                "sandboxes": "manage its sandboxes",
+                "destructive": "delete things",
+                "programs": "run programs it is sent",
+                "remoteView": "people can watch it",
+                "remoteControl": "people can take control",
+                "remoteTerminal": "people can open terminals"
+            },
+            "server": {
+                "as": "as {user}",
+                "admin": "with an admin password"
+            },
+            "exposure": {
+                "heading": "Read first",
+                "machine": "{count} other person's agents in {sandbox} can act on {target}: {what} | {count} other people's agents in {sandbox} can act on {target}: {what}",
+                "server": "{count} other person's agents in {sandbox} can sign in to {target} | {count} other people's agents in {sandbox} can sign in to {target}",
+                "operate": "{count} other person's agents in {sandbox} can run commands in {target} | {count} other people's agents in {sandbox} can run commands in {target}",
+                "inbound": "{sandbox}, outside your account, can hand work to {target}",
+                "fleet": "{count} other person's agents in {sandbox} can make sandboxes on your account | {count} other people's agents in {sandbox} can make sandboxes on your account",
+                "show": "Show"
+            },
+            "legend": {
+                "yours": "Yours to use",
+                "others": "Others' only",
+                "link": "Between sandboxes",
+                "runs": "Runs on"
+            }
         }
     },
     "setup": {

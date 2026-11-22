@@ -7,7 +7,7 @@ import MapBox from "./MapBox.vue";
 import MapGroupCard from "./MapGroupCard.vue";
 import MapPrincipalRow from "./MapPrincipalRow.vue";
 import { drawMap } from "./mapEdges";
-import type { Flow } from "./mapGeometry";
+import type { Flow } from "../../../lib/geometry/mapGeometry";
 import type { RoleName } from "./mapWords";
 import type { Focus, Lighting } from "./reachLighting";
 import type { GroupKey, Principal, PrincipalKind, ReachMap } from "./reachModel";

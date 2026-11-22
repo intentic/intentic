@@ -21,6 +21,7 @@ import {
     StackOpResultSchema,
 } from "../schemas/device-stacks.js";
 import { EgressOwnerKeysReadSchema } from "../schemas/egress.js";
+import { SandboxReachSchema } from "../schemas/sandbox-reach.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
 import {
     CheckoutPressInputSchema,
@@ -470,6 +471,18 @@ export const systemContract = {
                 "Every computer this sandbox can see, whether it reached it through desktop sync or through a connected device, in one row per machine: what it says about itself, which sandboxes it holds, and what stopped it answering when nothing came back.",
         })
         .output(DevicesListSchema),
+    // (2026-11-22) The account's access map asks every sandbox it reaches for this one answer and joins them
+    // (docs/architecture/accounts.md). Read from what the daemon stores and its live connections, never by calling a
+    // machine, so a map of ten sandboxes costs ten cheap reads; only the link cards' terms ask the far sandbox, briefly.
+    reach: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/reach",
+            summary: "What this sandbox is tied to outside itself",
+            description:
+                "The other sandboxes this one hands work to and takes work from, with their terms; the computers, phones, browsers and servers its agents reach, with the switches each has on; whether it may create sandboxes on its owner's account; and, for each, whether the reader's own conversations may use it and how many other people's may. Shaped for the reader: inbound links and where it runs are Full access's, the counts of other people are for whoever runs people and access.",
+        })
+        .output(SandboxReachSchema),
     // One stream for every op; the daemon adds no judgment, a refusal is the machine's own `error` line.
     manageDeviceSandbox: systemRoute
         .route({

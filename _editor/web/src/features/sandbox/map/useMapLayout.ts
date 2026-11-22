@@ -1,5 +1,5 @@
 import { nextTick, onBeforeUnmount, onMounted, type Ref, shallowRef, watch } from "vue";
-import { type Rect, within } from "./mapGeometry";
+import { type Rect, within } from "../../../lib/geometry/mapGeometry";
 import type { GroupKey, PrincipalKind } from "./reachModel";
 
 // WHERE THE STAGE'S CARDS LANDED. The stage lays them out with CSS, which is what keeps the map readable at any width;

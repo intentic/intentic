@@ -34,6 +34,7 @@ export const settingsPageTerms = () =>
         keybindings: t(`settings.search.pages.keybindings`),
         tokens: t(`settings.search.pages.tokens`),
         organisation: t(`settings.search.pages.organisation`),
+        access: t(`settings.search.pages.access`),
         data: t(`settings.search.pages.data`),
     }) satisfies Readonly<Record<string, string>>;
 
@@ -169,6 +170,14 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         title: () => t(`organisations.console.yours`),
         terms: () => [t(`organisations.console.openInWorkspace`)],
         shown: () => localFace() !== undefined,
+    },
+
+    // Access map: one drawing, found by what people ask of it.
+    {
+        id: `access-map`,
+        slug: `access`,
+        title: () => t(`settings.section.access`),
+        terms: () => [t(`settings.search.pages.access`)],
     },
 
     // Data & privacy.

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SETTLES, stubEnv, waitFor } from "@intentic/testing/bun";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../composition.js";
 
 import { daemonVersionOfBuild } from "@intentic/sandbox-contract/state/daemon-floor";
 import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
@@ -929,4 +931,22 @@ test("events: a connection asking for capacity is sent each provider's judged ca
     } finally {
         controller.abort();
     }
+});
+
+test("system.reach answers from the daemon's stored account state through the app router", async () => {
+    const client = clientFor(createApp(services({
+        ownerEmail: async () => "owner@example.com",
+        inboundLinks: unstubbed<Services["inboundLinks"]>("inboundLinks", { list: async () => [] }),
+        services: unstubbed<Services["services"]>("services", { list: async () => [] }),
+        auth: { authorize: async () => proven("owner@example.com", "owner"), authorizeOwner: async () => {} },
+    })), { bearer: "reach-test" });
+    expect(await client.system.reach()).toMatchObject({
+        self: {},
+        reader: { tier: "owner", agents: true },
+        linksOut: [],
+        linksIn: [],
+        devices: [],
+        servers: [],
+        people: 0,
+    });
 });

@@ -81,6 +81,9 @@ const SETTINGS_SECTIONS = [
     { slug: `billing`, icon: `credit-card`, group: `account`, plan: true },
     // The organisations this account is in, and the console an organisation admin runs them from (organisations/).
     { slug: `organisation`, icon: `users`, group: `account` },
+    // Everything the account reaches across every sandbox it is in, read from each one (access-map/). About sandboxes, so
+    // a desktop window on a folder, which has none, leaves it out.
+    { slug: `access`, icon: `sitemap`, group: `account`, sandbox: true },
     // Collection preferences and account data belong together, away from the default Profile page.
     { slug: `data`, icon: `shield`, group: `account` },
     // Which of the account's sandboxes answers for which project (account-level report routing, api projects/).

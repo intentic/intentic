@@ -8,6 +8,7 @@ import { demoMetrics } from "../../fixture/metrics";
 import { demoDiskPressure, demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../../fixture/storage";
 import { demoQuiet, deskEdition } from "../../mode";
 import { agentFlow, sandboxFlow } from "./deviceFlows";
+import { demoReach } from "../account/reach";
 import { events } from "../events";
 import { manifestProblems, repairManifest } from "./settingsManifests";
 import { withBrowserTools } from "./browserTools";
@@ -63,6 +64,8 @@ export const systemDoors = {
     // The owner's own computers. Without this the Devices tab could only say it had nothing to show, so nothing
     // under a paired folder — the sync switches, and the two answers to a conflict — was ever drawn.
     devices: () => ({ devices: demoDevices(Date.now()) }),
+    // What each sandbox of the demo's world is tied to, by the address it was asked at: the account's access map (reach.ts).
+    reach: (_input, call) => demoReach(call.url),
     // What a loosening of a sandbox's network fence is signed over, and the exceptions offered for it (fixture/devices.ts).
     egressOwnerKeys: () => demoEgressOwnerKeys(),
     // The agent's own two verbs, streamed as the daemon streams them: progress lines, then the machine's sentence.

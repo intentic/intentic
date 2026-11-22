@@ -73,6 +73,7 @@ import { isBuildOutputPath } from "./conversations/worktrees/build-outputs/build
 import { isWarmLayer } from "./conversations/worktrees/cargo-warm.js";
 import { overlaysRoot } from "./conversations/worktrees/isolation.js";
 import { createSystemRoutes } from "./system/system.routes.js";
+import { createReachRoutes } from "./secrets/reach/reach.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
@@ -154,6 +155,14 @@ const storageRoutes = (services: Services) => {
 const computerRoutes = (services: Services) => ({
     netdisk: createNetdiskRoutes(services),
     remote: createRemoteRoutes(services),
+});
+
+const systemRoutes = (services: Services) => ({
+    ...createSystemRoutes(services),
+    ...createReachRoutes(services),
+    ...createDeviceSystemRoutes(services),
+    ...createBrowsingSystemRoutes(services),
+    ...storageRoutes(services),
 });
 
 export const createRouter = (services: Services): SandboxRouter => ({
@@ -244,12 +253,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
         },
     }),
     // Device, browsing and storage procedures live beside what they act on; merged here so no subsystem imports another.
-    system: {
-        ...createSystemRoutes(services),
-        ...createDeviceSystemRoutes(services),
-        ...createBrowsingSystemRoutes(services),
-        ...storageRoutes(services),
-    },
+    system: systemRoutes(services),
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),
     offload: createOffloadRoutes(services),

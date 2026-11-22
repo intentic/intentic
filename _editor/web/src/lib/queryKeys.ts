@@ -137,6 +137,8 @@ export const AGENTS = family(`agents`);
 export const HOSTED_PLAN = family(`hosted-plan`);
 // Deleted sandboxes still inside their recovery window. Account-wide like the sandbox list, never one box's data.
 export const SANDBOX_TRASH = family(`sandbox-trash`);
+// The organisations the account is in, with its role in each: the account's access map draws them beside the account.
+export const ACCOUNT_ORGS = family(`account-orgs`);
 
 // ---- sandbox surfaces ----
 

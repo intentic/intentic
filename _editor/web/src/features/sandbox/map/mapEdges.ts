@@ -1,4 +1,4 @@
-import { curve, elbow, entryOf, exitOf, type Flow, type Point, portsAlong, type Rect } from "./mapGeometry";
+import { curve, elbow, entryOf, exitOf, type Flow, type Point, portsAlong, type Rect } from "../../../lib/geometry/mapGeometry";
 import type { MapLayout } from "./useMapLayout";
 import type { Lighting } from "./reachLighting";
 import type { GroupKey, PrincipalKind, ReachHow, ReachMap } from "./reachModel";
