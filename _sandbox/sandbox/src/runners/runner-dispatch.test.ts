@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import type { RunnerTurn } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import type { RunnerTurn,RunnerSyncLine,RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { ConversationWorktree } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { dispatchRemoteTurn } from "./runner-dispatch.js";
@@ -36,7 +36,6 @@ import { runnerContract } from "@intentic/sandbox-contract/contracts/runner.cont
 import { implement, ORPCError } from "@orpc/server";
 import pino from "pino";
 import { type OrpcLink, orpcLink } from "../peers/orpc-link.testing.js";
-import type { RunnerSyncLine,RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { createPeerHub } from "../peers/peer-hub.js";
 import { createRemoteTurns, type RemoteTurns } from "./held-turns/remote-turns.js";
 import type { DispatchServices } from "./runner-dispatch.js";
