@@ -186,6 +186,11 @@ const settleModel = async (connection: AcpConnection, sessionId: string, wanted:
     if (models === undefined || models.current === wanted) {
         return models?.current;
     }
+    // An agent may qualify its ids (Qwen Code offers `qwen4-max(anthropic)`), so a bare id names the one choice it prefixes.
+    const bare = models.choices.filter((choice) => choice.value.replace(/\([^()]*\)$/u, "") === wanted);
+    if (bare.length === 1 && bare[0] !== undefined && !models.choices.some((choice) => choice.value === wanted)) {
+        return settleModel(connection, sessionId, bare[0].value);
+    }
     if (!models.choices.some((choice) => choice.value === wanted)) {
         const offered = models.choices.map((choice) => choice.name).join(", ");
         throw new ModelNotOffered(

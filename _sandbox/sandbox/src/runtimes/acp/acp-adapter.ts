@@ -45,10 +45,13 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const launch = acpLaunchOf(capability.config);
+    // The model a spawn or a pinned chat names, chosen from the session's own model option (acp-agent.ts settleModel);
+    // the picker offers a custom agent no model list, so an unnamed turn keeps the agent's own default.
+    const options = input.model === undefined || input.model === "" ? {} : { model: input.model };
     // A sealed request reads nothing past its prompt, so nothing is mounted for it, and the ACP loop refuses every call
     // the agent asks about (acp-agent.ts), as Devin's arm does.
     if (context.base.policy.sealed === true) {
-        return armPlan((request) => services.acpAgent(provider, launch, request), { ...context.base, credential: { kind: "container" } });
+        return armPlan((request) => services.acpAgent(provider, launch, request, options), { ...context.base, credential: { kind: "container" } });
     }
     // Resolved by planTurn; without one the turn is the open, attended default, which may drive the credential-free browser.
     // A warm session keeps the MCP config it was opened with, so its turns share the conversation's bearer.
@@ -69,7 +72,7 @@ export const planAcpTurn = async (
     return armPlan(
         // The agent's warm session keeps the conversation's bearer and each server's URL across turns; the release only
         // empties what the bearer reaches until the next turn leases it again.
-        releasingMounts((request) => services.acpAgent(provider, launch, request), mounted),
+        releasingMounts((request) => services.acpAgent(provider, launch, request, options), mounted),
         withAttachments(
             {
                 ...context.base,

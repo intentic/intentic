@@ -66,6 +66,13 @@ test("a named model switches the session before the prompt, and the turn announc
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
+test("a bare id names the one choice an agent qualifies with a suffix", async () => {
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["qwen4-max-preview(anthropic)", "qwen4-max(anthropic)"] }))), TIMEOUTS);
+    const events = await collect(agent, request("hello"), undefined, { model: "qwen4-max" });
+    expect(events.filter((event) => event.kind === "init")).toEqual([{ kind: "init", model: "qwen4-max(anthropic)" }]);
+    expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
 test("a model the session's own list leaves out refuses the turn before anything is sent", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["swe", "opus"] }))), TIMEOUTS);
     const events = await collect(agent, request("hello"), undefined, { model: "gpt" });
