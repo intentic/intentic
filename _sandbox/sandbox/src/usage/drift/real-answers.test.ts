@@ -59,11 +59,11 @@ test("each answer on 2026-10-19 states the length of every window it names one f
         ["five_hour", 18_000],
     ]);
     expect(period(geminiUsageFromPayload(answer("gemini.retrieveUserQuotaSummary.2026-10-19.json")))).toEqual([["google:3p-weekly", 604_800]]);
-    // The per-model view names no window at all.
+    // The per-model view names no window, but reads the weekly one: Claude's reset there is the summary's 3p-weekly reset.
     const parsed = GoogleModelsSchema.safeParse(answer("gemini.fetchAvailableModels.2026-10-19.json"));
     expect(period(parsed.success ? googleModelsUsage(parsed.data) : undefined)).toEqual([
-        ["google:models:gemini", undefined],
-        ["google:models:3p", undefined],
+        ["google:models:gemini", 604_800],
+        ["google:models:3p", 604_800],
     ]);
 });
 

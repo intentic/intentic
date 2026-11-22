@@ -29,6 +29,7 @@ test("reads one pool per model family off Google's per-model view, a missing fra
                 label: "Gemini models",
                 utilization: (1 - 0.4699792) * 100,
                 resetsAt: Date.parse("2026-10-24T19:26:36Z") / 1000,
+                periodSeconds: 604_800,
                 gates: { models: ["gemini"] },
             },
             {
@@ -36,6 +37,7 @@ test("reads one pool per model family off Google's per-model view, a missing fra
                 label: "Claude and GPT models",
                 utilization: 100,
                 resetsAt: Date.parse("2026-10-24T12:03:10Z") / 1000,
+                periodSeconds: 604_800,
                 gates: { models: ["claude", "gpt"] },
             },
         ],

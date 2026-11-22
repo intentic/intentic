@@ -52,6 +52,14 @@ export const GoogleModelsSchema = z.object({
 });
 export type GoogleModels = z.infer<typeof GoogleModelsSchema>;
 
+// How long a per-model reading's window runs. The view states no length, but it reads the weekly allowance: Claude's
+// `resetTime` there is the instant the summary's `3p-weekly` bucket resets (drift/answers, 2026-10-19), and an untouched
+// family resets exactly seven days after it is read (32 accounts, 2026-11-22). Stated so a family read here and the same
+// family read off the summary on another account are one allowance to whatever sums them (chatCapacity.ts pooledPools):
+// unstated, four fresh accounts read this way drew a second "Claude and GPT models" lane at 100% left beside the
+// summary's weekly one at 0% for the other 28.
+const MODEL_VIEW_PERIOD_S = 7 * 86_400;
+
 // The family's pool, read off its fullest model: every pool of a family gates the whole family (googleGates), so only
 // the fullest could ever bind.
 const familyPool = (models: GoogleModels["models"], family: GoogleFamily): UsageWindow | undefined => {
@@ -71,7 +79,13 @@ const familyPool = (models: GoogleModels["models"], family: GoogleFamily): Usage
     if (fullest === undefined) {
         return undefined;
     }
-    const pool: UsageWindow = { kind: `google:models:${family.key}`, label: family.label, utilization: clampPercent((1 - fullest.remaining) * 100), gates: family.gates };
+    const pool: UsageWindow = {
+        kind: `google:models:${family.key}`,
+        label: family.label,
+        utilization: clampPercent((1 - fullest.remaining) * 100),
+        ...statedPeriod(MODEL_VIEW_PERIOD_S),
+        gates: family.gates,
+    };
     return fullest.resetsAt === undefined ? pool : { ...pool, resetsAt: fullest.resetsAt };
 };
 

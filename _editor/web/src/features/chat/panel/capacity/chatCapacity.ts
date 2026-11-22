@@ -1,5 +1,6 @@
 import { poolPace, type PoolPace } from "../../../../models/providers/capacity/usagePace";
-import type { AccountFix } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountFix, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { gatesModel, SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { PlanLimitsHeld } from "@intentic/sandbox-contract/contracts/usage.contract";
 import { t } from "@intentic/ui/i18n";
@@ -203,9 +204,29 @@ const ambiguousLabels = (rows: readonly PlanLimitRow[]): ReadonlySet<string> => 
 const untouchedSlice = (pool: PlanLimitPool, metersAll: boolean): boolean =>
     metersAll && pool.gates !== `all` && Math.round(remainingPercent(pool.percent)) >= 100;
 
+// A pool the rule made of its own for a limit refusal whose instant no published pool resets at (plan-pools.ts
+// refusedPool). Beside a spent pool that already gates every model it names, it says nothing a reader can use: the rail
+// drew "Claude Opus 4.6 · 0%" under "wk · Claude and GPT · 0%" on 28 Google accounts, one allowance read twice, from the
+// translator's nameless "all credentials cooling down" (2026-11-22). Left out of the drawing only: the verdict still
+// judges it, and it is drawn wherever it is the only word on its model.
+const REFUSED_KIND = `refused:`;
+
+const holdsGates = (outer: WindowGates, inner: WindowGates): boolean =>
+    outer === `all` || (outer !== `none` && inner !== `all` && inner !== `none` && inner.models.every((name) => gatesModel(outer, { id: name })));
+
+const saidAlready = (pool: PlanLimitPool, pools: readonly PlanLimitPool[]): boolean =>
+    pool.kind.startsWith(REFUSED_KIND) &&
+    pools.some(
+        (other) =>
+            !other.kind.startsWith(REFUSED_KIND) && other.percent >= SPENT_UTILIZATION && other.rounded !== true && holdsGates(other.gates, pool.gates),
+    );
+
+const drawnPools = (pools: readonly PlanLimitPool[]): readonly PlanLimitPool[] => pools.filter((pool) => !saidAlready(pool, pools));
+
 const capacityLanes = (row: PlanLimitRow, paced = true): readonly CapacityLane[] => {
-    const metersAll = row.pools.some((pool) => pool.gates === `all`);
-    const sorted = row.pools
+    const pools = drawnPools(row.pools);
+    const metersAll = pools.some((pool) => pool.gates === `all`);
+    const sorted = pools
         .filter((pool) => pool.gates !== `none` && !untouchedSlice(pool, metersAll))
         .map((pool) => ({ pool, period: poolPeriod(pool) }))
         .toSorted(
@@ -231,28 +252,62 @@ const capacityLanes = (row: PlanLimitRow, paced = true): readonly CapacityLane[]
     }));
 };
 
-// A pool's allowances as one: each window's use is the mean of what its accounts have used of it, so thirty fresh
+// Which allowance a pool is, across accounts: the models it gates and how long its window runs. Not its kind, since one
+// provider can name one allowance two ways: Google's quota summary calls the Claude and GPT week `google:3p-weekly`,
+// and on an account the summary leaves it out of (a fresh sign-in), the per-model view reads the same week as
+// `google:models:3p`. Keyed by kind, four fresh accounts drew a second "Claude and GPT models" lane at 100% left
+// beside the other 28 accounts' spent week (2026-11-22). A pool whose length can't be read stays its own allowance.
+const allowanceOf = (pool: PlanLimitPool): string => `${JSON.stringify(pool.gates)}|${poolPeriod(pool)?.seconds ?? pool.kind}`;
+
+// One account's pools, one per allowance: where it names one allowance twice, the fuller reading is the one it has.
+const accountAllowances = (row: PlanLimitRow): ReadonlyMap<string, PlanLimitPool> => {
+    const own = new Map<string, PlanLimitPool>();
+    for (const pool of drawnPools(row.pools)) {
+        const key = allowanceOf(pool);
+        const held = own.get(key);
+        if (held === undefined || pool.percent > held.percent) {
+            own.set(key, pool);
+        }
+    }
+    return own;
+};
+
+// The name most of the accounts give an allowance, so the lane reads the way the provider usually words it.
+const usualPool = (all: readonly PlanLimitPool[]): PlanLimitPool | undefined => {
+    const counts = new Map<string, number>();
+    for (const pool of all) {
+        counts.set(pool.kind, (counts.get(pool.kind) ?? 0) + 1);
+    }
+    return all.reduce<PlanLimitPool | undefined>(
+        (usual, pool) => (usual === undefined || (counts.get(pool.kind) ?? 0) > (counts.get(usual.kind) ?? 0) ? pool : usual),
+        undefined,
+    );
+};
+
+// A pool's allowances as one: each allowance's use is the mean of what its accounts have used of it, so thirty fresh
 // sign-ins and one spent read as about 3% gone, never as the roomiest one's 100% left nor the tightest one's 0%. Every
 // account the provider counts goes in, spent ones too: they are part of the total the turns spend. A credential that
 // needs a person sits outside `total`, so it sits outside the figure; an account with no reading says nothing and is
 // left out rather than counted as unused. A window resets account by account, so the date carried is the soonest one
 // that hands spent room back.
 const pooledPools = (rows: readonly PlanLimitRow[]): readonly PlanLimitPool[] => {
-    const byKind = new Map<string, PlanLimitPool[]>();
-    for (const pool of rows.filter((row) => !needsAPerson(row)).flatMap((row) => row.pools)) {
-        byKind.set(pool.kind, [...(byKind.get(pool.kind) ?? []), pool]);
+    const byAllowance = new Map<string, PlanLimitPool[]>();
+    for (const row of rows.filter((entry) => !needsAPerson(entry))) {
+        for (const [key, pool] of accountAllowances(row)) {
+            byAllowance.set(key, [...(byAllowance.get(key) ?? []), pool]);
+        }
     }
-    return [...byKind.values()].flatMap(([first, ...rest]) => {
-        if (first === undefined) {
+    return [...byAllowance.values()].flatMap((all) => {
+        const usual = usualPool(all);
+        if (usual === undefined) {
             return [];
         }
-        const all = [first, ...rest];
         const resets = (all.some((pool) => pool.percent > 0) ? all.filter((pool) => pool.percent > 0) : all).flatMap((pool) =>
             pool.resetsAt === undefined ? [] : [pool.resetsAt],
         );
         return [
             {
-                ...first,
+                ...usual,
                 percent: all.reduce((sum, pool) => sum + pool.percent, 0) / all.length,
                 resetsAt: resets.length === 0 ? undefined : Math.min(...resets),
                 rounded: all.some((pool) => pool.rounded === true),

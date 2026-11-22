@@ -1,5 +1,5 @@
 import { setLocale } from "@intentic/ui/i18n";
-import type { AccountUsage, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, TranslatorAccount, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { CAPACITY_RAIL_PX, PANE_COMFORT_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../../../../models/providers/providerAccounts";
@@ -483,6 +483,53 @@ describe(`a pool nobody picks among`, () => {
         expect(Object.fromEntries(lanes.map((lane) => [lane.kind, lane.percent]))).toEqual({ gemini: 20, claude: 75 });
         // The soonest reset that hands spent room back, not an untouched account's.
         expect(lanes.find((lane) => lane.kind === `gemini`)?.resetsAt).toBe(after(3_600));
+    });
+
+    // 2026-11-22: Google's quota summary left the Claude and GPT week out on four fresh sign-ins, which then read it off
+    // the per-model view under another key; summed by key, the rail drew that week twice, 0% left and 100% left.
+    it(`sums one allowance across accounts that name it differently, into one lane`, () => {
+        const WEEK = 604_800;
+        const claudeAndGpt = { models: [`claude`, `gpt`] };
+        const gemini = { kind: `google:models:gemini`, label: `Gemini models`, periodSeconds: WEEK, gates: { models: [`gemini`] }, resetsAt: after(500_000) };
+        const account = (index: number, claudeWindow: UsageWindow): TranslatorAccount => ({
+            name: `gemini-${index}`,
+            label: `radarsuspam${index}@gmail.com`,
+            usage: { measuredAt: NOW - 60_000, windows: [claudeWindow, { ...gemini, utilization: 40 }] },
+        });
+        const summarised = (index: number) =>
+            account(index, {
+                kind: `google:3p-weekly`,
+                label: `Claude and GPT models · Weekly Limit Remaining`,
+                utilization: 100,
+                periodSeconds: WEEK,
+                resetsAt: after(400_000),
+                gates: claudeAndGpt,
+            });
+        const fresh = account(4, { kind: `google:models:3p`, label: `Claude and GPT models`, utilization: 0, periodSeconds: WEEK, resetsAt: after(600_000), gates: claudeAndGpt });
+        translatorAccounts.value = { ...NO_ROUTED, gemini: [summarised(1), summarised(2), summarised(3), fresh] };
+
+        const lanes = chatCapacity([], NOW).providers[0]?.rows[0]?.lanes ?? [];
+        expect(lanes.map((lane) => [lane.kind, lane.percent, lane.resetsAt])).toEqual([
+            [`google:3p-weekly`, 75, after(400_000)],
+            [`google:models:gemini`, 40, after(500_000)],
+        ]);
+    });
+
+    it(`leaves out a refused model's own pool where a spent pool already gates that model, and draws it where none does`, () => {
+        const opus = { kind: `refused:claude-opus-4-6-thinking`, label: `Claude Opus 4.6 Thinking`, utilization: 100, resetsAt: after(450_000), gates: { models: [`claude-opus-4-6-thinking`] } };
+        const reading = (claudeUse: number): AccountUsage => ({
+            measuredAt: NOW - 60_000,
+            windows: [
+                { kind: `google:3p-weekly`, label: `Claude and GPT models · Weekly Limit Remaining`, utilization: claudeUse, periodSeconds: 604_800, resetsAt: after(400_000), gates: { models: [`claude`, `gpt`] } },
+                { kind: `google:models:gemini`, label: `Gemini models`, utilization: 10, periodSeconds: 604_800, resetsAt: after(500_000), gates: { models: [`gemini`] } },
+                opus,
+            ],
+        });
+        translatorAccounts.value = { ...NO_ROUTED, gemini: [{ name: `gemini-1`, label: `one@gmail.com`, usage: reading(100) }] };
+        expect(chatCapacity([], NOW).providers[0]?.rows[0]?.lanes.map((lane) => lane.kind)).toEqual([`google:3p-weekly`, `google:models:gemini`]);
+
+        translatorAccounts.value = { ...NO_ROUTED, gemini: [{ name: `gemini-1`, label: `one@gmail.com`, usage: reading(30) }] };
+        expect(chatCapacity([], NOW).providers[0]?.rows[0]?.lanes.map((lane) => lane.kind)).toContain(opus.kind);
     });
 
     it(`leaves a credential that needs a person and an account with no reading out of the pool's figure`, () => {
