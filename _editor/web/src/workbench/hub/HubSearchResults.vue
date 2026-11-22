@@ -21,6 +21,10 @@ const { search, listId, look } = defineProps<{
 const route = useRoute();
 const router = useRouter();
 
+// A sandbox answer's slug is a view-section id, canonicalized as the hub's own rows are (HubLayout's `sectionIcons`);
+// a settings answer's slug is the account's own, so it draws the icon its page carries.
+const iconOf = (result: HubSearchResult) => (result.hub === `sandbox` ? (sectionIcon(result.slug, result.icon) ?? result.icon) : result.icon);
+
 // A real link, so a middle press or a modified one opens the answer in a tab of its own as any link does; a plain
 // press goes there here and lands on the card.
 const href = (result: HubSearchResult): string => router.resolve(result.to).href;
@@ -79,7 +83,7 @@ const words = (): string => search.query.value.trim();
                         <Row
                             as="div"
                             density="dense"
-                            :icon="sectionIcon(result.slug, result.icon)"
+                            :icon="iconOf(result)"
                             :title="result.title"
                             :description="result.trail === `` ? undefined : result.trail"
                             :selected="current(result)"
@@ -106,7 +110,7 @@ const words = (): string => search.query.value.trim();
                         as="div"
                         interactive
                         chevron
-                        :icon="sectionIcon(result.slug, result.icon)"
+                        :icon="iconOf(result)"
                         :title="result.title"
                         :description="result.trail === `` ? undefined : result.trail"
                     />

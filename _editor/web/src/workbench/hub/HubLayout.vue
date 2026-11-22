@@ -30,6 +30,7 @@ const {
     withheld = [],
     ready = true,
     search,
+    sectionIcons = false,
 } = defineProps<{
     title: string;
     description?: string;
@@ -59,6 +60,12 @@ const {
      * something is typed its answers stand in the index's place. Made by the hub, so this stays a layout.
      */
     search?: HubSearchPanel;
+    /**
+     * Whether a row's slug is a view-section id, whose glyph the icon map canonicalizes (the sandbox hub's sections
+     * carry the views' names). Off — the settings hub — a row draws the icon it carries: two of its slugs (`access`,
+     * `projects`) name view sections there for other things, and the map would draw those glyphs instead.
+     */
+    sectionIcons?: boolean;
 }>();
 
 const route = useRoute();
@@ -67,6 +74,16 @@ const router = useRouter();
 // The index's rows, and the sections behind them: a row with parts is one row in the index and a section per part,
 // each at an address of its own.
 const rows = computed<readonly HubTab[]>(() => groups.flatMap((group) => group.items));
+// The groups as drawn: a hub whose slugs are view-section ids wears the map's canonical glyph; any other wears the
+// icon its rows carry (HubTab.icon is required either way, so nothing is ever undrawn).
+const drawn = computed<readonly NavGroup<HubTab>[]>(() =>
+    sectionIcons
+        ? groups.map((group) => ({
+              ...group,
+              items: group.items.map((item) => ({ ...item, icon: sectionIcon(item.slug, item.icon) ?? item.icon })),
+          }))
+        : groups,
+);
 const tabs = computed<readonly HubTab[]>(() => rows.value.flatMap(hubRowSections));
 // Every address this hub answers: the sections its index offers, and the ones it withholds from this reader.
 const slugs = computed<readonly string[]>(() => [...tabs.value.map((tab) => tab.slug), ...withheld]);
@@ -221,10 +238,10 @@ watch(
             <div v-if="drill" class="flex flex-col gap-4">
                 <HubSearchField v-if="search" :search="search" :list-id="searchList" />
                 <HubSearchResults v-if="search && searching" :search="search" :list-id="searchList" look="page" />
-                <HubIndex v-else :groups="groups" :link-to="rowLink" />
+                <HubIndex v-else :groups="drawn" :link-to="rowLink" />
             </div>
             <!-- While a search is typed the rail's groups give way to its answers, drawn where the rail draws an empty index; the field stays pinned, so typing never loses it. -->
-            <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="searching ? [] : groups">
+            <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="searching ? [] : drawn">
                 <template v-if="search" #pinned>
                     <HubSearchField :search="search" :list-id="searchList" />
                 </template>
@@ -237,7 +254,7 @@ watch(
                         <Row
                             as="div"
                             density="dense"
-                            :icon="sectionIcon(tab.slug, tab.icon)"
+                            :icon="tab.icon"
                             :title="tab.label"
                             :selected="tab.slug === activeRow?.slug"
                             class="rounded-lg"

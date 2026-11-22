@@ -55,7 +55,7 @@ const PRIVACY = {
 // long as the read takes, which is what `ready` is about. `tabbed` adds the row above as a group of its own.
 const mount = async (
     path: string,
-    index: { ready?: boolean; listed?: readonly string[]; tabbed?: boolean; withheld?: readonly string[] } = {},
+    index: { ready?: boolean; listed?: readonly string[]; tabbed?: boolean; withheld?: readonly string[]; sectionIcons?: boolean } = {},
 ): Promise<HTMLElement> => {
     await router.push(path);
     await router.isReady();
@@ -88,6 +88,7 @@ const mount = async (
                         groups: groups.value,
                         ready: index.ready ?? true,
                         withheld: index.withheld ?? [],
+                        sectionIcons: index.sectionIcons ?? false,
                     },
                     // The marker carries the slug the hub handed its body, which is the section on screen.
                     { default: ({ slug }: { slug: string }) => [h(`p`, { "data-section": slug }), h(Section)] },
@@ -205,6 +206,20 @@ it(`draws no tabs above a section that is a row of its own`, async () => {
     const el = await mount(at(`devices`), { tabbed: true });
     expect(section(el)).toBe(`devices`);
     expect(partTabs(el)).toHaveLength(0);
+});
+
+// `overview` is a view-section id the icon map knows (`th-large`); a hub whose slugs are its own — the settings
+// hub's `access` and `projects` name view sections for other things — keeps the glyph its table chose.
+it(`draws the icon a row carries when its slugs are not view sections`, async () => {
+    const el = await mount(at());
+    expect(el.querySelector(`[data-icon="info-circle"]`)).not.toBeNull();
+    expect(el.querySelector(`[data-icon="th-large"]`)).toBeNull();
+});
+
+it(`draws the view-section glyph a row's slug names when asked`, async () => {
+    const el = await mount(at(), { sectionIcons: true });
+    expect(el.querySelector(`[data-icon="th-large"]`)).not.toBeNull();
+    expect(el.querySelector(`[data-icon="info-circle"]`)).toBeNull();
 });
 
 it(`gives a row with parts no address of its own`, async () => {

@@ -306,6 +306,7 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
         :withheld="withheld"
         :ready="!isLoading"
         :search="search"
+        :section-icons="true"
     >
         <template #default="{ slug }">
             <AccessGate v-if="withheld.includes(slug)" :reason="MAINTAINERS" :place="placeOf(slug)" />
