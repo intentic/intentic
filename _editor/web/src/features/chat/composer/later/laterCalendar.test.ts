@@ -9,6 +9,7 @@ import {
     moveDay,
     parseClock,
     stepClock,
+    typedInstant,
 } from "./laterCalendar";
 
 // The send-later picker as values: the weeks the thirty-day booking window spans, the day keyboard movement lands on,
@@ -132,6 +133,17 @@ describe(`the instant a pick names`, () => {
         expect(draftInstant({ clock: 18 * 60 }, now)).toBe(at(10, 11, 18));
         expect(draftInstant({ clock: 9 * 60 }, now)).toBe(at(10, 12, 9));
         expect(draftInstant({}, now)).toBeUndefined();
+    });
+
+    it(`books a time typed straight into the hours at its next one, and nothing from a field that names none`, () => {
+        const now = at(10, 11, 14, 20);
+        expect(typedInstant(`1830`, now)).toBe(at(10, 11, 18, 30));
+        expect(typedInstant(`6pm`, now)).toBe(at(10, 11, 18));
+        expect(typedInstant(`9`, now)).toBe(at(10, 12, 9));
+        expect(typedInstant(`14:20`, now)).toBe(at(10, 12, 14, 20));
+        expect(typedInstant(``, now)).toBeUndefined();
+        expect(typedInstant(`25:00`, now)).toBeUndefined();
+        expect(typedInstant(`soon`, now)).toBeUndefined();
     });
 
     it(`keeps the wall clock across a day's own midnight`, () => {

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Icon, SearchBar, ui } from "@intentic/ui";
+import { Icon, SearchBar, ui, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { formatUntil } from "@intentic/ui/time";
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { agentDisplayTitle, agentStatusMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { pressAutoLand } from "../../../../models/fleet/presses/autoLandPress";
@@ -15,9 +15,11 @@ import type { Conversation } from "../../../../models/conversations/session/conv
 import { type LandsHow, waitTargets } from "./waitTargets";
 import { hourChoices, type SendLater, waitText } from "../../../../models/conversations/drafts/sendLater";
 import LaterTimePicker from "./LaterTimePicker.vue";
+import { typedInstant } from "./laterCalendar";
 
 /* When a message goes, when not now. HOUR FIRST: half a day of whole hours, one press each, since people book against
-   the clock ("at 2, when the limit is back"). A day of its own, or a minute off the hour, is the advanced case, one
+   the clock ("at 2, when the limit is back"). A time off the grid today or tomorrow is typed right under it ("1430",
+   "2pm", Enter), the field the panel opens on where there is a keyboard; a day further off is the advanced case, one
    row below and a view of its own (LaterTimePicker); waiting for another agent's work to land is the other row, and a
    view of its own too, so a long fleet never pushes the hours off the panel. The same panel is the send's caret in the
    composer (a pick there is the send) and re-times a message already waiting (ChatHeldBooking), so both read the same
@@ -52,6 +54,33 @@ const backToHours = async (from: Exclude<View, `hours`>): Promise<void> => {
     await nextTick();
     (from === `picker` ? pickerRow : agentsRow).value?.focus({ preventScroll: true });
 };
+
+// A time typed under the hours: its next one, today while still ahead, else tomorrow.
+const typed = ref(``);
+const typedAt = computed(() => typedInstant(typed.value, now.value));
+const typedBad = computed(() => typed.value.trim() !== `` && typedAt.value === undefined);
+const typedHint = computed(() => {
+    if (typedBad.value) {
+        return t(`chat.sendLater.typeTime`);
+    }
+    const at = typedAt.value;
+    return at === undefined ? t(`chat.sendLater.typeHint`) : `${formatUntil(at, now.value)} · ${waitText(at, now.value)}`;
+});
+const pickTyped = (): void => {
+    const at = typedAt.value;
+    if (at !== undefined) {
+        emit(`pick`, { kind: `at`, at });
+    }
+};
+// Where there is a keyboard, the panel opens on the field, so the caret, a time and Enter book it; a phone's sheet
+// does not raise its keyboard for a reader who came to press an hour.
+const { mobile, coarse } = useDevice();
+const typedField = ref<HTMLInputElement>();
+onMounted(() => {
+    if (!mobile.value && !coarse.value && view.value === `hours`) {
+        typedField.value?.focus({ preventScroll: true });
+    }
+});
 
 const { fleet } = useAgents();
 const { byId, upsert, settings } = useRules();
@@ -194,6 +223,43 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                         <span class="text-3xs text-subtle tabular-nums">{{ waitText(hour.at, now) }}</span>
                     </button>
                 </template>
+            </div>
+
+            <!-- Any other time today or tomorrow, typed: Enter or the arrow books it, and the line beside it says when that is. -->
+            <div class="flex items-center gap-1.5 px-2.5 pt-0.5 pb-1">
+                <span class="relative flex shrink-0 items-center">
+                    <Icon name="clock" class="pointer-events-none absolute left-2 text-2xs text-subtle" />
+                    <input
+                        ref="typedField"
+                        v-model="typed"
+                        type="text"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        spellcheck="false"
+                        maxlength="8"
+                        placeholder="14:30"
+                        :aria-label="t(`chat.sendLater.typeHint`)"
+                        :aria-invalid="typedBad"
+                        :class="[ui.input({ size: `sm` }), `w-[4.75rem] pl-6 tabular-nums max-md:w-24`, typedBad ? `ui-field-error-box` : ``]"
+                        @keydown.enter.prevent="pickTyped()"
+                    />
+                </span>
+                <span
+                    class="min-w-0 flex-1 truncate text-2xs tabular-nums"
+                    :class="typedBad ? `text-warning` : typedAt === undefined ? `text-subtle` : `text-content`"
+                    aria-live="polite"
+                    >{{ typedHint }}</span
+                >
+                <button
+                    type="button"
+                    class="composer-ghost h-7 w-7 shrink-0 max-md:h-10 max-md:w-10"
+                    :disabled="typedAt === undefined"
+                    v-tooltip.top="t(`chat.sendLater.typedSet`)"
+                    :aria-label="t(`chat.sendLater.typedSet`)"
+                    @click="pickTyped()"
+                >
+                    <Icon name="check" class="text-xs" />
+                </button>
             </div>
 
             <div class="mx-2.5 my-1 border-t border-line" aria-hidden="true" />

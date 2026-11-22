@@ -4950,6 +4950,8 @@
             "anotherAgent": "another agent",
             "autoLand": "Auto-land",
             "sendAt": "Send at",
+            "typeHint": "Or type a time",
+            "typedSet": "Set time",
             "tomorrow": "Tomorrow",
             "waitMinutes": "{minutes}m",
             "waitHours": "{hours}h",

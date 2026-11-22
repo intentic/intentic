@@ -4950,6 +4950,8 @@
             "anotherAgent": "un autre agent",
             "autoLand": "Intégration automatique",
             "sendAt": "Envoyer à",
+            "typeHint": "Ou saisissez une heure",
+            "typedSet": "Valider l’heure",
             "tomorrow": "Demain",
             "waitMinutes": "{minutes} min",
             "waitHours": "{hours} h",

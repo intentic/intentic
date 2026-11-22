@@ -1,4 +1,4 @@
-import { addDays, atMinute, dayOf, minuteOfDay } from "@intentic/ui/clock";
+import { addDays, atMinute, dayOf, minuteOfDay, parseClock } from "@intentic/ui/clock";
 import { bookable, LATEST_SEND_MS, SOONEST_SEND_MS } from "../../../../models/conversations/drafts/sendLater";
 
 // The day and time arithmetic is the kit's (clock.ts), shared with its own date and time fields.
@@ -113,4 +113,13 @@ export const draftInstant = ({ day, clock }: LaterDraft, now: number): number | 
     }
     const today = atMinute(dayOf(now), clock);
     return bookable(today, now) ? today : atMinute(addDays(dayOf(now), 1), clock);
+};
+
+/**
+ * The instant a time typed straight into the hours ("14:30", "1430", "2pm") names: its next one, as `draftInstant`
+ * reads a time without a day. Nothing for an empty field or one that does not read as a time.
+ */
+export const typedInstant = (text: string, now: number): number | undefined => {
+    const clock = text.trim() === `` ? undefined : parseClock(text);
+    return clock === undefined ? undefined : draftInstant({ clock }, now);
 };

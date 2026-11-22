@@ -4950,6 +4950,8 @@
             "anotherAgent": "ein anderer Agent",
             "autoLand": "Automatisch landen",
             "sendAt": "Senden um",
+            "typeHint": "Oder Uhrzeit eingeben",
+            "typedSet": "Uhrzeit setzen",
             "tomorrow": "Morgen",
             "waitMinutes": "{minutes} Min.",
             "waitHours": "{hours} Std.",
