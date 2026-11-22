@@ -9,7 +9,7 @@ const chatInSidePanel = ref(true);
 jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel }));
 
 const { default: SidePanel } = await import("./SidePanel.vue");
-const { closeAllTabs, closeTab, openBeside, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
+const { closeAllTabs, closeTab, openBeside, setTucked, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
 const { registerSideView } = await import("../../workbench/side/sideViews");
 const { chatSlot } = await import("../../workbench/window/panelSlots");
 
@@ -53,10 +53,10 @@ afterAll(() => {
 });
 
 let app: App | undefined;
-const mount = async (): Promise<HTMLElement> => {
+const mount = async (props: { floating?: boolean } = {}): Promise<HTMLElement> => {
     const host = document.createElement(`div`);
     document.body.append(host);
-    app = createApp({ render: () => h(SidePanel) });
+    app = createApp({ render: () => h(SidePanel, props) });
     installUi(app);
     app.mount(host);
     await settle();
@@ -232,4 +232,132 @@ it(`offers no split while the chat lives elsewhere, the tabs being the whole col
 
     expect(button(host, `Show beside`)).toBeNull();
     expect(host.querySelector<HTMLElement>(`.side-panel`)?.style.gridArea).toBe(`side`);
+});
+
+describe(`tucked away`, () => {
+    const strip = (host: HTMLElement): HTMLElement | null => host.querySelector<HTMLElement>(`.side-tucked`);
+    const stripLabels = (host: HTMLElement): string[] =>
+        [...(strip(host)?.querySelectorAll(`button`) ?? [])].map((each) => each.getAttribute(`aria-label`) ?? ``);
+
+    it(`folds what was opened into a strip beside the chat, every body still mounted, and brings it back on a press`, async () => {
+        openBeside(`stub`, { n: 1 }, { keep: true });
+        openBeside(`stub`, { n: 2 }, { keep: true });
+        const host = await mount();
+        const slot = chatSlot.value;
+        const body = host.querySelector(`.stub-body`);
+
+        button(host, `Tuck away`)?.click();
+        await settle();
+        expect(panel.tucked.value).toBe(true);
+        expect(stripLabels(host)).toEqual([`Show Thing 1`, `Show Thing 2`]);
+        // The column is out of sight and out of reach, not gone: what is framed in it never reloads.
+        const tabs = host.querySelector<HTMLElement>(`.side-tabs`);
+        expect(tabs?.classList.contains(`invisible`)).toBe(true);
+        expect(tabs?.hasAttribute(`inert`)).toBe(true);
+        expect(host.querySelector(`.stub-body`)).toBe(body);
+        // The section comes back into the middle; the strip stands between it and the chat, which never moved.
+        expect(host.querySelector<HTMLElement>(`.side-panel`)?.style.gridArea).toBe(`side`);
+        expect(strip(host)?.nextElementSibling?.classList.contains(`side-chat`)).toBe(true);
+        expect(chatSlot.value).toBe(slot);
+
+        button(host, `Show Thing 1`)?.click();
+        await settle();
+        expect(panel.tucked.value).toBe(false);
+        expect(panel.active.value).toBe(sideTabId(`stub`, { n: 1 }));
+        expect(strip(host)).toBeNull();
+        expect(host.querySelector(`.side-tabs`)?.hasAttribute(`inert`)).toBe(false);
+        expect(host.querySelector(`.stub-body`)).toBe(body);
+    });
+
+    it(`stands the strip at the window's edge while the chat lives elsewhere`, async () => {
+        chatInSidePanel.value = false;
+        openBeside(`stub`, { n: 1 });
+        setTucked(true);
+        const host = await mount();
+
+        expect(stripLabels(host)).toEqual([`Show Thing 1`]);
+        expect(host.querySelector(`.side-chat`)).toBeNull();
+    });
+
+    it(`never tucks in a popped-out chat's window`, async () => {
+        openBeside(`stub`, { n: 1 });
+        setTucked(true);
+        const host = await mount({ floating: true });
+
+        expect(strip(host)).toBeNull();
+        expect(button(host, `Tuck away`)).toBeNull();
+        expect(host.querySelector(`.side-tabs`)?.hasAttribute(`inert`)).toBe(false);
+    });
+
+    it(`tucks when the column's edge is dragged past half a pane, and comes back when dragged out again`, async () => {
+        // The test DOM has no pointer capture; the seam only needs the calls to land.
+        for (const [name, value] of [
+            [`setPointerCapture`, () => undefined],
+            [`hasPointerCapture`, () => false],
+            [`releasePointerCapture`, () => undefined],
+        ] as const) {
+            if (!(name in HTMLElement.prototype)) {
+                Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value });
+            }
+        }
+        openBeside(`stub`, { n: 1 });
+        const host = await mount();
+        // The panel's own edge, drawn last over both columns.
+        const seams = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`.side-panel > [role="separator"]`)];
+        const press = (type: string, x: number): void => void seams().at(-1)?.dispatchEvent(new MouseEvent(type, { clientX: x, bubbles: true }));
+        const frame = async (): Promise<void> => {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            await settle();
+        };
+
+        press(`pointerdown`, 0);
+        // Rightward narrows a column whose edge is its left: all the way, past half a pane, it tucks.
+        press(`pointermove`, 5000);
+        await frame();
+        expect(panel.tucked.value).toBe(true);
+        expect(strip(host)).not.toBeNull();
+        // Back under the pointer, within the same drag.
+        press(`pointermove`, 0);
+        await frame();
+        expect(panel.tucked.value).toBe(false);
+        press(`pointermove`, 5000);
+        await frame();
+        press(`pointerup`, 5000);
+        await settle();
+        expect(panel.tucked.value).toBe(true);
+    });
+});
+
+describe(`a window too narrow for the column`, () => {
+    const narrowTo = async (width: number): Promise<void> => {
+        Object.defineProperty(window, `innerWidth`, { configurable: true, value: width });
+        window.dispatchEvent(new Event(`resize`));
+        await settle();
+    };
+    const wide = window.innerWidth;
+    afterEach(() => narrowTo(wide));
+
+    it(`tucks it by itself, brings it back when the window widens, and lets something opened show regardless`, async () => {
+        openBeside(`stub`, { n: 1 }, { keep: true });
+        const host = await mount();
+        expect(host.querySelector(`.side-tucked`)).toBeNull();
+
+        await narrowTo(600);
+        expect(host.querySelector(`.side-tucked`)).not.toBeNull();
+        // Not the reader's tuck, so nothing remembers it.
+        expect(panel.tucked.value).toBe(false);
+
+        await narrowTo(2400);
+        expect(host.querySelector(`.side-tucked`)).toBeNull();
+
+        await narrowTo(600);
+        openBeside(`stub`, { n: 2 });
+        await settle();
+        expect(host.querySelector(`.side-tucked`)).toBeNull();
+
+        // Each narrowing tucks it again.
+        await narrowTo(2400);
+        await narrowTo(600);
+        expect(host.querySelector(`.side-tucked`)).not.toBeNull();
+    });
 });

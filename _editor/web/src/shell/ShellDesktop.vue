@@ -26,7 +26,7 @@ import { commandShortcut } from "../workbench/commands/useCommands";
 import { railBands, railRank, onRail, railPolicy, onRailOnlyByVisit } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
-import { chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../models/conversations/panel/chatPanelLayout";
+import { chatInSidePanel, chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../models/conversations/panel/chatPanelLayout";
 import { useChatFloating } from "../models/conversations/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
@@ -49,7 +49,7 @@ import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
 import { setSplit, sideDocked } from "../workbench/side/sideTabs";
-import { besideChat, besideFills, sideColumnShown, sideShown } from "./side/sideLayout";
+import { besideChat, besideFills, sideColumnShown, sideShown, sideTucked, TUCKED_STRIP_PX } from "./side/sideLayout";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { type SectionTile, tileLabel, tileParts, useSectionTiles } from "./rail/sectionTiles";
 import { useRailPins } from "./rail/railPins";
@@ -293,7 +293,13 @@ const railStyle = railFrame();
 // element in the app on every move, most of what a drag cost.
 const shellEl = ref<HTMLElement>();
 const chatColumn = computed(() => layout.liveChatWidth.value ?? layout.chatWidth.value);
-const sideWidth = computed(() => (besideChat.value && !besideFills.value ? chatColumn.value + layout.besideWidth.value : chatColumn.value));
+// Tucked, what was opened is only its strip: beside the chat, or the whole column while the chat lives elsewhere.
+const sideWidth = computed(() => {
+    if (sideTucked.value) {
+        return chatInSidePanel.value ? chatColumn.value + TUCKED_STRIP_PX : TUCKED_STRIP_PX;
+    }
+    return besideChat.value && !besideFills.value ? chatColumn.value + layout.besideWidth.value : chatColumn.value;
+});
 watchPostEffect(() => {
     shellEl.value?.style.setProperty(`--side-width`, sideColumnShown.value ? uiLength(sideWidth.value) : `0px`);
 });

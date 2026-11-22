@@ -13082,6 +13082,11 @@
             "showSection": "Mostrar al lado",
             "tabs": "Abierto al lado",
             "toggleSplit": "Alternar sección al lado",
+            "showTab": "Mostrar {title}",
+            "toggleTucked": "Alternar pestañas laterales plegadas",
+            "tuckAway": "Plegar",
+            "tuckAwayNote": "O arrastra el borde",
+            "tuckedTabs": "Pestañas plegadas",
             "unavailable": "No disponible",
             "unavailableNote": "La extensión que lo muestra está desactivada o se eliminó.",
             "closeTab": "Cerrar {title}"

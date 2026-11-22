@@ -13082,6 +13082,11 @@
             "showSection": "Bereich daneben zeigen",
             "tabs": "Daneben geöffnet",
             "toggleSplit": "Bereich daneben umschalten",
+            "showTab": "{title} anzeigen",
+            "toggleTucked": "Eingeklappte Seitentabs umschalten",
+            "tuckAway": "Einklappen",
+            "tuckAwayNote": "Oder Rand nach rechts ziehen",
+            "tuckedTabs": "Eingeklappte Tabs",
             "unavailable": "Nicht verfügbar",
             "unavailableNote": "Die Erweiterung, die es zeigt, ist aus oder wurde entfernt.",
             "closeTab": "{title} schließen"

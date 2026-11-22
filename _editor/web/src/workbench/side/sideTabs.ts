@@ -30,6 +30,9 @@ interface SideState {
     // Beside a side-docked chat, what was opened takes the whole middle; split, the section the rail picked stands beside
     // it again. Set by going to a section and by the reader; cleared with the last tab, so the next thing opened fills.
     readonly split: boolean;
+    // Tucked away by the reader into a strip of icons at the column's edge (SideTucked.vue), every body still mounted.
+    // Cleared by opening something beside, by a press on the strip, and with the last tab.
+    readonly tucked: boolean;
 }
 
 export interface OpenBesideOptions {
@@ -42,7 +45,7 @@ export interface OpenBesideOptions {
     readonly replace?: string | undefined;
 }
 
-const EMPTY: SideState = { tabs: [], active: null, peek: null, split: false };
+const EMPTY: SideState = { tabs: [], active: null, peek: null, split: false, tucked: false };
 
 // Keys sorted, so `{a, b}` and `{b, a}` are one tab.
 export const sideTabId = (view: string, input: SideInput): string =>
@@ -72,6 +75,7 @@ const StoredStateSchema = z.object({
     active: z.string().nullish(),
     peek: z.string().nullish(),
     split: z.boolean().optional(),
+    tucked: z.boolean().optional(),
 });
 
 // An unreadable payload counts as nothing remembered; the panel opens empty.
@@ -98,7 +102,13 @@ const parseState = (raw: string): SideState | undefined => {
         }
     }
     const names = (id: string | null | undefined): string | null => (tabs.some((tab) => tab.id === id) ? (id ?? null) : null);
-    return { tabs, active: names(stored.active) ?? tabs.at(-1)?.id ?? null, peek: names(stored.peek), split: tabs.length > 0 && stored.split === true };
+    return {
+        tabs,
+        active: names(stored.active) ?? tabs.at(-1)?.id ?? null,
+        peek: names(stored.peek),
+        split: tabs.length > 0 && stored.split === true,
+        tucked: tabs.length > 0 && stored.tucked === true,
+    };
 };
 
 const scopedSandboxId = sandboxValue(() => activeSandboxId.value);
@@ -110,6 +120,10 @@ const state = sandboxRef<SideState>(restored);
 // reopens a file at its top, as the workspace does.
 const jumps = sandboxRef<Readonly<Record<string, LineJump>>>(() => ({}));
 let jumpSeq = 0;
+// The reader asked to see the column (opened something beside, pressed the strip, dragged it out): a window too narrow for
+// it then leaves it out rather than tucking it away by itself (shell/side/sideLayout.ts), until the window narrows again.
+// Not stored: a reload into a narrow window tucks it.
+const insisted = sandboxRef<boolean>(() => false);
 
 // Ids only, never the tabs' objects: a tab's identity is its id, so rewriting the list with equal tabs writes nothing.
 const serialized = computed(() =>
@@ -118,6 +132,7 @@ const serialized = computed(() =>
         active: state.value.active,
         peek: state.value.peek,
         split: state.value.split,
+        tucked: state.value.tucked,
     }),
 );
 watch(serialized, (json) => {
@@ -138,6 +153,12 @@ const set = (next: Partial<SideState>): void => {
     state.value = { ...state.value, ...next };
 };
 
+// A change that puts the column on screen because the reader asked for it: untucked, and held out of a narrow window.
+const reveal = (next: Partial<SideState>): void => {
+    insisted.value = true;
+    set({ ...next, tucked: false });
+};
+
 // The tab the reader lands on once `closed` goes: the one to its right, else its left, else none.
 const neighbourOf = (tabs: readonly SideTab[], closed: string): string | null => {
     const at = tabs.findIndex((tab) => tab.id === closed);
@@ -145,7 +166,8 @@ const neighbourOf = (tabs: readonly SideTab[], closed: string): string | null =>
 };
 
 // Opens a side view on an input, or focuses the tab already showing it. A peek replaces the peek before it in place, so
-// following link after link reads as one tab changing, not a strip filling up.
+// following link after link reads as one tab changing, not a strip filling up. Either way the column comes back if it was
+// tucked away: opening something beside says the reader wants to look at it now.
 export const openBeside = (view: string, input: SideInput, options: OpenBesideOptions = {}): void => {
     const id = sideTabId(view, input);
     const current = state.value;
@@ -154,19 +176,19 @@ export const openBeside = (view: string, input: SideInput, options: OpenBesideOp
         jumps.value = { ...jumps.value, [id]: { line: options.line, seq: ++jumpSeq } };
     }
     if (open) {
-        set({ active: id, peek: options.keep === true && current.peek === id ? null : current.peek });
+        reveal({ active: id, peek: options.keep === true && current.peek === id ? null : current.peek });
         return;
     }
     const tab: SideTab = { id, view, input };
     const taking = options.replace === undefined ? -1 : current.tabs.findIndex((candidate) => candidate.id === options.replace);
     if (taking !== -1) {
         const peek = current.peek === options.replace ? (options.keep === true ? null : id) : current.peek;
-        set({ tabs: current.tabs.with(taking, tab), active: id, peek });
+        reveal({ tabs: current.tabs.with(taking, tab), active: id, peek });
         return;
     }
     const replacing = options.keep === true ? -1 : current.tabs.findIndex((candidate) => candidate.id === current.peek);
     const tabs = replacing === -1 ? [...current.tabs, tab] : current.tabs.with(replacing, tab);
-    set({ tabs, active: id, peek: options.keep === true ? (replacing === -1 ? current.peek : null) : id });
+    reveal({ tabs, active: id, peek: options.keep === true ? (replacing === -1 ? current.peek : null) : id });
 };
 
 // Double-click, Keep open, or anything else that says the reader means to come back to it.
@@ -200,7 +222,7 @@ export const closeTabs = (ids: ReadonlySet<string>): void => {
     const peek = current.peek !== null && ids.has(current.peek) ? null : current.peek;
     const kept = Object.fromEntries(Object.entries(jumps.value).filter(([id]) => !ids.has(id)));
     jumps.value = kept;
-    set({ tabs, active, peek, split: tabs.length === 0 ? false : current.split });
+    set({ tabs, active, peek, split: tabs.length === 0 ? false : current.split, tucked: tabs.length === 0 ? false : current.tucked });
 };
 
 // --- Reopen closed tab -------------------------------------------------------------------------------------------
@@ -261,6 +283,30 @@ export const setSplit = (split: boolean): void => {
     }
 };
 
+// Tucks the tabs into the strip at the column's edge, or brings the column back. Nothing to tuck with no tab open.
+export const setTucked = (tucked: boolean): void => {
+    if (!tucked) {
+        // Asked once a frame by a drag of the column's edge: only a change is written.
+        if (state.value.tucked || !insisted.value) {
+            reveal({});
+        }
+    } else if (!state.value.tucked && state.value.tabs.length > 0) {
+        set({ tucked });
+    }
+};
+
+// The window narrowed past what the column needs: what the reader asked for before no longer holds it out.
+export const forgetInsistence = (): void => {
+    insisted.value = false;
+};
+
+// A press on the tucked strip: that tab, with its column back.
+export const revealTab = (id: string): void => {
+    if (state.value.tabs.some((tab) => tab.id === id)) {
+        reveal({ active: id });
+    }
+};
+
 // The next or previous tab, wrapping; Alt+PageDown and Alt+PageUp from inside the panel.
 export const cycleTab = (step: 1 | -1, among: readonly SideTab[] = state.value.tabs): void => {
     if (among.length === 0) {
@@ -278,6 +324,8 @@ export const useSidePanel = () => ({
     active: computed(() => state.value.active),
     peek: computed(() => state.value.peek),
     split: computed(() => state.value.split),
+    tucked: computed(() => state.value.tucked),
+    insisted: computed(() => insisted.value),
     jumps: computed(() => jumps.value),
     canReopen: computed(() => closed.value.length > 0),
     neighbourOf: (id: string) => neighbourOf(state.value.tabs, id),

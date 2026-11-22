@@ -160,6 +160,7 @@ export const BUILTIN_COMMANDS = {
     "side.keepTab": { title: () => t(`ui.action.keepOpen`), category: SIDE_PANEL, icon: `pin` },
     "side.openInSection": { title: () => t(`shell.sidePanel.openInSection`), category: SIDE_PANEL, icon: `expand` },
     "side.toggleSplit": { title: () => t(`shell.sidePanel.toggleSplit`), category: SIDE_PANEL, icon: `split-columns`, when: onSurface(`side`) },
+    "side.toggleTucked": { title: () => t(`shell.sidePanel.toggleTucked`), category: SIDE_PANEL, icon: `chevrons-right` },
 
     // The chat's tabs (ChatTabs.vue). Close Finished, Archive, Reopen, Close Pane and Switch are unbound: no file-tab
     // twin, and no chord left free for them; the palette and this page reach them.

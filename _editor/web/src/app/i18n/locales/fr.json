@@ -13082,6 +13082,11 @@
             "showSection": "Afficher à côté",
             "tabs": "Ouvert à côté",
             "toggleSplit": "Basculer la section à côté",
+            "showTab": "Afficher {title}",
+            "toggleTucked": "Basculer les onglets latéraux repliés",
+            "tuckAway": "Replier",
+            "tuckAwayNote": "Ou glissez le bord",
+            "tuckedTabs": "Onglets repliés",
             "unavailable": "Indisponible",
             "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée.",
             "closeTab": "Fermer {title}"

@@ -12437,6 +12437,11 @@
             "showSection": "Pokaż sekcję obok",
             "tabs": "Otwarte obok",
             "toggleSplit": "Przełącz sekcję obok",
+            "showTab": "Pokaż {title}",
+            "toggleTucked": "Przełącz zwinięte karty boczne",
+            "tuckAway": "Zwiń",
+            "tuckAwayNote": "Lub przeciągnij krawędź w prawo",
+            "tuckedTabs": "Zwinięte karty",
             "unavailable": "Niedostępne",
             "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte.",
             "closeTab": "Zamknij {title}"

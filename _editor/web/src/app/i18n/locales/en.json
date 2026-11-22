@@ -13082,6 +13082,11 @@
             "showSection": "Show beside",
             "tabs": "Opened beside",
             "toggleSplit": "Toggle Section Beside",
+            "showTab": "Show {title}",
+            "toggleTucked": "Toggle Tucked Side Tabs",
+            "tuckAway": "Tuck away",
+            "tuckAwayNote": "Or drag its edge right",
+            "tuckedTabs": "Tucked tabs",
             "unavailable": "Not available",
             "unavailableNote": "The extension that shows it is off or was removed.",
             "closeTab": "Close {title}"

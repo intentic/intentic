@@ -22,8 +22,22 @@ const session = store(`sessionStorage`);
 const activeSandboxId = ref<string | undefined>(`sb1`);
 jest.mock("../../app/storage/activeSandbox", () => ({ activeSandboxId }));
 
-const { activateTab, closeAllTabs, closeOtherTabs, closeTab, closeTabs, cycleTab, keepTab, openBeside, reopenClosedTab, setSplit, sideTabId, useSidePanel } =
-    await import("./sideTabs");
+const {
+    activateTab,
+    closeAllTabs,
+    closeOtherTabs,
+    closeTab,
+    closeTabs,
+    cycleTab,
+    keepTab,
+    openBeside,
+    reopenClosedTab,
+    revealTab,
+    setSplit,
+    setTucked,
+    sideTabId,
+    useSidePanel,
+} = await import("./sideTabs");
 
 const panel = useSidePanel();
 const file = (path: string): SideInput => ({ path });
@@ -221,6 +235,57 @@ describe(`reopening a closed tab`, () => {
     });
 });
 
+describe(`tucking away`, () => {
+    beforeEach(() => closeAllTabs());
+
+    it(`tucks nothing while no tab is open`, () => {
+        setTucked(true);
+        expect(panel.tucked.value).toBe(false);
+    });
+
+    it(`brings the column back when something is opened beside, even a tab already open`, () => {
+        openBeside(`file`, file(`a.ts`), { keep: true });
+        openBeside(`file`, file(`b.ts`), { keep: true });
+        setTucked(true);
+        expect(panel.tucked.value).toBe(true);
+
+        openBeside(`file`, file(`a.ts`));
+        expect(panel.tucked.value).toBe(false);
+
+        setTucked(true);
+        openBeside(`file`, file(`c.ts`));
+        expect(panel.tucked.value).toBe(false);
+    });
+
+    it(`leaves it tucked while the reader only walks the tabs`, () => {
+        openBeside(`file`, file(`a.ts`), { keep: true });
+        openBeside(`file`, file(`b.ts`), { keep: true });
+        setTucked(true);
+        cycleTab(1);
+        activateTab(idOf(`b.ts`));
+        expect(panel.tucked.value).toBe(true);
+    });
+
+    it(`reveals a tab from the strip, focused, with its column back`, () => {
+        openBeside(`file`, file(`a.ts`), { keep: true });
+        openBeside(`file`, file(`b.ts`), { keep: true });
+        setTucked(true);
+        revealTab(idOf(`a.ts`));
+        expect(panel.active.value).toBe(idOf(`a.ts`));
+        expect(panel.tucked.value).toBe(false);
+    });
+
+    it(`forgets it with the last tab, so the next thing opened shows`, () => {
+        openBeside(`file`, file(`a.ts`), { keep: true });
+        openBeside(`file`, file(`b.ts`), { keep: true });
+        setTucked(true);
+        closeTab(idOf(`a.ts`));
+        expect(panel.tucked.value).toBe(true);
+        closeAllTabs();
+        expect(panel.tucked.value).toBe(false);
+    });
+});
+
 describe(`what survives a reload`, () => {
     const key = `intentic.sidePanel.sb1`;
 
@@ -237,6 +302,7 @@ describe(`what survives a reload`, () => {
             active: idOf(`b.ts`),
             peek: idOf(`b.ts`),
             split: false,
+            tucked: false,
         });
         expect(local.get(key)).toBe(session.get(key));
     });
@@ -262,6 +328,17 @@ describe(`what survives a reload`, () => {
         expect(paths()).toEqual([`a.ts`, `preview`]);
         expect(panel.active.value).toBe(sideTabId(`preview`, {}));
         expect(panel.peek.value).toBe(sideTabId(`preview`, {}));
+        expect(panel.tucked.value).toBe(false);
+    });
+
+    it(`comes back tucked when it was tucked, but never tucked with no tab`, () => {
+        session.set(key, JSON.stringify({ tabs: [{ view: `file`, input: { path: `a.ts` } }], tucked: true }));
+        resetSandboxScope();
+        expect(panel.tucked.value).toBe(true);
+
+        session.set(key, JSON.stringify({ tabs: [], tucked: true }));
+        resetSandboxScope();
+        expect(panel.tucked.value).toBe(false);
     });
 
     it(`opens empty on a payload that is not the panel's`, () => {

@@ -4,7 +4,7 @@ import { ContextMenu, FreshnessFrame, ResizeSeam, ui } from "@intentic/ui";
 import { loadChunk } from "@intentic/ui/chunk";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
-import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
+import { type Component, computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, useId } from "vue";
 import { useSandboxLiveness } from "../../client/sandbox/freshness/queryFreshness";
 import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
 import { registerBuiltin } from "../../workbench/commands/builtinCommands";
@@ -22,7 +22,7 @@ import {
     roomBesideChat,
     useLayout,
 } from "../../workbench/window/useLayout";
-import { besideChat, besideFills } from "./sideLayout";
+import { besideChat, besideFills, sideTucked, TUCK_BELOW_PX, TUCKED_STRIP_PX } from "./sideLayout";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
 import {
     activateTab,
@@ -34,12 +34,15 @@ import {
     cycleTab,
     keepTab,
     reopenClosedTab,
+    revealTab,
     setSplit,
+    setTucked,
     type SideTab,
     useSidePanel,
 } from "../../workbench/side/sideTabs";
 import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "../../workbench/side/sideViews";
 import SideStrip, { type SideStripItem } from "./SideStrip.vue";
+import SideTucked from "./SideTucked.vue";
 import SideUnavailable from "./SideUnavailable.vue";
 
 // THE SHELL'S RIGHT-HAND COLUMN: what the reader opened beside the section the rail put in the main area, and the chat
@@ -63,11 +66,23 @@ const tabsOnScreen = computed(() => shownSideTabs.value.length > 0);
 // whole panel.
 const beside = computed(() => !floating && besideChat.value);
 const fills = computed(() => !floating && besideFills.value);
+// Folded into a strip of icons at the panel's edge (sideLayout.ts). Never in a popped-out chat's window, which sizes the
+// panel beside its chat by itself.
+const tucked = computed(() => !floating && tabsOnScreen.value && sideTucked.value);
+// The tabs with the panel to themselves, the chat living elsewhere: the column's width is the chat's preference.
+const tabsAlone = computed(() => !floating && !beside.value && tabsOnScreen.value && !chatInSidePanel.value);
 
 // The seams speak pointer pixels; what is stored is app pixels. The panel's left edge sizes whatever stands there: the
 // beside column when there is one, else the one column the panel is (the chat's, or a popped-out window's own). Beside the
-// chat it runs from one section-pane's width to all of the middle: drawn into the section's floor, it snaps to filling.
+// chat it runs from one section-pane's width to all of the middle: drawn into the section's floor, it snaps to filling;
+// drawn past half its own floor, it tucks away into its strip, and drawn back out of the strip, it comes back. Both
+// happen under the pointer, so a drag that went too far undoes itself on the way back.
 const besideEdge = (px: number): void => {
+    if (px < TUCK_BELOW_PX) {
+        setTucked(true);
+        return;
+    }
+    setTucked(false);
     const room = roomBesideChat();
     if (px > room - MIN_PANE_PX / 2) {
         // The drag here passed through the widest split, which would leave the section at its floor next time.
@@ -78,36 +93,60 @@ const besideEdge = (px: number): void => {
     layout.setBesideWidth(px);
     setSplit(true);
 };
+// The tabs alone tuck the same way; their width is stored only for a column that stays.
+const aloneEdge = (px: number): void => {
+    if (px < TUCK_BELOW_PX) {
+        setTucked(true);
+        return;
+    }
+    setTucked(false);
+    layout.setChatWidth(px);
+};
 const edgeSeam = computed<number>({
     get: () =>
         toScreenPx(
-            beside.value
-                ? fills.value
-                    ? roomBesideChat()
-                    : layout.besideWidth.value
-                : floating
-                  ? layout.floatingSideWidth.value
-                  : layout.chatWidth.value,
+            tucked.value
+                ? TUCKED_STRIP_PX
+                : beside.value
+                  ? fills.value
+                      ? roomBesideChat()
+                      : layout.besideWidth.value
+                  : floating
+                    ? layout.floatingSideWidth.value
+                    : layout.chatWidth.value,
         ),
     set: (px) =>
         beside.value
             ? besideEdge(toAppPx(px))
             : floating
               ? layout.setFloatingSideWidth(toAppPx(px))
-              : layout.setChatWidth(toAppPx(px)),
+              : tabsAlone.value
+                ? aloneEdge(toAppPx(px))
+                : layout.setChatWidth(toAppPx(px)),
 });
 // Alone in the panel, the chat's edge is drawn live while dragged (useLayout's previewChatWidth, which only the shell's
 // grid reads) and stored once on release, so the drag moves the column and redraws nothing. Beside what was opened it
 // trades two widths and may snap that column to filling the middle, so there it moves the stored widths as it goes.
-const edgePreview = computed(() =>
-    beside.value || floating ? undefined : (px: number | undefined): void => layout.previewChatWidth(px === undefined ? undefined : toAppPx(px)),
-);
+// The tabs alone tuck while dragged too, drawing no width of their own meanwhile.
+const previewEdge = (px: number | undefined): void => {
+    if (px !== undefined && tabsAlone.value) {
+        if (toAppPx(px) < TUCK_BELOW_PX) {
+            setTucked(true);
+            layout.previewChatWidth(undefined);
+            return;
+        }
+        setTucked(false);
+    }
+    layout.previewChatWidth(px === undefined ? undefined : toAppPx(px));
+};
+const edgePreview = computed(() => (beside.value || floating ? undefined : previewEdge));
+// Down to the strip's own width wherever there are tabs to tuck: the seam reports how far past the floor it was drawn.
 const edgeBounds = computed(() =>
     beside.value
-        ? { min: MIN_PANE_PX, max: roomBesideChat(), reset: roomBesideChat() }
+        ? { min: TUCKED_STRIP_PX, max: roomBesideChat(), reset: roomBesideChat() }
         : floating
           ? { min: MIN_CHAT_WIDTH, max: maxFloatingSideWidth(), reset: defaultFloatingSideWidth() }
-          : { min: MIN_CHAT_WIDTH, max: maxChatWidth(), reset: defaultChatWidth() },
+          : { min: tabsAlone.value ? TUCKED_STRIP_PX : MIN_CHAT_WIDTH, max: maxChatWidth(), reset: defaultChatWidth() },
 );
 // Between the two columns. Filling, what was opened takes whatever the chat leaves; split, the seam trades width between
 // the two, so the section in the main area never moves under it. Either way what was opened keeps one pane's width.
@@ -126,7 +165,19 @@ const chatSeamMax = computed(() =>
 );
 // Split, both shrink with a window too narrow for their sum, the chat in proportion to its width but never under its
 // floor, so its composer keeps its controls; what was opened gives way first. Filling, the chat holds its width.
-const tabsStyle = computed(() => (beside.value && !fills.value ? { flex: `0 1 ${uiLength(layout.besideWidth.value)}` } : undefined));
+// Tucked, the column keeps the width it had, out of sight behind the panel's edge: what is framed in it is never resized,
+// so it comes back exactly as it was.
+const tuckedWidth = (): number => (beside.value ? (panel.split.value ? layout.besideWidth.value : roomBesideChat()) : layout.chatWidth.value);
+const tabsStyle = computed(() =>
+    tucked.value
+        ? { width: uiLength(tuckedWidth()) }
+        : beside.value && !fills.value
+          ? { flex: `0 1 ${uiLength(layout.besideWidth.value)}` }
+          : undefined,
+);
+const tabsClass = computed(() =>
+    tucked.value ? `absolute inset-y-0 right-full invisible` : beside.value && !fills.value ? `relative` : `relative flex-1`,
+);
 const chatStyle = computed(() =>
     beside.value
         ? fills.value
@@ -212,6 +263,25 @@ const toRightOf = (id: string): ReadonlySet<string> => {
 // The panel's root, so Copy Path writes to the clipboard of the window it is drawn in (a popped-out chat's, too).
 const rootEl = ref<HTMLElement>();
 
+// Tucking from a press inside the column hands the keyboard to the strip, and a press on the strip hands it to the tab
+// it brought back, so the keyboard never lands on what just went out of sight.
+const tuckedEl = ref<InstanceType<typeof SideTucked>>();
+const tuckAway = (): void => {
+    const hadFocus = rootEl.value?.querySelector(`.side-tabs`)?.contains(document.activeElement) === true;
+    setTucked(true);
+    if (hadFocus) {
+        void nextTick(() => tuckedEl.value?.focusActive());
+    }
+};
+const revealFromStrip = (id: string): void => {
+    const hadFocus = rootEl.value?.querySelector(`.side-tucked`)?.contains(document.activeElement) === true;
+    revealTab(id);
+    if (hadFocus) {
+        void nextTick(() => document.getElementById(domIdOf(id))?.focus());
+    }
+};
+const toggleTucked = (): void => (tucked.value ? setTucked(false) : tuckAway());
+
 // The file-tab menu every strip shares (tabMenu.ts), with the side panel's own way out: into the tab's section.
 const tabMenuRef = ref<{ show: (event: Event) => void }>();
 // The tab right-clicked; undefined for the strip's empty space, which shows the strip-wide rows alone.
@@ -269,6 +339,7 @@ onMounted(() => {
         registerBuiltin(`side.keepTab`, acting((tab) => keepTab(tab.id))),
         registerBuiltin(`side.openInSection`, acting(openHome)),
         registerBuiltin(`side.toggleSplit`, () => setSplit(fills.value)),
+        registerBuiltin(`side.toggleTucked`, toggleTucked),
     ];
 });
 onBeforeUnmount(() => {
@@ -291,11 +362,14 @@ onBeforeUnmount(() => {
         :style="panelStyle"
     >
         <!-- What was opened beside: the strip, then every tab's body stacked in one box, the one on screen visible. -->
+        <!-- Tucked, it stays mounted at its own width, invisible and inert behind the panel's edge: nothing framed in it
+             reloads or resizes, and the strip below stands in its place. -->
         <section
             v-if="tabsOnScreen"
-            class="side-tabs relative flex min-h-0 min-w-0 flex-col"
-            :class="beside && !fills ? `` : `flex-1`"
+            class="side-tabs flex min-h-0 min-w-0 flex-col"
+            :class="tabsClass"
             :style="tabsStyle"
+            :inert="tucked ? true : undefined"
             :aria-label="t(`shell.sidePanel.tabs`)"
         >
             <!-- `.view-header`, so the desktop app's window buttons take their corner from this bar when it reaches it. -->
@@ -343,6 +417,17 @@ onBeforeUnmount(() => {
                     >
                         <Icon name="expand" class="text-xs" />
                     </button>
+                    <!-- Last, nearest the edge it folds into: the gesture the drag past the floor also makes. -->
+                    <button
+                        v-if="!floating"
+                        type="button"
+                        :class="ui.iconButton({ size: `md` })"
+                        :aria-label="t(`shell.sidePanel.tuckAway`)"
+                        v-tooltip.bottom="{ title: t(`shell.sidePanel.tuckAway`), note: t(`shell.sidePanel.tuckAwayNote`) }"
+                        @click="tuckAway"
+                    >
+                        <Icon name="chevrons-right" class="text-xs" />
+                    </button>
                 </div>
             </div>
             <!-- Every body stays mounted and in place: a hidden preview is never detached (which would reload the app) and a
@@ -383,6 +468,17 @@ onBeforeUnmount(() => {
             </div>
         </section>
 
+        <!-- What was opened, tucked away: its tabs as icons where the column stood, beside the chat or at the window's edge. -->
+        <SideTucked
+            v-if="tucked"
+            ref="tuckedEl"
+            :tabs="items"
+            :active="shownSideActive"
+            @reveal="revealFromStrip"
+            @close="closeTab"
+            @contextmenu="onTabMenu"
+        />
+
         <!-- The chat's slot, the same element for as long as the chat lives here: tabs coming and going beside it never
              move the chat, so its transcript keeps its place. -->
         <section
@@ -394,7 +490,7 @@ onBeforeUnmount(() => {
             <div ref="chatSlot" class="contents"></div>
             <!-- Between the two columns: the chat's width, traded with the column beside it. -->
             <ResizeSeam
-                v-if="beside"
+                v-if="beside && !tucked"
                 v-model="chatSeam"
                 place="edge"
                 pane="after"

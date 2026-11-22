@@ -159,7 +159,8 @@ export const defaultFloatingSideWidth = (): number => clampFloatingSideWidth(toA
 
 // Split, the beside column shares the room the rail and the chat leave with the section in the main area: at most all
 // of it but one pane for that section, and half of it until dragged. Unsplit, it takes all of that room.
-export const roomBesideChat = (): number => toAppPx(window.innerWidth - ICON_RAIL_SCREEN_PX) - chatWidth.value;
+// `windowWidth`, in screen pixels, for a caller that follows the window's width reactively (shell/side/sideLayout.ts).
+export const roomBesideChat = (windowWidth: number = window.innerWidth): number => toAppPx(windowWidth - ICON_RAIL_SCREEN_PX) - chatWidth.value;
 const maxBesideWidth = (): number => Math.max(MIN_PANE_PX, roomBesideChat() - MIN_PANE_PX);
 const clampBesideWidth = (px: number): number => Math.round(Math.max(MIN_PANE_PX, Math.min(px, maxBesideWidth())));
 export const defaultBesideWidth = (): number => clampBesideWidth(roomBesideChat() / 2);
