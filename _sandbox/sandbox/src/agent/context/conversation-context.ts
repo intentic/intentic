@@ -40,6 +40,8 @@ export const sameRepos = (before: readonly { readonly repo: string }[], after: r
 const checkoutAdmissionOwner = (services: Services, id: string, requested: string | null | undefined): string | null | undefined =>
     services.agents.entry(id)?.identity.startedBy?.startsWith("agent:") === true ? null : requested;
 
+const checkoutPathsOf = (entry: PersistedAgent | undefined): readonly string[] | undefined => entry?.identity.checkoutPaths;
+
 // A spawned child's first checkout, cut from its parent's current work: the parent's remainder committed first, as a
 // checkpoint is, and each of the child's repos pinned to the parent's commit, so the child reads what the parent reads,
 // as the parent's in-process subagents do, and its work goes back onto the tree it was cut from (land-target.ts).
@@ -145,7 +147,7 @@ export const ensureComposedWorktree = async (
     // so editing an area narrows an existing conversation's checkout on its next turn.
     const fence = conversationFence(await services.areas.list(), entry?.identity);
     const childAdmission = checkoutAdmissionOwner(services, conversationId, admissionOwner);
-    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence, !mirror, childAdmission);
+    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence, !mirror, childAdmission, checkoutPathsOf(entry));
     // A new checkout that builds here starts from a target that already built, its parent's for a spawned child: in the
     // background, so the turn never waits on it (warm-checkout.ts).
     warmNewCheckout(services, conversationId, worktree.repos, { opening, mirror, warm: warm === true, cut });

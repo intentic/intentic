@@ -1,5 +1,5 @@
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
-import { fencedComposition } from "./worktree-cone.js";
+import { coneForScope, scopedComposition } from "./worktree-cone.js";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import type { GitRunner } from "@intentic/base/git";
@@ -15,7 +15,7 @@ interface CompositionRepo {
     readonly base: string | undefined;
 }
 
-interface CompositionSpaceOptions {
+export interface CompositionSpaceOptions {
     readonly mainDir: (repo: string) => string;
     readonly worktreeDir: (id: string, repo: string) => string;
     readonly head: (repo: string) => Promise<string | undefined>;
@@ -34,54 +34,71 @@ interface CompositionSpaceOptions {
     readonly admissionOwner?: string | null | undefined;
 }
 
+export interface CompositionCost {
+    readonly repo: string;
+    readonly files: number;
+    readonly buildOutput: number;
+    readonly bytes: number;
+}
+
+/** The same per-repository bytes used by admission, exposed for the spawn note. */
+export const estimateCompositionCosts = async (
+    id: string,
+    recorded: readonly { repo: string }[],
+    live: readonly CompositionRepo[],
+    options: CompositionSpaceOptions,
+    fence?: Fence,
+    scope?: Fence,
+    forceMissing = false,
+    preferLiveBase = false,
+): Promise<readonly CompositionCost[]> => {
+    const { mainDir, worktreeDir, git, logger, head } = options;
+    const buildOutputs = options.buildOutputs ?? ((dir: string) => buildOutputEstimate(dir));
+    const buildsHere = options.buildsHere ?? true;
+    const candidates = [...new Set([...recorded.map(({ repo }) => repo), ...live.map(({ repo }) => repo)])];
+    const missing = forceMissing ? candidates : await Promise.all(candidates.map(async (repo) => {
+        const present = await pathExists(recorded.some((entry) => entry.repo === repo) ? worktreeDir(id, repo) : join(worktreeDir(id, repo), ".git"));
+        return present ? undefined : repo;
+    }));
+    const costs = await Promise.all(missing.filter((repo): repo is string => repo !== undefined).map(async (repo) => {
+        const own = preferLiveBase ? undefined : await branchSha(mainDir(repo), `agent/${id}`, git).catch((error) => {
+            logger.warn({ err: error, repo }, "agents: could not size a retired checkout's branch");
+            return undefined;
+        });
+        const sha = own ?? live.find((entry) => entry.repo === repo)?.base ?? (await head(repo));
+        if (sha === undefined) {
+            return undefined;
+        }
+        const cone = coneForScope(fence, scope, repo);
+        const files = await checkoutCost(mainDir(repo), sha, git, cone).catch((error: Error) => {
+            logger.warn({ err: error, repo }, "agents: could not size a checkout before writing it");
+            return undefined;
+        });
+        if (files === undefined) {
+            return undefined;
+        }
+        const buildOutput = buildsHere ? await buildOutputs(mainDir(repo)) : 0;
+        return { repo, files, buildOutput, bytes: files + buildOutput };
+    }));
+    return costs.filter((cost): cost is CompositionCost => cost !== undefined);
+};
+
 // Reserve only the checkouts ensure will write. Standing ones need no space reading or tree-size walk.
 export const reserveCompositionSpace = async (
     id: string,
     recorded: readonly { repo: string }[],
     live: readonly CompositionRepo[],
     options: CompositionSpaceOptions,
+    fence?: Fence,
+    scope?: Fence,
 ): Promise<() => void> => {
-    const { mainDir, worktreeDir, git, logger, head, historyRoot, historySpace } = options;
-    const buildOutputs = options.buildOutputs ?? ((dir: string) => buildOutputEstimate(dir));
-    const buildsHere = options.buildsHere ?? true;
-    const candidates = [...new Set([...recorded.map(({ repo }) => repo), ...live.map(({ repo }) => repo)])];
-    const missing = (
-        await Promise.all(
-            candidates.map(async (repo) =>
-                (await pathExists(recorded.some((entry) => entry.repo === repo) ? worktreeDir(id, repo) : join(worktreeDir(id, repo), ".git")))
-                    ? undefined
-                    : repo,
-            ),
-        )
-    ).filter((repo): repo is string => repo !== undefined);
-    if (missing.length > 0) {
-        const costs = await Promise.all(
-            missing.map(async (repo) => {
-                // A retired branch can hold more than today's HEAD; size the commit that will actually attach.
-                const own = await branchSha(mainDir(repo), `agent/${id}`, git).catch((error) => {
-                    logger.warn({ err: error, repo }, "agents: could not size a retired checkout's branch");
-                    return undefined;
-                });
-                const sha = own ?? live.find((entry) => entry.repo === repo)?.base ?? (await head(repo));
-                if (sha === undefined) {
-                    return undefined;
-                }
-                // A size that could not be read is left out rather than failing the turn: the guard is for a disk known
-                // to be short, and a checkout of unknown size still meets the floor below.
-                const files = await checkoutCost(mainDir(repo), sha, git).catch((error: Error) => {
-                    logger.warn({ err: error, repo }, "agents: could not size a checkout before writing it");
-                    return undefined;
-                });
-                // What its builds will add here: a Rust checkout's `target/` dwarfs its files (build-output-estimate.ts).
-                // A runner's mirror adds nothing here.
-                return files === undefined ? undefined : files + (buildsHere ? await buildOutputs(mainDir(repo)) : 0);
-            }),
-        );
-        const known = costs.filter((cost) => cost !== undefined);
+    const { historyRoot, historySpace, logger } = options;
+    const costs = await estimateCompositionCosts(id, recorded, live, options, fence, scope);
+    if (costs.length > 0) {
         try {
             return await reserveCheckoutSpace(
                 historyRoot,
-                known.reduce((total, cost) => total + cost, 0),
+                costs.reduce((total, cost) => total + cost.bytes, 0),
                 historySpace,
                 options.admissionOwner === undefined ? id : options.admissionOwner ?? undefined,
             );
@@ -100,13 +117,9 @@ export const selectedComposition = (
     available: readonly CompositionRepo[],
     selection: readonly string[] | undefined,
     fence: Fence,
+    scope?: Fence,
 ): readonly CompositionRepo[] => {
     const picked = selection === undefined ? available : available.filter(({ repo }) => repo === "root" || selection.includes(repo));
-    const reachable = new Set(
-        fencedComposition(
-            fence,
-            picked.map(({ repo }) => repo),
-        ),
-    );
+    const reachable = new Set(scopedComposition(fence, scope, picked.map(({ repo }) => repo)));
     return picked.filter(({ repo }) => reachable.has(repo));
 };

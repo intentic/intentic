@@ -34,6 +34,7 @@ const ChildSpecSchema = z.object({
     account: z.string().optional(),
     on: z.string().optional(),
     fallbacks: z.array(RehomeSchema).optional(),
+    paths: z.array(z.string().min(1)).max(50).optional(),
     // The JSON Schema its result must match (child-result.ts), where the parent asked for one.
     result: z.object({ schema: z.record(z.string(), z.json()) }).optional(),
     // The workflow run it works for (script-runs.ts), whose endings it reads.
@@ -108,6 +109,7 @@ export const specOnFile = (spec: ChildSpawnSpec): ChildSpecOnFile => {
         opt("run", spec.run),
         opt("actsAs", spec.actsAs),
         opt("fallbacks", spec.fallbacks?.map((fallback) => ({ ...fallback }))),
+        opt("paths", spec.paths === undefined ? undefined : [...spec.paths]),
     );
     return onFile;
 };
@@ -127,6 +129,7 @@ export const specFromFile = (onFile: ChildSpecOnFile): ChildSpawnSpec => ({
     ...opt("result", onFile.result === undefined ? undefined : { schema: onFile.result.schema }),
     ...opt("run", onFile.run),
     ...opt("actsAs", onFile.actsAs),
+    ...opt("paths", onFile.paths),
     ...opt(
         "fallbacks",
         onFile.fallbacks?.map((fallback) => ({

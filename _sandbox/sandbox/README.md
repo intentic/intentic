@@ -1069,7 +1069,10 @@ flowchart LR
   hours; cancellation removes it immediately. That same composition path runs when a workflow worker resumes after a
   restart. (2026-11-22) On marta, a fan-out left 81 finished worktrees of a 3.7 GB workspace checked out, filling the
   engine disk; the restart resumed the workflow and began making more. The previous policy had no finished-child
-  retirement or disk admission wait.
+  retirement or disk admission wait. A child may pass `paths` to keep only those workspace folders and each repository's
+  root-level files; excluded repositories and folders are never checked out, and admission prices the same sparse cone.
+  The first significant local spawn also reports its per-child cost, disk room above the floor and largest folders; a
+  workflow keeps that warning once in its run log.
 - Git survives a host crash (2026-11-03). On 10-30 rog lost power under WSL2 and came back with 45 loose objects and
   `refs/stash` in `/history/gits/root` all NUL at their right size, and 22 files of one checkout the same; the next
   checkpoint committed the zeroed files and a land died 15 hours later on `inflate: data stream error`. Now every

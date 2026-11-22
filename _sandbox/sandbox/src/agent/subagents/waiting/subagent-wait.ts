@@ -10,6 +10,7 @@ import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { z } from "zod";
 import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNote } from "../children.js";
+import { workspacePaths } from "./workspace-paths.js";
 import type { ChildResultDoor } from "../child-records.js";
 import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "../child-result.js";
 import { HALF_A_MOVE } from "../child-words.js";
@@ -247,6 +248,7 @@ const SPAWN_FIELDS = {
     fallbacks: FALLBACKS_FIELD,
     schema: SCHEMA_FIELD,
     after: z.array(z.string().min(1)).max(16).optional().describe(AFTER_WORDS),
+    paths: workspacePaths.describe("Workspace-relative folders this child needs. Its checkout contains these folders and each repository's root-level files; everything else is absent. Use for fan-outs over large workspaces. Work outside these folders does not belong to this child."),
     freshOf: z
         .object({
             conversationId: z.string().min(1).describe("The subagent whose finished work it judges: one you spawned."),
@@ -280,6 +282,7 @@ const spawnAsked = (args: SpawnArgs): ChildSpawnSpec | { readonly refused: strin
         ...opt("result", schema?.data === undefined ? undefined : { schema: schema.data }),
         ...opt("freshOf", args.freshOf),
         ...opt("after", args.after),
+        ...opt("paths", args.paths),
     };
 };
 

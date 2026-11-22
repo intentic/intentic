@@ -100,6 +100,12 @@ describe("the note's text", () => {
         expect(bare).not.toContain("You started once");
         expect(childPreambleText({ ...FACTS, tools: { queue: false, quiet: false, base: false, digest: false } })).not.toContain("Builds and tests");
     });
+
+    it("tells a scoped child what is present and where its work belongs", () => {
+        expect(childPreambleText({ ...FACTS, scope: ["FIRMA/KADRY/Umowy", "src"] })).toContain(
+            "- Checkout scope: only `FIRMA/KADRY/Umowy`, `src` and repository root-level files are present. Keep your changes within those folders; work outside them does not belong to this child.",
+        );
+    });
 });
 
 // A workspace with standing rules at its root and a repository whose own rules are below where the child starts.

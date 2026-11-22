@@ -1,4 +1,14 @@
-import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
+import { type Fence, fenceAllows, fenceIntersection, fenceReaches, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
+
+/** The narrower folder set of a conversation's security fence and a child's checkout scope. */
+export const coneForScope = (fence: Fence, scope: Fence, repo: string): readonly string[] | undefined =>
+    coneFor(fenceIntersection(fence, scope), repo);
+
+/** Repositories reached by either restriction; root is always carried for workspace layout and root files. */
+export const scopedComposition = (fence: Fence, scope: Fence, repos: readonly string[]): string[] => {
+    const combined = fenceIntersection(fence, scope);
+    return combined === undefined ? [...repos] : fencedComposition(combined, repos);
+};
 
 // What a fenced conversation's checkout actually holds. The hook that fences an agent's file tools stops a misread
 // instruction, not a shell, and a shell computes its own paths — so for a conversation started by a fenced person the

@@ -1,4 +1,4 @@
-import { coneFor, fencedComposition } from "./worktree-cone.js";
+import { coneFor, coneForScope, fencedComposition, scopedComposition } from "./worktree-cone.js";
 
 // What a fenced conversation's checkout holds, as arithmetic. The worktree builder turns these answers into
 // `git sparse-checkout set --cone`; this pins the answers.
@@ -48,5 +48,25 @@ describe("coneFor", () => {
     // folders into "no cone at all".
     test("a named folder the repository does not have still narrows it", () => {
         expect(coneFor(["api/absent"], "api")).toEqual(["absent"]);
+    });
+});
+
+describe("child checkout scope", () => {
+    test("a scope without a fence cuts each reached repo and carries root", () => {
+        expect(scopedComposition(undefined, ["team/docs"], ["root", "team", "other"])).toEqual(["root", "team"]);
+        expect(coneForScope(undefined, ["team/docs"], "team")).toEqual(["docs"]);
+    });
+
+    test("a fence and scope inside it use the narrower folders", () => {
+        expect(coneForScope(["team"], ["team/docs"], "root")).toEqual(["team/docs"]);
+    });
+
+    test("a wider scope leaves the fence as the cone", () => {
+        expect(coneForScope(["team/docs"], ["team"], "root")).toEqual(["team/docs"]);
+    });
+
+    test("nested repos are reached by a containing scoped folder and use their own root", () => {
+        expect(scopedComposition(undefined, ["team"], ["root", "team", "team/app"])).toEqual(["root", "team", "team/app"]);
+        expect(coneForScope(undefined, ["team"], "team/app")).toBeUndefined();
     });
 });

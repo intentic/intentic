@@ -40,6 +40,8 @@ export type TurnInput = AgentTurn & {
     // The fence its starter holds, as area ids, if this turn is its first; latched there and never re-read, or an
     // unfenced person replying in a fenced conversation would widen it mid-thread.
     readonly areas?: readonly string[];
+    // A spawned child's checkout scope, latched with its identity at birth and re-applied on every ensure.
+    readonly checkoutPaths?: readonly string[];
     // The service this turn acts as (schemas/services.ts), as the daemon resolved it from an automation, a sender rule,
     // a link or a control token, never from a client's word: latched into the conversation's `services`, which only grow
     // (access/principal-chain.ts).

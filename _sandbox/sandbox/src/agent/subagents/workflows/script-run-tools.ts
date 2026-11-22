@@ -24,7 +24,7 @@ const WORKFLOW_WORDS =
     "Run a workflow: a script that coordinates subagents for you, so a fan-out (review every file, verify every finding, " +
     "port every package) costs you one call instead of a turn of bookkeeping. The script opens with " +
     '`export const meta = { name: "…", description: "…", phases: [{ title: "…" }] }`, and the rest is the body of an async ' +
-    "function: `await agent(prompt, { label, provider, model, schema })` starts a subagent (a full agent in its own worktree, " +
+    "function: `await agent(prompt, { label, provider, model, schema, paths })` starts a subagent (a full agent in its own worktree, " +
     "on any connected provider; its work lands in your checkout as a spawned one's does) and resolves to its final report, " +
     "or to its value matching `schema`, which it is sent back to fix at most twice; `parallel([() => agent(…), …])` waits " +
     "for all, a failed one as null; `pipeline(items, item => agent(…), found => agent(…))` takes each item through every " +
@@ -34,7 +34,9 @@ const WORKFLOW_WORDS =
     "Finished calls are kept: after a restart the run goes on where it was, and `resume` with an earlier run's id hands " +
     "back every call whose prompt and options are unchanged, so an edited script pays only for what changed. The script " +
     `has no clock, randomness, files or network: only these calls. At most ${MAX_CALLS} agent calls a run, ${DEFAULT_CONCURRENCY} ` +
-    "at once unless you say otherwise; your own subagent limits apply as well.";
+    "at once unless you say otherwise; your own subagent limits apply as well. Pass `paths` for a large-workspace fan-out: " +
+    "each worker then checks out only those workspace folders and repository root-level files; everything else is absent, " +
+    "and work outside those folders does not belong to that worker.";
 
 // Any JSON the script reads as `args`: an object or a list, as the run's caller passes it.
 const ARGS_FIELD = z.union([z.looseObject({}), z.array(z.unknown())]).optional().describe("What the script reads as `args`.");

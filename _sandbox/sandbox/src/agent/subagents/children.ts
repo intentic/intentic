@@ -68,6 +68,7 @@ import { AFTER_SKIPPED, afterDue, afterMoved, afterRefusal, afterSummary, resetA
 import { CHILDREN, childResultOf, closeUnstarted, keepChild, SEATS, settleChild } from "./child-records.js";
 import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedByRules, restoredStartAnswer, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
+import { spawnCheckoutCostNote } from "./starting/spawn-checkout-note.js";
 export type { ChildRehome } from "./child-spec.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
@@ -123,6 +124,8 @@ export interface ChildSpawnSpec {
     // Siblings it starts after: it waits, filed, until each has finished and its work is in the parent's checkout
     // (child-after.ts). Taken off the spec as the spawn files it.
     readonly after?: readonly string[];
+    // Workspace-relative folders this child needs; persisted with its conversation and applied on every checkout.
+    readonly paths?: readonly string[];
 }
 
 export interface ChildParent {
@@ -1024,7 +1027,8 @@ const startChild = async (
         runChildTurn(services, id, parent.conversationId, turn, dispatchOf(placed), true);
         handedOff = true;
         keepChild(services, id);
-        return startedWith(id, [placed.note, repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed), governed.note, siblingNewsWords(FAN_OUT.news(provider))]);
+        const costNote = placed.kind === "here" ? await spawnCheckoutCostNote(services, parent.conversationId, id, governed.spec) : undefined;
+        return startedWith(id, [placed.note, repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed), governed.note, siblingNewsWords(FAN_OUT.news(provider)), costNote]);
     } finally {
         if (!handedOff) {
             admitted.release();

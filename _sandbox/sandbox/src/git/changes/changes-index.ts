@@ -92,7 +92,9 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
 // - advice.addEmbeddedRepo=false: a nested repo is scanned here, not warned about as a gitlink.
 export const stageAll = async (dir: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<void> => {
     try {
-        await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]));
+        // A sparse checkout's omitted paths still belong to its commit if a tool wrote one explicitly. Without
+        // --sparse, git add -A warns and skips them, making a child scope silently lose such work at retire/land.
+        await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "--sparse", "-A", "--ignore-errors", ...pathspecArgs]));
     } finally {
         // Unscoped: the diff reads only the index, which scratch, being untracked and unstaged, is never in. Run even
         // where `add` reported a file it could not read: everything else it staged still owes its bits.

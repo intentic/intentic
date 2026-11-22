@@ -1,6 +1,6 @@
 import { conversationEntry } from "../registry/agents-store.testing.js";
 import type { BeginTurn } from "./conversation-decide.js";
-import { servicesOfConversation } from "./identity-latch.js";
+import { identityOf, servicesOfConversation } from "./identity-latch.js";
 
 // The services a conversation acts for only ever grow: the turn's own, what it held, and the speaking conversation's,
 // since what it may reach is what every one of them may (access/principal-chain.ts).
@@ -21,4 +21,10 @@ test("a child spoken into by its parent brings the parent's services along", () 
 
 test("a conversation that never ran as a service records none", () => {
     expect(servicesOfConversation(held(), turn(), () => undefined)).toEqual({});
+});
+
+test("a child's checkout scope is latched once and cannot widen on a later turn", () => {
+    const opened = identityOf({ startedBy: "agent:p1" }, turn({ checkoutPaths: ["docs/one"] }), () => undefined, true);
+    expect(opened.checkoutPaths).toEqual(["docs/one"]);
+    expect(identityOf(opened, turn({ checkoutPaths: ["docs/two"] }), () => undefined).checkoutPaths).toEqual(["docs/one"]);
 });

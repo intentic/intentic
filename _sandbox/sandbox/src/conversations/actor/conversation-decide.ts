@@ -66,14 +66,14 @@ export interface BeginTurn {
     readonly title?: string;
     // `model` when the title is a name an agent chose rather than a head cut from a prompt (seams/turn-starter.ts).
     readonly titleSource?: "model";
-    // A spawned child's own answer to a spent allowance, and a maintainer's to whether finished work lands by itself,
-    // which the conversation opens with.
+    // A child's answer to a spent allowance and whether finished work lands by itself, latched at opening.
     readonly postures?: { readonly limit?: LimitPolicy; readonly autoLand?: boolean };
     readonly origin?: AgentOrigin;
     readonly startIn?: string;
     readonly startedBy?: string; // Who asked for this turn, as the daemon verified it.
     readonly owner?: Pick<SessionOwner, "email" | "name">; // The member the conversation belongs to when this turn opens it.
     readonly areas?: readonly string[]; // The fence that member holds, as area ids.
+    readonly checkoutPaths?: readonly string[];
     readonly runAs?: string; // The service this turn acts as, latched into the conversation's `services`.
     readonly forkedFrom?: ForkedFrom;
     // A fresh session's origin and kind (`startedBy` then names that origin as its parent), and whether this opens its

@@ -140,6 +140,7 @@ describe("a spawn on file", () => {
             provider: "cursor",
             model: "composer-2.5",
             effort: "high",
+            paths: ["FIRMA/KADRY/Umowy"],
             fallbacks: [{ provider: "claude", model: "claude-sonnet-4-6" }],
             result: { schema: { type: "string" } },
         };

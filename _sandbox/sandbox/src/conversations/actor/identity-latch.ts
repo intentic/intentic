@@ -80,6 +80,7 @@ export const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: st
     ...opt("origin", existing.origin ?? turn.origin),
     ...opt("startedBy", existing.startedBy ?? turn.startedBy),
     ...areasOfConversation(existing, turn, entryOf),
+    ...opt("checkoutPaths", existing.checkoutPaths === undefined ? turn.checkoutPaths === undefined ? undefined : [...turn.checkoutPaths] : [...existing.checkoutPaths]),
     ...opt("startIn", existing.startIn ?? turn.startIn),
     ...opt("actsAs", existing.actsAs ?? turn.profile.actsAs),
     ...opt("forkedFrom", existing.forkedFrom ?? turn.forkedFrom),

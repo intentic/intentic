@@ -1,5 +1,5 @@
 import type { GitRunner } from "@intentic/base/git";
-import { blobBytes, checkoutCost } from "./checkout-cost.js";
+import { blobBytes, checkoutCost, largestCheckoutFolders } from "./checkout-cost.js";
 
 // What `ls-tree -r --format='%(objecttype) %(objectsize)'` prints: a file, a symlink (a blob too) and a gitlink, which
 // has no blob size.
@@ -35,6 +35,21 @@ test("concurrent and repeated reads share one tree walk per repository and sha, 
     expect(calls.length).toBe(3);
 });
 
+test("cone costs include root files and only the requested folders, with the cone in the cache key", async () => {
+    const calls: string[][] = [];
+    const git: GitRunner = async (_dir, args) => {
+        calls.push([...args]);
+        return { stdout: args.includes("--") ? "blob 7\n" : "blob 3\n", stderr: "" };
+    };
+    expect(await checkoutCost("/scoped", "cone-sha", git, ["src/one"])).toBe(10);
+    expect(calls).toEqual([
+        ["ls-tree", "--full-tree", "--format=%(objecttype) %(objectsize)", "cone-sha"],
+        ["ls-tree", "-r", "--full-tree", "--format=%(objecttype) %(objectsize)", "cone-sha", "--", "src/one"],
+    ]);
+    expect(await checkoutCost("/scoped", "cone-sha", git, ["src/two"])).toBe(10);
+    expect(calls).toHaveLength(4);
+});
+
 test("a failed read is not kept, and the cache holds a bounded number of commits", async () => {
     let fail = true;
     let reads = 0;
@@ -59,4 +74,23 @@ test("a failed read is not kept, and the cache holds a bounded number of commits
     expect(reads).toBe(before);
     await checkoutCost("/bounded", "sha-0", git);
     expect(reads).toBe(before + 1);
+});
+
+test("largest-folder sizing lists shallow names and counts blobs without printing their paths", async () => {
+    const argsSeen: string[][] = [];
+    const git: GitRunner = async (_dir, args) => {
+        argsSeen.push([...args]);
+        if (args[0] === "ls-tree" && args.includes("-z")) {
+            const tree = args.at(-1);
+            return { stdout: tree === "sha:FIRMA" ? "040000 tree aaa\tKADRY\x00040000 tree bbb\tNET\0" : "040000 tree ccc\tFIRMA\x00040000 tree ddd\tother\0", stderr: "" };
+        }
+        const path = args.at(-1);
+        return { stdout: path === "FIRMA" ? "blob 50\n" : path === "FIRMA/KADRY" ? "blob 45\n" : path === "FIRMA/NET" ? "blob 3\n" : "blob 4\n", stderr: "" };
+    };
+    expect(await largestCheckoutFolders("/folders", "sha", git)).toEqual([
+        { path: "FIRMA/KADRY", bytes: 45 },
+        { path: "other", bytes: 4 },
+        { path: "FIRMA/NET", bytes: 3 },
+    ]);
+    expect(argsSeen.filter((args) => args.includes("--")).every((args) => args.includes("--format=%(objecttype) %(objectsize)"))).toBe(true);
 });

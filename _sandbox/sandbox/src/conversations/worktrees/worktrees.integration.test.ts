@@ -15,6 +15,7 @@ import { opt } from "../../opt.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { createAgentWorktrees } from "./worktrees.js";
 import { settledEstimate } from "./build-outputs/build-output-estimate.js";
+import { checkoutCost } from "../../system/resources/storage/checkout-cost.js";
 import { agentRepoChanges } from "../land/agent-changes.js";
 import { isolatedAgent } from "../registry/agents-store.testing.js";
 
@@ -68,6 +69,59 @@ const setup = async (
     );
     return { work, historyRoot, worktrees };
 };
+
+test("a scoped checkout never writes excluded trees, is priced by its cone and lands scoped work", async () => {
+    const base = await mkdtemp(join(tmpdir(), "intentic-worktrees-scope-"));
+    tempDirs.push(base);
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    const workspace = workspacePaths(work);
+    await mkdir(work, { recursive: true });
+    await ensureRootRepo(workspace, historyRoot);
+    await writeFile(join(work, "CLAUDE.md"), "root\n");
+    await mkdir(join(work, "needed"), { recursive: true });
+    await writeFile(join(work, "needed", "data.json"), "12345\n");
+    await mkdir(join(work, "large"), { recursive: true });
+    await writeFile(join(work, "large", "never.txt"), "a large excluded payload\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "scope fixture");
+
+    const target = join(historyRoot, "worktrees", "scoped", "large", "never.txt");
+    let absentImmediatelyAfterAdd = false;
+    const observingGit: GitRunner = async (cwd, args, env) => {
+        const result = await defaultGit(cwd, args, env);
+        if (args[0] === "worktree" && args[1] === "add" && cwd === work) {
+            absentImmediatelyAfterAdd = !existsSync(target);
+        }
+        return result;
+    };
+    const worktrees = createAgentWorktrees({
+        workspace,
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation(work, historyRoot),
+        logger,
+        perf,
+        relocateGitDirs: () => true,
+    }, observingGit);
+
+    const scoped = await worktrees.ensure("scoped", [], undefined, undefined, undefined, undefined, undefined, undefined, ["needed"]);
+    expect(absentImmediatelyAfterAdd).toBe(true);
+    expect(existsSync(join(scoped.cwd, "large", "never.txt"))).toBe(false);
+    expect(existsSync(join(scoped.cwd, "needed", "data.json"))).toBe(true);
+    expect(await readFile(join(scoped.cwd, "CLAUDE.md"), "utf8")).toBe("root\n");
+    expect(scoped.repos.map(({ repo }) => repo)).toEqual(["root"]);
+
+    const baseSha = (await sh(work, "rev-parse", "HEAD"));
+    expect(await checkoutCost(work, baseSha, defaultGit, ["needed"])).toBe(Buffer.byteLength("root\n") + Buffer.byteLength("12345\n"));
+
+    await writeFile(join(scoped.cwd, "needed", "data.json"), "changed\n");
+    await mkdir(join(scoped.cwd, "large"), { recursive: true });
+    await writeFile(join(scoped.cwd, "large", "unexpected.txt"), "explicit out-of-scope write\n");
+    await worktrees.retire("scoped", scoped.repos, "scope land");
+    expect(await sh(work, "show", "agent/scoped:needed/data.json")).toBe("changed");
+    expect(await sh(work, "show", "agent/scoped:large/unexpected.txt")).toBe("explicit out-of-scope write");
+});
 
 // One package's installed tree; untracked by design, which a worktree checkout cannot carry.
 const deps = async (repo: string, pkg: string): Promise<void> => {

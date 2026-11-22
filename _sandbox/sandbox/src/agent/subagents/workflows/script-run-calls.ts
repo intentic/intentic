@@ -8,6 +8,8 @@ import { type ResultSchema, ResultSchemaSchema, type ResultValue, resultSchemaFa
 import { type ChildParent, cancelChild, childReportOf, sendToChild, spawnChild } from "../children.js";
 import { type ChildSettlement, childResultOf, childSettlementOf, onChildSettled } from "../child-records.js";
 import { type Cache, keepRun, type LiveRun, type ScriptCall, type ScriptDefaults } from "./script-run-store.js";
+import { workspacePaths } from "../waiting/workspace-paths.js";
+import { appendSpawnCostNote } from "./run-cost-note.js";
 
 // One agent() call of a workflow run (script-runs.ts): what it asks, read and keyed; handed back from the cache where the
 // same asking already finished; else a spawned child doing it, waited on to its ending, and sent back to fix a result
@@ -25,6 +27,7 @@ const AgentOptionsSchema = z.object({
     effort: z.string().optional(),
     schema: ResultSchemaSchema.optional(),
     fallbacks: z.array(RehomeSchema).max(4).optional(),
+    paths: workspacePaths,
 });
 type AgentOptions = z.infer<typeof AgentOptionsSchema>;
 
@@ -176,6 +179,7 @@ const workCall = async (context: RunContext, call: ScriptCall, prompt: string, o
             ...opt("harness", route.harness),
             ...opt("effort", route.effort),
             ...opt("fallbacks", options.fallbacks),
+            ...opt("paths", options.paths),
             ...opt("result", schema === undefined ? undefined : { schema }),
             run: { id: live.id },
         });
@@ -191,6 +195,7 @@ const workCall = async (context: RunContext, call: ScriptCall, prompt: string, o
             throw new Error(OVERTAKEN);
         }
         call.child = spawned.id;
+        appendSpawnCostNote(live.record.log, spawned.note);
         keepRun(services, live);
     }
     for (;;) {

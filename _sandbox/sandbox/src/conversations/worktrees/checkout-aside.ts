@@ -108,7 +108,7 @@ const carryOnto = async ({ logger, id, repo, target }: CheckoutPlace, aside: str
 
 // Runs `worktree add` (`args`, in the repo's main checkout) over whatever the hole holds, and rethrows a refusal once
 // the hole is put back.
-export const addCheckoutOver = async (place: CheckoutPlace, main: string, args: readonly string[], git: GitRunner): Promise<void> => {
+const addCheckoutOver = async (place: CheckoutPlace, main: string, args: readonly string[], git: GitRunner): Promise<void> => {
     const stood = await standAside(place, main);
     try {
         await git(main, args);
@@ -118,5 +118,27 @@ export const addCheckoutOver = async (place: CheckoutPlace, main: string, args: 
     }
     if (stood.files !== undefined) {
         await carryOnto(place, stood.files);
+    }
+};
+
+/** Adds a sparse checkout without ever populating the excluded paths first. */
+export const addWorktree = async (
+    main: string,
+    target: string,
+    branch: string,
+    base: string,
+    existingBranch: boolean,
+    place: CheckoutPlace,
+    cone: readonly string[] | undefined,
+    git: GitRunner,
+): Promise<void> => {
+    const sparse = cone !== undefined;
+    const add = existingBranch
+        ? ["worktree", "add", ...(sparse ? ["--no-checkout"] : []), target, branch]
+        : ["worktree", "add", ...(sparse ? ["--no-checkout"] : []), "-b", branch, target, base];
+    await addCheckoutOver(place, main, add, git);
+    if (sparse) {
+        await git(target, ["sparse-checkout", "set", "--cone", ...cone]);
+        await git(target, ["read-tree", "-mu", "HEAD"]);
     }
 };

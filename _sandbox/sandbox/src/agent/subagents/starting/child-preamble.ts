@@ -81,6 +81,7 @@ export interface ChildPreambleFacts {
     readonly moreSiblings: number;
     // The siblings it started after (spawn's `after`, child-after.ts), whose work is in its checkout already.
     readonly after: readonly string[] | undefined;
+    readonly scope?: readonly string[] | undefined;
     // What is installed of the sandbox's own build and test tools.
     readonly tools: { readonly queue: boolean; readonly quiet: boolean; readonly base: boolean; readonly digest: boolean };
 }
@@ -155,6 +156,7 @@ export const childPreambleText = (facts: ChildPreambleFacts): string =>
             ? []
             : [`- You started once ${listed(facts.after)} had finished: ${facts.after.length === 1 ? "its" : "their"} work is in your checkout already.`]),
         ...siblingLines(facts),
+        ...(facts.scope === undefined ? [] : [`- Checkout scope: only ${listed(facts.scope)} and repository root-level files are present. Keep your changes within those folders; work outside them does not belong to this child.`]),
         ...toolLines(facts),
         ...REPORT_LINES,
     ].join("\n");
@@ -281,6 +283,7 @@ export const childNoteFor = async (deps: ChildPreambleDeps, turn: ChildTurn): Pr
         siblings: siblings.slice(0, SIBLINGS_NAMED),
         moreSiblings: Math.max(0, siblings.length - SIBLINGS_NAMED),
         after: kid.after,
+        scope: kid.spec.paths,
         tools: await toolsInstalled(turn.outputCleaners),
     });
     return { title: CHILD_NOTE_TITLE, text };

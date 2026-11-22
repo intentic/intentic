@@ -102,6 +102,8 @@ const IdentitySchema = z.object({
     origin: AgentOriginSchema.optional(),
     startedBy: z.string().optional(),
     areas: z.array(z.string()).optional(),
+    // Added 2026-11-22: subagent workspace-relative checkout scope, latched at its opening; absent on older records.
+    checkoutPaths: z.array(z.string()).max(50).optional(),
     people: z.array(z.string()).optional(),
     // Added 2026-10-26, optional: every service a turn of it ran as (schemas/services.ts), grown like `people` and never
     // shrinking (access/principal-chain.ts). A row written before it acts for no service.
