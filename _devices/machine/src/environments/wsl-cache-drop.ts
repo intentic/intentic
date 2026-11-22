@@ -46,8 +46,16 @@ const listRunning = async (): Promise<string[] | undefined> => {
     return runningDistrosFrom(decodeWslListing(listed.stdout.bytes));
 };
 
+// The page cache and the reclaimable slab (dentries, inodes: most of a gigabyte after a sync walks a big tree), then the
+// free memory compacted. The VM hands pages back to Windows through free page reporting, which reports only whole free
+// blocks of a few megabytes: cache dropped from pages scattered among ones still in use frees memory inside the VM that
+// Windows never sees. On marta (2026-11-22) the page cache alone had given back 0-0.7 GiB a drop; all three together
+// took the VM from 8.7 to 4.9 GiB resident within 20 s. A kernel without compaction has no compact_memory: skipped.
+export const DROP_SCRIPT =
+    "sync; echo 3 > /proc/sys/vm/drop_caches; if [ -w /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi";
+
 const dropThrough = async (distro: string): Promise<void> => {
-    await execBounded("wsl.exe", ["-d", distro, "-u", "root", "--", "sh", "-c", "sync; echo 1 > /proc/sys/vm/drop_caches"], {
+    await execBounded("wsl.exe", ["-d", distro, "-u", "root", "--", "sh", "-c", DROP_SCRIPT], {
         timeoutMs: DROP_TIMEOUT_MS,
     });
 };

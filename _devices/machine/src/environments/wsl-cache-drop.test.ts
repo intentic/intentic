@@ -1,6 +1,6 @@
 import type { HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
 import { DROP_COOLDOWN_MS } from "./windows-memory.js";
-import { startCacheDrop } from "./wsl-cache-drop.js";
+import { DROP_SCRIPT, startCacheDrop } from "./wsl-cache-drop.js";
 
 const GIB = 1024 ** 3;
 
@@ -80,4 +80,12 @@ test("a drop that fails is said once and never thrown out of the tick", async ()
     });
     await broken.pass();
     expect(reading.lines).toEqual(["giving the WSL VM's file cache back to Windows failed: no memory reading"]);
+});
+
+// Dropping the page cache alone frees memory inside the VM that Windows never gets back: the slab goes too, and the free
+// memory is compacted into the whole blocks free page reporting hands back.
+test("a drop flushes first, drops cache and slab, then compacts where the kernel can", () => {
+    expect(DROP_SCRIPT.startsWith("sync;")).toBe(true);
+    expect(DROP_SCRIPT).toContain("echo 3 > /proc/sys/vm/drop_caches");
+    expect(DROP_SCRIPT).toContain("if [ -w /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi");
 });

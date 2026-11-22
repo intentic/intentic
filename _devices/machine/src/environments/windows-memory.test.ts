@@ -1,4 +1,4 @@
-import { cacheDropDistro, decodeWslListing, DROP_COOLDOWN_MS, dropLine, runningDistrosFrom, shouldDropCache } from "./windows-memory.js";
+import { cacheDropDistro, decodeWslListing, DROP_COOLDOWN_MS, dropLine, EARLY_DROP_COOLDOWN_MS, runningDistrosFrom, shouldDropCache } from "./windows-memory.js";
 
 const GIB = 1024 ** 3;
 const NOW = 1_800_000_000_000;
@@ -11,7 +11,18 @@ test("a small PC is low under 1.5 GiB, a big one under a tenth of its memory", (
     // rog on 2026-11-02: 1.1 GB of 32.
     expect(shouldDropCache({ availableBytes: 1.1 * GIB, totalBytes: 32 * GIB }, NEVER, NOW)).toBe(true);
     expect(shouldDropCache({ availableBytes: 3 * GIB, totalBytes: 32 * GIB }, NEVER, NOW)).toBe(true);
-    expect(shouldDropCache({ availableBytes: 3.3 * GIB, totalBytes: 32 * GIB }, NEVER, NOW)).toBe(false);
+    expect(shouldDropCache({ availableBytes: 6.5 * GIB, totalBytes: 32 * GIB }, NEVER, NOW)).toBe(false);
+});
+
+// marta on 2026-11-22: 4.5 GiB of 31.4 for hours, above the low line, with 5 GiB of the VM's cache Windows never got back.
+test("a PC under a fifth of its memory gives the cache back early, at a slower pace than one under the low line", () => {
+    const tight = { availableBytes: 4.5 * GIB, totalBytes: 31.4 * GIB };
+    expect(shouldDropCache(tight, NEVER, NOW)).toBe(true);
+    expect(shouldDropCache(tight, NOW - DROP_COOLDOWN_MS, NOW)).toBe(false);
+    expect(shouldDropCache(tight, NOW - EARLY_DROP_COOLDOWN_MS + 1, NOW)).toBe(false);
+    expect(shouldDropCache(tight, NOW - EARLY_DROP_COOLDOWN_MS, NOW)).toBe(true);
+    // Under the low line, the short cooldown still holds however recent the early drop was.
+    expect(shouldDropCache({ availableBytes: 2 * GIB, totalBytes: 31.4 * GIB }, NOW - DROP_COOLDOWN_MS, NOW)).toBe(true);
 });
 
 test("a drop is not repeated within the cooldown, however low Windows stays", () => {
