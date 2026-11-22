@@ -8937,6 +8937,7 @@
             "cleanBuildOutput": "Clean build output",
             "cleanBuildOutputDetail": "Removes what builds left in checkouts whose conversation has nothing running; the next build makes it again.",
             "diskLow": "The disk is nearly full: {free} free ({percent}%)",
+            "diskHostLimit": "Windows drive {drive} under the sandbox's engine has {free} free",
             "diskReaped": "removed {bytes} of build output from {count} finished checkout | removed {bytes} of build output from {count} finished checkouts",
             "diskUsing": "{category} holds the most ({bytes})"
         },

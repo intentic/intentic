@@ -76,6 +76,20 @@ test("ic's answer is its last line that reads as one, and a level this agent doe
     expect(diskAnswer("error: unrecognized subcommand 'disk'")).toBeUndefined();
 });
 
+test("older answers still parse, and the optional host and raw disk fields are kept", () => {
+    expect(diskAnswer(JSON.stringify({ state: "measured", level: "ok", totalBytes: TOTAL, availableBytes: TOTAL }))).toMatchObject({ state: "measured" });
+    expect(diskAnswer(JSON.stringify({
+        state: "measured",
+        level: "low",
+        totalBytes: TOTAL,
+        availableBytes: 80 * GIB,
+        diskTotalBytes: TOTAL,
+        diskAvailableBytes: 950 * GIB,
+        host: { drive: "C:", freeBytes: 18 * GIB, totalBytes: 1_000 * GIB, backingPath: "C:\\engine.vhdx", backingBytes: 376 * GIB },
+        limitedBy: "drive",
+    }))).toMatchObject({ diskTotalBytes: TOTAL, diskAvailableBytes: 950 * GIB, host: { drive: "C:", backingBytes: 376 * GIB }, limitedBy: "drive" });
+});
+
 test("a level crossed is cleared and told once, with what takes the space and whose it is, then left alone while it stands", async () => {
     const at = 10 * HOUR;
     const disk = watch({
@@ -139,6 +153,67 @@ test("with the switch off nothing is cleared, and the word says so", async () =>
         "engine disk: full — 5.0 GB of 1000.0 GB left to write (0%). Clearing is off here (intentic-machine updates --disk on). Biggest: sandbox a4ba63bf2aa5's history volume 430.0 GB (measured 1 min ago).",
     ]);
     expect(disk.state.relieved).toBe("ok");
+});
+
+test("when the Windows drive is limiting space, the line names it and reports the VHDX size", async () => {
+    const drive = {
+        limitedBy: "drive",
+        host: { drive: "C:", freeBytes: 18.5 * GIB, backingBytes: 376 * GIB },
+    };
+    const disk = watch({
+        [READ]: measured("low", 80, drive),
+        [RELIEVE_AND_TELL]: measured("low", 80, drive),
+    });
+    await disk.round();
+    expect(disk.lines[0]).toContain("engine disk: low — Windows drive C:\\ has 18.5 GB free under the engine's disk (376.0 GB).");
+});
+
+test("an unreadable engine disk explains the repair once until a successful read", async () => {
+    const disk = watch({
+        [READ]: said({ state: "unreadable", reason: "getpwnam(root) failed 5" }),
+    });
+    expect(await disk.round()).toBe(10 * 60_000);
+    await disk.round();
+    expect(disk.lines).toEqual([
+        "engine disk: the engine's disk cannot be read — getpwnam(root) failed 5. The Windows drive under it may have filled and left WSL with a broken attachment. Free space on the Windows drive under the engine's disk if it is short, then run ic engine restart --wsl (it restarts Docker Desktop too).",
+    ]);
+
+    disk.answers[READ] = measured("ok", 900);
+    await disk.round();
+    disk.answers[READ] = said({ state: "unreadable", reason: "I/O error" });
+    await disk.round();
+    expect(disk.lines).toHaveLength(2);
+    expect(disk.lines[1]).toContain("engine disk: the engine's disk cannot be read — I/O error.");
+});
+
+test("an ic read failure that reports a broken WSL attachment is said once", async () => {
+    const disk = watch({ [READ]: { code: -1, output: "<3>WSL ERROR: getpwnam(root) failed 5" } });
+    await disk.round();
+    await disk.round();
+    expect(disk.lines).toHaveLength(1);
+    expect(disk.lines[0]).toContain("cannot be read — <3>WSL ERROR: getpwnam(root) failed 5.");
+    expect(disk.lines[0]).toContain("ic engine restart --wsl");
+});
+
+test("a sufficiently sparse VHDX gets one compaction hint per low-space stretch", async () => {
+    const compactable = {
+        diskTotalBytes: TOTAL,
+        diskAvailableBytes: 950 * GIB,
+        host: { drive: "C:", freeBytes: 18 * GIB, backingBytes: 376 * GIB },
+        limitedBy: "drive",
+    };
+    const disk = watch({
+        [READ]: measured("low", 80, compactable),
+        [RELIEVE_AND_TELL]: measured("low", 80, compactable),
+    });
+    await disk.round();
+    disk.answers[READ] = measured("low", 75, compactable);
+    disk.answers[RELIEVE] = measured("low", 75, compactable);
+    disk.clock.now += 60_000;
+    await disk.round();
+    expect(disk.lines.filter((line) => line.includes("ic engine compact"))).toEqual([
+        "engine disk: ic engine compact could give back about 326.0 GB from the engine's VHDX (one UAC prompt; sandboxes on the engine stop for a few minutes).",
+    ]);
 });
 
 test("a line with nothing measured yet is followed by the measurement when it lands, and a failed one is said once", async () => {

@@ -12,6 +12,7 @@
 //! - `--relieve` clears what is nobody's data, more of it at each level ([`relief_for`]): the build cache and dangling
 //!   images, and when the disk is all but full the ballast the keeper holds back (rootfs/intentic-engine, THE DISK'S
 //!   BALLAST). Never a volume, never an image a sandbox or a person can still use.
+//! - On Windows, the drive holding the VHDX can run out before ext4 does; ic caps the reading and writes a host hint.
 //!
 //! The machine agent asks every minute and tells the owner once per level crossed
 //! (`_devices/machine/src/device/sandbox-rounds/engine-disk.ts`).
@@ -64,6 +65,10 @@ pub struct Reading {
     pub free_bytes: u64,
     /// The keeper's ballast, held back until the disk is all but full; 0 when there is none.
     pub ballast_bytes: u64,
+    /// The unadjusted guest `df` values, retained for the machine agent's diagnostics.
+    pub disk_total_bytes: u64,
+    pub disk_available_bytes: u64,
+    pub limited_by_drive: bool,
 }
 
 /// `df -Pk` (1024-blocks, used, available) and the ballast's bytes, as [`disk_script`] prints them. Pure.
@@ -92,6 +97,9 @@ pub fn parse_reading(said: &str) -> Option<Reading> {
         available_bytes: available_kib * 1024,
         free_bytes: total_kib.saturating_sub(used_kib) * 1024,
         ballast_bytes,
+        disk_total_bytes: total_kib * 1024,
+        disk_available_bytes: available_kib * 1024,
+        limited_by_drive: false,
     })
 }
 
@@ -238,14 +246,21 @@ pub enum Seen {
 }
 
 /// The keeper-side numbers in one document, for `--json`. Pure.
-pub fn reading_json(reading: &Reading, at: u64) -> Value {
+pub fn reading_json(
+    reading: &Reading,
+    at: u64,
+    host: Option<&super::host_disk::HostDisk>,
+) -> Value {
     let lines = lines(reading.total_bytes);
-    json!({
+    let mut answer = json!({
         "engine": Kind::Intentic.id(),
         "state": "measured",
         "level": level(reading).id(),
         "totalBytes": reading.total_bytes,
         "availableBytes": reading.available_bytes,
+        "diskTotalBytes": reading.disk_total_bytes,
+        "diskAvailableBytes": reading.disk_available_bytes,
+        "limitedBy": if reading.limited_by_drive { "drive" } else { "disk" },
         "freeBytes": reading.free_bytes,
         "ballastBytes": reading.ballast_bytes,
         "lines": {
@@ -255,13 +270,23 @@ pub fn reading_json(reading: &Reading, at: u64) -> Value {
             "ballastRoom": lines.ballast_room,
         },
         "measuredAt": at,
-    })
+    });
+    if let Some(host) = host {
+        answer["host"] = json!({
+            "drive": host.drive,
+            "freeBytes": host.free_bytes,
+            "totalBytes": host.total_bytes,
+            "backingPath": host.backing_path,
+            "backingBytes": host.backing_bytes,
+        });
+    }
+    answer
 }
 
 /// The `--json` answer for a disk that was not measured. Pure.
 pub fn unmeasured_json(seen: &Seen) -> Value {
     match seen {
-        Seen::Measured(reading) => reading_json(reading, 0),
+        Seen::Measured(reading) => reading_json(reading, 0, None),
         Seen::NotOurs(kind) => json!({
             "engine": kind.id(),
             "state": "notOurs",
@@ -336,6 +361,7 @@ pub fn sentence(reading: &Reading) -> String {
 /// The engine's disk now: one `wsl.exe --exec` into its distro, and only while that distro runs, since `wsl -d` would
 /// start a stopped one.
 pub fn look() -> Seen {
+    super::host_disk::refresh_hints();
     let kind = super::in_use();
     if kind != Kind::Intentic {
         return Seen::NotOurs(kind);
@@ -367,9 +393,25 @@ fn look_into_distro() -> Seen {
         script.as_str(),
     ];
     match super::wsl::run_wsl(&args, READ_LIMIT) {
-        Ok((0, said, _)) => parse_reading(&said).map(Seen::Measured).unwrap_or_else(|| {
-            Seen::Unreadable(format!("df in {} said: {}", record.distro, said.trim()))
-        }),
+        Ok((0, said, _)) => parse_reading(&said)
+            .map(|reading| {
+                let host = super::host_disk::measure(Kind::Intentic);
+                let (total, available, limited) = super::host_disk::effective(
+                    reading.disk_total_bytes,
+                    reading.disk_available_bytes,
+                    host.as_ref(),
+                );
+                Seen::Measured(Reading {
+                    total_bytes: total,
+                    available_bytes: available,
+                    free_bytes: reading.free_bytes,
+                    limited_by_drive: limited,
+                    ..reading
+                })
+            })
+            .unwrap_or_else(|| {
+                Seen::Unreadable(format!("df in {} said: {}", record.distro, said.trim()))
+            }),
         Ok((code, said, stderr)) => Seen::Unreadable(format!(
             "df in {} ended with {code}: {}",
             record.distro,
@@ -511,7 +553,8 @@ pub fn run(args: DiskArgs) -> Result<()> {
     });
     let now = crate::sandbox::now_ms();
     if args.json {
-        let mut answer = reading_json(&reading, now);
+        let host = super::host_disk::measure(Kind::Intentic);
+        let mut answer = reading_json(&reading, now, host.as_ref());
         if args.relieve {
             merge(&mut answer, relief_json(&done, &before));
         }
@@ -591,6 +634,14 @@ fn print_human(
         ),
         ("Ballast".to_string(), ballast),
     ]);
+    if reading.limited_by_drive {
+        if let Some(host) = super::host_disk::measure(Kind::Intentic) {
+            ui::note(&format!(
+                "{} is the limiting drive for the intentic engine's virtual disk.",
+                host.drive
+            ));
+        }
+    }
     match breakdown {
         Some(Ok(breakdown)) => disk_consumers::print_human(breakdown),
         Some(Err(why)) => ui::note(&format!(
@@ -622,6 +673,9 @@ mod tests {
             available_bytes: available,
             free_bytes: available,
             ballast_bytes: 0,
+            disk_total_bytes: total,
+            disk_available_bytes: available,
+            limited_by_drive: false,
         }
     }
 
@@ -636,6 +690,9 @@ mod tests {
                 available_bytes: 45_756_020 * 1024,
                 free_bytes: (1_055_762_868 - 956_303_376) * 1024,
                 ballast_bytes: 10_737_418_240,
+                disk_total_bytes: 1_055_762_868 * 1024,
+                disk_available_bytes: 45_756_020 * 1024,
+                limited_by_drive: false,
             })
         );
         // No ballast: stat failed and the script said 0.
@@ -736,12 +793,20 @@ mod tests {
                 available_bytes: 40_000_000_000,
                 free_bytes: 90_000_000_000,
                 ballast_bytes: 0,
+                disk_total_bytes: TB,
+                disk_available_bytes: 40_000_000_000,
+                limited_by_drive: false,
             },
             7,
+            None,
         );
         assert_eq!(answer["state"], "measured");
         assert_eq!(answer["level"], "critical");
         assert_eq!(answer["availableBytes"], 40_000_000_000u64);
+        assert_eq!(answer["diskTotalBytes"], TB);
+        assert_eq!(answer["diskAvailableBytes"], 40_000_000_000u64);
+        assert_eq!(answer["limitedBy"], "disk");
+        assert!(answer.get("host").is_none());
         assert_eq!(answer["lines"]["low"], 100_000_000_000u64);
         assert_eq!(answer["lines"]["full"], 10 * GIB);
         assert_eq!(answer["measuredAt"], 7);

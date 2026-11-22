@@ -104,6 +104,13 @@ const relieve = async (
 
 const UNMEASURED: DiskPressure = { level: "ok", freeBytes: 0, totalBytes: 0, measuredAt: 0, using: [] };
 
+const withHostLimit = (state: DiskPressure, space: HistorySpace): DiskPressure => {
+    if (space.limitedBy !== undefined) {
+        state.limitedBy = space.limitedBy;
+    }
+    return state;
+};
+
 export const createDiskPressureWatch = (deps: DiskPressureDeps): DiskPressureWatch => {
     let state: DiskPressure = UNMEASURED;
     // The worst level the owner was told of since the disk last had room.
@@ -127,8 +134,8 @@ export const createDiskPressureWatch = (deps: DiskPressureDeps): DiskPressureWat
                 ({ space, level } = await relieve(deps, space, reapBelow, enough));
             }
         }
-        const moved = level !== state.level || reaped !== state.reaped;
-        const next: DiskPressure = {
+        const moved = level !== state.level || reaped !== state.reaped || state.limitedBy?.drive !== space.limitedBy?.drive;
+        const next = withHostLimit({
             level,
             freeBytes: space.freeBytes,
             totalBytes: space.totalBytes,
@@ -139,7 +146,7 @@ export const createDiskPressureWatch = (deps: DiskPressureDeps): DiskPressureWat
                     return undefined;
                 }),
             ),
-        };
+        }, space);
         if (reaped !== undefined) {
             next.reaped = reaped;
         }

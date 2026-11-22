@@ -595,6 +595,7 @@ fn connect(
     // made: a first setup that fails to start leaves none of them behind (audit 2026-10 item 14), and a re-run's
     // existing volumes, which hold a sandbox's data, are never among them.
     let made = make_volumes(&slug);
+    crate::engine::host_disk::refresh_hints();
     log.section(&format!("docker run {sandbox_image}"));
     // Two attempts: the loopback shortcut (127.0.0.1:<derived port>:8787, a browser on this machine skipping
     // the tunnel) is the one part whose failure doesn't mean a broken sandbox — docker refuses the WHOLE
@@ -1004,6 +1005,7 @@ fn stamped_run(slug: &str, here: &crate::sandbox::side::Side) -> Vec<String> {
         "-e".to_string(),
         format!("HOST_ENGINE={}", crate::engine::stamp()),
     ]);
+    extra.extend(crate::engine::host_disk::mount_args());
     extra
 }
 
@@ -1699,10 +1701,13 @@ mod tests {
             .windows(2)
             .any(|pair| pair == ["-e", "HOST_ENV=archlinux"]));
         // The engine this PC runs containers on: `native` off Windows, the chosen one on it.
-        assert_eq!(
-            &extra[extra.len() - 2..],
-            ["-e", &format!("HOST_ENGINE={}", crate::engine::stamp())]
-        );
+        assert!(extra
+            .windows(2)
+            .any(|pair| pair == ["-e", &format!("HOST_ENGINE={}", crate::engine::stamp())]));
+        #[cfg(windows)]
+        assert!(extra
+            .windows(2)
+            .any(|pair| pair[0] == "-v" && pair[1].ends_with(":/run/intentic/host:ro")));
         // An environment that is not known is not guessed at.
         let unknown = stamped_run("x", &Side::new("linux", None));
         assert!(!unknown.iter().any(|arg| arg.starts_with("HOST_ENV")));

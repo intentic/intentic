@@ -239,7 +239,12 @@ fn start_internal(quiet: bool) -> Result<(), String> {
         ));
     }
     let mut keeper = spawn_keeper(&record.distro, port_from_host(&record.host))?;
-    wait_for_engine(&record, START_WAIT, &mut keeper)?;
+    if let Err(problem) = wait_for_engine(&record, START_WAIT, &mut keeper) {
+        if super::wsl_errors::broken_disk_attachment(&problem) {
+            return Err(attachment_recovery_message(&problem));
+        }
+        return Err(problem);
+    }
     keep_relay(&mut record, quiet);
     super::wsl_integration::apply_all(&record, quiet);
     Ok(())
@@ -293,6 +298,56 @@ pub fn restart() -> Result<(), String> {
     terminate()?;
     std::thread::sleep(Duration::from_secs(2));
     start()
+}
+
+/// Try the normal restart first. Only the explicit `--wsl` option authorizes the machine-wide WSL shutdown needed to
+/// detach a VHDX that Windows could not read after its host drive filled.
+pub fn restart_with_wsl(consent: bool) -> Result<(), String> {
+    terminate()?;
+    std::thread::sleep(Duration::from_secs(2));
+    match start() {
+        Ok(()) => Ok(()),
+        Err(problem) if super::wsl_errors::broken_disk_attachment(&problem) && consent => {
+            recover_broken_attachment()
+        }
+        Err(problem) => Err(problem),
+    }
+}
+
+fn attachment_recovery_message(details: &str) -> String {
+    format!(
+        "the intentic engine's disk cannot be read because Windows ran out of space under it, or WSL still holds a broken attachment ({details}). `wsl --shutdown` re-attaches it; Docker Desktop and every other WSL distro restart too. If the drive has only a few GB free, free space before trying `ic engine restart --wsl`."
+    )
+}
+
+fn recover_broken_attachment() -> Result<(), String> {
+    let (free, drive) = crate::checks::windows_free_bytes();
+    if !super::wsl_errors::enough_recovery_space(free) {
+        let free = free
+            .map(|bytes| format!("{} GiB", bytes / (1024 * 1024 * 1024)))
+            .unwrap_or_else(|| "an unknown amount of space".to_string());
+        return Err(format!(
+            "the intentic engine's disk cannot be read because Windows ran out of space under it / WSL still holds a broken attachment. The {drive} drive has {free}; free at least 5 GiB before `wsl --shutdown` can re-attach the disk. Docker Desktop and every other WSL distro restart too."
+        ));
+    }
+    ui::note("running `wsl --shutdown` to re-attach the engine disk; Docker Desktop and every other WSL distro restart too.");
+    let (code, stdout, stderr) = wsl::run_wsl(&["--shutdown"], Duration::from_secs(120))?;
+    if code != 0 {
+        return Err(format!(
+            "`wsl --shutdown` could not re-attach the engine disk: {}",
+            nonempty(&stderr, &stdout)
+        ));
+    }
+    std::thread::sleep(Duration::from_secs(3));
+    start()
+}
+
+fn nonempty<'a>(preferred: &'a str, fallback: &'a str) -> &'a str {
+    if preferred.trim().is_empty() {
+        fallback
+    } else {
+        preferred
+    }
 }
 
 pub fn update() -> Result<(), String> {
@@ -921,8 +976,11 @@ fn keeper_ended(record: &EngineRecord, code: Option<i32>) -> String {
         ],
         Duration::from_secs(20),
     )
-    .map(|(_, out, _)| out)
+    .map(|(_, out, err)| format!("{out}\n{err}"))
     .unwrap_or_default();
+    if super::wsl_errors::broken_disk_attachment(&said) {
+        return attachment_recovery_message(&said);
+    }
     keeper_sentence(code, &said)
 }
 

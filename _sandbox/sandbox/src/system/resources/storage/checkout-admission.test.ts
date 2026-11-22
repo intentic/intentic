@@ -1,4 +1,4 @@
-import { readHistorySpace, reserveCheckoutSpace } from "./checkout-admission.js";
+import { limitHistorySpaceByHostDisk, readHistorySpace, reserveCheckoutSpace } from "./checkout-admission.js";
 import { GIB } from "./checkout-space.js";
 
 test("concurrent checkouts reserve the available room until their writes finish", async () => {
@@ -15,13 +15,13 @@ test("concurrent checkouts reserve the available room until their writes finish"
     releaseNext();
 });
 
-test("a conversation told of the floor goes past it next time, until a reading has room again", async () => {
-    let freeBytes = 7 * GIB;
+test("a conversation told of the floor can send anyway above the critical level, until a reading has room again", async () => {
+    let freeBytes = 50 * GIB;
     const read = async () => ({ freeBytes, totalBytes: 1000 * GIB });
-    await expect(reserveCheckoutSpace("told", GIB, read, "c1")).rejects.toThrow("The sandbox's disk has 7.5 GB free");
-    await expect(reserveCheckoutSpace("told", GIB, read, "c2")).rejects.toThrow("The sandbox's disk has 7.5 GB free");
-    (await reserveCheckoutSpace("told", GIB, read, "c1"))();
-    await expect(reserveCheckoutSpace("told", GIB, read, "c1-elsewhere")).rejects.toThrow("too little");
+    await expect(reserveCheckoutSpace("told", 31 * GIB, read, "c1")).rejects.toThrow("The sandbox's disk has 53.7 GB free");
+    await expect(reserveCheckoutSpace("told", 31 * GIB, read, "c2")).rejects.toThrow("The sandbox's disk has 53.7 GB free");
+    (await reserveCheckoutSpace("told", 31 * GIB, read, "c1"))();
+    await expect(reserveCheckoutSpace("told", 31 * GIB, read, "c1-elsewhere")).rejects.toThrow("too little");
     freeBytes = 100 * GIB;
     (await reserveCheckoutSpace("told", GIB, read, "c1"))();
     freeBytes = 7 * GIB;
@@ -44,4 +44,45 @@ test("a root daemon counts the filesystem's reserved blocks as free, any other w
     };
     expect(await readHistorySpace("/history", true, readVolume)).toEqual({ freeBytes: 81920, totalBytes: 409600 });
     expect(await readHistorySpace("/history", false, readVolume)).toEqual({ freeBytes: 20480, totalBytes: 409600 });
+});
+
+test("a Windows drive caps a dense VHDX using its reusable backing-file space", () => {
+    const space = limitHistorySpaceByHostDisk(
+        { freeBytes: 624_000_000_000, totalBytes: 1_000_000_000_000 },
+        {
+            v: 1,
+            at: Date.now(),
+            engine: "intentic",
+            drive: "C:\\",
+            driveFreeBytes: 18_500_000_000,
+            driveTotalBytes: 1_000_000_000_000,
+            backingPath: "C:\\Users\\marta\\ext4.vhdx",
+            backingBytes: 376_000_000_000,
+        },
+    );
+
+    expect(space).toEqual({
+        freeBytes: 18_500_000_000,
+        totalBytes: 394_500_000_000,
+        limitedBy: { drive: "C:\\", driveFreeBytes: 18_500_000_000 },
+    });
+});
+
+test("a critically full host-limited history volume refuses a 3.7 GB checkout", async () => {
+    const space = limitHistorySpaceByHostDisk(
+        { freeBytes: 624_000_000_000, totalBytes: 1_000_000_000_000 },
+        {
+            v: 1,
+            at: Date.now(),
+            engine: "intentic",
+            drive: "C:\\",
+            driveFreeBytes: 18_500_000_000,
+            driveTotalBytes: 1_000_000_000_000,
+            backingPath: "C:\\Users\\marta\\ext4.vhdx",
+            backingBytes: 376_000_000_000,
+        },
+    );
+    await expect(reserveCheckoutSpace("host-limited", 3_700_000_000, async () => space)).rejects.toThrow(
+        "Windows drive C:\\ under the sandbox's engine has 18.5 GB free",
+    );
 });

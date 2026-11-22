@@ -96,6 +96,12 @@ Postgres of the owner's PANICked on ENOSPC and stayed down. `ic engine disk` rea
 and the machine agent watches it every minute ([ic README](../README.md), `src/engine/disk.rs`). The keeper's own part
 is the ballast: some of the disk held back so that it can be given back at the last moment.
 
+On Windows, `ic engine disk` also checks the drive containing `ext4.vhdx`. The Windows host disk hint is refreshed at
+`%USERPROFILE%\.intentic\host\disk-intentic.json`, and ic bind-mounts the hint directory read-only into each sandbox
+at `/run/intentic/host`. The effective Available count is the smaller of ext4's Available and the drive's free space
+plus space the already allocated VHDX can reuse; this prevents a dense VHDX from appearing to have more writable space
+than its Windows drive does. The same hint is written for Docker Desktop when one of its supported VHDX paths exists.
+
 - **What.** One file, `/var/lib/intentic-engine/ballast`, of 2% of the disk, within 2 and 10 GiB (10 GiB on a 1 TB
   disk). It is made with `fallocate`: its blocks are reserved and nothing is written, so the VHDX under it does not grow
   and making it costs no I/O. It sits outside Docker's data root, so nothing Docker does counts or removes it.
@@ -112,6 +118,38 @@ is the ballast: some of the disk held back so that it can be given back at the l
 - The keeper looks every ten seconds, in either network mode (`keep_disk`, stopped with the other helpers), and logs
   each ballast it makes or gives back to `/var/log/intentic-engine.log`. The numbers are the same ones ic reads the
   disk by: a test in `src/engine/disk.rs` reads them off the keeper's text.
+
+## Compacting the Windows VHDX
+
+The engine VHDX is deliberately kept dense and is never touched while WSL has it attached read-write. `ic engine compact`
+first reads ext4's used bytes with `df` while the distro runs and compares them with the VHDX file size. If the estimated
+reclaim is under 5 GiB it skips the interruption unless `--force` is given. It then names running Intentic sandboxes
+and asks before stopping the engine; `--yes` answers that confirmation for an unattended caller.
+
+Compaction runs `fstrim -v /` in the guest, stops the engine through the same held-stop path as `ic engine stop`, and
+tries an exclusive file open to verify WSL released the VHDX. When WSL still holds it, `--wsl` consents to
+`wsl --shutdown`; this also stops Docker Desktop and every other WSL distro. DiskPart then selects the VHDX, attaches it
+read-only, compacts it, and detaches it. Windows shows one administrator prompt; DiskPart is used because Windows Home
+does not include Optimize-VHD. Its output is saved under `%USERPROFILE%\.intentic\logs\`. ic starts the engine again and
+reports the VHDX size and Windows drive free space before and after. `--json` returns those readings as one document for
+the machine agent.
+
+The same machine-wide shutdown repairs the stuck attachment left when Windows ran out of space under a VHDX. A normal
+`ic engine start` or `ic engine restart` tries the ordinary WSL path and points to `ic engine restart --wsl` when it sees
+the stable WSL/guest failure signatures. That flag checks for at least 5 GiB free on the drive holding the engine VHDX
+before `wsl --shutdown`; `ic sandbox fix` offers the shutdown as a consented repair. Both routes restart Docker Desktop
+and every other WSL distro too.
+
+## Leftovers after a move
+
+`ic engine cleanup` removes an old move's stopped containers, volumes and images once their keep period expires;
+`--now` makes all unremoved move copies due immediately. At the same time, on each engine a due move left behind, it
+removes images only when they have the Intentic source label (`org.opencontainers.image.source`), the published sandbox
+repository (`ghcr.io/intentic/sandbox`), or an `intentic-sandbox-*` repository name, and no container uses the image.
+It also removes stopped `egress-helper` containers carrying ic's `dev.intentic.kind` label when their sandbox is gone
+(side-wide old helpers are only removed when that engine has no Intentic sandbox containers). It never removes a volume
+or an image used by a container, and never considers unmarked images. Cleanup waits for due copies or `--now`; it does
+not sweep an engine merely because a move happened recently.
 
 ## The NVIDIA GPU
 

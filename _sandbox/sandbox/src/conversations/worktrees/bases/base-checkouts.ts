@@ -199,7 +199,7 @@ const standUp = async (ctx: Context, base: Located): Promise<boolean> => {
     }
     const space = await (ctx.deps.space ?? (() => readHistorySpace(ctx.deps.historyRoot)))();
     if (!checkoutSpace(space, 0).allowed) {
-        throw new BaseRefused(checkoutRefusal(space.freeBytes, 0));
+        throw new BaseRefused(checkoutRefusal(space.freeBytes, 0, space.limitedBy));
     }
     await mkdir(dirname(base.dir), { recursive: true });
     await ctx.deps.withRepoLock(base.repo, () => ctx.git(ctx.deps.mainDir(base.repo), ["worktree", "add", "--detach", "-q", base.dir, base.commit]));

@@ -139,7 +139,7 @@ pub(crate) fn argv(probe: &Probe) -> Vec<String> {
 /// Run the probe once, bounded by `limit`, its whole output in the log. Err is docker not running it at all.
 pub(crate) fn run(probe: &Probe, limit: Duration, log: &Log) -> Result<docker::Bounded, String> {
     let args = argv(probe);
-    log.line(&format!("docker {}", args.join(" ")));
+    log.line(&crate::logfile::command_for_log("docker", &args));
     // A probe that an interrupted run left behind still holds the name, and would fail this one for a reason that has
     // nothing to do with the image.
     docker::quiet(&["rm", "-f", &probe.name]);

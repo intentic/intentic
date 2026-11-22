@@ -1014,7 +1014,19 @@ pub fn cleanup(now: bool) -> Result<()> {
         .into_iter()
         .filter(|moved| !device_only || moved.from == DEVICE_FROM)
         .collect();
-    if due.is_empty() {
+    // Include an engine whose move copies were already removed on an earlier pass, so a refused helper/image removal
+    // can be retried by the next cleanup run without repeating the move's copy deletion.
+    let mut sources: Vec<Kind> = journal
+        .moved
+        .iter()
+        .filter(|moved| now || moved.remove_after <= now_ms())
+        .filter(|moved| !device_only || moved.from == DEVICE_FROM)
+        .filter_map(|moved| Kind::parse(&moved.from))
+        .filter(|kind| *kind != Kind::Native)
+        .collect();
+    sources.sort_by_key(|kind| kind.id());
+    sources.dedup();
+    if due.is_empty() && sources.is_empty() {
         return Ok(());
     }
     // An interrupted move's entry holds cleanup off too: the copies it set aside may share their names with the ones due.
@@ -1086,6 +1098,41 @@ pub fn cleanup(now: bool) -> Result<()> {
             kind.name()
         ));
         removed.push((moved.slug.clone(), moved.at));
+    }
+    // Once the dated copies have been handled, tidy only ic-marked leftovers on the engine the move left behind.
+    // No volume is considered here; images in use by any container are skipped before image rm is called.
+    for kind in sources {
+        let engine = match kind {
+            Kind::Intentic => {
+                let Some(env) = super::reach() else { continue };
+                if super::start().is_err() {
+                    continue;
+                }
+                Target::Intentic(env)
+            }
+            Kind::DockerDesktop => Target::DockerDesktop,
+            Kind::Native => continue,
+        };
+        if !answers(&engine) {
+            continue;
+        }
+        match cleanup_intentic_leftovers(&engine) {
+            Ok((images, helpers)) if images > 0 || helpers > 0 => {
+                if !acted {
+                    ui::act("clean up moved copies");
+                    acted = true;
+                }
+                ui::quiet(&format!(
+                    "removed {images} unused Intentic image reference(s) and {helpers} stopped Intentic helper container(s) left on {}.",
+                    kind.name()
+                ));
+            }
+            Ok(_) => {}
+            Err(reason) => ui::note(&format!(
+                "could not clean up all Intentic leftovers on {}: {reason}",
+                kind.name()
+            )),
+        }
         if kind == Kind::Intentic && super::in_use() != Kind::Intentic {
             let _ = super::rest("not in use since this device's sandboxes moved to Docker Desktop");
         }
@@ -1104,6 +1151,194 @@ pub fn cleanup(now: bool) -> Result<()> {
         ui::done("cleaned up");
     }
     Ok(())
+}
+
+const IMAGE_SOURCE_LABEL: &str = "org.opencontainers.image.source";
+const INTENTIC_SOURCE: &str = "https://github.com/intentic/intentic";
+const SANDBOX_REPOSITORY: &str = "ghcr.io/intentic/sandbox";
+const SANDBOX_IMAGE_PREFIX: &str = "intentic-sandbox-";
+
+/// Whether Docker metadata gives an image an explicit Intentic mark. Pure.
+pub fn intentic_image(repo: &str, labels: &serde_json::Value) -> bool {
+    repo == SANDBOX_REPOSITORY
+        || repo.starts_with(SANDBOX_IMAGE_PREFIX)
+        || labels[IMAGE_SOURCE_LABEL].as_str() == Some(INTENTIC_SOURCE)
+}
+
+/// Whether an ic helper container is stopped and its owning sandbox no longer exists on this engine. Pure.
+pub fn stale_helper(
+    kind: &str,
+    state: &str,
+    sandbox: Option<&str>,
+    sandboxes_present: &std::collections::HashSet<String>,
+) -> bool {
+    if kind != "egress-helper" || matches!(state, "running" | "restarting" | "paused") {
+        return false;
+    }
+    match sandbox {
+        Some(slug) => !sandboxes_present.contains(slug),
+        None => sandboxes_present.is_empty(),
+    }
+}
+
+/// Remove only unused, marked images and stopped ic egress helpers. It never asks Docker to force-remove an image.
+fn cleanup_intentic_leftovers(target: &Target) -> std::result::Result<(usize, usize), String> {
+    use std::collections::{HashMap, HashSet};
+
+    let containers = capture_lines(
+        target,
+        &[
+            "ps",
+            "-a",
+            "--no-trunc",
+            "--format",
+            "{{.Names}}\t{{.ID}}\t{{.State}}\t{{.Label \"dev.intentic.kind\"}}\t{{.Label \"dev.intentic.sandbox\"}}",
+        ],
+    )?;
+    let mut sandboxes = HashSet::new();
+    let rows: Vec<Vec<&str>> = containers
+        .iter()
+        .map(|line| line.split('\t').collect())
+        .collect();
+    for fields in &rows {
+        let name = fields.first().copied().unwrap_or_default();
+        let is_sandbox_name = name
+            .strip_prefix(crate::sandbox::CONTAINER_PREFIX)
+            .is_some_and(|rest| {
+                !rest.ends_with(crate::sandbox::MOVED_SUFFIX)
+                    && !rest.ends_with(crate::sandbox::PARKED_SUFFIX)
+                    && !rest.starts_with("tunnel-")
+            });
+        if fields.get(3) == Some(&"sandbox") || is_sandbox_name {
+            if let Some(slug) = fields.get(4).filter(|slug| !slug.is_empty()) {
+                sandboxes.insert((*slug).to_string());
+            }
+        }
+    }
+    let mut helpers_removed = 0;
+    for fields in &rows {
+        let (Some(id), Some(state), Some(kind)) = (fields.get(1), fields.get(2), fields.get(3))
+        else {
+            continue;
+        };
+        let sandbox = fields.get(4).copied().filter(|slug| !slug.is_empty());
+        if stale_helper(kind, state, sandbox, &sandboxes)
+            && remove_one(target, &["container", "rm", id])?
+        {
+            helpers_removed += 1;
+        }
+    }
+
+    let image_rows = capture_lines(
+        target,
+        &[
+            "image",
+            "ls",
+            "--all",
+            "--no-trunc",
+            "--format",
+            "{{.ID}}\t{{.Repository}}\t{{.Tag}}",
+        ],
+    )?;
+    let used_ids: HashSet<String> = capture_lines(
+        target,
+        &["ps", "-a", "--no-trunc", "--format", "{{.ImageID}}"],
+    )?
+    .into_iter()
+    .collect();
+    let mut images: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for fields in image_rows
+        .iter()
+        .map(|line| line.split('\t').collect::<Vec<_>>())
+    {
+        if let [id, repo, tag, ..] = fields.as_slice() {
+            images
+                .entry((*id).to_string())
+                .or_default()
+                .push(((*repo).to_string(), (*tag).to_string()));
+        }
+    }
+    let mut images_removed = 0;
+    for (id, references) in images {
+        if used_ids.contains(&id) {
+            continue;
+        }
+        let known_intentic_repo = references
+            .iter()
+            .any(|(repo, _)| intentic_image(repo, &serde_json::Value::Null));
+        let labels = !known_intentic_repo && inspect_image_labels(target, &id);
+        let mut candidates: Vec<String> = references
+            .into_iter()
+            .filter(|(repo, tag)| {
+                tag != "<none>" && (intentic_image(repo, &serde_json::Value::Null) || labels)
+            })
+            .map(|(repo, tag)| format!("{repo}:{tag}"))
+            .collect();
+        // A labelled dangling image has no named reference to remove. Removing its ID is safe only when every
+        // container was checked above and none uses it.
+        if candidates.is_empty() && labels {
+            let has_named_ref = image_rows.iter().any(|line| {
+                let mut fields = line.split('\t');
+                fields.next() == Some(id.as_str())
+                    && fields.next().is_some_and(|repo| repo != "<none>")
+            });
+            if !has_named_ref {
+                candidates.push(id.clone());
+            }
+        }
+        for reference in candidates {
+            if remove_one(target, &["image", "rm", &reference])? {
+                images_removed += 1;
+            }
+        }
+    }
+    Ok((images_removed, helpers_removed))
+}
+
+fn capture_lines(target: &Target, args: &[&str]) -> std::result::Result<Vec<String>, String> {
+    let result =
+        docker::capture_on(target, args, docker::READ_LIMIT).map_err(|Fail(reason)| reason)?;
+    if result.code != Some(0) {
+        return Err(result.stderr.trim().to_string());
+    }
+    Ok(result
+        .stdout
+        .lines()
+        .map(str::to_string)
+        .filter(|line| !line.is_empty())
+        .collect())
+}
+
+fn remove_one(target: &Target, args: &[&str]) -> std::result::Result<bool, String> {
+    let result =
+        docker::capture_on(target, args, docker::READ_LIMIT).map_err(|Fail(reason)| reason)?;
+    if result.code == Some(0) {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn inspect_image_labels(target: &Target, image_id: &str) -> bool {
+    let Ok(result) = docker::capture_on(
+        target,
+        &[
+            "image",
+            "inspect",
+            "--format",
+            "{{json .Config.Labels}}",
+            image_id,
+        ],
+        docker::READ_LIMIT,
+    ) else {
+        return false;
+    };
+    if result.code != Some(0) {
+        return false;
+    }
+    let labels: serde_json::Value =
+        serde_json::from_str(result.stdout.trim()).unwrap_or(serde_json::Value::Null);
+    intentic_image("", &labels)
 }
 
 /* ——— Getting both engines ready. ——— */
@@ -3201,6 +3436,62 @@ mod tests {
         );
         assert_eq!(repository_of("alpine"), "alpine");
         assert_eq!(repository_of("alpine@sha256:abc"), "alpine");
+    }
+
+    #[test]
+    fn cleanup_marks_only_intentic_sandbox_images() {
+        assert!(intentic_image(
+            "ghcr.io/intentic/sandbox",
+            &serde_json::Value::Null
+        ));
+        assert!(intentic_image(
+            "intentic-sandbox-rollback-sandbox-abc",
+            &serde_json::Value::Null
+        ));
+        assert!(intentic_image(
+            "some-mirror/sandbox",
+            &serde_json::json!({ IMAGE_SOURCE_LABEL: INTENTIC_SOURCE })
+        ));
+        assert!(!intentic_image(
+            "ghcr.io/intentic/sandbox-tools",
+            &serde_json::Value::Null
+        ));
+        assert!(!intentic_image(
+            "alpine",
+            &serde_json::json!({"org.opencontainers.image.source":"https://example.test"})
+        ));
+    }
+
+    #[test]
+    fn cleanup_removes_only_stopped_helpers_for_missing_sandboxes() {
+        let mut present = std::collections::HashSet::new();
+        present.insert("still-here".to_string());
+        assert!(stale_helper(
+            "egress-helper",
+            "exited",
+            Some("gone"),
+            &present
+        ));
+        assert!(!stale_helper(
+            "egress-helper",
+            "running",
+            Some("gone"),
+            &present
+        ));
+        assert!(!stale_helper(
+            "egress-helper",
+            "exited",
+            Some("still-here"),
+            &present
+        ));
+        assert!(!stale_helper("sandbox", "exited", Some("gone"), &present));
+        assert!(!stale_helper("egress-helper", "exited", None, &present));
+        assert!(stale_helper(
+            "egress-helper",
+            "exited",
+            None,
+            &std::collections::HashSet::new()
+        ));
     }
 
     fn moved(slug: &str, at: u64, remove_after: u64) -> Moved {

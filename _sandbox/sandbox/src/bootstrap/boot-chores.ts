@@ -27,6 +27,7 @@ import { readHistorySpace } from "../system/resources/storage/checkout-admission
 import { startDiskPressureWatch } from "../system/resources/storage/disk-pressure.js";
 import { readLastStorageScan, resolveStorageRoots } from "../system/resources/storage/disk-storage.js";
 import { leftoversRelief } from "../system/resources/storage/pressure-reliefs.js";
+import { CHILD_CHECKOUT_IDLE_GRACE_MS, idleChildCheckoutsRelief, retireIdleChildCheckouts } from "../agent/subagents/checkouts/child-checkout-retirement.js";
 import { mainIncrementalRelief } from "../conversations/worktrees/build-outputs/main-incremental.js";
 import { baseCheckoutsOf } from "../conversations/worktrees/bases/base-checkouts.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -163,6 +164,17 @@ export const retentionChores = (phase: BootPhase): Chore[] => {
                       // No sandbox-wide quiet moment: each checkout is judged by its own conversation (archive.ts).
                       run: async (): Promise<void> => retireUnpinned(phase, (await reaperOf(phase).sweep(Date.now())).length),
                   },
+                  {
+                      name: "settled-child-checkouts",
+                      everyMs: BUILD_OUTPUT_SWEEP_MS,
+                      // Children keep a short warm window for follow-up sends; then their work stays on parked branch refs.
+                      run: async (): Promise<void> => {
+                          const retired = await retireIdleChildCheckouts(services, { now: Date.now(), graceMs: CHILD_CHECKOUT_IDLE_GRACE_MS });
+                          if (retired > 0) {
+                              logger.info({ retired }, "subagents: retired idle child checkouts; work remains on their branches");
+                          }
+                      },
+                  },
                   // Base checkouts no live conversation asked for in a day (conversations/worktrees/bases/base-checkouts.ts).
                   { name: "base-checkouts", everyMs: HOUR_MS, run: async (): Promise<void> => void (await baseCheckoutsOf(services).sweep(Date.now())) },
                   { name: "state-aged", everyMs: HOUR_MS, run: () => sweepAgedState(services.workspace.root, Date.now(), logger) },
@@ -264,6 +276,9 @@ const startDiskPressure = (phase: BootPhase): (() => void) => {
             return swept;
         },
         reliefs: [
+            // A settled child's checkout is safe on its branch and can be restored; return this space before deleting
+            // regenerable build caches or old artifacts, starting with the child that has been idle longest.
+            idleChildCheckoutsRelief(services),
             mainIncrementalRelief({ workspaceRoot: services.workspace.root, historyRoot: config.historyRoot }),
             // Made again by the next `base` that asks for one, warm where a build already ran.
             { name: "base checkouts", free: (enough) => baseCheckoutsOf(services).relieve(enough) },

@@ -868,6 +868,16 @@ fn engine_down(
 /// it on purpose). Up and not answering: restarted, with a yes, since every sandbox restarts with it. Either way, WSL
 /// itself restarted next, and after that the person. Pure.
 pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair) -> bool) -> Check {
+    if matches!(engine, Engine::Erroring(reason) if crate::engine::wsl_errors::broken_disk_attachment(reason))
+        && !tried(&Repair::ShutdownWsl)
+    {
+        return Check::fail(
+            DOCKER,
+            "The intentic engine's disk cannot be read because Windows ran out of space under it, or WSL still holds a broken attachment.",
+            "restart WSL and the engine: ic sandbox fix asks before running `wsl --shutdown`, which also restarts Docker Desktop and every other WSL distro.",
+            Fix::Do(Repair::ShutdownWsl),
+        );
+    }
     let stuck = matches!(engine, Engine::Silent | Engine::Erroring(_));
     if held && !stuck {
         return Check::fail(
@@ -904,7 +914,7 @@ pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair)
         return Check::fail(
             DOCKER,
             format!("{problem} Starting it again did not help."),
-            "restart WSL under it (ic sandbox fix does this once you say yes): every WSL distro on this device stops for a moment.",
+            "restart WSL under it (ic sandbox fix asks before running `wsl --shutdown`): Docker Desktop and every WSL distro on this device restart.",
             Fix::Do(Repair::ShutdownWsl),
         );
     }
@@ -1299,6 +1309,21 @@ mod tests {
             intentic_engine_down(&down, false, &always).who(),
             Some(Who::You)
         );
+    }
+
+    #[test]
+    fn unreadable_engine_vhdx_proposes_consenting_to_wsl_shutdown_first() {
+        let engine = Engine::Erroring(
+            "Wsl/Service/CreateInstance/E_FAIL while /dev/sdd cannot be opened".to_string(),
+        );
+        let check = intentic_engine_down(&engine, false, &never);
+        assert_eq!(repair_of(&check), Some(Repair::ShutdownWsl));
+        assert_eq!(check.who(), Some(Who::Consent));
+        assert!(check
+            .problem
+            .as_deref()
+            .is_some_and(|problem| problem.contains("disk cannot be read")));
+        assert!(check.remedy.unwrap().contains("Docker Desktop"));
     }
 
     #[test]

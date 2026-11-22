@@ -154,6 +154,18 @@ test("the sandbox's own news reaches its owner and maintainers, never a collabor
     });
 });
 
+test("disk pressure names the host drive when it is the limit", () => {
+    const notification = diskLow("critical", {
+        level: "critical",
+        freeBytes: 18_500_000_000,
+        totalBytes: 394_500_000_000,
+        measuredAt: 0,
+        limitedBy: { drive: "C:\\", driveFreeBytes: 18_500_000_000 },
+        using: [],
+    });
+    expect(notification.body).toContain("Windows drive C:\\ under the sandbox's engine has 18.5 GB free");
+});
+
 test("named for one member, only that member's own devices hear it, and only while they are away", async () => {
     const reached = stubSends();
     const store = storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com"), device("https://push.example/unnamed"));

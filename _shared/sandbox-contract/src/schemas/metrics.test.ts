@@ -1,4 +1,4 @@
-import { type SandboxMetrics, SandboxMetricsSchema } from "./metrics.js";
+import { type DiskPressure, type SandboxMetrics, DiskPressureSchema, SandboxMetricsSchema } from "./metrics.js";
 
 // A daemon payload from before memoryBreakdown and the other optional accounting fields existed.
 const legacyMetrics = {
@@ -17,6 +17,14 @@ const legacyMetrics = {
         terminal: { processes: 1, rssBytes: 100 * 2 ** 20 },
     },
 } satisfies SandboxMetrics;
+
+test("disk-pressure readings keep old payloads valid and carry an optional host drive limit", () => {
+    const reading: DiskPressure = { level: "critical", freeBytes: 18_500_000_000, totalBytes: 394_500_000_000, measuredAt: 1, using: [] };
+    expect(DiskPressureSchema.parse(reading)).toEqual(reading);
+    expect(
+        DiskPressureSchema.parse({ ...reading, limitedBy: { drive: "C:\\", driveFreeBytes: 18_500_000_000 } }).limitedBy,
+    ).toEqual({ drive: "C:\\", driveFreeBytes: 18_500_000_000 });
+});
 
 describe("the metrics memory accounting contract", () => {
     test("an older payload parses unchanged without the optional breakdown or its categories", () => {

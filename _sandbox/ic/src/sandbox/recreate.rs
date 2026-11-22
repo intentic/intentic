@@ -1212,6 +1212,7 @@ fn recreate(
     log.section("run command");
 
     /* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal. */
+    crate::engine::host_disk::refresh_hints();
     let mut launched = docker::run_argv(&argv, &log);
     for _ in 0..PORT_RELEASE_TRIES {
         // The last attempt's refusal alone, so a conflict on an earlier attempt cannot keep this true once a later
@@ -1983,6 +1984,7 @@ pub(crate) fn stamp_args(slug: &str, stamp: &Restamp) -> Vec<String> {
         "-e".to_string(),
         format!("HOST_ENGINE={}", crate::engine::stamp()),
     ]);
+    extra.extend(crate::engine::host_disk::mount_args());
     extra
 }
 
@@ -2402,13 +2404,11 @@ mod tests {
             .windows(2)
             .any(|pair| pair == ["-e", "HOST_ENV=ubuntu"]));
         // The engine is this recreate's own, never the old container's (a move between engines is a recreate).
-        assert_eq!(
-            &args[args.len() - 2..],
-            [
+        assert!(args.windows(2).any(|pair| pair
+            == [
                 "-e".to_string(),
                 format!("HOST_ENGINE={}", crate::engine::stamp())
-            ]
-        );
+            ]));
         assert!(
             !stamp_args("x", &restamp(Some(&Side::new("windows", None)), &here))
                 .iter()

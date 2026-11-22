@@ -68,6 +68,16 @@ const DiskAnswerSchema = z.object({
     level: z.enum(LEVELS).optional(),
     totalBytes: z.number().optional(),
     availableBytes: z.number().optional(),
+    diskTotalBytes: z.number().optional(),
+    diskAvailableBytes: z.number().optional(),
+    host: z.object({
+        drive: z.string().optional(),
+        freeBytes: z.number().optional(),
+        totalBytes: z.number().optional(),
+        backingPath: z.string().optional(),
+        backingBytes: z.number().optional(),
+    }).optional(),
+    limitedBy: z.enum(["drive", "disk"]).optional(),
     consumers: z.array(z.object({ what: z.string(), bytes: z.number() })).optional(),
     consumersAt: z.number().optional(),
     consumersUnread: z.string().optional(),
@@ -101,6 +111,15 @@ const spaceOf = (answer: DiskAnswer | undefined): Space | undefined =>
 const leftText = (available: number, total: number): string =>
     `${sizeLabel(available)} of ${sizeLabel(total)} left to write (${Math.floor((available * 100) / Math.max(total, 1))}%)`;
 
+const spaceText = (read: Space, answer: DiskAnswer | undefined): string => {
+    const host = answer?.host;
+    if (answer?.limitedBy === "drive" && host?.drive !== undefined) {
+        const drive = host.drive.endsWith("\\") ? host.drive : `${host.drive}\\`;
+        return `Windows drive ${drive} has ${sizeLabel(host.freeBytes ?? read.availableBytes)} free under the engine's disk (${sizeLabel(host.backingBytes ?? read.totalBytes)})`;
+    }
+    return leftText(read.availableBytes, read.totalBytes);
+};
+
 const ageText = (ms: number): string => (ms < 2 * 60 * 60_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : `${Math.round(ms / (60 * 60_000))} h`);
 
 // The biggest few, each with its size. Pure.
@@ -126,18 +145,20 @@ const reliefText = (after: DiskAnswer): string => {
 // measurement answered (undefined when that run failed). Pure.
 const tellLine = ({
     read,
+    answer,
     after,
     relieving,
     reliefOn,
     now,
 }: {
     readonly read: Space;
+    readonly answer: DiskAnswer | undefined;
     readonly after: DiskAnswer | undefined;
     readonly relieving: boolean;
     readonly reliefOn: boolean;
     readonly now: number;
 }): string => {
-    const head = `engine disk: ${read.level} — ${leftText(read.availableBytes, read.totalBytes)}.`;
+    const head = `engine disk: ${read.level} — ${spaceText(read, answer)}.`;
     const relief = relieving && after !== undefined ? reliefText(after) : "";
     const off = reliefOn ? "" : " Clearing is off here (intentic-machine updates --disk on).";
     const consumers = after?.consumers ?? [];
@@ -171,6 +192,10 @@ export interface DiskWatchState {
     measuring: Promise<void> | undefined;
     // The last sentence of a watch that could not watch, said once.
     unwatched: string | undefined;
+    // An unreadable engine disk is said once until a later read succeeds.
+    unreadableTold: boolean;
+    // VHDX space that a compact could return is said once per low-space stretch.
+    compactTold: boolean;
 }
 
 export const newDiskWatchState = (): DiskWatchState => ({
@@ -182,6 +207,8 @@ export const newDiskWatchState = (): DiskWatchState => ({
     owed: false,
     measuring: undefined,
     unwatched: undefined,
+    unreadableTold: false,
+    compactTold: false,
 });
 
 // Whether to clear now: a level worse than any cleared at this stretch, or critical or worse and the last clearing old. Pure.
@@ -245,10 +272,61 @@ const settle = (state: DiskWatchState, log: Log, read: Space): void => {
     state.told = "ok";
     state.relieved = "ok";
     state.owed = false;
+    state.unreadableTold = false;
+    state.compactTold = false;
+};
+
+const COMPACT_HINT_MIN_BYTES = 50 * 1024 ** 3;
+
+const compactableBytes = (answer: DiskAnswer | undefined): number | undefined => {
+    const backingBytes = answer?.host?.backingBytes;
+    const diskTotalBytes = answer?.diskTotalBytes;
+    const diskAvailableBytes = answer?.diskAvailableBytes;
+    if (backingBytes === undefined || diskTotalBytes === undefined || diskAvailableBytes === undefined) {
+        return undefined;
+    }
+    return backingBytes - (diskTotalBytes - diskAvailableBytes);
+};
+
+const compactLine = (bytes: number): string =>
+    `engine disk: ic engine compact could give back about ${sizeLabel(bytes)} from the engine's VHDX (one UAC prompt; sandboxes on the engine stop for a few minutes).`;
+
+const BROKEN_ENGINE_DISK = /(?:EIO|failed 5|getpwnam\(root\) failed 5|I\/O error|E_FAIL|can't open blockdev)/i;
+
+const unreadableLine = (reason: string, answer: DiskAnswer | undefined): string => {
+    const drive = answer?.host?.drive;
+    const driveHint = drive === undefined ? "Free space on the Windows drive under the engine's disk if it is short" : `Free space on Windows drive ${drive} if it is short`;
+    return `engine disk: the engine's disk cannot be read — ${reason}. The Windows drive under it may have filled and left WSL with a broken attachment. ${driveHint}, then run ic engine restart --wsl (it restarts Docker Desktop too).`;
+};
+
+const unreadableReason = (run: IcRun, answer: DiskAnswer | undefined): string | undefined => {
+    const reason = answer?.reason ?? lastLine(run.output) ?? answer?.state ?? "no output";
+    return answer?.state === "unreadable" || BROKEN_ENGINE_DISK.test(`${reason}\n${run.output}`) ? reason : undefined;
+};
+
+const tellUnreadable = (state: DiskWatchState, deps: DiskWatchDeps, reason: string, answer: DiskAnswer | undefined): void => {
+    if (!state.unreadableTold) {
+        state.unreadableTold = true;
+        deps.log(unreadableLine(reason, answer));
+    }
+};
+
+const tellCompact = (state: DiskWatchState, deps: DiskWatchDeps, read: Space, answer: DiskAnswer | undefined): void => {
+    const reclaimable = compactableBytes(answer);
+    if (
+        state.compactTold ||
+        rank(read.level) < rank("low") ||
+        reclaimable === undefined ||
+        reclaimable <= Math.max(COMPACT_HINT_MIN_BYTES, (answer?.host?.backingBytes ?? 0) * 0.25)
+    ) {
+        return;
+    }
+    state.compactTold = true;
+    deps.log(compactLine(reclaimable));
 };
 
 // A level short of ok: cleared and told as due, in one ic run.
-const actOn = async (state: DiskWatchState, deps: DiskWatchDeps, read: Space): Promise<void> => {
+const actOn = async (state: DiskWatchState, deps: DiskWatchDeps, read: Space, answer: DiskAnswer | undefined): Promise<void> => {
     const tell = rank(read.level) > rank(state.told);
     const due = reliefDue(state, read.level, deps.now());
     if (!tell && !due) {
@@ -270,7 +348,7 @@ const actOn = async (state: DiskWatchState, deps: DiskWatchDeps, read: Space): P
     if (tell) {
         state.told = read.level;
         state.owed = after?.consumersAt === undefined || deps.now() - after.consumersAt > CONSUMERS_STALE_MS;
-        deps.log(tellLine({ read, after, relieving: relieve, reliefOn, now: deps.now() }));
+        deps.log(tellLine({ read, answer, after, relieving: relieve, reliefOn, now: deps.now() }));
         return;
     }
     const still = stillLine(read.level, after);
@@ -286,6 +364,11 @@ export const diskRound = async (state: DiskWatchState, deps: DiskWatchDeps): Pro
     const answer = diskAnswer(run.output);
     const read = spaceOf(answer);
     if (read === undefined) {
+        const reason = unreadableReason(run, answer);
+        if (reason !== undefined) {
+            tellUnreadable(state, deps, reason, answer);
+            return IDLE_EVERY_MS;
+        }
         sayOnce(
             state,
             deps.log,
@@ -296,11 +379,13 @@ export const diskRound = async (state: DiskWatchState, deps: DiskWatchDeps): Pro
         return IDLE_EVERY_MS;
     }
     state.unwatched = undefined;
+    state.unreadableTold = false;
+    tellCompact(state, deps, read, answer);
     if (read.level === "ok") {
         settle(state, deps.log, read);
         return EVERY_MS;
     }
-    await actOn(state, deps, read);
+    await actOn(state, deps, read, answer);
     if (measureDue(state, deps.now())) {
         state.measureTriedAt = deps.now();
         state.measuring = measure(state, deps).finally(() => {

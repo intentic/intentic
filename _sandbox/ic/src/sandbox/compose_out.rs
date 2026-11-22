@@ -143,6 +143,7 @@ pub fn write_folder_as(slug: &str, dir: &Path, host: Option<HostStamps>) -> Resu
         bail!("{reason}");
     }
     let env = docker::container_env_nul(&container)?;
+    crate::engine::host_disk::refresh_hints();
     let image = docker::inspect(&container, "{{.Config.Image}}")
         .filter(|image| !image.is_empty())
         .ok_or_else(|| Fail(format!("could not read {container}'s image.")))?;
@@ -179,6 +180,9 @@ pub fn write_folder_as(slug: &str, dir: &Path, host: Option<HostStamps>) -> Resu
     let mut mounts: Vec<String> = Vec::new();
     if let Some(auth) = docker::mount_source(&container, at_rest::AUTH_MOUNT) {
         mounts.push(format!("{auth}:{}", at_rest::AUTH_MOUNT));
+    }
+    if let Some(host_mount) = crate::engine::host_disk::mount_spec() {
+        mounts.push(host_mount);
     }
     let mounts_joined = (!mounts.is_empty()).then(|| mounts.join("\n"));
     let dns = docker::inspect(&container, "{{join .HostConfig.Dns \" \"}}")

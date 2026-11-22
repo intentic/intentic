@@ -452,6 +452,21 @@ enum EngineCommand {
         #[arg(long)]
         relieve: bool,
     },
+    /// Return free space from the engine's Windows VHDX (Windows only)
+    Compact {
+        /// Skip the small-reclaim threshold and compact anyway
+        #[arg(long)]
+        force: bool,
+        /// Confirm stopping the engine and all workloads on it
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+        /// Consent to `wsl --shutdown` if WSL still holds the VHDX (stops every distro and Docker Desktop)
+        #[arg(long)]
+        wsl: bool,
+        /// One JSON document for the machine agent
+        #[arg(long)]
+        json: bool,
+    },
     /// Import the WSL distro, generate TLS, and start the engine
     Install,
     /// Start the engine and wait until it answers
@@ -464,7 +479,12 @@ enum EngineCommand {
     /// Stop the engine without removing it (same as stop today)
     Hold,
     /// Stop the engine and start it again: for one that is up and does not answer
-    Restart,
+    Restart {
+        /// When WSL reports that the engine VHDX has a broken attachment, consent to `wsl --shutdown` before retrying.
+        /// This restarts every WSL distro on the device, including Docker Desktop.
+        #[arg(long)]
+        wsl: bool,
+    },
     /// Move every sandbox this side of the device keeps to another engine, and switch the device onto it. The engine left
     /// keeps its copies, stopped, for 7 days; moving back is a move the other way
     Move {
@@ -1646,11 +1666,22 @@ fn main() {
                 kept,
                 relieve,
             }),
+            Some(EngineCommand::Compact {
+                force,
+                yes,
+                wsl,
+                json,
+            }) => engine::run_compact(engine::CompactArgs {
+                force,
+                yes,
+                wsl,
+                json,
+            }),
             Some(EngineCommand::Install) => engine::run_install(),
             Some(EngineCommand::Start { quiet }) => engine::run_start(quiet),
             Some(EngineCommand::Stop) => engine::run_stop(),
             Some(EngineCommand::Hold) => engine::run_hold(),
-            Some(EngineCommand::Restart) => engine::run_restart(),
+            Some(EngineCommand::Restart { wsl }) => engine::run_restart(wsl),
             Some(EngineCommand::Move { abort: true, .. }) => engine::moves::abort(),
             Some(EngineCommand::Move { to, yes, .. }) => engine::moves::run(engine::moves::Args {
                 to: to.unwrap_or_default(),

@@ -30,6 +30,8 @@ interface CompositionSpaceOptions {
     // it. On 2026-11-12 a turn sent to omen was refused for rog's disk, because rog's own main `target/` (about 115 GB)
     // was counted for a mirror that never builds.
     readonly buildsHere?: boolean | undefined;
+    // Null disables the warn-once escape for automated starts; undefined preserves the conversation's owner key.
+    readonly admissionOwner?: string | null | undefined;
 }
 
 // Reserve only the checkouts ensure will write. Standing ones need no space reading or tree-size walk.
@@ -81,7 +83,7 @@ export const reserveCompositionSpace = async (
                 historyRoot,
                 known.reduce((total, cost) => total + cost, 0),
                 historySpace,
-                id,
+                options.admissionOwner === undefined ? id : options.admissionOwner ?? undefined,
             );
         } catch (error) {
             if (error instanceof CheckoutSpaceRefused) {

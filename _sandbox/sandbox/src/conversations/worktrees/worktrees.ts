@@ -72,8 +72,7 @@ export interface AgentWorktrees {
     // A workflow captures this once and hands it to every candidate so a fan-out sees one snapshot, not several moving
     // workspaces.
     readonly snapshot: () => Promise<ConversationWorktree["repos"]>;
-    // Creates the composition on first use (recorded = []), optionally pinned to a caller-owned snapshot.
-    // Otherwise repairs the recorded composition and brings it to `selection` when one is given.
+    // Creates the composition on first use (recorded = []), optionally pinned to a caller-owned snapshot; otherwise repairs it to `selection`.
     readonly ensure: (
         id: string,
         recorded: readonly { repo: string; base: string }[],
@@ -92,6 +91,7 @@ export interface AgentWorktrees {
         // Whether the checkout's builds run here; false for a runner's mirror, so only its files are priced against this
         // sandbox's disk (composition-space.ts). Absent means they do.
         buildsHere?: boolean,
+        admissionOwner?: string | null,
     ) => Promise<ConversationWorktree>;
     // Tear down: worktree remove before the ref (git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
@@ -688,7 +688,7 @@ export const createAgentWorktrees = (
                 .filter((entry): entry is { repo: string; base: string } => entry.base !== undefined)
                 .map(({ repo, base }) => ({ repo, base }));
         },
-        ensure: async (id, recorded, base, namespaced, selection, fence, buildsHere) => {
+        ensure: async (id, recorded, base, namespaced, selection, fence, buildsHere, admissionOwner) => {
             const branch = `agent/${id}`;
             // What the conversation should hold, root leading: every live repo, or the selected ones plus root, and
             // in either case only the ones the fence reaches.
@@ -696,7 +696,7 @@ export const createAgentWorktrees = (
             // conversation is selected.
             const available = base ?? (await liveRepos()).map((repo) => ({ repo, base: undefined }));
             const live = selectedComposition(available, selection, fence);
-            const releaseSpace = await reserveCompositionSpace(id, recorded, live, { ...options, mainDir, worktreeDir, head: composableHead, git, buildsHere });
+            const releaseSpace = await reserveCompositionSpace(id, recorded, live, { ...options, mainDir, worktreeDir, head: composableHead, git, buildsHere, admissionOwner });
             try {
                 if (recorded.length > 0) {
                     await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));

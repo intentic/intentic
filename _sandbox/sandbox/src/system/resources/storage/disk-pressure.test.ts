@@ -24,6 +24,29 @@ test("the settings' reaping threshold moves where reaping starts, never where th
     expect(pressureLevel(at(120), 0.05)).toBe("ok");
 });
 
+test("the marta host-limited history volume is critical", () => {
+    expect(pressureLevel({ freeBytes: 18_500_000_000, totalBytes: 394_500_000_000 })).toBe("critical");
+});
+
+test("the watch carries a limiting Windows drive into its state and tells the owner", async () => {
+    const limitedBy = { drive: "C:\\", driveFreeBytes: 18_500_000_000 };
+    const told: DiskPressure[] = [];
+    const watch = createDiskPressureWatch({
+        read: async () => ({ freeBytes: 18_500_000_000, totalBytes: 394_500_000_000, limitedBy }),
+        reap: async () => 0,
+        lastScan: async () => undefined,
+        tell: async (_level, state) => void told.push(state),
+        changed: () => {},
+        logger: { info: () => {}, warn: () => {} },
+        now: () => 42,
+    });
+
+    await watch.tick();
+
+    expect(watch.state().limitedBy).toEqual(limitedBy);
+    expect(told[0]?.limitedBy).toEqual(limitedBy);
+});
+
 test("a watch reads its threshold each tick and reaps until the disk is back over it", async () => {
     let enoughAnswers: boolean[] = [];
     let space = 200;

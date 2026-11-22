@@ -1060,6 +1060,16 @@ flowchart LR
   `keptJobSessions`, adopted by the boot's session sweep), and archiving, purging or discarding a conversation cancels
   the subagents it spawned (`agent/subagents/family-cancel.ts`); a paused child's end is kept in
   `/history/paused-children.json` so a restart still tells its parent (2026-10-05).
+- Spawned children keep their checkout warm for 20 minutes after a completed, failed or killed turn, then the periodic
+  sweep commits any remainder onto `agent/<child>` and parks that branch. A quick follow-up `send` restores it through
+  `ensure`; a held child remains reviewable, mergeable and landable from the branch refs. The sweep skips running or
+  queued turns, pending questions, background jobs, active land leases and work whose standing is still ready. While
+  disk is short, the pressure watch retires eligible child checkouts immediately, oldest idle first. An automated child
+  start refused by checkout space remains pending in a FIFO line and retries composition every 30 seconds for up to six
+  hours; cancellation removes it immediately. That same composition path runs when a workflow worker resumes after a
+  restart. (2026-11-22) On marta, a fan-out left 81 finished worktrees of a 3.7 GB workspace checked out, filling the
+  engine disk; the restart resumed the workflow and began making more. The previous policy had no finished-child
+  retirement or disk admission wait.
 - Git survives a host crash (2026-11-03). On 10-30 rog lost power under WSL2 and came back with 45 loose objects and
   `refs/stash` in `/history/gits/root` all NUL at their right size, and 22 files of one checkout the same; the next
   checkpoint committed the zeroed files and a land died 15 hours later on `inflate: data stream error`. Now every
@@ -1268,7 +1278,8 @@ flowchart LR
   filesystem, since freeing a separate disk gives the history volume nothing. Under 10% and under 5% it
   tells the sandbox's owner and maintainers once per level, whatever the threshold, with a push
   (`notifyIfAway` at 10%, `notify` at 5%) and a "disk is nearly full" row at the head of the sandbox's attention
-  list, saying what is left, what it removed and what holds the most, with a Clean press; it says so again only after
+  list, saying what is left, what it removed and what holds the most, with a Clean press; the Windows host disk hint
+  (2026-11-22) also clamps this reading and names the limiting drive. It says so again only after
   the disk has been back over the threshold. `GET /system/disk-pressure` answers from its last reading, and the `disk` runtime
   domain says when that moved. Hourly, a Cargo-tagged folder in `/tmp` (an agent's `CARGO_TARGET_DIR`) that no build
   wrote to for a day and that no running process names (argv, cwd or `CARGO_TARGET_DIR`) is removed the same way
@@ -1466,8 +1477,12 @@ daemon restart it is read back off the session file and the usage ledger; unknow
 New conversation checkouts reserve room on the history filesystem before any repository is written. The free-space
 floor is 2% of that volume, clamped to 5–20 GiB; the estimated checkout must leave that floor free. Free space is what
 the daemon's own writes can take, so a root daemon counts the filesystem's reserved blocks. The floor is said once per
-conversation: its next try checks out past it (Send anyway), though never past a checkout the disk cannot hold at all,
-and a reading with room again resets the warning. Existing checkouts and workspace conversations keep running. Storage reports current history space and each live repository's tracked
+conversation: its next try checks out past it (Send anyway), though never past a checkout the disk cannot hold at all;
+a critically full volume under 5% free refuses checkouts until space returns. A reading with room again resets the warning.
+On Windows-hosted engines (2026-11-22), `readHistorySpace` also reads the optional, 30-minute host disk hint at
+`/run/intentic/host/disk-$HOST_ENGINE.json` (or `INTENTIC_HOST_DISK_DIR`), caps free space by the backing VHDX's room
+to grow on its Windows drive, and names that drive in checkout and disk-pressure warnings. No hint means statfs alone,
+as before. Existing checkouts and workspace conversations keep running. Storage reports current history space and each live repository's tracked
 blob sizes at HEAD, cached per repository and commit, so a large repository's cost is visible before another copy.
 A Cargo repository (a `Cargo.toml` at its top or one folder below) is priced at what its checkouts grow to as well
 (`conversations/worktrees/build-outputs/build-output-estimate.ts`, 2026-11-03): main's own build output, measured in the background

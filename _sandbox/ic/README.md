@@ -665,7 +665,10 @@ flowchart LR
     hashing a volume, the reshape) keep the move's heartbeat fresh, so no other `ic` reads a move still working as dead.
     The old copies stay for 7 days in
     `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
-    removes them; no listing names one as a sandbox (`ic sandbox list` skips `<name>.moved`), and a `docker system
+    removes them; after a move's copies are due (or with `--now`), cleanup also removes unused sandbox images marked by
+    the Intentic source label or sandbox image repository and stopped `egress-helper` containers left on the old engine
+    when their sandboxes are gone. It never removes volumes, images used by any container, or unmarked images. No listing
+    names a moved copy as a sandbox (`ic sandbox list` skips `<name>.moved`), and a `docker system
     prune` on that engine can take one sooner, since it is a stopped container. Sandboxes kept by a WSL-side `ic` stay
     on Docker Desktop. Measured on omen: 1.47 GB of volumes
     with checksums matching in 61 s once the image was there (about 70 MB/s onto our engine, 26 MB/s back); the
@@ -694,6 +697,18 @@ flowchart LR
   - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
     the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
     `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.
+  - **A VHDX WSL cannot reattach.** If Windows ran out of drive space under the engine disk, WSL can keep a broken
+    attachment after `ic engine start` or a plain `ic engine restart`. They try the ordinary start first and report
+    when guest errors match the disk failure. `ic engine restart --wsl` then consents to `wsl --shutdown` and starts
+    the engine again; before shutdown it requires at least 5 GiB free on the drive containing the VHDX. This restarts
+    Docker Desktop and every other WSL distro too. `ic sandbox fix` offers the same machine-wide repair as a consented
+    step. Free space first when the drive is nearly full.
+  - **Compacting the engine disk.** `ic engine compact` measures the guest's used blocks and the VHDX size, and skips
+    an estimated reclaim below 5 GiB unless `--force` is passed. It trims the running guest, then asks before stopping
+    the engine and its workloads (or accepts `--yes`). Once the VHDX is released it uses DiskPart's read-only attach and
+    compact steps through one administrator prompt; `--wsl` consents to `wsl --shutdown` if WSL still holds the file,
+    restarting Docker Desktop and every other distro. `--json` returns the before/after VHDX size and Windows drive
+    free space for a machine agent. It uses DiskPart on Windows Home, which does not include Optimize-VHD.
   - **A disk that is never sparse (2026-10-30).** `.wslconfig`'s `sparseVhd=true` makes every VHDX WSL creates sparse,
     the engine's included, and a sparse VHDX turns each block the guest trims into a hole in the NTFS file whose refill
     takes a fragment of its own. Under a sandbox's churn rog's 909 GB disk reached 1.08 million fragments, NTFS refused
@@ -711,6 +726,13 @@ flowchart LR
     rog) and a database in a container is not root: `ok`, `low` under 10% of the disk (the sandboxes' own watch says low
     at the same share), `critical` under 5%, `full` under the size of the ballast the keeper holds back
     ([engine/README.md](engine/README.md#its-disk)). `--json` is the machine agent's.
+    On Windows, ic also measures the Windows drive holding the engine's VHDX and caps Available to the space that can
+    actually be written there, accounting for blocks already allocated by the dense VHDX. When that drive is the limit,
+    the total and level use the capped figures and human output names the drive; JSON keeps the effective
+    `totalBytes`/`availableBytes`, adds raw `diskTotalBytes`/`diskAvailableBytes`, `limitedBy`, and the `host` drive and
+    backing file details. Each reading refreshes `~/.intentic/host/disk-<engine>.json` atomically. Windows sandbox
+    containers and generated Compose files bind that folder read-only at `/run/intentic/host`; Linux and macOS hosts do
+    not add the bind. A missing or failed hint leaves the guest disk reading usable.
     `--consumers` names what takes the space and whose it is
     ([src/engine/disk_consumers.rs](src/engine/disk_consumers.rs)): ic's labels and volume and image families name a
     sandbox, `com.docker.compose.project` a compose project, images count only the space no other image shares. It is

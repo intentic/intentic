@@ -133,6 +133,11 @@ pub fn run_disk(args: super::disk::DiskArgs) -> Result<()> {
     super::disk::run(args)
 }
 
+/// `ic engine compact`: trim and compact the dense Windows engine VHDX offline.
+pub fn run_compact(args: super::compact::Args) -> Result<()> {
+    super::compact::run(args)
+}
+
 pub fn run_copy(args: super::moves::CopyArgs) -> Result<()> {
     super::moves::copy(args)
 }
@@ -157,9 +162,12 @@ pub fn run_hold() -> Result<()> {
     Ok(())
 }
 
-pub fn run_restart() -> Result<()> {
+pub fn run_restart(wsl: bool) -> Result<()> {
     ui::act("Restarting the intentic engine");
-    super::restart().map_err(Fail::from)?;
+    if wsl {
+        ui::note("`--wsl` allows a machine-wide `wsl --shutdown`; Docker Desktop and every other WSL distro restart too.");
+    }
+    super::restart_with_wsl(wsl).map_err(Fail::from)?;
     ui::done("The intentic engine is restarted.");
     Ok(())
 }

@@ -140,9 +140,10 @@ export const diskLow = (level: "low" | "critical", state: DiskPressure): PushNot
         state.reaped === undefined || state.reaped.bytes === 0
             ? "No build output was left to remove."
             : `Removed ${gigabytes(state.reaped.bytes)} of build output from ${String(state.reaped.checkouts)} finished checkout(s).`;
+    const limit = state.limitedBy === undefined ? "" : ` Windows drive ${state.limitedBy.drive} under the sandbox's engine has ${gigabytes(state.limitedBy.driveFreeBytes)} free.`;
     return {
         title: level === "critical" ? "The sandbox's disk is almost full" : "The sandbox's disk is getting full",
-        body: `${gigabytes(state.freeBytes)} free (${String(percent)}%). ${reaped} Storage shows what is using the rest.`,
+        body: `${gigabytes(state.freeBytes)} free (${String(percent)}%).${limit} ${reaped} Storage shows what is using the rest.`,
         url: legacyPathOf(page.sandboxSettings()),
         tag: "disk-low",
         requireInteraction: level === "critical",

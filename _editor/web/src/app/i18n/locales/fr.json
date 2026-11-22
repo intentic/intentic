@@ -8937,6 +8937,7 @@
             "cleanBuildOutput": "Nettoyer les sorties de build",
             "cleanBuildOutputDetail": "Retire ce que les builds ont laissé dans les checkouts dont la conversation n'exécute rien ; le prochain build le recrée.",
             "diskLow": "Le disque est presque plein : {free} libres ({percent} %)",
+            "diskHostLimit": "Le lecteur Windows {drive} sous le moteur du sandbox dispose de {free} libres",
             "diskReaped": "{bytes} de sorties de build retirés de {count} checkout terminé | {bytes} de sorties de build retirés de {count} checkouts terminés",
             "diskUsing": "{category} occupe le plus ({bytes})"
         },

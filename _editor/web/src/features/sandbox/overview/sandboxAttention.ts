@@ -132,7 +132,7 @@ const diskItems = (pressure: DiskPressure | undefined): SandboxAttentionItem[] =
     if (!diskPressing(pressure)) {
         return [];
     }
-    const free = t(`sandbox.sandboxAttention.diskLow`, { free: formatBytes(pressure.freeBytes), percent: freePercent(pressure) });
+    const free = `${t(`sandbox.sandboxAttention.diskLow`, { free: formatBytes(pressure.freeBytes), percent: freePercent(pressure) })}${pressure.limitedBy === undefined ? `` : `; ${t(`sandbox.sandboxAttention.diskHostLimit`, { drive: pressure.limitedBy.drive, free: formatBytes(pressure.limitedBy.driveFreeBytes) })}`}`;
     const reaped =
         pressure.reaped === undefined || pressure.reaped.bytes === 0
             ? ``

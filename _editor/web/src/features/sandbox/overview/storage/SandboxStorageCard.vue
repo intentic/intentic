@@ -246,10 +246,10 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                 v-if="historyDisk?.low"
                 :of="{
                     tone: `warning`,
-                    title: t(`sandbox.sandboxStorageCard.historyLow`, {
+                    title: `${t(`sandbox.sandboxStorageCard.historyLow`, {
                         free: formatBytes(historyDisk.freeBytes),
                         floor: formatBytes(historyDisk.floorBytes),
-                    }),
+                    })}${historyDisk.limitedBy === undefined ? `` : ` ${t(`sandbox.sandboxAttention.diskHostLimit`, { drive: historyDisk.limitedBy.drive, free: formatBytes(historyDisk.limitedBy.driveFreeBytes) })}.`}`,
                 }"
             />
             <div v-for="repo in largeCheckouts" :key="repo.repo" class="flex flex-col gap-1">

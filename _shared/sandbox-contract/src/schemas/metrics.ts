@@ -346,6 +346,10 @@ const StorageReportFields = z.object({
             totalBytes: z.number().describe("The history volume's total size."),
             floorBytes: z.number().describe("Space kept free before a new checkout: 2% of this volume clamped to 5–20 GiB."),
             low: z.boolean().describe("Whether available history space is below the checkout floor."),
+            limitedBy: z
+                .object({ drive: z.string(), driveFreeBytes: z.number() })
+                .optional()
+                .describe("The Windows host drive limiting free space, when a host disk hint is available."),
         })
         .optional()
         .describe("The filesystem holding conversation checkouts, independent of the workspace volume. Absent if unreadable."),
@@ -401,6 +405,10 @@ export const DiskPressureSchema = z.object({
     freeBytes: z.number().describe("Space available on the history volume at the last reading."),
     totalBytes: z.number().describe("The history volume's size."),
     measuredAt: z.number().describe("When it was read, in milliseconds; 0 before the first reading."),
+    limitedBy: z
+        .object({ drive: z.string(), driveFreeBytes: z.number() })
+        .optional()
+        .describe("The Windows host drive limiting free space, when a host disk hint is available."),
     reaped: z
         .object({
             bytes: z.number().describe("Space the removals gave back, as the volume measured it before and after."),

@@ -745,7 +745,7 @@ pub fn run_argv(argv: &[String], log: &Log) -> std::result::Result<String, Strin
     }
     // Logged HERE, not by the caller: every caller runs a second, differently-shaped attempt when the first
     // is refused, and a postmortem that shows only the first command describes a launch that never happened.
-    log.line(&format!("docker {}", argv.join(" ")));
+    log.line(&crate::logfile::command_for_log("docker", argv));
     let args: Vec<&str> = argv.iter().map(String::as_str).collect();
     let out = match command(&args).output() {
         Ok(out) => out,

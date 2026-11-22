@@ -26,11 +26,11 @@ import { authRootOf } from "../../state-paths.js";
 import { type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
 import { holdAccount } from "../providers/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
+import { childRerunHorizonMs } from "../subagents/child-records.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
 import { resolveConflictNow } from "../../conversations/land/settle/resolve-conflict.js";
 import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
-import { childRerunHorizonMs } from "../subagents/child-records.js";
 import { type ScriptRunDoor, scriptRunDoor } from "../subagents/workflows/script-runs.js";
 import { runtimeFrames } from "./frames/runtime-frames.js";
 import { checkoutDirtyPaths, turnShellEdits } from "../tools/agent-shell-edits.js";
@@ -200,7 +200,7 @@ const placementOf = (
     if (runner !== undefined) {
         return runnerPlacement(
             services,
-            { conversationId: id, snapshot, runner },
+            { conversationId: id, snapshot, runner, signal },
             {
                 compose: () => ensureComposedWorktree(services, input, id, input.worktreeBase, entersNamespace(input), { mirror: true }),
                 // What carries a failed turn on is this sandbox's to decide, never the runner's (remote-failure.ts).

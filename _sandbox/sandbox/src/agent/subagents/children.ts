@@ -62,6 +62,7 @@ import { type ResultSchema, type ResultValue, turnResult } from "./child-result.
 import { briefOf, opensWithBrief, takeBriefRead, withBrief } from "./starting/child-brief.js";
 import { resetRoomLineForTest, stopRoomWait, wakeParentUnstarted } from "./starting/child-room.js";
 import { admitAndStart, type StartedChildTurn } from "./starting/child-start.js";
+import { resetChildDiskRoomLineForTest, stopChildDiskRoomWait } from "../run/placement/child-disk-room.js";
 import { AFTER_SKIPPED, afterDue, afterMoved, afterRefusal, afterSummary, resetAfterForTest, startAfterNow, waitForSiblings, withdrawAfter } from "./starting/child-after.js";
 import { CHILDREN, childResultOf, closeUnstarted, keepChild, SEATS, settleChild } from "./child-records.js";
 import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedByRules, restoredStartAnswer, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
@@ -262,6 +263,7 @@ export const resetChildrenForTest = (actors: Actors): void => {
     FAN_OUT.reset();
     SEAT_LINE.reset();
     resetRoomLineForTest();
+    resetChildDiskRoomLineForTest();
     resetAfterForTest();
 };
 
@@ -1525,6 +1527,7 @@ const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: Chi
     // Still waiting for memory, or for a turn somebody else started on it: its start sees the cancel and does not happen.
     if (run === undefined || kid.queued || kid.behind) {
         stopRoomWait(childId);
+        stopChildDiskRoomWait(childId);
         return { ok: true, note: CANCEL_NOTES.waiting };
     }
     await services.turns.stop({ conversationId: childId, run: run.id });

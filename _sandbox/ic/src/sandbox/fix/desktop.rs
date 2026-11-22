@@ -158,6 +158,18 @@ pub fn shutdown_wsl(facts: &DeviceFacts) -> Done {
         return Err("WSL is restarted from Windows.".to_string());
     }
     let ours = crate::engine::in_use() == crate::engine::Kind::Intentic;
+    #[cfg(windows)]
+    if ours {
+        let (free, drive) = crate::checks::windows_free_bytes();
+        if !crate::engine::wsl_errors::enough_recovery_space(free) {
+            let free = free
+                .map(|bytes| format!("{} GiB", bytes / (1024 * 1024 * 1024)))
+                .unwrap_or_else(|| "an unknown amount of space".to_string());
+            return Err(format!(
+                "The {drive} drive has {free}; free at least 5 GiB before `wsl --shutdown` can re-attach the engine disk. Docker Desktop and every other WSL distro restart too."
+            ));
+        }
+    }
     // With our engine in use the facts call Docker Desktop absent (it is not what runs the sandboxes), so whether it
     // runs is read off the task list here.
     let desktop_ran = facts.desktop == super::host::Desktop::Running

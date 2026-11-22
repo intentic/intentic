@@ -20,6 +20,7 @@ import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
 import { type BooksDeps, keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
 import { CheckoutSpaceRefused } from "../../../system/resources/storage/checkout-space.js";
 import type { ReachWatch } from "./turn-reach.js";
+import { composeWithChildDiskRoom } from "./child-disk-room.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -286,7 +287,7 @@ async function* landIntoParent(
 // whatever the remote turn said, since the mirror is what the runner delivered.
 export const runnerPlacement = (
     deps: BooksDeps & Pick<Services, "turnCheckpoints">,
-    turn: { readonly conversationId: string; readonly snapshot: SnapshotTurn; readonly runner: string },
+    turn: { readonly conversationId: string; readonly snapshot: SnapshotTurn; readonly runner: string; readonly signal?: AbortSignal | undefined },
     steps: {
         // Composes the mirror with the same decision a local turn makes.
         readonly compose: () => Promise<ConversationWorktree>;
@@ -294,7 +295,7 @@ export const runnerPlacement = (
     },
 ): Placement => ({
     async *open () {
-        const worktree = await steps.compose();
+        const worktree = await composeWithChildDiskRoom(deps, turn.conversationId, turn.signal, steps.compose);
         // The mirror was just composed: nothing rebased it, and the runner enforces its own paths.
         yield { ...worktreeFrame(worktree, new Map(), true, []), remote: turn.runner };
         yield* anchorIsolatedTurn(deps, turn.conversationId, worktree.repos, turn.snapshot);

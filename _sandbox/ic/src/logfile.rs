@@ -38,6 +38,52 @@ pub fn intentic_home() -> PathBuf {
     home_dir().join(".intentic")
 }
 
+/// Render a command line for logs without copying credentials from docker's env arguments into the log.
+/// Pure so every path that records a command can share the same policy.
+pub fn command_for_log(program: &str, args: &[String]) -> String {
+    let mut rendered = Vec::with_capacity(args.len() + 1);
+    rendered.push(program.to_string());
+    let mut env_value_follows = false;
+    for arg in args {
+        if env_value_follows {
+            rendered.push(redact_env_assignment(arg));
+            env_value_follows = false;
+            continue;
+        }
+        if arg == "-e" || arg == "--env" {
+            rendered.push(arg.clone());
+            env_value_follows = true;
+        } else if let Some(value) = arg.strip_prefix("--env=") {
+            rendered.push(format!("--env={}", redact_env_assignment(value)));
+        } else if let Some(value) = arg.strip_prefix("-e").filter(|value| value.contains('=')) {
+            rendered.push(format!("-e{}", redact_env_assignment(value)));
+        } else {
+            rendered.push(arg.clone());
+        }
+    }
+    rendered.join(" ")
+}
+
+fn redact_env_assignment(value: &str) -> String {
+    let Some((name, _)) = value.split_once('=') else {
+        return value.to_string();
+    };
+    if sensitive_env_name(name) {
+        format!("{name}=…redacted…")
+    } else {
+        value.to_string()
+    }
+}
+
+fn sensitive_env_name(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    name == "OWNER_EMAIL"
+        || name == "SANDBOX_GRANT"
+        || ["_TOKEN", "_SECRET", "_PASSWORD", "_KEY"]
+            .iter()
+            .any(|suffix| name.ends_with(suffix))
+}
+
 fn home_dir() -> PathBuf {
     #[cfg(unix)]
     let home = std::env::var("HOME").unwrap_or_default();
@@ -242,6 +288,47 @@ fn prune(dir: &std::path::Path, prefix: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_logs_redact_credential_env_values_but_keep_key_file_paths() {
+        let args = [
+            "run".to_string(),
+            "-e".to_string(),
+            "CONNECT_TOKEN=abc".to_string(),
+            "--env=SYNC_PAIR_TOKEN=xyz".to_string(),
+            "-eHOST_PAIR_TOKEN=def".to_string(),
+            "-e".to_string(),
+            "SANDBOX_GRANT=grant".to_string(),
+            "-e".to_string(),
+            "OWNER_EMAIL=person@example.test".to_string(),
+            "-e".to_string(),
+            "API_SECRET=s".to_string(),
+            "-e".to_string(),
+            "DB_PASSWORD=p".to_string(),
+            "-e".to_string(),
+            "SIGNING_KEY=k".to_string(),
+            "-e".to_string(),
+            "TLS_KEY_FILE=/run/secrets/key".to_string(),
+            "-e".to_string(),
+            "PLAIN_NAME=shown".to_string(),
+        ];
+        let logged = command_for_log("docker", &args);
+        for name in [
+            "CONNECT_TOKEN",
+            "SYNC_PAIR_TOKEN",
+            "HOST_PAIR_TOKEN",
+            "SANDBOX_GRANT",
+            "OWNER_EMAIL",
+            "API_SECRET",
+            "DB_PASSWORD",
+            "SIGNING_KEY",
+        ] {
+            assert!(logged.contains(&format!("{name}=…redacted…")), "{logged}");
+        }
+        assert!(logged.contains("TLS_KEY_FILE=/run/secrets/key"), "{logged}");
+        assert!(logged.contains("PLAIN_NAME=shown"), "{logged}");
+        assert!(!logged.contains("person@example.test"), "{logged}");
+    }
 
     /// A sink writing into a buffer the test reads back.
     #[derive(Clone, Default)]

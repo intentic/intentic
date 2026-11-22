@@ -392,7 +392,13 @@ fn restic(
         args.extend_from_slice(&["-v", mount]);
     }
     args.extend_from_slice(&["--entrypoint", "sh", RESTIC_IMAGE, "-c", &full_script]);
-    log.line(&format!("docker {}", args.join(" ")));
+    log.line(&crate::logfile::command_for_log(
+        "docker",
+        &args
+            .iter()
+            .map(|arg| (*arg).to_string())
+            .collect::<Vec<_>>(),
+    ));
     let ran = docker::capture_bounded(&args, LIMIT)?;
     log.line(&ran.stdout);
     log.line(&ran.stderr);

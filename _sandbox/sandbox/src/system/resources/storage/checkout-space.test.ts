@@ -11,13 +11,18 @@ test("the history floor clamps two percent to 5–20 GiB", () => {
 test("a checkout may leave exactly the floor, but not one byte less", () => {
     expect(checkoutSpace({ totalBytes: 100 * GIB, freeBytes: 5 * GIB }, 0)).toEqual({ floorBytes: 5 * GIB, allowed: true });
     expect(checkoutSpace({ totalBytes: 100 * GIB, freeBytes: 5 * GIB - 1 }, 0)).toEqual({ floorBytes: 5 * GIB, allowed: false });
-    expect(checkoutSpace({ totalBytes: 500 * GIB, freeBytes: 23 * GIB }, 13 * GIB)).toEqual({ floorBytes: 10 * GIB, allowed: true });
+    expect(checkoutSpace({ totalBytes: 500 * GIB, freeBytes: 25 * GIB }, 15 * GIB)).toEqual({ floorBytes: 10 * GIB, allowed: true });
     expect(checkoutSpace({ totalBytes: 500 * GIB, freeBytes: 23 * GIB - 1 }, 13 * GIB)).toEqual({ floorBytes: 10 * GIB, allowed: false });
-    expect(checkoutSpace({ totalBytes: 4000 * GIB, freeBytes: 80 * GIB }, 13 * GIB)).toEqual({ floorBytes: 20 * GIB, allowed: true });
+    expect(checkoutSpace({ totalBytes: 4000 * GIB, freeBytes: 250 * GIB }, 230 * GIB)).toEqual({ floorBytes: 20 * GIB, allowed: true });
 });
 
 test("the refusal says the measured free space, checkout estimate and recovery", () => {
     expect(checkoutRefusal(3_100_000_000, 13_000_000_000)).toBe(
         "The sandbox's disk has 3.1 GB free, too little to give this conversation its own copy of the workspace (about 13 GB). Free space in Settings → Storage, or send again to check it out anyway.",
     );
+});
+
+test("only a reading the Windows drive limits stops checkouts under 5% free; a native disk keeps its floor", () => {
+    expect(checkoutSpace({ totalBytes: 1000 * GIB, freeBytes: 40 * GIB }, GIB).allowed).toBe(true);
+    expect(checkoutSpace({ totalBytes: 1000 * GIB, freeBytes: 40 * GIB, limitedBy: { drive: "C:\\", driveFreeBytes: 40 * GIB } }, GIB).allowed).toBe(false);
 });

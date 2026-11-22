@@ -953,13 +953,22 @@ Windows side's agent now watches that disk
 ([`device/sandbox-rounds/engine-disk.ts`](src/device/sandbox-rounds/engine-disk.ts)). ic does the measuring and the
 clearing ([`ic engine disk`](../../_sandbox/ic/README.md)); this keeps the clock and tells.
 
-- **Every minute**, `ic engine disk --json`: one `df` in the distro, and the level it makes. `ok`; `low` under 10% of
+- **Every minute**, `ic engine disk --json`: the effective space, limited by the guest disk or the Windows drive holding
+  the engine's VHDX, and the level it makes. When the Windows drive is limiting, the line names it and its free space
+  (for example, `Windows drive C:\ has 18.5 GB free under the engine's disk (376.0 GB)`). `ok`; `low` under 10% of
   the disk left to write; `critical` under 5%; `full` under the ballast the engine's keeper holds back (2% of the disk,
   2 to 10 GiB, [engine README](../../_sandbox/ic/engine/README.md#its-disk)), which the keeper gives back the moment the
   disk reaches it. "Left to write" is what a process that is not root may still write, which is where a database in a
   container stops. An engine that is not this PC's, a stopped one, or an ic too old to answer is said once and asked
   again every ten minutes. Only the Windows side runs it: the engine is the PC's, and the distros' agents would watch
   the same disk twice.
+- **Unreadable.** A failed read that points to I/O or a broken WSL attachment, or an `unreadable` answer from ic, is
+  said once until a read succeeds. The line explains that the Windows drive may have filled and left WSL holding a
+  broken attachment, and says to free space if the drive is short before running `ic engine restart --wsl`. That repair
+  restarts Docker Desktop too. The watch checks again every ten minutes while the disk cannot be read.
+- **Compaction.** When more than both 50 GB and a quarter of the VHDX could be returned, the line says approximately
+  how much `ic engine compact` could give back. It is said once while space is low, and is never run by the watch. Compaction
+  needs one UAC prompt and stops sandboxes on the engine for a few minutes.
 - **Cleared.** On each level crossed upwards, and every quarter hour while it stands at critical or full, `--relieve`
   clears what is nobody's data for that level: dangling build cache and dangling images when low, all unused build
   cache when critical, and when full the ballast first. Never a volume and never an image with a name. A clearing while

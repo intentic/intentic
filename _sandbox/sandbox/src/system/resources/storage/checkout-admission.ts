@@ -1,6 +1,65 @@
 import type { StatsFs } from "node:fs";
-import { statfs } from "node:fs/promises";
-import { checkoutSpace, CheckoutSpaceRefused, type HistorySpace } from "./checkout-space.js";
+import { readFile, statfs } from "node:fs/promises";
+import { join } from "node:path";
+import { z } from "zod";
+import { checkoutSpace, CheckoutSpaceRefused, hostDriveCritical, type HistorySpace } from "./checkout-space.js";
+
+const HOST_DISK_HINT_MAX_AGE_MS = 30 * 60_000;
+const HOST_DISK_HINT_CACHE_MS = 3_000;
+const HostEngineSchema = z.enum(["intentic", "dockerDesktop", "own"]);
+const HostDiskHintSchema = z.object({
+    v: z.literal(1),
+    at: z.number().int().nonnegative(),
+    engine: HostEngineSchema,
+    drive: z.string().min(1),
+    driveFreeBytes: z.number().int().nonnegative(),
+    driveTotalBytes: z.number().int().nonnegative(),
+    backingPath: z.string().min(1),
+    backingBytes: z.number().int().nonnegative(),
+});
+type HostDiskHint = z.infer<typeof HostDiskHintSchema>;
+
+interface CachedHostDiskHint {
+    readonly until: number;
+    readonly read: Promise<HostDiskHint | undefined>;
+}
+
+const hostDiskHints = new Map<string, CachedHostDiskHint>();
+
+const readHostDiskHint = (engine: string, directory: string, now: number): Promise<HostDiskHint | undefined> => {
+    const key = `${engine}\0${directory}`;
+    const cached = hostDiskHints.get(key);
+    if (cached !== undefined && now < cached.until) {
+        return cached.read;
+    }
+    const read = readFile(join(directory, `disk-${engine}.json`), "utf8")
+        .then((contents) => HostDiskHintSchema.safeParse(JSON.parse(contents)))
+        .then((parsed) => {
+            if (!parsed.success || parsed.data.engine !== engine || now - parsed.data.at > HOST_DISK_HINT_MAX_AGE_MS) {
+                return undefined;
+            }
+            return parsed.data;
+        })
+        // allow(silent-catch): host hints are optional; missing, unreadable, or malformed hints preserve the statfs reading.
+        .catch(() => undefined);
+    hostDiskHints.set(key, { until: now + HOST_DISK_HINT_CACHE_MS, read });
+    return read;
+};
+
+// Pure clamp for the dense VHDX on its host drive: existing backing-file blocks can be reused before the file grows.
+export const limitHistorySpaceByHostDisk = (space: HistorySpace, hint: HostDiskHint): HistorySpace => {
+    const used = space.totalBytes - space.freeBytes;
+    const hostRoom = hint.driveFreeBytes + Math.max(0, hint.backingBytes - used);
+    const freeBytes = Math.min(space.freeBytes, hostRoom);
+    if (hostRoom >= space.freeBytes) {
+        return space;
+    }
+    return {
+        freeBytes,
+        totalBytes: used + freeBytes,
+        limitedBy: { drive: hint.drive, driveFreeBytes: hint.driveFreeBytes },
+    };
+};
 
 // Root's writes may fill the reserved blocks an unprivileged writer is kept out of (checkout-space.ts).
 export const readHistorySpace = async (
@@ -9,7 +68,16 @@ export const readHistorySpace = async (
     readVolume: (root: string) => Promise<StatsFs> = statfs,
 ): Promise<HistorySpace> => {
     const volume = await readVolume(root);
-    return { freeBytes: (privileged ? volume.bfree : volume.bavail) * volume.bsize, totalBytes: volume.blocks * volume.bsize };
+    const space: HistorySpace = {
+        freeBytes: (privileged ? volume.bfree : volume.bavail) * volume.bsize,
+        totalBytes: volume.blocks * volume.bsize,
+    };
+    const engine = process.env["HOST_ENGINE"];
+    if (engine === undefined || !HostEngineSchema.safeParse(engine).success) {
+        return space;
+    }
+    const hint = await readHostDiskHint(engine, process.env["INTENTIC_HOST_DISK_DIR"] ?? "/run/intentic/host", Date.now());
+    return hint === undefined ? space : limitHistorySpaceByHostDisk(space, hint);
 };
 
 // A first turn reserves its estimate until its checkouts stand, so concurrent turns cannot all spend the same room.
@@ -33,11 +101,11 @@ export const reserveCheckoutSpace = async (
         if (key !== undefined) {
             warned.delete(key);
         }
-    } else if (key === undefined || !warned.has(key) || space.freeBytes < bytes + pending) {
+    } else if (hostDriveCritical(space) || key === undefined || !warned.has(key) || space.freeBytes < bytes + pending) {
         if (key !== undefined) {
             warned.add(key);
         }
-        throw new CheckoutSpaceRefused(space.freeBytes, bytes);
+        throw new CheckoutSpaceRefused(space.freeBytes, bytes, space.limitedBy);
     }
     reservations.set(root, pending + bytes);
     return () => {

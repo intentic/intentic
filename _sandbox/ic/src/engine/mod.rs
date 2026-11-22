@@ -7,8 +7,10 @@
 
 pub mod choice;
 mod commands;
+mod compact;
 mod disk;
 mod disk_consumers;
+pub mod host_disk;
 
 /// What a process that is not root may still write on the intentic engine's disk, when this PC's sandboxes run on it
 /// and its distro answers; None otherwise (another engine, a stopped distro, a reading that failed). The disk guards
@@ -28,7 +30,7 @@ mod pins;
 mod record;
 #[cfg(windows)]
 mod wsl;
-mod wsl_errors;
+pub(crate) mod wsl_errors;
 
 #[cfg(windows)]
 mod relay;
@@ -37,6 +39,7 @@ mod windows;
 #[cfg(windows)]
 mod wsl_integration;
 
+pub use compact::Args as CompactArgs;
 /// What a docker prune says it reclaimed; tidy's build cache step reads its prune by the same rule.
 pub use disk::reclaimed as prune_reclaimed;
 pub use disk::DiskArgs;
@@ -393,6 +396,23 @@ pub fn restart() -> Result<(), String> {
     }
 }
 
+/// Restart normally, optionally consenting to the machine-wide WSL shutdown used to repair a broken engine VHDX
+/// attachment. Non-Windows builds retain the existing no-op behavior unless that Windows-only repair is requested.
+pub fn restart_with_wsl(consent: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        windows::restart_with_wsl(consent)
+    }
+    #[cfg(not(windows))]
+    {
+        if consent {
+            Err("`ic engine restart --wsl` is available only on Windows.".to_string())
+        } else {
+            restart()
+        }
+    }
+}
+
 pub fn hold() -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -494,7 +514,7 @@ pub fn adopt() {
 }
 
 pub use commands::{
-    default_action, docker_desktop_installed, run_copy, run_disk, run_fetch, run_hold, run_install,
-    run_prefer, run_relay, run_remove, run_restart, run_start, run_status, run_stop, run_update,
-    run_wsl,
+    default_action, docker_desktop_installed, run_compact, run_copy, run_disk, run_fetch, run_hold,
+    run_install, run_prefer, run_relay, run_remove, run_restart, run_start, run_status, run_stop,
+    run_update, run_wsl,
 };

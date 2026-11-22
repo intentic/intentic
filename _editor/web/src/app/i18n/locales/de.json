@@ -8937,6 +8937,7 @@
             "cleanBuildOutput": "Build-Ausgabe bereinigen",
             "cleanBuildOutputDetail": "Entfernt, was Builds in Checkouts hinterlassen haben, deren Unterhaltung gerade nichts ausführt; der nächste Build erzeugt es neu.",
             "diskLow": "Die Festplatte ist fast voll: {free} frei ({percent} %)",
+            "diskHostLimit": "Das Windows-Laufwerk {drive} unter der Sandbox-Engine hat noch {free} frei",
             "diskReaped": "{bytes} Build-Ausgabe aus {count} fertigen Checkout entfernt | {bytes} Build-Ausgabe aus {count} fertigen Checkouts entfernt",
             "diskUsing": "{category} belegt am meisten ({bytes})"
         },

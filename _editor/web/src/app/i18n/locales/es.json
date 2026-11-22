@@ -8937,6 +8937,7 @@
             "cleanBuildOutput": "Limpiar resultados de compilación",
             "cleanBuildOutputDetail": "Quita lo que dejaron las compilaciones en checkouts cuya conversación no está ejecutando nada; la próxima compilación lo vuelve a crear.",
             "diskLow": "El disco está casi lleno: {free} libres ({percent} %)",
+            "diskHostLimit": "La unidad de Windows {drive} bajo el motor del sandbox tiene {free} libres",
             "diskReaped": "se quitaron {bytes} de resultados de compilación de {count} checkout terminado | se quitaron {bytes} de resultados de compilación de {count} checkouts terminados",
             "diskUsing": "{category} es lo que más ocupa ({bytes})"
         },

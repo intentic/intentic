@@ -21,6 +21,7 @@ import type { TurnInput } from "../../../seams/turn-starter.js";
 import { type LandBooks, type LandingDeps, type LandingHooks, landTurn, settleLandBooks } from "../../../conversations/land/turn-landing.js";
 import { anchorIsolatedTurn, type Placement, worktreeFrame } from "./turn-placement.js";
 import type { ReachWatch } from "./turn-reach.js";
+import { composeWithChildDiskRoom } from "./child-disk-room.js";
 
 // An isolated conversation's own worktree: composed and rebased onto today's main line before the model reads it,
 // rebased again whenever a parked card settles, after a tool call where the main line moved nothing it changed and at
@@ -275,7 +276,6 @@ export const worktreePlacement = (
     const books: LandBooks = { span: [], branch: "", outcome: undefined, reconciled: false };
     // Workflow steps stay on the run's snapshot; rebasing would reintroduce the removed race.
     const pinned = input.worktreeBase !== undefined;
-    // Nothing to rebase until the worktree is composed, and never for a pinned step.
     let rebase = async (_upstream: Upstream, _gate?: SyncGate): Promise<RepoSync[]> => [];
     // A rebase outside the land, under the leases of every checkout it reads and writes (land-target.ts).
     const rebaseLeased = async (): Promise<RepoSync[]> => {
@@ -296,7 +296,8 @@ export const worktreePlacement = (
         async *open () {
             const entry = deps.agents.entry(conversationId);
             // A fork wanting the files as they were starts at the source's own commit, for comparability.
-            const worktree = await steps.compose(input.worktreeBase ?? (await forkWorktreeBase(deps.turnCheckpoints, input.forkOf)));
+            const openingBase = input.worktreeBase ?? (await forkWorktreeBase(deps.turnCheckpoints, input.forkOf));
+            const worktree = await composeWithChildDiskRoom(deps, conversationId, turn.signal, () => steps.compose(openingBase));
             const onto = new Map<string, string>();
             rebase = pinned ? rebase : rebaser(deps, conversationId, worktree, onto, books);
             // Reported per turn, not once at boot: it depends on how the container launched. A fenced checkout is

@@ -8408,6 +8408,7 @@
             "cleanBuildOutput": "Wyczyść wyniki budowania",
             "cleanBuildOutputDetail": "Usuwa to, co buildy zostawiły w checkoutach rozmów, w których nic teraz nie działa; następny build utworzy to ponownie.",
             "diskLow": "Dysk jest prawie pełny: wolne {free} ({percent}%)",
+            "diskHostLimit": "Dysk Windows {drive} pod silnikiem sandboxa ma {free} wolnego miejsca",
             "diskReaped": "usunięto {bytes} wyników budowania z {count} zakończonego checkoutu | usunięto {bytes} wyników budowania z {count} zakończonych checkoutów",
             "diskUsing": "najwięcej zajmuje {category} ({bytes})"
         },

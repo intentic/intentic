@@ -15,6 +15,8 @@ import { opt } from "../../opt.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { createAgentWorktrees } from "./worktrees.js";
 import { settledEstimate } from "./build-outputs/build-output-estimate.js";
+import { agentRepoChanges } from "../land/agent-changes.js";
+import { isolatedAgent } from "../registry/agents-store.testing.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -580,6 +582,24 @@ test("a retired agent's checkout comes back from its branch, with its work", asy
     expect(await readFile(join(restored.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
 });
 
+test("a retired held child diff reads its parked branch ref without reattaching the checkout", async () => {
+    const { work, worktrees } = await setup();
+    const opened = await worktrees.ensure("held-child", []);
+    await writeFile(join(opened.cwd, "CLAUDE.md"), "held child work\n");
+    await worktrees.retire("held-child", opened.repos, "held child");
+    const entry = isolatedAgent(opened.repos, { id: "held-child", landing: { conflicts: [] } });
+    const root = opened.repos.find(({ repo }) => repo === "root");
+    if (root === undefined) {
+        throw new Error("test setup did not create the root repo");
+    }
+    expect(await worktrees.attached("held-child", "root")).toBe(false);
+    expect(await agentRepoChanges(worktrees, entry, root, "outstanding")).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: "CLAUDE.md" })]),
+    );
+    expect(existsSync(worktrees.conversationDir("held-child"))).toBe(false);
+    expect(await readFile(join(work, "CLAUDE.md"), "utf8")).toBe("workspace notes\n");
+});
+
 // Deleting a nested repo takes `<repo>/.git/worktrees/<name>` with it, leaving a dangling checkout where every git
 // command fails; retire reclaims what it can there while preserving the repos that still exist.
 test("retire reclaims a checkout whose repository was deleted from the workspace, and still preserves the rest", async () => {
@@ -945,6 +965,8 @@ test("disk admission guards fresh, joined and retired checkouts but lets standin
     expect(standing.repos).toEqual(first.repos);
     expect(reads).toBe(2);
     await expect(worktrees.ensure("c2", [])).rejects.toThrow("The sandbox's disk has 3.1 GB free");
+    await expect(worktrees.ensure("sub-automated", [], undefined, undefined, [], undefined, true, null)).rejects.toThrow("The sandbox's disk has 3.1 GB free");
+    await expect(worktrees.ensure("sub-automated", [], undefined, undefined, [], undefined, true, null)).rejects.toThrow("The sandbox's disk has 3.1 GB free");
     expect(existsSync(worktrees.conversationDir("c2"))).toBe(false);
     // Each conversation is told once (the next test), so the joined and retired cases are two conversations.
     await expect(worktrees.ensure("c3", other.repos, undefined, undefined, ["intent"])).rejects.toThrow(
