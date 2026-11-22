@@ -59,7 +59,7 @@ it("shows the sandbox's own sentence when it refuses or the computer is not avai
 
 it("opens what its switches allow, and names the one that is off", () => {
     const side = remoteSide(row(), { kind: `answered`, status: status({ allow: { view: false, control: false, terminal: true } }) });
-    expect(side?.screen).toEqual({ ready: false, reason: `Seeing the screen is switched off for this computer.` });
+    expect(side?.screen).toEqual({ ready: false, reason: `Seeing the screen is off in this computer’s permissions.` });
     expect(side?.terminal).toEqual({ ready: true });
     expect(side?.monitors).toEqual([monitor]);
 });

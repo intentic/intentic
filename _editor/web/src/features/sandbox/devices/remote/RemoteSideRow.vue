@@ -5,8 +5,9 @@ import { BrandMark, Button, ConfirmDialog, Icon, Row, useDevice } from "@intenti
 import { timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { errorMessage } from "@intentic/base/errors";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { osMark, platformName } from "../../../../models/sandbox/devices/deviceFacts";
 import { screenRoute } from "../../../../models/sandbox/devices/deviceLinks";
 import type { DeviceRow } from "../../../../models/sandbox/devices/deviceRows";
@@ -38,6 +39,30 @@ const read = computed<StatusRead | undefined>(() => {
     return query.error.value === null ? { kind: `waiting` } : { kind: `refused`, reason: errorMessage(query.error.value) };
 });
 const side = computed(() => remoteSide(row, read.value));
+// The switches live on the computer's card (its form, an agent, another window can flip them), so a status whose `allow`
+// no longer matches the card is read again at once rather than at the next poll.
+const { capabilities } = useCapabilities();
+const stale = computed(() => {
+    const config = capabilities.value.find((capability) => capability.id === row.device.card)?.config;
+    const allow = query.data.value?.allow;
+    if (config === undefined || allow === undefined) {
+        return false;
+    }
+    return (
+        (config[`remoteView`] === `on`) !== allow.view ||
+        (config[`remoteControl`] === `on`) !== allow.control ||
+        (config[`remoteTerminal`] === `on`) !== allow.terminal
+    );
+});
+watch(
+    stale,
+    (now) => {
+        if (now && !query.isFetching.value) {
+            void query.refetch();
+        }
+    },
+    { immediate: true },
+);
 const mark = computed(() => osMark(row.device));
 const title = computed(() => environmentTitle(row));
 // The one line under the name: why nothing here opens, else why one of the two does not, else nothing.

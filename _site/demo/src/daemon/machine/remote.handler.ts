@@ -5,7 +5,7 @@ import { capabilityList } from "../account/capabilities";
 import type { Doors } from "../doors";
 
 // A person's screen and terminals on the owner's PC (fixture/devices.ts `ada-pc`, and its Arch Linux side): what each
-// environment can open, as the PC's card's three switches allow (flipped on the Devices page, written to the capability
+// environment can open, as the PC's card's three switches allow (flipped on that card's form, written to the capability
 // store, read back here), two monitors on the Windows side, and the shells already running on each. A screen and a
 // terminal open with a path and a token as the sandbox hands them out; the demo serves no picture or shell behind them,
 // so the views show their own connecting state.
