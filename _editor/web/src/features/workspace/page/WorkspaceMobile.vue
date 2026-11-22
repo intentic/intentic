@@ -26,7 +26,7 @@ import { reportOpenPath } from "../../../workbench/presence/usePresence";
 import { outgoingMark, outgoingSummary } from "../../../models/workspace/push/outgoingWork";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../../../models/changes/useChanges";
-import { useMonaco } from "../files/useMonaco";
+import { warmMonaco } from "../files/useMonaco";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import { matchToggles } from "../../../models/workspace/search/useSearchOptions";
@@ -151,8 +151,8 @@ const diff = useLoaded(() => ({
 // Presence: announces which file this tab has open.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
-// Loads Monaco (+ Shiki bridge) up front so the first file open isn't cold.
-onMounted(() => void useMonaco().ensureMonaco());
+// Loads Monaco (+ Shiki bridge) at the first touch in the files rather than up front (useMonaco.ts warmMonaco).
+onMounted(() => rootEl.value?.addEventListener(`pointerover`, warmMonaco, { once: true }));
 
 const openMeta = computed(() => entry(openPath.value));
 

@@ -102,6 +102,10 @@ export default defineConfig(({ command }) => ({
         rolldownOptions: {
             // One HTML entry: a floating panel is a route (/floating/<panel>), not a separate page to build.
             input: { index: here("./index.html") },
+            // Non-ASCII written as escapes: one `…` or `ł` anywhere in a chunk makes V8 hold the whole script as UTF-16,
+            // two bytes a character. Every large chunk had one, so the page's 12.6 M characters of script took 22.5 MB as
+            // strings, and Monaco's 3.7 M took 7.5 MB (2026-11-21). Escaped, each is one byte a character.
+            output: { charset: `ascii` },
         },
     },
 }));

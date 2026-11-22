@@ -12,7 +12,6 @@ import {
     type CapacityRow,
     type CapacityUnread,
     chatCapacity,
-    heldReadings,
 } from "./chatCapacity";
 import { accountsLoaded } from "../../../../models/providers/providerAccounts";
 import { formatAge, formatRemaining, formatReset } from "../../../../models/providers/usageStatus";
@@ -125,7 +124,7 @@ const remeasureLabel = computed(() =>
 // the column's height: this rail is not where accounts are fixed. So the drawn form is one quiet icon and a count
 // beside the age, and every sentence rides the hover and the screen reader.
 const staleNote = computed((): { readonly count: number; readonly detail: string } | undefined => {
-    const held = heldReadings(heldAccounts.value);
+    const { held } = capacity.value;
     const lines = [
         ...(held === undefined
             ? []
@@ -159,7 +158,7 @@ const staleTip = computed((): Tip | undefined => {
     if (staleNote.value === undefined) {
         return undefined;
     }
-    const held = heldReadings(heldAccounts.value);
+    const { held } = capacity.value;
     const unread = capacity.value.unread;
     const refused = unread.reduce((sum, entry) => sum + entry.count, 0);
     const lastReads = unread.flatMap((entry) => (entry.lastReadAt === undefined ? [] : [entry.lastReadAt]));

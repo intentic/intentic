@@ -373,8 +373,8 @@ export const shared = {
     // since Vite keeps the named exports (and the literal) while `namedExports` is on.
     json: { namedExports: false, stringify: true },
     // ES workers, since the code highlighter's worker (ui/src/markdown/highlightWorker.ts) loads each grammar as its
-    // own chunk on first use, which an IIFE worker cannot split.
-    worker: { format: `es` as const },
+    // own chunk on first use, which an IIFE worker cannot split. ASCII for the reason the app's chunks are (vite.config.ts).
+    worker: { format: `es` as const, rolldownOptions: { output: { charset: `ascii` as const } } },
     define: { "import.meta.env.BUILD_ID": JSON.stringify(BUILD_ID), "import.meta.env.BUILD_COMMIT": JSON.stringify(BUILD_COMMIT) },
     resolve: {
         // Source-first workspace aliases shared with bun.setup.ts; see source-aliases.ts.

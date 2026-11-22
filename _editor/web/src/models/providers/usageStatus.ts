@@ -32,6 +32,7 @@ import { formatWhen, timeAgo } from "@intentic/ui/format";
 import { sandboxNow } from "../agent-status/sandboxClock";
 import { t } from "@intentic/ui/i18n";
 import { type AccountFacts, accountFacts, factsOf, freshest, providerFacts, refusalsOf, routedAccountFacts, withRow } from "./capacity/doorFacts";
+import { heldAlike, type ProviderJudgement, judgementsAt } from "./capacity/providerJudgement";
 import { verdictNow } from "./capacity/verdictClock";
 
 // Where the door's facts come from (a held capacity, else the stores), served from here too, so a surface reads one door.
@@ -499,10 +500,15 @@ interface PlanLimitSource {
     readonly routed: boolean;
 }
 
-const planLimitRow = (provider: AgentProvider, source: PlanLimitSource, now: number): PlanLimitRow => {
+const planLimitRow = (provider: AgentProvider, source: PlanLimitSource, now: number, judgement: ProviderJudgement): PlanLimitRow => {
     const { account } = source.facts;
+    const facts = factsOf(provider, source.facts);
+    // Read off the provider's one judgement where it holds the account as this row does (providerJudgement.ts).
+    const shared = heldAlike(judgement, facts);
     // The pools are drawn at the instant the row's verdict is judged at, never one a moment apart.
-    const usage = liveUsage(provider, account, source.facts.usage, undefined, now);
+    const usage = shared
+        ? judgedReading(usageAt(facts.usage, sandboxNow(now)), judgement.standing(account))
+        : liveUsage(provider, account, source.facts.usage, undefined, now);
     const pools = usage === undefined ? [] : usagePools(usage);
     const binding = usage === undefined ? undefined : bindingPool(usage, pools, undefined);
     return {
@@ -519,29 +525,47 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource, now: num
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
         routed: source.routed,
-        state: accountState(provider, source.facts, undefined, now),
-        facts: factsOf(provider, source.facts),
+        state: shared ? (judgement.states.get(account) ?? { kind: `unknown` }) : accountState(provider, source.facts, undefined, now),
+        facts,
     };
 };
 
 // Measured rows first, tightest on top — the account about to gate a turn should be visible without scrolling.
 // Unmeasured rows sink; unknown isn't headroom.
-export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts, now: number = verdictNow()): PlanLimitRow[] =>
-    [
+export const planLimitRows = (
+    native: Record<string, readonly OauthAccount[]>,
+    routed: TranslatorAccounts,
+    now: number = verdictNow(),
+): PlanLimitRow[] => {
+    // Native and routed accounts of one provider are one list to the rule, so they share its one judgement.
+    const judgementOf = judgementsAt(now);
+    return [
         ...Object.entries(native).flatMap(([provider, accounts]) =>
             accounts.map((account) =>
-                planLimitRow(provider, {
-                    facts: accountFacts(account),
-                    label: account.label,
-                    // Omitted when it would just repeat the label (already the account's email).
-                    identity: account.email === account.label ? undefined : account.email,
-                    routed: false,
-                }, now),
+                planLimitRow(
+                    provider,
+                    {
+                        facts: accountFacts(account),
+                        label: account.label,
+                        // Omitted when it would just repeat the label (already the account's email).
+                        identity: account.email === account.label ? undefined : account.email,
+                        routed: false,
+                    },
+                    now,
+                    judgementOf(provider),
+                ),
             ),
         ),
         // Routed accounts have no separate identity (label is the name).
         ...Object.entries(routed).flatMap(([provider, accounts]) =>
-            accounts.map((account) => planLimitRow(provider, { facts: routedAccountFacts(account), label: account.label, identity: undefined, routed: true }, now)),
+            accounts.map((account) =>
+                planLimitRow(
+                    provider,
+                    { facts: routedAccountFacts(account), label: account.label, identity: undefined, routed: true },
+                    now,
+                    judgementOf(provider),
+                ),
+            ),
         ),
     ].toSorted((left, right) => {
         if (left.percent === undefined || right.percent === undefined) {
@@ -549,6 +573,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
         }
         return right.percent - left.percent || left.label.localeCompare(right.label);
     });
+};
 
 // Aggregated by provider: rows don't scale to dozens of accounts, so capacity is a band count, not an average.
 

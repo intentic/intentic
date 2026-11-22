@@ -38,7 +38,7 @@ import {
     relistWhenSeen,
 } from "./lazyListings";
 import { actionError, busy, run } from "./treeActions";
-import { eagerIndex, spanningIndex } from "./treeIndex";
+import { storeIndex } from "./treeIndex";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { isShared, scopeFields, scopeQuery, workspaceView } from "../../../app/workspaceScope";
@@ -416,10 +416,9 @@ export function useWorkspaceTree() {
     const rootHidden = computed(() => query.data.value?.hidden ?? 0);
     // Folders containing only empty folders, workspace-wide; not derivable from `tree` since budget cuts hide it.
     const barren = computed<readonly string[]>(() => query.data.value?.barren ?? []);
-    // Eager tree walk, cached separately so a lazy subtree landing doesn't re-walk the whole eager tree each time.
-    const eagerByPath = computed(() => eagerIndex(tree.value));
-    // Path → entry map spanning the eager tree and every lazy subtree, so a lazily-shown file resolves by path.
-    const entriesByPath = computed(() => spanningIndex(eagerByPath.value, lazyChildren.value));
+    // Path → entry spanning the eager tree and every lazy subtree, so a lazily-shown file resolves by path. Looked up
+    // folder by folder, never walked whole on a delta (treeIndex.ts).
+    const entriesByPath = computed(() => storeIndex(tree.value, lazyChildren.value));
 
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));

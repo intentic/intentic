@@ -3,6 +3,7 @@ import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/
 import { readingHeadroom, type ServiceFacts, serviceState, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "./providerAccounts";
 import {
+    accountFacts,
     accountState,
     bindingWindow,
     formatAge,
@@ -683,6 +684,42 @@ describe(`planLimitRows`, () => {
             },
         );
         expect(rows[0]?.state).toEqual({ kind: `blocked`, fix: `wait`, reason: `quota exceeded`, until: 4_000_000_000 });
+    });
+
+    // 2026-11-21: each row judged its whole provider twice, so a list of N accounts judged it 2N times. The rows now read
+    // one judgement of the provider (capacity/providerJudgement.ts), which must give every row what judging it alone did.
+    it(`gives every stored account the verdict and reading it would get judged alone`, () => {
+        const reading = (utilization: number, measuredAt: number): AccountUsage =>
+            usage({ windows: [window({ utilization, resetsAt: 9_000 })], measuredAt });
+        providerAccounts.value = {
+            ...providerAccounts.value,
+            claude: [
+                account({ id: `full`, label: `Full`, usage: reading(100, 900) }),
+                account({ id: `roomy`, label: `Roomy`, usage: reading(30, 900) }),
+                account({ id: `answered`, label: `Answered`, usage: reading(20, 1_500) }),
+                account({ id: `revoked`, label: `Revoked`, usage: reading(10, 900), needsReauth: true }),
+            ],
+        };
+        usageByAccount.value = { "claude:roomy": reading(55, 1_200) };
+        providerRefusals.value = {
+            claude: [
+                { at: 1_000, kind: `limit`, message: `weekly limit`, account: `full` },
+                { at: 1_100, kind: `limit`, message: `limit`, resetsAt: 8_000 },
+            ],
+        };
+        const rows = planLimitRows(providerAccounts.value, noRouted, 1_000_000);
+        const stored = providerAccounts.value[`claude`] ?? [];
+        const drawn = stored.map((own) => rows.find((entry) => entry.account === own.id));
+        const alone = stored.map((own) => {
+            const judged = liveUsage(`claude`, own.id, own.usage, undefined, 1_000_000);
+            const state = accountState(`claude`, accountFacts(own), undefined, 1_000_000);
+            return { state, percent: usagePercent(judged), measuredAt: judged?.measuredAt };
+        });
+        expect(drawn.map((entry) => ({ state: entry?.state, percent: entry?.percent, measuredAt: entry?.measuredAt }))).toEqual(alone);
+        expect(new Set(rows.map((entry) => entry.state.kind))).toEqual(new Set([`spent`, `ready`, `blocked`]));
+        usageByAccount.value = {};
+        providerRefusals.value = {};
+        providerAccounts.value = { ...providerAccounts.value, claude: [] };
     });
 
     it(`judges each row by the contract's rule on the facts it carries, as the daemon does`, () => {

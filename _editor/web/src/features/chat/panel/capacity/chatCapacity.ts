@@ -145,6 +145,8 @@ export interface ChatCapacity {
     readonly measuredAt: number | undefined;
     // Readings that cannot move and why, said beside the age they are left out of; never a silent exclusion.
     readonly unread: readonly CapacityUnread[];
+    // The accounts a provider is holding reads off (heldReadings), judged off the same rows as the rest.
+    readonly held: CapacityHeld | undefined;
 }
 
 // The tightest pool that gates every model, or, if none gates everything, the roomiest scoped pool; undefined when
@@ -405,6 +407,7 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
             labels: entry.rows.map((row) => row.label),
             lastReadAt: entry.lastReadAt,
         })),
+        held: heldReadings(held, now, rows),
     };
 };
 
@@ -421,8 +424,8 @@ export interface CapacityHeld {
 // read yet) still counts: the count is what says a number could not move, and the label only says which. A park whose
 // instant has passed is dropped rather than restated: the next trigger reads that account, so the claim is over. A
 // blocked credential is dropped too: the rail names it by what it is missing and draws no figure a re-read could move.
-export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = verdictNow()): CapacityHeld | undefined => {
-    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value, now);
+// `rows` are the ones chatCapacity already built, so the rail judges every account once per change, not once per line.
+const heldReadings = (held: readonly PlanLimitsHeld[], now: number, rows: readonly PlanLimitRow[]): CapacityHeld | undefined => {
     const rowOf = (entry: PlanLimitsHeld): PlanLimitRow | undefined =>
         rows.find((candidate) => candidate.provider === entry.provider && candidate.account === entry.account);
     const standing = held.flatMap((entry) => {

@@ -8,7 +8,8 @@ import { type ExplorerFilters, technicalHidden } from "../explorerFilter";
 import { type LandedEntry, landingNest } from "../fileNesting";
 import type { useEmptyDirs } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
-import { deadLink, flattenRows, indexEntries, type Row } from "./treeRows";
+import { deadLink, flattenRows, type Row } from "./treeRows";
+import { walkIndex } from "../../../../models/workspace/tree/treeIndex";
 
 // The tree the explorer draws, as reactive state: the by-path index over the eager walk and every lazy subtree, the
 // visible rows in order (flattened by treeRows.ts), and which folders are open. Writes to the open set go through here.
@@ -30,9 +31,9 @@ export interface TreeRowsHost {
 
 export const useTreeRows = (host: TreeRowsHost) => {
     const { expanded, lazyChildren, lazyHidden } = host.store;
-    // Children come from the eager walk's inline `children`, else the lazily-fetched map keyed by path.
+    // Children come from the eager walk's inline `children`, else the lazy map; byPath finds a path folder by folder.
     const childrenOf = (entry: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] => entry.children ?? lazyChildren.value.get(entry.path) ?? [];
-    const byPath = computed(() => indexEntries(host.tree(), childrenOf));
+    const byPath = computed(() => walkIndex(host.tree(), lazyChildren.value));
     const { filters } = host;
 
     // Provisional entries join or leave each listing here, so a file gesture shows at the gesture, not a round trip later.

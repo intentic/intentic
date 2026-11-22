@@ -2,7 +2,7 @@
 import { sandboxBeside } from "../../models/home/masterRail";
 import { here, isPage, page } from "../../lib/routes/links";
 import { homeConversation } from "../../models/home/homeChat";
-import { computed, onUnmounted } from "vue";
+import { computed, defineAsyncComponent, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useChatFloating } from "../../models/conversations/panel/chatFloating";
 import { globalTerminalSource, useTerminalPanel } from "../../models/terminal/useTerminalPanel";
@@ -12,13 +12,17 @@ import { BROWSERS_SIDE_VIEW, browsersFront, browsersOpened } from "../../workben
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
-import LiveBrowser from "../browsers/LiveBrowser.vue";
-import TerminalPanel from "../../features/terminal/TerminalPanel.vue";
+import { loadChunk } from "@intentic/ui/chunk";
 import AccessGate from "../../components/access/AccessGate.vue";
 import { useHeldPlace } from "../../components/heldPlace";
 import { t } from "@intentic/ui/i18n";
 import { browsersSlot, chatBarSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
 import { tabsOfView } from "../../workbench/side/sideTabs";
+
+// The terminal and the live browser arrive the first time each is opened, not with this chunk: every desktop window
+// held xterm (half a megabyte of script) and the live browser in memory, opened or not (2026-11-21).
+const TerminalPanel = defineAsyncComponent(() => loadChunk(() => import(`../../features/terminal/TerminalPanel.vue`)));
+const LiveBrowser = defineAsyncComponent(() => loadChunk(() => import(`../browsers/LiveBrowser.vue`)));
 
 // The three poppable panels (chat, terminal, browsers), mounted once per window, above the router. Each is
 // teleported to wherever it belongs (its section, the side panel, a floating window's slot, or a parking stage) — a

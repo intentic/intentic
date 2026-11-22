@@ -24,7 +24,7 @@ import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import { type ProjectFocus, projectIdsOf } from "../explorer/projectFocus";
 import { detectActivations } from "../../../workbench/views/registry";
-import { useMonaco } from "../files/useMonaco";
+import { warmMonaco } from "../files/useMonaco";
 import {
     defaultSidebarWidth,
     DEFAULT_SIDE_PANE_WIDTH,
@@ -607,8 +607,6 @@ onMounted(() => {
     if (workspaceBody.value !== undefined) {
         bodyObserver.observe(workspaceBody.value);
     }
-    // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
-    void useMonaco().ensureMonaco();
     workspaceCommandDisposables = [
         publishContextKey(`workspaceFileUndoable`, fileUndoable),
         ...WORKSPACE_COMMANDS.map(([command, handler]) => registerBuiltin(command, handler)),
@@ -661,6 +659,8 @@ const homeTooltip = computed((): Tip => ({
         <div
             ref="workspaceBody"
             class="relative flex min-h-0 flex-1"
+            @pointerover.once="warmMonaco"
+            @focusin.once="warmMonaco"
             @dragenter="onRootDragEnter"
             @dragover="onRootDragOver"
             @dragleave="onRootDragLeave"

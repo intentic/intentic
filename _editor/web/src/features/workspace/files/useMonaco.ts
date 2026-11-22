@@ -169,3 +169,13 @@ export const watchEditorType = (apply: (type: { fontSize: number; lineHeight: nu
 export function useMonaco() {
     return { ensureMonaco, ensureLanguage };
 }
+
+/**
+ * Starts loading Monaco once the reader reaches into a workspace page's files (a pointer over them, focus in them), so
+ * the first file opened isn't cold. A page never loads it on mount: the window often opens on one and never opens a
+ * file, and Monaco loaded unused held its script twice, 7.5 MB as a V8 string and 10.5 MB in the browser's script cache,
+ * before its compiled code and its own state (2026-11-21). A pointer that passes over the page, or a file opened, loads
+ * it all the same.
+ */
+export const warmMonaco = (): void => void ensureMonaco();
+
