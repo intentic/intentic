@@ -21,6 +21,7 @@ import { machineFacts } from "./machine-facts.js";
 import type { RemoteTurns } from "./held-turns/remote-turns.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { keepRunnerPresentation } from "./naming/runner-presentation.js";
+import { DISPATCHED_CHILD_NOTES } from "./held-turns/dispatched-child-notes.js";
 import { filePresentationStore } from "../system/presentation/presentation-store.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
@@ -104,6 +105,10 @@ async function* runHeldTurn(services: Services, input: RunnerTurn): AsyncGenerat
         return;
     }
     await materializeAttachments(services.workspace.root, input);
+    if (input.childNote !== undefined) {
+        // Read as the turn is planned (child-preamble.ts): this runner has no record of the child to write it from.
+        services.conversations.holdings(DISPATCHED_CHILD_NOTES).hold(input.conversationId, input.conversationId, input.childNote);
+    }
     const followed = services.remoteTurns.start(input.conversationId, async function* (signal) {
         // The parent's own `begin` already judged who sent it; this mirror reopens for whatever the parent dispatched.
         await services.agents.clearArchived([input.conversationId]);

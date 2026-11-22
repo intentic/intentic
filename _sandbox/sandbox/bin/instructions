@@ -21,12 +21,14 @@ const USAGE = `instructions — keep a rule the owner stated, in an AGENTS.md ev
                           ask the owner, on a card in this chat showing the exact change, to add the rule to that
                           AGENTS.md: the workspace root's by default, a repository's with --file <repo>. --text - reads
                           the rule from stdin. Nothing is written until they approve; their yes appends it in their
-                          own tree, and every conversation that starts there is told it from its next turn.
+                          own tree and commits that file on its own, and every conversation that starts there is
+                          told it from its next turn.
 
 Use it when the owner states a lasting rule or preference about how work is done here ("from now on…", "always…",
-"never…", "remember…"), never for an instruction about the task at hand. Write the rule as they meant it, in a sentence
-or two, as a "- " bullet where the file lists its rules that way; the root's file for the whole workspace, a
-repository's for that repository alone. Never edit an AGENTS.md yourself to add one.
+"never…", "remember…"), with --why quoting what they said. Never for an instruction about the task at hand, and never
+for a convention you worked out yourself: that belongs in the repository's own docs. Write the rule as they meant it,
+in a sentence or two, as a "- " bullet where the file lists its rules that way; the root's file for the whole
+workspace, a repository's for that repository alone. Never edit an AGENTS.md yourself to add one.
 
 ${WAIT_HELP}`;
 

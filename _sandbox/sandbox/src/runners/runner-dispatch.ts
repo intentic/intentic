@@ -2,6 +2,7 @@ import { opt } from "../opt.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { canonicalHarness } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type RunnerSync, type RunnerSyncLine, type RunnerTurn, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
@@ -124,8 +125,13 @@ const deliverBranch = async (services: DispatchServices, runnerId: string, sync:
 };
 
 // What the runner is handed for this turn: the dispatch's residue, attachments inline.
-const runnerTurnOf = async (services: DispatchServices, input: RoutedAgentTurn & { conversationId: string }, branch: string): Promise<RunnerTurn> => {
-    const attachments = await inlineAttachments(services, input);
+const runnerTurnOf = async (
+    services: DispatchServices,
+    input: RoutedAgentTurn & { conversationId: string },
+    branch: string,
+    childNote: (() => Promise<TurnNote | undefined>) | undefined,
+): Promise<RunnerTurn> => {
+    const [attachments, note] = await Promise.all([inlineAttachments(services, input), childNote?.()]);
     return {
         conversationId: input.conversationId,
         branch,
@@ -142,6 +148,7 @@ const runnerTurnOf = async (services: DispatchServices, input: RoutedAgentTurn &
         ...opt("account", input.account),
         ...opt("sessionId", input.sessionId),
         ...opt("attachments", attachments),
+        ...opt("childNote", note),
     };
 };
 
@@ -164,6 +171,8 @@ export async function* dispatchRemoteTurn(
     runnerId: string,
     worktree: ConversationWorktree,
     signal: AbortSignal | undefined,
+    // A spawned child's opening note, written here where its record is (stream-agent.ts runnerChildNote).
+    childNote?: () => Promise<TurnNote | undefined>,
 ): AsyncGenerator<AgentEvent> {
     const client = services.runnerHub.client(runnerId);
     if (client === undefined) {
@@ -209,7 +218,7 @@ export async function* dispatchRemoteTurn(
             yield { kind: "done" };
             return;
         }
-        const turn = await runnerTurnOf(services, input, worktree.branch);
+        const turn = await runnerTurnOf(services, input, worktree.branch, childNote);
         const end = yield* relayTurn(
             context,
             { client: live, open: (current) => current.runTurn(turn, signal === undefined ? {} : { signal }) },

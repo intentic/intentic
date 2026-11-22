@@ -73,6 +73,117 @@ describe("cargo test", () => {
         expect(run?.tests.find((test) => test.name === "tests::slow")?.outcome).toBe("ignored");
     });
 
+    // Tests run in parallel interleave their panics with each other and with the runner's own lines. 2026-11-22, the
+    // shinobi-society audit: this is the output that gave the first test the second's header as its reason and the
+    // second `test result: FAILED. …` (an agent's `cargo test 2>&1 | grep -E '^test |panicked'`).
+    const A = "game::tests::fleet::a_node_of_a_fleet_only_refuses_a_stored_world_this_build_cannot_take_on";
+    const B = "game::tests::fleet::a_stored_world_this_build_cannot_take_on_starts_a_standalone_game_over_once";
+    const failures = (text) => parseTestRun(lines(text))?.tests.filter((test) => test.outcome === "fail");
+
+    it("gives a failure only the panic its own thread names, never a neighbour's header or the summary", () => {
+        expect(
+            failures(`test game::tests::fleet::a_fleet_of_one_is_a_standalone_game ... ok
+test ${A} ... FAILED
+test ${B} ... FAILED
+thread '${A}' (2130228) panicked at crates/server/src/game/tests/fleet.rs:131:9:
+thread '${B}' (2130229) panicked at crates/server/src/game/tests/fleet.rs:178:9:
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 58 filtered out; finished in 0.00s`),
+        ).toEqual([
+            { name: A, outcome: "fail", line: "panicked at crates/server/src/game/tests/fleet.rs:131:9" },
+            { name: B, outcome: "fail", line: "panicked at crates/server/src/game/tests/fleet.rs:178:9" },
+        ]);
+    });
+
+    it("leaves the messages after back-to-back headers unclaimed, and keeps the message of a panic that printed alone", () => {
+        // `--nocapture`: each header opens with a blank line; three panicked at once, then one alone after the others.
+        const run = failures(`     Running unittests src/lib.rs (target/debug/deps/server-0123456789abcdef)
+
+running 4 tests
+
+thread 'fleet::a' (11) panicked at crates/server/src/fleet.rs:10:9:
+
+thread 'fleet::b' (12) panicked at crates/server/src/fleet.rs:20:9:
+
+thread 'fleet::c' (13) panicked at crates/server/src/fleet.rs:30:9:
+the node refused
+note: run with \`RUST_BACKTRACE=1\` environment variable to display a backtrace
+assertion \`left == right\` failed
+the world was taken twice
+test fleet::a ... FAILED
+test fleet::b ... FAILED
+test fleet::c ... FAILED
+
+thread 'fleet::d' (14) panicked at crates/server/src/fleet.rs:40:9:
+no free port
+test fleet::d ... FAILED
+
+failures:
+
+failures:
+    fleet::a
+    fleet::b
+    fleet::c
+    fleet::d
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s`);
+        expect(run?.map((test) => test.line)).toEqual([
+            "panicked at crates/server/src/fleet.rs:10:9",
+            "panicked at crates/server/src/fleet.rs:20:9",
+            "panicked at crates/server/src/fleet.rs:30:9",
+            "no free port (crates/server/src/fleet.rs:40:9)",
+        ]);
+    });
+
+    it("reads a section only up to a neighbour's panic, takes a spawned thread's panic as the test's own, and keeps same-named tests of two crates apart", () => {
+        const run = failures(`     Running unittests src/lib.rs (target/debug/deps/engine-0123456789abcdef)
+
+running 3 tests
+test tests::empty ... FAILED
+test tests::mixed ... FAILED
+test tests::spawns ... FAILED
+
+failures:
+
+---- tests::empty stdout ----
+---- tests::mixed stdout ----
+
+thread 'tests::empty' (21) panicked at src/lib.rs:5:9:
+
+---- tests::spawns stdout ----
+
+thread 'tokio-runtime-worker' (23) panicked at src/net.rs:9:5:
+port 4000 is taken
+
+failures:
+    tests::empty
+    tests::mixed
+    tests::spawns
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests/render.rs (target/debug/deps/render-0123456789abcdef)
+
+running 1 test
+test tests::spawns ... FAILED
+
+failures:
+
+---- tests::spawns stdout ----
+the frame was empty
+
+failures:
+    tests::spawns
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s`);
+        expect(run?.map((test) => [test.suite, test.name, test.line])).toEqual([
+            // Its own thread's panic, found in another test's section: the place is sure, the message is not there.
+            ["engine", "tests::empty", "panicked at src/lib.rs:5:9"],
+            // Its section holds only a neighbour's panic: no reason rather than the wrong one.
+            ["engine", "tests::mixed", undefined],
+            ["engine", "tests::spawns", "port 4000 is taken (src/net.rs:9:5)"],
+            ["render", "tests::spawns", "the frame was empty"],
+        ]);
+    });
+
     it("still names the failures a grep left, with no summary to count from", () => {
         const run = parseTestRun(["test tests::bad_add ... FAILED", "test tests::panics ... FAILED"]);
         expect(run?.summarized).toBe(false);

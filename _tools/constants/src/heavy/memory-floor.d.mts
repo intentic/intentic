@@ -15,9 +15,13 @@ export function belowFloor(answer: Pick<RoomAnswer, "verdict" | "freeBytes">): b
 export function biggestProcesses(count?: number, proc?: string): BigProcess[];
 export function floorWords(
     label: string,
-    answer: Pick<RoomAnswer, "freeBytes" | "needBytes" | "diagnosis">,
+    answer: Pick<RoomAnswer, "freeBytes" | "needBytes" | "diagnosis" | "priced">,
     at: { readonly waitedMs: number; readonly ceilingMs: number; readonly biggest?: readonly BigProcess[] },
 ): string;
+export function waitWords(
+    label: string,
+    answer: Pick<RoomAnswer, "verdict" | "waitedMs" | "freeBytes" | "diagnosis" | "waitedFor" | "stuck" | "priced">,
+): string | undefined;
 export function notStartedWords(label: string, answer: Pick<RoomAnswer, "freeBytes" | "diagnosis">, waitedMs: number): string;
 export function holdAtFloor(options: {
     readonly answer: RoomAnswer;

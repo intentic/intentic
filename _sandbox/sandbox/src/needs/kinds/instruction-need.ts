@@ -7,13 +7,17 @@ import { opt } from "../../opt.js";
 // A standing rule an agent proposes keeping (docs/architecture/needs.md): the owner said it once ("from now on…",
 // "remember…"), and an AGENTS.md is what every later conversation is told (agent/prompt/workspace-memory.ts). Those
 // files are the owner's own words to every agent, so an agent never writes one itself: the card shows the exact change,
-// and a person's approval appends it to the file on the main tree. Met as well when the words are already in the file,
-// however they got there.
+// and a person's approval appends it to the file on the main tree and commits that file on its own. Left uncommitted,
+// an approved rule sat among whatever else was dirty, and the owner's next discard took it too (shinobi-society,
+// 2026-11-21: a rule approved at 17:12 was gone at 17:16, while its agent told the owner it was in AGENTS.md). Met as
+// well when the words are already in the file, however they got there.
 
 export interface InstructionNeedDeps {
     // The file's text on the main tree; undefined when there is none. Throws for a path that leads out of the workspace.
     readonly read: (file: string) => Promise<string | undefined>;
-    readonly write: (file: string, text: string) => Promise<void>;
+    // Writes the file and commits exactly it under `subject`, unless it already held edits of the owner's own, which are
+    // theirs to commit; true when it was committed.
+    readonly write: (file: string, text: string, subject: string) => Promise<boolean>;
     // Whether the folder the file sits in exists on the main tree.
     readonly folder: (file: string) => Promise<boolean>;
 }
@@ -89,13 +93,26 @@ const clipped = (text: string): string => {
     return first.length > 70 ? `${first.slice(0, 69)}…` : first;
 };
 
-const metFor = (subject: Pick<InstructionNeed, "file">, already: boolean): Met => ({
-    result: already ? `${subject.file} already holds this rule.` : `The rule is in ${subject.file} now, in the owner's tree.`,
-    use: [
-        `Follow it from now on in this conversation too. Every conversation that starts at or below ${posix.dirname(subject.file) === "." ? "the workspace root" : posix.dirname(subject.file)} is told it from its next turn; an isolated one once the file is committed.`,
-        "Do not add it to the file yourself as well.",
-    ],
-});
+// How the rule stands once the file says it: already there, written and committed on its own, or written beside the
+// owner's own uncommitted edits to that file, which only they can commit.
+type Kept = "already" | "committed" | "uncommitted";
+
+const metFor = (subject: Pick<InstructionNeed, "file">, kept: Kept): Met => {
+    const below = posix.dirname(subject.file) === "." ? "the workspace root" : posix.dirname(subject.file);
+    const told = kept === "uncommitted" ? "from its next turn; an isolated one once the file is committed" : "from its next turn";
+    return {
+        result:
+            kept === "already"
+                ? `${subject.file} already holds this rule.`
+                : kept === "committed"
+                  ? `The rule is in ${subject.file} now, committed on its own on the main line.`
+                  : `The rule is in ${subject.file} now, in the owner's tree, uncommitted: the file held their own unsaved edits, so it waits for them to commit it.`,
+        use: [`Follow it from now on in this conversation too. Every conversation that starts at or below ${below} is told it ${told}.`, "Do not add it to the file yourself as well."],
+    };
+};
+
+// The commit an approved rule is kept under: what it says, as the card's title clips it.
+const ruleCommitSubject = (file: string, text: string): string => `Instructions: remember in ${file}: ${clipped(text)}`;
 
 export const instructionNeed = (deps: InstructionNeedDeps): NeedKindHandler => {
     const subjectOf = (need: Need): InstructionNeed | undefined => (need.subject.kind === "instruction" ? need.subject : undefined);
@@ -114,7 +131,7 @@ export const instructionNeed = (deps: InstructionNeedDeps): NeedKindHandler => {
         }
         const current = await deps.read(file);
         if (holds(current, ask.text)) {
-            return { kind: "met", message: metFor({ file }, true).result };
+            return { kind: "met", message: metFor({ file }, "already").result };
         }
         const text = ask.text.trim();
         const subject: InstructionNeed = {
@@ -132,7 +149,7 @@ export const instructionNeed = (deps: InstructionNeedDeps): NeedKindHandler => {
         // Met once the file says it, whoever wrote it there: the owner pasting it in by hand closes the card too.
         check: async (need): Promise<Met | undefined> => {
             const subject = subjectOf(need);
-            return subject !== undefined && holds(await deps.read(subject.file), subject.text) ? metFor(subject, true) : undefined;
+            return subject !== undefined && holds(await deps.read(subject.file), subject.text) ? metFor(subject, "already") : undefined;
         },
         answer: async (need, answer) => {
             const subject = subjectOf(need);
@@ -142,10 +159,10 @@ export const instructionNeed = (deps: InstructionNeedDeps): NeedKindHandler => {
             // Read again: the file may have moved since the card was drawn. The addition is the same either way.
             const current = await deps.read(subject.file);
             if (holds(current, subject.text)) {
-                return { status: "met", ...metFor(subject, true) };
+                return { status: "met", ...metFor(subject, "already") };
             }
-            await deps.write(subject.file, withRule(current, subject.text));
-            return { status: "met", ...metFor(subject, false) };
+            const committed = await deps.write(subject.file, withRule(current, subject.text), ruleCommitSubject(subject.file, subject.text));
+            return { status: "met", ...metFor(subject, committed ? "committed" : "uncommitted") };
         },
         nextTurn: () => false,
         key: (subject: NeedSubject) => (subject.kind === "instruction" ? `${subject.file}\n${subject.text.replace(/\s+/g, " ")}` : ""),

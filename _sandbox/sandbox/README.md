@@ -906,7 +906,11 @@ flowchart LR
   nothing else heavy runs beside such a command; `bin/quiet` is that lane for timing runs, waiting for calm and
   printing the conditions beside the result. Cargo starts through `heavy-launch.cjs`, which picks its jobs and test
   threads from the room it was given. `memory-room` never starts a command below a person's turn's room: it holds it to
-  its ceiling and then exits 75. `offload-run` says how to keep an offloaded command here (`INTENTIC_OFFLOAD=0`). Agents'
+  its ceiling and then exits 75. (2026-11-22) The room socket prices a queued command at least at what the same command
+  (`@intentic/constants` `heavy/command-peaks.mjs`) took at its peak lately, plus 15%, capped at the sandbox's limit:
+  `system/resources/queue/peak-watch.ts` measures the process tree queue-run's pid leads from its exec to its exit, and
+  `system/resources/queue/command-peaks.ts` keeps each command's last five peaks within two weeks, 300 commands at most,
+  in `/history/command-peaks.json`. `memory-room` names the price and the peak behind it on its wait line. `offload-run` says how to keep an offloaded command here (`INTENTIC_OFFLOAD=0`). Agents'
   guide: `seed-skills/intentic/references/heavy-commands.md`.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one

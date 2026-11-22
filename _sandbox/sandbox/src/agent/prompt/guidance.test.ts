@@ -195,6 +195,26 @@ test("a many-sided machine is described as one computer with its sides", () => {
     expect(text).toContain("`rog` is ONE computer with 2 environments on it");
 });
 
+// 2026-11-22, shinobi-society: two computers set up alike were each described in full, word for word but for the name,
+// and a distro whose record lacked its name was called "the metal".
+test("computers set up alike are described once together, and what `in` does is said once for all", () => {
+    const rog = EVERYTHING_MOUNTED.hostDevices?.machines?.[0];
+    if (rog === undefined) {
+        throw new Error("the fixture names rog");
+    }
+    const machines = [
+        rog,
+        { ...rog, id: "omen" },
+        { id: "z440", environments: [...rog.environments, { key: "wsl:itest-arch", shell: "/bin/sh", home: "/root" }] },
+    ];
+    const text = guidanceBlock({ ...EVERYTHING_MOUNTED, hostDevices: { ids: ["rog", "omen", "z440"], self: "rog", machines } });
+    expect(text).toContain("`rog` and `omen` are each ONE computer with 2 environments on it");
+    expect(text).toContain("`z440` is ONE computer with 3 environments on it");
+    expect(text).toContain('`wsl:itest-arch` is the WSL distro "itest-arch" on it (/bin/sh, home /root)');
+    expect(text.split("`in` picks the side")).toHaveLength(2);
+    expect(text.split("One Docker engine serves")).toHaveLength(2);
+});
+
 // The product's own guide is one file, named for every runtime: the Claude Code loop loads it as a skill, the rest read it.
 test("every runtime is pointed at the product guide's file", () => {
     for (const facts of [NOTHING_MOUNTED, OTHER_MOUNTED]) {
@@ -215,7 +235,7 @@ test("every runtime is told to keep a lasting rule through an approved proposal,
     for (const facts of [NOTHING_MOUNTED, OTHER_MOUNTED]) {
         const text = guidanceBlock(facts);
         expect(text).toContain('`instructions propose --text "…" --why "…"`');
-        expect(text).toContain("Not for an instruction about the task at hand");
+        expect(text).toContain("Only for words the owner said: not for an instruction about the task at hand, and not for a convention you worked out yourself");
         expect(text).toContain("do not write the rule into an AGENTS.md yourself");
     }
 });

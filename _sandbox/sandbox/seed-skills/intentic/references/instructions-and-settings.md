@@ -14,11 +14,14 @@ named. An `AGENTS.md` inside a repository is that repository's own, added only f
 **A rule the owner states in chat** ("from now on…", "always…", "never…", "remember…") is kept with
 `instructions propose --text "…" --why "…"` (`--file <repo>` for a repository's own `AGENTS.md`, `--text -` from
 stdin). It raises a card in the chat showing the exact change as a diff; nothing is written until the owner approves,
-and the yes appends the rule to that file in the owner's tree (the main tree, never the conversation's checkout). It
-then reaches every conversation that starts there from its next turn, an isolated one once the file is committed (the
-catch below). The call answers like every asking command: exit 0 when the file already says it, 3 while the card
-waits. Not for an instruction about the task at hand, and never by editing an `AGENTS.md` yourself unless the owner
-asked you to edit that file.
+and the yes appends the rule to that file in the owner's tree (the main tree, never the conversation's checkout) and
+commits that one file on its own (`Instructions: remember in AGENTS.md: …`), so a later discard of other changes
+cannot take it. A file that already held the owner's own unsaved edits is written but left for them to commit, and
+the answer says so. It then reaches every conversation that starts there from its next turn. The call answers like
+every asking command: exit 0 when the file already says it, 3 while the card waits. Only for words the owner said
+(`--why` quotes them): not for an instruction about the task at hand, not for a convention an agent worked out itself
+(that goes in the repository's docs), and never by editing an `AGENTS.md` yourself unless the owner asked you to edit
+that file.
 
 **The system prompt.** Sandbox ▸ Agent ▸ Instructions, **System prompt** (`systemPromptMode`, `systemPrompt` in
 settings.json):

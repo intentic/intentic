@@ -10,37 +10,70 @@ import { type GuidanceFacts, loadedWith, serverPrefix, toolName, toolsOf } from 
 
 type Facts = Pick<GuidanceFacts, "runtime">;
 
+// A distro's name: its own, else the one its key carries (`wsl:<distro>`). 2026-11-22: an environment keyed
+// `wsl:itest-arch` without its distro was described as "the metal", beside the real metal of the same computer.
+const distroOf = (environment: EnvironmentReach): string | undefined =>
+    environment.distro ?? (environment.key.startsWith("wsl:") ? environment.key.slice("wsl:".length) : undefined);
+
 const sideOf = (environment: EnvironmentReach): string => {
     const facts = [environment.shell, environment.home === undefined ? undefined : `home ${environment.home}`]
         .filter((fact) => fact !== undefined)
         .join(", ");
-    const what = environment.distro === undefined ? `the metal` : `the WSL distro "${environment.distro}" on it`;
-    const owns = environment.distro === undefined ? `, where the screen, the GUI and the clipboard live` : ``;
+    const distro = distroOf(environment);
+    const what = distro === undefined ? `the metal` : `the WSL distro "${distro}" on it`;
+    const owns = distro === undefined ? `, where the screen, the GUI and the clipboard live` : ``;
     return `\`${environment.key}\` is ${what}${facts === "" ? "" : ` (${facts})`}${owns}`;
 };
 
 // One folder, two names: the native home as a distro sees it, and each distro's home as Windows sees it.
 const pathsOf = (native: EnvironmentReach | undefined, distros: readonly EnvironmentReach[]): string[] => [
     ...(native?.home === undefined || wslPathOf(native.home) === undefined ? [] : [`${native.home} is ${wslPathOf(native.home)} from a distro`]),
-    ...distros.flatMap((environment) =>
-        environment.home === undefined || environment.distro === undefined
-            ? []
-            : [`${environment.home} is ${windowsPathOf(environment.distro, environment.home)} from Windows`],
-    ),
+    ...distros.flatMap((environment) => {
+        const distro = distroOf(environment);
+        return environment.home === undefined || distro === undefined ? [] : [`${environment.home} is ${windowsPathOf(distro, environment.home)} from Windows`];
+    }),
 ];
 
-const machineFull = ({ id, environments }: MachineReach): string => {
-    const native = environments.find((environment) => environment.distro === undefined);
-    const distros = environments.filter((environment) => environment.distro !== undefined);
+// One computer's sides and the folders they share, without its name: two computers set up alike read the same, and are
+// said once together.
+const sidesOf = ({ environments }: MachineReach): string => {
+    const native = environments.find((environment) => distroOf(environment) === undefined);
+    const distros = environments.filter((environment) => distroOf(environment) !== undefined);
     const paths = pathsOf(native, distros);
-    const crossings = distros.map((environment) => `\`in: "wsl:${environment.distro ?? ""}"\` runs it in that distro`);
+    const noMetal = native === undefined ? ` No metal side is reachable here: \`in\` omitted runs on the side the card is named after.` : ``;
+    return `${environments.map(sideOf).join("; ")}.${noMetal}${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`}`;
+};
+
+const named = (ids: readonly string[]): string => {
+    const quoted = ids.map((id) => `\`${id}\``);
+    return quoted.length === 1 ? (quoted[0] ?? "") : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1) ?? ""}`;
+};
+
+// The computers with more than one environment: what `in` does and the Docker engine they share, said once, then each
+// computer's sides. 2026-11-22: every turn in shinobi-society was told the same 700 characters twice, once for `rog`
+// and once for `omen`, word for word but for the name.
+const machinesFull = (machines: readonly MachineReach[]): string => {
+    if (machines.length === 0) {
+        return "";
+    }
+    const groups = new Map<string, { readonly ids: string[]; readonly count: number }>();
+    for (const machine of machines) {
+        const sides = sidesOf(machine);
+        const group = groups.get(sides) ?? { ids: [], count: machine.environments.length };
+        group.ids.push(machine.id);
+        groups.set(sides, group);
+    }
+    const each = [...groups].map(([sides, { ids, count }]) =>
+        ids.length === 1
+            ? `${named(ids)} is ONE computer with ${count} environments on it, never two machines to keep in step: ${sides}`
+            : `${named(ids)} are each ONE computer with ${count} environments on it, never two machines to keep in step: ${sides}`,
+    );
+    const distros = [...new Set(machines.flatMap(({ environments }) => environments.flatMap((environment) => distroOf(environment) ?? [])))];
+    const into = distros.length === 1 ? `\`in: "wsl:${distros[0] ?? ""}"\`` : `\`in: "wsl:<distro>"\` (${distros.map((distro) => `\`wsl:${distro}\``).join(", ")})`;
     return (
-        `\`${id}\` is ONE computer with ${environments.length} environments on it, never two machines to keep in step: ` +
-        `${environments.map(sideOf).join("; ")}. \`run_command\`'s \`in\` picks the side: omitted it runs on ` +
-        `${native === undefined ? `the side the card is named after` : `the metal`}, ` +
-        `${crossings.join("; ")}${native === undefined ? `` : `, and \`in: "windows"\` from inside a distro runs PowerShell on the Windows side`}. ` +
-        `One Docker engine serves every environment.` +
-        `${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`}`
+        ` ${each.join(" ")} On such a computer \`run_command\`'s \`in\` picks the side: omitted it runs on the metal, ` +
+        `${into} runs it in that distro, and \`in: "windows"\` from inside a distro runs PowerShell on the Windows side. ` +
+        `One Docker engine serves every environment of a computer.`
     );
 };
 
@@ -79,7 +112,7 @@ export const devicesFull = (facts: Facts, { ids, self, slug, machines, onDemand 
         `\`inspect_sandbox\` reads another sandbox's conversations and logs there, never \`docker exec\`. ` +
         `Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
         `own turn mid-sentence, so say so and get a yes first; and a call refused for a switch that is off is the owner's ` +
-        `decision, never routed around: ask for it on a card with \`capabilities request <device> --set <switch>=on --why "…"\`.${(machines ?? []).map((machine) => ` ${machineFull(machine)}`).join("")}`
+        `decision, never routed around: ask for it on a card with \`capabilities request <device> --set <switch>=on --why "…"\`.${machinesFull(machines ?? [])}`
     );
 };
 

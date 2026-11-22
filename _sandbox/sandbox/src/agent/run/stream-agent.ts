@@ -52,7 +52,7 @@ import { withSwitchTold } from "./turn/turn-switch.js";
 import type { HeldTurn } from "./turn/holds/held-turn.js";
 import { keepableOf, keptWarmOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
-import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
+import { dispatchToRunner } from "./placement/runner-child-note.js";
 import { remoteFailuresHere, unbooked } from "../../runners/held-turns/remote-failure.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
@@ -204,7 +204,7 @@ const placementOf = (
             {
                 compose: () => ensureComposedWorktree(services, input, id, input.worktreeBase, entersNamespace(input), { mirror: true }),
                 // What carries a failed turn on is this sandbox's to decide, never the runner's (remote-failure.ts).
-                dispatch: (worktree) => remoteFailuresHere(services, { ...input, conversationId: id }, runner, dispatchRemoteTurn(services, { ...input, conversationId: id }, runner, worktree, signal)),
+                dispatch: (worktree) => remoteFailuresHere(services, { ...input, conversationId: id }, runner, dispatchToRunner(services, { ...input, conversationId: id }, runner, worktree, signal)),
             },
         );
     }

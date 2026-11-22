@@ -1,4 +1,7 @@
 // Types for memory-room.mjs, the one room formula the daemon's ResourceBudget and the scripts share.
+import type { CommandSignature, LearnedPrice } from "./heavy/command-peaks.mjs";
+
+export type { LearnedPrice } from "./heavy/command-peaks.mjs";
 export type RoomWorkload = "agentRuntime" | "service" | "panel" | "install" | "command" | "toolchain";
 
 export const COST_BYTES: Readonly<Record<RoomWorkload, number>>;
@@ -86,6 +89,10 @@ export interface RoomAnswer extends RoomJudgement {
     readonly stuck?: boolean;
     // Held to its ceiling below the floor (heavy/memory-floor.mjs): the command must not start.
     readonly notStarted?: boolean;
+    // The daemon's answer only: what it priced the command at, and, where that is the command's measured peak rather
+    // than its rule's price, why (learnedCostBytes).
+    readonly costBytes?: number;
+    readonly priced?: LearnedPrice;
 }
 
 export const STUCK_MS: number;
@@ -93,7 +100,8 @@ export const EASED_BYTES: number;
 export function stuckWait(options?: { readonly stuckMs?: number; readonly easedBytes?: number }): {
     readonly observe: (judged: Pick<RoomJudgement, "freeBytes" | "reservedBytes">, at: number) => boolean;
 };
-export function waitWords(label: string, answer: Pick<RoomAnswer, "verdict" | "waitedMs" | "freeBytes" | "diagnosis" | "waitedFor" | "stuck">): string | undefined;
+export { learnedCostBytes, PEAK_MARGIN } from "./heavy/command-peaks.mjs";
+export { waitWords } from "./heavy/memory-floor.mjs";
 
 export function readingFrom(read: (path: string) => string | undefined): MemoryReading;
 export function readReadingSync(): MemoryReading;
@@ -115,6 +123,8 @@ export function askRoom(options?: {
     readonly read?: () => MemoryReading;
     readonly size?: RoomSize;
     readonly pid?: number;
+    // The command `pid` runs and that process's start (heavy/command-peaks.mjs queuedSignature).
+    readonly signature?: CommandSignature & { readonly start: number };
     // How long a wait that cannot help is kept up before it is given up (STUCK_MS).
     readonly stuckMs?: number;
 }): Promise<RoomAnswer>;

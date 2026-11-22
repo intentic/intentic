@@ -1,4 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import type { RunnerTurn } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { ConversationWorktree } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { dispatchRemoteTurn } from "./runner-dispatch.js";
@@ -68,6 +70,7 @@ const notHere = (): never => {
 // procedures, which answers them NOT_FOUND as any unknown procedure is.
 const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], options: { dieAfter?: number; redial?: () => void; old?: boolean } = {}) => {
     const calls: string[] = [];
+    const received: RunnerTurn[] = [];
     const dying = async function* (frames: AsyncIterable<AgentEvent>): AsyncGenerator<AgentEvent> {
         let seen = 0;
         for await (const frame of frames) {
@@ -99,6 +102,7 @@ const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], optio
         }),
         runTurn: os.runTurn.handler(({ input }) => {
             calls.push("runTurn");
+            received.push(input);
             return dying(turns.start(input.conversationId, scriptedTurn(script)) ?? (async function* () {})());
         }),
         syncWorkspace: os.syncWorkspace.handler(({ input }) => {
@@ -124,7 +128,7 @@ const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], optio
         cancelCommand: os.cancelCommand.handler(notHere),
     });
     const link: OrpcLink<RunnerClient> = await orpcLink<RunnerClient>(router);
-    return { client: link.client, calls: () => [...calls], close: () => link.close() };
+    return { client: link.client, calls: () => [...calls], received: () => [...received], close: () => link.close() };
 };
 
 const announced: RunnerAnnounced = { version: "test", image: "dev" };
@@ -147,7 +151,7 @@ const parent = () => {
     return { services, dial, leave: () => dial(undefined) };
 };
 
-const dispatched = async (services: DispatchServices, signal?: AbortSignal): Promise<AgentEvent[]> => {
+const dispatched = async (services: DispatchServices, signal?: AbortSignal, childNote?: () => Promise<TurnNote | undefined>): Promise<AgentEvent[]> => {
     const frames: AgentEvent[] = [];
     for await (const event of dispatchRemoteTurn(
         services,
@@ -155,6 +159,7 @@ const dispatched = async (services: DispatchServices, signal?: AbortSignal): Pro
         "rog",
         worktree,
         signal,
+        childNote,
     )) {
         frames.push(event);
     }
@@ -185,6 +190,19 @@ test("a link that drops mid-turn is read through: every frame once, the gap said
     expect(frames.some((frame) => frame.kind === "agent_notice" && frame.text.includes("was down for"))).toBe(true);
     expect(first.calls()).toEqual(["heldTurn", "sync:pull", "runTurn"]);
     expect(second.calls()).toEqual(["heldTurn", "attachTurn:1", "sync:push"]);
+});
+
+// A spawned child placed on a runner: the runner holds no record of it, so the note it opens with is written here and
+// travels with the turn (runner-child-note.ts, runner-service.ts).
+test("a child's opening note travels with its turn, and a turn without one sends none", async () => {
+    const { services, dial, leave } = parent();
+    const note = { title: "You are a subagent", text: "## You are a subagent\n\nYou are `sub-kid`." };
+    const runner = await runnerAt(createRemoteTurns(), [done]);
+    dial(runner.client);
+    await dispatched(services, undefined, async () => note);
+    await dispatched(services);
+    leave();
+    expect(runner.received().map((turn) => turn.childNote)).toEqual([note, undefined]);
 });
 
 test("a runner that restarted while the link was down says the turn was lost, and its branch still comes back", async () => {

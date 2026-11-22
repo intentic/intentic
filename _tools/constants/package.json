@@ -29,6 +29,8 @@
         "src/memory-room.d.mts",
         "src/heavy/memory-floor.mjs",
         "src/heavy/memory-floor.d.mts",
+        "src/heavy/command-peaks.mjs",
+        "src/heavy/command-peaks.d.mts",
         "src/allow.mjs",
         "src/allow.d.mts",
         "src/dev-previews.mjs",

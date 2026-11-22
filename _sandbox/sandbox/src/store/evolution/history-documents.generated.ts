@@ -17,6 +17,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "boot-history.json", portability: "derived" },
     { path: "burn-rates.json", portability: "carry" },
     { path: "chore-clock.json", portability: "derived" },
+    { path: "command-peaks.json", portability: "carry" },
     { path: "composer-drafts.json", portability: "carry" },
     { path: "conversations.db#conversation.record", portability: "carry" },
     { path: "dependency-requests.json", portability: "carry" },

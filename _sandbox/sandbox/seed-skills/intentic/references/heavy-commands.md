@@ -21,6 +21,18 @@ cannot see.
   memory. Stop something of yours (a background job, a dev server) or wait; it starts by itself once there is room.
   At its ceiling it ends with `not started` and exit code 75: nothing ran, run it again later. Short of what it asks
   for but above that floor, it starts with what there is, and cargo sizes its jobs to it.
+- `` … Priced at 11.2 GiB: `cargo test --lib -p integra-render` peaked at 9.7 GiB on its last run. `` at the end of a
+  `[memory-room]` line means the command waited for more memory than its rule's price because the same command took
+  that much before. The queue measures every command it starts (the whole tree of processes, so the test binary cargo
+  runs counts) and prices the next run of the same command at its largest peak of the last five runs within two weeks,
+  plus 15%, never more than the sandbox's memory. The same command means the same rule, repository, folder, program,
+  subcommand and package or target selectors (`-p`, `--lib`, `--test`, `--workspace`, `--all-targets`, `--target`,
+  `--release`, features). A test filter, `-j`, an environment variable, `timeout`, a redirection or a pipe does not
+  make it a different command. There is nothing to do: the wait keeps other heavy commands from starting beside it,
+  and such a command waits out its whole wait for room rather than starting short after 30 seconds, since it is known
+  to be stopped by the memory guard when it does.
+  If you made the command lighter, the old peak keeps pricing it until five newer runs or two weeks pass. Narrowing
+  the command (`-p one-crate`, `--lib`) makes it a different command with a record of its own.
 - `offload: running on <machine>, where the owner's Offloaded work setting sends <kind> commands` means the command
   runs on one of the owner's machines and its changed files come back. To run one here instead, behind this
   sandbox's queue: `INTENTIC_OFFLOAD=0 <command>`. Never set `INTENTIC_HEAVY_HELD`: it skips the queue itself, and

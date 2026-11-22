@@ -74,21 +74,33 @@ flowchart LR
 - A test command's run is read as tests ([src/test-runs.mjs](src/test-runs.mjs)): cargo test and nextest by crate and
   test, bun test by file and name, and vitest, jest, pytest and go test from their default reporters, best-effort. The
   command must name a runner (`cargo test`, `bun test`, `suites`, `pnpm test`, …) and the output must be one a parser
-  recognises. Then [src/test-digest.mjs](src/test-digest.mjs) reads git where it ran (the command's leading `cd`s
-  followed): HEAD, whether the tree is clean, the main line (`intentic.mainBranch`, else `main`, `master`,
-  `origin/HEAD`) and the fork point from it.
+  recognises. Then [src/test-digest.mjs](src/test-digest.mjs) finds the test command in the line, split as the shell
+  splits it (`&&`, `||`, `;`, newlines, quotes), and reads git where it ran (every `cd` before it followed): HEAD,
+  whether the tree is clean, the main line (`intentic.mainBranch`, else `main`, `master`, `origin/HEAD`) and the fork
+  point from it. A line it cannot split safely (a heredoc, a subshell, a compound command) is read by its leading `cd`s
+  alone.
 - Every such run is recorded under `logsDir/test-outcomes/` ([src/test-outcomes.mjs](src/test-outcomes.mjs)): one JSON
-  file per run, named by its commit, holding its failures with their first line and its passes as short hashes. A run
-  on a clean tree at a commit on the main line is that commit's **baseline**, and so is `base run <cmd>`, run at the
-  fork point. The record keeps at most 1000 files, 32 MiB and 21 days, dropping work runs before baselines. The daemon's
+  file per run, named by its commit, holding its failures with their first line, its passes as short hashes, and the
+  machine's load as it ended (the 1-minute load average over the host's cores; runs recorded before 2026-11-22 have
+  none). A run on a clean tree at a commit on the main line is that commit's **baseline**, and so is a test command run
+  under `base run`, at the fork point (or the main-line commit its `--at` names). The record keeps at most 1000 files, 32 MiB and 21 days, dropping work runs before baselines. The daemon's
   log pruner counts the directory on its own.
 - A run with a failing test ends with a digest after the footer, ledgered as `tests`: the counts, then one line per
-  failure with its first panic, assert or error line. Each failure is labelled against the baseline at the fork point,
-  or the nearest recorded main commit within 50 commits. A label is `also fails at main@X (seen 2h ago)`,
-  `new: passes at main@X` or `new: not seen failing at main@X`. New failures are listed first; past 15 lines the rest
-  are counted by label. A run that is itself a baseline says its failures are
-  main's. With no baseline, the digest names the command that makes one: `base run <cmd>` when `base` is on `PATH`,
-  else a clean checkout of that commit.
+  failure with its first panic, assert or error line. A cargo failure gets only a reason that names it (its thread's
+  panic, or its own `---- name stdout ----` section); parallel tests interleave their panics, so one whose message is
+  not surely its own gets only its place, and one with nothing of its own gets no reason rather than a neighbour's.
+- Each failure is labelled against the baseline at the fork point, or the nearest recorded main commit within 50
+  commits, in this order: `new: passes at main@X` (only a baseline run that passed the test makes its failure new),
+  `not run at main@X: no recorded run there includes it`, and `also fails at main@X (seen 2h ago)`. Past 15 lines the
+  rest are counted by label. A new failure on a loaded machine names the load: when this run's load per core is at
+  least 0.75 and at least twice that of the baseline run that passed the test at the highest load, the label says both
+  (`new: passed at main@X at load 2.1/16; this run at 14.3/16, …`) and suggests `base run` to compare at the same load.
+  A run that is itself a baseline says its failures are main's.
+- With no baseline, or with failures no baseline run included, the digest names the command that records one: the
+  line's test command alone, its env assignments and `timeout` kept and its pipes and redirections dropped, as
+  `cd <dir> && base run <cmd>` (the `cd` only where the tests ran elsewhere) when `base` is on `PATH`, else in a clean
+  checkout of the fork point. Where the line holds no single test command it can split out (a heredoc, two test
+  commands), it says to run the test command alone through `base run`, never a line that would edit files there.
 - `agents ci` (`GET /ci/main`, the daemon's `ci/known/main-known.ts`) lists each repository's newest baselined main
   commit and what failed there, beside CI's failures, through `mainBaselines` (`@intentic/output-cleaners/outcomes`).
 - The sandbox adapter records under the logs directory and names the run's conversation (`INTENTIC_TURN_OWNER`).

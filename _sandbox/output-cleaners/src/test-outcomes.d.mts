@@ -1,6 +1,13 @@
 // Types for test-outcomes.mjs: the sandbox's record of test runs, and the baselines read from it.
 import type { ParsedTest, TestCounts } from "./test-runs.mjs";
 
+// The machine's load as a run ended: the 1-minute load average and the cores it is shared by (the host's, as the load
+// average is in a container).
+export interface RunLoad {
+    readonly one: number;
+    readonly cores: number;
+}
+
 export interface RecordedTest extends ParsedTest {
     // The test's id across runs (test-digest.mjs testId).
     readonly id: string;
@@ -23,6 +30,8 @@ export interface RunToRecord {
     readonly partial: boolean;
     readonly counts: TestCounts;
     readonly tests: readonly RecordedTest[];
+    // Absent where the machine reports none.
+    readonly load?: RunLoad | undefined;
 }
 
 // A run read back.
@@ -36,6 +45,8 @@ export interface RecordedRun {
     readonly failed: readonly { readonly id: string; readonly name: string; readonly line: string | undefined }[];
     // Passing tests' short hashes, space-separated: ask passedIn.
     readonly passed: string;
+    // Undefined for a run recorded before runs kept it, or on a machine with no load average.
+    readonly load: RunLoad | undefined;
     readonly baseline: boolean;
 }
 

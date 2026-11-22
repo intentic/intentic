@@ -13,6 +13,7 @@ import { workspaceMemoryFiles } from "../../prompt/workspace-memory.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { planTurn } from "../../run/turn/turn-plan.js";
 import { base, codexServices, context, turn, wire } from "../../run/turn/turn-plan.testing.js";
+import { DISPATCHED_CHILD_NOTES } from "../../../runners/held-turns/dispatched-child-notes.js";
 import { type ChildPreambleFacts, type ChildTurn, childArtifactsDir, childNoteFor, childPreambleText } from "../starting/child-preamble.js";
 import { withBrief } from "../starting/child-brief.js";
 import { CHILDREN } from "../child-records.js";
@@ -68,10 +69,10 @@ describe("the note's text", () => {
                 "  - The heavy-command queue sets build and test parallelism (cargo's `-j` and test threads included) and takes turns across conversations: pass no `-j` and take no turns by hand.",
                 "  - `quiet -- <command>` for anything you time: benchmarks, profiles, steady captures.",
                 "  - `base run <command>` runs a command at the commit your work started from: your before, beside your after.",
-                "  - A failing test run ends with a digest marking each failure new or also failing at main: report that, do not re-derive it.",
+                "  - A failing test run ends with a digest placing each failure against main: passed there, never run there, or failing there too. Report that; check one it could not place, or one it says load may explain, with `base run` before calling it yours.",
                 "- Report: your final message is what your parent reads. End it with these four parts:",
                 "  1. Files changed.",
-                "  2. Checks run and each one's result; for a failure, whether it is new or also fails at main.",
+                "  2. Checks run and each one's result; for a failure, whether it is new, also fails at main, or was not checked there.",
                 "  3. Decisions you took that the task left open.",
                 "  4. What you did not verify.",
             ].join("\n"),
@@ -190,6 +191,22 @@ describe("the note a spawned child's turn opens with", () => {
         expect(await childNoteFor(deps, childTurn(root, { prompt: "Also the shadow pass.", sessionId: "thread-1" }))).toBeUndefined();
         // A conversation no parent spawned.
         expect(await childNoteFor(deps, childTurn(root, { conversationId: "conv-lead" }))).toBeUndefined();
+    });
+
+    // A runner holds no record of the child: its parent's sandbox writes the note and sends it with the dispatched turn
+    // (runner-child-note.ts), and the runner's plan takes it once (runner-service.ts files it).
+    it("on a runner, is the one its parent sent with the turn, taken by that turn alone", async () => {
+        const root = await workspace();
+        const parentSide = family();
+        const sent = await childNoteFor(parentSide.deps, childTurn(root));
+        if (sent === undefined) {
+            throw new Error("expected the parent to write a note");
+        }
+        const runner = { ...family().deps, conversations: memoryFleet().conversations };
+        expect(await childNoteFor(runner, childTurn(root))).toBeUndefined();
+        runner.conversations.holdings(DISPATCHED_CHILD_NOTES).hold("sub-kid", "sub-kid", sent);
+        expect(await childNoteFor(runner, childTurn(root))).toEqual(sent);
+        expect(await childNoteFor(runner, childTurn(root, { prompt: "Also the shadow pass.", sessionId: "thread-1" }))).toBeUndefined();
     });
 });
 

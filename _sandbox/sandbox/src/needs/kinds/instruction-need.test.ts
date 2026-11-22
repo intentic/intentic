@@ -2,21 +2,28 @@ import type { Need } from "@intentic/sandbox-contract/schemas/needs";
 import { appendDiff, instructionFile, instructionNeed, withRule } from "./instruction-need.js";
 
 // A standing rule the owner said once, kept in an AGENTS.md only by a person's approval: the card carries the exact
-// change, the yes appends it on the main tree, and words the file already holds meet the ask without a card. The files
-// here are a map standing in for the main tree (needs-slice.ts mainTreeFiles reads and writes the real one).
+// change, the yes appends it on the main tree and commits it, and words the file already holds meet the ask without a
+// card. The files here are a map standing in for the main tree (needs-slice.ts mainTreeFiles reads and writes the real
+// one); `dirty` names files holding the owner's own uncommitted edits, which the write leaves uncommitted.
 
-const harness = (files: Record<string, string> = {}, folders: readonly string[] = [".", "game"]) => {
+const harness = (files: Record<string, string> = {}, folders: readonly string[] = [".", "game"], dirty: readonly string[] = []) => {
     const tree = new Map(Object.entries(files));
     const writes: string[] = [];
+    const commits: string[] = [];
     const kind = instructionNeed({
         read: async (file) => tree.get(file),
-        write: async (file, text) => {
+        write: async (file, text, subject) => {
             writes.push(file);
             tree.set(file, text);
+            if (dirty.includes(file)) {
+                return false;
+            }
+            commits.push(subject);
+            return true;
         },
         folder: async (file) => folders.includes(file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "."),
     });
-    return { kind, tree, writes };
+    return { kind, tree, writes, commits };
 };
 
 const needOf = (subject: Need["subject"]): Need => ({ id: "need-1", conversationId: "conv-1", subject, title: "", status: "open", createdAt: 1, updatedAt: 1 });
@@ -47,21 +54,35 @@ describe("instruction need", () => {
         expect(writes).toEqual([]);
     });
 
-    it("appends the rule on approval, exactly as the diff showed it, and meets the need", async () => {
-        const { kind, tree } = harness({ "AGENTS.md": RULES });
+    it("appends the rule on approval, exactly as the diff showed it, commits it on its own, and meets the need", async () => {
+        const { kind, tree, commits } = harness({ "AGENTS.md": RULES });
         const raised = await kind.resolve({ kind: "instruction", file: "AGENTS.md", text: "- Don't overdo tests." }, context);
         if (raised.kind !== "raise") {
             throw new Error(`expected a card, got ${raised.kind}`);
         }
         const answered = await kind.answer(needOf(raised.subject), { kind: "approve" }, { email: "owner@acme.dev" });
-        expect(answered).toMatchObject({ status: "met", result: "The rule is in AGENTS.md now, in the owner's tree." });
+        expect(answered).toMatchObject({ status: "met", result: "The rule is in AGENTS.md now, committed on its own on the main line." });
         expect(tree.get("AGENTS.md")).toBe(`${RULES}- Don't overdo tests.\n`);
+        expect(commits).toEqual(["Instructions: remember in AGENTS.md: Don't overdo tests."]);
         // Approving twice (a second tab) writes nothing more.
         expect(await kind.answer(needOf(raised.subject), { kind: "approve" }, { email: "owner@acme.dev" })).toMatchObject({
             status: "met",
             result: "AGENTS.md already holds this rule.",
         });
         expect(tree.get("AGENTS.md")).toBe(`${RULES}- Don't overdo tests.\n`);
+        expect(commits).toHaveLength(1);
+    });
+
+    it("leaves the rule uncommitted, and says so, when the file already held the owner's own unsaved edits", async () => {
+        const { kind, tree, commits } = harness({ "AGENTS.md": RULES }, [".", "game"], ["AGENTS.md"]);
+        const raised = await kind.resolve({ kind: "instruction", file: "AGENTS.md", text: "- Keep commits small." }, context);
+        if (raised.kind !== "raise") {
+            throw new Error(`expected a card, got ${raised.kind}`);
+        }
+        const answered = await kind.answer(needOf(raised.subject), { kind: "approve" }, { email: "owner@acme.dev" });
+        expect(answered).toMatchObject({ status: "met", result: expect.stringContaining("uncommitted: the file held their own unsaved edits") });
+        expect(tree.get("AGENTS.md")).toBe(`${RULES}- Keep commits small.\n`);
+        expect(commits).toEqual([]);
     });
 
     it("creates a repository's AGENTS.md when it has none, from a folder named on its own", async () => {

@@ -84,6 +84,14 @@ const SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const textOr = (value, fallback) => (value === undefined || value === null ? fallback : String(value));
 const countOf = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
+// The machine's load a run recorded: its 1-minute load average and the cores that load is shared by. Undefined for a run
+// recorded before runs kept it (2026-11-22) or on a machine with no load average.
+const loadOf = (raw) => {
+    const one = Number(raw?.one);
+    const cores = Number(raw?.cores);
+    return Number.isFinite(one) && one >= 0 && Number.isInteger(cores) && cores > 0 ? { one, cores } : undefined;
+};
+
 // A run file's text as a run, every field coerced to what the writer wrote, or undefined when it is not one: the reader
 // never trusts a file's shape, since anything with the directory's permissions could have written it.
 const parseRun = (text, entry) => {
@@ -101,6 +109,7 @@ const parseRun = (text, entry) => {
         counts: { passed: countOf(raw.counts?.passed), failed: countOf(raw.counts?.failed), ignored: countOf(raw.counts?.ignored) },
         failed: raw.failed.map((failure) => ({ id: textOr(failure?.id, ""), name: textOr(failure?.name, ""), line: failure?.line === undefined ? undefined : textOr(failure.line, "") })),
         passed: textOr(raw.passed, ""),
+        load: loadOf(raw.load),
         baseline: entry.baseline,
     };
 };
@@ -116,9 +125,10 @@ const readRun = (dir, entry) => {
 };
 
 /**
- * Keeps one run: what it ran at, how it ended, its failures by id with their first line, and its passes as hashes. A
- * write that fails costs the record, never the command, so this never throws; it answers the file written, if any.
- * `keep` is for tests.
+ * Keeps one run: what it ran at, how it ended, its failures by id with their first line, its passes as hashes, and the
+ * machine's load as it ended (absent where it has none; a reader of an older run finds none either). A write that
+ * fails costs the record, never the command, so this never throws; it answers the file written, if any. `keep` is for
+ * tests.
  */
 export const recordRun = (dir, run, now = Date.now(), keep = KEEP) => {
     try {
@@ -143,6 +153,7 @@ export const recordRun = (dir, run, now = Date.now(), keep = KEEP) => {
                 .slice(0, KEEP_FAILURES)
                 .map((test) => ({ id: test.id, name: test.name, line: test.line })),
             passed: passes.map((test) => passKey(test.id)).join(" "),
+            load: run.load,
         };
         const staging = join(dir, `.${name}.part`);
         writeFileSync(staging, JSON.stringify(body));

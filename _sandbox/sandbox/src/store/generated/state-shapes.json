@@ -291,6 +291,12 @@
       "since": "v1.327.0"
     }
   ],
+  "history:command-peaks.json": [
+    {
+      "type": "{ commands?: { command: string; key: string; samples: { at: number; mib: number }[] }[] }",
+      "since": "unreleased"
+    }
+  ],
   "history:composer-drafts.json": [
     {
       "type": "{ people: Record<string, Record<string, { attachments?: string[]; forkOf?: { conversationId: string; files: \"then\" | \"now\"; keep: number }; freshOf?: { conversationId: string; kind: \"review\" | \"test\" | \"ask\" }; revision: number; serves?: { account?: string; agent: string; effort?: string; harness: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model?: string }; since: number; text: string }>>; revision: number }",

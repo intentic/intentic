@@ -300,6 +300,11 @@ export const RunnerTurnSchema = z.object({
     // Base64 since frames are JSON and attachment count is capped; `path` is the workspace-relative path the prompt
     // already names.
     attachments: z.array(z.object({ path: z.string().min(1), bytesBase64: z.string() })).optional(),
+    // What the sandbox tells a spawned child with its brief (the "You are a subagent" note), written by the parent: the
+    // runner holds no record of the child, its siblings or where its work lands, so a child placed there went without
+    // one (shinobi-society, 2026-11-21). A runner older than this field ignores it. A TurnNote (events/transcript.ts),
+    // spelled out here: importing that module from this one closes a load cycle through schemas/agent.ts.
+    childNote: z.object({ title: z.string(), text: z.string() }).optional(),
 });
 export type RunnerTurn = z.infer<typeof RunnerTurnSchema>;
 

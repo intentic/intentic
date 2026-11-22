@@ -12,7 +12,7 @@ import { fileSafetyPolicyStore } from "../safety/safety-policy-store.js";
 import { createSafetyRoutes } from "../safety/safety.routes.js";
 import { createSettingsRoutes } from "../settings/settings.routes.js";
 import { fileSandboxSettingsStore, settingsDocument } from "../settings/settings-store.js";
-import { versionedSettingsWrite, versionSettingsWrite } from "./settings-versions.js";
+import { versionedRepoWrite, versionedSettingsWrite, versionSettingsWrite } from "./settings-versions.js";
 import { commitOnly } from "../git/changes/changes-index.js";
 
 // A real repository: what matters is what git holds afterwards, a commit of exactly the settings page's write, with the
@@ -167,4 +167,31 @@ test("a Safety page save is committed on its own too", async () => {
     await call(routes.setPolicy, { text: "Never push to main.\n" }, { context: { headers: new Headers(), method: "POST", url: "/safety/policy" } });
 
     expect(git(root, "log", "-1", "--format=%s", "--name-only").trim().split("\n")).toEqual(["Settings: safety policy", "", ".intentic/config/safety.md"]);
+});
+
+// An AGENTS.md rule the owner approved goes into the repository the file belongs to: committed there on its own, unless
+// the file already held their own unsaved edits (needs/kinds/instruction-need.ts).
+test("a write in a nested repository is committed there, and one into a file the owner was editing is not", async () => {
+    const root = workspace();
+    const game = join(root, "game");
+    mkdirSync(game);
+    git(game, "init", "-q");
+    writeFileSync(join(game, "AGENTS.md"), "- one\n");
+    git(game, "add", "-A");
+    git(game, "-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "-m", "Initialize game");
+    const host = hostOn(root);
+    const inGame = { ...host, agentWorktrees: { ...host.agentWorktrees, mainDir: (repo: string) => (repo === "game" ? game : root) } };
+
+    const kept = await versionedRepoWrite(inGame, "game", ["AGENTS.md"], "Instructions: remember in game/AGENTS.md: two", async () =>
+        writeFileSync(join(game, "AGENTS.md"), "- one\n- two\n"),
+    );
+    expect(kept.committed).toBe(true);
+    expect(git(game, "log", "-1", "--format=%s", "--name-only").trim().split("\n")).toEqual(["Instructions: remember in game/AGENTS.md: two", "", "AGENTS.md"]);
+
+    writeFileSync(join(game, "AGENTS.md"), "- one\n- two\n- the owner's own, unsaved\n");
+    const theirs = await versionedRepoWrite(inGame, "game", ["AGENTS.md"], "Instructions: three", async () =>
+        writeFileSync(join(game, "AGENTS.md"), "- one\n- two\n- the owner's own, unsaved\n- three\n"),
+    );
+    expect(theirs.committed).toBe(false);
+    expect(git(game, "status", "--porcelain").trim()).toBe("M AGENTS.md");
 });

@@ -8,7 +8,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { holdAtFloor, notStartedWords, START_FLOOR_BYTES } from "./heavy/memory-floor.mjs";
+import { queuedSignature } from "./heavy/command-peaks.mjs";
+import { holdAtFloor, notStartedWords, waitWords } from "./heavy/memory-floor.mjs";
+
+// The price a measured peak sets, and the line a held command is told (beside the floor's own), both part of this formula.
+export { learnedCostBytes, PEAK_MARGIN } from "./heavy/command-peaks.mjs";
+export { waitWords } from "./heavy/memory-floor.mjs";
 
 const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
@@ -395,13 +400,19 @@ const getJson = (socketPath, path, timeoutMs) =>
         asked.end();
     });
 
-const askSocket = (workload, waitSeconds, label, socketPath, size, pid) => {
+// `start` is the pid's start, by which the daemon finds that process in its own pid namespace to measure it.
+const askSocket = (workload, waitSeconds, label, socketPath, size, pid, signature) => {
     const query = new URLSearchParams({ class: workload, wait: String(waitSeconds), label });
     if (size !== undefined) {
         query.set("size", size);
     }
     if (pid !== undefined) {
         query.set("pid", String(pid));
+    }
+    if (signature !== undefined) {
+        query.set("key", signature.key);
+        query.set("command", signature.command);
+        query.set("start", String(signature.start));
     }
     return getJson(socketPath, `/room?${query}`, (waitSeconds + 15) * 1000);
 };
@@ -465,32 +476,11 @@ export const stuckWait = ({ stuckMs = STUCK_MS, easedBytes = EASED_BYTES } = {})
 };
 
 /**
- * What `memory-room` prints for a command it held, or undefined for one it never held. Says why it waited (`waitedFor`,
- * the first short reading's diagnosis) and, for one that starts short of room (never below the floor, heavy/memory-floor.mjs),
- * why it starts anyway.
- */
-export const waitWords = (label, answer) => {
-    if (!(answer.waitedMs > 0)) {
-        return undefined;
-    }
-    const seconds = Math.round(answer.waitedMs / 1000);
-    const free = answer.freeBytes === undefined ? "?" : gib(answer.freeBytes);
-    const why = answer.waitedFor ?? answer.diagnosis;
-    const held = why === undefined ? "" : ` (${why})`;
-    if (answer.verdict === "run") {
-        return `[memory-room] ${label}: waited ${seconds}s for memory${held}, ${free} free — starting.`;
-    }
-    const still = answer.diagnosis === undefined ? "" : ` Still: ${answer.diagnosis}.`;
-    return answer.stuck === true
-        ? `[memory-room] ${label}: short of memory for ${seconds}s, and waiting longer would not help: nothing admitted is about to let memory go and the shortage has not eased (${free} free) — starting now.${still}`
-        : `[memory-room] ${label}: still short of memory after ${seconds}s (${free} free, above the ${gib(START_FLOOR_BYTES)} floor it needs to start) — starting with what there is.${still}`;
-};
-
-/**
  * The daemon's verdict for one more of `workload`, waiting up to `waitSeconds` for room; where no daemon answers, the
  * same formula over the same files, polled every `intervalMs`. Never throws: every failure is an answer of `run`.
  * `size` prices a toolchain command by its named shape (SIZE_BYTES: `targeted` for one aimed at named files); `pid` is the process the
- * admitted work runs as, whose exit hands its reservation back at once instead of after RESERVATION_MS.
+ * admitted work runs as, whose exit hands its reservation back at once instead of after RESERVATION_MS. `signature` names the
+ * command it runs (queuedSignature), which the daemon prices by its measured peak; the formula alone learns nothing.
  */
 export const askRoom = async ({
     workload = "toolchain",
@@ -501,9 +491,10 @@ export const askRoom = async ({
     read = readReadingSync,
     size,
     pid,
+    signature,
     stuckMs = STUCK_MS,
 } = {}) => {
-    const answered = await askSocket(workload, waitSeconds, label, socketPath, size, pid);
+    const answered = await askSocket(workload, waitSeconds, label, socketPath, size, pid, signature);
     if (answered !== undefined) {
         return { ...answered, source: "daemon" };
     }
@@ -530,6 +521,25 @@ export const askRoom = async ({
     return answer;
 };
 
+// What the command line asks for; `--pid` (queue-run's) names the command it runs, priced by what it took last time.
+const askedOf = (option) => {
+    const label = option("label", "command");
+    const number = Number(option("pid", ""));
+    const pid = Number.isInteger(number) && number > 1 ? number : undefined;
+    return {
+        workload: option("class", "toolchain"),
+        label,
+        intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000),
+        size: isRoomSize(option("size", "")) ? option("size", "") : undefined,
+        pid,
+        signature: pid === undefined ? undefined : queuedSignature(pid, label),
+    };
+};
+
+// What the daemon holds for an admitted command: its rule's price, or what it took last time where that is more; 0 for none.
+const admittedBytes = (answer, asked) =>
+    answer.verdict === "run" && answer.source === "daemon" ? (answer.costBytes ?? costBytesOf(asked.workload, asked.size)) : 0;
+
 // `memory-room --class toolchain --wait 120 [--ceiling 900] --label NAME [--size targeted|cargo-build|6144m|…] [--pid PID]
 // [--admitted]` holds a command until there is room, printing why it waited. Short of room at `--wait` it starts anyway,
 // unless less than the floor is free: then it goes on waiting up to `--ceiling` and, still below it, exits 75 so the
@@ -547,16 +557,9 @@ const main = async (args) => {
         return 0;
     }
     const waitSeconds = Math.max(0, Number(option("wait", "0")) || 0);
-    const label = option("label", "command");
-    const pid = Number(option("pid", ""));
     const startedAt = Date.now();
-    const asked = {
-        workload: option("class", "toolchain"),
-        label,
-        intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000),
-        size: isRoomSize(option("size", "")) ? option("size", "") : undefined,
-        pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
-    };
+    const asked = askedOf(option);
+    const label = asked.label;
     let answer = await askRoom({ ...asked, waitSeconds });
     if (answer.verdict !== "run") {
         const ceilingSeconds = Math.max(waitSeconds, Number(option("ceiling", "0")) || 0);
@@ -567,7 +570,7 @@ const main = async (args) => {
         }
     }
     if (args.includes("--admitted")) {
-        process.stdout.write(`${answer.verdict === "run" && answer.source === "daemon" ? costBytesOf(asked.workload, asked.size) : 0}\n`);
+        process.stdout.write(`${admittedBytes(answer, asked)}\n`);
     }
     if (args.includes("--json")) {
         process.stdout.write(`${JSON.stringify(answer)}\n`);

@@ -4,8 +4,8 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 
-// A settings page's own write (a role's card or kit, a connection's manifest entry, the Agent tab's settings.json),
-// committed on its own as it lands.
+// A settings page's own write (a role's card or kit, a connection's manifest entry, the Agent tab's settings.json), or
+// an AGENTS.md rule the owner approved on a card (needs/kinds/instruction-need.ts), committed on its own as it lands.
 // These files are versioned in the workspace (VERSIONED_STATE_PATHS), and left uncommitted they read as the owner's own
 // edits: a land touching the same file was refused as work only its owner could move, and it took three Accepts, a
 // manual save and a redo to get it through. Unlike the `version-landed` rule's commits this does not wait on the owner
@@ -27,9 +27,9 @@ const stageable = async (dir: string, paths: readonly string[], git: GitRunner):
 
 // Whether any of `paths` differs from HEAD (staged, unstaged or untracked); true when git cannot say, so a doubt keeps
 // the write uncommitted rather than committing somebody's work.
-const uncommitted = async (services: SettingsVersionHost, paths: readonly string[], git: GitRunner): Promise<boolean> => {
+const uncommitted = async (services: SettingsVersionHost, repo: string, paths: readonly string[], git: GitRunner): Promise<boolean> => {
     try {
-        const { stdout } = await git(services.agentWorktrees.mainDir("root"), ["status", "--porcelain", "--untracked-files=all", "--", ...paths]);
+        const { stdout } = await git(services.agentWorktrees.mainDir(repo), ["status", "--porcelain", "--untracked-files=all", "--", ...paths]);
         return stdout.trim() !== "";
     } catch {
         // allow(silent-catch): a doubt is the answer here, and the caller acts on it by leaving the write uncommitted
@@ -48,13 +48,23 @@ export const versionedSettingsWrite = async <T>(
     subject: string,
     write: () => Promise<T>,
     git: GitRunner = defaultGit,
-): Promise<T> => {
-    const theirs = await uncommitted(services, paths, git);
+): Promise<T> => (await versionedRepoWrite(services, "root", paths, subject, write, git)).result;
+
+/**
+ * `versionedSettingsWrite` in any repository of the workspace (`paths` relative to its main checkout), saying whether
+ * the write was committed: an AGENTS.md rule the owner approved goes into the repository whose file it is.
+ */
+export const versionedRepoWrite = async <T>(
+    services: SettingsVersionHost,
+    repo: string,
+    paths: readonly string[],
+    subject: string,
+    write: () => Promise<T>,
+    git: GitRunner = defaultGit,
+): Promise<{ readonly result: T; readonly committed: boolean }> => {
+    const theirs = await uncommitted(services, repo, paths, git);
     const result = await write();
-    if (!theirs) {
-        await versionSettingsWrite(services, paths, subject, git);
-    }
-    return result;
+    return { result, committed: theirs ? false : await commitRepoPaths(services, repo, paths, subject, git) };
 };
 
 /** Commits exactly `paths` (workspace-relative) under `subject`; false when nothing was committed. Never throws. */
@@ -63,14 +73,16 @@ export const versionSettingsWrite = async (
     paths: readonly string[],
     subject: string,
     git: GitRunner = defaultGit,
-): Promise<boolean> => {
+): Promise<boolean> => commitRepoPaths(services, "root", paths, subject, git);
+
+const commitRepoPaths = async (services: SettingsVersionHost, repo: string, paths: readonly string[], subject: string, git: GitRunner): Promise<boolean> => {
     try {
-        const dir = services.agentWorktrees.mainDir("root");
-        return await services.agentWorktrees.withRepoLock("root", async () =>
+        const dir = services.agentWorktrees.mainDir(repo);
+        return await services.agentWorktrees.withRepoLock(repo, async () =>
             services.git.commitOnly(dir, await stageable(dir, paths, git), subject, AGENT_GIT_AUTHOR, git),
         );
     } catch (error) {
-        services.logger.debug({ err: error, paths }, "settings: a settings page's write stays uncommitted");
+        services.logger.debug({ err: error, repo, paths }, "settings: a write stays uncommitted");
         return false;
     }
 };

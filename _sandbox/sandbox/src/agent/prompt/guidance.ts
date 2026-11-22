@@ -148,8 +148,9 @@ const REMEMBER =
     'When the owner states a lasting rule or preference about how work is done here ("from now on…", "always…", ' +
     '"never…", "remember…"), keep it for every later conversation: `instructions propose --text "…" --why "…"` puts it ' +
     "on a card showing the exact change to the workspace's AGENTS.md (`--file <repo>` for one repository's own), and " +
-    "their approval writes it. Not for an instruction about the task at hand; and unless they asked you to edit that " +
-    "file, do not write the rule into an AGENTS.md yourself.";
+    "their approval writes it. Only for words the owner said: not for an instruction about the task at hand, and not " +
+    "for a convention you worked out yourself, which belongs in the repository's own docs; and unless they asked you to " +
+    "edit that file, do not write the rule into an AGENTS.md yourself.";
 
 // How a turn waits: on a background command and the `keep`/`wait` tools where its shell has them, on the daemon's
 // `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Kept to the rules (2026-11-17): the

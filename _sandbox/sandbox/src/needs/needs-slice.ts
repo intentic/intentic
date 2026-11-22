@@ -1,5 +1,6 @@
 import { askedAudience } from "../push/push-audience.js";
 import { childActor } from "../auth/principal.js";
+import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -18,6 +19,7 @@ import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { approveDraft, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
 import { composeEnvironment } from "../environment/overlay.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
+import { versionedRepoWrite } from "../seams/settings-versions.js";
 import { deliverWake } from "../seams/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
@@ -80,9 +82,16 @@ const usableNow = async (services: Services, capability: Capability): Promise<re
     return Object.entries(contributionEnv(connector.spec, config)).map(([key, value]) => `${key}_${suffix}=${value}`);
 };
 
+// The repository an AGENTS.md on the main tree belongs to, and its path there: a top-level folder that is a repository
+// of its own (agentWorktrees.mainDir), else the workspace root's.
+const repoOfFile = (workspaceRoot: string, file: string): { readonly repo: string; readonly path: string } => {
+    const [top = "", ...rest] = file.split("/");
+    return rest.length > 0 && existsSync(join(workspaceRoot, top, ".git")) ? { repo: top, path: rest.join("/") } : { repo: "root", path: file };
+};
+
 // An AGENTS.md on the main tree, through the escape guard: a path, or a symlinked folder, that leads out of the
-// workspace is refused rather than read or written.
-const mainTreeFiles = (workspaceRoot: string): InstructionNeedDeps => {
+// workspace is refused rather than read or written. A write is committed on its own in that file's repository.
+const mainTreeFiles = (workspaceRoot: string, whole: NeedsSliceDeps["whole"]): InstructionNeedDeps => {
     const within = async (file: string): Promise<string> => {
         const resolved = await resolveRealWithin(workspaceRoot, file);
         if (resolved === undefined) {
@@ -92,7 +101,11 @@ const mainTreeFiles = (workspaceRoot: string): InstructionNeedDeps => {
     };
     return {
         read: async (file) => readFile(await within(file), "utf8").catch(undefinedIfMissing),
-        write: async (file, text) => writeFile(await within(file), text),
+        write: async (file, text, subject) => {
+            const at = await within(file);
+            const { repo, path } = repoOfFile(workspaceRoot, file);
+            return (await versionedRepoWrite(whole(), repo, [path], subject, () => writeFile(at, text))).committed;
+        },
         // The root itself is no path inside it (resolveWithin), so it is named here.
         folder: async (file) => {
             const at = dirname(file) === "." ? workspaceRoot : (await resolveRealWithin(workspaceRoot, dirname(file)))?.path;
@@ -228,7 +241,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
                 },
             }),
             // On the main tree, the owner's own copy, never a conversation's checkout.
-            instruction: instructionNeed(mainTreeFiles(workspaceRoot)),
+            instruction: instructionNeed(mainTreeFiles(workspaceRoot, whole)),
         },
         logger,
         raisingConversation: (named) => liveRequestRun(whole().conversations)(named)?.conversationId,

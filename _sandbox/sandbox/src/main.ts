@@ -2,6 +2,7 @@ import { setRunnerEnv } from "@intentic/base/git";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
+import { commandPeaks } from "./system/resources/queue/command-peaks.js";
 import { startWorkSignal, type WorkSignal } from "./workload/work-signal.js";
 import { startQuietWatch } from "./system/quiet-watch.js";
 import { inBackground } from "./system/background-git.js";
@@ -169,14 +170,14 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         shutdown.push(teardown);
     }
     // The budget's verdict for heavy commands and test fan-outs, on a socket of its own; one per container, so the
-    // daemon that claimed the container serves it.
+    // daemon that claimed the container serves it. It prices a heavy command by its recent peak, and measures each one.
     if (role.container) {
         // The daemon's own git signs through the owner's ssh agent socket (bound below): an alias names only the public half
         // of its key (ssh-hosts.ts), so a fetch or pull without SSH_AUTH_SOCK fails "Permission denied (publickey)". Handed
         // to the git runner, not set on process.env, which every other child (an extension backend, a turn bound no socket
         // of its own) would inherit. Only where the agent is the container's, as for the tmux server (boot-sweeps.ts).
         setRunnerEnv({ SSH_AUTH_SOCK: services.sshAgent.owner });
-        const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
+        const room = await startRoomSocket(services.resources, logger, { perf: services.perf, peaks: commandPeaks(config.historyRoot) });
         shutdown.push(() => room.close());
         // Since when nobody has needed the sandbox, for the host's keeper that puts an unused one to sleep unless its owner
         // said not to (quiet-watch.ts); a change is written at once rather than on the signal's next beat.

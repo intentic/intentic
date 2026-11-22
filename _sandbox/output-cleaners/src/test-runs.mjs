@@ -46,64 +46,126 @@ const PANIC = /^thread '([^']+)'(?: \(\d+\))? panicked at (.+)$/;
 const OLD_PANIC = /^'(.*)', (\S+:\d+:\d+)$/;
 const BACKTRACE_NOTE = /^note: run with `RUST_BACKTRACE/;
 
-// A panic's message and where it was, from its header line and the lines after it.
-const panicLine = (rest, after) => {
-    const old = OLD_PANIC.exec(rest);
-    if (old !== null) {
-        return clip(`${old[1]} (${old[2]})`);
-    }
-    const message = after.find((line) => line.trim() !== "" && !BACKTRACE_NOTE.test(line));
-    const where = rest.replace(/:$/, "");
-    return clip(message === undefined ? `panicked at ${where}` : `${message} (${where})`);
-};
-
-// Every panic in the output by the thread it happened on, which libtest and nextest name after the test.
-const panicsOf = (lines) => {
-    const panics = new Map();
-    lines.forEach((line, index) => {
-        const panic = PANIC.exec(line);
-        if (panic !== null && !panics.has(panic[1])) {
-            panics.set(panic[1], panicLine(panic[2], lines.slice(index + 1, index + 4)));
-        }
-    });
-    return panics;
-};
-
 const LIBTEST_RUNNING = /^\s*Running (?:unittests )?\S+ \((.+)\)\s*$/;
 const LIBTEST_DOC = /^\s*Doc-tests (\S+)\s*$/;
 const LIBTEST_TEST = /^test (.+?) \.\.\. (ok|FAILED|ignored(?:, .*)?)$/;
 const LIBTEST_SECTION = /^---- (.+?) (?:stdout|stderr) ----$/;
 const LIBTEST_RESULT = /^test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored/;
 const LIBTEST_OUTCOME = { ok: "pass", FAILED: "fail" };
+// Where a binary's tests begin, and where its `---- name stdout ----` sections end.
+const startsBinary = (line) => LIBTEST_RUNNING.test(line) || LIBTEST_DOC.test(line);
+const endsSections = (line) =>
+    startsBinary(line) || LIBTEST_TEST.test(line) || LIBTEST_RESULT.test(line) || /^(?:failures|successes):\s*$/.test(line) || /^running \d+ tests?$/.test(line);
 
-// The first telling line under a failed test's `---- name stdout ----`: its panic, or what it printed first.
-const sectionLines = (lines) => {
+// A line the runner prints about the run rather than a test's own words: never a failure's reason, and never a panic's
+// message. Read at call time, so it may name the nextest patterns below.
+const isRunLine = (line) =>
+    PANIC.test(line) ||
+    endsSections(line) ||
+    LIBTEST_SECTION.test(line) ||
+    BACKTRACE_NOTE.test(line) ||
+    line.startsWith('error: test failed') ||
+    NEXTEST_STATUS.test(line) ||
+    NEXTEST_SUMMARY.test(line) ||
+    /^\s*(?:─|Starting \d+ tests?|Canceling\b)/.test(line);
+
+// A panic's message and where it was: the old format's inline message, else the message the header was surely
+// followed by, else only the place.
+const panicLine = (rest, message) => {
+    const old = OLD_PANIC.exec(rest);
+    if (old !== null) {
+        return clip(`${old[1]} (${old[2]})`);
+    }
+    const where = rest.replace(/:$/, "");
+    return clip(message === undefined ? `panicked at ${where}` : `${message} (${where})`);
+};
+
+/**
+ * Every panic header in the output, by its line: the thread it names and what it says. Its message is the line right
+ * after it, and only when that line is surely the message: tests that run in parallel interleave their output, so a
+ * header followed by a blank, by another header or by anything the runner prints (a result line, `test result:`,
+ * `failures:`) has no message here, and neither has a header that follows one left without its message, since the
+ * line after it may be either panic's. 2026-11-22, shinobi-society: each of ten failing tests was given the next one's
+ * header as its reason, and one was given `test result: FAILED. …`.
+ */
+const panicsAt = (lines) => {
+    const panics = new Map();
+    let unanswered = false;
+    lines.forEach((line, index) => {
+        if (line.trim() === "") {
+            return;
+        }
+        const panic = PANIC.exec(line);
+        if (panic === null) {
+            unanswered = false;
+            return;
+        }
+        const next = lines[index + 1] ?? "";
+        const sure = !unanswered && next.trim() !== "" && !isRunLine(next);
+        panics.set(index, { thread: panic[1], line: panicLine(panic[2], sure ? clip(next) : undefined) });
+        unanswered = !sure && !OLD_PANIC.test(panic[2]);
+    });
+    return panics;
+};
+
+// The first panic each thread had, which libtest and nextest name after the test it ran.
+const panicsByThread = (panics) => {
+    const byThread = new Map();
+    for (const panic of panics.values()) {
+        if (!byThread.has(panic.thread)) {
+            byThread.set(panic.thread, panic.line);
+        }
+    }
+    return byThread;
+};
+
+/**
+ * What each failed test's `---- name stdout ----` section says first, for a test whose own thread's panic is not in the
+ * output: a panic on a thread it spawned (one not named after any test of its binary), else the first line it printed.
+ * A panic named after another test means the section holds a neighbour's output from there on, so nothing after it is
+ * read; runner lines are never a reason.
+ */
+const sectionLines = (lines, names, panics) => {
     const first = new Map();
     let name;
     for (const [index, line] of lines.entries()) {
         const section = LIBTEST_SECTION.exec(line);
-        if (section !== null) {
-            name = section[1];
+        if (section !== null || endsSections(line)) {
+            name = section?.[1];
             continue;
         }
-        if (name === undefined || first.has(name) || line.trim() === "" || BACKTRACE_NOTE.test(line)) {
-            name = line.startsWith("failures:") || line.startsWith("test result:") ? undefined : name;
+        const panic = panics.get(index);
+        if (name === undefined || first.has(name) || line.trim() === "" || (panic === undefined && isRunLine(line))) {
             continue;
         }
-        const panic = PANIC.exec(line);
-        first.set(name, panic === null ? clip(line) : panicLine(panic[2], lines.slice(index + 1, index + 4)));
+        if (panic === undefined) {
+            first.set(name, clip(line));
+        } else {
+            first.set(name, panic.thread !== name && names.has(panic.thread) ? undefined : panic.line);
+        }
     }
     return first;
 };
 
-/** cargo test: `test name ... ok|FAILED|ignored` under each binary's `Running` line, and its `test result:` counts. */
-const parseLibtest = (lines) => {
-    if (!lines.some((line) => LIBTEST_RESULT.test(line) || LIBTEST_TEST.test(line))) {
-        return undefined;
+// libtest's lines by the binary that printed them: each `Running` line starts one, so two crates' tests of the same
+// name, and their panics, are never read as each other's.
+const binariesOf = (lines) => {
+    const binaries = [];
+    for (const line of lines) {
+        if (binaries.length === 0 || startsBinary(line)) {
+            binaries.push([]);
+        }
+        binaries.at(-1).push(line);
     }
-    const sections = sectionLines(lines);
-    const panics = panicsOf(lines);
-    const tests = [];
+    return binaries;
+};
+
+/** One binary's tests, each failure with the reason it can be sure is its own: its thread's panic, else its section. */
+const libtestBinary = (lines, tests) => {
+    const names = new Set(lines.flatMap((line) => LIBTEST_TEST.exec(line)?.[1] ?? []));
+    const panics = panicsAt(lines);
+    const byThread = panicsByThread(panics);
+    const sections = sectionLines(lines, names, panics);
     let counts;
     let suite;
     for (const line of lines) {
@@ -112,11 +174,25 @@ const parseLibtest = (lines) => {
         const test = LIBTEST_TEST.exec(line);
         if (test !== null) {
             const outcome = LIBTEST_OUTCOME[test[2]] ?? "ignored";
-            const why = outcome === "fail" ? (sections.get(test[1]) ?? panics.get(test[1])) : undefined;
+            const why = outcome === "fail" ? (byThread.get(test[1]) ?? sections.get(test[1])) : undefined;
             tests.push(testOf({ suite, name: test[1], outcome }, why));
         }
         const result = LIBTEST_RESULT.exec(line);
         counts = result === null ? counts : plus(counts, Number(result[1]), Number(result[2]), Number(result[3]));
+    }
+    return counts;
+};
+
+/** cargo test: `test name ... ok|FAILED|ignored` under each binary's `Running` line, and its `test result:` counts. */
+const parseLibtest = (lines) => {
+    if (!lines.some((line) => LIBTEST_RESULT.test(line) || LIBTEST_TEST.test(line))) {
+        return undefined;
+    }
+    const tests = [];
+    let counts;
+    for (const binary of binariesOf(lines)) {
+        const own = libtestBinary(binary, tests);
+        counts = own === undefined ? counts : plus(counts, own.passed, own.failed, own.ignored);
     }
     return runOf("cargo", tests, counts);
 };
@@ -141,7 +217,7 @@ const parseNextest = (lines) => {
     if (!lines.some((line) => NEXTEST_SUMMARY.test(line) || /^\s*Starting \d+ tests? across/.test(line))) {
         return undefined;
     }
-    const panics = panicsOf(lines);
+    const panics = panicsByThread(panicsAt(lines));
     const tests = lines.flatMap((line) => {
         const status = NEXTEST_STATUS.exec(line);
         const outcome = status === null ? undefined : nextestOutcome(status[1]);

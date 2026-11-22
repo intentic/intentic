@@ -364,6 +364,17 @@ test("what memory-room prints says why it waited and why it starts", () => {
     );
 });
 
+// 2026-11-22, the shinobi-society audit: `cargo test -p integra-render` was priced at 512 MiB and peaked at 7 to 13.5 GB.
+test("a command priced by its measured peak says so on every line it is held with", () => {
+    const priced = { bytes: 11.2 * GIB, peakBytes: 9.7 * GIB, runs: 1, command: "cargo test --lib -p integra-render" };
+    const why = " Priced at 11.2 GiB: `cargo test --lib -p integra-render` peaked at 9.7 GiB on its last run.";
+    expect(waitWords("cargo-verify", { verdict: "run", waitedMs: 45_000, freeBytes: 12 * GIB, priced })).toBe(
+        `[memory-room] cargo-verify: waited 45s for memory, 12.0 GiB free — starting.${why}`,
+    );
+    expect(waitWords("cargo-verify", { verdict: "refuse", waitedMs: 31_000, freeBytes: 6 * GIB, stuck: true, priced })?.endsWith(`— starting now.${why}`)).toBe(true);
+    expect(waitWords("cargo-verify", { verdict: "run", waitedMs: 0, freeBytes: 12 * GIB, priced })).toBeUndefined();
+});
+
 test("two Cargo admission reservations fit an 18 GiB sandbox with a person reserve", () => {
     expect(costBytesOf("toolchain", "cargo-build")).toBe(7 * GIB);
     const reading = { limitBytes: 18 * GIB, usedBytes: GIB, swapBytes: 0, stallPercent: 0, oomKills: 0 };

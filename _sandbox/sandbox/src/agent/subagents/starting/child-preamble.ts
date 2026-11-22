@@ -9,6 +9,7 @@ import type { FilesInFlight } from "../../../conversations/files-in-flight.js";
 import { holdsChildren, recordedTargetOf } from "../../../conversations/land/land-target.js";
 import { isIsolated, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import { onPath } from "../../../image/on-path.js";
+import { DISPATCHED_CHILD_NOTES } from "../../../runners/held-turns/dispatched-child-notes.js";
 import { CHILD_NOTE_HEADER, CHILD_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 import { statePath } from "../../../state-paths.js";
 import type { MemoryFiles } from "../../prompt/workspace-memory.js";
@@ -47,7 +48,7 @@ export const CHILD_BRIEF_WORDS =
     "AGENTS.md files on its path (already in its instructions; it is told which repositories' own it must read), not to " +
     "commit and where its work lands, a folder for its artifacts, your other subagents with the files each is changing, " +
     "the build and test tools installed here (the queue sets build parallelism, so no `-j`), and the shape of its final " +
-    "report (files changed, checks run with failures marked new or also failing at main, decisions taken, what is unverified). " +
+    "report (files changed, checks run with each failure placed against main, decisions taken, what is unverified). " +
     "Write the task itself: what to do, where, and how you will judge it done.";
 
 // Where a subagent's finished work goes, as the registry reads it now (land-target.ts): into its parent's checkout, held
@@ -129,7 +130,9 @@ const toolLines = ({ tools }: ChildPreambleFacts): string[] => {
         tools.queue ? "  - The heavy-command queue sets build and test parallelism (cargo's `-j` and test threads included) and takes turns across conversations: pass no `-j` and take no turns by hand." : undefined,
         tools.quiet ? "  - `quiet -- <command>` for anything you time: benchmarks, profiles, steady captures." : undefined,
         tools.base ? "  - `base run <command>` runs a command at the commit your work started from: your before, beside your after." : undefined,
-        tools.digest ? "  - A failing test run ends with a digest marking each failure new or also failing at main: report that, do not re-derive it." : undefined,
+        tools.digest
+            ? "  - A failing test run ends with a digest placing each failure against main: passed there, never run there, or failing there too. Report that; check one it could not place, or one it says load may explain, with `base run` before calling it yours."
+            : undefined,
     ].filter((line) => line !== undefined);
     return lines.length === 0 ? [] : ["- Builds and tests:", ...lines];
 };
@@ -137,7 +140,7 @@ const toolLines = ({ tools }: ChildPreambleFacts): string[] => {
 const REPORT_LINES = [
     "- Report: your final message is what your parent reads. End it with these four parts:",
     "  1. Files changed.",
-    "  2. Checks run and each one's result; for a failure, whether it is new or also fails at main.",
+    "  2. Checks run and each one's result; for a failure, whether it is new, also fails at main, or was not checked there.",
     "  3. Decisions you took that the task left open.",
     "  4. What you did not verify.",
 ];
@@ -263,10 +266,15 @@ export interface ChildTurn {
 
 /**
  * The note a spawned child's turn opens with: on a turn that carries its brief, unless the session it resumes already
- * read the brief. Undefined for every other turn.
+ * read the brief. Undefined for every other turn. On a runner, the one its parent sent with the turn.
  */
 export const childNoteFor = async (deps: ChildPreambleDeps, turn: ChildTurn): Promise<TurnNote | undefined> => {
     const childId = turn.conversationId;
+    const dispatched = childId === undefined ? undefined : deps.conversations.holdings(DISPATCHED_CHILD_NOTES).get(childId);
+    if (childId !== undefined && dispatched !== undefined) {
+        deps.conversations.holdings(DISPATCHED_CHILD_NOTES).drop(childId);
+        return dispatched;
+    }
     const kid = childId === undefined ? undefined : deps.conversations.holdings(CHILDREN).get(childId);
     if (childId === undefined || kid === undefined || !opensWithBrief(kid, turn) || (kid.briefRead === true && turn.sessionId !== undefined)) {
         return undefined;

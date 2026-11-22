@@ -48,6 +48,14 @@ flowchart LR
   run aimed at named files), `editor-typecheck` (the editor's full `vue-tsc`, 7 GiB) and `scoped-typecheck` (`lsp diag`
   on a Vue package, 4 GiB), and `cargo-build` (7 GiB per admission, based on Shinobi's 2026-11-02 Rust build peaks).
   Two Cargo reservations fit an 18 GiB sandbox with headroom; the price does not cap compiler RSS.
+- (2026-11-22) A heavy command is priced at least at what the same command took last time: `heavy/command-peaks.mjs`
+  says which runs are one command (the rule, the repository by its git directory and the folder in it, the program, and
+  for cargo its subcommand and package and target selectors, never a test filter, `-j`, an environment variable, a
+  wrapper, a redirection or a pipe), and `learnedCostBytes` prices it at the larger of its rule's price and its recent
+  peak plus 15% (`PEAK_MARGIN`), capped at the sandbox's limit. `memory-room` reads the command queue-run's process runs
+  and sends that signature with its ask; the daemon keeps the peaks, measures each run, and answers with the price and
+  why, which the wait line quotes. A command never measured is priced as before. Shinobi's owner table priced every
+  cargo command at 512 MiB, and one test binary peaked at 13.5 GB.
 - `memory-room` is the one formula for whether the sandbox has room (limit, used, free, stall, and what each workload
   class costs). A size may also be a MiB count (`6144m`), a declared class's price. `heavy/memory-floor.mjs` is what the
   `memory-room` command does with a command still short at its deadline: below `START_FLOOR_BYTES` free (a person's
