@@ -5,6 +5,7 @@
 // Row draws only when it is filled, and the section reports itself through an inject that has to survive being
 // passed down a slot.
 import "@intentic/testing/dom";
+import type { Glyph } from "@intentic/ui/glyph";
 import { ICONS, type IconName } from "@intentic/ui/icons";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
@@ -107,7 +108,8 @@ const mount = async (
 // Whether a row leads with this glyph, told by what it draws: Row imports the real Icon rather than the registered stub, so its svg carries
 // no name, only the glyph's paths.
 const rowDraws = (el: HTMLElement, name: IconName): boolean => {
-    const drawn = [ICONS[name].outline, ICONS[name].solid].filter((d) => d !== undefined && d !== ``);
+    const { outline, solid }: Glyph = ICONS[name];
+    const drawn = [outline, solid].filter((d): d is string => d !== undefined && d !== ``);
     return [...el.querySelectorAll(`[data-row-icon]`)].some((icon) => {
         const paths = [...icon.querySelectorAll(`path`)].map((path) => path.getAttribute(`d`));
         return paths.length === drawn.length && drawn.every((d) => paths.includes(d));
