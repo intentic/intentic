@@ -43,8 +43,19 @@ const landable = computed(() => props.agent.status === `ready`);
         </p>
         <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
         <div class="flex flex-wrap items-center gap-1.5">
-            <Button tier="accent" size="small" tone="success" thumb :disabled="landing || busy" class="self-start whitespace-nowrap" @click.stop="emit('land')">
-                <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : landWord(agent.branches, words.land) }}
+            <!-- A long branch ends in an ellipsis inside the press rather than past the card's edge. -->
+            <Button
+                tier="accent"
+                size="small"
+                tone="success"
+                thumb
+                :disabled="landing || busy"
+                class="min-w-0 max-w-full self-start whitespace-nowrap"
+                @click.stop="emit('land')"
+            >
+                <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" /><span class="min-w-0 truncate">{{
+                    landing ? words.landing : landWord(agent.branches, words.land)
+                }}</span>
             </Button>
             <!-- Getting started's mark for the first land, beside the press that does it (only while that is the step). -->
             <TourMark v-if="!landing" step="land" place="card" :priority="3" side="bottom" @click.stop />

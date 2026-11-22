@@ -302,7 +302,7 @@ const emptyNote = computed<string | undefined>(() => {
         </div>
 
         <!-- Any git repository with a marketplace file can be a collapsed registry. -->
-        <ResponsiveOverlay v-model="changing" :anchor="sourceAnchor" :header="t(`sandbox.words.source`)" panel-class="w-pop p-4">
+        <ResponsiveOverlay v-model="changing" :anchor="sourceAnchor" :header="t(`sandbox.words.source`)" panel-class="w-pop" padded>
             <form class="flex flex-col gap-3" @submit.prevent="applyChange">
                 <p class="text-2xs text-muted">
                     {{ t(`sandbox.extensionsBrowse.anyGitRepositoryHolding`) }} <code class="ui-code">.claude-plugin/marketplace.json</code>

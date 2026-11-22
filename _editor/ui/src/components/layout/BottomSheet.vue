@@ -7,7 +7,8 @@ import { commits, lockAxis, rubberBand, velocityTracker } from "../../motion/swi
 import { useBackDismiss } from "../../composables/useBackDismiss.js";
 import { provideSurfaceGround } from "../overlays/surfaceGround.js";
 
-const { header } = defineProps<{ header?: string }>();
+// `headerId` names the title, for content that labels a group after it (ResponsiveOverlay's `titleId`).
+const { header, headerId } = defineProps<{ header?: string; headerId?: string }>();
 
 // A popover and a sheet are a surface: what lies on them draws none of its own (surfaceGround.ts).
 provideSurfaceGround();
@@ -251,14 +252,16 @@ onBeforeUnmount(() => {
             @pointercancel="onUp"
         >
             <div class="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden="true" />
-            <div v-if="header" class="px-4 pt-3 text-sm font-semibold text-content">{{ header }}</div>
+            <div v-if="header" :id="headerId" class="px-4 pt-3 text-sm font-semibold text-content">{{ header }}</div>
         </div>
         <!-- THE ONE SCROLLER IN THE SHEET. It must be the element that overflows: `overscroll-behavior: contain` on a scroll
      container that cannot scroll swallows the finger instead of chaining to whatever can, which is how every tall
-     sheet (model picker, chats) stopped moving under touch while the Drawer's own content box held the overflow. -->
+     sheet (model picker, chats) stopped moving under touch while the Drawer's own content box held the overflow. Never
+     sideways: a row's 44px touch target (`touch-target`) reaching past the sheet's edge made the whole sheet slide under
+     a diagonal swipe; what is wide scrolls in a box of its own. -->
         <div
             ref="scroller"
-            class="min-h-0 flex-1 overflow-y-auto px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+            class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
             style="overscroll-behavior: contain"
             @touchstart.passive="onTouchStart"
             @touchmove="onTouchMove"

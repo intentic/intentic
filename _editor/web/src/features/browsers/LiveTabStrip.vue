@@ -9,7 +9,7 @@
      menu, whose rows the caller gives; and a tab is dragged along its own window's run to a new place. What a tab IS
      stays the caller's: this draws, it decides nothing. -->
 <script setup lang="ts">
-import { ContextMenu, Icon, ui, vMiddleclick } from "@intentic/ui";
+import { ContextMenu, Icon, ui, useDevice, vMiddleclick } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
@@ -40,6 +40,8 @@ const emit = defineEmits<{
 }>();
 
 const t = useT();
+// A finger needs the new-tab pair apart (the template, by the + press).
+const { coarse } = useDevice();
 
 const stripEl = ref<HTMLElement | undefined>();
 
@@ -376,9 +378,11 @@ const carrying = (id: string): boolean => carry.value?.ids !== undefined && carr
         <!-- Always here: a browser never hides the way to a new tab, whatever the window in front is doing. One press
              is a web tab, as in every browser; the chevron beside it is the launcher, with everything else this view
              can show (the apps, the desktop). It was the + itself once, which made the commonest press a menu. -->
+        <!-- Under a finger the pair stand apart at 32px each: the chevron's 20px, tucked 4px under the +, took the + press
+             itself, since its 44px touch target (`touch-target`) reached past the middle of the + beside it. -->
         <button
             type="button"
-            :class="ui.iconButton({ size: `md`, round: true }, 'self-center')"
+            :class="ui.iconButton({ size: coarse ? `lg` : `md`, round: true }, 'self-center')"
             :aria-label="t(`browsers.browsers.newTab`)"
             v-tooltip.bottom="t(`browsers.browsers.newTab`)"
             @click="emit('quickOpen')"
@@ -387,7 +391,7 @@ const carrying = (id: string): boolean => carry.value?.ids !== undefined && carr
         </button>
         <button
             type="button"
-            :class="ui.iconButton({ size: `xs`, round: true }, `-ml-1 self-center`)"
+            :class="ui.iconButton({ size: coarse ? `lg` : `xs`, round: true }, coarse ? `self-center` : `-ml-1 self-center`)"
             aria-haspopup="menu"
             :aria-label="t(`browsers.launcher.more`)"
             v-tooltip.bottom="t(`browsers.launcher.more`)"

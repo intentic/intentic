@@ -1021,10 +1021,10 @@ const pickedTier = ref(`collaborator`);
             side="bottom"
             cross="start"
             panel-class="w-64"
+            padded
+            titled
         >
-            <div class="flex flex-col gap-1 p-2">
-                <p class="text-xs text-content">The same panel on a desktop; a thumb-reachable sheet on a phone. One open flag.</p>
-            </div>
+            <p class="text-xs text-content">The same panel on a desktop; a thumb-reachable sheet on a phone. One open flag.</p>
         </ResponsiveOverlay>
     </Page>
 </template>

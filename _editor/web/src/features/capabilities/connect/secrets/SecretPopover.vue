@@ -59,7 +59,7 @@ const onSendKey = (event: KeyboardEvent): void => {
 </script>
 
 <template>
-    <ResponsiveOverlay v-model="open" :anchor="anchor" :header="header" side="bottom" :panel-class="wide ? `w-pop p-4` : `w-pop-sm p-4`">
+    <ResponsiveOverlay v-model="open" :anchor="anchor" :header="header" side="bottom" :panel-class="wide ? `w-pop` : `w-pop-sm`" padded>
         <div ref="body" class="flex flex-col gap-3" @keydown="onSendKey">
             <slot />
             <Notice v-if="error" :of="error" />

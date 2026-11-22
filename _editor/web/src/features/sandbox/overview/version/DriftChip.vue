@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ResponsiveOverlay, toneInk, toneRim, ui, useDevice } from "@intentic/ui";
+import { ResponsiveOverlay, toneInk, toneRim, ui } from "@intentic/ui";
 import { ref } from "vue";
 import { DRIFT_KINDS, type DriftArea, type DriftKind, KIND_TONE, kindImpact } from "./driftReport";
 
@@ -10,8 +10,6 @@ import { DRIFT_KINDS, type DriftArea, type DriftKind, KIND_TONE, kindImpact } fr
 const { area } = defineProps<{ area: DriftArea }>();
 
 const open = ref(false);
-// A phone's sheet already heads itself with the name; the desktop panel has no header of its own.
-const { mobile } = useDevice();
 const anchor = ref<HTMLElement>();
 
 // Only the kinds this area actually holds, so a drifted-only area doesn't explain what "missing" would have meant.
@@ -31,13 +29,10 @@ const evidence = (): readonly string[] => DRIFT_KINDS.flatMap((kind) => area[kin
     >
         {{ area.label }}
     </button>
-    <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" :header="area.label" panel-class="w-80 max-w-[calc(100vw-1rem)] p-3">
-        <!-- Spaced here rather than by `panel-class`, which only the desktop panel wears: a phone's sheet gets the same gaps. -->
+    <!-- The name heads it on both (`titled`): a phone's sheet and the desktop panel draw the one heading. -->
+    <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" :header="area.label" panel-class="w-80 max-w-[calc(100vw-1rem)]" padded titled>
         <div class="flex flex-col gap-2">
-            <div class="flex flex-col gap-0.5">
-                <p v-if="!mobile" class="text-sm font-semibold">{{ area.label }}</p>
-                <p v-if="area.where !== undefined" class="text-xs text-muted">{{ area.where }}</p>
-            </div>
+            <p v-if="area.where !== undefined" class="text-xs text-muted">{{ area.where }}</p>
             <p v-for="kind in kinds()" :key="kind" class="text-xs">{{ kindImpact(kind) }}</p>
             <!-- The internal names, last and quietest: what a fix is written against, and what nobody else needs. -->
             <ul class="flex flex-wrap gap-x-3 gap-y-1">

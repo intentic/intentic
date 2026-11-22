@@ -181,7 +181,14 @@ const generateOne = async (): Promise<void> => {
                 <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
                      needs no section of its own while there is nothing in it yet. -->
                 <div data-setting="secrets-add" class="flex flex-wrap items-center justify-end gap-2">
-                    <FilterBar v-if="filterable" v-model="query" :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)" class="min-w-0 flex-1">
+                    <!-- 18rem before the presses beside it go to a line of their own: `flex-1` alone has no width to wrap at, so on a
+                         phone the field was squeezed to a single letter of what was typed rather than the buttons moving down. -->
+                    <FilterBar
+                        v-if="filterable"
+                        v-model="query"
+                        :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)"
+                        class="min-w-[min(100%,18rem)] flex-1"
+                    >
                         <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
                     </FilterBar>
                     <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" tier="boring" :disabled="adding" @click="openAdd">

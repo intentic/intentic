@@ -2,7 +2,7 @@
 import type { BrowserPage, BrowserSession, DesktopWindow } from "@intentic/sandbox-contract/schemas/terminal";
 import { errorMessage } from "@intentic/base/errors";
 import { noticeOf } from "@intentic/ui/async";
-import { AnchoredOverlay, Button, EmptyState, Icon, Picker, ui } from "@intentic/ui";
+import { AnchoredOverlay, Button, EmptyState, Icon, Picker, ui, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, shallowRef, watch } from "vue";
 import { activePageOf, freshestWindow, settledPick } from "../../features/browsers/activePage";
 import { toUrl } from "../../features/browsers/address";
@@ -1111,8 +1111,11 @@ const toolsEl = ref<HTMLElement | undefined>();
 // The start page (LiveStartPage.vue), whose search box takes the keyboard as the view opens on nothing.
 const startField = ref<{ focus: () => void } | undefined>();
 // Whenever the view lands on nothing open (on arrival, or once the last window closes), the keyboard goes to the
-// search box, the way a new browser window opens ready to type; not while parked, where nobody is looking.
-const onStart = computed(() => webInFront.value && current.value === undefined && !parked);
+// search box, the way a new browser window opens ready to type; not while parked, where nobody is looking. Nor under a
+// finger: there the focus raised the on-screen keyboard and the box's suggestions over the list of everything else the
+// page opens, before the reader had asked for either. A tap in the box does both.
+const { coarse } = useDevice();
+const onStart = computed(() => webInFront.value && current.value === undefined && !parked && !coarse.value);
 watch(
     onStart,
     (empty) => {

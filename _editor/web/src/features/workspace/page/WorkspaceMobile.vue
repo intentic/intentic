@@ -85,7 +85,7 @@ const words = useVocabulary();
 const { maker } = useAudience();
 const changes = useChanges(workspaceView);
 const store = useWorkspaceTree();
-const { entriesByPath, entry, listingOf, hiddenIn, keepListed, error, isLoading, refetch, run, busy, actionError, canWriteAt, lazyLoading } = store;
+const { entriesByPath, entry, listingOf, hiddenIn, keepListed, error, isLoading, refetch, run, actionError, canWriteAt, lazyLoading } = store;
 // The tree query reports a raw message; this view knows the user was trying to see their files.
 const treeNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: t(`workspace.workspaceMobile.couldntLoadFiles`), detail: error.value },
@@ -384,51 +384,40 @@ const onPick = (event: Event): void => {
         </template>
 
         <template v-else>
-            <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
+            <!-- What the screen is (back, Files | Changes) leads; its tools sit in one cluster at the far end. The row used to
+                 hold seven presses and was 436px of content on a 390px phone, with Refresh past the right edge; it now holds
+                 what is about the whole segment, and wraps the cluster under the switch rather than off the screen where a
+                 larger text size still makes it outgrow the line. -->
+            <div class="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 border-b border-line bg-card px-1.5 py-1.5">
                 <button v-if="back" type="button" :class="ui.iconButton({ size: `xl` })" :aria-label="back.label" @click="back.go()">
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
                 <SegmentedControl v-model="segment" size="sm" :options="segmentOptions" />
-                <span class="flex-1"></span>
-                <WorkspaceScopeChip />
-                <button
-                    type="button"
-                    :class="ui.iconButton({ on: segment === `history`, size: `xl` })"
-                    :aria-pressed="segment === 'history'"
-                    :aria-label="t(`workspace.workspaceMobile.restorePoints`)"
-                    @click="segment = 'history'"
-                >
-                    <Icon name="history" class="text-base" />
-                </button>
-                <BringProjectButton v-if="segment === 'files' && !contentMode" look="phone" @pick="fileInput?.click()" />
-                <!-- The desktop funnel, thumb-sized, as a sheet not a menu; drill-down only, content search has its own chip. -->
-                <button
-                    v-if="segment === 'files' && !contentMode"
-                    type="button"
-                    :class="ui.iconButton({ size: `xl` }, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)"
-                    :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
-                    @click="filterSheet = true"
-                >
-                    <Icon name="filter" class="text-base" />
-                </button>
-                <!-- One refresh for the row, refetching whichever segment shows; Changes no longer carries its own header row. -->
-                <button
-                    type="button"
-                    :class="ui.iconButton({ size: `xl` })"
-                    @click="segment === 'changes' ? changes.refresh() : refetch()"
-                    :aria-label="t(`ui.action.refresh`)"
-                    :disabled="
-                        segment === 'changes'
-                            ? changes.actionBusy.value || changes.fetching.value || changes.landing.value !== undefined
-                            : busy || isLoading
-                    "
-                >
-                    <Icon
-                        name="refresh"
-                        class="text-base"
-                        :spin="segment === 'changes' ? changes.fetching.value || changes.actionBusy.value : isLoading || busy"
-                    />
-                </button>
+                <div class="ml-auto flex items-center gap-1">
+                    <WorkspaceScopeChip />
+                    <button
+                        type="button"
+                        :class="ui.iconButton({ on: segment === `history`, size: `xl` })"
+                        :aria-pressed="segment === 'history'"
+                        :aria-label="t(`workspace.workspaceMobile.restorePoints`)"
+                        @click="segment = 'history'"
+                    >
+                        <Icon name="history" class="text-base" />
+                    </button>
+                    <BringProjectButton v-if="segment === 'files' && !contentMode" look="phone" @pick="fileInput?.click()" />
+                    <!-- Changes' refresh only: the file list is pulled down to refresh (PullToRefresh, below), and Restore points
+                         carries its own. In the Files segment this press re-read the tree, whatever the reader was looking at. -->
+                    <button
+                        v-if="segment === 'changes'"
+                        type="button"
+                        :class="ui.iconButton({ size: `xl` })"
+                        @click="changes.refresh()"
+                        :aria-label="t(`ui.action.refresh`)"
+                        :disabled="changes.actionBusy.value || changes.fetching.value || changes.landing.value !== undefined"
+                    >
+                        <Icon name="refresh" class="text-base" :spin="changes.fetching.value || changes.actionBusy.value" />
+                    </button>
+                </div>
             </div>
             <NoticeStack :of="[actionError, treeNotice]" class="shrink-0 px-3 py-1.5" />
 
@@ -459,6 +448,17 @@ const onPick = (event: Event): void => {
                             { label: t(`workspace.words.text`), value: `text` },
                         ]"
                     />
+                    <!-- The desktop funnel, thumb-sized, as a sheet not a menu, beside the field it narrows with: drill-down only,
+                         content search has its own chips. Tinted while a switch hides something the folder holds. -->
+                    <button
+                        v-if="!contentMode"
+                        type="button"
+                        :class="ui.iconButton({ size: `xl` }, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)"
+                        :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
+                        @click="filterSheet = true"
+                    >
+                        <Icon name="filter" class="text-base" />
+                    </button>
                 </div>
                 <!-- Files-to-include glob (VSCode grammar), the desktop field's twin, full width: a phone row is the only room. -->
                 <div v-if="contentMode" class="shrink-0 px-2 pb-1.5">

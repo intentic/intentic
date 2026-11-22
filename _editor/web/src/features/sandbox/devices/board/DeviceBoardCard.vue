@@ -89,7 +89,8 @@ const selfTip = computed<Tip | undefined>(() =>
                  and still has to answer how this sandbox reaches it. -->
             <div v-tooltip.top="specsTip" class="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div class="flex min-w-0 items-center gap-2">
-                    <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                    <!-- The chip goes under the name rather than cutting it to "ad…": the name is what the tile is for. -->
+                    <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                         <span :id="titleId" class="min-w-0 truncate text-base font-semibold leading-6 text-content">{{ machine.label }}</span>
                         <!-- Words, not a mark: a pin read as "pinned" (what it means everywhere else in the editor), and its
                              blue read as one more status beside the verdict. This is identity, not health, so it wears the

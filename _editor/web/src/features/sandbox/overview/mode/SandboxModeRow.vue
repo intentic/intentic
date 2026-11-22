@@ -7,7 +7,7 @@
 import type { SandboxMode } from "@intentic/constants";
 import { Button, Notice, ResponsiveOverlay } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref, useId, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useTier } from "../../../../client/sandbox/useTier";
 import { modeSwitchLines, useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import ModeChoice from "../../../../parts/sandbox/ModeChoice.vue";
@@ -30,7 +30,6 @@ watch(open, (opened) => {
     }
 });
 const lines = computed(() => (mode.value === undefined ? [] : modeSwitchLines(mode.value, draft.value, settings.value?.rules ?? [])));
-const questionId = useId();
 
 const save = async (): Promise<void> => {
     if (await switchTo(draft.value)) {
@@ -50,19 +49,30 @@ const save = async (): Promise<void> => {
         </button>
         <span v-else :class="FIXED_VALUE">{{ summary }}</span>
         <template v-if="canShip">
-            <ResponsiveOverlay v-model="open" :anchor="anchor" :header="t(`sandbox.mode.question`)" side="bottom" cross="start" panel-class="w-pop p-4">
-                <div class="flex flex-col gap-3" data-sandbox-mode-editor>
-                    <span :id="questionId" class="text-sm font-medium text-content">{{ t(`sandbox.mode.question`) }}</span>
-                    <ModeChoice v-model="draft" :labelled-by="questionId" />
-                    <ul v-if="lines.length > 0" class="flex list-disc flex-col gap-1 pl-4 text-xs text-muted">
-                        <li v-for="line in lines" :key="line">{{ line }}</li>
-                    </ul>
-                    <Notice v-if="refusal" :of="refusal" />
-                    <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
-                        <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="open = false" />
-                        <Button tier="accent" :label="t(`ui.action.save`)" size="small" :loading="saving" :disabled="draft === mode || saving" @click="save" />
+            <!-- The question heads the panel on both: the sheet's title on a phone, the panel's first line on a desktop. -->
+            <ResponsiveOverlay
+                v-model="open"
+                :anchor="anchor"
+                :header="t(`sandbox.mode.question`)"
+                side="bottom"
+                cross="start"
+                panel-class="w-pop"
+                padded
+                titled
+            >
+                <template #default="{ titleId }">
+                    <div class="flex flex-col gap-3" data-sandbox-mode-editor>
+                        <ModeChoice v-model="draft" :labelled-by="titleId ?? ``" />
+                        <ul v-if="lines.length > 0" class="flex list-disc flex-col gap-1 pl-4 text-xs text-muted">
+                            <li v-for="line in lines" :key="line">{{ line }}</li>
+                        </ul>
+                        <Notice v-if="refusal" :of="refusal" />
+                        <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
+                            <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="open = false" />
+                            <Button tier="accent" :label="t(`ui.action.save`)" size="small" :loading="saving" :disabled="draft === mode || saving" @click="save" />
+                        </div>
                     </div>
-                </div>
+                </template>
             </ResponsiveOverlay>
         </template>
     </OverviewSettingRow>

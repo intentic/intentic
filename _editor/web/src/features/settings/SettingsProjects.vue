@@ -21,7 +21,15 @@ const { sandboxes } = useSandbox();
 const owned = computed(() => sandboxes.value.filter((sandbox) => sandbox.tier === `owner`));
 
 const project = ref(``);
-const sandboxId = ref(``);
+// The sandbox a claim goes to: the one picked, else the first the reader owns. The picker shows that default rather than
+// a blank field that a claim then quietly filled in.
+const picked = ref(``);
+const sandboxId = computed({
+    get: () => (owned.value.some((sandbox) => sandbox.id === picked.value) ? picked.value : (owned.value[0]?.id ?? ``)),
+    set: (id: string) => {
+        picked.value = id;
+    },
+});
 const busy = ref(false);
 const failure = ref<string | undefined>();
 
@@ -40,8 +48,8 @@ const run = async (task: () => Promise<{ claims: ProjectClaim[] }>): Promise<voi
 };
 
 const claim = async (): Promise<void> => {
-    const chosen = sandboxId.value === `` ? owned.value[0]?.id : sandboxId.value;
-    if (busy.value || project.value.trim() === `` || chosen === undefined) {
+    const chosen = sandboxId.value;
+    if (busy.value || project.value.trim() === `` || chosen === ``) {
         return;
     }
     await run(() => apiClient.projects.claim({ sandboxId: chosen, project: project.value.trim() }));

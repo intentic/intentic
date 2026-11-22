@@ -110,7 +110,10 @@ useKeybindings();
                 <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
                     <RouterView v-if="onHome" />
                     <SandboxGate v-else>
-                        <div class="min-h-0 flex-1 overflow-auto" style="overscroll-behavior: contain">
+                        <!-- Up and down only. A phone's page never moves sideways as a whole, and it did by a few pixels under any
+                             diagonal swipe wherever a control's 44px touch target (`touch-target`) reached past the screen's edge,
+                             as a top bar's last button does. What is wide (a diff, a table, a key row) scrolls in a box of its own. -->
+                        <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden" style="overscroll-behavior: contain">
                             <RouterView />
                         </div>
                     </SandboxGate>

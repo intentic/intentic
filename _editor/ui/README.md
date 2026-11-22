@@ -23,6 +23,9 @@ flowchart LR
   words as one line for an accessible name.
 - **Phones.** Components that hold a menu or a row of buttons pick their phone layout themselves, from `useDevice`,
   so callers don't have to. `ResponsiveOverlay` is an anchored panel on a desktop and a `BottomSheet` on a phone.
+  A form or a note in one takes `padded` (the same 16px inset on both) and, when its anchor does not name it,
+  `titled` (its `header` heads the desktop panel as it heads the sheet), rather than padding or titling itself and
+  hiding the copy on a phone.
   `OverflowActions` is a row of icon buttons on a desktop and one ⋯ on a phone, opening an `ActionSheet` (the touch
   equivalent of `ContextMenu`). A `BottomSheet` goes by a drag down from its handle, or from its content once that
   is scrolled to the top, or by a flick. `SwipeRow` lets a thumb swipe a row aside to take its one action (a board

@@ -13,8 +13,10 @@ defineProps<{
 </script>
 
 <template>
-    <div class="flex min-w-0 gap-x-3 py-1" :class="stacked ? `flex-wrap items-center` : `items-start`">
-        <dt class="shrink-0 text-xs text-subtle" :class="stacked ? `basis-full pt-1` : `w-28 py-1`">
+    <!-- Its own container: beside its value only where the row has 20rem, over it on a narrower one. On a phone the 7rem
+         name left the value a column a word or two wide ("Sleeps when / nobody uses / it, and…", seven lines). -->
+    <div class="@container/setting flex min-w-0 flex-wrap gap-x-3 py-1" :class="stacked ? `items-center` : `items-start`">
+        <dt class="shrink-0 text-xs text-subtle" :class="stacked ? `basis-full pt-1` : `basis-full pt-1 @xs/setting:w-28 @xs/setting:basis-auto @xs/setting:py-1`">
             <label v-if="labelFor" :for="labelFor" class="cursor-pointer">{{ label }}</label>
             <template v-else>{{ label }}</template>
         </dt>

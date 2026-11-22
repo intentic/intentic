@@ -538,15 +538,17 @@ const confirmHandOver = async (): Promise<void> => {
                 <span class="inline-flex shrink-0 items-center text-2xs">
                     <AgentReactions ref="reactionChips" :agent-id="fleetAgent.id" :reactions="fleetAgent.reactions" :sandbox-id="remoteBox" dense />
                 </span>
+                <!-- A face, as the board card's own press is (CardHoverBar): a bare + at the end of this row read as "new chat" on
+                     a phone, where nothing hovers to name it. Thumb-sized there, as the session menu beside it is. -->
                 <button
                     ref="reactTrigger"
                     type="button"
-                    :class="ui.iconButton()"
+                    :class="ui.iconButton({ size: mobile ? `xl` : `sm`, round: mobile })"
                     :aria-label="t(`agents.agentReactions.addReaction`)"
                     v-tooltip.bottom="t(`agents.agentReactions.addReaction`)"
                     @click="openReactions"
                 >
-                    <Icon name="plus" class="text-2xs" />
+                    <Icon name="face-smile" :class="mobile ? `text-base` : `text-xs`" />
                 </button>
             </template>
             <template v-if="reviewable">
