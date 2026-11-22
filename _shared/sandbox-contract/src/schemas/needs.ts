@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { KeyringShareModeSchema } from "./keyring.js";
 import { AutomationSchema } from "./automations.js";
+import { HostPowerFindingSchema } from "./host-power.js";
 import { entryId } from "./internal.js";
 
 // A need: something an agent cannot finish its task without that only a person can provide (a connection, a secret's
@@ -8,11 +9,11 @@ import { entryId } from "./internal.js";
 // it until someone answers, draws it wherever it is waiting, and wakes the conversation when it is met
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
-export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction"] as const;
+export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power"] as const;
 export const NeedKindSchema = z
     .enum(NEED_KINDS)
     .describe(
-        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, or a standing rule written into an AGENTS.md.",
+        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, a standing rule written into an AGENTS.md, or power settings changed on the computer this sandbox runs on.",
     );
 export type NeedKind = z.infer<typeof NeedKindSchema>;
 
@@ -192,6 +193,19 @@ export const InstructionNeedSchema = z.object({
 });
 export type InstructionNeed = z.infer<typeof InstructionNeedSchema>;
 
+// The computer this sandbox runs on would sleep through work just booked on it (2026-11-22, host-power.ts): its power plan
+// sleeps it after hours without input, its lid does, Windows Update may restart it in the night. Raised by the daemon
+// itself, never by an agent's ask, in the conversation whose booking it would stop; a person's approval runs the
+// computer's `power-stay-on` op, which changes what `fixable` findings say on mains power. Its outcome is the person's
+// alone: the conversation is never woken to hear it, since a woken turn would run the booked work early.
+export const HostPowerNeedSchema = z.object({
+    kind: z.literal("host-power"),
+    device: z.string().min(1).describe("The connected computer this sandbox runs on, by its device id."),
+    findings: z.array(HostPowerFindingSchema).describe("What its OS would do to the work, as read when the card was raised."),
+    dueAt: z.number().optional().describe("When the booked work that raised it is due, in milliseconds."),
+});
+export type HostPowerNeed = z.infer<typeof HostPowerNeedSchema>;
+
 export const NeedSubjectSchema = z
     .discriminatedUnion("kind", [
         CapabilityNeedSchema,
@@ -201,6 +215,7 @@ export const NeedSubjectSchema = z
         EnvironmentNeedSchema,
         AutomationNeedSchema,
         InstructionNeedSchema,
+        HostPowerNeedSchema,
     ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;

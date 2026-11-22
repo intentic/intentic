@@ -11,7 +11,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { automationCatalog } from "./catalog.js";
-import { doorOf, refuseInvalidAutomation, refusePastEnd, refusePastMoment, saveAutomation } from "./automation-save.js";
+import { doorOf, refuseInvalidAutomation, refusePastEnd, refusePastMoment, saveAutomation, switchedAutomation } from "./automation-save.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { nextRunOf, sandboxZone } from "./schedule-zone.js";
 import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
@@ -85,7 +85,7 @@ export const createAutomationsRoutes = (services: Services) => {
             if ((await services.automations.setEnabled(input.id, input.enabled)) === "missing") {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
-            void reconcileListenerProcesses(services);
+            switchedAutomation(services, existing, input.enabled);
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {

@@ -2,6 +2,7 @@ import { needsContract } from "@intentic/sandbox-contract/contracts/needs.contra
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Caller } from "../auth/auth.js";
+import { opt } from "../opt.js";
 import { NeedRefusal, type Needs } from "./needs.js";
 import { isOwnerRevoke, revokeGrant, standingGrants, type StandingGrantsDeps } from "./standing-grants.js";
 
@@ -14,6 +15,9 @@ export interface NeedsRoutesDeps {
     readonly grants: StandingGrantsDeps;
     // Whether this caller may see a conversation, by the fleet's own rule (auth/fleet-scope.ts).
     readonly visible: (caller: Caller | undefined, conversationId: string) => boolean;
+    // Whether the request's own bearer clears the maintainer floor (auth/owner-gates.ts `isMaintainerBearer`), handed to the
+    // need as `Answerer.maintainer` for a kind that asks (host-power): the route's floor admits machine credentials too.
+    readonly maintains: (headers: Headers) => Promise<boolean>;
 }
 
 // The header an agent CLI names its conversation by (platform/leftovers.ts workloadStamp, INTENTIC_TURN_OWNER).
@@ -39,7 +43,7 @@ const answered = async <T>(work: Promise<T>): Promise<T> => {
     }
 };
 
-export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) => {
+export const createNeedsRoutes = ({ needs, grants, visible, maintains }: NeedsRoutesDeps) => {
     const i = implement(needsContract).$context<OrpcContext>();
     const conversationOf = (context: OrpcContext): string | undefined => context.headers.get(CONVERSATION_HEADER) ?? undefined;
     // A need of a conversation the caller cannot see reads as no need at all, as that conversation does.
@@ -68,7 +72,8 @@ export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) =
         })),
         answer: i.answer.handler(async ({ input, context }) => {
             await seen(input.id, context);
-            return answered(needs.answer(input.id, input.answer, { email: context.identity?.email }));
+            const maintainer: true | undefined = (await maintains(context.headers)) ? true : undefined;
+            return answered(needs.answer(input.id, input.answer, { email: context.identity?.email, ...opt("maintainer", maintainer) }));
         }),
         // The release's own door: below the operating tier, so the approvers its gate names may reach it, and only for a
         // release, whose own rule then admits exactly them (kinds/release-need.ts `mayAnswer`).

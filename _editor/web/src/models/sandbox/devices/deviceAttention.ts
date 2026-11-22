@@ -1,14 +1,17 @@
 import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
+import { fixablePowerFindings, type HostPowerFinding, POWER_FINDING } from "@intentic/sandbox-contract/schemas/host-power";
+import { DEVICE_FEATURE_POWER, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import type { IconName, Tip } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
 import { deviceQuiet, deviceReconnecting, hostEntry, type ManageBlock } from "./deviceFacts";
 import type { DeviceRow } from "./deviceRows";
+import { powerLine, powerRow, worstFirst } from "./hostPower";
 import { t } from "@intentic/ui/i18n";
 
 // Everything a device wants from the reader, as one ordered list: the gap that stops it answering, the age
-// of the reading, and the switch standing between its sandboxes and their buttons. A healthy machine yields
-// none of it, which is nearly all of them.
+// of the reading, what its own power settings would do to work booked on it, and the switch standing between its
+// sandboxes and their buttons. A healthy machine yields none of it, which is nearly all of them.
 
 // The agent is deliberately absent: its state and its two verbs are one object with one home (deviceAgent.ts),
 // rather than a sentence here and a version strip further down the page.
@@ -246,6 +249,59 @@ const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined
     };
 };
 
+// The change `power-stay-on` makes, typed on the machine, for an agent that does not carry the op.
+const POWER_COMMAND = `intentic-machine power stay-on`;
+
+// Mains power only, and the tip says so: a laptop in a bag must still sleep, so the op leaves battery as it is.
+const keepAwake = (): DeviceAgentFix => ({
+    kind: `agent`,
+    label: t(`sandbox.deviceAttention.keepAwake`),
+    hint: { title: t(`sandbox.deviceAttention.mainsOnly`), note: t(`sandbox.deviceAttention.batteryAsIs`) },
+    op: `power-stay-on`,
+});
+
+// Of what the op cannot change, only a suspend with a command to stop it earns a line: it closes by hand. A battery that
+// still sleeps and an update that may restart Windows in the night hold on nearly every laptop and close with no press,
+// so they are said on the chat card when something booked would meet them (needs.ts `host-power`), not here forever.
+const suspendConcern = (findings: readonly HostPowerFinding[]): DeviceConcern | undefined => {
+    const suspend = findings.find((finding) => finding.id === POWER_FINDING.osSleep && finding.command !== undefined);
+    return suspend === undefined
+        ? undefined
+        : { key: `power`, tone: `info`, icon: `moon`, text: t(`sandbox.deviceAttention.powerSuspends`), command: suspend.command };
+};
+
+// What this machine's own power settings would do to work booked on it (host-power.ts). rog's plan slept it five hours
+// after its owner's last keypress, every sandbox on it froze until the lid was opened, and nothing on this page had said
+// it would (2026-11-22). The worst setting is the sentence and the rest are a hover away, so four of them are still one
+// line; the fix is the agent's own op, a button where the agent carries it and its command where it does not. Raised
+// only on a machine that answers with no gap, like the links above: the button travels over its socket, and a gap has
+// its own sentence to say first. Read from the machine's facts, so it clears itself once a reading comes back clean.
+const powerConcern = (device: Device): DeviceConcern | undefined => {
+    const power = device.facts?.power;
+    if (power === undefined || device.online !== true || device.gap !== undefined) {
+        return undefined;
+    }
+    const [worst, ...rest] = worstFirst(fixablePowerFindings(power));
+    if (worst === undefined) {
+        return suspendConcern(power.findings);
+    }
+    const what = powerLine(worst).now;
+    const carries = deviceSupports(device.facts, DEVICE_FEATURE_POWER);
+    return {
+        key: `power`,
+        tone: `warning`,
+        icon: `moon`,
+        // A network cut in standby does not hold the work back; it fails it, which is a different sentence.
+        text:
+            worst.id === POWER_FINDING.standbyNetwork
+                ? t(`sandbox.deviceAttention.powerOffline`, { what })
+                : t(`sandbox.deviceAttention.powerWaits`, { what }),
+        hint: rest.length === 0 ? undefined : { title: t(`sandbox.deviceAttention.powerAlso`), rows: rest.map(powerRow) },
+        fix: carries ? keepAwake() : undefined,
+        command: carries ? undefined : POWER_COMMAND,
+    };
+};
+
 // The command that runs the agent's tidy-up on demand and says what it would do; `--fix` does it.
 const UPKEEP_COMMAND = `intentic-machine doctor`;
 
@@ -320,6 +376,12 @@ export const deviceAttention = (
             text: t(`sandbox.deviceAttention.lastHeard`, { ago: timeAgo(device.report?.capturedAt ?? readAt, { now: readAt }) }),
             hint: { title: t(`sandbox.deviceAttention.snapshot`), note: t(`sandbox.deviceAttention.mayBeOutdated`) },
         });
+    }
+    // Next to the reading's age, since it is the machine's own state too, and before what it holds: a machine that will
+    // sleep through tonight's work matters more than a link it no longer needs.
+    const power = powerConcern(device);
+    if (power !== undefined) {
+        concerns.push(power);
     }
     // After the machine's own state, before the door: this is about what it is holding, which only means anything once
     // the reader knows it is answering at all.

@@ -41,6 +41,12 @@ export interface Answerer {
     readonly email: string | undefined;
     // The agent itself (`needs done`): it already knows, so it is never told, and the record says whose word it was.
     readonly agent?: true;
+    // (2026-11-22) The request's own bearer clears the maintainer floor, checked the way the doors that act on a connected
+    // device check it (owner-gates.ts `requireMaintainer`): the owner, or someone with Full access, signed in. The answer
+    // route's floor already keeps every member below that out, but a machine credential the route's grants admit (an
+    // operator panel's token, an extension's) arrives there with nobody behind it. A kind whose yes changes one of the
+    // owner's computers (host-power) asks for this instead. Absent: not vouched for, which such a kind reads as no.
+    readonly maintainer?: true;
 }
 
 // What a person's answer did. `met` and `declined` settle the need; `working` is a yes still being carried out (a
@@ -73,6 +79,17 @@ export interface NeedKindHandler {
     readonly nextTurn: (need: Need) => boolean;
     // Two asks are the same need when this key matches, so asking twice finds the first rather than raising again.
     readonly key: (subject: NeedSubject) => string;
+    // (2026-11-22) False for a need the daemon raises for a person about a conversation, never for its agent: a host-power
+    // card, raised when work booked for later would be slept through. However it ends, nothing is steered into a running
+    // turn and no turn is woken to hear it, at the answer, at the end of a turn or at boot: a woken turn spends an
+    // allowance, and here it would also run the booked work hours early, the very thing the card is about. The agent
+    // never deals with it either: `needs` leaves it out, and `needs cancel` and `needs done` refuse it, since it was
+    // never the agent's to ask or to take back. Its card, its push and the board's badge are as any need's. Absent: the
+    // agent is told, as it is of every need it asked.
+    readonly tellsAgent?: false;
 }
+
+// Whether the conversation's agent hears of this need at all (`tellsAgent`). Pure.
+export const agentHears = (kinds: NeedKinds, need: Pick<Need, "subject">): boolean => kinds[need.subject.kind].tellsAgent !== false;
 
 export type NeedKinds = Readonly<Record<NeedKind, NeedKindHandler>>;

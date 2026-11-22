@@ -21,6 +21,7 @@ import { keepReceipt, receiptOf } from "./message-receipts.js";
 import { steerComposed } from "./turn-interactions.js";
 import { bookingFor, bookingOfAsk, unbookable } from "./booking-ask.js";
 import { bookContinuation, continueQueued } from "./continuation.js";
+import { checkBookedPower } from "../../../hosts/power/host-power.js";
 import { queuedMessageOf, requestOf } from "./queued-message.js";
 
 // Every message to a conversation comes through here, whoever sends it: said into the live turn where that turn takes
@@ -39,6 +40,23 @@ const NOT_STEERABLE: Unsteered = { why: "no steerable turn running for that conv
 const steeredOr = (steered: boolean | { readonly invalid: string }): true | Unsteered => (steered === false ? NOT_STEERABLE : steered);
 
 const ARCHIVED: Unsaid = { why: "the conversation is archived, and only a person's message reopens it" };
+
+// A scheduled send booked: said in the log, and (2026-11-22) checked against the settings of the computer this sandbox
+// runs on, which raises a card when it would sleep through the send (hosts/power/host-power.ts). Never waited for; a booking
+// that waits on another conversation's work has no time to check.
+const noteBooking = (daemon: Services, conversationId: string, booking: Booking): void => {
+    daemon.logger.info({ conversationId, until: booking.until, after: booking.after?.conversationId }, "admission: a scheduled send is booked");
+    void checkBookedPower(daemon, conversationId, booking);
+};
+
+// What a reschedule answers once the queue took it or did not; a new time is checked as a first booking is.
+const rebooked = (daemon: Services, conversationId: string, booking: Booking, moved: boolean): "booked" | "missing" => {
+    if (!moved) {
+        return "missing";
+    }
+    void checkBookedPower(daemon, conversationId, booking);
+    return "booked";
+};
 
 // Hands the words to the live turn wherever it runs: composed against this workspace for a local one, uncomposed to a
 // runner's, whose paths resolve only in its own workspace.
@@ -414,7 +432,7 @@ export const createAdmission = (
         await daemon.conversations.send(conversationId, { kind: "queue-scheduled", item, booking, ...opt("opening", opening) }).settled;
         const booked: MessageReceipt = { delivered: "queued" };
         kept(conversationId, new Map([[item.id, booked]]));
-        daemon.logger.info({ conversationId, until: booking.until, after: booking.after?.conversationId }, "admission: a scheduled send is booked");
+        noteBooking(daemon, conversationId, booking);
         return booked;
     };
 
@@ -525,7 +543,7 @@ export const createAdmission = (
                     kept(conversationId, await deliver(conversationId));
                     return "released";
                 }
-                return daemon.conversations.send(conversationId, { kind: "queue-rescheduled", booking, ...opt("ids", ids) }).reply ? "booked" : "missing";
+                return rebooked(daemon, conversationId, booking, daemon.conversations.send(conversationId, { kind: "queue-rescheduled", booking, ...opt("ids", ids) }).reply);
             }),
         // A Continue booked for later, a continuation in the queue (continuation.ts), under the conversation's own lock.
         continueAt: (ask) => inTurn(ask.conversationId, async () => bookContinuation(services(), ask)),

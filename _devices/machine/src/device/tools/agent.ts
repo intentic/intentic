@@ -3,6 +3,7 @@ import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
 import type { DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
+import { forgetPowerReading } from "../../power/host-power.js";
 import { machineLauncher } from "../../resident/supervision.js";
 import { SWAP_WAIT_MAX_MS } from "../sandbox-rounds/swap-records.js";
 import { onFileChange } from "./programs/file-changes.js";
@@ -20,6 +21,9 @@ export const AGENT_VERB: Record<DeviceAgentOp, readonly string[]> = {
     upgrade: ["upgrade"],
     restart: ["run"],
     "forget-unreachable": ["device", "forget-unreachable"],
+    // (2026-11-22) The owner's yes on the sandbox's host-power card: this computer's power plans changed so it stays on
+    // while plugged in (power/apply.ts). No restart: the agent keeps serving.
+    "power-stay-on": ["power", "stay-on"],
 };
 
 // How the log of a detached run is followed (2026-10-20). Lines are read when the log changes (fs.watch), not on a
@@ -145,6 +149,9 @@ const started = (op: DeviceAgentOp, installed: string | undefined): string => {
     if (op === "restart") {
         return `Restarting this device's agent. This connection drops while that happens.`;
     }
+    if (op === "power-stay-on") {
+        return `Changing this computer's power settings so it stays on while plugged in: no sleep, hibernate or lid action on mains power. Battery settings are left as they are; this connection stays up.`;
+    }
     return `Dropping this device's links to sandboxes that have stopped answering. The agent closes them on its next pass; this connection stays up.`;
 };
 
@@ -154,6 +161,7 @@ const settled: Record<DeviceAgentOp, string> = {
     upgrade: `The update ran on this machine. Whether each side's new agent is the one serving shows in its version, which this view re-reads on its own.`,
     restart: `The agent was restarted on this device.`,
     "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
+    "power-stay-on": `This computer's power settings were changed: on mains power it no longer sleeps or hibernates by itself, and what each finding became is in the lines above. \`intentic-machine power restore\` on it puts the old values back.`,
 };
 
 // The ops that end in this agent restarting.
@@ -194,15 +202,22 @@ export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => vo
     const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes: true });
     onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
     const lines: string[] = [];
-    await followLog({
-        path: agentLogPath,
-        from: at,
-        isAlive: () => isProcessAlive(pid),
-        onLine: (line) => {
-            lines.push(line);
-            onLine(line);
-        },
-    });
+    try {
+        await followLog({
+            path: agentLogPath,
+            from: at,
+            isAlive: () => isProcessAlive(pid),
+            onLine: (line) => {
+                lines.push(line);
+                onLine(line);
+            },
+        });
+    } finally {
+        // The facts this agent answers read the settings again, rather than keep the reading from before the change.
+        if (op === "power-stay-on") {
+            forgetPowerReading();
+        }
+    }
     const stop = runStop(lines);
     if (stop !== undefined) {
         throw new Error(stop);

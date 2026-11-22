@@ -27,7 +27,7 @@ import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, type HostFiles, hostConnections, hostSummaries, readHostFiles } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
-import { factsDue, factsTakenAtHello, refreshFactsBeside, refreshFactsOnceSettled } from "./device-facts-refresh.js";
+import { factsDue, factsTakenAtHello, refreshFactsBeside, refreshFactsNow, refreshFactsOnceSettled } from "./device-facts-refresh.js";
 import { type AnswerMemory, type DescribedHalf, keepLastAnswer, landLateHalf, type LateHalves, type LateLandings, lateReason, type ListedHalf, listedOf, noteReading, type Reading, readHalf, whenLanded, worthAnnouncing } from "./device-listing.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
@@ -568,6 +568,11 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
         // A drop leaves the agent running on the same socket, so no hello re-describes it (device-facts-refresh.ts).
         if (input.op === "forget-unreachable") {
             refreshFactsOnceSettled(services, id);
+        }
+        // (2026-11-22) The agent drops its own cached reading of the power settings as the op ends, so asking now finds
+        // them changed: the Devices view's warning and an open host-power card clear without waiting for the next read.
+        if (input.op === "power-stay-on") {
+            refreshFactsNow(services, id);
         }
     }
 }

@@ -62,7 +62,7 @@ export const nextDueAfter = (automations: readonly AutomationRecord[], after: nu
 // dropping it, so "due" stays the truth right up until it fires.
 // `sandbox` is the zone of record the automation's own `tz` overrides; it is a parameter rather than a read, so this
 // stays pure and every caller has to have decided which clock it means.
-export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number | undefined => {
+export const nextRunOf = (automation: Pick<AutomationRecord, "enabled" | "trigger">, sandbox: Zone): number | undefined => {
     if (!automation.enabled) {
         return undefined;
     }

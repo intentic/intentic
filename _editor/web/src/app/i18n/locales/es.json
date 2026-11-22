@@ -6523,6 +6523,12 @@
             "approve": "Aprobar y activar",
             "conversationHere": "Retoma esta conversación",
             "firstPass": "La primera vez que la comprobación se supera"
+        },
+        "hostPower": {
+            "lead": "{device} detendría el trabajo programado para {when}.",
+            "leadUndated": "{device} detendría el trabajo programado en él.",
+            "approve": "Cambiar estos ajustes en {device}",
+            "working": "Cambiando los ajustes en {device}…"
         }
     },
     "preview": {
@@ -6826,7 +6832,12 @@
             "stillConnected": "Sigue conectado a {count} sandbox. | Sigue conectado a {count} sandboxes.",
             "updateFailed": "No se pudo actualizar su agente",
             "updated": "Actualización terminada",
-            "updating": "Actualizando su agente…"
+            "updating": "Actualizando su agente…",
+            "workingPower": "Cambiando ajustes de energía…",
+            "powerChanging": "Cambiando sus ajustes de energía…",
+            "powerChanged": "Ajustes de energía cambiados",
+            "powerFailed": "No se pudieron cambiar sus ajustes de energía",
+            "powerRefused": "Ese dispositivo no cambió sus ajustes de energía."
         },
         "agentMemory": {
             "addToMemory": "Añadir a la memoria",
@@ -7803,7 +7814,37 @@
             "upkeepLeftWhy": "Su limpieza {at} te dejó {what} ({why})",
             "upkeepOnly": "{left}.",
             "upkeepMore": "{left} y uno más. | {left} y {count} más.",
-            "lastHeard": "Última señal {ago}."
+            "lastHeard": "Última señal {ago}.",
+            "powerWaits": "{what}, así que el trabajo programado para la noche espera a que despierte.",
+            "powerOffline": "{what}, así que el trabajo programado para la noche no llega a la red.",
+            "powerSuspends": "Puede suspenderse solo, así que el trabajo programado para la noche espera a que despierte.",
+            "powerAlso": "También encontrado",
+            "keepAwake": "Mantenerlo despierto enchufado",
+            "mainsOnly": "Solo enchufado",
+            "batteryAsIs": "La batería queda igual"
+        },
+        "hostPower": {
+            "sleepIdle": "Se suspende tras {after} sin actividad estando enchufado",
+            "hibernateIdle": "Hiberna tras {after} sin actividad estando enchufado",
+            "lidSleep": "Cerrar la tapa lo suspende",
+            "lidHibernate": "Cerrar la tapa lo hiberna",
+            "lidShutDown": "Cerrar la tapa lo apaga",
+            "standbyNetwork": "Corta la red en espera",
+            "never": "nunca",
+            "nothing": "no hace nada",
+            "keepsNetwork": "la mantiene",
+            "batterySleep": "Con batería sigue suspendiéndose tras {after}: déjalo enchufado por la noche.",
+            "batterySleepAny": "Con batería sigue suspendiéndose: déjalo enchufado por la noche.",
+            "updateRestart": "Windows Update puede reiniciarlo entre las {from} y las {to} (hora de {device}); tras un reinicio no se ejecuta nada hasta que inicies sesión.",
+            "osSleep": "Puede suspenderse solo. Para evitarlo, ejecuta esto en {device}:",
+            "rowSleep": "Suspensión tras",
+            "rowHibernate": "Hibernación tras",
+            "rowLid": "Tapa cerrada",
+            "rowStandby": "En espera",
+            "lidSleeps": "se suspende",
+            "lidHibernates": "hiberna",
+            "lidShutsDown": "se apaga",
+            "noNetwork": "sin red"
         },
         "deviceBoard": {
             "device": "Este dispositivo",
@@ -7864,6 +7905,7 @@
             "doneUnpair": "Desemparejado. La carpeta local se queda exactamente como está.",
             "doneClean": "Salida de compilación borrada. Los borrados retenidos se sincronizan en unos segundos.",
             "askedForget": "Quitando los enlaces que dejaron de responder. El recuento de aquí se pondrá al día cuando vuelva su bucle.",
+            "askedPower": "Cambiando sus ajustes de energía. Esta página se pondrá al día con su próxima lectura.",
             "askedRestart": "Reiniciando. Esta página se pondrá al día cuando vuelva su bucle.",
             "askedUpgrade": "Actualizando. La nueva versión aparecerá aquí cuando vuelva su bucle.",
             "batchDidntRestart": "{count} sandbox no se reinició en {machine}. | {count} sandboxes no se reiniciaron en {machine}.",
@@ -7918,6 +7960,7 @@
             "updateBatchHeader": "¿Actualizar {count} sandbox en {machine}? | ¿Actualizar {count} sandboxes en {machine}?",
             "verbHeader": "¿{verb} {name}?",
             "workingAgentForget": "Quitando los enlaces muertos de un dispositivo",
+            "workingAgentPower": "Cambiando los ajustes de energía de un dispositivo",
             "workingAgentRestart": "Reiniciando el agente de un dispositivo",
             "workingAgentUpgrade": "Actualizando los agentes de una máquina",
             "workingClean": "Borrando la salida de compilación",

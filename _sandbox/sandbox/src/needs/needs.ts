@@ -13,7 +13,7 @@ import {
 import { needWakePrompt } from "@intentic/sandbox-contract/events/need-wake";
 import type { Logger } from "pino";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
-import { type Answerer, isGone, type Met, type NeedKinds, type SecretKeepOn } from "./need-kinds.js";
+import { agentHears, type Answerer, isGone, type Met, type NeedKinds, type SecretKeepOn } from "./need-kinds.js";
 import type { NeedsStore } from "./needs-store.js";
 
 // One lifecycle for every need (docs/architecture/needs.md): raise it from an agent's ask, hold the asking call while
@@ -193,8 +193,9 @@ const openNeedsPasses = (
     };
 };
 
-// One of the asking conversation's own needs, for the agent to withdraw or close: refused for anyone else's.
-const ownedBy = async (deps: Pick<NeedsDeps, "store" | "raisingConversation">, id: string, conversationId: string | undefined): Promise<Need> => {
+// One of the asking conversation's own needs, for the agent to withdraw or close: refused for anyone else's, and for one
+// the sandbox raised for a person about this conversation (`tellsAgent`), which the agent never asked and cannot take back.
+const ownedBy = async (deps: Pick<NeedsDeps, "store" | "raisingConversation" | "kinds">, id: string, conversationId: string | undefined): Promise<Need> => {
     const need = await deps.store.get(id);
     if (need === undefined) {
         throw new NeedRefusal("not_found", `No need is named "${id}": \`needs\` lists this conversation's.`);
@@ -202,6 +203,9 @@ const ownedBy = async (deps: Pick<NeedsDeps, "store" | "raisingConversation">, i
     const asking = deps.raisingConversation(conversationId);
     if (asking !== undefined && need.conversationId !== asking) {
         throw new NeedRefusal("not_yours", `"${id}" was raised by another conversation, so it is not this one's to withdraw.`);
+    }
+    if (!agentHears(deps.kinds, need)) {
+        throw new NeedRefusal("not_yours", `"${id}" is the sandbox's own question to a person, not one this conversation asked, so it is not this one's to withdraw or close.`);
     }
     return need;
 };
@@ -251,8 +255,11 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         });
 
     // Tells the conversation how a need ended, when no call is holding for it. A decline only reaches a live turn: a
-    // finished conversation is not woken to hear a no.
+    // finished conversation is not woken to hear a no. A need its agent never hears of (`tellsAgent`) stops here, untold.
     const deliver = async (need: Need, met: Met | undefined): Promise<void> => {
+        if (!agentHears(deps.kinds, need)) {
+            return;
+        }
         if (need.status === "declined") {
             const steered = await deps.steer(need.conversationId, promptOf(need, "declined", undefined));
             await told(need, steered ? "turn" : undefined);
@@ -453,7 +460,9 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             const note = reply.note?.trim();
             return settle(id, "declined", note === undefined || note === "" ? "" : `They said: ${note}`, by);
         }
-        const outcome = await deps.kinds[need.subject.kind].answer(need, reply, by);
+        // Kept out of check passes while the kind carries it out: a yes that changes the world (a computer's power settings)
+        // announces it, and the pass that starts must not settle the need first and lose who answered, as with `provide`.
+        const outcome = await passes.holdOut(id, () => deps.kinds[need.subject.kind].answer(need, reply, by));
         if ("refused" in outcome) {
             throw new NeedRefusal("forbidden", outcome.refused);
         }
@@ -479,7 +488,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         ask,
         mine: async (conversationId) => {
             const asking = deps.raisingConversation(conversationId);
-            return asking === undefined ? [] : (await deps.store.all()).filter((need) => need.conversationId === asking);
+            return asking === undefined ? [] : (await deps.store.all()).filter((need) => need.conversationId === asking && agentHears(deps.kinds, need));
         },
         withdraw: async (id, conversationId) => {
             const need = await ownedBy(deps, id, conversationId);
@@ -563,8 +572,8 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
                 for (const conversationId of new Set(needs.filter(isOpenNeed).map((need) => need.conversationId))) {
                     await publish(conversationId);
                 }
-                // Answered while the daemon was down, or met by the restart itself (a rebuild): said now.
-                for (const need of needs.filter((entry) => entry.status === "met" && entry.told === undefined)) {
+                // Answered while the daemon was down, or met by the restart itself (a rebuild): said now, unless its agent never hears of it.
+                for (const need of needs.filter((entry) => entry.status === "met" && entry.told === undefined && agentHears(deps.kinds, entry))) {
                     await deliver(need, await metOf(need));
                 }
                 await checkOpen();

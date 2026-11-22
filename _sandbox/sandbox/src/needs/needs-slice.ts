@@ -1,4 +1,4 @@
-import { askedAudience } from "../push/push-audience.js";
+import { askedAudience, OPERATORS } from "../push/push-audience.js";
 import { childActor } from "../auth/principal.js";
 import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
@@ -34,6 +34,8 @@ import { refuseInvalidAutomation, saveAutomation } from "../automations/automati
 import { checkSource } from "../automations/watch/watch-sources.js";
 import { sourceEnv } from "../automations/watch/watch-condition.js";
 import { grantNeed } from "./kinds/grant-need.js";
+import { hostPowerNeed } from "./kinds/host-power-need.js";
+import { runDeviceAgentFlow } from "../hosts/device-reports.js";
 import { releaseNeed } from "./kinds/release-need.js";
 import { keepOnDevice } from "./kinds/secret-keep-on.js";
 import { secretNeed } from "./kinds/secret-need.js";
@@ -44,6 +46,8 @@ import { fileNeedsStore, needsDocument } from "./needs-store.js";
 // How long one browser may take to say which sites it allows before the last answer stands, so a sleeping laptop never
 // stalls the needs check.
 const SITE_CHECK_TIMEOUT_MS = 3_000;
+// How long a computer is given to describe itself again after a host-power card changed its settings.
+const POWER_REFRESH_MS = 8_000;
 
 // The needs service as the daemon composes it (docs/architecture/needs.md): each kind over the subsystem that owns what
 // it asks for, and the lifecycle over the turn engine's doors. Every seam reads the finished Services when it is called,
@@ -122,6 +126,39 @@ const secretNeedOf = (whole: NeedsSliceDeps["whole"]) =>
         deviceHeld: async () => (await whole().deviceSecrets.listed()).map((entry) => entry.pointer.name),
         keepOn: (name, value, keepOn) => keepOnDevice(whole(), name, value, keepOn),
     });
+
+// A host-power need over the computer's facts as the hub holds them, its agent op run as the Devices view runs it.
+const hostPowerNeedOf = (whole: NeedsSliceDeps["whole"]) =>
+    hostPowerNeed({
+        facts: (device) => whole().hostHub.state(device).facts,
+        online: (device) => whole().hostHub.online(device),
+        runAgentFlow: (device, flow) => runDeviceAgentFlow(whole(), device, flow),
+        refresh: (device) => whole().hostHub.refresh(device, POWER_REFRESH_MS),
+    });
+
+// A raised need's push, to the people the conversation's asks wait on (push/push-audience.ts), and its words in the
+// channel the conversation came from, where its person may be the only place it reaches them.
+// (2026-11-22) A host-power card is about one of the owner's own computers, and only a maintainer may answer it
+// (kinds/host-power-need.ts `mayAnswer`): it goes to the sandbox's operators, never to the conversation's other people,
+// and never into the channel it came from, where nobody could act on it.
+const notifyNeed =
+    (whole: NeedsSliceDeps["whole"], logger: NeedsSliceDeps["logger"]): NeedsDeps["notify"] =>
+    (need) => {
+        const services = whole();
+        const entry = services.agents.entry(need.conversationId);
+        const raised = needRaised(need, entry?.social.title?.text);
+        if (need.subject.kind === "host-power") {
+            void services.pushSender.notifyIfAway(raised, OPERATORS);
+            return;
+        }
+        void services.pushSender.notifyIfAway(raised, askedAudience((id) => services.agents.entry(id), need.conversationId));
+        const channel = needChannelOf(entry?.identity.origin);
+        if (channel !== undefined) {
+            void deliverToListenerChannel(services, channel, needChannelText(need)).catch((error: unknown) =>
+                logger.warn({ err: error, conversationId: need.conversationId, provider: channel.provider }, "needs: the channel did not take the ask"),
+            );
+        }
+    };
 
 // A settled need's lock-screen ask is replaced on the devices it showed on (push.ts `withdraw`).
 const withdrawNeedPush =
@@ -242,6 +279,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             }),
             // On the main tree, the owner's own copy, never a conversation's checkout.
             instruction: instructionNeed(mainTreeFiles(workspaceRoot, whole)),
+            "host-power": hostPowerNeedOf(whole),
         },
         logger,
         raisingConversation: (named) => liveRequestRun(whole().conversations)(named)?.conversationId,
@@ -254,19 +292,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             void whole().conversations.send(conversationId, { kind: "frame", frame });
         },
         show: (conversationId, shown) => void whole().conversations.send(conversationId, { kind: "needs-shown", needs: shown }),
-        notify: (need) => {
-            const services = whole();
-            const entry = services.agents.entry(need.conversationId);
-            // The people the conversation's asks wait on (push/push-audience.ts).
-            void services.pushSender.notifyIfAway(needRaised(need, entry?.social.title?.text), askedAudience((id) => services.agents.entry(id), need.conversationId));
-            // Said in the channel the conversation came from too, where its person may be the only place it reaches them.
-            const channel = needChannelOf(entry?.identity.origin);
-            if (channel !== undefined) {
-                void deliverToListenerChannel(services, channel, needChannelText(need)).catch((error: unknown) =>
-                    logger.warn({ err: error, conversationId: need.conversationId, provider: channel.provider }, "needs: the channel did not take the ask"),
-                );
-            }
-        },
+        notify: notifyNeed(whole, logger),
         withdrawNotification: withdrawNeedPush(whole),
         steer: async (conversationId, prompt) => (await whole().turns.steer(conversationId, { text: prompt, voice: "sandbox" })) === true,
         wake: async (conversationId, prompt) => {

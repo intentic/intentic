@@ -6523,6 +6523,12 @@
             "approve": "Approuver et activer",
             "conversationHere": "Reprend cette conversation",
             "firstPass": "La première fois que la vérification réussit"
+        },
+        "hostPower": {
+            "lead": "{device} arrêterait le travail prévu pour {when}.",
+            "leadUndated": "{device} arrêterait le travail prévu dessus.",
+            "approve": "Modifier ces paramètres sur {device}",
+            "working": "Modification des paramètres sur {device}…"
         }
     },
     "preview": {
@@ -6826,7 +6832,12 @@
             "stillConnected": "Toujours connecté à {count} sandbox. | Toujours connecté à {count} sandboxes.",
             "updateFailed": "Impossible de mettre à jour son agent",
             "updated": "Mise à jour terminée",
-            "updating": "Mise à jour de son agent…"
+            "updating": "Mise à jour de son agent…",
+            "workingPower": "Modification de l'alimentation…",
+            "powerChanging": "Modification de ses paramètres d'alimentation…",
+            "powerChanged": "Paramètres d'alimentation modifiés",
+            "powerFailed": "Impossible de modifier ses paramètres d'alimentation",
+            "powerRefused": "Cet appareil n'a pas modifié ses paramètres d'alimentation."
         },
         "agentMemory": {
             "addToMemory": "Ajouter à la mémoire",
@@ -7803,7 +7814,37 @@
             "upkeepLeftWhy": "Son nettoyage {at} vous a laissé {what} ({why})",
             "upkeepOnly": "{left}.",
             "upkeepMore": "{left}, et un de plus. | {left}, et {count} de plus.",
-            "lastHeard": "Dernier signe de vie {ago}."
+            "lastHeard": "Dernier signe de vie {ago}.",
+            "powerWaits": "{what}, donc le travail prévu pour la nuit attend son réveil.",
+            "powerOffline": "{what}, donc le travail prévu pour la nuit n'atteint pas le réseau.",
+            "powerSuspends": "Il peut se mettre en veille de lui-même, donc le travail prévu pour la nuit attend son réveil.",
+            "powerAlso": "Également trouvé",
+            "keepAwake": "Le garder éveillé sur secteur",
+            "mainsOnly": "Sur secteur seulement",
+            "batteryAsIs": "Batterie inchangée"
+        },
+        "hostPower": {
+            "sleepIdle": "Se met en veille après {after} sans activité sur secteur",
+            "hibernateIdle": "Se met en veille prolongée après {after} sans activité sur secteur",
+            "lidSleep": "Fermer le capot le met en veille",
+            "lidHibernate": "Fermer le capot le met en veille prolongée",
+            "lidShutDown": "Fermer le capot l'éteint",
+            "standbyNetwork": "Coupe le réseau en veille",
+            "never": "jamais",
+            "nothing": "ne fait rien",
+            "keepsNetwork": "le garde",
+            "batterySleep": "Sur batterie, il se met toujours en veille après {after} : laissez-le branché pour la nuit.",
+            "batterySleepAny": "Sur batterie, il se met toujours en veille : laissez-le branché pour la nuit.",
+            "updateRestart": "Windows Update peut le redémarrer entre {from} et {to} (heure de {device}) ; après un redémarrage, rien ne tourne tant que vous ne vous êtes pas connecté.",
+            "osSleep": "Il peut se mettre en veille de lui-même. Pour l'en empêcher, exécutez ceci sur {device} :",
+            "rowSleep": "Veille après",
+            "rowHibernate": "Hibernation après",
+            "rowLid": "Capot fermé",
+            "rowStandby": "En veille",
+            "lidSleeps": "veille",
+            "lidHibernates": "veille prolongée",
+            "lidShutsDown": "s'éteint",
+            "noNetwork": "pas de réseau"
         },
         "deviceBoard": {
             "device": "Cet appareil",
@@ -7864,6 +7905,7 @@
             "doneUnpair": "Désappairé. Le dossier local reste exactement tel quel.",
             "doneClean": "Sortie de build vidée. Les suppressions retenues se synchronisent en quelques secondes.",
             "askedForget": "Abandon des liens qui ne répondent plus. Le compteur ici se met à jour quand sa boucle revient.",
+            "askedPower": "Modification de ses paramètres d'alimentation. Cette page se met à jour à sa prochaine lecture.",
             "askedRestart": "Redémarrage. Cette page se met à jour quand sa boucle revient.",
             "askedUpgrade": "Mise à jour. La nouvelle version s'affiche ici quand sa boucle revient.",
             "batchDidntRestart": "{count} sandbox n'a pas redémarré sur {machine}. | {count} sandboxes n'ont pas redémarré sur {machine}.",
@@ -7918,6 +7960,7 @@
             "updateBatchHeader": "Mettre à jour {count} sandbox sur {machine} ? | Mettre à jour {count} sandboxes sur {machine} ?",
             "verbHeader": "{verb} {name} ?",
             "workingAgentForget": "Abandon des liens morts d'un appareil",
+            "workingAgentPower": "Modification des paramètres d'alimentation d'un appareil",
             "workingAgentRestart": "Redémarrage de l'agent d'un appareil",
             "workingAgentUpgrade": "Mise à jour des agents d'une machine",
             "workingClean": "Vidage de la sortie de build",

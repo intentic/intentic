@@ -1154,8 +1154,10 @@ test("a removed runner loses its enrollment here, but only when the machine says
 
 // The agent's own two ops: both stop the process carrying the request, so the stream ending badly is the normal
 // ending, and only an answer the device's RPC layer actually sent is a failure worth printing.
-const agentServices = (said: () => AsyncGenerator<DeviceFlowLine>): Services =>
-    ({ hostHub: { client: () => ({ runAgentFlow: async () => said() }) } }) as unknown as Services;
+const agentServices = (said: () => AsyncGenerator<DeviceFlowLine>, refreshed: string[] = []): Services =>
+    ({
+        hostHub: { client: () => ({ runAgentFlow: async () => said() }), refresh: async (id: string) => void refreshed.push(id), state: () => ({}) },
+    }) as unknown as Services;
 
 test("an update the device narrates all the way through keeps every frame it sent", async () => {
     const lines = await drain(
@@ -1192,6 +1194,19 @@ test("a connection that dies with the restarted process ends with one plain line
         { kind: "line", text: "90% of 82 MB" },
         { kind: "line", text: "Lost contact with rog — that is what restarting its agent does to this connection." },
     ]);
+});
+
+// (2026-11-22) The agent drops its own cached reading of the power settings as `power-stay-on` ends, so the facts are
+// asked for again at once: the Devices view's warning and an open host-power card clear without waiting for a read.
+test("a power change asks the computer to describe itself again as its flow ends, and no other agent op does", async () => {
+    const refreshed: string[] = [];
+    const changed = async function* (): AsyncGenerator<DeviceFlowLine> {
+        yield { kind: "result", message: "The power settings were changed on this device." };
+    };
+    await drain(runDeviceAgentFlow(agentServices(changed, refreshed), "rog", { op: "power-stay-on" }));
+    await drain(runDeviceAgentFlow(agentServices(changed, refreshed), "rog", { op: "upgrade" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refreshed).toEqual(["rog"]);
 });
 
 // An agent too old to have this route answers through its RPC layer rather than dying, and that answer names

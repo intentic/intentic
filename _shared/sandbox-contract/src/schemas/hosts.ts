@@ -1,5 +1,6 @@
 // hosts: the user's own connected devices (the `host` capability's live half)
 import { z } from "zod";
+import { HostPowerSchema } from "./host-power.js";
 import { IntenticOsFactsSchema } from "./intentic-os.js";
 // Manifest says which machines are intended; this says which actually hold a socket now. Nothing persists across a
 // daemon restart except the enrollment itself, so a closed laptop reads offline within a heartbeat.
@@ -106,6 +107,11 @@ export const DeviceFactsSchema = z.object({
     // the machine boots, so the daemon tells the agent it may be this box's steward and the os_* tools are there. `os`
     // above stays the human name. Absent everywhere else, and from an agent older than the field.
     intenticOs: IntenticOsFactsSchema.optional(),
+    // (2026-11-22) What this computer's OS would do to work left running on it: a power plan that sleeps it, a lid that
+    // does, an update restart in the night (HostPowerSchema, host-power.ts). Said by the environment that owns those
+    // settings (Windows' native side, a Linux or macOS host), never by a WSL distro. Absent from an agent older than the
+    // field, and where the settings could not be read.
+    power: HostPowerSchema.optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
@@ -210,6 +216,10 @@ export const DeviceFeatureSchema = z.enum([
     // (2026-11-20) `remoteService`: remoted's Windows service for the lock screen and administrator prompts, read,
     // installed and removed (schemas/device-remote.ts). Advertised by a Windows agent that advertises `remote`.
     "remote-service",
+    // (2026-11-22) The `power-stay-on` agent op: the power settings that would sleep this computer through scheduled work
+    // (`DeviceFacts.power`), changed on mains power by `intentic-machine power stay-on`. Advertised where the agent can
+    // change them itself, which is Windows' native side.
+    "power",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -230,6 +240,7 @@ export const DEVICE_FEATURE_STACKS: DeviceFeature = "stacks";
 export const DEVICE_FEATURE_REMOTE: DeviceFeature = "remote";
 export const DEVICE_FEATURE_REMOTE_ICE: DeviceFeature = "remote-ice";
 export const DEVICE_FEATURE_REMOTE_SERVICE: DeviceFeature = "remote-service";
+export const DEVICE_FEATURE_POWER: DeviceFeature = "power";
 // What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

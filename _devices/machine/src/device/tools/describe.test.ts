@@ -1,6 +1,6 @@
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
 import type { LinkReading } from "../config.js";
-import { agentLines, linkFacts } from "./describe.js";
+import { agentLines, linkFacts, powerLines } from "./describe.js";
 import { icOverrides } from "./ic-binary.js";
 
 // What a sandbox is told about the links this machine holds to OTHER sandboxes. Counts and an age, never addresses:
@@ -53,4 +53,25 @@ test("the overrides shown are ic's and intentic's own, sorted, with a secret's v
         "INTENTIC_LOG_DIR=/l",
         "INTENTIC_SETUP_TOKEN=<6 characters>",
     ]);
+});
+
+// (2026-11-22) What the computer's own power settings would do to work left running, in the agent's sentences, and that
+// they are its owner's to change: a model reading describe is told, and told not to reach for powercfg itself.
+test("describe says what the power settings would do, that nothing would where nothing would, and nothing where they were not read", () => {
+    expect(powerLines({})).toEqual([]);
+    expect(powerLines({ power: { at: 1, utcOffsetMinutes: 60, findings: [] } })).toEqual([
+        "Power settings: nothing in this computer's own settings would put it to sleep or cut it off while work is left running.",
+    ]);
+    const [line] = powerLines({
+        power: {
+            at: 1,
+            utcOffsetMinutes: 60,
+            findings: [
+                { id: "sleep-idle", power: "ac", afterSeconds: 18_000, fixable: true, text: "Sleeps after 5 hours without input on mains power (plan: Turbo)." },
+                { id: "update-restart", window: { fromHour: 2, toHour: 8 }, fixable: false, text: "Windows Update may restart it between 02:00 and 08:00 local time." },
+            ],
+        },
+    });
+    expect(line).toContain("Sleeps after 5 hours without input on mains power (plan: Turbo). Windows Update may restart it between 02:00 and 08:00 local time.");
+    expect(line).toContain("do not change them yourself");
 });

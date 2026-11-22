@@ -207,10 +207,17 @@ const dropSpent = (): void => {
     }
 };
 
+// The ops that leave the agent's process as it was: a new pid never comes, so a reading taken after the press is the
+// answer when the machine's own sentence did not arrive.
+const KEEPS_PROCESS: ReadonlySet<DeviceAgentOp> = new Set([`power-stay-on`]);
+
 // Whether a reading shows this side's agent back from the press: a live, unstalled loop serving the build on disk, run
 // by a different process than the one the press was made against. A pid on both sides decides it; without one, an
 // install that moved does, and failing that a reading the machine took after the press.
-export const agentReturned = (device: Device, record: Pick<AgentRecord, `pid` | `installed` | `askedAt`>): boolean => {
+export const agentReturned = (
+    device: Device,
+    record: Pick<AgentRecord, `pid` | `installed` | `askedAt`> & { readonly op?: DeviceAgentOp | undefined },
+): boolean => {
     const report = device.report;
     const agent = report?.agent;
     if (device.online !== true || report === undefined || agent === undefined || !agent.running) {
@@ -218,6 +225,9 @@ export const agentReturned = (device: Device, record: Pick<AgentRecord, `pid` | 
     }
     if (agentStalled(agent, report.capturedAt) || agentBuildSkew(agent) !== undefined) {
         return false;
+    }
+    if (record.op !== undefined && KEEPS_PROCESS.has(record.op)) {
+        return report.capturedAt > record.askedAt;
     }
     if (record.pid !== undefined && agent.pid !== undefined) {
         return agent.pid !== record.pid;

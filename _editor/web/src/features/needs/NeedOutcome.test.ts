@@ -90,3 +90,21 @@ it(`draws nothing under a plain yes with no case to fold`, () => {
     const element = mount({ ...bare, subject: { kind: `secret`, name: `NPM_TOKEN` }, outcome: `NPM_TOKEN is stored.` });
     expect(element.querySelector(`[data-card-outcome]`)).toBeNull();
 });
+
+// A power card's answer is the person's alone: its conversation is never woken to hear it, so "not told yet" would say a
+// wait that never ends. What the yes changed on the computer is the one fact the chip does not carry.
+it(`says what a power card's yes changed, and never that an agent has yet to hear it`, () => {
+    const element = mount({
+        id: `need-9`,
+        conversationId: `c-1`,
+        subject: { kind: `host-power`, device: `rog`, findings: [] },
+        title: `rog would sleep through the send booked for 07:10`,
+        status: `met`,
+        outcome: `rog now stays awake on mains power.`,
+        answeredBy: `me@acme.dev`,
+        createdAt: 1,
+        updatedAt: 2,
+    });
+    expect(element.querySelector(`[data-need-power]`)?.textContent).toBe(`rog now stays awake on mains power.`);
+    expect(element.querySelector(`[data-need-unheard]`)).toBeNull();
+});

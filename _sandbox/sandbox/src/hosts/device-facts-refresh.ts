@@ -21,8 +21,16 @@ const LINKS_SETTLE_MS = 12_000;
 // When each machine was last asked to describe itself beside a reading.
 const askedAt = new Map<string, number>();
 
+// What a row or a card shows from the facts that can change under a live connection: the link count, and (2026-11-22)
+// what the computer's power settings would do to work left running (`power`, without the moment it was read, which
+// changes on every read). A change to either is announced, so the Devices view and an open host-power card catch up.
+const changeable = (services: Services, id: string): string => {
+    const facts = services.hostHub.state(id).facts;
+    return JSON.stringify([facts?.links, facts?.power?.findings, facts?.power?.battery]);
+};
+
 const refreshFacts = async (services: Services, id: string): Promise<void> => {
-    const before = JSON.stringify(services.hostHub.state(id).facts?.links);
+    const before = changeable(services, id);
     // Never costs the reading it rides beside: the last answer stands, as at hello.
     try {
         await services.hostHub.refresh(id, DESCRIBE_TIMEOUT_MS);
@@ -30,9 +38,17 @@ const refreshFacts = async (services: Services, id: string): Promise<void> => {
         // allow(silent-catch): a machine that did not re-describe itself keeps its facts from hello, which the row shows
         return;
     }
-    if (JSON.stringify(services.hostHub.state(id).facts?.links) !== before) {
+    if (changeable(services, id) !== before) {
         publishRuntimeChange("hosts");
     }
+};
+
+/** Asks the machine to describe itself again now, never waited on: after a flow that changed what it says of itself. */
+export const refreshFactsNow = (services: Services, id: string): void => {
+    askedAt.set(id, Date.now());
+    void refreshFacts(services, id).catch((error: Error) =>
+        services.logger.warn({ err: error, device: id }, "device reads: could not take what the machine said of itself"),
+    );
 };
 
 /** Asks the machine to describe itself again unless a reading asked within FACTS_EVERY_MS; never waited on. */

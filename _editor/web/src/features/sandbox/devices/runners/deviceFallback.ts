@@ -90,6 +90,7 @@ const AGENT_COMMAND: Record<DeviceAgentOp, string> = {
     upgrade: `upgrade`,
     restart: `run`,
     "forget-unreachable": `device forget-unreachable`,
+    "power-stay-on": `power stay-on`,
 };
 
 export const agentFallback = (op: DeviceAgentOp): string => `intentic-machine ${AGENT_COMMAND[op]}`;

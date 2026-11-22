@@ -939,9 +939,75 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   daemon is up and fires it on the minute. A moment due within that lead and five minutes keeps the sandbox awake
   instead. A sandbox the alarm woke that no person has used since sleeps again five minutes after the work is done. The
   log says `something it scheduled is due` for such a start. The computer itself asleep or switched off still misses
-  it: the daemon then fires it once, late, when it next starts (the scheduler's catch-up).
+  it: the daemon then fires it once, late, when it next starts (the scheduler's catch-up; the computer's own sleep is
+  [Power settings](#power-settings) below).
   `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and
   nothing sleeps.
+
+### Power settings
+
+(2026-11-22) The section above is about a SANDBOX asleep, which the keeper decides; this one is about the COMPUTER
+asleep, which its own OS decides, and which stops every sandbox on it at once. Two sandboxes on rog had conversations
+booked for the night. rog's power plan said "Sleep after (plugged in): 5 hours", so five hours after the last keypress,
+at 05:37 UTC, Windows took it from Modern Standby into real sleep, and nothing on it ran until its lid was opened at
+10:01: a send booked for 07:10 went out three hours late, and nobody had been told this could happen. The owner chose
+not to hold the computer awake from software: the agent reads the settings that would stop work left running, says
+what each does, and changes them only at the owner's word ([`power/`](src/power)).
+
+- **What is read.** Only by the environment that owns the settings: Windows' own side, a Linux host, a Mac, never a WSL
+  distro (its computer is the Windows PC around it). On Windows, one PowerShell
+  ([`windows-reading.ts`](src/power/windows-reading.ts)) reads four settings from EVERY power plan, since a vendor's
+  tool switches plans by itself (rog's ASUS software moves between Performance, Balanced, Silent and Turbo): sleep after
+  (STANDBYIDLE), hibernate after (HIBERNATEIDLE), the lid (LIDACTION) and the network in Modern Standby
+  (CONNECTIVITYINSTANDBY), each on mains power and on battery. It also reads whether the PC has Modern Standby, a
+  battery and a lid (CallNtPowerInformation, through Add-Type), Windows Update's active hours and the offset from UTC.
+  `powercfg` prints its labels in the PC's language (owners run Polish and German Windows), so only its GUIDs and
+  `0x` numbers are read: `powercfg /qh <plan> <subgroup> <setting>` ends, in every language, with the AC index and then
+  the DC index. A setting a plan lacks reads as absent, never as an error. Measured on rog: about a second, most of it
+  PowerShell starting. On Linux, all four sleep targets masked (`systemctl is-enabled`) means the computer cannot suspend
+  at all (z440); otherwise logind's lid action on mains power (on a computer with a lid), logind's `IdleAction` and
+  GNOME's idle suspend are read ([`linux.ts`](src/power/linux.ts)). On a Mac, `pmset -g custom`'s AC `sleep`
+  ([`macos.ts`](src/power/macos.ts)).
+- **What it says.** Findings ([`windows-findings.ts`](src/power/windows-findings.ts), the contract's `HostPowerSchema`),
+  each with a plain sentence of the agent's own, and the plans that hold it where that matters:
+  - `sleep-idle` and `hibernate-idle`: a plan sleeps or hibernates the PC after a time without input on mains power,
+    the shortest across plans (a value from 0x7FFFFFFF up counts as never);
+  - `lid-close`: closing the lid on mains power sleeps, hibernates or shuts it down (only where there is a lid);
+  - `standby-network`: on Modern Standby, a plan cuts the network while the screen is off, so whatever a sandbox calls
+    out to fails;
+  - `battery-sleep`: on battery it sleeps after a time or when the lid closes. Told, never changed: a laptop in a bag
+    must still sleep;
+  - `update-restart`: Windows Update may restart the PC outside its active hours (rog's 08:00 to 02:00 make 02:00 to
+    08:00), and after a restart nothing runs again until somebody signs in, since the agent and Docker Desktop start at
+    sign-in. Told, never changed: the active hours are the owner's to pick;
+  - `os-sleep`: Linux or macOS may suspend the computer. The fix needs root, so the finding carries the command
+    (`sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target`, `sudo pmset -c sleep 0`)
+    and the agent never runs it. A MacBook's lid sleeps it whatever the setting, unless an external display is attached.
+- **Where it goes.** The device's facts carry it as `power` (`describe` at every hello and every two minutes), so the
+  sandbox can raise a card when work it booked would be slept through. A reading is kept five minutes and an older one
+  is answered while the next is read; a read that fails is said once in `machine.log` and leaves the field absent until
+  one works. `describe` says the findings in one line and that they are the owner's to change. The Windows side
+  advertises `power`, the feature that says it takes the `power-stay-on` op.
+- **Stay-on** (Windows only, [`writes.ts`](src/power/writes.ts) decides, [`apply.ts`](src/power/apply.ts) does). The
+  owner's yes on that card runs the `power-stay-on` op, which is `intentic-machine power stay-on` detached, as `upgrade`
+  is. For every plan, on mains power only: sleep after and hibernate after to never, the lid to do nothing (where there
+  is a lid), and on Modern Standby the network in standby from disabled to enabled. Only values that differ are written,
+  so a second run writes nothing. Each goes through `powercfg /setacvalueindex`, which needs no elevation (checked on
+  rog), and then `powercfg /setactive` on the active plan, which otherwise keeps what it had loaded. Battery values are
+  never written. The run reads the settings again and says, per finding, whether it changed; one stay-on would change
+  that is still there makes it exit 1.
+- **Put back.** Before the first write the values as they were go to `~/.intentic/machine/power-before.json`. An entry
+  already there is never overwritten, since after the first stay-on a plan holds stay-on's own value, not the owner's: a
+  later stay-on only adds what it had not saved. A snapshot that cannot be read stops the run before anything is
+  written. `intentic-machine power restore` writes each saved value back where the plan still holds what stay-on wrote,
+  leaves one the owner has changed since (and says so), reloads the active plan and removes the snapshot.
+- **Told at once.** Both runs touch `~/.intentic/machine/power-changed` when they wrote anything; the resident agent
+  drops a reading older than it at the next ask and waits up to three seconds for a fresh one, and the op forgets it
+  too as it ends. So the facts the daemon reads right after the owner's yes say what Windows now holds, whether the
+  run was the op or a person in a terminal.
+- **By hand.** `intentic-machine power status [--json]` reads and shows the same findings (`--json`: the facts' `power`
+  plus `ok` and `restorable`); `power stay-on` and `power restore` as above. In a WSL distro each verb is handed to the
+  Windows side's agent. On Linux and macOS, `stay-on` changes nothing: it prints the finding's command and exits 1.
 
 ### The engine's disk
 
@@ -1332,7 +1398,7 @@ person who runs it alone, and either way it never downloads anything.
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `remote`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `remote`, `power`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
 - [src/uninstall/purge.ts](src/uninstall/purge.ts) — `uninstall --purge`: the steps in `steps.ts`, the distros in `distros.ts`, the files in `sweep.ts`, every decision pure in `plan.ts`.
 - [src/resident/resident.ts](src/resident/resident.ts) — the resident process that holds links, pairings and WSL distros; `supervision.ts` beside it starts and stops it through whatever restarts this environment's agent.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
@@ -1345,6 +1411,7 @@ person who runs it alone, and either way it never downloads anything.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
 - [src/resident/watchdog.ts](src/resident/watchdog.ts) — the agent's own hang watchdog.
 - [src/resident/pause-cause.ts](src/resident/pause-cause.ts) — what a pause the watchdog saw was: a sleep, a freeze or the clock.
+- [src/power/host-power.ts](src/power/host-power.ts) — what this computer's own power settings would do to work left running (the facts' `power`): Windows in `windows-reading.ts` and `windows-findings.ts`, Linux and macOS in `linux.ts` and `macos.ts`; `power stay-on` and `restore` decided in `writes.ts`, done in `apply.ts`, drawn in `power-command.ts`.
 - [src/release/release-verify.ts](src/release/release-verify.ts) — a downloaded release binary checked against the release's signed `SHA256SUMS`.
 - [src/device/egress/set-egress.ts](src/device/egress/set-egress.ts) — the `set-egress` op: a tightening as it comes, a loosening under the owner's passkey (`proof.ts`), checked against the pins in `pins.ts`; `follower.ts` keeps `ic sandbox egress --follow` running, `trust-command.ts` is `intentic-machine egress trust`.
 - [src/keyring/commands.ts](src/keyring/commands.ts) — `intentic-machine keyring …`; `service.ts` installs, starts, upgrades and removes intentic-keyring, `relay.ts` carries the sandbox's `keyring*` calls to its pipe.
@@ -1356,4 +1423,5 @@ pnpm --filter @intentic/machine test
 pnpm turbo run build --filter=./_devices/machine
 node _devices/machine/dist/cli.js status
 node _devices/machine/dist/cli.js doctor        # what the upkeep would do here; --fix does it
+node _devices/machine/dist/cli.js power status  # what this computer's power settings would do to work left running
 ```

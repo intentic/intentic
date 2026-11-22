@@ -6523,6 +6523,12 @@
             "approve": "Genehmigen und einschalten",
             "conversationHere": "Setzt diese Unterhaltung fort",
             "firstPass": "Beim ersten erfolgreichen Prüfen"
+        },
+        "hostPower": {
+            "lead": "{device} würde die für {when} geplante Arbeit anhalten.",
+            "leadUndated": "{device} würde die dort geplante Arbeit anhalten.",
+            "approve": "Diese Einstellungen auf {device} ändern",
+            "working": "Die Einstellungen auf {device} werden geändert…"
         }
     },
     "preview": {
@@ -6826,7 +6832,12 @@
             "stillConnected": "Noch mit {count} Sandbox verbunden. | Noch mit {count} Sandboxes verbunden.",
             "updateFailed": "Sein Agent konnte nicht aktualisiert werden",
             "updated": "Aktualisierung abgeschlossen",
-            "updating": "Sein Agent wird aktualisiert…"
+            "updating": "Sein Agent wird aktualisiert…",
+            "workingPower": "Energieeinstellungen werden geändert…",
+            "powerChanging": "Seine Energieeinstellungen werden geändert…",
+            "powerChanged": "Energieeinstellungen geändert",
+            "powerFailed": "Seine Energieeinstellungen konnten nicht geändert werden",
+            "powerRefused": "Dieses Gerät hat seine Energieeinstellungen nicht geändert."
         },
         "agentMemory": {
             "addToMemory": "Zum Gedächtnis hinzufügen",
@@ -7803,7 +7814,37 @@
             "upkeepLeftWhy": "Seine Aufräumrunde {at} hat {what} für Sie übrig gelassen ({why})",
             "upkeepOnly": "{left}.",
             "upkeepMore": "{left} und eines mehr. | {left} und {count} weitere.",
-            "lastHeard": "Zuletzt gemeldet {ago}."
+            "lastHeard": "Zuletzt gemeldet {ago}.",
+            "powerWaits": "{what}, daher wartet über Nacht geplante Arbeit, bis er aufwacht.",
+            "powerOffline": "{what}, daher erreicht über Nacht geplante Arbeit das Netzwerk nicht.",
+            "powerSuspends": "Er kann sich selbst schlafen legen, daher wartet über Nacht geplante Arbeit, bis er aufwacht.",
+            "powerAlso": "Außerdem gefunden",
+            "keepAwake": "Am Netzstrom wach halten",
+            "mainsOnly": "Nur am Netzstrom",
+            "batteryAsIs": "Akkubetrieb bleibt unverändert"
+        },
+        "hostPower": {
+            "sleepIdle": "Wechselt nach {after} ohne Eingabe am Netzstrom in den Energiesparmodus",
+            "hibernateIdle": "Wechselt nach {after} ohne Eingabe am Netzstrom in den Ruhezustand",
+            "lidSleep": "Zuklappen versetzt ihn in den Energiesparmodus",
+            "lidHibernate": "Zuklappen versetzt ihn in den Ruhezustand",
+            "lidShutDown": "Zuklappen fährt ihn herunter",
+            "standbyNetwork": "Trennt im Standby das Netzwerk",
+            "never": "nie",
+            "nothing": "tut nichts",
+            "keepsNetwork": "bleibt verbunden",
+            "batterySleep": "Im Akkubetrieb schläft er weiterhin nach {after} ein: Lassen Sie ihn über Nacht am Netzteil.",
+            "batterySleepAny": "Im Akkubetrieb schläft er weiterhin ein: Lassen Sie ihn über Nacht am Netzteil.",
+            "updateRestart": "Windows Update kann ihn zwischen {from} und {to} neu starten (Uhrzeit auf {device}); nach einem Neustart läuft nichts, bis Sie sich anmelden.",
+            "osSleep": "Er kann sich selbst schlafen legen. Um das zu verhindern, führen Sie dies auf {device} aus:",
+            "rowSleep": "Energiesparen nach",
+            "rowHibernate": "Ruhezustand nach",
+            "rowLid": "Deckel zu",
+            "rowStandby": "Im Standby",
+            "lidSleeps": "Energiesparmodus",
+            "lidHibernates": "Ruhezustand",
+            "lidShutsDown": "fährt herunter",
+            "noNetwork": "kein Netzwerk"
         },
         "deviceBoard": {
             "device": "Dieses Gerät",
@@ -7864,6 +7905,7 @@
             "doneUnpair": "Entkoppelt. Der lokale Ordner bleibt genau so, wie er ist.",
             "doneClean": "Build-Ausgabe entfernt. Zurückgehaltene Löschungen werden in wenigen Sekunden synchronisiert.",
             "askedForget": "Die Verbindungen, die nicht mehr antworten, werden entfernt. Die Zahl hier zieht nach, sobald seine Schleife zurück ist.",
+            "askedPower": "Ändert die Energieeinstellungen. Diese Seite zieht mit seiner nächsten Meldung nach.",
             "askedRestart": "Startet neu. Diese Seite zieht nach, sobald seine Schleife zurück ist.",
             "askedUpgrade": "Wird aktualisiert. Die neue Version erscheint hier, sobald seine Schleife zurück ist.",
             "batchDidntRestart": "{count} Sandbox auf {machine} wurde nicht neu gestartet. | {count} Sandboxes auf {machine} wurden nicht neu gestartet.",
@@ -7918,6 +7960,7 @@
             "updateBatchHeader": "{count} Sandbox auf {machine} aktualisieren? | {count} Sandboxes auf {machine} aktualisieren?",
             "verbHeader": "{verb} {name}?",
             "workingAgentForget": "Tote Verbindungen eines Geräts werden entfernt",
+            "workingAgentPower": "Die Energieeinstellungen eines Geräts werden geändert",
             "workingAgentRestart": "Der Agent eines Geräts wird neu gestartet",
             "workingAgentUpgrade": "Die Agenten eines Rechners werden aktualisiert",
             "workingClean": "Build-Ausgabe wird entfernt",

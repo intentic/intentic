@@ -87,6 +87,8 @@ test(`the agent's own two ops are the verbs its CLI takes`, () => {
     expect(agentFallback(`upgrade`)).toBe(`intentic-machine upgrade`);
     // Bare `run` restarts: it stops the agent it finds and starts it again through its supervisor.
     expect(agentFallback(`restart`)).toBe(`intentic-machine run`);
+    // The power concern's own words for an agent without the op (deviceAttention.ts): the same line, either way.
+    expect(agentFallback(`power-stay-on`)).toBe(`intentic-machine power stay-on`);
 });
 
 describe(`a runner`, () => {

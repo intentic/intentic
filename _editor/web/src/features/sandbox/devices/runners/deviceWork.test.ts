@@ -186,4 +186,12 @@ describe(`agentReturned`, () => {
         expect(agentReturned(unstamped(`1.321.0`, asked.askedAt - 5_000), asked)).toBe(false);
         expect(agentReturned(unstamped(`1.321.0`, asked.askedAt + 5_000), asked)).toBe(true);
     });
+
+    // Changing the power settings replaces no process, so the same pid reading again after the press is the answer.
+    it(`takes a later reading from the same process for an op that keeps it`, () => {
+        const power = { ...asked, op: `power-stay-on` as const };
+        const later = side(`rog`, 100);
+        expect(agentReturned({ ...later, report: { ...later.report!, capturedAt: power.askedAt + 5_000 } }, power)).toBe(true);
+        expect(agentReturned({ ...later, report: { ...later.report!, capturedAt: power.askedAt - 5_000 } }, power)).toBe(false);
+    });
 });

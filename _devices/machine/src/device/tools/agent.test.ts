@@ -9,6 +9,8 @@ test("every op maps to the CLI verb that actually performs it", () => {
         upgrade: ["upgrade"],
         restart: ["run"],
         "forget-unreachable": ["device", "forget-unreachable"],
+        // The owner's yes to keeping this computer on while plugged in (power/), which restarts nothing.
+        "power-stay-on": ["power", "stay-on"],
     });
 });
 

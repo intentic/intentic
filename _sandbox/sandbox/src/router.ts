@@ -53,6 +53,7 @@ import { createNeedsRoutes } from "./needs/needs.routes.js";
 import { unapproveExtension } from "./extensions/extension-removal.js";
 import { ownerApprovals } from "./needs/standing-grants.js";
 import { provenanceOf, visibleTo } from "./auth/fleet-scope.js";
+import { isMaintainerBearer } from "./auth/owner-gates.js";
 import { providerSecretEntries } from "./agent/providers/provider-registry.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
 import { createPrivacyRoutes } from "./privacy/privacy.routes.js";
@@ -251,6 +252,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
             const entry = services.agents.entry(conversationId);
             return entry === undefined || visibleTo(caller, provenanceOf(entry));
         },
+        maintains: (headers) => isMaintainerBearer(services, headers),
     }),
     // Device, browsing and storage procedures live beside what they act on; merged here so no subsystem imports another.
     system: systemRoutes(services),

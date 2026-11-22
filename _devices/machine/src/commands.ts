@@ -9,6 +9,7 @@ import { remoteRoutes } from "./device/remote/commands.js";
 import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
 import { keyringCommands } from "./keyring/commands.js";
+import { powerRoutes } from "./power/power-command.js";
 import { type MachineUpgradeEnd, realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
 import { runForeground } from "./resident/resident.js";
 import { readResident, restartResident, stopResident } from "./resident/supervision.js";
@@ -22,7 +23,8 @@ import { MACHINE_VERSION } from "./version.js";
 // intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
 // folders/ports; both share one resident agent (`run`), `status`, `upgrade`, `updates` and `uninstall`. `sandbox`
 // passes ic's own verbs through, for repairing a sandbox on this machine without a browser; `doctor` is the agent's own
-// upkeep pass on demand (upkeep/); `keyring` installs and keeps intentic-keyring, a process of its own (keyring/).
+// upkeep pass on demand (upkeep/); `keyring` installs and keeps intentic-keyring, a process of its own (keyring/);
+// `power` says what the computer's own power settings would do to work left running, and keeps it on (power/).
 
 interface RunFlags {
     readonly foreground: boolean;
@@ -157,6 +159,9 @@ export const commands = buildRouteMap({
         // People's remote desktop and terminals (device/remote/): who is connected, and the person here ending it.
         remote: remoteRoutes,
         environment: environmentRoutes,
+        // The computer's own power plans (power/): what would sleep it through work left running, and on Windows the
+        // mains-power values changed at the owner's word (the sandbox's `power-stay-on` op runs `power stay-on`).
+        power: powerRoutes,
         run,
         "before-sign-in": beforeSignInCommand,
         status,

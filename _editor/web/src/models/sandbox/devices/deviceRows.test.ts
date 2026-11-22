@@ -1,5 +1,6 @@
 import { listedDevice } from "../../../testing/listedDevice";
 import { AGENT_STALL_AFTER_MS, type Device } from "@intentic/sandbox-contract/schemas/devices";
+import type { HostPowerFinding } from "@intentic/sandbox-contract/schemas/host-power";
 import { deviceAttention } from "./deviceAttention";
 import {
     batchable,
@@ -737,6 +738,89 @@ test(`says nothing about links a machine is holding perfectly well`, () => {
 test(`leaves the dead links unsaid on a machine that cannot hear the drop`, () => {
     const concerns = withLinks({ total: 5, unreachable: 2 }, { gap: `offline`, online: false });
     expect(concerns.map((concern) => concern.key)).toEqual([`gap`]);
+});
+
+// What the machine's own power settings would do to work booked on it (host-power.ts): rog's, the night its plan slept it
+// five hours after the last keypress and froze every sandbox on it until morning.
+const SLEEPS: HostPowerFinding = { id: `sleep-idle`, power: `ac`, afterSeconds: 5 * 3600, plans: [`Balanced`], fixable: true, text: `Sleeps after 5 hours.` };
+const HIBERNATES: HostPowerFinding = { id: `hibernate-idle`, power: `ac`, afterSeconds: 3 * 3600, fixable: true, text: `Hibernates after 3 hours.` };
+const LID: HostPowerFinding = { id: `lid-close`, power: `ac`, action: `sleep`, fixable: true, text: `Closing the lid sleeps it.` };
+const STANDBY: HostPowerFinding = { id: `standby-network`, fixable: true, text: `Modern Standby cuts the network.` };
+const BATTERY: HostPowerFinding = { id: `battery-sleep`, power: `dc`, afterSeconds: 900, fixable: false, text: `On battery it sleeps after 15 minutes.` };
+const UPDATE: HostPowerFinding = { id: `update-restart`, window: { fromHour: 2, toHour: 8 }, fixable: false, text: `Windows Update may restart it.` };
+const SUSPEND: HostPowerFinding = { id: `os-sleep`, fixable: false, command: `sudo systemctl mask sleep.target suspend.target`, text: `The OS may suspend it.` };
+
+// Every per-device switch granted and an agent that carries `power-stay-on`, unless a case says otherwise.
+const withPower = (findings: HostPowerFinding[], { features = [`power`], ...overrides }: Partial<Device> & { features?: string[] } = {}) =>
+    concernsOf(
+        {
+            facts: { os: `windows`, arch: `x64`, shell: `pwsh`, home: `C:\\Users\\ada`, roots: [], features, power: { at: NOW, utcOffsetMinutes: 60, findings } },
+            ...overrides,
+        },
+        {},
+        undefined,
+        GRANTED,
+    );
+
+test(`names the setting that would sleep a machine through the night, with the agent's own fix as the button`, () => {
+    const concerns = withPower([LID, SLEEPS, BATTERY]);
+    const power = concerns.find((concern) => concern.key === `power`);
+    expect(power).toMatchObject({ tone: `warning`, icon: `moon` });
+    // The idle timeout before the lid, which only counts once it is closed.
+    expect(power?.text).toBe(`Sleeps after 5h without input on mains power, so work booked for the night waits until it wakes.`);
+    expect(power?.fix).toMatchObject({ kind: `agent`, op: `power-stay-on`, label: `Keep it awake on mains power` });
+    expect(power?.command).toBeUndefined();
+    // The rest of what the button changes, a hover away; the battery is not among it, since the op leaves it alone.
+    expect(power?.hint).toEqual({ title: `Also found`, rows: [{ label: `Lid closed`, value: `sleeps` }] });
+});
+
+test(`leads with the shorter of two idle timeouts, and keeps one finding to a sentence with no tip`, () => {
+    expect(withPower([SLEEPS, HIBERNATES]).find((concern) => concern.key === `power`)?.text).toMatch(/^Hibernates after 3h /u);
+    expect(withPower([SLEEPS]).find((concern) => concern.key === `power`)?.hint).toBeUndefined();
+});
+
+// A network cut in standby fails the work rather than holding it back, and that is what the sentence says.
+test(`says a network cut in standby stops booked work reaching the network`, () => {
+    const [power] = withPower([STANDBY]);
+    expect(power?.text).toBe(`Cuts the network in standby, so work booked for the night can't reach the network.`);
+});
+
+// An agent that reads the settings but does not carry the op: the same change, typed on the machine.
+test(`names the command where the machine's agent does not carry the op`, () => {
+    const [power] = withPower([SLEEPS], { features: [] });
+    expect(power?.fix).toBeUndefined();
+    expect(power?.command).toBe(`intentic-machine power stay-on`);
+});
+
+// The button travels over the machine's socket, like Forget them: a machine that cannot hear it has its gap to say.
+test(`leaves the power settings unsaid on a machine that cannot hear the fix`, () => {
+    expect(withPower([SLEEPS], { gap: `offline`, online: false }).map((concern) => concern.key)).toEqual([`gap`]);
+});
+
+// What nothing here changes holds on nearly every laptop and closes with no press: said on the chat card when something
+// booked would meet it, not on this strip forever. A suspend with a command to stop it is the one that earns a line.
+test(`keeps the strip clear of what no press closes, and names the command that stops a suspend`, () => {
+    expect(withPower([BATTERY, UPDATE])).toEqual([]);
+    expect(withPower([])).toEqual([]);
+    const [suspend] = withPower([SUSPEND], { features: [] });
+    expect(suspend).toMatchObject({ key: `power`, tone: `info`, icon: `moon`, command: SUSPEND.command });
+    expect(suspend?.text).toBe(`It may suspend itself, so work booked for the night waits until it wakes.`);
+    expect(suspend?.fix).toBeUndefined();
+});
+
+test(`orders the power settings after the reading's age and before the links`, () => {
+    const facts = {
+        os: `windows`,
+        arch: `x64`,
+        shell: `pwsh`,
+        home: `C:\\Users\\ada`,
+        roots: [],
+        features: [`power`],
+        links: { total: 3, unreachable: 1 },
+        power: { at: NOW, utcOffsetMinutes: 60, findings: [SLEEPS] },
+    };
+    const concerns = concernsOf({ facts }, { capturedAt: NOW - 61_000 }, undefined, GRANTED);
+    expect(concerns.map((concern) => concern.key)).toEqual([`stale`, `power`, `links`]);
 });
 
 test(`explains the gap without a button when there is no card to connect the machine`, () => {

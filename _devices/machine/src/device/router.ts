@@ -333,7 +333,8 @@ export const createHostRouter = (runtime: HostRuntime) => {
     // The keyring is asked for the sandbox on this link's other end, never one a call names.
     const keyring = { sandboxUrl: runtime.sandboxUrl, address: runtime.keyringAddress };
     return os.router({
-        describe: os.describe.handler(async () => await hostFacts(runtime.scopes())),
+        // The link's log hears a failed read of the power settings (power/host-power.ts), once until one works again.
+        describe: os.describe.handler(async () => await hostFacts(runtime.scopes(), runtime.log)),
         // Behind "Run commands" like `status`; FORBIDDEN is the one refusal the sandbox reads as that switch.
         report: os.report.handler(async () => {
             if (runtime.scopes().shell !== "on") {

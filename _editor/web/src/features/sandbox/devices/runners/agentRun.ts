@@ -41,6 +41,14 @@ export const agentRunLive = (run: AgentRun | undefined): boolean =>
 // Counted so the headline can say how much was done, never only that something was.
 const count = (links: LinksAsked | undefined): number | undefined => (links === undefined || links.unreachable === 0 ? undefined : links.unreachable);
 
+// A change of settings, not of the agent: no process is replaced, so nothing is "coming back" while it runs.
+const powerTitle = (state: AgentRunState): string =>
+    state === `failed`
+        ? t(`sandbox.agentRun.powerFailed`)
+        : state === `done`
+          ? t(`sandbox.agentRun.powerChanged`)
+          : t(`sandbox.agentRun.powerChanging`);
+
 /** The strip's headline: what is happening, or what happened, in one line. */
 export const agentRunTitle = (run: AgentRun): string => {
     const n = count(run.links);
@@ -69,6 +77,8 @@ export const agentRunTitle = (run: AgentRun): string => {
                   : run.state === `waiting`
                     ? t(`sandbox.agentRun.comingBack`)
                     : t(`sandbox.agentRun.restarting`);
+        case `power-stay-on`:
+            return powerTitle(run.state);
         default:
             return run.op satisfies never;
     }
@@ -90,14 +100,46 @@ export const agentRunDetail = (run: AgentRun): string | undefined => {
     return run.state === `done` ? run.said : undefined;
 };
 
-/** What a refusal is titled when the machine gave no sentence of its own; one per verb, never "update" for all three. */
+// The maps below are keyed by every op, so an op the contract adds is a type error here rather than another op's words.
+
+/** What a refusal is titled when the machine gave no sentence of its own; one per verb, never "update" for all of them. */
 export const agentRefusal = (op: DeviceAgentOp): string =>
-    op === `forget-unreachable`
-        ? t(`sandbox.agentRun.forgetRefused`)
-        : op === `restart`
-          ? t(`sandbox.agentRun.restartRefused`)
-          : t(`sandbox.useDevices.agentUpdateRefused`);
+    ({
+        upgrade: t(`sandbox.useDevices.agentUpdateRefused`),
+        restart: t(`sandbox.agentRun.restartRefused`),
+        "forget-unreachable": t(`sandbox.agentRun.forgetRefused`),
+        "power-stay-on": t(`sandbox.agentRun.powerRefused`),
+    } satisfies Record<DeviceAgentOp, string>)[op];
 
 /** What the environment's row says beside its spinner while the run is live: the verb, short enough for the row's meta. */
 export const agentRunWorking = (op: DeviceAgentOp): string =>
-    op === `upgrade` ? t(`sandbox.agentRun.working`) : op === `restart` ? t(`sandbox.agentRun.workingRestart`) : t(`sandbox.agentRun.workingForget`);
+    ({
+        upgrade: t(`sandbox.agentRun.working`),
+        restart: t(`sandbox.agentRun.workingRestart`),
+        "forget-unreachable": t(`sandbox.agentRun.workingForget`),
+        "power-stay-on": t(`sandbox.agentRun.workingPower`),
+    } satisfies Record<DeviceAgentOp, string>)[op];
+
+/** What the Devices row and the machine's card say while one is out on a machine, before `doingOn` names the machine. */
+export const agentRunDoing = (op: DeviceAgentOp): string =>
+    ({
+        upgrade: t(`sandbox.deviceOps.workingAgentUpgrade`),
+        restart: t(`sandbox.deviceOps.workingAgentRestart`),
+        "forget-unreachable": t(`sandbox.deviceOps.workingAgentForget`),
+        "power-stay-on": t(`sandbox.deviceOps.workingAgentPower`),
+    } satisfies Record<DeviceAgentOp, string>)[op];
+
+// Update and restart both stop the resident process carrying the request, so the page can't claim an
+// outcome: it shows what was watched, then this, and the confirmation is the next poll's version. The
+// connection dropping isn't announced here — the log says it in the moment it happens.
+/** What the strip waits on once the call has ended without the machine's answer. */
+export const agentRunAsked = (op: DeviceAgentOp): string =>
+    ({
+        upgrade: t(`sandbox.deviceOps.askedUpgrade`),
+        restart: t(`sandbox.deviceOps.askedRestart`),
+        // The machine restarts its agent against the links it has left, so this page hears the new count the same way it
+        // hears a new version: on the loop's next hello, not from this request.
+        "forget-unreachable": t(`sandbox.deviceOps.askedForget`),
+        // Nothing restarts: the machine's own answer ends the wait, and failing that its next reading does.
+        "power-stay-on": t(`sandbox.deviceOps.askedPower`),
+    } satisfies Record<DeviceAgentOp, string>)[op];

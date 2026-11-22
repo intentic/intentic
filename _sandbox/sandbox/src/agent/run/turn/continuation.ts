@@ -10,6 +10,7 @@ import { opt } from "../../../opt.js";
 import type { ContinueAsk, ContinueBooked, TurnInput } from "../../../seams/turn-starter.js";
 import { bookingOfAsk, unbookable } from "./booking-ask.js";
 import { carryOnTurn } from "./turn-resume.js";
+import { checkBookedPower } from "../../../hosts/power/host-power.js";
 
 /* A CONTINUE CAN WAIT IN THE QUEUE, AS A CONTINUE. "Continue at 05:00", pressed on a turn a spent allowance stopped, used
    to book the word "Continue" as the person's message (the queue held only words, and a Continue could only start now):
@@ -131,5 +132,8 @@ export const bookContinuation = async (services: Services, ask: ContinueAsk, now
     }
     await services.conversations.send(ask.conversationId, { kind: "queue-scheduled", item, booking }).settled;
     services.logger.info({ conversationId: ask.conversationId, until: booking.until, after: booking.after?.conversationId }, "admission: a continuation is booked");
+    // (2026-11-22) A Continue booked for a time is work booked as a scheduled send is: checked against the computer's
+    // settings the same way, never waited for (hosts/power/host-power.ts).
+    void checkBookedPower(services, ask.conversationId, booking);
     return "booked";
 };

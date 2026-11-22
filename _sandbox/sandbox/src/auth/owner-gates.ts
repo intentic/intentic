@@ -108,6 +108,19 @@ export const holdsRightBearer = async (services: AuthDeps, headers: Headers, rig
     );
 };
 
+// Whether this bearer clears the maintainer floor on its own, refusing nobody: `requireMaintainer`'s question for a route
+// where only some answers turn on it (a host-power need's, needs.routes.ts). A loopback daemon has one person, who is
+// the owner. A machine credential never passes, whoever's session it rides.
+export const isMaintainerBearer = async (services: AuthDeps, headers: Headers): Promise<boolean> => {
+    if (services.auth === undefined) {
+        return true;
+    }
+    return authorizeMaintainer(services.auth, bearerOf(headers), listenerIn(headers)).then(
+        () => true,
+        () => false,
+    );
+};
+
 // Whether this bearer is the owner, refusing nobody: for a route where only some changes turn on the answer. A
 // loopback daemon has one person, who is the owner.
 export const isOwnerBearer = async (services: AuthDeps, headers: Headers): Promise<boolean> => {

@@ -218,7 +218,9 @@ export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
 // on every sandbox's page and a sibling restarting or asleep must keep this machine, and never the link carrying the
 // request, which is by definition answering. Before 2026-11-17 it took any link that had failed twenty dials (about
 // eight minutes), and one sandbox's button disconnected the machine from another.
-export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable"]);
+// `power-stay-on` (2026-11-22) changes the power settings that would sleep the computer through scheduled work, on mains
+// power only (`intentic-machine power stay-on`, `DeviceFacts.power`); only an agent advertising DEVICE_FEATURE_POWER has it.
+export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable", "power-stay-on"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
 export const DeviceAgentFlowSchema = z.strictObject({ op: DeviceAgentOpSchema });
 export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;

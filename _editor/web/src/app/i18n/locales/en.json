@@ -6523,6 +6523,12 @@
             "approve": "Approve and switch on",
             "conversationHere": "Picks this conversation back up",
             "firstPass": "The first time the check passes"
+        },
+        "hostPower": {
+            "lead": "{device} would stop the work booked for {when}.",
+            "leadUndated": "{device} would stop the work booked on it.",
+            "approve": "Change these settings on {device}",
+            "working": "Changing the settings on {device}…"
         }
     },
     "preview": {
@@ -6826,7 +6832,12 @@
             "stillConnected": "Still connected to {count} sandbox. | Still connected to {count} sandboxes.",
             "updateFailed": "Couldn't update its agent",
             "updated": "Update finished",
-            "updating": "Updating its agent…"
+            "updating": "Updating its agent…",
+            "workingPower": "Changing power settings…",
+            "powerChanging": "Changing its power settings…",
+            "powerChanged": "Power settings changed",
+            "powerFailed": "Couldn't change its power settings",
+            "powerRefused": "That device didn't change its power settings."
         },
         "agentMemory": {
             "addToMemory": "Add to memory",
@@ -7803,7 +7814,37 @@
             "upkeepLeftWhy": "Its tidy-up {at} left {what} for you ({why})",
             "upkeepOnly": "{left}.",
             "upkeepMore": "{left}, and one more. | {left}, and {count} more.",
-            "lastHeard": "Last heard from {ago}."
+            "lastHeard": "Last heard from {ago}.",
+            "powerWaits": "{what}, so work booked for the night waits until it wakes.",
+            "powerOffline": "{what}, so work booked for the night can't reach the network.",
+            "powerSuspends": "It may suspend itself, so work booked for the night waits until it wakes.",
+            "powerAlso": "Also found",
+            "keepAwake": "Keep it awake on mains power",
+            "mainsOnly": "Mains power only",
+            "batteryAsIs": "Battery stays as it is"
+        },
+        "hostPower": {
+            "sleepIdle": "Sleeps after {after} without input on mains power",
+            "hibernateIdle": "Hibernates after {after} without input on mains power",
+            "lidSleep": "Closing the lid puts it to sleep",
+            "lidHibernate": "Closing the lid hibernates it",
+            "lidShutDown": "Closing the lid shuts it down",
+            "standbyNetwork": "Cuts the network in standby",
+            "never": "never",
+            "nothing": "does nothing",
+            "keepsNetwork": "keeps it",
+            "batterySleep": "On battery it still sleeps after {after}: keep it plugged in for the night.",
+            "batterySleepAny": "On battery it still sleeps: keep it plugged in for the night.",
+            "updateRestart": "Windows Update may restart it between {from} and {to} ({device}'s clock); after a restart nothing runs until you sign in.",
+            "osSleep": "It may suspend itself. To stop that, run this on {device}:",
+            "rowSleep": "Sleeps after",
+            "rowHibernate": "Hibernates after",
+            "rowLid": "Lid closed",
+            "rowStandby": "In standby",
+            "lidSleeps": "sleeps",
+            "lidHibernates": "hibernates",
+            "lidShutsDown": "shuts down",
+            "noNetwork": "no network"
         },
         "deviceBoard": {
             "device": "This device",
@@ -7864,6 +7905,7 @@
             "doneUnpair": "Unpaired. The local folder is left exactly as it is.",
             "doneClean": "Build output cleared. Held-back deletions sync within a few seconds.",
             "askedForget": "Dropping the links that stopped answering. The count here catches up when its loop comes back.",
+            "askedPower": "Changing its power settings. This page catches up with its next reading.",
             "askedRestart": "Restarting. This page catches up when its loop comes back.",
             "askedUpgrade": "Updating. The new version shows here when its loop comes back.",
             "batchDidntRestart": "{count} sandbox didn't restart on {machine}. | {count} sandboxes didn't restart on {machine}.",
@@ -7918,6 +7960,7 @@
             "updateBatchHeader": "Update {count} sandbox on {machine}? | Update {count} sandboxes on {machine}?",
             "verbHeader": "{verb} {name}?",
             "workingAgentForget": "Dropping a device's dead links",
+            "workingAgentPower": "Changing a device's power settings",
             "workingAgentRestart": "Restarting a device's agent",
             "workingAgentUpgrade": "Updating a machine's agents",
             "workingClean": "Clearing build output",

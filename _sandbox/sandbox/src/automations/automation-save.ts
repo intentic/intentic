@@ -9,7 +9,9 @@ import type { Services } from "../composition.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { ensureVisitorChatRole } from "../roles/visitor-chat.js";
 import { automationCatalog, ISSUES_PROVIDER, triggerSourceEvents } from "./catalog.js";
-import { sandboxZone, zoneOf } from "./schedule-zone.js";
+import { nextRunOf, sandboxZone, zoneOf } from "./schedule-zone.js";
+import { parentOfActor } from "../auth/principal.js";
+import { checkHostPowerFor } from "../hosts/power/host-power.js";
 import { sourceProblem } from "./watch/watch-sources.js";
 
 // What saving an automation refuses and what it brings into being, shared by the Automations page's upsert route and an
@@ -189,4 +191,36 @@ export const saveAutomation = async (services: Services, sent: Automation, by: s
     }
     // The first enabled listener automation materializes its gateway process; the last one's removal stops it.
     void reconcileListenerProcesses(services);
+    checkAutomationPower(services, automation);
+};
+
+// What switching an automation on or off sets going: the first enabled listener automation materializes its gateway
+// process and the last one's switch-off stops it; one switched on is checked against the computer's settings as a saved
+// one is (below). `before` is the automation as it was before the switch.
+export const switchedAutomation = (services: Services, before: Automation | undefined, enabled: boolean): void => {
+    void reconcileListenerProcesses(services);
+    if (before !== undefined && enabled) {
+        checkAutomationPower(services, { ...before, enabled: true });
+    }
+};
+
+// (2026-11-22) An automation a clock drives (a schedule, a one-time wake) is work booked for later, as a scheduled send
+// is: when it is switched on, its next moment is checked against the settings of the computer this sandbox runs on, and
+// a card goes up when that computer would sleep through it (hosts/power/host-power.ts). The card goes in the conversation the
+// automation belongs to: the one it continues, or else the one that proposed it (`createdBy`, an approved need's). One
+// with neither has no conversation to put a card in and is left to the Devices view, which shows the same settings.
+// Never waited for, and never a reason a save fails.
+const checkAutomationPower = (services: Services, automation: Automation): void => {
+    const conversationId = automation.target?.kind === "conversation" ? automation.target.conversationId : parentOfActor(automation.createdBy);
+    if (conversationId === undefined || !automation.enabled) {
+        return;
+    }
+    void sandboxZone(services)
+        .then(async (zone) => {
+            const due = nextRunOf(automation, zone);
+            if (due !== undefined) {
+                await checkHostPowerFor(services, conversationId, due);
+            }
+        })
+        .catch((error: Error) => services.logger.warn({ err: error, automation: automation.id }, "host power: could not read when the automation next runs"));
 };

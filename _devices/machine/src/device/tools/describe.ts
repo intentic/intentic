@@ -5,6 +5,7 @@ import {
     DEVICE_FEATURE_FILE_COPY,
     DEVICE_FEATURE_KEYRING,
     DEVICE_FEATURE_LOOPBACK_CATCH,
+    DEVICE_FEATURE_POWER,
     DEVICE_FEATURE_PROGRAMS,
     DEVICE_FEATURE_PROJECT_DELIVERY,
     DEVICE_FEATURE_REACH_NETWORK,
@@ -28,6 +29,7 @@ import { readIntenticOs } from "./os/os.js";
 import { NO_DESKTOP_YET, runningBeforeSignIn } from "../session.js";
 import { keyringAdvertised } from "../../keyring/feature.js";
 import { remotedAdvertised } from "../remote/remoted-binary.js";
+import { powerFacts } from "../../power/host-power.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -86,8 +88,9 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
     };
 };
 
-export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, stamped, features, upkeep, ic, intenticOs, keyring] = await Promise.all([
+// `log` hears a failed read of the power settings, once until one works again (power/host-power.ts).
+export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => void = () => undefined): Promise<DeviceFacts> => {
+    const [os, engine, wsl, distros, stamped, features, upkeep, ic, intenticOs, keyring, power] = await Promise.all([
         osName(),
         engineFacts(),
         wslEnvironment(),
@@ -98,6 +101,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         installedIc(),
         readIntenticOs(),
         keyringAdvertised(),
+        powerFacts(log),
     ]);
     const links = linkFacts(stamped);
     // Read after deviceFeatures, which fetched (or failed to fetch) the current ic first.
@@ -120,7 +124,8 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         // build answers them: a machine without Docker answers the stack tools with Docker's own error. The keyring only
         // while one is installed here and answers (keyring/feature.ts); people's remote access only where an
         // intentic-remoted can be had (remote/remoted-binary.ts), and its lock-screen service on Windows alone
-        // (remote/remoted-service.ts).
+        // (remote/remoted-service.ts). The `power-stay-on` op on Windows' own side alone, the one environment whose power
+        // plans the agent changes (power/apply.ts): a Linux or macOS fix needs root, and a WSL distro's are Windows'.
         features: [
             ...features,
             DEVICE_FEATURE_LOOPBACK_CATCH,
@@ -132,6 +137,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
             ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
             ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE] : []),
+            ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER] : []),
         ],
     };
     // Why that list is short, when the ic under it could not be brought up to date.
@@ -159,7 +165,27 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
     if (intenticOs !== undefined) {
         facts.intenticOs = intenticOs;
     }
+    // (2026-11-22) What this computer's own power settings would do to work left running on it, said only by the
+    // environment that owns them (Windows' own side, a Linux host, a Mac); absent in a WSL distro and until a read works.
+    if (power !== undefined) {
+        facts.power = power;
+    }
     return facts;
+};
+
+// The line describe adds where the power settings were read: what would stop work left running, in the agent's own
+// sentences, and that they are the owner's to change (2026-11-22: the owner's decision; the sandbox asks on a card
+// when booked work would be slept through), so a model that reads them does not reach for powercfg. Pure.
+export const powerLines = (facts: Pick<DeviceFacts, "power">): string[] => {
+    if (facts.power === undefined) {
+        return [];
+    }
+    if (facts.power.findings.length === 0) {
+        return ["Power settings: nothing in this computer's own settings would put it to sleep or cut it off while work is left running."];
+    }
+    return [
+        `Power settings (what this computer's own OS would do to work left running on it): ${facts.power.findings.map((finding) => finding.text).join(" ")} They are the owner's to change: the sandbox asks them on a card when work booked here would be slept through, so do not change them yourself.`,
+    ];
 };
 
 // The line describe adds on Intentic OS, so the os_* tools are found before a model reaches for bootc. Pure.
@@ -219,6 +245,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}`,
             ...agentLines(ic, icOverrides(process.env), { version: MACHINE_VERSION, startedAt: thisRun()?.startedAt, previous: previousExit() }),
             ...(runningBeforeSignIn() ? [`Session: none yet. ${NO_DESKTOP_YET}`] : []),
+            ...powerLines(facts),
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined

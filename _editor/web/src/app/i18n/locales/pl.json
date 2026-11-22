@@ -6221,7 +6221,12 @@
             "stillConnected": "Wciąż połączone z {count} sandboxem. | Wciąż połączone z {count} sandboxami. | Wciąż połączone z {count} sandboxami.",
             "updateFailed": "Nie udało się zaktualizować jego agenta",
             "updated": "Aktualizacja zakończona",
-            "updating": "Aktualizowanie jego agenta…"
+            "updating": "Aktualizowanie jego agenta…",
+            "workingPower": "Zmieniam zasilanie…",
+            "powerChanging": "Zmienianie jego ustawień zasilania…",
+            "powerChanged": "Ustawienia zasilania zmienione",
+            "powerFailed": "Nie udało się zmienić jego ustawień zasilania",
+            "powerRefused": "Tamto urządzenie nie zmieniło swoich ustawień zasilania."
         },
         "agentMemory": {
             "addToMemory": "Dodaj do pamięci",
@@ -7248,7 +7253,37 @@
             "upkeepLeftWhy": "Sprzątanie ({at}) zostawiło Ci do zrobienia: {what} ({why})",
             "upkeepOnly": "{left}.",
             "upkeepMore": "{left} i jeszcze jedną rzecz. | {left} i jeszcze {count} rzeczy. | {left} i jeszcze {count} rzeczy.",
-            "lastHeard": "Ostatni kontakt: {ago}."
+            "lastHeard": "Ostatni kontakt: {ago}.",
+            "powerWaits": "{what}, więc praca zaplanowana na noc czeka, aż się obudzi.",
+            "powerOffline": "{what}, więc praca zaplanowana na noc nie dociera do sieci.",
+            "powerSuspends": "Może sam przejść w uśpienie, więc praca zaplanowana na noc czeka, aż się obudzi.",
+            "powerAlso": "Znaleziono też",
+            "keepAwake": "Nie usypiaj na zasilaniu sieciowym",
+            "mainsOnly": "Tylko zasilanie sieciowe",
+            "batteryAsIs": "Bateria bez zmian"
+        },
+        "hostPower": {
+            "sleepIdle": "Przechodzi w uśpienie po {after} bez aktywności na zasilaniu sieciowym",
+            "hibernateIdle": "Hibernuje się po {after} bez aktywności na zasilaniu sieciowym",
+            "lidSleep": "Zamknięcie pokrywy go usypia",
+            "lidHibernate": "Zamknięcie pokrywy go hibernuje",
+            "lidShutDown": "Zamknięcie pokrywy go wyłącza",
+            "standbyNetwork": "Odcina sieć w trybie czuwania",
+            "never": "nigdy",
+            "nothing": "nic nie robi",
+            "keepsNetwork": "zachowuje ją",
+            "batterySleep": "Na baterii nadal usypia się po {after}: zostaw go na noc podłączonego do prądu.",
+            "batterySleepAny": "Na baterii nadal się usypia: zostaw go na noc podłączonego do prądu.",
+            "updateRestart": "Windows Update może go zrestartować między {from} a {to} (czas na {device}); po restarcie nic nie działa, dopóki się nie zalogujesz.",
+            "osSleep": "Może sam przejść w uśpienie. Żeby temu zapobiec, uruchom to na {device}:",
+            "rowSleep": "Uśpienie po",
+            "rowHibernate": "Hibernacja po",
+            "rowLid": "Zamknięta pokrywa",
+            "rowStandby": "W czuwaniu",
+            "lidSleeps": "usypia",
+            "lidHibernates": "hibernuje",
+            "lidShutsDown": "wyłącza się",
+            "noNetwork": "bez sieci"
         },
         "deviceBoard": {
             "device": "To urządzenie",
@@ -7309,6 +7344,7 @@
             "doneUnpair": "Rozparowano. Lokalny folder zostaje bez zmian.",
             "doneClean": "Wyniki budowania usunięte. Wstrzymane usunięcia zsynchronizują się w ciągu kilku sekund.",
             "askedForget": "Usuwanie powiązań, które przestały odpowiadać. Licznik tutaj nadrobi, gdy jego pętla wróci.",
+            "askedPower": "Zmienianie ustawień zasilania. Ta strona nadrobi przy jego następnym odczycie.",
             "askedRestart": "Restartowanie. Ta strona nadrobi, gdy jego pętla wróci.",
             "askedUpgrade": "Aktualizowanie. Nowa wersja pojawi się tutaj, gdy jego pętla wróci.",
             "batchDidntRestart": "{count} sandbox nie zrestartował się na {machine}. | {count} sandboxy nie zrestartowały się na {machine}. | {count} sandboxów nie zrestartowało się na {machine}.",
@@ -7363,6 +7399,7 @@
             "updateBatchHeader": "Zaktualizować {count} sandbox na {machine}? | Zaktualizować {count} sandboxy na {machine}? | Zaktualizować {count} sandboxów na {machine}?",
             "verbHeader": "{verb}: {name}?",
             "workingAgentForget": "Usuwanie martwych powiązań urządzenia",
+            "workingAgentPower": "Zmienianie ustawień zasilania urządzenia",
             "workingAgentRestart": "Restartowanie agenta urządzenia",
             "workingAgentUpgrade": "Aktualizowanie agentów maszyny",
             "workingClean": "Czyszczenie wyników budowania",
@@ -14046,6 +14083,12 @@
             "approve": "Zatwierdź i włącz",
             "conversationHere": "Wraca do tej rozmowy",
             "firstPass": "Za pierwszym razem, gdy sprawdzenie przejdzie"
+        },
+        "hostPower": {
+            "lead": "{device} przerwie pracę zaplanowaną na {when}.",
+            "leadUndated": "{device} przerwie zaplanowaną na nim pracę.",
+            "approve": "Zmień te ustawienia na {device}",
+            "working": "Zmieniam ustawienia na {device}…"
         }
     },
     "local": {

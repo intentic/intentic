@@ -10,6 +10,7 @@ import NeedCapabilityBody from "./NeedCapabilityBody.vue";
 import NeedDecline from "./NeedDecline.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
 import NeedGrantBody from "./NeedGrantBody.vue";
+import NeedHostPowerBody from "./NeedHostPowerBody.vue";
 import NeedInstructionBody from "./NeedInstructionBody.vue";
 import NeedReleaseBody from "./NeedReleaseBody.vue";
 import NeedSecretBody from "./NeedSecretBody.vue";
@@ -57,6 +58,11 @@ const decline = async (): Promise<void> => {
     <NeedInstructionBody v-else-if="need.subject.kind === `instruction`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedInstructionBody>
+    <!-- No agent hears a power card's answer (its conversation is never woken for it), so its "Not now" opens no line
+         for a word back: one press puts it away. -->
+    <NeedHostPowerBody v-else-if="need.subject.kind === `host-power`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="false" @open="decline" /></template>
+    </NeedHostPowerBody>
     <NeedEnvironmentBody v-else :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedEnvironmentBody>

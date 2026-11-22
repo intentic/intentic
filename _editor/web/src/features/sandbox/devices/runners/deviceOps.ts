@@ -7,7 +7,7 @@ import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { type Operation, useOperations } from "../../../../workbench/operations/operations";
 import { opsScope, ROW } from "./deviceOpKeys";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
-import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
+import { agentRefusal, type AgentRun, agentRunAsked, agentRunDoing, type LinksAsked } from "./agentRun";
 import { type DeviceUpdateRun, foldUpdateLine, isStagedVerb, settleUpdateRun, startUpdateRun } from "./deviceUpdateStages";
 import { agentInFlight, agentRunOf, beginDeviceWork, dismissAgentRun, machineCalling, pressAgent, sandboxesWorking } from "./deviceWork";
 import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "../../../../models/sandbox/devices/shapeFlow";
@@ -106,18 +106,6 @@ const commandUnreached = (command: SyncCommand): string =>
         "sync-clean": t(`sandbox.deviceOps.unreachedClean`),
     })[command];
 
-// Update and restart both stop the resident process carrying the request, so the page can't claim an
-// outcome: it shows what was watched, then this, and the confirmation is the next poll's version. The
-// connection dropping isn't announced here — the log says it in the moment it happens.
-const agentAsked = (op: DeviceAgentOp): string =>
-    ({
-        upgrade: t(`sandbox.deviceOps.askedUpgrade`),
-        restart: t(`sandbox.deviceOps.askedRestart`),
-        // The machine restarts its agent against the links it has left, so this page hears the new count the same way it
-        // hears a new version: on the loop's next hello, not from this request.
-        "forget-unreachable": t(`sandbox.deviceOps.askedForget`),
-    })[op];
-
 // What the Devices row and the machine's card say while one of these is out on a machine. `logs` is absent: reading a
 // tail is not work being done to anything, and a row that marks it would be marking almost every visit.
 const VERB_WORKING = {
@@ -154,13 +142,6 @@ const syncWorking = (command: SyncCommand): string =>
         "sync-install": t(`sandbox.deviceOps.workingInstall`),
         "sync-clean": t(`sandbox.deviceOps.workingClean`),
     })[command];
-
-const agentWorking = (op: DeviceAgentOp): string =>
-    ({
-        upgrade: t(`sandbox.deviceOps.workingAgentUpgrade`),
-        restart: t(`sandbox.deviceOps.workingAgentRestart`),
-        "forget-unreachable": t(`sandbox.deviceOps.workingAgentForget`),
-    })[op];
 
 /** A run's words said away from the machine's card, so they name the machine. */
 const doingOn = (doing: string, machine: string): string => t(`sandbox.deviceOps.doingOn`, { doing, machine });
@@ -962,11 +943,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
         const press = pressAgent({
             machine: machine().key,
-            what: doingOn(agentWorking(op), machine().label),
+            what: doingOn(agentRunDoing(op), machine().label),
             op,
             door: environment.device,
             moved: moved.map((side) => side.device),
-            waiting: agentAsked(op),
+            waiting: agentRunAsked(op),
             links: linksAsked(environment, op),
         });
         try {

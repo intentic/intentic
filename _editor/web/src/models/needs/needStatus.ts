@@ -16,6 +16,8 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     automation: `automations`,
     // A standing rule for AGENTS.md, the workspace's book of instructions.
     instruction: `book`,
+    // A computer that would sleep through booked work: the glyph the Devices page gives a sleeping machine.
+    "host-power": `moon`,
 };
 
 // The header chip of a need that is no longer waiting; undefined while it is, since the card's own buttons say that.
@@ -39,13 +41,17 @@ export const workingLine = (need: Pick<Need, "status" | "subject">): string | un
     if (need.status !== `working`) {
         return undefined;
     }
+    if (need.subject.kind === `host-power`) {
+        return t(`needs.hostPower.working`, { device: need.subject.device });
+    }
     return need.subject.kind === `environment` ? t(`needs.card.approvedRebuild`) : t(`needs.card.settingUp`);
 };
 
 // Said on a closed card only when the agent has not heard the outcome yet. Hearing it, on the call or in a turn, is what
-// a closed card means, so it goes unsaid.
-export const unheardLine = (need: Pick<Need, "status" | "told">): string | undefined => {
-    if (need.status !== `met` && need.status !== `declined`) {
+// a closed card means, so it goes unsaid. A power card's answer is the person's alone: its conversation is never woken
+// to hear it (a woken turn would run the booked work early), so there is nobody left to tell.
+export const unheardLine = (need: Pick<Need, "status" | "told" | "subject">): string | undefined => {
+    if ((need.status !== `met` && need.status !== `declined`) || need.subject.kind === `host-power`) {
         return undefined;
     }
     switch (need.told) {

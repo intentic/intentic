@@ -75,7 +75,16 @@ const harness = (): Harness => {
     const settings: Harness["settings"] = { continueWhenMet: true, live: true, steerable: true, standing: STANDING };
     const ended = new Set<(conversationId: string) => void>();
     const handler = fakeKind(kind);
-    const kinds: NeedKinds = { capability: handler, secret: handler, grant: handler, release: handler, environment: handler, automation: handler, instruction: handler };
+    const kinds: NeedKinds = {
+        capability: handler,
+        secret: handler,
+        grant: handler,
+        release: handler,
+        environment: handler,
+        automation: handler,
+        instruction: handler,
+        "host-power": { ...handler, tellsAgent: false },
+    };
     let next = 0;
     const deps: NeedsDeps = {
         store: memoryNeedsStore(),
@@ -546,4 +555,54 @@ test("a pass that fails answers its own calls with the failure, and the pass que
     release();
     await after;
     expect(passes).toBe(2);
+});
+
+// (2026-11-22) A need the sandbox raises for a person about the conversation, never for its agent (`tellsAgent`: a
+// host-power card): however it ends, no turn is steered or woken, since a woken turn would run the booked work early.
+describe("a need the agent never hears of", () => {
+    const POWER: NeedSubject = { kind: "host-power", device: "rog", findings: [{ id: "lid-close", fixable: true, text: "Closing the lid sleeps it." }], dueAt: 1 };
+
+    it("wakes nothing and steers nothing when it is met, declined or met by the world, and leaves it untold", async () => {
+        const { deps, woken, steered, notified, drawn, kind } = harness();
+        const needs = createNeeds(deps);
+        const approved = await needs.observe("conv-1", POWER, "rog would sleep through work booked here");
+        expect(drawn).toHaveLength(1);
+        expect(notified).toHaveLength(1);
+        await needs.answer(approved.id, { kind: "approve" }, { email: "owner@example.com", maintainer: true });
+        const declined = await needs.observe("conv-2", POWER, "rog would sleep through work booked here");
+        await needs.answer(declined.id, { kind: "decline" }, { email: "owner@example.com", maintainer: true });
+        const fixed = await needs.observe("conv-3", POWER, "rog would sleep through work booked here");
+        kind.met = { result: "rog's settings no longer stop work left running on it.", use: [] };
+        await needs.recheck();
+        expect(woken).toEqual([]);
+        expect(steered).toEqual([]);
+        expect((await deps.store.all()).map((need) => [need.id, need.status, need.told])).toEqual([
+            [approved.id, "met", undefined],
+            [declined.id, "declined", undefined],
+            [fixed.id, "met", undefined],
+        ]);
+    });
+
+    it("is passed over at boot rather than told, and waits for no turn to end", async () => {
+        const { deps, woken, kind, endTurn } = harness();
+        kind.nextTurn = true;
+        await deps.store.put({ id: "need-9", conversationId: "conv-3", subject: POWER, title: "rog would sleep", status: "met", createdAt: 1, updatedAt: 2 });
+        const stop = createNeeds(deps).start();
+        await settleSoon();
+        endTurn("conv-3");
+        await settleSoon();
+        expect(woken).toEqual([]);
+        stop();
+    });
+
+    it("is left out of what the agent lists, and is not the agent's to withdraw or close", async () => {
+        const { deps } = harness();
+        const needs = createNeeds(deps);
+        const card = await needs.observe("conv-1", POWER, "rog would sleep through work booked here");
+        expect(await needs.mine("conv-1")).toEqual([]);
+        expect(await needs.list({ conversationId: "conv-1" })).toHaveLength(1);
+        await expect(needs.withdraw(card.id, "conv-1")).rejects.toThrow("not one this conversation asked");
+        await expect(needs.done(card.id, "conv-1", "it works")).rejects.toThrow("not one this conversation asked");
+        expect((await deps.store.get(card.id))?.status).toBe("open");
+    });
 });
