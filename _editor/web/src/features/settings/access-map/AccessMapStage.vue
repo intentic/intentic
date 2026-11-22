@@ -80,6 +80,9 @@ const opacityOf = (line: Line): number => (line.state === `off` ? 0.12 : line.fa
 const arrowId = `access-arrow-${useId()}`;
 const markerOf = (line: Line): string | undefined => (line.arrow ? `url(#${arrowId}-${line.state === `on` ? `on` : `rest`})` : undefined);
 
+// The you node's hover, said in a script: a cast inside a template handler reads to vue-tsc as an unwrapped ref.
+const pointYou = (on: boolean): void => emit(`point`, on ? YOU_ID : undefined);
+
 const orgWord = (org: AccountGraph[`you`][`orgs`][number]): string =>
     org.role === `admin` ? t(`settings.accessMap.orgAdmin`, { org: org.name }) : t(`settings.accessMap.orgMember`, { org: org.name });
 </script>
@@ -131,7 +134,7 @@ const orgWord = (org: AccountGraph[`you`][`orgs`][number]): string =>
                     :pinned="pinned === YOU_ID"
                     :now
                     :picture
-                    @point="(on: boolean) => emit(`point`, on ? (YOU_ID as string) : undefined)"
+                    @point="pointYou"
                     @press="emit(`press`, YOU_ID)"
                 />
                 <ul v-if="graph.you.orgs.length > 0" class="flex flex-col gap-0.5 px-1">

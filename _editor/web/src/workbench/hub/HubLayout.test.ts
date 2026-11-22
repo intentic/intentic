@@ -5,6 +5,7 @@
 // Row draws only when it is filled, and the section reports itself through an inject that has to survive being
 // passed down a slot.
 import "@intentic/testing/dom";
+import { ICONS, type IconName } from "@intentic/ui/icons";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -101,6 +102,16 @@ const mount = async (
     app.mount(el);
     await nextTick();
     return el;
+};
+
+// Whether a row leads with this glyph, told by what it draws: Row imports the real Icon rather than the registered stub, so its svg carries
+// no name, only the glyph's paths.
+const rowDraws = (el: HTMLElement, name: IconName): boolean => {
+    const drawn = [ICONS[name].outline, ICONS[name].solid].filter((d) => d !== undefined && d !== ``);
+    return [...el.querySelectorAll(`[data-row-icon]`)].some((icon) => {
+        const paths = [...icon.querySelectorAll(`path`)].map((path) => path.getAttribute(`d`));
+        return paths.length === drawn.length && drawn.every((d) => paths.includes(d));
+    });
 };
 
 const spinners = (el: HTMLElement): Element[] => [...el.querySelectorAll(`[data-icon="spinner"][data-spin]`)];
@@ -212,14 +223,14 @@ it(`draws no tabs above a section that is a row of its own`, async () => {
 // hub's `access` and `projects` name view sections for other things — keeps the glyph its table chose.
 it(`draws the icon a row carries when its slugs are not view sections`, async () => {
     const el = await mount(at());
-    expect(el.querySelector(`[data-icon="info-circle"]`)).not.toBeNull();
-    expect(el.querySelector(`[data-icon="th-large"]`)).toBeNull();
+    expect(rowDraws(el, `info-circle`)).toBe(true);
+    expect(rowDraws(el, `th-large`)).toBe(false);
 });
 
 it(`draws the view-section glyph a row's slug names when asked`, async () => {
     const el = await mount(at(), { sectionIcons: true });
-    expect(el.querySelector(`[data-icon="th-large"]`)).not.toBeNull();
-    expect(el.querySelector(`[data-icon="info-circle"]`)).toBeNull();
+    expect(rowDraws(el, `th-large`)).toBe(true);
+    expect(rowDraws(el, `info-circle`)).toBe(false);
 });
 
 it(`gives a row with parts no address of its own`, async () => {
