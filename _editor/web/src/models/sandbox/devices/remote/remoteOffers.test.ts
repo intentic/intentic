@@ -78,9 +78,16 @@ it("names a terminal by the computer and where on it the shell runs", () => {
     expect(primaryMonitor([])).toBeUndefined();
 });
 
-it("says why a computer with no screen to show has none, when it knows, and draws no button when it does not", () => {
+it("says why a computer with no screen to show has none, when it knows", () => {
     const reason = `this computer has no display, and a virtual desktop needs Xvfb and a desktop session: install xvfb xfce4`;
     const headless = remoteSide(row(), { kind: `answered`, status: status({ monitors: [], screenReason: reason }) });
     expect(headless?.screen).toEqual({ ready: false, reason });
-    expect(remoteSide(row(), { kind: `answered`, status: status({ monitors: [] }) })?.screen).toBeUndefined();
+});
+
+it("keeps the screen button while remoted has not run since the sandbox restarted, so no monitors are known yet", () => {
+    // The sandbox's daemon forgets what remoted said when it restarts; the terminal's button stays, and so must the screen's.
+    const unknown = remoteSide(row(), { kind: `answered`, status: status({ monitors: [] }) });
+    expect(unknown?.screen).toEqual({ ready: true });
+    const viewOff = remoteSide(row(), { kind: `answered`, status: status({ monitors: [], allow: { view: false, control: false, terminal: true } }) });
+    expect(viewOff?.screen).toEqual({ ready: false, reason: `Seeing the screen is off in this computer’s permissions.` });
 });

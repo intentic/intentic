@@ -59,13 +59,15 @@ const blockedBefore = (row: DeviceRow): string | undefined => {
 
 // The PC's screen is its native side's alone; a distro's own remoted names none (the sandbox drops any it does). A native
 // side with no screen to show says why when remoted knows (no display and no Xvfb: what to install), rather than hiding
-// the button and leaving the person to guess.
+// the button and leaving the person to guess. No monitors and no reason is a remoted that has not run since the sandbox's
+// daemon last started (the contract's "empty until remoted has run once"), not a computer without a screen: the button
+// stays, and opening it starts remoted, which names the monitors.
 const screenOffer = (native: boolean, status: RemoteStatus): Offer | undefined => {
     if (!native) {
         return undefined;
     }
-    if (status.monitors.length === 0) {
-        return status.screenReason === undefined ? undefined : off(status.screenReason);
+    if (status.monitors.length === 0 && status.screenReason !== undefined) {
+        return off(status.screenReason);
     }
     return status.allow.view ? READY : off(t(`sandbox.deviceRemote.viewOff`));
 };
