@@ -282,6 +282,9 @@ const auditFamily = (now: number): AgentSummary[] => {
             turns: 2,
             toolUses: 212,
             subagents: { running: 1, total: 12 },
+            // The batches come from a workflow run (agent/subagents/workflows): it starts the next one as each ends, so
+            // its tray names it with a Stop of its own.
+            scriptRuns: [{ id: `wfr-3e5693e0-bde2`, name: `score-batches`, calls: 12, working: 1, failed: 8, phase: `Score`, startedAt: now - minutes(37) }],
         },
         spawned(AUDIT_AGENT_ID, `sub-lean-cedar-7h2k`, {
             title: batch(14),

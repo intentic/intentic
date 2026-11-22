@@ -11,6 +11,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { childRunOf } from "@intentic/sandbox-contract/events/child-run";
 import { newConversationId, SUBAGENT_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { stopRunsOf } from "./workflows/live-runs.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
 import { steerTurn } from "../checkpoints/agent-steering.js";
@@ -39,7 +40,7 @@ import {
     type FamilyLink,
     familyCancels,
     markFamilyEnded,
-} from "./family-cancel.js";
+} from "./family/family-cancel.js";
 import { endPause, pauseChild } from "./paused-children.js";
 import { FAN_OUT, type Lane, siblingNewsWords } from "./fan-out-governor.js";
 import { waitForWork, type WorkWaitOutcome } from "./waiting/work-wait.js";
@@ -1619,6 +1620,8 @@ const stopMember = async (deps: ChildCancelDeps, family: Family, { child, move }
  * waits for its turn to unwind. Never throws; answers what it cancelled.
  */
 export const cancelFamily = async (deps: FamilyDeps, family: Family, why: FamilyEnd): Promise<readonly FamilyCancel[]> => {
+    // Its workflow runs first, so none starts a worker in place of one stopped below (live-runs.ts).
+    stopRunsOf([...family.heads, ...family.members.map(({ child }) => child)], why === "stopped" ? "owner" : "left");
     if (family.members.length === 0) {
         return [];
     }

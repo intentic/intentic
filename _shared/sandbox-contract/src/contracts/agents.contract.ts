@@ -2,6 +2,7 @@ import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, SessionTranscriptSchema } from "../events/transcript.js";
 import { AgentTranscriptSchema } from "../events/agent-transcript.js";
+import { AgentFamilyStoppedSchema, AgentStopFamilySchema } from "../schemas/agent-background.js";
 import { AgentAssignSchema, AgentAutoLandSchema, AgentNotifySchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
 import { AgentSearchQuerySchema, AgentSearchResultSchema } from "../schemas/agent-search.js";
 import { AgentsAttentionSchema, AgentsListSchema, HomeConversationSchema } from "../schemas/agents-list.js";
@@ -336,6 +337,16 @@ export const agentsContract = {
         })
         .input(AgentStopJobSchema)
         .output(AgentSummarySchema),
+    stopFamily: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/stop-family",
+            summary: "Stop a conversation and everything it started",
+            description:
+                "Stops this conversation's running turn, the workflow runs it started, and the work of every agent below it: their running turns, their starts still waiting and the re-runs the sandbox booked for them, and their own workflow runs. Stopped this way, none of their endings wakes the conversation, so nothing starts again by itself. Their conversations and what they wrote stay. Naming a workflow run stops only that run and the agents it started. Stopping what already ended is not an error.",
+        })
+        .input(AgentStopFamilySchema)
+        .output(AgentFamilyStoppedSchema),
     seenAll: procedure
         .route({
             method: "POST",

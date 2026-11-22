@@ -1,14 +1,15 @@
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import type { Holding } from "../../conversations/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import type { Holding } from "../../../conversations/actor/conversation-holdings.js";
 
 // A conversation leaving the board (archived by hand, by the board's Clear, by the aged sweep or a vanished checkout;
-// purged; discarded) takes the work of the children it spawned with it: their running turns stop and the re-runs the
-// sandbox booked for them are dropped, so nothing goes on working for a parent that will never read it, and nothing
-// starts again by itself. Their conversations stay, with whatever they wrote. The decisions are here; children.ts
+// purged; discarded) takes the work of the children it spawned with it: their running turns stop, the re-runs the
+// sandbox booked for them are dropped and the workflow runs that would start more end, so nothing goes on working for a
+// parent that will never read it, and nothing starts again by itself. A person's Stop all on a card that stays
+// (family-stop.ts) does the same. Their conversations stay, with whatever they wrote. The decisions are here; children.ts
 // carries them out through the cancel tool's own path (cancelFamily).
 
-/** Why a family ends. */
-export type FamilyEnd = "archived" | "purged" | "discarded";
+/** Why a family ends: its head left the board, or a person stopped it all. */
+export type FamilyEnd = "archived" | "purged" | "discarded" | "stopped";
 
 /** One edge of the spawn tree: a conversation and the one that spawned it. */
 export interface FamilyLink {

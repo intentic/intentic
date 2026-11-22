@@ -5,7 +5,7 @@ import type { Services } from "../../../composition.js";
 import { canonicalJson } from "../../../audit/audit-chain.js";
 import { opt } from "../../../opt.js";
 import { type ResultSchema, ResultSchemaSchema, type ResultValue, resultSchemaFault } from "../child-result.js";
-import { type ChildParent, childReportOf, sendToChild, spawnChild } from "../children.js";
+import { type ChildParent, cancelChild, childReportOf, sendToChild, spawnChild } from "../children.js";
 import { type ChildSettlement, childResultOf, childSettlementOf, onChildSettled } from "../child-records.js";
 import { type Cache, keepRun, type LiveRun, type ScriptCall, type ScriptDefaults } from "./script-run-store.js";
 
@@ -157,10 +157,17 @@ const routeOf = (options: AgentOptions, defaults: ScriptDefaults | undefined): {
     return { route: { provider, model, ...opt("harness", harness), ...opt("effort", effort) }, schema: options.schema };
 };
 
-// A worker started, or one this run already had, waited on until its call has an answer.
+// What a call the run's stop overtook answers; the script has already ended, so nobody reads it.
+const OVERTAKEN = "The workflow was stopped before this call started its worker.";
+
+// A worker started, or one this run already had, waited on until its call has an answer. A stopped run starts no worker:
+// its script ends at once, but a call already past its place or mid-spawn would otherwise start one nobody stops.
 const workCall = async (context: RunContext, call: ScriptCall, prompt: string, options: AgentOptions, route: ScriptDefaults, schema: ResultSchema | undefined): Promise<ResultValue> => {
     const { services, live, parent } = context;
     if (call.child === undefined) {
+        if (live.stop.signal.aborted) {
+            throw new Error(OVERTAKEN);
+        }
         const spawned = await spawnChild(services, parent, {
             prompt,
             description: `${live.record.name}: ${call.label}`.slice(0, 200),
@@ -174,6 +181,14 @@ const workCall = async (context: RunContext, call: ScriptCall, prompt: string, o
         });
         if (!spawned.ok) {
             throw new Error(`${call.label}: ${spawned.message}`);
+        }
+        if (live.stop.signal.aborted) {
+            try {
+                await cancelChild(services, parent, spawned.id);
+            } catch (error) {
+                services.logger.warn({ err: error, child: spawned.id }, "workflow run: a worker started as the run stopped could not be stopped");
+            }
+            throw new Error(OVERTAKEN);
         }
         call.child = spawned.id;
         keepRun(services, live);

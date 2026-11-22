@@ -14,9 +14,7 @@ import { archivedCards } from "./archived-cards.js";
 import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
 import { opt } from "../opt.js";
 import { transcriptPageAnswer } from "./transcript-page-answer.js";
-import { cancelWatcher, cancelWatchersFor } from "../agent/verification/watchers.js";
-import { backgroundJobOf } from "../agent/tools/jobs/background-jobs.js";
-import { stopJob } from "../agent/tools/jobs/job-fates.js";
+import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
@@ -46,6 +44,7 @@ import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 import { draftRoutes } from "./drafts/drafts.routes.js";
 import { notifyRoutes } from "./people/notify.routes.js";
 import { autoApproveRoutes } from "./auto-approve.routes.js";
+import { cardStopRoutes } from "./card-stops.routes.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT, but an archive waits out a stop.
@@ -378,6 +377,7 @@ export const createAgentsRoutes = (services: Services) => {
         ...draftRoutes(i, services),
         ...notifyRoutes(i, services),
         ...autoApproveRoutes(i, services, { entryFor, framed }),
+        ...cardStopRoutes(i, services, { entryFor, workEntryFor, framed, summaryAfter }),
         seen: i.seen.handler(async ({ input, context }) => {
             entryFor(input.id, context);
             const summary = await services.agents.markSeen(input.id, Date.now());
@@ -397,27 +397,6 @@ export const createAgentsRoutes = (services: Services) => {
                 await services.agents.markAllSeen(Date.now());
             }
             return { agents: services.agents.list().flatMap((agent) => framedSummary(caller, agent) ?? []), rev: services.agents.revision() };
-        }),
-        // The only user-initiated way to end a watch; every other exit is automatic (it fires, times out, or a later
-        // turn stops it). Legal in every state, including mid-turn, since a watch is a timer, not turn state.
-        stopWatching: i.stopWatching.handler(async ({ input, context }) => {
-            const entry = entryFor(input.id, context);
-            // Awaited: the disarm must reach the watch journal, or a recreate would restore it on boot. A named watch
-            // is disarmed alone; an unknown name is already-gone, not an error, since it may have fired mid-press.
-            await (input.watchId === undefined ? cancelWatchersFor(entry.id) : cancelWatcher(entry.id, input.watchId));
-            // Reads back through `get`, not the live roster: an archived conversation can still hold armed watches.
-            return framed(context, summaryAfter(services, entry.id));
-        }),
-        // A person's way to end what a conversation left running: the server it handed over, the build it waits on.
-        // Legal in every state, mid-turn included; the job's watch is disarmed before it ends, so nothing wakes.
-        stopJob: i.stopJob.handler(async ({ input, context }) => {
-            const entry = entryFor(input.id, context);
-            const job = backgroundJobOf(services.conversations, entry.id, input.jobId);
-            // An unknown id is a job already gone (it exited, or a restart forgot it), not an error: the press is satisfied.
-            if (job !== undefined) {
-                await stopJob({ conversations: services.conversations, logger: services.logger }, job, "person");
-            }
-            return framed(context, summaryAfter(services, entry.id));
         }),
         // Measured against main as it stands, not the last land's record. A committed row leaves the list; uncommitted
         // stays flagged `landed`; discarded-after-land goes back to unflagged.

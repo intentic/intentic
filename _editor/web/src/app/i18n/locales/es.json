@@ -1059,6 +1059,8 @@
             "exportTranscript": "Exportar transcripción",
             "openIn": "Abrir en {name}",
             "openInItsSandbox": "Abrir en su sandbox",
+            "stopAll": "Detener todo",
+            "stopAllHint": "Su turno, sus workflows y cada agente por debajo",
             "stopWatchingCount": "Dejar de vigilar ({count})"
         },
         "synthesizeSessions": {
@@ -1181,6 +1183,20 @@
             "inheritedTip": "Aprueba automáticamente cada permiso, porque la sesión que la inició lo hace.",
             "label": "Aprobación automática",
             "failed": "No se pudo cambiar la aprobación automática"
+        },
+        "familyStop": {
+            "workflowCounts": "{working} trabajando · {calls} iniciados",
+            "workflowTip": "Ejecución de workflow",
+            "workflowNote": "Inicia el siguiente agente solo",
+            "stop": "Detener workflow",
+            "stopNote": "Sus agentes también se detienen",
+            "stopping": "Deteniendo todo lo que inició «{title}»",
+            "stoppingRun": "Deteniendo el workflow {name}",
+            "agents": "{count} agente | {count} agentes",
+            "runs": "{count} workflow | {count} workflows",
+            "stopped": "Detenido: {what}",
+            "nothing": "Ya no quedaba nada en marcha",
+            "failed": "No se pudo detener"
         }
     },
     "app": {

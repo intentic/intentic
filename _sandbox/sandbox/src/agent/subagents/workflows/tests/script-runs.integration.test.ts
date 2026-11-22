@@ -12,7 +12,8 @@ import type { TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { conversationEntry } from "../../../../conversations/registry/agents-store.testing.js";
 import { childActor } from "../../../../auth/principal.js";
-import { resetChildrenForTest, spawnChild } from "../../children.js";
+import { cancelChild, resetChildrenForTest, spawnChild } from "../../children.js";
+import { stopFamily } from "../../family/family-stop.js";
 import { isWorker } from "../../child-records.js";
 import { resetSubagents, waitForSubagent } from "../../subagents.js";
 import { awaitScriptRun, resetScriptRunsForTest, type ScriptRunStatus, scriptRunsInFlight, startScriptRun, stopScriptRun } from "../script-runs.js";
@@ -46,6 +47,8 @@ const daemon = async (body: TurnStarter["stream"]): Promise<{ readonly services:
         ...driven,
         config: unstubbed<Services["config"]>("config", { historyRoot: root }),
         agents: unstubbed<Services["agents"]>("agents", {
+            // The family a Stop all reads beside the spawn records, which already hold every worker of a run here.
+            ids: () => [],
             entry: (id: string) =>
                 id === parent.conversationId
                     ? conversationEntry({ id })
@@ -338,6 +341,55 @@ describe("stopping a run", () => {
 
         expect(await finished(services, run)).toMatchObject({ state: "stopped", error: "The workflow was stopped." });
         expect(told[0]).toContain("was stopped");
+    });
+});
+
+// 2026-11-22, marta: a run kept starting workers while its owner stopped them one by one, with its parent at rest and no
+// press that reached the run. Its card now lists it, and Stop all ends it without waking the parent.
+describe("a run its owner stops", () => {
+    // A worker that works until it is stopped, as a real turn does: its engine registers the abort a stop calls.
+    const hanging = (turns: TurnInput[]): TurnStarter["stream"] =>
+        async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            const stopped = Promise.withResolvers<void>();
+            const unregister = actors.registerTurn(input.conversationId ?? "", { abort: () => stopped.resolve(), steering: new SteeringQueue() });
+            try {
+                await stopped.promise;
+            } finally {
+                unregister();
+            }
+            yield { kind: "done" };
+        };
+    const script = `export const meta = { name: "materialize" };\nreturn await parallel(args.folders.map((folder) => () => agent("write " + folder, { label: folder })));`;
+
+    it("is on its parent's card while it goes, and starts the next worker when one is stopped by hand", async () => {
+        const turns: TurnInput[] = [];
+        const { services } = await daemon(hanging(turns));
+        const run = await started(services, script, { args: { folders: ["a", "b", "c"] }, concurrency: 1 });
+        await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+        await waitFor(() => expect(actors.state(parent.conversationId)?.scriptRuns).toMatchObject([{ id: run, name: "materialize", calls: 1, working: 1 }]), SETTLES);
+
+        expect(await cancelChild(services, parent, turns[0]?.conversationId ?? "")).toMatchObject({ ok: true });
+
+        await waitFor(() => expect(turns.map((turn) => turn.prompt)).toEqual(["write a", "write b"]), SETTLES);
+        await waitFor(() => expect(actors.state(parent.conversationId)?.scriptRuns).toMatchObject([{ id: run, calls: 2, working: 1, failed: 1 }]), SETTLES);
+        stopScriptRun(parent.conversationId, run);
+        await finished(services, run);
+    });
+
+    it("ends with Stop all: no worker after it, off the card, and its parent is not woken to start it again", async () => {
+        const turns: TurnInput[] = [];
+        const { services } = await daemon(hanging(turns));
+        const run = await started(services, script, { args: { folders: ["a", "b", "c"] }, concurrency: 1 });
+        await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+
+        expect(await stopFamily(services, parent.conversationId)).toMatchObject({ turn: false, runs: 1 });
+
+        expect(await finished(services, run)).toMatchObject({ state: "stopped", error: expect.stringContaining("A person stopped it") });
+        expect(actors.state(parent.conversationId)?.scriptRuns).toEqual([]);
+        await new Promise((settle) => setTimeout(settle, 50));
+        expect(turns).toHaveLength(1);
+        expect(told).toEqual([]);
     });
 });
 

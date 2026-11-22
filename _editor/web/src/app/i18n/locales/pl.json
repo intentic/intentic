@@ -1059,6 +1059,8 @@
             "exportTranscript": "Eksportuj transkrypcję",
             "openIn": "Otwórz w {name}",
             "openInItsSandbox": "Otwórz w jego sandboxie",
+            "stopAll": "Zatrzymaj wszystko",
+            "stopAllHint": "Jego turę, jego workflowy i każdego agenta pod nim",
             "stopWatchingCount": "Przestań obserwować ({count})"
         },
         "synthesizeSessions": {
@@ -1181,6 +1183,20 @@
             "inheritedTip": "Automatycznie zatwierdza każdą zgodę, bo robi to sesja, która ją uruchomiła.",
             "label": "Automatyczne zatwierdzanie",
             "failed": "Nie udało się zmienić automatycznego zatwierdzania"
+        },
+        "familyStop": {
+            "workflowCounts": "Pracują: {working} · uruchomione: {calls}",
+            "workflowTip": "Przebieg workflow",
+            "workflowNote": "Sam uruchamia kolejnego agenta",
+            "stop": "Zatrzymaj workflow",
+            "stopNote": "Jego agenty też staną",
+            "stopping": "Zatrzymywanie wszystkiego, co uruchomił „{title}”",
+            "stoppingRun": "Zatrzymywanie workflow {name}",
+            "agents": "{count} agent | {count} agenty | {count} agentów",
+            "runs": "{count} workflow | {count} workflowy | {count} workflowów",
+            "stopped": "Zatrzymano: {what}",
+            "nothing": "Nic już nie działało",
+            "failed": "Nie udało się zatrzymać"
         }
     },
     "app": {

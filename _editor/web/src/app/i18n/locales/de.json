@@ -1059,6 +1059,8 @@
             "exportTranscript": "Transkript exportieren",
             "openIn": "In {name} öffnen",
             "openInItsSandbox": "In seiner Sandbox öffnen",
+            "stopAll": "Alles stoppen",
+            "stopAllHint": "Seinen Zug, seine Workflows und jeden Agenten darunter",
             "stopWatchingCount": "Beobachten beenden ({count})"
         },
         "synthesizeSessions": {
@@ -1181,6 +1183,20 @@
             "inheritedTip": "Erlaubt jede Berechtigung automatisch, weil die Sitzung, die sie gestartet hat, das tut.",
             "label": "Automatisch erlauben",
             "failed": "Automatisches Erlauben konnte nicht geändert werden"
+        },
+        "familyStop": {
+            "workflowCounts": "{working} arbeiten · {calls} gestartet",
+            "workflowTip": "Workflow-Lauf",
+            "workflowNote": "Startet den nächsten Agenten selbst",
+            "stop": "Workflow stoppen",
+            "stopNote": "Seine Agenten stoppen mit",
+            "stopping": "Alles wird gestoppt, was „{title}“ gestartet hat",
+            "stoppingRun": "Workflow {name} wird gestoppt",
+            "agents": "{count} Agent | {count} Agenten",
+            "runs": "{count} Workflow | {count} Workflows",
+            "stopped": "Gestoppt: {what}",
+            "nothing": "Es lief nichts mehr",
+            "failed": "Konnte nicht gestoppt werden"
         }
     },
     "app": {

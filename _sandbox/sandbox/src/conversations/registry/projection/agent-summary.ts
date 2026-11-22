@@ -46,7 +46,7 @@ const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined
 };
 
 // What the actor keeps for its card between turns; nothing for a conversation this daemon has not heard from.
-const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "needs">> =>
+const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "scriptRuns" | "needs">> =>
     state ?? {};
 
 // The per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the card's
@@ -150,10 +150,10 @@ export const spentBy = (totals: Totals, usage: TurnUsage, running: number) => {
     };
 };
 
-// What the actor holds for the card: the live turn's readings, the checklist, and the loop, workflow, watches and jobs
+// What the actor holds for the card: the live turn's readings, the checklist, and the loop, workflow, watches, jobs and runs
 // its pumps last published. An empty list is turned absent, indistinguishable from never having watched.
 export const liveReadings = (entry: PersistedAgent, state: ConversationState | undefined) => {
-    const { loop, workflow, watches, jobs, needs } = cardReadings(state);
+    const { loop, workflow, watches, jobs, scriptRuns, needs } = cardReadings(state);
     return {
         ...contextFill(state),
         ...opt("activity", state?.turn.activity),
@@ -164,6 +164,7 @@ export const liveReadings = (entry: PersistedAgent, state: ConversationState | u
         ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
         awaitingWake: state !== undefined && awaitingWake(state),
         ...(jobs !== undefined && jobs.length > 0 ? { jobs: [...jobs] } : {}),
+        ...opt("scriptRuns", scriptRuns === undefined || scriptRuns.length === 0 ? undefined : [...scriptRuns]),
         ...(needs !== undefined && needs.length > 0 ? { needs: [...needs] } : {}),
     };
 };

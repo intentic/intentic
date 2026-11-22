@@ -4,7 +4,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { parentOfActor } from "../../auth/principal.js";
 import type { Logger } from "pino";
 import type { Family, FamilyDeps } from "../../agent/subagents/children.js";
-import type { FamilyEnd } from "../../agent/subagents/family-cancel.js";
+import type { FamilyEnd } from "../../agent/subagents/family/family-cancel.js";
 import type { TurnEngine } from "../../seams/turn-engine.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import type { ResourceReaper } from "../../system/boot/reaper.js";

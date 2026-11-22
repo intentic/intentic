@@ -20,8 +20,10 @@ import {
     landRows,
     pressAutoApprove,
     sessionNameRows,
+    stopAllRows,
     watchRows,
 } from "../../../models/fleet/presses/agentMenu";
+import { pressStopFamily } from "../../../models/fleet/presses/familyStop";
 import { landFromMenu } from "../../../models/fleet/presses/landPress";
 import { useAgents } from "../../../models/fleet/useAgents";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
@@ -38,6 +40,7 @@ export interface ChatRowAgentRows {
     readonly fresh: MenuItem[];
     // Copy session name, beside the chat's own Rename and Share.
     readonly name: MenuItem[];
+    // Stop everything and Stop watching: what would go on without the reader.
     readonly watch: MenuItem[];
     // Auto-approve, for this chat and every chat open beside it.
     readonly autoApprove: MenuItem[];
@@ -64,6 +67,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>, beside: ()
         restore,
         archive: (ids) => archive(ids),
         setAutoApprove: (ids, on) => pressAutoApprove(setAutoApprove, ids, on),
+        stopAll: (agent) => pressStopFamily(agent),
     };
     // The agent's review page, as "View changes" with the diff icon wherever it is offered (changesToRead), and only when
     // it has something on it. No drill-in into the chat: this row IS the chat.
@@ -87,7 +91,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>, beside: ()
             review: [...reviewRows(agent), ...landRows(agent, facts, act)],
             fresh: freshRows(agent, facts, act),
             name: sessionNameRows(agent, act),
-            watch: watchRows(agent, facts, act),
+            watch: [...stopAllRows(agent, facts, act), ...watchRows(agent, facts, act)],
             autoApprove: autoApproveRows(agent, facts, act),
             filing: filingRows(agent, facts, act, commandShortcut(`chat.archive`)),
         };

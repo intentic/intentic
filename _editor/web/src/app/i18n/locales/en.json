@@ -1059,6 +1059,8 @@
             "exportTranscript": "Export transcript",
             "openIn": "Open in {name}",
             "openInItsSandbox": "Open in its sandbox",
+            "stopAll": "Stop everything",
+            "stopAllHint": "Its turn, its workflows and every agent below it",
             "stopWatchingCount": "Stop watching ({count})"
         },
         "synthesizeSessions": {
@@ -1181,6 +1183,20 @@
             "inheritedTip": "Auto-approves every permission, because the session that started it does.",
             "label": "Auto-approve",
             "failed": "Couldn't change auto-approve"
+        },
+        "familyStop": {
+            "workflowCounts": "{working} at work · {calls} started",
+            "workflowTip": "Workflow run",
+            "workflowNote": "Starts the next agent itself",
+            "stop": "Stop workflow",
+            "stopNote": "Its working agents stop too",
+            "stopping": "Stopping everything “{title}” started",
+            "stoppingRun": "Stopping workflow {name}",
+            "agents": "{count} agent | {count} agents",
+            "runs": "{count} workflow | {count} workflows",
+            "stopped": "Stopped {what}",
+            "nothing": "Nothing was still running",
+            "failed": "Couldn't stop it"
         }
     },
     "app": {

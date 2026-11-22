@@ -112,6 +112,19 @@ it(`keeps the tray shut under a card the reader is not on, counting its family o
     expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`4`);
 });
 
+// 2026-11-22, marta: a workflow run kept starting agents under a stopped card, and nothing on the board named it. Its row,
+// with its Stop, now heads the tray under any card, the reader on it or not (ScriptRunRow).
+it(`names a workflow run its agent started at the head of the tray, with its Stop, under a card the reader is not on`, async () => {
+    const run = { id: `wfr-1`, name: `spaces-materialize`, calls: 13, working: 1, failed: 2, phase: `Umowy`, startedAt: 1 };
+    setAgents([{ ...lead, status: `stopped`, scriptRuns: [run] }, helper(`port`, { title: `port the parser`, status: `running`, startedAt: 2 })], 100);
+    const board = await mountBoard();
+
+    const row = tray(board)?.querySelector(`[data-script-run]`);
+    const words = [...(row?.querySelectorAll(`span, button`) ?? [])].filter((el) => el.children.length === 0).map((el) => el.textContent?.trim());
+    expect(words).toEqual([`spaces-materialize`, `· Umowy`, t(`agents.familyStop.workflowCounts`, { working: 1, calls: 13 }), t(`ui.action.stop`)]);
+    expect(row?.querySelector(`button`)?.getAttribute(`aria-label`)).toBe(t(`agents.familyStop.stop`));
+});
+
 it(`counts a family with nothing left at work as its total alone, and leaves no group to announce under a shut tray`, async () => {
     setAgents([lead, helper(`notes`, { title: `write the notes`, updatedAt: 900 })], 100);
     roster([inProcess(`call-scan`, { description: `scan the logs`, status: `completed`, endedAt: 950, activityAt: 950 })]);

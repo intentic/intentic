@@ -12,6 +12,7 @@ import { KeepWarmSchema } from "./keep-warm.js";
 import { proceedOverride } from "./proceed-without-asking.js";
 import { autoApproveMark } from "./auto-approve.js";
 import { AgentNeedSchema } from "./needs.js";
+import { AgentJobsSchema, AgentScriptRunsSchema } from "./agent-background.js";
 import { StrandedCloneSchema } from "./stranded-clone.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 import { ProgramAskSchema } from "../events/requests.js";
@@ -745,54 +746,9 @@ export const AgentSummarySchema = z.object({
         .describe(
             "What it is waiting on people for and has not got yet, oldest first. Absent means nothing: an open need is why an idle-looking agent still needs you.",
         ),
-    // In memory only: a daemon restart leaves transcript rows naming jobs this list no longer carries.
-    jobs: z
-        .array(
-            z.object({
-                id: z.string().describe("The daemon's handle for this job, the one its transcript row names."),
-                label: z.string().describe("What the job is, in the agent's own words when it gave any, else its command on one line."),
-                session: z.string().describe("The terminal session its pane runs in, which is what opening it focuses."),
-                startedAt: z.number().describe("When it started, in milliseconds."),
-                endedAt: z.number().optional().describe("When the command exited, in milliseconds. Absent while it runs."),
-                exitCode: z.number().int().optional().describe("The code it exited with. Absent while it runs, or when its exit left none."),
-                // What the turn that left it running decided about it (agent/tools/jobs/job-fates.ts): one of these, or none
-                // while its turn is still going.
-                watch: z
-                    .string()
-                    .optional()
-                    .describe(
-                        "The watch its exit wakes this conversation through. Present once the turn that left it running has ended and the conversation is waiting on it.",
-                    ),
-                handed: z
-                    .boolean()
-                    .optional()
-                    .describe(
-                        "Left running for the person: the agent kept it for them with the `keep` tool (or it holds a port this conversation already left them), so it outlives the turn, wakes nothing and is theirs to stop.",
-                    ),
-                ports: z.array(z.number().int()).optional().describe("The ports it was listening on when its turn ended."),
-                stoppedBy: z
-                    .enum(["turn", "person", "agent"])
-                    .optional()
-                    .describe(
-                        "Who stopped it: the sandbox, when the turn that used it ended without handing it over; a person; or the agent itself. Present from the moment the stop is asked. Absent for a job that exited by itself.",
-                    ),
-                // agent/tools/jobs/input-wait.ts: told from /proc, never from what it printed, since a prompt can go
-                // straight to the terminal or sit in a pipe.
-                inputWait: z
-                    .object({
-                        since: z.number().describe("When it went still, in milliseconds."),
-                        program: z.string().describe("The process blocked reading the terminal, as its command line."),
-                    })
-                    .optional()
-                    .describe(
-                        "Present while it sits blocked reading its terminal with nothing moving: a prompt nobody in the sandbox will answer, which only stopping it or a person typing into its terminal ends. Absent while it runs on, and once it ends.",
-                    ),
-            }),
-        )
-        .optional()
-        .describe(
-            "Commands this conversation left running in the background, and how the most recent ones ended. Absent means none since the daemon started. A job is running exactly while it has no end.",
-        ),
+    // Background commands and workflow runs (agent-background.ts): what keeps going beside its turn.
+    jobs: AgentJobsSchema,
+    scriptRuns: AgentScriptRunsSchema,
     // Epoch ms it was archived; nothing is lost (branch, transcript, counters stay), and unarchiving re-attaches a
     // fresh worktree from the branch.
     archivedAt: z
@@ -961,3 +917,4 @@ export const AgentFileDiffQuerySchema = z.object({
     path: z.string().min(1).describe("Which file, relative to that repository."),
 });
 export { LandConflictReasonSchema, type LandConflictReason, LandConflictPathSchema, LandConflictSchema, type LandConflict, LandResultSchema, type LandResult, LandModeSchema, type LandMode, AgentSpanSchema, type AgentSpan, AgentLandSchema, LandingExtensionsSchema, type LandingExtensions } from "./agent-land.js";
+export { AgentFamilyStoppedSchema, AgentStopFamilySchema, type AgentFamilyStopped, type AgentScriptRun } from "./agent-background.js";

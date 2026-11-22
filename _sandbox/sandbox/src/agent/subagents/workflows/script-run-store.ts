@@ -4,6 +4,7 @@ import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contr
 import type { Services } from "../../../composition.js";
 import { defineDocument } from "../../../store/evolution/documents.js";
 import { openDirectory } from "../../../store/open-document.js";
+import { type RunStop, showRunsOf } from "./live-runs.js";
 
 // A workflow run as it is written down (script-runs.ts runs it): one file per run under the history volume, written as it
 // moves and read back by a restart, a resume and the status tool.
@@ -68,21 +69,24 @@ export const scriptRunsDocument = defineDocument({
     schema: ScriptRunSchema,
 });
 
-// A run in progress in this process: its record, its stop, what settles when it ends, and the workers it waits on.
+// A run in progress in this process: its record, its stop, what settles when it ends, and who stopped it, if anyone did.
 export interface LiveRun {
     readonly id: string;
     readonly record: ScriptRun;
     readonly stop: AbortController;
     readonly ended: PromiseWithResolvers<void>;
+    stoppedBy?: RunStop;
 }
 
 // The run files, one per run, under the history volume.
 export const runFiles = (services: Pick<Services, "config">): ReturnType<typeof openDirectory<typeof scriptRunsDocument>> =>
     openDirectory(scriptRunsDocument, join(services.config.historyRoot, scriptRunsDocument.path));
 
-// Every write of one run in the order it was made; a failed one is said and the run goes on.
+// Every write of one run in the order it was made; a failed one is said and the run goes on. Its parent's card hears of
+// it in the same breath (live-runs.ts), since every move a run makes is written here.
 const WRITES = new Map<string, Promise<void>>();
-export const keepRun = (services: Pick<Services, "config" | "logger">, live: LiveRun): void => {
+export const keepRun = (services: Pick<Services, "config" | "logger" | "conversations" | "agents">, live: LiveRun): void => {
+    showRunsOf(services, live.record.parent);
     live.record.at = Date.now();
     const snapshot: ScriptRun = structuredClone(live.record);
     const before = WRITES.get(live.id) ?? Promise.resolve();

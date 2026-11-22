@@ -1,6 +1,6 @@
 import type { Seal } from "@intentic/sandbox-contract/schemas/seal";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { AgentJob, AgentSummary, AgentWatch, ReviewTally, SessionOwner, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentJob, AgentScriptRun, AgentSummary, AgentWatch, ReviewTally, SessionOwner, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import type { AgentNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { AgentOrigin, ForkedFrom, FreshSession, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
@@ -185,8 +185,9 @@ export type ConversationEvent =
     | { readonly kind: "grant-restored"; readonly tool: string; readonly always: boolean }
     // The gate asks for a grant on this tool; answered once, and only while fresh.
     | { readonly kind: "grant-taken"; readonly tool: string }
-    // The card's list of the conversation's background jobs, whole, as their registry now reads it.
+    // The card's lists of the conversation's background jobs and of its workflow runs still going, each whole, as read now.
     | { readonly kind: "jobs-shown"; readonly jobs: readonly AgentJob[] }
+    | { readonly kind: "script-runs-shown"; readonly runs: readonly AgentScriptRun[] }
     // The card's list of its armed watches, whole; empty once the last one fires or is stopped.
     | { readonly kind: "watches-shown"; readonly watches: readonly AgentWatch[] }
     // A turn the sandbox had on its way to it (conversation-holdings.ts) went nowhere: a card at rest reads its own ending again.
@@ -739,6 +740,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "grant-restored": (state, event, now) => unchanged({ ...state, grant: { tool: event.tool, always: event.always, grantedAt: now } }, undefined),
     "grant-taken": (state, event, now) => onGrantTaken(state, event.tool, now),
     "jobs-shown": (state, event) => ({ state: { ...state, jobs: event.jobs }, effects: BROADCAST, reply: undefined }),
+    "script-runs-shown": (state, event) => ({ state: { ...state, scriptRuns: event.runs }, effects: BROADCAST, reply: undefined }),
     "watches-shown": (state, event) => ({ state: { ...state, watches: event.watches }, effects: BROADCAST, reply: undefined }),
     "turn-not-coming": (state) => (state.phase.kind === "running" ? unchanged(state, undefined) : { state, effects: BROADCAST, reply: undefined }),
     "needs-shown": (state, event) => ({ state: { ...state, needs: event.needs }, effects: BROADCAST, reply: undefined }),

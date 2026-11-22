@@ -49,6 +49,7 @@ const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & Men
     land: jest.fn(),
     exportTranscript: jest.fn(),
     setAutoApprove: jest.fn(),
+    stopAll: jest.fn(),
 });
 // The rows as a reader sees them: a label, or a rule between groups.
 const rows = (items: readonly MenuItem[]): string[] => items.map((item) => (item.separator === true ? `—` : String(item.label)));
@@ -187,6 +188,22 @@ describe(`what a card's menu offers`, () => {
         const three = card(`w3`, { status: `running`, watches: [WATCH, WATCH, WATCH], awaitingWake: true });
         expect(rows(menuItemsFor(one, facts(), actions()))).toEqual([OPEN_CHAT, `—`, `Stop watching`]);
         expect(rows(menuItemsFor(three, facts(), actions()))).toEqual([OPEN_CHAT, `—`, `Stop watching (3)`]);
+    });
+
+    // A workflow run starts the next agent as each one stops, with its card at rest: Stop everything is the press that ends
+    // it with every agent below, offered only while something there is going (familyStop.ts).
+    it(`stops everything below a card while a workflow run or a subagent is going, beside the watch`, () => {
+        const run = { id: `wfr-1`, name: `spaces-materialize`, calls: 13, working: 3, failed: 2, startedAt: 1 };
+        const scripted = card(`s1`, { status: `stopped`, scriptRuns: [run] });
+        const helped = card(`s2`, { status: `running`, subagents: { running: 2, total: 5 }, watches: [WATCH], awaitingWake: true });
+        const act = actions();
+        const items = menuItemsFor(scripted, facts(), act);
+        expect(rows(items)).toEqual([OPEN_CHAT, `—`, t(`agents.cardMenu.stopAll`), `—`, t(`agents.agentsView.archive`)]);
+        expect(rows(menuItemsFor(helped, facts(), actions()))).toEqual([OPEN_CHAT, `—`, t(`agents.cardMenu.stopAll`), `Stop watching`]);
+        items.find((item) => item.label === t(`agents.cardMenu.stopAll`))?.command?.({ originalEvent: new Event(`click`), item: {} });
+        expect(act.stopAll).toHaveBeenCalledWith(scripted);
+        expect(rows(menuItemsFor(card(`s3`, { status: `running`, subagents: { running: 0, total: 5 } }), facts(), actions()))).toEqual([OPEN_CHAT]);
+        expect(rows(menuItemsFor(card(`s4`, { status: `idle`, scriptRuns: [run], archivedAt: 3 }), facts(), actions()))).not.toContain(t(`agents.cardMenu.stopAll`));
     });
 
     it(`offers another box's card the crossing to it by name, and nothing that writes through this box`, () => {

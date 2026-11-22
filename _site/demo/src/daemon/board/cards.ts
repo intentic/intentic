@@ -210,6 +210,24 @@ export const stopJob = ({ id, jobId }: SandboxHandlerInput<`agents`, `stopJob`>)
         }),
     );
 
+// As the daemon does for a person's Stop all (agents.stopFamily): the card's workflow runs end, its own turn and every
+// agent below it at work stop. Naming a run ends only that run and the workers it had at work.
+export const stopFamily = ({ id, run }: SandboxHandlerInput<`agents`, `stopFamily`>): SandboxHandlerOutput<`agents`, `stopFamily`> => {
+    const card = roster.agents.find((agent) => agent.id === id) ?? refuse(`No such agent.`, 404);
+    const runs = (card.scriptRuns ?? []).filter((candidate) => run === undefined || candidate.id === run);
+    const kept = (card.scriptRuns ?? []).filter((candidate) => !runs.includes(candidate));
+    const working = run === undefined ? roster.agents.filter((agent) => agent.startedBy === `agent:${id}` && agent.status === `running`) : [];
+    for (const child of working) {
+        patchAgent(child.id, { status: `stopped`, activity: undefined, updatedAt: Date.now() });
+    }
+    const turn = run === undefined && card.status === `running`;
+    patchAgent(id, { scriptRuns: kept.length === 0 ? undefined : kept });
+    if (turn) {
+        patchAgent(id, { status: `stopped`, activity: undefined });
+    }
+    return { turn, runs: runs.length, agents: run === undefined ? working.length : runs.reduce((sum, stopped) => sum + stopped.working, 0) };
+};
+
 // Honors the search field's case-sensitivity switch, matching the browser's own tier.
 const folded = (text: string, caseSensitive: boolean): string => (caseSensitive ? text : text.toLowerCase());
 

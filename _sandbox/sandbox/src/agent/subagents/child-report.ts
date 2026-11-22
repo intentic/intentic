@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import { bookedRerunWords } from "../../conversations/land/child-lands.js";
-import { familyEnded } from "./family-cancel.js";
+import { familyEnded } from "./family/family-cancel.js";
 import { settledChildVerification } from "./child-verification.js";
 import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
 import { noteQueuedReport, queuedChildReportId } from "./waiting/queued-reports.js";

@@ -9,12 +9,17 @@ import { trayFold } from "@intentic/ui/motion";
 import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
 import ChildStartingRow from "./ChildStartingRow.vue";
+import ScriptRunRow from "./ScriptRunRow.vue";
+import { isRemote } from "../../models/fleet/fleetScope";
+import { pressStopFamily } from "../../models/fleet/presses/familyStop";
 import { CHILD_ROWS } from "../../models/fleet/board/childRows";
 
 // Show spawned conversations and runtime subagents in a card's unboxed tray: reader asks, active work, grouped stopped reasons, then folded history.
 // Active work includes spawned children still starting (no conversation yet), each a dashed stand-in (ChildStartingRow).
 // Require CHILD_ROWS and actual children. Open trays for focused cards, visible children or active filters; otherwise show stable ChildCount.
 // Reader-only asks remain visible even under unfocused cards because chat cards have no other place to show that news.
+// So do the workflow runs the card's agent started (ScriptRunRow): a run starts the next agent as each one stops, so its
+// row, with its Stop, is the news of what keeps them coming, whichever card is looked at.
 
 const props = defineProps<{
     agent: FleetAgent;
@@ -35,6 +40,8 @@ const children = computed(() => board?.childrenOf(props.agent) ?? []);
 const subagents = computed(() => board?.subagentsOf(props.agent) ?? []);
 const tray = computed(() => (board === undefined ? undefined : trayOf(children.value, board.stateOf(props.agent), subagents.value)));
 const title = computed(() => agentDisplayTitle(props.agent));
+// Its runs, where its Stop reaches them: another sandbox's card is that sandbox's to stop, from its own board.
+const runs = computed(() => (isRemote(props.agent) ? [] : (props.agent.scriptRuns ?? [])));
 // An automation's earlier runs are named for the automation, not as agents its latest run started.
 const automation = computed(() => (children.value.length > 0 && stackedRuns(children.value).length === children.value.length ? automationOf(props.agent) : undefined));
 const label = computed(() =>
@@ -76,7 +83,7 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
 // A shut tray with nothing in it draws nothing: not its frosted strip on a wallpaper (wallpapers.css), which on an empty
 // box still painted a sliver under the card. Worn from the render that shuts the fold, so a shutting fold, pinned
 // outside the flow (trayFold), has already left the column its final height.
-const drawn = computed(() => shown.value || (tray.value?.asks.length ?? 0) > 0);
+const drawn = computed(() => shown.value || (tray.value?.asks.length ?? 0) > 0 || runs.value.length > 0);
 // Where the rows start: the card's title edge (its border, padding, identity tile and the gap after it) less a row's
 // own `px-2`, so the glyph, not the hover wash, lines up with the title. RailCard: 1 + 12 + 24 + 8; AgentCard: 1 + 14
 // (16 live) + 28 + 10.
@@ -91,8 +98,12 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
         class="relative flex flex-col"
         :class="[inset, { 'child-tray': drawn }]"
     >
+        <!-- What keeps starting the rows below: its Stop is the one press that ends it, so it is drawn under any card. -->
+        <div v-if="runs.length > 0" class="flex flex-col pt-1">
+            <ScriptRunRow v-for="run in runs" :key="run.id" :run="run" @stop="pressStopFamily(agent, run)" />
+        </div>
         <!-- A child asking the reader keeps its row under any card: the one row that is news whichever card is looked at. -->
-        <div v-if="tray.asks.length > 0" class="flex flex-col pt-1">
+        <div v-if="tray.asks.length > 0" class="flex flex-col" :class="runs.length === 0 ? `pt-1` : ``">
             <ChildRow
                 v-for="child in tray.asks"
                 :key="child.id"
@@ -111,7 +122,7 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
         <!-- The rest folds open and shut (trayFold): the box takes its height at once and the rows slide out from under the card, on the compositor. -->
         <Transition :css="false" @enter="trayFold.enter" @leave="trayFold.leave">
             <div v-if="shown">
-                <div class="flex flex-col" :class="tray.asks.length === 0 ? `pt-1` : ``">
+                <div class="flex flex-col" :class="tray.asks.length === 0 && runs.length === 0 ? `pt-1` : ``">
                     <template v-for="child in tray.lead" :key="child.id">
                         <!-- A spawned child whose first turn has not begun: a stand-in where its row will arrive, nothing to press. -->
                         <ChildStartingRow

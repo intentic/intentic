@@ -1,4 +1,4 @@
-import type { AgentJob, AgentSummary, AgentWatch, ReviewTally, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentJob, AgentScriptRun, AgentSummary, AgentWatch, ReviewTally, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import type { AgentNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { KeepWarm } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -157,6 +157,9 @@ export interface ConversationState {
     // What the card lists of its background jobs, running first and then how recent ones ended, as background-jobs.ts
     // last published it. No turn resets it: a job ends whenever its command does, as often as not between turns.
     readonly jobs: readonly AgentJob[];
+    // Its workflow runs still going, as live-runs.ts last published them: a run outlives the turn that started it, so no
+    // turn resets this either.
+    readonly scriptRuns: readonly AgentScriptRun[];
     // Its armed watches as the card lists them, as watchers.ts last published them: armed as one turn ends, fired hours
     // later, so no turn resets this either.
     readonly watches: readonly AgentWatch[];
@@ -219,6 +222,7 @@ export const idleConversation = (queue: TurnQueue = NO_QUEUE): ConversationState
     steers: { next: 0, slots: [] },
     grant: undefined,
     jobs: [],
+    scriptRuns: [],
     watches: [],
     needs: [],
     loop: undefined,

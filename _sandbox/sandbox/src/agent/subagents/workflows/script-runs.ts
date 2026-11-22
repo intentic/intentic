@@ -17,6 +17,7 @@ import { agentCall, forgetWorker, placesFor, resetCallsForTest, type RunContext 
 import { type Cache, cacheOf, keepRun, type LiveRun, runFiles, runOnFile, type ScriptCall, type ScriptDefaults, type ScriptRun } from "./script-run-store.js";
 import { ScriptMetaSchema, splitScript } from "./script-source.js";
 import { readLiteral, runScript } from "./script-vm.js";
+import { addLiveRun, dropLiveRun, liveRun, resetLiveRunsForTest, type RunStop, showRunsOf, stopLiveRun } from "./live-runs.js";
 import { defineInFlight } from "../../../seams/restart/in-flight.js";
 
 /* Run coordination scripts independently of the parent; each agent() works in its own child worktree and lands into the parent's checkout.
@@ -46,7 +47,13 @@ export interface ScriptRunRequest {
 
 export type ScriptRunStart = { readonly ok: true; readonly run: string; readonly note: string } | { readonly ok: false; readonly message: string };
 
-const LIVE = new Map<string, LiveRun>();
+// What a run stopped from outside its script ends on, by who stopped it.
+const STOPPED_BY: Record<RunStop, string> = {
+    agent: "The workflow was stopped.",
+    owner: "A person stopped it from the board. Start it again only if they ask: resume with its id keeps every call it finished.",
+    left: "Its conversation left the board.",
+};
+
 // The wake a run's parent gets as it ends, said once, into its live turn or a turn of its own.
 const endingWords = (run: string, record: ScriptRun): string => {
     const calls = record.calls.length;
@@ -71,9 +78,15 @@ const endingWords = (run: string, record: ScriptRun): string => {
     ].join("\n");
 };
 
-const tellParent = async (services: Services, run: string, record: ScriptRun): Promise<void> => {
+// A run a person stopped wakes nobody: a turn it opened would read the ending as news and might start the run again,
+// the very thing the press stopped. Its record says who stopped it, for the next turn that asks workflow_status.
+const tellParent = async (services: Services, run: string, record: ScriptRun, stoppedBy?: RunStop): Promise<void> => {
     const entry = services.agents.entry(record.parent);
     if (entry === undefined || entry.archivedAt !== undefined) {
+        return;
+    }
+    if (stoppedBy === "owner") {
+        services.logger.info({ run, parent: record.parent }, "workflow run: a person stopped it, so its ending wakes nobody");
         return;
     }
     try {
@@ -130,7 +143,7 @@ const execute = async (services: Services, live: LiveRun, cache: Cache): Promise
     if ("value" in ended) {
         record.result = ended.value;
     } else {
-        record.error = ended.error;
+        record.error = live.stoppedBy === undefined ? ended.error : STOPPED_BY[live.stoppedBy];
     }
     record.endedAt = Date.now();
     // A call the script never waited for has nobody to read it: its worker stops, its work stays in its worktree. Not
@@ -145,22 +158,24 @@ const execute = async (services: Services, live: LiveRun, cache: Cache): Promise
             }
         }
     }
+    // Off the live list before the last write, so the write that files its ending takes it off its parent's card too.
+    dropLiveRun(live.id);
     keepRun(services, live);
-    LIVE.delete(live.id);
     live.ended.resolve();
-    await tellParent(services, live.id, record);
+    await tellParent(services, live.id, record, live.stoppedBy);
 };
 
 const launch = (services: Services, id: string, record: ScriptRun, cache: Cache): LiveRun => {
     const live: LiveRun = { id, record, stop: new AbortController(), ended: Promise.withResolvers<void>() };
-    LIVE.set(id, live);
+    addLiveRun(live);
     keepRun(services, live);
     void (async (): Promise<void> => {
         try {
             await execute(services, live, cache);
         } catch (error) {
             services.logger.error({ err: error, run: id }, "workflow run: ended on a fault of the daemon's");
-            LIVE.delete(id);
+            dropLiveRun(id);
+            showRunsOf(services, record.parent);
             live.ended.resolve();
         }
     })();
@@ -192,7 +207,7 @@ const resumedCache = async (services: Services, parent: string, run: string | un
     if (run === undefined) {
         return new Map();
     }
-    if (LIVE.has(run)) {
+    if (liveRun(run) !== undefined) {
         return { fault: `Run ${run} is still running: stop it first, or wait for it.` };
     }
     const earlier = await runOnFile(services, run);
@@ -288,7 +303,7 @@ export interface ScriptRunStopped {
 
 /** Where a run stands, as its parent reads it. */
 const scriptRunStatus = async (services: Services, parent: string, run: string): Promise<ScriptRunStatus | ScriptRunRefusal> => {
-    const record = LIVE.get(run)?.record ?? (await runOnFile(services, run));
+    const record = liveRun(run)?.record ?? (await runOnFile(services, run));
     if (record === undefined || record.parent !== parent) {
         return { ok: false, message: `No run ${run} of this conversation's.` };
     }
@@ -354,7 +369,7 @@ export const awaitScriptRun = async (
     signal: AbortSignal,
     actors?: Pick<ConversationActors, "holdings">,
 ): Promise<ScriptRunStatus | ScriptRunRefusal> => {
-    const live = LIVE.get(run);
+    const live = liveRun(run);
     const waitOutcome =
         live !== undefined && live.record.parent === parent && ms > 0
             ? await parkOnRun(live.ended.promise, ms, signal, actors === undefined ? undefined : { actors, parent })
@@ -367,12 +382,12 @@ export const awaitScriptRun = async (
 };
 
 /** Stops a run of this parent's: its script ends, its workers still working are stopped; their work stays. */
-export const stopScriptRun = (parent: string, run: string): ScriptRunStopped => {
-    const live = LIVE.get(run);
+export const stopScriptRun = (parent: string, run: string, why: RunStop = "agent"): ScriptRunStopped => {
+    const live = liveRun(run);
     if (live === undefined || live.record.parent !== parent) {
         return { ok: false, message: `No running run ${run} of this conversation's.` };
     }
-    live.stop.abort();
+    stopLiveRun(live, why);
     return { ok: true, message: "Stopping: its workers still working are stopped, and what they wrote stays in their worktrees. Its ending wakes you as usual." };
 };
 
@@ -422,9 +437,6 @@ export const scriptRunsInFlight = defineInFlight({
 
 /** For a suite: every run in this process forgotten. */
 export const resetScriptRunsForTest = (): void => {
-    for (const live of LIVE.values()) {
-        live.stop.abort();
-    }
-    LIVE.clear();
+    resetLiveRunsForTest();
     resetCallsForTest();
 };

@@ -9,6 +9,7 @@ import { unregistered, watching } from "../../agent-status/agentStatus-standing"
 import { FRESH_ICONS } from "../freshKinds";
 import { canScheduleFresh, canStartFresh, freshKindLabel, freshKindsOf } from "../freshSession";
 import { type LandChoice, offersReland } from "./landPress";
+import { familyGoing } from "./familyStop";
 import { canArchive, type FleetAgent } from "../useAgents-fleet";
 
 // THE ROWS AN AGENT OFFERS FROM ANY MENU DRAWN FOR IT: the board card's (features/agents/board/view/cardMenu.ts) and
@@ -35,6 +36,8 @@ export interface AgentMenuActions {
     readonly startFresh: (agent: FleetAgent, kind: FreshKind) => void;
     readonly copySessionName: (branch: string) => Promise<void>;
     readonly stopWatching: (id: string) => Promise<void>;
+    // Its turn, its workflow runs and every agent below it, stopped together (familyStop.ts).
+    readonly stopAll: (agent: FleetAgent) => void;
     readonly restore: (ids: readonly string[]) => Promise<void>;
     readonly archive: (ids: readonly string[]) => Promise<void>;
     // Puts the auto-approve mark on, or takes it off, these conversations at once.
@@ -108,6 +111,13 @@ export const watchRows = (agent: FleetAgent, facts: AgentMenuFacts, act: AgentMe
         },
     ];
 };
+
+// Stop everything (familyStop.ts), beside Stop watching: the other press that ends what would go on without the reader. Only
+// while something below the card is at work or will start, since with nothing going the chat's own Stop is all there is.
+export const stopAllRows = (agent: FleetAgent, facts: AgentMenuFacts, act: AgentMenuActions): MenuItem[] =>
+    !facts.here || agent.archivedAt !== undefined || !familyGoing(agent)
+        ? []
+        : [{ label: t(`agents.cardMenu.stopAll`), hint: t(`agents.cardMenu.stopAllHint`), icon: `stop`, command: () => act.stopAll(agent) }];
 
 // The auto-approve mark (sandbox-contract schemas/auto-approve.ts): one row that turns it on, or off where the card wears
 // its own, for this card and every card selected with it (the panes a Ctrl or Shift click opened), so several sessions

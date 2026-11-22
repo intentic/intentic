@@ -26,6 +26,7 @@ export const agentsSamples: GroupSamples<`agents`> = ({ fleet }) => ({
     reactDraft: { id: `smoke-unstarted-draft`, emoji: `👍`, on: true },
     assign: { id: fleet.AWAITING_AGENT_ID, to: `grace@acme.dev` },
     autoLand: { id: fleet.AWAITING_AGENT_ID, autoLand: true },
+    autoApprove: { ids: [fleet.AWAITING_AGENT_ID], on: true },
     breakPolicy: { id: fleet.AWAITING_AGENT_ID, ending: `limit`, policy: null },
     keepWarm: { id: fleet.AWAITING_AGENT_ID, until: null },
     stopJob: { id: fleet.REVIEW_AGENT_ID, jobId: fleet.SOFT_E2E_JOB },
@@ -37,6 +38,7 @@ export const agentsSamples: GroupSamples<`agents`> = ({ fleet }) => ({
     startFreshHome: undefined,
     clearHomeHistory: undefined,
     stopWatching: { id: fleet.AWAITING_AGENT_ID },
+    stopFamily: { id: fleet.AUDIT_AGENT_ID },
     requestLand: { id: fleet.REVIEW_AGENT_ID },
     land: { id: fleet.REVIEW_AGENT_ID },
     // The refused land read again, settled by hand, and its committed work found in history.

@@ -21,8 +21,10 @@ import {
     landRows,
     pressAutoApprove,
     sessionNameRows,
+    stopAllRows,
     watchRows,
 } from "../../../../models/fleet/presses/agentMenu";
+import { pressStopFamily } from "../../../../models/fleet/presses/familyStop";
 import { boxNameOf, isRemote, openInSandbox } from "../../../../models/fleet/fleetScope";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { draftFreshSession } from "../../../../models/fleet/freshSession";
@@ -145,7 +147,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
                       command: () => act.openInSandbox(sandboxId, agent.id),
                   },
               ],
-        watchRows(agent, facts, act),
+        [...stopAllRows(agent, facts, act), ...watchRows(agent, facts, act)],
         autoApproveRows(agent, facts, act),
         [...filingRows(agent, facts, act), ...closeRows(agent, act)],
     ]);
@@ -198,6 +200,7 @@ export const useCardMenu = (host: MenuHost) => {
         openInSandbox,
         startFresh: (agent, kind) => void draftFreshSession(agent, kind),
         setAutoApprove: (ids, on) => pressAutoApprove(setAutoApprove, ids, on),
+        stopAll: (agent) => pressStopFamily(agent),
         // The menu closes on the press, so the read goes through the ledger: the file arriving is the answer, a refusal a
         // receipt (as the agent page's own row does, AgentSessionMenu).
         exportTranscript: (agent) => {
