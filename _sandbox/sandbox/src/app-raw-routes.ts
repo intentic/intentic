@@ -49,6 +49,7 @@ import { peerDoorRawRoutes } from "./peers/peer-doors.routes.js";
 import { arrivalRawRoutes } from "./portability/arrival.routes.js";
 import { bundleRawRoutes } from "./portability/bundle.routes.js";
 import { gatewayRawRoutes } from "./privacy/gateway/gateway.routes.js";
+import { runnerFleetRawRoutes } from "./runners/fleet/runner-fleet.routes.js";
 import { runnerCredentialRawRoutes } from "./runners/runner-credentials.routes.js";
 import { runnerGitRawRoutes } from "./runners/runner-git.routes.js";
 import { runnerDefinitionRawRoutes } from "./runners/runner.routes.js";
@@ -111,6 +112,7 @@ export const appRawRoutes = (services: Services) =>
         arrivalRawRoutes(services),
         bundleRawRoutes(services),
         gatewayRawRoutes(services),
+        runnerFleetRawRoutes(services),
         runnerCredentialRawRoutes(services),
         runnerGitRawRoutes(services),
         runnerDefinitionRawRoutes(services),

@@ -12,8 +12,10 @@ import type { PersistedAgent } from "../registry/agents-store.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { createFleetReads, readableHandle } from "./fleet-reads.js";
-import { withBaseText } from "../../agent/prompt/prompt-disclosure.js";
+import { recordedPromptReader } from "../../agent/prompt/prompt-disclosure.js";
 import { relayFleetRead } from "../../links/link-records-relay.js";
+import { relayFleetToParent } from "../../runners/fleet/parent-fleet.js";
+import { indexedPath, worktreesRootOf } from "./fleet-overlap.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
 // one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so what lives here
@@ -92,25 +94,23 @@ const resumeRoute =
         return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
     };
 
-// A read made by the agent's `--on <link>`: the same question of a linked sandbox, relayed through its records doors.
-const orOnLink =
+// Where a read is answered: a linked sandbox's records doors for the agent's `--on <link>`; the parent's fleet when this
+// daemon is a runner and a turn the parent placed here asks (runners/fleet/parent-fleet.ts); otherwise here.
+const answeredWhere =
     (services: Services, read: (c: Context<AppEnv>) => Promise<Response>) =>
     async (c: Context<AppEnv>): Promise<Response> => {
         const on = c.req.query("on");
-        return on === undefined || on === "" ? read(c) : relayFleetRead(services, c, on);
+        if (on !== undefined && on !== "") {
+            return relayFleetRead(services, c, on);
+        }
+        const relative = (path: string): string => indexedPath(path, services.workspace.root, worktreesRootOf(services.agentWorktrees));
+        return (await relayFleetToParent(services, c, relative)) ?? (await read(c));
     };
 
 // Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
 const createFleetRoutes = (services: Services) => ({
     // The bundle's system prompt with its base's own text, as GET /agents/{id}/system-prompt answers it.
-    ...createFleetReads(
-        services,
-        (c) => turnReader(services, c),
-        async (id) => {
-            const recorded = await services.promptRecord.of(id);
-            return recorded === undefined ? undefined : await withBaseText(recorded, services.workspace.root);
-        },
-    ),
+    ...createFleetReads(services, (c) => turnReader(services, c), recordedPromptReader(services.promptRecord, services.workspace.root)),
     /** POST /fleet/message: say something to another conversation — steered into its live turn, opening one, or queued
      *  behind one; with `wait`, answered once the turn it reached settles. */
     message: async (c: Context<AppEnv>): Promise<Response> => {
@@ -142,10 +142,10 @@ const createFleetRoutes = (services: Services) => ({
 export const fleetRawRoutes = defineRawRoutes((services: Services) => {
     const fleetRoutes = createFleetRoutes(services);
     return {
-        "GET /fleet": orOnLink(services, fleetRoutes.list),
+        "GET /fleet": answeredWhere(services, fleetRoutes.list),
         "POST /fleet/message": fleetRoutes.message,
         "POST /fleet/resume": resumeRoute(services),
-        "GET /fleet/{handle}": orOnLink(services, fleetRoutes.show),
-        "GET /fleet/{handle}/bundle": orOnLink(services, fleetRoutes.bundle),
+        "GET /fleet/{handle}": answeredWhere(services, fleetRoutes.show),
+        "GET /fleet/{handle}/bundle": answeredWhere(services, fleetRoutes.bundle),
     };
 });

@@ -698,7 +698,10 @@ const nowLines = (now) => {
     return lines;
 };
 
-const writeRecall = (agent) => {
+// `answeredBy` is "parent" when this shell runs on a runner and its parent answered (runners/fleet/parent-fleet.ts): the
+// paths it names are that sandbox's, not this machine's, so the record is read through this command instead.
+const writeRecall = (agent, answeredBy) => {
+    const elsewhere = answeredBy === "parent";
     const failure = agent.failureCode === undefined ? agent.status : `${agent.status} (${agent.failureCode})`;
     process.stdout.write(`${agent.id} · "${agent.title ?? "(untitled)"}" · ${agent.running ? "working" : failure}\n`);
     const settings = [modelOf(agent), agent.effort, agent.harness].filter(Boolean);
@@ -713,7 +716,7 @@ const writeRecall = (agent) => {
         process.stdout.write(`  ${provenance.join(" · ")}\n`);
     }
     if (agent.branch !== undefined) {
-        process.stdout.write(`  branch ${agent.branch} · worktree ${agent.worktree}\n`);
+        process.stdout.write(`  branch ${agent.branch} · worktree ${agent.worktree}${elsewhere ? " (on the sandbox this runner works for)" : ""}\n`);
     }
     if (agent.runner !== undefined) {
         process.stdout.write(`  runs on ${agent.runner}\n`);
@@ -747,7 +750,8 @@ const writeRecall = (agent) => {
         const files = repo.paths.map(({ path, by }) => `${path} ← landed by ${by.map(namedOf).join(", ")}`);
         process.stdout.write(`  ${index === 0 ? "refused land:" : "             "} ${repo.repo}: ${files.join("; ")}\n`);
     }
-    process.stdout.write(`  record ${agent.record} (zstdcat) · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
+    const record = elsewhere ? "kept by the sandbox this runner works for: read it with --transcript or --message" : `${agent.record} (zstdcat)`;
+    process.stdout.write(`  record ${record} · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
     for (const [index, line] of nowLines(agent.now).entries()) {
         process.stdout.write(`${index === 0 ? "now:\n" : ""}  ${line}\n`);
     }
@@ -902,7 +906,7 @@ const show = async (argv) => {
         writeMessage(answer.agent, answer.detail);
         return;
     }
-    writeRecall(answer.agent);
+    writeRecall(answer.agent, answer.answeredBy);
     if (answer.transcript === undefined) {
         process.stdout.write(`more: agents show ${answer.agent.id} --transcript [--last <n>] [--grep <text>] · --message <n>\n`);
         return;

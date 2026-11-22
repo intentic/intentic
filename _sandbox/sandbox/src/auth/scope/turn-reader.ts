@@ -49,6 +49,17 @@ export const turnReader = async (services: Pick<Services, "agents" | "members" |
     if (named === undefined || named === "" || !provesOwner(named, c.req.header("x-intentic-turn-proof"))) {
         return conversationReader(NOBODY, provenance);
     }
-    const readers = (await chainOf(services, named)).map((caller) => conversationReader(caller, provenance));
-    return (conversationId) => conversationId === named || readers.every((reads) => reads(conversationId));
+    return await conversationTurnReader(services, named);
+};
+
+/** What a turn of `conversationId` may read: its own conversation, and what every one of its people may. The caller has
+ *  already settled that the turn asking is that conversation's: its proof here, or a runner it was placed on
+ *  (runners/fleet/runner-fleet.routes.ts). */
+export const conversationTurnReader = async (
+    services: Pick<Services, "agents" | "members" | "ownerEmail">,
+    conversationId: string,
+): Promise<ConversationReader> => {
+    const provenance = registryProvenance(services.agents);
+    const readers = (await chainOf(services, conversationId)).map((caller) => conversationReader(caller, provenance));
+    return (id) => id === conversationId || readers.every((reads) => reads(id));
 };

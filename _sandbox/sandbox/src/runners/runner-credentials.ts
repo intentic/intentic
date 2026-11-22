@@ -11,6 +11,7 @@ import type { HarnessCredentialsResult } from "../agent/providers/harness-creden
 import type { MessageReceipt } from "@intentic/sandbox-contract/schemas/agent";
 import type { Said, Unsaid } from "../seams/turn-starter.js";
 import type { RunnerIdentity } from "./runner-identity.js";
+import type { ParentFleetRead } from "./fleet/parent-fleet.js";
 
 // The runner's side of the credential doors: a dispatched turn asks the origin sandbox for its credential per turn over
 // HTTPS, translated back into the same shape local resolution produces. The refresh hook re-mints at the parent when
@@ -23,6 +24,8 @@ export interface ParentCredentials {
     readonly resolve: (input: { readonly agent?: string; readonly account?: string; readonly model?: string }) => Promise<HarnessCredentialsResult>;
     // Hands a wake for one of the parent's conversations to the parent (runners/ownership/wake.ts); undefined keeps it here.
     readonly wake?: (said: Said) => Promise<MessageReceipt | Unsaid | undefined>;
+    // Asks the parent's fleet a read one of its conversations' turns made here (runners/fleet/parent-fleet.ts).
+    readonly fleet?: ParentFleetRead;
 }
 
 const post = async (url: string, token: string, body: object, timeoutMs: number): Promise<unknown> => {

@@ -115,6 +115,19 @@ export const runnerCredentialRefreshUrl = (parentUrl: string): string => `${pare
 export const runnerTranslatorPath = "/system/runners/translator";
 export const runnerTranslatorUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}${runnerTranslatorPath}`;
 
+// The fleet door: a runner's turn reading the parent's conversations (`agents ls|find|show|bundle`), since the parent holds
+// every record and the runner only the turns it ran. `rest` is the fleet read's own path after `/fleet` and its query,
+// and the request names the conversation it is for in RUNNER_FLEET_CONVERSATION_HEADER.
+export const runnerFleetPath = "/system/runners/fleet";
+export const runnerFleetUrl = (parentUrl: string, rest: string): string => `${parentUrl.replace(/\/$/, "")}${runnerFleetPath}${rest}`;
+export const RUNNER_FLEET_CONVERSATION_HEADER = "x-intentic-runner-conversation";
+// Set on every answer the door gives a runner it knows, so the runner tells the door's own 404 from a parent too old to
+// have one.
+export const RUNNER_FLEET_DOOR_HEADER = "x-intentic-runner-fleet";
+// The door's refusal of a conversation the parent did not place on that runner: the runner reads its own record instead.
+export const RunnerFleetNotPlacedSchema = z.object({ ok: z.literal(false), placed: z.literal(false), message: z.string() });
+export type RunnerFleetNotPlaced = z.infer<typeof RunnerFleetNotPlacedSchema>;
+
 export const RunnerCredentialRequestSchema = z.object({
     // Provider as the turn names it (absent = claude); an open vocabulary, including endpoint/<id>.
     agent: z.string().optional(),

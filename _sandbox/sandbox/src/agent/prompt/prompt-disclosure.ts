@@ -87,3 +87,12 @@ export const withBaseText = async (disclosure: SystemPromptDisclosure, cwd: stri
     const base = await read(cwd, model).catch(() => undefined);
     return base === undefined ? disclosure : { ...disclosure, base: { ...disclosure.base, text: base.text } };
 };
+
+/** A conversation's recorded system prompt with its base's own text, as GET /agents/{id}/system-prompt answers it: what a
+ *  fleet door puts in a conversation's bundle. */
+export const recordedPromptReader =
+    (record: { readonly of: (id: string) => Promise<SystemPromptDisclosure | undefined> }, cwd: string) =>
+    async (id: string): Promise<SystemPromptDisclosure | undefined> => {
+        const recorded = await record.of(id);
+        return recorded === undefined ? undefined : await withBaseText(recorded, cwd);
+    };

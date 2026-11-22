@@ -4,6 +4,7 @@ import { parentCredentialSource } from "./runner-credentials.js";
 import { ensureRunnerIdentity, readRunnerIdentity } from "./runner-identity.js";
 import { startRunnerLink } from "./runner-link.js";
 import { parentWake } from "./ownership/wake.js";
+import { parentFleetRead } from "./fleet/parent-fleet.js";
 import { seedRunnerPresentation } from "./naming/runner-presentation.js";
 import { filePresentationStore } from "../system/presentation/presentation-store.js";
 
@@ -45,6 +46,11 @@ export const startRunnerMode = async (services: Services, env: RunnerModeEnv | u
     );
     // Before the link, so the very first dispatched turn already resolves against the origin's providers.
     // And the owner of every conversation it runs: its own wakes go there (runners/ownership/wake.ts).
-    services.runnerParent.current = { ...parentCredentialSource(identity, services.logger), wake: parentWake(identity, services.logger) };
+    // Its turns' fleet reads go there too: the parent holds every conversation's record (runners/fleet/parent-fleet.ts).
+    services.runnerParent.current = {
+        ...parentCredentialSource(identity, services.logger),
+        wake: parentWake(identity, services.logger),
+        fleet: parentFleetRead(identity),
+    };
     startRunnerLink(services, identity, working);
 };
