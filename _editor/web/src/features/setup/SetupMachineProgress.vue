@@ -14,11 +14,18 @@ import { useSetupRunProgress } from "./progress/useSetupRunProgress";
 // (<StagedProgress>), and kept one press away, opening by themselves when the run fails. Drawn by the Add sandbox
 // run (add/AddSandboxRun.vue), on Home and in its dialog alike.
 
-const { door, machine } = defineProps<{
+const {
+    door,
+    machine,
+    page = false,
+} = defineProps<{
     // The machine the run went to.
     door: MachineDoor;
     // Its run, kept in the operations ledger under the row.
     machine: Pick<SetupOnMachineApi, `run`>;
+    // Drawn as Home's page, whose header already names the machine and says the step and the time left
+    // (features/home/newSandbox/HomeNewSandbox.vue): the card's own heading and estimate are not said twice.
+    page?: boolean;
 }>();
 
 const t = useT();
@@ -60,6 +67,8 @@ watch(
         v-if="run"
         v-model:log="showLog"
         :heading="heading"
+        :hide-heading="page && run.status === `running`"
+        :page="page"
         :progress="progress ?? { elapsedMs: undefined, measured: run.measured }"
         :steps="run.steps"
         :stage="run.stage"
@@ -75,7 +84,7 @@ watch(
         :log-note="t(`setup.setupRunProgress.outputOn`, { machine: door.machineLabel })"
         hide-dismiss
     >
-        <p v-if="run.remaining && run.status === `running`" class="text-2xs text-muted">{{ run.remaining }}</p>
+        <p v-if="!page && run.remaining && run.status === `running`" class="text-2xs text-muted">{{ run.remaining }}</p>
     </StagedProgress>
     <Notice v-if="machine.run.failure.value" :of="machine.run.failure.value" />
 </template>

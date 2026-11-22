@@ -41,7 +41,7 @@ import { pcCardShown, pcCarriesMove } from "./pcSetup/livePcCard";
 import { followRoster, signedIn as rosterSignedIn } from "./roster";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 import { engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine/engine";
-import { agentSettled, openable, openSandbox, useMastheadMenu } from "./face";
+import { agentSettled, openable, openSandbox, useMastheadMenu, workedOnIds } from "./face";
 
 // DEVICES, IN A LOCAL WINDOW: the page the app adds to a local window's rail (host.ts), where the launcher window's card
 // used to be. It is the workspace's Devices view opened on one machine, the one this window runs on: the same masthead
@@ -209,11 +209,8 @@ const mastheadErrands = computed(
 
 const mastheadMenu = useMastheadMenu(restartAgent);
 
-// The row a verb is working on, by the id the list knows it by: its status glyph spins, as on the workspace's page.
-const busyIds = computed(() => {
-    const slug = busy.value?.slug;
-    return slug === undefined ? [] : groups.value.filter((group) => group.sandbox?.slug === slug).map((group) => group.sandboxId);
-});
+// The rows a verb, or the setup card above, is working on: their status glyphs spin (face.ts `workedOnIds`).
+const busyIds = computed(() => workedOnIds(groups.value, busy.value?.slug, activeRun.value === `setup` ? pending.value : undefined));
 
 /* The way back says where it goes, and that leaving this page does not stop a live setup. */
 const backTip = computed((): Tip => ({ title: t(`desktop.app.openWorkspace`), note: running.value ? t(`desktop.app.installKeepsRunning`) : `` }));

@@ -3,6 +3,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { unfinishedSandboxes } from "../../models/sandbox/live/roster";
+import { newSandbox } from "../home/newSandbox/newSandbox";
 import { type SandboxAttentionItem, useSandboxAttention } from "../sandbox/overview/sandboxAttention";
 
 // Everything the getting-started ring carries besides its checklist (SandboxErrands.vue): the active sandbox's needs and
@@ -20,7 +21,10 @@ export interface SandboxErrands {
 export const useSandboxErrands = (): SandboxErrands => {
     const sandbox = useSandbox();
     const { needs, notes, badge } = useSandboxAttention();
-    const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
+    // Not the one Home is making right now: its row is unfinished only until its run ends, and its own tile carries it
+    // (features/home/newSandbox/), so the ring counting it as an errand of the reader's said "needs you" of a run going fine.
+    const making = computed(() => newSandbox.value?.here.add.created.value?.id);
+    const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value).filter((row) => row.id !== making.value));
     const any = computed(() => needs.value.length > 0 || notes.value.length > 0 || unfinished.value.length > 0);
     return { needs, notes, unfinished, badge, any };
 };

@@ -44,6 +44,10 @@ and a guard test fails on any navigation to `/setup` written anywhere else (`rou
 - **A press on a connected machine** runs `ic sandbox connect` there and streams its output back
   (`flow/useSetupOnMachine.ts`); the page reads those lines with the engine the desktop app reads its own install with
   (sandbox-run's `setup-progress`), in `progress/`, and draws them with `<StagedProgress>` (`SetupMachineProgress.vue`).
+  On Home's page (`page`) the card drops the heading and the estimate the page's header already says, and its steps
+  take the page's type; the app's install (`DesktopSetupProgress.vue`, `inPlace`) and a machine of ours' steps
+  (`HostedWaitSteps.vue`) do the same, so the header and the lane never say the same figure twice. How far each lane
+  has got is read once more where the run lives, for its tile and This computer (`features/home/newSandbox/newSandboxGauge.ts`).
 - **A machine of ours** (`flow/useHostedLane.ts`): provisioned on the row (on the tier the address named), waited on with
   its steps (`hostedWait.ts`, `HostedWaitSteps.vue`), started over where that can help.
 - **The row and the watch** (`flow/useSetupRow.ts`, `flow/useRegistryWatch.ts`): the row is made only on the press and

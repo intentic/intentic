@@ -14601,8 +14601,8 @@
         "newSandbox": {
             "title": "Neue Sandbox",
             "settingUp": "{name} wird eingerichtet",
-            "meanwhile": "Wechseln Sie solange zu einer anderen Sandbox. Diese Kachel zeigt weiter, wie weit es ist, und {name} öffnet sich hier, sobald sie bereit ist.",
-            "failedLine": "Sie hat angehalten, bevor sie bereit war. Was passiert ist, steht unten.",
+            "meanwhile": "Sie können währenddessen in jeder anderen Sandbox arbeiten. Die Kachel {name} in der Leiste zeigt, wie weit es ist, und Sie erfahren, wenn es bereit ist.",
+            "failedLine": "Was schiefging, steht unten.",
             "create": "Sandbox erstellen",
             "dismiss": "Verwerfen",
             "ready": "Bereit · zum Öffnen doppelklicken",
@@ -14613,15 +14613,33 @@
                 "asking": "Wartet auf Ihre Antwort",
                 "failed": "Angehalten, bevor sie bereit war",
                 "refused": "Konnte nicht erstellt werden",
-                "opening": "Startet zum ersten Mal"
+                "opening": "Startet zum ersten Mal",
+                "now": "Jetzt",
+                "left": "Noch"
             },
-            "preparing": "Wird vorbereitet…"
+            "preparing": "Wird vorbereitet…",
+            "stepOf": "Schritt {index} von {count}",
+            "toast": {
+                "ready": "{name} ist bereit",
+                "asking": "Die Einrichtung von {name} braucht Ihre Antwort",
+                "failed": "{name} wurde gestoppt, bevor es bereit war",
+                "show": "Anzeigen",
+                "seeWhy": "Grund ansehen"
+            },
+            "where": {
+                "here": "Auf diesem Computer",
+                "machine": "Auf {machine}",
+                "hosted": "Auf einer Intentic-Maschine in unserer Cloud",
+                "command": "Auf Ihrem Server, mit dem Befehl unten",
+                "attach": "Läuft bereits unter seiner eigenen Adresse"
+            }
         },
         "otherSandboxes": {
             "label": "Alle Sandboxes: {names}",
             "needing": "{count} braucht dich | {count} brauchen dich",
             "waiting": "Wartet auf dich",
-            "quiet": "Nichts wartet"
+            "quiet": "Nichts wartet",
+            "ready": "Bereit"
         }
     },
     "hostedStart": {
@@ -14689,7 +14707,7 @@
             "failedBecause": "Warum es angehalten hat",
             "gone": "Das ist beendet.",
             "meanwhile": "Es läuft weiter, während du etwas anderes tust. Seine Kachel in der Leiste zeigt den Fortschritt.",
-            "devices": "Mehr dazu unter Geräte"
+            "devices": "Alle Schritte und das Protokoll, unter Geräte"
         }
     },
     "run": {

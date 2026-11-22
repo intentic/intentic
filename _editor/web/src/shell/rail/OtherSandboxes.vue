@@ -21,7 +21,8 @@ import { useFolderPlace } from "../../features/sandbox/gates/switcherPlace";
 import type { AttentionReading } from "../../models/home/homeFacts";
 import { localRailUnrolled } from "../../models/home/masterRail";
 import { identityHue } from "../../lib/identityHue";
-import { clusterOf } from "../../models/home/otherSandboxes";
+import { type ClusterSlot, clusterOf, type MakingBox } from "../../models/home/otherSandboxes";
+import { newSandbox, readNewSandbox, readySandboxes } from "../../features/home/newSandbox/newSandbox";
 import { sandboxOrder } from "../../models/home/sandboxOrder";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
@@ -40,12 +41,24 @@ const { local } = place;
 // folder window, which reaches no sandbox's daemon.
 const nothingRead = computed<ReadonlyMap<string, AttentionReading>>(() => new Map());
 const readings = local ? nothingRead : useHomeAttention({ everyMs: 45_000, skip: () => sandbox.activeSandboxId.value });
+// The sandbox Home is making, from its press until its run ends (features/home/newSandbox/newSandbox.ts), ringed among
+// the others, so a reader inside another sandbox sees it and has the way back to it. A folder window makes its own.
+const making = computed((): MakingBox | undefined => {
+    const run = newSandbox.value;
+    const reading = readNewSandbox(run);
+    if (local || run === undefined || reading === undefined || reading.phase === `draft`) {
+        return undefined;
+    }
+    return { id: run.here.add.created.value?.id, name: reading.name === `` ? t(`home.newSandbox.title`) : reading.name, state: reading.phase };
+});
+const makingNote = computed(() => readNewSandbox(newSandbox.value)?.note);
 const cluster = computed(() =>
     clusterOf(
         switchableSandboxes(sandbox.sandboxes.value),
         sandbox.activeSandboxId.value,
         readings.value,
         local ? place.arranged.value : sandboxOrder.value,
+        { making: making.value, ready: local ? undefined : readySandboxes.value },
     ),
 );
 
@@ -98,17 +111,42 @@ const unrollHere = (): void => {
 };
 
 const needy = computed(() => cluster.value.slots.filter((slot) => slot.needsYou > 0));
+// The hover's rows: the sandbox being made and where it stands, one made while the reader was elsewhere, then what waits.
+const tipRows = computed(() => [
+    ...cluster.value.slots.filter((slot) => slot.making !== undefined).map((slot) => ({
+            label: slot.name,
+            value: makingNote.value ?? ``,
+            tone: slot.making === `failed` ? (`danger` as const) : slot.making === `asking` ? (`warning` as const) : undefined,
+        })),
+    ...cluster.value.slots.filter((slot) => slot.ready === true).map((slot) => ({ label: slot.name, value: t(`home.otherSandboxes.ready`) })),
+    ...needy.value.map((slot) => ({ label: slot.name, value: slot.needsYou })),
+]);
 const tip = computed<Tip>(() => ({
     title: t(`home.open`),
     keys: commandShortcut(`view.home`),
-    rows: needy.value.map((slot) => ({ label: slot.name, value: slot.needsYou })),
+    rows: tipRows.value,
     // A folder window counts nothing, so it says nothing about what waits.
     note: local ? undefined : needy.value.length > 0 ? t(`home.otherSandboxes.waiting`) : t(`home.otherSandboxes.quiet`),
 }));
+// A circle's point: a count waiting there, the sandbox being made asking something (warning) or stopped (danger), or one
+// made while the reader was elsewhere (the ready mark's own tone).
+const pointOf = (slot: ClusterSlot): string | undefined => {
+    if (slot.making === `failed`) {
+        return badgeClass({ tone: `danger` });
+    }
+    if (slot.making === `asking`) {
+        return badgeClass({ tone: `warning` });
+    }
+    if (slot.needsYou > 0) {
+        return badgeClass({ count: slot.needsYou });
+    }
+    return slot.ready === true ? badgeClass({ tone: `info` }) : undefined;
+};
 const label = computed(() =>
     [
         t(`home.otherSandboxes.label`, { names: cluster.value.names.join(`, `) }),
         cluster.value.needing > 0 ? t(`home.otherSandboxes.needing`, { count: cluster.value.needing }) : undefined,
+        making.value === undefined || makingNote.value === undefined ? undefined : `${making.value.name}: ${makingNote.value}`,
     ]
         .filter((part) => part !== undefined)
         .join(`. `),
@@ -138,9 +176,15 @@ const label = computed(() =>
                 :style="{ ...at(index), ...(slot.image ? {} : tint(slot.id)) }"
             >
                 <SandboxLogo :image="slot.image" :name="slot.name" class="rounded-full [&_span]:text-inherit" />
+                <!-- The sandbox being made: a turning arc around its circle while it runs, the rail's "in flight" ink. -->
+                <span
+                    v-if="slot.making === `running` || slot.making === `opening`"
+                    class="icon-rail-cluster-ring absolute rounded-full motion-safe:animate-spin"
+                    data-cluster-making
+                ></span>
                 <!-- Which of them waits for the reader: a point on that circle, in the count chip's own plate, above the circles that
                      overlap it. -->
-                <span v-if="slot.needsYou > 0" class="icon-rail-cluster-point absolute z-10 rounded-full" :class="badgeClass({ count: slot.needsYou })"></span>
+                <span v-if="pointOf(slot)" class="icon-rail-cluster-point absolute z-10 rounded-full" :class="pointOf(slot)"></span>
             </span>
             <span
                 v-if="cluster.more > 0"

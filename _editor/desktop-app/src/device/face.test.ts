@@ -134,3 +134,14 @@ it(`keeps Restart behind the masthead's ⋯ while the agent is well, and hands i
     expect(stopped.face.agentSettled.value).toBe(false);
     expect(stopped.face.useMastheadMenu(async () => undefined).value).toEqual([]);
 });
+
+it(`spins the row a verb works on, and the row of the sandbox the setup card is making while that runs`, async () => {
+    machineWith(true);
+    const { face } = await load();
+    const group = (sandboxId: string, slug: string): DeviceSandboxGroup => ({ sandboxId, title: sandboxId, sandbox: { slug, running: false, image: `img` }, ports: [] });
+    const groups = [group(`a`, `slug-a`), group(`b`, `slug-b`), group(`c`, `slug-c`)];
+    expect(face.workedOnIds(groups, `slug-a`, undefined)).toEqual([`a`]);
+    expect(face.workedOnIds(groups, undefined, { sandboxId: `b` })).toEqual([`b`]);
+    expect(face.workedOnIds(groups, `slug-a`, { slug: `slug-c` })).toEqual([`a`, `c`]);
+    expect(face.workedOnIds(groups, undefined, undefined)).toEqual([]);
+});

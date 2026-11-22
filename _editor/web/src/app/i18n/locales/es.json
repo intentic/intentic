@@ -14601,8 +14601,8 @@
         "newSandbox": {
             "title": "Nuevo sandbox",
             "settingUp": "Configurando {name}",
-            "meanwhile": "Mientras tanto, vuelve a cualquier otro sandbox. Este icono sigue mostrando cuánto ha avanzado, y {name} se abre aquí en cuanto esté listo.",
-            "failedLine": "Se detuvo antes de estar listo. Abajo está lo que pasó.",
+            "meanwhile": "Mientras tanto puedes trabajar en cualquier otro sandbox. El mosaico {name} de la barra muestra cuánto lleva, y se te avisa cuando esté listo.",
+            "failedLine": "Lo que salió mal está abajo.",
             "create": "Crear sandbox",
             "dismiss": "Descartar",
             "ready": "Listo · doble clic para abrir",
@@ -14613,15 +14613,33 @@
                 "asking": "Necesita tu respuesta",
                 "failed": "Se detuvo antes de estar listo",
                 "refused": "No se pudo crear",
-                "opening": "Arrancando por primera vez"
+                "opening": "Arrancando por primera vez",
+                "now": "Ahora",
+                "left": "Falta"
             },
-            "preparing": "Preparándolo…"
+            "preparing": "Preparándolo…",
+            "stepOf": "Paso {index} de {count}",
+            "toast": {
+                "ready": "{name} está listo",
+                "asking": "La configuración de {name} necesita tu respuesta",
+                "failed": "{name} se detuvo antes de estar listo",
+                "show": "Mostrar",
+                "seeWhy": "Ver por qué"
+            },
+            "where": {
+                "here": "En este ordenador",
+                "machine": "En {machine}",
+                "hosted": "En una máquina de Intentic, en nuestra nube",
+                "command": "En tu servidor, con el comando de abajo",
+                "attach": "Ya funciona en su propia dirección"
+            }
         },
         "otherSandboxes": {
             "label": "Todos los sandboxes: {names}",
             "needing": "{count} te necesita | {count} te necesitan",
             "waiting": "Te esperan",
-            "quiet": "Nada pendiente"
+            "quiet": "Nada pendiente",
+            "ready": "Listo"
         }
     },
     "hostedStart": {
@@ -14689,7 +14707,7 @@
             "failedBecause": "Por qué se detuvo",
             "gone": "Esto ha terminado.",
             "meanwhile": "Sigue mientras haces otra cosa. Su icono en la barra muestra cómo va.",
-            "devices": "Más detalle en Dispositivos"
+            "devices": "Todos los pasos y el registro, en Dispositivos"
         }
     },
     "run": {

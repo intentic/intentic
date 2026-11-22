@@ -5,11 +5,16 @@
      drawn twice, and a run this page holds itself is the page's own tile already. A sandbox Home's rail already has a tile
      for (`tiled`) carries its own runs on that tile while they work (processTiles.ts `foldedOnSandbox`), and its setup,
      once finished, is put away here rather than left as a "done" tile beside it: the sandbox's tile is marked ready
-     instead, unless it is the one on screen. -->
+     instead, unless it is the one on screen.
+     ON A SANDBOX'S RAIL THE NEW SANDBOX IS HERE TOO (2026-11-22): Home's rail has its tile among the sandboxes, but a reader
+     who made one and went into another sandbox lost it, and with it any sign of how far it was, whether it asked them
+     something or had stopped. So the sandbox rail leads this group with the same tile (NewSandboxTile.vue), whose press
+     shows its page on Home, as every tile here does. -->
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { markReady, newSandbox } from "../../features/home/newSandbox/newSandbox";
+import NewSandboxTile from "../../features/home/newSandbox/NewSandboxTile.vue";
+import { markReady, newSandbox, newSandboxTileShown, readNewSandbox } from "../../features/home/newSandbox/newSandbox";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { ADD_SANDBOX_HOME_PATH } from "../../models/sandbox/addSandbox";
 import { useFaceProcesses } from "../../models/processes/faceProcesses";
@@ -65,6 +70,8 @@ watch(
     { immediate: true },
 );
 const selected = computed(() => processAskedBy(route));
+// The new sandbox's tile, on a sandbox's rail only (Home's draws it among its sandboxes), from the press until its run ends.
+const leads = computed(() => sandboxRail && readNewSandbox(newSandbox.value) !== undefined && newSandboxTileShown(route, newSandbox.value));
 // Pushed, so Back returns to the chat or the screen the reader pressed it from.
 const open = (tile: ProcessTile): void => {
     if (tile.report.sandboxId !== undefined && tile.report.sandboxId === making.value) {
@@ -78,5 +85,7 @@ const open = (tile: ProcessTile): void => {
 </script>
 
 <template>
-    <ProcessTiles :tiles="tiles" :selected="selected" @open="open" />
+    <ProcessTiles :tiles="tiles" :selected="selected" :lead="leads" @open="open">
+        <NewSandboxTile v-if="leads" />
+    </ProcessTiles>
 </template>

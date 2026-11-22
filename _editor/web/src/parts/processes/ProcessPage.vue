@@ -1,7 +1,10 @@
 <!-- A PROCESS'S PAGE, the same in both faces (processReport.ts): on Home in the chat's place, in a local window as a route
      of its shell. What it is and where it stands, how far, what it asks of the reader, why it stopped, and every press it
      takes, answered here rather than on another screen. The run is never this page's: leaving it changes nothing, which
-     the page says. A face that has more to show (Devices' card on This computer) puts it in the slot. -->
+     the page says. A face that has more to show (Devices' card on This computer) puts it in the slot.
+     READ AT A GLANCE (2026-11-22), as Home's new sandbox reads (features/home/newSandbox/HomeNewSandbox.vue): the run's
+     face and name with its percent beside them, and under them one line of where it is (the step of how many, what it is
+     doing, the time left) while it runs, or what it waits for, or that it stopped, in that state's tone. -->
 <script setup lang="ts">
 import { Button, Meter, Page, SandboxLogo, SectionHeader, toneTint, useCopied } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
@@ -17,7 +20,28 @@ const t = useT();
 
 const tile = computed(() => (report === undefined ? undefined : processTileOf(report)));
 const share = computed(() => (report?.percent === undefined || !processLive(report) ? undefined : report.percent / 100));
-const figures = computed(() => [report?.position, report?.remaining].filter((part): part is string => part !== undefined).join(` · `));
+const percent = computed(() => (share.value === undefined || report?.state !== `running` ? undefined : Math.round(share.value * 100)));
+// Running, the line is where it is: its place, what it is doing and what is left, in the owner's words as they came.
+// Otherwise it is the state's own line (processWords.ts): what it waits for, that it stopped, that it is done.
+const running = computed(() => report?.state === `running`);
+const progressLine = computed(() =>
+    [report?.position, report?.line, report?.remaining].filter((part): part is string => part !== undefined && part !== ``).join(` · `),
+);
+const statusLine = computed(() => (running.value && progressLine.value !== `` ? progressLine.value : tile.value?.note));
+const statusTone = computed(() => {
+    switch (report?.state) {
+        case `waiting`:
+            return processAsks(report) ? `font-medium text-warning` : `text-muted`;
+        case `failed`:
+            return `font-medium text-danger`;
+        case `done`:
+            return `text-success`;
+        case `running`:
+            return `text-content`;
+        default:
+            return `text-muted`;
+    }
+});
 const actions = computed(() => report?.actions ?? []);
 const needs = computed(() => report?.needs ?? []);
 
@@ -44,29 +68,30 @@ const needActionLabel = (act: ProcessAction, need: ProcessNeed): string =>
     <section class="flex min-h-0 min-w-0 flex-1 flex-col" :aria-label="tile?.title" data-process-page>
         <div class="min-h-0 flex-1 overflow-y-auto">
             <Page>
-                <div class="mx-auto flex w-full max-w-lg flex-col gap-6 py-6">
+                <div class="mx-auto flex w-full max-w-xl flex-col gap-6 py-8">
                     <p v-if="report === undefined || tile === undefined" class="text-sm text-muted">{{ t(`processes.page.gone`) }}</p>
                     <template v-else>
-                        <header class="flex items-start gap-4">
-                            <SandboxLogo v-if="`logo` in tile.glyph" :image="null" :name="tile.glyph.logo" :size="48" class="shrink-0 rounded-xl" />
-                            <span v-else class="flex size-12 shrink-0 items-center justify-center rounded-xl bg-content/5 text-xl text-muted">
-                                <Icon :name="tile.glyph.icon" aria-hidden="true" />
+                        <header class="flex items-start gap-4" :data-state="report.state">
+                            <span class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-content/5 text-2xl text-muted">
+                                <SandboxLogo v-if="`logo` in tile.glyph" :image="null" :name="tile.glyph.logo" :size="40" />
+                                <Icon v-else :name="tile.glyph.icon" aria-hidden="true" />
                             </span>
-                            <div class="flex min-w-0 flex-col gap-1">
-                                <h1 class="truncate text-xl font-semibold text-content">{{ tile.title }}</h1>
-                                <p class="flex items-center gap-2 text-sm text-muted" data-process-note>
-                                    <Icon v-if="processLive(report) && !processAsks(report)" name="spinner" spin class="text-xs text-link" aria-hidden="true" />
-                                    {{ tile.note }}
+                            <div class="flex min-w-0 flex-1 flex-col gap-1">
+                                <div class="flex items-baseline gap-3">
+                                    <h1 class="min-w-0 flex-1 truncate text-xl font-semibold text-content">{{ tile.title }}</h1>
+                                    <span v-if="percent !== undefined" class="shrink-0 font-mono text-lg tabular-nums text-muted" data-process-percent>{{ percent }}%</span>
+                                </div>
+                                <p class="flex items-center gap-2 text-sm" :class="statusTone" data-process-note>
+                                    <Icon v-if="processLive(report) && !processAsks(report)" name="spinner" spin class="shrink-0 text-xs text-link" aria-hidden="true" />
+                                    <Icon v-else-if="processAsks(report) || report.state === `failed`" name="exclamation-circle" class="shrink-0" aria-hidden="true" />
+                                    {{ statusLine }}
                                 </p>
                             </div>
                         </header>
 
-                        <div v-if="share !== undefined || figures !== ``" class="flex flex-col gap-1.5">
-                            <Meter v-if="share !== undefined" :value="share" size="md" :label="tile.title" :valuetext="tile.note" class="w-full" />
-                            <p v-if="figures !== ``" class="text-xs text-muted">{{ figures }}</p>
-                        </div>
+                        <Meter v-if="share !== undefined" :value="share" size="md" :label="tile.title" :valuetext="statusLine" class="w-full" />
 
-                        <div v-if="report.failure" :class="toneTint(`danger`, `soft`, `flex flex-col gap-1 rounded-lg p-3`)" data-process-failure>
+                        <div v-if="report.failure" :class="toneTint(`danger`, `soft`, `flex flex-col gap-1 rounded-lg px-4 py-3`)" data-process-failure>
                             <span class="text-xs font-medium text-danger">{{ t(`processes.page.failedBecause`) }}</span>
                             <p class="whitespace-pre-line text-sm text-content">{{ report.failure }}</p>
                         </div>
@@ -105,7 +130,7 @@ const needActionLabel = (act: ProcessAction, need: ProcessNeed): string =>
                             />
                         </div>
 
-                        <p v-if="report.state === `running`" class="text-xs text-muted">{{ t(`processes.page.meanwhile`) }}</p>
+                        <p v-if="report.state === `running`" class="border-t border-line pt-4 text-xs text-muted">{{ t(`processes.page.meanwhile`) }}</p>
                     </template>
                 </div>
             </Page>

@@ -48,6 +48,8 @@ const props = defineProps<{
     logNote?: string | undefined;
     /** Inside a surface whose own buttons put an ended run away (a dialog's footer), so there are not two. */
     hideDismiss?: boolean;
+    /** Drawn as a page's subject (Home's new sandbox) rather than inside a card: the list's type a step larger. */
+    page?: boolean;
 }>();
 
 defineEmits<{ dismiss: [] }>();
@@ -152,10 +154,10 @@ const spoken = computed(() => [running.value?.label, figure.value].filter((part)
     <div class="flex flex-col gap-3">
         <!-- One line for the whole run: what it is, and how long it has left (or has been going). -->
         <div v-if="!hideHeading" class="flex items-baseline gap-2">
-            <span class="flex-1 text-xs font-medium text-content">{{ heading }}</span>
-            <span v-if="figure" class="shrink-0 font-mono text-2xs tabular-nums text-muted">{{ figure }}</span>
+            <span class="flex-1 font-medium text-content" :class="page ? `text-sm` : `text-xs`">{{ heading }}</span>
+            <span v-if="figure" class="shrink-0 font-mono tabular-nums text-muted" :class="page ? `text-xs` : `text-2xs`">{{ figure }}</span>
         </div>
-        <p v-else-if="leftLine" class="text-xs text-muted first-letter:uppercase">{{ leftLine }}</p>
+        <p v-else-if="leftLine" class="text-muted first-letter:uppercase" :class="page ? `text-sm` : `text-xs`">{{ leftLine }}</p>
 
         <!-- Read out once per step, not once per second: the label changes when the step does. -->
         <span class="sr-only" aria-live="polite">{{ running?.label }}</span>
@@ -202,40 +204,38 @@ const spoken = computed(() => [running.value?.label, figure.value].filter((part)
             </li>
         </ol>
 
-        <!-- A longer plan: one bar, then the steps as a list with the running one's detail under it. -->
+        <!-- A longer plan: one bar, then the steps as a list with the running one's detail under it. One continuous bar
+             (2026-11-22): drawn as a segment per step, sized by its weight, the quick steps shrank to dots beside a long
+             download and the bar read as a dotted line rather than how far the run had got. -->
         <template v-if="!columns">
             <div
-                class="flex h-1.5 gap-0.5 overflow-hidden rounded-full"
+                class="h-2 overflow-hidden rounded-full"
+                :class="running?.state === 'running' && share === 0 ? `animate-pulse bg-primary-400/30` : `bg-content/10`"
                 role="progressbar"
                 :aria-label="heading"
                 aria-valuemin="0"
                 aria-valuemax="100"
                 :aria-valuenow="share"
                 :aria-valuetext="spoken"
+                data-staged-bar
             >
                 <div
-                    v-for="step in steps"
-                    :key="step.key"
-                    class="h-full overflow-hidden rounded-full"
-                    :class="step.state === 'running' && step.fill === 0 ? `animate-pulse bg-primary-400/30` : `bg-canvas`"
-                    :style="{ flexGrow: step.weight, flexBasis: 0 }"
-                >
-                    <div
-                        class="h-full rounded-full transition-[width] duration-500 ease-out"
-                        :class="step.state === 'stopped' ? `bg-warning` : `bg-primary-400`"
-                        :style="{ width: `${step.state === 'done' ? 100 : step.fill * 100}%` }"
-                    />
-                </div>
+                    class="h-full rounded-full transition-[width] duration-500 ease-out"
+                    :class="status === 'stopped' ? `bg-warning` : status === 'done' ? `bg-success` : `bg-primary-400`"
+                    :style="{ width: `${status === 'done' ? 100 : share}%` }"
+                />
             </div>
 
-            <ol class="flex flex-col gap-1.5">
-                <li v-for="step in steps" :key="step.key" class="flex items-center gap-2">
-                    <Icon :name="ICONS[step.state]" :spin="step.state === 'running'" :class="`shrink-0 ${TONES[step.state]}`" />
+            <ol class="flex flex-col gap-2">
+                <li v-for="step in steps" :key="step.key" class="flex items-start gap-2.5" :data-step-state="step.state">
+                    <Icon :name="ICONS[step.state]" :spin="step.state === 'running'" :class="[`shrink-0`, page ? `text-sm` : `text-xs`, TONES[step.state]]" />
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate text-2xs" :class="LABEL_TONES[step.state]">{{ step.label }}</span>
-                        <span v-if="step.state === 'running'" class="block truncate text-2xs text-subtle">{{ detail ?? step.note }}</span>
+                        <span class="block truncate" :class="[page ? `text-sm` : `text-xs`, LABEL_TONES[step.state]]">{{ step.label }}</span>
+                        <span v-if="step.state === 'running' && (detail ?? step.note)" class="block truncate text-muted" :class="page ? `text-xs` : `text-2xs`">{{
+                            detail ?? step.note
+                        }}</span>
                     </span>
-                    <span v-if="clockOf(step)" class="shrink-0 font-mono text-2xs tabular-nums text-muted">{{ clockOf(step) }}</span>
+                    <span v-if="clockOf(step)" class="shrink-0 font-mono tabular-nums text-muted" :class="page ? `text-xs leading-5` : `text-2xs leading-4`">{{ clockOf(step) }}</span>
                 </li>
             </ol>
         </template>

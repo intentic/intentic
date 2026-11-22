@@ -9,6 +9,7 @@ import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE } from "../../../models/sandbox/ad
 import { FINISH_QUERY } from "../../../models/sandbox/finishOnHome";
 import { toTop } from "../../../lib/routes/links";
 import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
+import { gaugePercent, type NewSandboxGauge } from "./newSandboxGauge";
 
 // A NEW SANDBOX IS MADE ON HOME, IN A TILE OF ITS OWN (2026-10-26). The + on Home's rail, its first-run page, and every
 // other "Add sandbox" on a desktop (the switcher inside a sandbox, the palette, a folder window of the app) open Home
@@ -89,6 +90,8 @@ export interface NewSandboxRun {
     readonly opening: Readonly<Ref<boolean>>;
     /** A setup left unfinished is what this run finishes, rather than a sandbox it makes: there is no form to go back to. */
     readonly resumed: Readonly<Ref<boolean>>;
+    /** How far it has got, whichever way it runs (newSandboxGauge.ts); undefined before the press went somewhere. */
+    readonly gauge: Readonly<Ref<NewSandboxGauge | undefined>>;
     /** The press, so the tile stands from it. */
     readonly create: () => Promise<void>;
     /** The press on a setup left unfinished, finished in place (on a machine of ours where `asked`); the tile stands from it as from Create. */
@@ -161,6 +164,8 @@ export interface NewSandboxFacts {
     /** The machine running the command said what broke. */
     readonly commandFailed?: boolean;
     readonly report: Pick<DesktopSetupReport, `state` | `percent` | `waitingFor`> | undefined;
+    /** How full the run is by its own gauge (newSandboxGauge.ts), whichever way it runs; the app's report stands in without one. */
+    readonly percent?: number | undefined;
 }
 
 /**
@@ -195,8 +200,8 @@ export const newSandboxPhase = (facts: NewSandboxFacts): NewSandboxPhase => {
     return `running`;
 };
 
-/** The tile's line under its name, in the hover and its accessible name; the app's own percent while it gives one. */
-export const newSandboxNote = (phase: NewSandboxPhase, facts: Pick<NewSandboxFacts, `started` | `report`>): string => {
+/** The tile's line under its name, in the hover and its accessible name; the run's own percent while it gives one. */
+export const newSandboxNote = (phase: NewSandboxPhase, facts: Pick<NewSandboxFacts, `started` | `report` | `percent`>): string => {
     switch (phase) {
         case `draft`:
             return t(`home.newSandbox.tile.draft`);
@@ -207,7 +212,8 @@ export const newSandboxNote = (phase: NewSandboxPhase, facts: Pick<NewSandboxFac
         case `failed`:
             return facts.started === undefined ? t(`home.newSandbox.tile.refused`) : t(`home.newSandbox.tile.failed`);
         default: {
-            const percent = facts.started === `here` && facts.report?.state === `running` ? Math.round(facts.report.percent) : undefined;
+            const fromApp = facts.started === `here` && facts.report?.state === `running` ? Math.round(facts.report.percent) : undefined;
+            const percent = facts.percent ?? fromApp;
             return percent === undefined || percent <= 0
                 ? t(`home.newSandbox.tile.running`)
                 : t(`home.newSandbox.tile.runningPercent`, { percent });
@@ -220,6 +226,7 @@ export interface NewSandboxReading {
     readonly phase: NewSandboxPhase;
     readonly note: string;
     readonly name: string;
+    readonly gauge: NewSandboxGauge | undefined;
 }
 
 /** The published run read flat, as its page and its tile both read it; undefined while there is none. */
@@ -238,7 +245,8 @@ export const readNewSandbox = (run: NewSandboxRun | undefined): NewSandboxReadin
         hostedFailed: add.hostedRow.value !== null && add.hostedWait.value.failure !== undefined,
         commandFailed: add.command.wait.reportFailures.value !== null,
         report: desktopReport.value,
+        percent: gaugePercent(run.gauge.value),
     };
     const phase = newSandboxPhase(facts);
-    return { phase, note: newSandboxNote(phase, facts), name: add.created.value?.name ?? add.name.value.trim() };
+    return { phase, note: newSandboxNote(phase, facts), name: add.created.value?.name ?? add.name.value.trim(), gauge: run.gauge.value };
 };

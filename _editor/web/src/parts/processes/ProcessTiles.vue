@@ -1,7 +1,9 @@
 <!-- THE RAIL'S TEMPORARY GROUP (models/processes/processTiles.ts): a tile per process under way, drawn the same on Home's
      rail, the sandbox rail and This computer's, worn like every other tile (a glyph or the sandbox's letters, a mark in the
      top corner for news, the spinning mark in the bottom one while it works). A press opens its page in the face the
-     reader is in; each rail says where by `open`. Nothing when nothing runs, divider included. -->
+     reader is in; each rail says where by `open`. Nothing when nothing runs, divider included. A rail with a tile of its
+     own for the group (the sandbox rail's new sandbox, shell/rail/RailProcesses.vue) puts it in the slot, first, and says
+     it stands with `lead`. -->
 <script setup lang="ts">
 import { SandboxLogo } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
@@ -11,15 +13,20 @@ import type { ProcessTile } from "../../models/processes/processTiles";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../workbench/views/viewBadge";
 
-const { tiles, selected = undefined } = defineProps<{ tiles: readonly ProcessTile[]; selected?: string | undefined }>();
+const {
+    tiles,
+    selected = undefined,
+    lead = false,
+} = defineProps<{ tiles: readonly ProcessTile[]; selected?: string | undefined; lead?: boolean }>();
 const emit = defineEmits<{ open: [tile: ProcessTile] }>();
 const t = useT();
 </script>
 
 <template>
-    <template v-if="tiles.length > 0">
+    <template v-if="tiles.length > 0 || lead">
         <span class="my-1 icon-rail-divider h-px shrink-0 bg-line" aria-hidden="true"></span>
         <div role="group" :aria-label="t(`processes.group`)" class="flex shrink-0 flex-col items-center" data-process-tiles>
+            <slot />
             <button
                 v-for="tile in tiles"
                 :key="tile.id"

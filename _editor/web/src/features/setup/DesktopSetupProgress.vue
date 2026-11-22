@@ -83,13 +83,18 @@ const answer = (act: ProcessAction): void => {
 const sessionEnd = computed(() => (report.state === `waiting` && (report.waitingFor === `restart` || report.waitingFor === `signOut`) ? report.waitingFor : undefined));
 // A question on the app's card, the one wait the reader answers there.
 const asking = computed(() => report.state === `waiting` && sessionEnd.value === undefined && !pcSetup.value);
+// On Home's page the heading stands only where it says what the page's header cannot: a wait, or an app gone quiet.
+const headed = computed(() => sessionEnd.value !== undefined || pcSetup.value || asking.value || silence.value === `gone`);
 </script>
 
 <template>
     <!-- `done` draws nothing: the app opens the workspace itself the moment the run ends well. -->
-    <div v-if="report.state !== `done`" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm p-3">
+    <!-- ON HOME'S PAGE (`inPlace`, 2026-11-22) the page's header already says where it runs, the step of how many, the
+         time left and the percent: no card of its own around the bar, no heading that repeats them, and the page's type. A
+         wait keeps its heading there, since what it waits for is the news. -->
+    <div v-if="report.state !== `done`" class="flex flex-col" :class="inPlace ? `gap-3 text-sm` : `gap-2 rounded-lg bg-card p-3 shadow-sm`">
         <template v-if="report.state === `running` || report.state === `waiting`">
-            <div class="flex items-baseline gap-2 text-2xs">
+            <div v-if="!inPlace || headed" class="flex items-baseline gap-2" :class="inPlace ? `text-sm` : `text-2xs`">
                 <span class="flex-1 font-medium text-content">
                     <template v-if="sessionEnd === `restart`">{{ t(`setup.desktopSetupProgress.waitingForRestart`) }}</template>
                     <template v-else-if="sessionEnd === `signOut`">{{ t(`setup.desktopSetupProgress.waitingForSignOut`) }}</template>
@@ -99,13 +104,13 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                     <template v-else>{{ t(`setup.desktopSetupProgress.installingOnDevice`, { what }) }}</template>
                 </span>
                 <!-- The app's own account of its run: a replay keeps its words (app/replayText.ts). -->
-                <template v-if="!pcSetup">
+                <template v-if="!pcSetup && !inPlace">
                     <span v-if="report.position" class="text-subtle" data-replay="diagnostic">{{ report.position }}</span>
                     <span v-if="timeLeft && report.state === `running`" class="text-subtle" data-replay="diagnostic">· {{ timeLeft }}</span>
                     <span v-if="!putAway" class="font-mono tabular-nums text-muted">{{ report.percent }}%</span>
                 </template>
             </div>
-            <div v-if="!putAway && !pcSetup" class="h-1.5 overflow-hidden rounded-full bg-canvas">
+            <div v-if="!putAway && !pcSetup" class="overflow-hidden rounded-full" :class="inPlace ? `h-2 bg-content/10` : `h-1.5 bg-canvas`">
                 <div
                     class="h-full rounded-full transition-[width] duration-500 ease-out"
                     :class="report.state === `waiting` ? `bg-warning` : `bg-primary-400`"
@@ -113,14 +118,14 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                 />
             </div>
             <!-- The download in the app's own counts: what the bar alone could not say when its estimate ran out. -->
-            <p v-if="figures" class="text-2xs text-muted" data-replay="diagnostic">
+            <p v-if="figures" class="text-muted" :class="inPlace ? `text-sm` : `text-2xs`" data-replay="diagnostic">
                 {{
                     figures.unit === `GB`
                         ? t(`setup.desktopSetupProgress.downloadingImageGb`, { done: figures.done, total: figures.total })
                         : t(`setup.desktopSetupProgress.downloadingImageMb`, { done: figures.done, total: figures.total })
                 }}
             </p>
-            <div class="flex items-center gap-3 text-2xs text-muted">
+            <div class="flex items-center gap-3 text-muted" :class="inPlace ? `text-xs` : `text-2xs`">
                 <span class="min-w-0 flex-1">
                     <template v-if="sessionEnd === `restart`">{{ t(`setup.desktopSetupProgress.restartBeforeDocker`) }}</template>
                     <template v-else-if="sessionEnd === `signOut`">{{ t(`setup.desktopSetupProgress.signOutBeforeDocker`) }}</template>

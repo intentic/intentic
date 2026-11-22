@@ -767,12 +767,19 @@ a desktop (the rail's +, the first run's Create, the switcher inside a sandbox, 
 window) opens `/home?add=sandbox`, which puts a dialog over Home asking for a name, who handles the code (the sandbox's
 mode, hands-off or hands-on, `parts/sandbox/ModeChoice.vue`) and where it runs. Create closes it
 and leaves the reader on the chat they were in (a first sandbox, with no chat to go back to, on its run instead), with a
-tile at the end of the rail wearing the rail's spinning mark, or a warning mark when the run waits on the reader or
-stopped. Pressing the tile shows the run in the chat's place (the app's install, a connected machine's steps, a machine
-of ours starting, the first start); any other tile can be pressed meanwhile: the run is held above Home
-(`NewSandboxHost.vue`, mounted by `WorkspaceShell.vue`), so it carries on. A reader watching lands on the new sandbox's
-home conversation once it is up; one who went elsewhere is not moved, and finds its tile marked ready. A press the
-platform refuses stays in the dialog with the reason. Picked to run on
+tile at the end of the rail filling a bar along its foot as the run counts itself (`newSandboxGauge.ts`: the app's
+percent, a connected machine's steps, a machine of ours' steps, whichever way it runs), or a warning mark when the run
+waits on the reader or stopped. Pressing the tile shows the run in the chat's place (the app's install, a connected
+machine's steps, a machine of ours starting, the first start), headed by where it runs, the step of how many, the time
+left and the percent; any other tile can be pressed meanwhile: the run is held above Home (`NewSandboxHost.vue`,
+mounted by `WorkspaceShell.vue`), so it carries on. **Inside another sandbox it stays in sight** (2026-11-22): the
+sandbox rail leads its processes group with the same tile (`shell/rail/RailProcesses.vue`), the cluster under the
+switcher counts the sandbox being made as one of the others, ringed while it runs and pointed when it asks something
+or stopped (`models/home/otherSandboxes.ts`), so a reader with one sandbox and a second on its way still has the way
+back to all sandboxes, and the notification lane says so while the run waits on them or stopped. A reader watching
+lands on the new sandbox's home conversation once it is up; one who went elsewhere is not moved: its tile and its
+circle are marked ready, and a receipt says it is ready with the press that opens it. A press the platform refuses
+stays in the dialog with the reason. Picked to run on
 this computer, the desktop app runs the install out of sight (`intentic://setup?…&stay=1`, the app's `park_setup`)
 instead of swapping its window over to This device, and keeps it there when the run waits on the reader or stops: the
 tile wears the mark, and the run's page answers what it asks (the go-ahead, a restart, a sign-out, a retry) in place,
@@ -853,15 +860,17 @@ app's window to another face, or sent the workspace to `/setup`.)_
 
   A report carries ids and the owner's own text only (a name, "Step 4 of 10", a requirement's label), and the page
   words the rest (`models/processes/processWords.ts`). Runs only the workspace holds (a machine of ours or a connected
-  machine started from Home) are told to the app by `intentic://process?report=…`, so This computer draws them too
-  (`features/home/homeProcesses.ts`).
+  machine started from Home) are told to the app by `intentic://process?report=…`, with their percent (in fives), step
+  and time left, so This computer draws them with a bar too (`features/home/homeProcesses.ts`).
 - **The rail group.** `parts/processes/ProcessTiles.vue` is drawn by Home's rail and the sandbox rail
   (`shell/rail/RailProcesses.vue`) and by This computer's rail (`local/LocalShell.vue`).
   - `models/processes/processTiles.ts` decides the tiles and their marks: spinning while a run works, a warning while it
     waits on the reader, danger when it failed, a check when it is done; a run the reader stopped goes at once.
-  - The sandbox Home is making keeps its own tile among the sandboxes. This folder's own way to a sandbox and Repair
-    keep theirs on This computer.
-- **The page.** `parts/processes/ProcessPage.vue` is the same page in both faces:
+  - The sandbox Home is making keeps its own tile among the sandboxes on Home's rail, and heads this group on a
+    sandbox's rail. This folder's own way to a sandbox and Repair keep theirs on This computer.
+- **The page.** `parts/processes/ProcessPage.vue` is the same page in both faces, headed as Home's new sandbox is: the
+  run's face and name with its percent, and one line under them of where it is (its step of how many, what it does,
+  the time left) or what it waits for, in that state's tone:
   - On Home it is `/home?process=<id>` (`features/home/HomeProcess.vue`, in `MasterHomeView`), where "Open" selects the
     sandbox in place.
   - On This computer it is `/process/:id` (`local/process/LocalProcess.vue`), where "Open" is the press that takes the

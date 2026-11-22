@@ -32,7 +32,7 @@ const takeHostedForSlowDownload = (): void => {
     <div v-if="started" class="flex flex-col gap-3" data-add-sandbox-run>
         <AddSandboxOpening v-if="opening && created" :sandbox-id="created.id" :name="created.name" @shown="emit(`shown`)" />
         <template v-else-if="started.kind === `machine`">
-            <SetupMachineProgress :door="started.door" :machine="onMachine" />
+            <SetupMachineProgress :door="started.door" :machine="onMachine" :page="inPlace" />
         </template>
         <AddSandboxCommand v-else-if="started.kind === `command`" :add="here.add" />
         <!-- An address already answering was recorded: it opens on its first start, above, the moment it is selected. -->
@@ -77,7 +77,7 @@ const takeHostedForSlowDownload = (): void => {
                     <template #icon><Icon name="refresh" /></template>
                 </Button>
             </template>
-            <HostedWaitSteps v-else-if="hostedRow !== null" :wait="hostedWait" />
+            <HostedWaitSteps v-else-if="hostedRow !== null" :wait="hostedWait" :page="inPlace" />
             <p v-else class="flex items-center gap-2 text-xs text-muted">
                 <Icon name="spinner" spin class="text-xs" />
                 {{ t(`setup.setup.startingMachine`) }}

@@ -116,6 +116,15 @@
     box-shadow: 0 0 0 calc(var(--cluster-d) * 0.09) var(--ui-tile-ground);
 }
 
+/* The sandbox being made: an arc around its circle, turning, in the rail's "in flight" ink (viewBadge.ts
+   RUNNING_MARK_CLASS), outside the ground ring that cuts the circle out of the ones beneath. */
+.icon-rail-cluster-ring {
+    inset: calc(var(--cluster-d) * -0.2);
+    border: calc(var(--cluster-d) * 0.1) solid transparent;
+    border-top-color: var(--color-link);
+    border-right-color: var(--color-link);
+}
+
 .icon-rail-cluster-point {
     width: calc(var(--cluster-d) * 0.42);
     height: calc(var(--cluster-d) * 0.42);

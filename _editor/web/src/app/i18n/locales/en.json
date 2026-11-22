@@ -14601,8 +14601,8 @@
         "newSandbox": {
             "title": "New sandbox",
             "settingUp": "Setting up {name}",
-            "meanwhile": "Go back to any other sandbox meanwhile. This tile keeps showing how far it has got, and {name} opens here once it's ready.",
-            "failedLine": "It stopped before it was ready. What happened is below.",
+            "meanwhile": "You can work in any other sandbox meanwhile. The {name} tile on the rail shows how far it has got, and you are told when it is ready.",
+            "failedLine": "What went wrong is below.",
             "create": "Create sandbox",
             "dismiss": "Dismiss",
             "ready": "Ready · double-click to open",
@@ -14613,15 +14613,33 @@
                 "asking": "Needs your answer",
                 "failed": "Stopped before it was ready",
                 "refused": "Could not be created",
-                "opening": "Starting for the first time"
+                "opening": "Starting for the first time",
+                "now": "Now",
+                "left": "Left"
             },
-            "preparing": "Getting it ready…"
+            "preparing": "Getting it ready…",
+            "stepOf": "Step {index} of {count}",
+            "toast": {
+                "ready": "{name} is ready",
+                "asking": "Setting up {name} needs your answer",
+                "failed": "{name} stopped before it was ready",
+                "show": "Show",
+                "seeWhy": "See why"
+            },
+            "where": {
+                "here": "On this computer",
+                "machine": "On {machine}",
+                "hosted": "On an Intentic machine, in our cloud",
+                "command": "On your server, by the command below",
+                "attach": "Already running at its own address"
+            }
         },
         "otherSandboxes": {
             "label": "All sandboxes: {names}",
             "needing": "{count} needs you | {count} need you",
             "waiting": "Waiting for you",
-            "quiet": "Nothing waiting"
+            "quiet": "Nothing waiting",
+            "ready": "Ready"
         }
     },
     "hostedStart": {
@@ -14689,7 +14707,7 @@
             "failedBecause": "Why it stopped",
             "gone": "This has ended.",
             "meanwhile": "It goes on while you do something else. Its tile on the rail shows how far it is.",
-            "devices": "More detail in Devices"
+            "devices": "Every step and the log, on Devices"
         }
     },
     "run": {

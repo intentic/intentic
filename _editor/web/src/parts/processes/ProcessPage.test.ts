@@ -122,3 +122,19 @@ it(`copies a need's note itself, never sending the press to the run, and says it
         }
     }
 });
+
+it(`says how far a running run is in one line, its percent beside its name`, () => {
+    const el = mountPage({
+        id: `sandbox-setup:sbx`,
+        kind: `sandbox-setup`,
+        state: `running`,
+        origin: `workspace`,
+        subject: `shop`,
+        percent: 40,
+        position: `Step 4 of 8`,
+        line: `Download the sandbox image`,
+        remaining: `about 2 minutes left`,
+    });
+    expect(el.querySelector(`[data-process-percent]`)?.textContent).toBe(`40%`);
+    expect(el.querySelector(`[data-process-note]`)?.textContent?.trim()).toBe(`Step 4 of 8 · Download the sandbox image · about 2 minutes left`);
+});

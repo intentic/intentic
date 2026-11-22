@@ -67,3 +67,23 @@ export const openSandbox = async (group: DeviceSandboxGroup): Promise<void> => {
     const id = sandbox.platformId ?? undefined;
     await intoLocalSandbox(id === undefined ? undefined : `/?${new URLSearchParams({ sandbox: id }).toString()}`, faceKeyOf(sandbox));
 };
+
+/**
+ * The rows something is working on, by the id the list knows each by, so their status glyphs spin as on the workspace's
+ * page: the one a verb runs on (`slug`), and the sandbox the page's setup card is making while that runs (`setup`). Its
+ * container is listed before it answers, and its row said "not running here" under a card saying it was being started
+ * (2026-11-22).
+ */
+export const workedOnIds = (
+    groups: readonly DeviceSandboxGroup[],
+    slug: string | undefined,
+    setup: { readonly sandboxId?: string | undefined; readonly slug?: string | undefined } | undefined,
+): string[] =>
+    groups
+        .filter(
+            (group) =>
+                (slug !== undefined && group.sandbox?.slug === slug) ||
+                (setup?.sandboxId !== undefined && group.sandboxId === setup.sandboxId) ||
+                (setup?.slug !== undefined && group.sandbox?.slug === setup.slug),
+        )
+        .map((group) => group.sandboxId);

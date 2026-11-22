@@ -2,6 +2,7 @@ import { watch } from "vue";
 import type { ProcessAction, ProcessReport } from "../../app/environments/processes/processReport";
 import { type HeldProcess, holdProcess } from "../../models/processes/faceProcesses";
 import { newSandbox, type NewSandboxRun, readNewSandbox } from "./newSandbox/newSandbox";
+import { gaugePercent, gaugePosition } from "./newSandbox/newSandboxGauge";
 
 // HOME'S OWN RUNS, TOLD TO THE APP so This computer draws them too (processReport.ts): a new sandbox Home starts on a
 // machine of ours, on a connected machine, or by a command, which only this page follows. The app's install on this
@@ -17,13 +18,23 @@ const homeRunReport = (run: NewSandboxRun | undefined): ProcessReport | undefine
         return undefined;
     }
     const base = { id: `sandbox-setup:${row.id}`, kind: `sandbox-setup`, origin: `workspace`, subject: row.name, sandboxId: row.id } as const;
+    // How far it has got, so This computer's page draws its bar and its step as Home's page does (newSandboxGauge.ts). The
+    // percent in fives: each change is a link the app handles, and a bar on another window needs no finer step than that.
+    const gauge = reading.gauge;
+    const percent = gaugePercent(gauge);
+    const measured = {
+        startedAt: gauge?.startedAt,
+        percent: percent === undefined ? undefined : Math.floor(percent / 5) * 5,
+        position: gaugePosition(gauge),
+        remaining: gauge?.remaining,
+    };
     switch (reading.phase) {
         case `failed`:
-            return { ...base, state: `failed`, actions: [`retry`, `dismiss`] };
+            return { ...base, state: `failed`, actions: [`retry`, `dismiss`], startedAt: gauge?.startedAt };
         case `asking`:
-            return { ...base, state: `waiting`, waitingFor: `answer`, line: reading.note };
+            return { ...base, state: `waiting`, waitingFor: `answer`, line: reading.note, startedAt: gauge?.startedAt };
         default:
-            return { ...base, state: `running`, line: reading.note };
+            return { ...base, ...measured, state: `running`, line: gauge?.step ?? reading.note };
     }
 };
 
