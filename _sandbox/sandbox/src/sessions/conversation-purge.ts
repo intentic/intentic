@@ -67,19 +67,27 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
     ]);
 };
 
-// Uploads the removed conversations' transcripts name and no other conversation's does.
+// Uploads the removed conversations' transcripts name and no other conversation's does. The removed ones are read first:
+// when they name no upload, every other record is left unread. 2026-11-23: taking back a scheduled message that opened a
+// conversation (an empty transcript, so nothing to orphan) read all 5,331 records, 1.9 GB of text, on every take-back;
+// two in two minutes took the daemon's heap past its 3 GB bound and the sandbox restarted mid-turn.
 const orphanedAttachments = async (historyRoot: string, stored: Stored, removed: readonly PurgeConversation[]): Promise<Set<string>> => {
+    const named = new Set((await Promise.all(removed.map(async (entry) => [...attachmentDirs(await stored(entry.id))]))).flat());
+    if (named.size === 0) {
+        return named;
+    }
     const removedIds = new Set(removed.map((entry) => entry.id));
     const units = (await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
-    const retained = new Set<string>();
     for (const unit of units.filter((entry) => entry.isDirectory() && isConversationId(entry.name) && !removedIds.has(entry.name))) {
         // one record at a time, so only one is ever held in memory.
         for (const id of attachmentDirs(await stored(unit.name))) {
-            retained.add(id);
+            named.delete(id);
+        }
+        if (named.size === 0) {
+            break;
         }
     }
-    const named = await Promise.all(removed.map(async (entry) => [...attachmentDirs(await stored(entry.id))]));
-    return new Set(named.flat().filter((id) => !retained.has(id)));
+    return named;
 };
 
 export const purgeConversationState = async (

@@ -100,6 +100,20 @@ test("a retained transcript that cannot be read stops the purge before any uploa
     expect(await readFile(join(attachments, "shared", "b.png"), "utf8")).toBe("kept");
 });
 
+test("a removed conversation that names no upload leaves every other transcript unread", async () => {
+    const root = await mkdtemp(join(tmpdir(), "conversation-purge-"));
+    roots.push(root);
+    const workspace = join(root, "work");
+    const history = join(root, "history");
+    await writeTranscript(history, "removed", [{ role: "user", text: "no uploads here" }]);
+    // Reading it would throw EISDIR (the test above): the purge passing says it was never read.
+    await mkdir(transcriptFile(history, "kept"), { recursive: true });
+
+    await expect(
+        purgeConversationState(workspace, history, fileTranscriptRecord(history).stored, [conversation("removed", "removed-session")], [conversation("kept", "kept-session")]),
+    ).resolves.toBeUndefined();
+});
+
 test("purge also takes the transcript backup, Claude's per-session todos and environment, and a Codex thread's rollout", async () => {
     const root = await mkdtemp(join(tmpdir(), "conversation-purge-"));
     roots.push(root);
