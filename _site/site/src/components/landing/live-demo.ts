@@ -2,9 +2,11 @@
 // rather than sending the visitor to /demo/. The frame stands on a poster, a screenshot of the very view it opens on,
 // and the swap happens only once the app says it has drawn.
 //
-// - Wide screens load it by themselves, once the page has loaded, the browser is idle and the frame is on screen. It is
-//   drawn at the poster's own 1280×720 and scaled to the frame, never below MIN_SCALE: past that the frame draws a
-//   narrower app instead of smaller type.
+// - Wide screens load it by themselves as soon as the frame is on screen, without waiting for the page's load event or
+//   an idle moment: the hero is the first thing a visitor reaches for, and waiting on those left "Starting…" up for
+//   seconds on a page whose animations never let the browser idle (the owner's, 2026-11-23). The poster stays the LCP
+//   (it is fetched at high priority from the markup). The frame is drawn at the poster's own 1280×720 and scaled to the
+//   frame, never below MIN_SCALE: past that the frame draws a narrower app instead of smaller type.
 // - Phones, and readers who asked for less data, keep the poster until they press it: then the frame loads over the
 //   whole window, where a phone-sized app has the room it needs. A phone-sized frame inside the page would be a scroll trap.
 // - "Full screen" lifts the same element into the top layer (it is a popover) and puts it back, so the app keeps its
@@ -38,22 +40,6 @@ interface LiveParts {
     readonly posters: readonly HTMLElement[];
     readonly src: string;
 }
-
-const whenIdle = (then: () => void): void => {
-    if (`requestIdleCallback` in window) {
-        window.requestIdleCallback(then, { timeout: 2_000 });
-    } else {
-        setTimeout(then, 200);
-    }
-};
-
-const afterLoad = (then: () => void): void => {
-    if (document.readyState === `complete`) {
-        then();
-    } else {
-        window.addEventListener(`load`, then, { once: true });
-    }
-};
 
 const findParts = (): LiveParts | undefined => {
     const root = document.querySelector<HTMLElement>(`[data-live]`);
@@ -97,7 +83,7 @@ class LiveHero {
         new ResizeObserver(() => this.#fit()).observe(stage);
         this.#sync();
         if (this.#wide.matches && !window.matchMedia(`(prefers-reduced-data: reduce)`).matches) {
-            afterLoad(() => whenIdle(() => this.#loadWhenSeen()));
+            this.#loadWhenSeen();
         }
     }
 

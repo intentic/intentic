@@ -164,6 +164,7 @@ export default defineConfig({
         warmup: {
             clientFiles: [
                 here(`src/main.ts`),
+                here(`src/boot.ts`),
                 fromRoot(`_editor/web/src/main.ts`),
                 fromRoot(`_editor/web/src/shell/WorkspaceShell.vue`),
                 fromRoot(`_editor/web/src/shell/ShellDesktop.vue`),

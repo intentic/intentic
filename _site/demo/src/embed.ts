@@ -3,7 +3,7 @@
 // so it, not a query parameter the app's router could drop, is what says a page load is the hero's.
 //
 // Embedded, the demo is a guest on someone else's page, which changes four things, all set up here before any other
-// module of the demo or the app runs (main.ts imports this first):
+// module of the demo or the app runs (main.ts calls settleAsGuest before it loads anything else):
 //
 // - Its storage is its own. The frame is same-origin and same-tab with /demo/, so it would otherwise read and write the
 //   very localStorage and sessionStorage the full demo keeps: its look, its mode, its open tabs, and everything the app
@@ -146,12 +146,17 @@ const signOutInPlace = (): void => {
     window.env.afterSignOut = import.meta.env.BASE_URL;
 };
 
-if (embedded) {
+/** Makes this page load a guest on the landing page, when it is the hero; nothing otherwise. main.ts calls it before any
+ *  other module of the demo or the app is loaded. */
+export const settleAsGuest = (): void => {
+    if (!embedded) {
+        return;
+    }
     sealStorage();
     holdPageStill();
     letPageScroll();
     signOutInPlace();
-}
+};
 
 // The app marks `boot:view` once its first view has drawn (@intentic/web app/perf/boot.ts). A short settle after it
 // lets the view's own reads land, so the swap shows the conversation rather than its placeholder.
