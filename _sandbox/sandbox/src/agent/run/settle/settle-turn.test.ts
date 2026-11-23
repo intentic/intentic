@@ -88,6 +88,7 @@ const plan = (change: Partial<SettlementPlan> = {}): SettlementPlan => ({
     },
     proof: undefined,
     commands: [],
+    skills: [],
     reach: undefined,
     snapshot: undefined,
     ...change,

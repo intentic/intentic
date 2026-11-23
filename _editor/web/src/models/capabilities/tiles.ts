@@ -123,6 +123,22 @@ export const capabilityTile = (capability: CapabilitySummary, extensions: readon
     return tile === undefined ? undefined : { id: tile.id, name: entryName(tile), logo: tile.logo, icon: tile.icon };
 };
 
+// Which catalog section a live connection's tile sits in, for a list that groups what connections brought the way the
+// catalog groups the connections themselves (the Skills list). Same join as capabilityTile, plus the core tiles of a
+// kind with a discriminator (one CLI kind holds GitHub and Slack). Undefined when no tile claims it.
+export const capabilityCategory = (capability: CapabilitySummary, extensions: readonly ExtensionSummary[]): CapabilityCategory | undefined => {
+    const key = contributionDiscriminator(capability.kind);
+    const entryId = key === undefined ? undefined : String(capability.config[key] ?? ``);
+    const contribution = extensions
+        .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
+        .find((entry) => entry.kind === capability.kind && entry.id === entryId);
+    if (contribution !== undefined) {
+        return contributionEntry(contribution).category;
+    }
+    const ofKind = CAPABILITY_CATALOG.filter((entry) => entry.kind === capability.kind);
+    return (ofKind.find((entry) => entry.id === entryId) ?? ofKind[0])?.category;
+};
+
 // Just the mark, for rows that name a connection with something of their own (a skill's title, a secret's key).
 // Either half may be absent for the caller's own tiers to fill; a tile declaring neither answers undefined, never
 // an empty object.

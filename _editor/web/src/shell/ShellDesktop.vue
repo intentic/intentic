@@ -7,9 +7,9 @@ import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
-import { ui, ContextMenu, type TipTone, type TooltipValue } from "@intentic/ui";
+import { ui, ContextMenu, loadChunk, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onMounted, onUnmounted, provide, ref, watch, watchPostEffect } from "vue";
+import { computed, defineAsyncComponent, onMounted, onUnmounted, provide, ref, watch, watchPostEffect } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { useTier } from "../client/sandbox/useTier";
@@ -46,6 +46,7 @@ import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
+import { registerSkillView } from "../workbench/views/skillView";
 import { setSplit, sideDocked } from "../workbench/side/sideTabs";
 import { besideChat, besideFills, sideColumnShown, sideShown, sideTucked, TUCKED_STRIP_PX } from "./side/sideLayout";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
@@ -165,6 +166,10 @@ const cycleSection = (delta: number): void => {
 let sectionCommands: readonly Disposable[] = [];
 // What the side panel can show of the core's own: a file, the running app.
 const coreSideViews = registerCoreSideViews();
+// What a Workspace skill tab draws; a lazy chunk like any view's (loadChunk reloads a redeploy under an open tab).
+const skillPage = registerSkillView(
+    defineAsyncComponent(() => loadChunk(async () => (await import(`../features/sandbox/agent-settings/skills/SkillPage.vue`)).default)),
+);
 
 onMounted(() => {
     // References opened from here on land in the side panel rather than moving the main area (openBeside).
@@ -181,6 +186,7 @@ onUnmounted(() => {
     for (const disposable of coreSideViews) {
         disposable.dispose();
     }
+    skillPage.dispose();
     for (const disposable of sectionCommands) {
         disposable.dispose();
     }

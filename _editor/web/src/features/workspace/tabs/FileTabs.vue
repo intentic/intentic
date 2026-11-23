@@ -46,6 +46,9 @@ const tabLabel = (tab: WorkspaceTab): string => {
     if (tab.kind === `document`) {
         return basename(tab.path);
     }
+    if (tab.kind === `skill`) {
+        return tab.name;
+    }
     return basename(tab.path);
 };
 // A card naming what kind of surface a tab is and what it is of. A file reaches it only as the preview tab: a kept one
@@ -59,6 +62,9 @@ const tabSubject = (tab: WorkspaceTab): Tip => {
     }
     if (tab.kind === `diff`) {
         return { title: t(`views.vocabulary.diff`), rows: [{ label: t(`workspace.fileTabs.file`), value: tab.label }] };
+    }
+    if (tab.kind === `skill`) {
+        return { title: t(`workspace.fileTabs.skill`), rows: [{ label: t(`shared.name`), value: tab.name }] };
     }
     return { title: t(`workspace.fileTabs.preview`), rows: [{ label: t(`workspace.fileTabs.path`), value: tab.path }] };
 };
@@ -208,6 +214,7 @@ watch(
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <!-- Provider's own glyph, an open string; an unknown name falls back in the icon set rather than erroring. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
+                <Icon v-else-if="tab.kind === 'skill'" name="book" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
                 <!-- Italic slants past its box; truncate would clip the last glyph without room on the right. -->
                 <span class="max-w-40 truncate" :class="tab.id === preview ? `pr-[0.2em] italic` : ``">{{ tabLabel(tab) }}</span>

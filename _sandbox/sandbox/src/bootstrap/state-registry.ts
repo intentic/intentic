@@ -120,6 +120,7 @@ import { pushChecksLeftoversStep } from "../store/evolution/steps/push-checks-le
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
+import { skillUsesDocument } from "../store/skills/skill-uses.js";
 import { turnStartsDocument } from "../store/start-window.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
@@ -196,10 +197,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     choreProbesDocument,
     ciDocument,
     composerDraftsDocument,
+    projectDeliveriesDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
@@ -248,11 +249,11 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     ruleFiringsDocument,
     runnerIdentityDocument,
     safetyLogDocument,
+    autostartDocument,
+    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    autostartDocument,
-    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
@@ -273,6 +274,7 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     issueInstallsDocument,
     webchatInstallsDocument,
     newestRunDocument,
+    skillUsesDocument,
     turnStartsDocument,
     bootFailureDocument,
     bootHistoryDocument,

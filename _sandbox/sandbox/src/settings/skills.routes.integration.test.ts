@@ -93,7 +93,7 @@ test("a settings write never removes an own skill's loaded copy", async () => {
 test("reading a skill returns its instructions without the declared block", async () => {
     const { client } = withStore();
     await client.skills.save({ name: "notes", description: "Use it.", body: "# Notes\n\nRun `git log`." });
-    expect(await client.skills.read({ id: "notes" })).toEqual({ id: "notes", name: "notes", body: "# Notes\n\nRun `git log`.\n" });
+    expect(await client.skills.read({ id: "notes" })).toEqual({ id: "notes", name: "notes", body: "# Notes\n\nRun `git log`.\n", files: [] });
     expect(await errorCode(client.skills.read({ id: "ghost" }))).toBe("NOT_FOUND");
 });
 
@@ -135,6 +135,26 @@ test("a loose file in the skills folder can be cleared away", async () => {
     expect((await client.skills.list()).find((skill) => skill.id === "scratch")).toMatchObject({ origin: "dropped", removable: true });
     await client.skills.remove({ name: "scratch" });
     expect(loaded("scratch")).toBeUndefined();
+});
+
+// A dropped skill's folder is the one the agent reads, so the page can open it and the files beside its SKILL.md.
+test("reading a dropped skill names its folder and the other files in it", async () => {
+    const { client, root } = withStore();
+    const dir = join(root, ".agents", "skills", "unsloppify");
+    mkdirSync(join(dir, "references"), { recursive: true });
+    mkdirSync(join(dir, "scripts"), { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: unsloppify\ndescription: Use when tidying prose.\n---\n\nBody.\n");
+    writeFileSync(join(dir, "references", "patterns.md"), "# Patterns\n");
+    writeFileSync(join(dir, "scripts", "scan.sh"), "#!/bin/sh\n");
+
+    expect(await client.skills.read({ id: "unsloppify" })).toEqual({
+        id: "unsloppify",
+        name: "unsloppify",
+        body: "Body.\n",
+        folder: ".agents/skills/unsloppify",
+        files: ["references/patterns.md", "scripts/scan.sh"],
+    });
+    expect((await client.skills.list()).find((skill) => skill.id === "unsloppify")?.uses).toMatchObject({ week: expect.any(Number) });
 });
 
 // Refused by the schema at the edge, not mid-write; a slash in the name would otherwise escape the store's directory.

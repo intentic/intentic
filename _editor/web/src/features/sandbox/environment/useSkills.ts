@@ -1,4 +1,4 @@
-import type { SkillBody, SkillDraft, SkillSummary, SkillSwitch } from "@intentic/sandbox-contract/schemas/settings";
+import type { SkillDraft, SkillSummary, SkillSwitch } from "@intentic/sandbox-contract/schemas/settings";
 import { allLoaded, useLoaded } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -58,15 +58,6 @@ export function useSkills() {
         void invalidate();
     };
 
-    // Fetched on demand, since a skill's body can run to thousands of words; keyed per id so re-opening an already-read
-    // row is free.
-    const readBody = (id: string): Promise<SkillBody> => queryClient.fetchQuery(rpcQuery(`skills.read`, { id }));
-
-    // Dropped after a save, so re-opening shows what was just written, not the old cached body.
-    const forgetBody = (id: string): void => {
-        queryClient.removeQueries({ queryKey: rpcKey(`skills.read`, { id }) });
-    };
-
     return {
         skills,
         settings,
@@ -74,7 +65,5 @@ export function useSkills() {
         save,
         remove,
         setEnabled,
-        readBody,
-        forgetBody,
     };
 }

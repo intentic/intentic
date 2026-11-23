@@ -10,8 +10,10 @@ import { skillVisual } from "./skillVisual";
 import { provenanceOf } from "./skillWords";
 import { useT } from "@intentic/ui/i18n";
 
-// A skill's row opens in place on a press, no menu (<DisclosureRow> owns the chevron, ARIA and open wash). Open, your
-// own skill is written where it is read (<SkillEditor>); anybody else's is read as the document it is. Where it came
+// A skill's row opens in place on a press, no menu (<DisclosureRow> owns the chevron, ARIA and open wash): a role card's
+// own kit lists its skills this way (RoleKitFields.vue), where a handful sit under the role's prompt; the sandbox's whole
+// catalog opens each skill as a page instead (SkillPage.vue). Open, your own skill is written where it is read
+// (<SkillEditor>); anybody else's is read as the document it is. Where it came
 // from is a quiet word beside the switch, not a coloured chip: the list is read for its names, and five chip colours
 // down it said nothing a word does not.
 
@@ -55,6 +57,19 @@ const unnamed = computed(() => skill.description === ``);
 // The editor edits a draft, not the row: provenance stays on the row, and body arrives only once read.
 const editing = computed<SkillDraft | undefined>(() =>
     skill.editable && body !== undefined ? { name: skill.name, description: skill.description, body } : undefined,
+);
+// What is typed, seeded each time the row opens on the saved text; a close drops the body, so a reopen seeds again.
+const description = ref(``);
+const text = ref(``);
+watch(
+    editing,
+    (now, before) => {
+        if (now !== undefined && before === undefined) {
+            description.value = now.description;
+            text.value = now.body;
+        }
+    },
+    { immediate: true },
 );
 
 // Somebody else's text, folded to a screenful while read so a long one never buries the rows under it. Measured, not
@@ -117,6 +132,8 @@ watch(
             <!-- The reader's own skill: written where it is read. -->
             <SkillEditor
                 v-else-if="editing !== undefined"
+                v-model:description="description"
+                v-model:body="text"
                 :skill="editing"
                 :disabled="disabled"
                 :saving="saving"

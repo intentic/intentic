@@ -1,31 +1,38 @@
 <script setup lang="ts">
-import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
-import { Await, Button, Icon, Row, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
+import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
+import { Await, Button, Card, Icon, Modal, Row, SearchBar, Section, SkeletonRows, ui, useDevice } from "@intentic/ui";
 import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+import { here, page } from "../../../../lib/routes/links";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../../models/extensions/useExtensions";
+import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
+import { sectionReachable } from "../../../../workbench/views/registry";
 import { useSkills } from "../../environment/useSkills";
-import SkillDraftRow from "./SkillDraftRow.vue";
-import SkillRow from "./SkillRow.vue";
-import { bySection, isTunable, matchesSkill } from "./skillList";
+import SkillCard from "./SkillCard.vue";
+import SkillChip from "./SkillChip.vue";
+import SkillPage from "./SkillPage.vue";
+import { NEW_SKILL } from "./skillDrafts";
+import { bySection, isWorkspaceSkill, matchesSkill, shelvesOf } from "./skillList";
 import type { SkillSources } from "./skillVisual";
 import { useT } from "@intentic/ui/i18n";
 
-// Every skill the agent carries, from any source (image, owner, connections, extensions, plugins, loose files),
-// including disabled built-ins and unclaimed files. Split into tunable (this app can enable/delete) and borrowed
-// rows; a row's controls come only from what the daemon reports for it, never a rule restated here. Writing a new one is
-// the group's own action, top right where every list keeps it ("New setup", "Add another account"), and the skill being
-// written appears at the top of the list as the open row it will become.
+// Every skill the agent carries, from any source, as a catalog: the reader's own words as cards with room for their
+// whole trigger line, then what arrived with connections, extensions and the image as names on labelled shelves, the way
+// the Connections catalog groups what brought them. A skill is read and written on its own page, a Workspace tab beside
+// the files a skill is made of (SkillPage.vue), never in a drawer squeezed into this column; a phone, whose Workspace
+// shows files only, opens that page as a sheet here. Writing a new one opens the page it will become, empty.
 
 const t = useT();
 
 const FILTERABLE_FROM = 8;
-// Below this many borrowed rows, the fold saves nothing worth a click.
-const FOLD_FROM = 6;
 
-const { skills, settings, loaded, save, remove, setEnabled, readBody, forgetBody } = useSkills();
+const { skills, settings, loaded, setEnabled } = useSkills();
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
+const { openSkill } = useWorkspaceTabs();
+const { mobile } = useDevice();
+const router = useRouter();
 
 const query = ref(``);
 const filtering = computed(() => query.value.trim() !== ``);
@@ -35,96 +42,32 @@ const matches = computed<SkillSummary[]>(() => {
     return skills.value.filter((skill) => matchesSkill(skill, needle)).toSorted(bySection);
 });
 
-// The two halves of the list: what this surface can act on, and what merely arrived with something.
-const tunable = computed(() => matches.value.filter(isTunable));
-const borrowed = computed(() => matches.value.filter((skill) => !isTunable(skill)));
-
-// Opens automatically while small or while filtering; a manual toggle is remembered otherwise, so clearing the
-// search doesn't refold it.
-const openedByHand = ref<boolean | undefined>(undefined);
-const borrowedOpen = computed(() => filtering.value || (openedByHand.value ?? borrowed.value.length <= FOLD_FROM));
-const rememberFold = (event: Event): void => {
-    if (!filtering.value) {
-        openedByHand.value = (event.target as HTMLDetailsElement).open;
-    }
-};
-
 // Enabled, not installed: a disabled extension doesn't claim the card its connection came from.
 const sources = computed<SkillSources>(() => ({ capabilities: capabilities.value, extensions: enabledExtensions.value }));
 
-// Every name in the list, filtered or not: a new skill saved under one of them would replace it.
-const takenNames = computed(() => skills.value.map((skill) => skill.name));
+const own = computed(() => matches.value.filter(isWorkspaceSkill));
+const shelves = computed(() => shelvesOf(matches.value, sources.value));
 
-// Which row is open; `adding` is its own flag since a new skill has no id yet.
-const openId = ref<string | undefined>();
-const adding = ref(false);
-// The open row's text, once fetched; its own ref rather than a suspense boundary since the row is already on screen.
-const openBody = ref<string | undefined>();
-const bodyError = ref<string | undefined>();
-// Why the last save failed; the editor stays open with what was typed, and says it beside its Save.
-const saveError = ref<string | undefined>();
-const saving = computed(() => save.isPending.value);
+// The page a phone shows over this list, since its Workspace has no tab to put one in.
+const sheet = ref<{ readonly id: string; readonly name: string } | undefined>();
 
-const close = (): void => {
-    openId.value = undefined;
-    openBody.value = undefined;
-    bodyError.value = undefined;
-    saveError.value = undefined;
-    adding.value = false;
-};
-
-const startAdd = (): void => {
-    close();
-    adding.value = true;
-};
-
-// Opens a row and fetches its body, or closes it if already open. id is set before the await so the row shows it's
-// opening immediately.
-const toggle = async (skill: SkillSummary): Promise<void> => {
-    if (openId.value === skill.id) {
-        close();
+const open = (id: string, name: string): void => {
+    if (mobile.value || !sectionReachable(here(page.workspace()))) {
+        sheet.value = { id, name };
         return;
     }
-    close();
-    openId.value = skill.id;
-    try {
-        const read = (await readBody(skill.id)).body;
-        // A press on another row while this one was still reading has moved on; its answer is not this row's.
-        if (openId.value === skill.id) {
-            openBody.value = read;
-        }
-    } catch (failure) {
-        if (openId.value === skill.id) {
-            bodyError.value = failure instanceof Error ? failure.message : t(`sandbox.agentSkills.couldntReadSkill`);
-        }
-    }
+    openSkill(id, name);
+    void router.push(here(page.workspace()));
 };
 
-// Closes only once the daemon has it: a refused save keeps the editor and what was typed in it.
-const saveDraft = async (draft: SkillDraft): Promise<void> => {
-    saveError.value = undefined;
-    try {
-        await save.mutateAsync(draft);
-    } catch (failure) {
-        saveError.value = failure instanceof Error ? failure.message : t(`sandbox.agentSkills.couldntSaveSkill`);
-        return;
-    }
-    // Clears the cached body; otherwise reopening the row would show what this edit just replaced.
-    forgetBody(draft.name);
-    close();
-};
-
-const removeSkill = (skill: SkillSummary): void => {
-    remove.mutate(skill.name);
-    close();
-};
+const startAdd = (): void => open(NEW_SKILL, t(`sandbox.skillForm.newSkill`));
 </script>
 
 <template>
     <Await :of="loaded" imprint="sandbox.agent.skills" :label="t(`sandbox.agentSkills.readingSandboxsSkills`)">
         <template #fallback>
-            <!-- Until it has been seen once: the group as it reads while loading, its action already where it will be. -->
-            <RowGroup :label="t(`sandbox.agentSkills.skills`)">
+            <!-- Until it has been seen once: the section as it reads while loading, its action already where it will be. -->
+            <Section :label="t(`sandbox.agentSkills.skills`)">
                 <template #actions>
                     <Button size="small" tier="boring" :label="t(`sandbox.words.writeSkill`)" disabled>
                         <template #icon><Icon name="plus" /></template>
@@ -134,17 +77,17 @@ const removeSkill = (skill: SkillSummary): void => {
                     <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
                     <SkeletonRows :rows="3" description control />
                 </div>
-            </RowGroup>
+            </Section>
         </template>
         <template #failed="{ error }">
-            <RowGroup :label="t(`sandbox.agentSkills.skills`)">
-                <Row icon="exclamation-triangle" :description="error" />
-            </RowGroup>
+            <Section :label="t(`sandbox.agentSkills.skills`)">
+                <Card><Row icon="exclamation-triangle" :description="error" /></Card>
+            </Section>
         </template>
         <template #default="{ refreshError }">
-            <RowGroup data-setting="agent-skills" :label="t(`sandbox.agentSkills.skills`)">
+            <Section data-setting="agent-skills" :label="t(`sandbox.agentSkills.skills`)">
                 <template #actions>
-                    <!-- One field beside the one action, not a toolbar: a full bar would look like it belongs to more than this group. -->
+                    <!-- One field beside the one action, not a toolbar: a full bar would look like it belongs to more than this section. -->
                     <SearchBar
                         v-if="filterable"
                         v-model="query"
@@ -154,71 +97,67 @@ const removeSkill = (skill: SkillSummary): void => {
                         :aria-label="t(`sandbox.agentSkills.filterSkills`)"
                         autocapitalize="off"
                         spellcheck="false"
-                        class="w-full max-w-56"
+                        class="w-56 max-w-full"
                     />
                     <Button size="small" tier="boring" :label="t(`sandbox.words.writeSkill`)" :disabled="settings === undefined" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </template>
 
-                <!-- First, where the press that made it is: the same head and editor a saved skill opens into. -->
-                <SkillDraftRow v-if="adding" :taken="takenNames" :disabled="settings === undefined" :saving="saving" :error="saveError" @save="saveDraft" @cancel="close" />
+                <div class="flex flex-col gap-3">
+                    <p v-if="refreshError !== undefined" class="flex items-center gap-1.5 text-xs text-danger">
+                        <Icon name="exclamation-triangle" class="text-2xs" aria-hidden="true" />{{ refreshError }}
+                    </p>
 
-                <SkillRow
-                    v-for="skill in tunable"
-                    :key="skill.id"
-                    :skill="skill"
-                    :expanded="openId === skill.id"
-                    :body="openId === skill.id ? openBody : undefined"
-                    :body-error="openId === skill.id ? bodyError : undefined"
-                    :sources="sources"
-                    :disabled="settings === undefined"
-                    :saving="openId === skill.id && saving"
-                    :save-error="openId === skill.id ? saveError : undefined"
-                    @toggle="void toggle(skill)"
-                    @enable="(value: boolean) => setEnabled(skill, value)"
-                    @save="saveDraft"
-                    @remove="removeSkill(skill)"
-                />
-
-                <Row v-if="refreshError !== undefined" icon="exclamation-triangle" :description="refreshError" />
-                <RowNote v-else-if="skills.length === 0 && !adding" variant="empty">{{ t(`sandbox.agentSkills.noSkillsAddedYet`) }}</RowNote>
-                <!-- Distinct from an empty list or from hits hidden inside the closed fold below. -->
-                <Row v-else-if="matches.length === 0" icon="search" :description="t(`sandbox.agentSkills.nothingMatchesFilter`)" />
-
-                <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
-                <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">
-                    <!-- In the rows' own type and inset: a label for the rows under it, not a heading of a size of its own. -->
-                    <summary
-                        class="ui-row-select flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 [&::-webkit-details-marker]:hidden"
-                    >
-                        <span class="text-xs font-medium text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
-                        <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
-                        <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">{{ t(`sandbox.agentSkills.toDropOneDrop`) }}</span>
-                        <Icon
-                            name="chevron-right"
-                            aria-hidden="true"
-                            class="ml-auto shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90"
-                        />
-                    </summary>
-                    <div class="divide-y divide-line-subtle border-t border-line-subtle">
-                        <SkillRow
-                            v-for="skill in borrowed"
+                    <div v-if="own.length > 0" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2">
+                        <SkillCard
+                            v-for="skill in own"
                             :key="skill.id"
                             :skill="skill"
-                            :expanded="openId === skill.id"
-                            :body="openId === skill.id ? openBody : undefined"
-                            :body-error="openId === skill.id ? bodyError : undefined"
-                            :sources="sources"
                             :disabled="settings === undefined"
-                            @toggle="void toggle(skill)"
+                            @open="open(skill.id, skill.name)"
                             @enable="(value: boolean) => setEnabled(skill, value)"
-                            @save="saveDraft"
-                            @remove="removeSkill(skill)"
                         />
                     </div>
-                </details>
-            </RowGroup>
+                    <p v-else-if="!filtering" :class="ui.emptyState()">{{ t(`sandbox.agentSkills.noneOfYourOwn`) }}</p>
+
+                    <!-- One surface holding every shelf: a label beside its names, as a properties column reads. -->
+                    <Card v-if="shelves.length > 0">
+                        <dl class="flex flex-col gap-3">
+                            <div v-for="shelf in shelves" :key="shelf.key" class="flex flex-col gap-1.5 @xl:flex-row @xl:gap-3">
+                                <dt class="text-xs text-subtle @xl:w-32 @xl:shrink-0 @xl:pt-1.5">{{ shelf.label }}</dt>
+                                <dd class="flex min-w-0 flex-wrap gap-1.5">
+                                    <SkillChip
+                                        v-for="skill in shelf.skills"
+                                        :key="skill.id"
+                                        :skill="skill"
+                                        :sources="sources"
+                                        :disabled="settings === undefined"
+                                        @open="open(skill.id, skill.name)"
+                                        @enable="(value: boolean) => setEnabled(skill, value)"
+                                    />
+                                </dd>
+                            </div>
+                        </dl>
+                    </Card>
+
+                    <p v-if="filtering && matches.length === 0" class="flex items-center gap-1.5 text-xs text-muted">
+                        <Icon name="search" class="text-2xs" aria-hidden="true" />{{ t(`sandbox.agentSkills.nothingMatchesFilter`) }}
+                    </p>
+                </div>
+            </Section>
+
+            <Modal :open="sheet !== undefined" size="full" :header="sheet?.name" @update:open="(value: boolean) => !value && (sheet = undefined)">
+                <SkillPage
+                    v-if="sheet !== undefined"
+                    :key="sheet.id"
+                    :skill="sheet.id"
+                    :name="sheet.name"
+                    host="sheet"
+                    @gone="sheet = undefined"
+                    @saved="(name: string) => (sheet = { id: name, name })"
+                />
+            </Modal>
         </template>
     </Await>
 </template>

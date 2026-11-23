@@ -33,6 +33,8 @@ const {
     openDirectory,
     openFile,
     openDocument,
+    openSkill,
+    replaceSkill,
     keepTab,
     selectTab,
     closedTabs,
@@ -418,4 +420,32 @@ it(`opens a directory panel on the tab a caller named, re-pointing one already o
 
     expect(strip.value.main.tabs).toEqual([{ kind: `directory`, id: `dir:shop`, dir: `shop`, view: `git-history-repo` }]);
     expect(activeId.value).toBe(`dir:shop`);
+});
+
+// Opened from Settings, a skill's page focuses the tab it already has rather than stacking a second one.
+it(`opens a skill's page once, however often it is asked for`, () => {
+    startFresh();
+    openFile(`src/main.ts`);
+    openSkill(`notes`, `notes`);
+    openFile(`README.md`);
+    openSkill(`notes`, `notes`);
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `skill:notes`, `README.md`]);
+    expect(activeId.value).toBe(`skill:notes`);
+    expect(previewId.value).toBeNull();
+});
+
+// Saving a new skill turns its page into the saved skill's page: same place in the strip, nothing to find again.
+it(`puts the saved skill's page where the new one's was`, () => {
+    startFresh();
+    openFile(`src/main.ts`);
+    openSkill(`+new`, `New skill`);
+    openFile(`README.md`);
+    selectTab(`skill:+new`);
+
+    replaceSkill(`+new`, `changelog`, `changelog`);
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `skill:changelog`, `README.md`]);
+    expect(strip.value.main.tabs[1]).toEqual({ kind: `skill`, id: `skill:changelog`, skill: `changelog`, name: `changelog` });
+    expect(activeId.value).toBe(`skill:changelog`);
 });

@@ -159,6 +159,14 @@ export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
 // Same slug shape the SDK's loader accepts, checked here so a bad name is a refused save, not a skill that silently
 // never loads.
 export const SkillNameSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "a skill name is lowercase letters, digits and dashes");
+// Counted from the turns that loaded the skill (a skill tool call naming it, or a read of its SKILL.md), so a skill that
+// is only listed never counts. A window, not a lifetime total: the question is whether it still earns its place.
+export const SKILL_USES_WINDOW_DAYS = 7;
+export const SkillUsesSchema = z.object({
+    week: z.number().int().nonnegative().describe("Turns that loaded it in the last seven days."),
+    last: z.string().optional().describe("When a turn last loaded it, as an ISO time. Absent when no turn has since the count began."),
+});
+export type SkillUses = z.infer<typeof SkillUsesSchema>;
 export const SkillSummarySchema = z.object({
     // Qualified as `<origin>:<owner>:<name>` for anything not `own`/`builtin`.
     id: z
@@ -190,6 +198,10 @@ export const SkillSummarySchema = z.object({
     // Wider than `editable` by one case: a dropped skill isn't the owner's to edit, but is theirs to remove, with no
     // other way to short of the file tree.
     removable: z.boolean(),
+    // Optional for the daemon-older-than-browser seam: a sandbox from before the count answers nothing, which is not zero.
+    uses: SkillUsesSchema.optional().describe(
+        "How often turns have loaded it lately. Absent where nothing counts (a sandbox from before the count), which is not the same as never.",
+    ),
 });
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;
 export const SkillsListSchema = z.array(SkillSummarySchema);
@@ -200,6 +212,20 @@ export const SkillBodySchema = z.object({
     name: z.string().describe("Its name."),
     // Everything after the frontmatter.
     body: z.string().describe("The instructions themselves, as written."),
+    // Only where the folder is what the agent reads, so a file opened from it is the file that matters: the loaded folder
+    // (a dropped skill, a connection's cheatsheet) or a role kit's. The owner's own skill is written through this
+    // contract instead, and a built-in's, an extension's or a plugin's lives outside the workspace.
+    folder: z
+        .string()
+        .optional()
+        .describe(
+            "The workspace-relative folder holding it, when that folder is what the agent reads. Absent for your own skills, which are written here rather than as files, and for anything kept outside the workspace.",
+        ),
+    // Defaulted for the daemon-older-than-browser seam. Relative to the skill's folder, SKILL.md left out, capped.
+    files: z
+        .array(z.string())
+        .default([])
+        .describe("The other files in its folder (references, scripts, licences), relative to it, SKILL.md left out. Capped at 50."),
 });
 export type SkillBody = z.infer<typeof SkillBodySchema>;
 export const SkillIdSchema = z.object({

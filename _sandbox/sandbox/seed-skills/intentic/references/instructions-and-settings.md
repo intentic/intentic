@@ -44,8 +44,14 @@ exactly as a custom sandbox prompt does; empty or missing falls back to the sand
 
 **Skills.** The owner's own are stored in `.intentic/config/skills/` and switched on as copies in
 `/work/.agents/skills/` (Claude reads them through `/work/.claude/skills`, one link to that folder), managed on
-Sandbox ▸ Agent ▸ Instructions, **Skills**. A role's own are in its kit, `roles/<id>/skills/`. The
-image-baked ones, this skill among them, are in `/root/.claude/skills/`, which only the Claude Code loop loads.
+Sandbox ▸ Agent ▸ Instructions, **Skills**. That list shows the owner's own (and a role's kit, and files dropped into
+the loaded folder) as cards, and everything connections, extensions and the image brought as names grouped by where
+they came from. Pressing one opens it as a page in a Workspace tab (a sheet on a phone): its trigger line and
+instructions, written there for the owner's own, how many turns loaded it in the last seven days (counted from the
+turns' own tool calls, a skill tool naming it or a read of its `SKILL.md`, kept in `/history/skill-uses.json`), and the
+files of its folder, each opening as a workspace file where the folder is the one the agent reads. A role's own are in
+its kit, `roles/<id>/skills/`. The image-baked ones, this skill among them, are in `/root/.claude/skills/`, which only
+the Claude Code loop loads.
 
 ## When a change reaches agents
 

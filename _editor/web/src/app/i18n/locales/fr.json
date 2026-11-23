@@ -7423,16 +7423,17 @@
             "whatGetsStopped": "Ce qui est arrêté"
         },
         "agentSkills": {
-            "cameWhatInstalledConnected": "{count} sont venues avec ce que vous avez installé et connecté",
-            "couldntReadSkill": "Impossible de lire ce skill.",
             "couldntSaveSkill": "Impossible d'enregistrer ce skill.",
             "filterSkills": "Filtrer les skills",
             "nameTriggerOrigin": "Nom, déclencheur ou origine…",
-            "noSkillsAddedYet": "Aucun skill ajouté pour l'instant.",
             "nothingMatchesFilter": "Rien ne correspond à ce filtre.",
             "readingSandboxsSkills": "Lecture des skills de ce sandbox…",
             "skills": "Skills",
-            "toDropOneDrop": "pour en retirer un, retirez ce qui le livre"
+            "connections": "Connexions",
+            "extensionsPlugins": "Extensions et plugins",
+            "saysWhatNotWhen": "Dit ce qu'il est, pas quand l'utiliser : l'agent le choisit donc rarement.",
+            "noneOfYourOwn": "Aucun des vôtres pour l'instant. Écrivez-en un pour apprendre à l'agent comment on travaille ici.",
+            "openSkill": "Ouvrir {name}"
         },
         "agentSubagents": {
             "keepRoomForYou": "Marge gardée pour vous",
@@ -12079,6 +12080,21 @@
             "bringBack": "Ramener",
             "bringBackNote": "Dans la fenêtre principale",
             "windowBlocked": "Le navigateur a bloqué la nouvelle fenêtre. Autorisez les fenêtres pop-up pour ce site, puis réessayez."
+        },
+        "skillPage": {
+            "used": "Utilisation",
+            "size": "Taille",
+            "from": "Origine",
+            "files": "Fichiers",
+            "words": "{count} mot | {count} mots",
+            "turnsThisWeek": "{count} tour cette semaine | {count} tours cette semaine",
+            "lastUsed": "dernière fois {when}",
+            "notThisWeek": "Pas utilisé cette semaine",
+            "notUsedYet": "Pas encore utilisé",
+            "gone": "{name} n'est plus là.",
+            "openConnection": "Ouvrir sa connexion",
+            "on": "Activé",
+            "off": "Désactivé"
         }
     },
     "settings": {
@@ -14415,7 +14431,8 @@
             "management": "Panneau de gestion",
             "path": "Chemin",
             "preview": "Aperçu",
-            "closeTab": "Fermer {title}"
+            "closeTab": "Fermer {title}",
+            "skill": "Skill"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} dépôts",

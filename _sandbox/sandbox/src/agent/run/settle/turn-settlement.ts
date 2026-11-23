@@ -63,6 +63,8 @@ export interface SettlementPlan {
     readonly settledUsage?: SettledTurn;
     // Its failed commands and clean runs, for the command record (logs/command-runs-log.ts); empty when it ran none.
     readonly commands: readonly CommandRunLine[];
+    // The skills it loaded, each once, for the Skills list's weekly count (store/skills/skill-uses.ts).
+    readonly skills: readonly string[];
 }
 
 // How the turn ended, as far as settling it goes.
@@ -85,7 +87,7 @@ export interface TurnEnd {
     // The namespace the turn ran in, if it entered one.
     readonly isolation: TurnPlacement | undefined;
     readonly experiments: Extract<TurnPlan, { readonly ok: true }>["experiments"];
-    readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "reach" | "metrics" | "commands">;
+    readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "reach" | "metrics" | "commands" | "skills">;
     // When the runtime was started (epoch ms): the turn's own clock, for the duration a provider did not report.
     readonly startedAt: number;
 }
@@ -266,6 +268,7 @@ export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPl
             },
             end.frames.commands.reading(),
         ),
+        skills: end.frames.skills.reading(),
     };
 };
 

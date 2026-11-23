@@ -1,18 +1,20 @@
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { SandboxSettings, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
-import { readSkillText, RETIRED_OWNER, SANDBOX_OWNER, skillInventory } from "./skill-inventory.js";
+import { readSkill, readSkillText, RETIRED_OWNER, SANDBOX_OWNER, skillFolderFiles, skillInventory } from "./skill-inventory.js";
+import { createTurnFrames } from "../agent/run/frames/frame-reducers.js";
+import { recordSkillUses } from "../store/skills/skill-uses.js";
 import { stampSkill } from "../store/loaded-skills.js";
 import { roleSkillsRoot, writeRoleSkill } from "../roles/role-kit.js";
 import { scanSkillFolders, SKILL_FILE } from "../skill-file.js";
-import { reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js";
+import { ownSkillDir, reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js";
 
 // The image's own plugin dirs; none by default, as on a bare dev run.
 interface BakedPlugins {
@@ -43,7 +45,8 @@ const stubServices = (
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
-        config: unstubbed<Services["config"]>("config", { extensionsDir: "", ...baked }),
+        // Beside the workspace, one per root, so a count one test records is never another's.
+        config: unstubbed<Services["config"]>("config", { extensionsDir: "", historyRoot: `${root}-history`, ...baked }),
         // Read on every listing: a role's kit skills are part of what the agent knows (the `role` origin). Empty
         // is the default most cases here want.
         roles: unstubbed<Services["roles"]>("roles", { list: async () => [...roles] }),
@@ -250,7 +253,7 @@ test("the image's webq plugin lists its skills", async () => {
 
     const listed = await skillInventory(stubServices(root, [], settingsWith([]), [], baked));
     expect(listed.filter((row) => row.id.includes(":"))).toEqual([
-        { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed },
+        { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed, uses: { week: 0 } },
     ]);
 });
 
@@ -359,4 +362,97 @@ test("a stamped skill no writer claims lists as retired, and one whose writer co
     expect(rowFor(rows, "old-tool")).toMatchObject({ origin: "builtin", owner: RETIRED_OWNER, removable: false });
     // A cli skill whose capability entry is gone: the sandbox's, not a drop.
     expect(rowFor(rows, "github")).toMatchObject({ origin: "builtin", owner: SANDBOX_OWNER, removable: false });
+});
+
+// The skill page opens a folder only where it is the copy the agent reads, and lists its files wherever there is one.
+test("a skill's folder is offered where the agent reads it, and its other files listed wherever it has a folder", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const studio: Role = { id: "studio", label: "Studio", capabilities: [] };
+    const baked = { webqPluginDir: join(root, "webq-plugin") };
+    const services = stubServices(root, [], settingsWith(["lsp"]), [studio], baked);
+    const loaded = join(root, ".agents", "skills");
+    await writeSkill(loaded, "unsloppify", "Use when tidying prose.");
+    await mkdir(join(loaded, "unsloppify", "references"), { recursive: true });
+    await mkdir(join(loaded, "unsloppify", "scripts"), { recursive: true });
+    await writeFile(join(loaded, "unsloppify", "scripts", "scan.sh"), "#!/bin/sh\n");
+    await writeFile(join(loaded, "unsloppify", "references", "patterns.md"), "# Patterns\n");
+    await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." });
+    await switchOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." }, true);
+    await writeFile(join(ownSkillDir(root, "notes"), "example.md"), "An example.\n");
+    await reconcileBakedSkills(services, ["lsp"]);
+    await writeRoleSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    await writeFile(join(roleSkillsRoot(root, "studio"), "voice", "tone.md"), "Warm.\n");
+    await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.");
+    await writeFile(join(baked.webqPluginDir, "skills", "webq", "checklist.md"), "- tests\n");
+
+    const opened = async (id: string) => {
+        const found = await readSkill(services, id);
+        return { folder: found?.folder, files: await skillFolderFiles(found?.dir) };
+    };
+    expect(await opened("unsloppify")).toEqual({ folder: ".agents/skills/unsloppify", files: ["references/patterns.md", "scripts/scan.sh"] });
+    expect(await opened("role:studio:voice")).toEqual({ folder: relative(root, join(roleSkillsRoot(root, "studio"), "voice")), files: ["tone.md"] });
+    // The owner's own is written through the routes, so its loaded folder is not offered; what sits beside it in the
+    // store still lists.
+    expect(await opened("notes")).toEqual({ folder: undefined, files: ["example.md"] });
+    // Outside the workspace: listed, not opened.
+    expect(await opened("builtin:webq:webq")).toEqual({ folder: undefined, files: ["checklist.md"] });
+    // A baked tool is a string in the registry, even switched on with a copy on disk.
+    expect(await opened("lsp")).toEqual({ folder: undefined, files: [] });
+});
+
+test("a skill folder lists at most fifty other files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const dir = join(root, "big");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, SKILL_FILE), "---\nname: big\n---\n");
+    await Promise.all(Array.from({ length: 60 }, (_, index) => writeFile(join(dir, `f${String(index).padStart(2, "0")}.md`), "")));
+    const files = await skillFolderFiles(dir);
+    expect(files).toHaveLength(50);
+    expect(files[0]).toBe("f00.md");
+    expect(files).not.toContain(SKILL_FILE);
+});
+
+// The count rides the turn's own frames to its settle; a turn is one use however often it loads the skill.
+test("a turn that loads a skill counts once on its row, by a skill call or by reading its SKILL.md", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const baked = { webqPluginDir: join(root, "webq-plugin") };
+    const services = stubServices(root, [], settingsWith([]), [], baked);
+    await writeSkill(join(root, ".agents", "skills"), "ux-redesign", "Use when redesigning a screen.");
+    await writeSkill(join(root, ".agents", "skills"), "unsloppify", "Use when tidying prose.");
+    await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.");
+    const untouched = await skillInventory(services);
+    expect(rowFor(untouched, "ux-redesign").uses).toEqual({ week: 0 });
+
+    const settle = async (events: Parameters<ReturnType<typeof createTurnFrames>["note"]>[0][], at: number): Promise<void> => {
+        const frames = createTurnFrames(root, undefined);
+        for (const event of events) {
+            frames.note(event);
+        }
+        await recordSkillUses(`${root}-history`, frames.skills.reading(), at);
+    };
+    const at = Date.now();
+    await settle(
+        [
+            { kind: "tool_call", id: "s1", name: "Skill", category: "other", status: "in_progress", input: JSON.stringify({ skill: "ux-redesign" }) },
+            { kind: "tool_call", id: "s2", name: "Skill", category: "other", status: "in_progress", input: JSON.stringify({ skill: "ux-redesign" }) },
+            { kind: "tool_call", id: "s3", name: "Skill", category: "other", status: "in_progress", input: JSON.stringify({ skill: "webq:webq" }) },
+        ],
+        at - 60_000,
+    );
+    await settle(
+        [
+            { kind: "tool_call", id: "r1", name: "Read", category: "read", status: "in_progress", target: join(root, ".agents/skills/ux-redesign/SKILL.md") },
+            { kind: "tool_call", id: "b1", name: "Bash", category: "execute", status: "in_progress", target: "sed -n 1,80p .agents/skills/unsloppify/SKILL.md" },
+            // Writing the file is not loading it.
+            { kind: "tool_call", id: "e1", name: "Edit", category: "edit", status: "in_progress", target: ".agents/skills/webq/SKILL.md" },
+        ],
+        at,
+    );
+
+    const rows = await skillInventory(services);
+    expect(rowFor(rows, "ux-redesign").uses).toEqual({ week: 2, last: new Date(at).toISOString() });
+    expect(rowFor(rows, "unsloppify").uses).toEqual({ week: 1, last: new Date(at).toISOString() });
+    // A plugin's skill is called `<plugin>:<name>` and listed by its name.
+    expect(rowFor(rows, "builtin:webq:webq").uses).toEqual({ week: 1, last: new Date(at - 60_000).toISOString() });
+    expect(rowFor(rows, "lsp").uses).toEqual({ week: 0 });
 });

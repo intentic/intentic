@@ -1,15 +1,17 @@
-import { join } from "node:path";
+import { readdir } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { type AgentMount, agentMounts } from "../agent/run/harness/agent-mounts.js";
 import type { Services } from "../composition.js";
 import { accountGroupOf } from "../capabilities/account-skills.js";
-import { listRoleSkills, readRoleSkill } from "../roles/role-kit.js";
+import { listRoleSkills, readRoleSkill, roleSkillsRoot } from "../roles/role-kit.js";
 import { loadedSkillsRoot, skillWriterOf } from "../store/loaded-skills.js";
+import { readSkillUses } from "../store/skills/skill-uses.js";
 import { parseSkillFile, scanSkillFolders, SKILL_FILE, skillDocument } from "../skill-file.js";
 import { retiredSkillReason } from "./skill-retirement.js";
-import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn } from "./skills.js";
+import { bakedSkillNames, bakedSkillText, isBakedSkill, listOwnSkills, ownSkillDir, ownSkillOn } from "./skills.js";
 
 // Reads everything the agent knows from six sources (baked tools, the owner's store, connections, plugins, extensions,
 // roles) directly off disk, not a config projection; an unclaimed file lists as `dropped` rather than being skipped.
@@ -138,43 +140,89 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
         }
     }
 
-    return rows;
+    // Joined by name, the one key a skill tool and a file read both carry; every row answers once the count exists, a
+    // skill no turn has loaded since as zero.
+    const uses = await readSkillUses(services.config.historyRoot);
+    return rows.map((row) => ({ ...row, uses: uses.get(row.name) ?? { week: 0 } }));
 };
 
 // A baked tool's description, parsed from the registry's own skill text so there's no second copy to disagree with it;
 // read from the registry since an off tool has no file on disk.
 const bakedDescription = (name: string): string => parseSkillFile(bakedSkillText(name) ?? "").description ?? "";
 
-// Reads one skill's text by id, in the shapes the list mints (bare name, or `<origin>:<owner>:<name>`); always a fresh
-// read, since the file may change after the list is drawn. A bare name tries the loaded copy, then the store, then the
-// baked registry, in read order.
-export const readSkillText = async (services: Services, id: string): Promise<{ readonly name: string; readonly text: string } | undefined> => {
+// One skill as read by id: its text, the folder it lives in when there is one to list, and that folder as the workspace
+// names it when it is the copy the agent reads.
+export interface ReadSkill {
+    readonly name: string;
+    readonly text: string;
+    // Absolute; absent for a baked tool, whose text is a string in the registry.
+    readonly dir?: string;
+    readonly folder?: string;
+}
+
+// Reads one skill by id, in the shapes the list mints (bare name, or `<origin>:<owner>:<name>`); always a fresh read,
+// since the file may change after the list is drawn. A bare name tries the loaded copy, then the store, then the baked
+// registry, in read order.
+export const readSkill = async (services: Services, id: string): Promise<ReadSkill | undefined> => {
     const root = services.workspace.root;
     const [scope, owner, name] = id.split(":");
     // A kit skill's `owner` is the role id the list's id carries; the row's label is prettier but not a key.
     if (name !== undefined && owner !== undefined && scope === "role") {
         const skill = await readRoleSkill(root, owner, name);
-        return skill === undefined ? undefined : { name, text: skillDocument(skill.name, skill.description, skill.body) };
+        const dir = join(roleSkillsRoot(root, owner), name);
+        return skill === undefined ? undefined : { name, text: skillDocument(skill.name, skill.description, skill.body), dir, folder: workspaceFolder(root, dir) };
     }
+    // Outside the workspace: listed, never offered as a folder to open.
     if (name !== undefined && owner !== undefined && (scope === "builtin" || scope === "plugin" || scope === "extension")) {
         const capabilities = await services.capabilities.list();
         const mount = (await listedMounts(services, capabilities, [])).find((entry) => entry.origin === scope && entry.id === owner);
         if (mount === undefined) {
             return undefined;
         }
-        const text = await services.files.read(join(skillsDirOf(mount), name, SKILL_FILE));
-        return text === undefined ? undefined : { name, text };
+        const dir = join(skillsDirOf(mount), name);
+        const text = await services.files.read(join(dir, SKILL_FILE));
+        return text === undefined ? undefined : { name, text, dir };
     }
     // Any other colon-scope isn't minted here; treated as a literal name, so it just isn't found.
     const bare = scope ?? id;
-    const loaded = await services.files.read(join(loadedSkillsRoot(root), bare, SKILL_FILE));
-    if (loaded !== undefined) {
-        return { name: bare, text: loaded };
-    }
+    const loadedDir = join(loadedSkillsRoot(root), bare);
+    const loaded = await services.files.read(join(loadedDir, SKILL_FILE));
     const stored = await services.files.read(join(ownSkillDir(root, bare), SKILL_FILE));
+    // The owner's own is written through `skills.save`, which rewrites the loaded copy from the stored one, so its files
+    // are listed from the store and no folder is offered: a hand edit to either would be undone or desync the two.
     if (stored !== undefined) {
-        return { name: bare, text: stored };
+        return { name: bare, text: loaded ?? stored, dir: ownSkillDir(root, bare) };
     }
-    const baked = bakedSkillText(bare);
-    return baked === undefined ? undefined : { name: bare, text: baked };
+    // A baked tool's loaded copy is the registry's string written out, rewritten on every reconcile.
+    if (isBakedSkill(bare)) {
+        const baked = loaded ?? bakedSkillText(bare);
+        return baked === undefined ? undefined : { name: bare, text: baked };
+    }
+    return loaded === undefined ? undefined : { name: bare, text: loaded, dir: loadedDir, folder: workspaceFolder(root, loadedDir) };
+};
+
+/** The text alone, for a caller with no use for where it lives. */
+export const readSkillText = async (services: Services, id: string): Promise<{ readonly name: string; readonly text: string } | undefined> => {
+    const found = await readSkill(services, id);
+    return found === undefined ? undefined : { name: found.name, text: found.text };
+};
+
+const workspaceFolder = (root: string, dir: string): string => relative(root, dir).split(sep).join("/");
+
+// Enough for any skill a person wrote; a folder past it is a vendored tree, which a page of names would not help read.
+const SKILL_FILES_CAP = 50;
+
+/** The other files in a skill's folder, relative to it, SKILL.md left out, sorted and capped; none for no folder. */
+export const skillFolderFiles = async (dir: string | undefined): Promise<string[]> => {
+    if (dir === undefined) {
+        return [];
+    }
+    // allow(silent-catch): a folder gone or unreadable since its SKILL.md was read lists nothing, as no folder does
+    const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => []);
+    return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => relative(dir, join(entry.parentPath, entry.name)).split(sep).join("/"))
+        .filter((path) => path !== SKILL_FILE)
+        .toSorted()
+        .slice(0, SKILL_FILES_CAP);
 };

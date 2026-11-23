@@ -1,5 +1,6 @@
 import type { Services } from "../../../composition.js";
 import { appendCommandRuns } from "../../../logs/command-runs-log.js";
+import { recordSkillUses } from "../../../store/skills/skill-uses.js";
 import { readSettledUsage } from "../frames/settled-usage.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { ReachFrames } from "../../verification/agent-reach.js";
@@ -44,6 +45,7 @@ export const performSettlement = (
     }
     void deps.usage.record(plan.usage).catch((error: unknown) => deps.logger.warn({ err: error }, "usage: ledger append failed"));
     void appendCommandRuns(deps.config.historyRoot, plan.commands).catch((error) => deps.logger.warn({ err: error }, "commands: record append failed"));
+    void recordSkillUses(deps.config.historyRoot, plan.skills).catch((error) => deps.logger.warn({ err: error }, "skills: use count write failed"));
     turn.flush();
     // Last and never awaited: the allowance reading must not hold what waits on the turn's settle (frames/settled-usage.ts).
     if (plan.settledUsage !== undefined) {

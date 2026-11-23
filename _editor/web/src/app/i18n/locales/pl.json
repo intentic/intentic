@@ -6812,16 +6812,17 @@
             "whatGetsStopped": "Co zostaje zatrzymane"
         },
         "agentSkills": {
-            "cameWhatInstalledConnected": "Z tym, co zainstalowano i podłączono: {count}",
-            "couldntReadSkill": "Nie udało się odczytać tej umiejętności.",
             "couldntSaveSkill": "Nie udało się zapisać tej umiejętności.",
             "filterSkills": "Filtruj umiejętności",
             "nameTriggerOrigin": "Nazwa, wyzwalacz albo pochodzenie…",
-            "noSkillsAddedYet": "Nie dodano jeszcze żadnych umiejętności.",
             "nothingMatchesFilter": "Nic nie pasuje do tego filtra.",
             "readingSandboxsSkills": "Odczytywanie umiejętności tego sandboxa…",
             "skills": "Umiejętności",
-            "toDropOneDrop": "żeby jakąś usunąć, usuń to, co ją przynosi"
+            "connections": "Połączenia",
+            "extensionsPlugins": "Rozszerzenia i wtyczki",
+            "saysWhatNotWhen": "Mówi, czym jest, a nie kiedy jej używać, więc agent rzadko ją wybiera.",
+            "noneOfYourOwn": "Nie masz jeszcze własnych. Napisz jedną, żeby nauczyć agenta, jak się tu pracuje.",
+            "openSkill": "Otwórz {name}"
         },
         "agentSubagents": {
             "keepRoomForYou": "Zapas zostawiony dla ciebie",
@@ -11468,6 +11469,21 @@
             "bringBack": "Przywróć",
             "bringBackNote": "Do głównego okna",
             "windowBlocked": "Przeglądarka zablokowała nowe okno. Zezwól na wyskakujące okna dla tej strony i spróbuj ponownie."
+        },
+        "skillPage": {
+            "used": "Użycie",
+            "size": "Rozmiar",
+            "from": "Źródło",
+            "files": "Pliki",
+            "words": "{count} słowo | {count} słowa | {count} słów",
+            "turnsThisWeek": "{count} tura w tym tygodniu | {count} tury w tym tygodniu | {count} tur w tym tygodniu",
+            "lastUsed": "ostatnio {when}",
+            "notThisWeek": "Nieużywana w tym tygodniu",
+            "notUsedYet": "Jeszcze nieużywana",
+            "gone": "{name} już tu nie ma.",
+            "openConnection": "Otwórz połączenie",
+            "on": "Włączona",
+            "off": "Wyłączona"
         }
     },
     "settings": {
@@ -13804,7 +13820,8 @@
             "management": "Panel zarządzania",
             "path": "Ścieżka",
             "preview": "Podgląd",
-            "closeTab": "Zamknij {title}"
+            "closeTab": "Zamknij {title}",
+            "skill": "Umiejętność"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, repozytoria: {count}",

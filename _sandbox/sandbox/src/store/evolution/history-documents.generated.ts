@@ -64,6 +64,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "runner-pair-consumed.json", portability: "identity" },
     { path: "script-runs/", portability: "carry" },
     { path: "shares.json", portability: "carry" },
+    { path: "skill-uses.json", portability: "derived" },
     { path: "spawned-children/", portability: "carry" },
     { path: "sync-enrollments.json", portability: "identity", note: "Re-pair desktop sync from the Sync tab." },
     { path: "sync-pair-consumed.json", portability: "identity" },

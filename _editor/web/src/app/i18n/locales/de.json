@@ -7423,16 +7423,17 @@
             "whatGetsStopped": "Was gestoppt wird"
         },
         "agentSkills": {
-            "cameWhatInstalledConnected": "{count} kamen mit dem, was Sie installiert und verbunden haben",
-            "couldntReadSkill": "Dieser Skill ließ sich nicht lesen.",
             "couldntSaveSkill": "Dieser Skill ließ sich nicht speichern.",
             "filterSkills": "Skills filtern",
             "nameTriggerOrigin": "Name, Auslöser oder Herkunft…",
-            "noSkillsAddedYet": "Noch keine Skills hinzugefügt.",
             "nothingMatchesFilter": "Nichts passt zu diesem Filter.",
             "readingSandboxsSkills": "Die Skills dieser Sandbox werden gelesen…",
             "skills": "Skills",
-            "toDropOneDrop": "um einen loszuwerden, entfernen Sie das, was ihn mitbringt"
+            "connections": "Verbindungen",
+            "extensionsPlugins": "Erweiterungen & Plugins",
+            "saysWhatNotWhen": "Sagt, was er ist, aber nicht, wann er gebraucht wird, daher wählt der Agent ihn selten.",
+            "noneOfYourOwn": "Noch keine eigenen. Schreiben Sie einen, um dem Agenten beizubringen, wie hier gearbeitet wird.",
+            "openSkill": "{name} öffnen"
         },
         "agentSubagents": {
             "keepRoomForYou": "Für dich freigehaltener Spielraum",
@@ -12079,6 +12080,21 @@
             "bringBack": "Zurückholen",
             "bringBackNote": "Ins Hauptfenster",
             "windowBlocked": "Der Browser hat das neue Fenster blockiert. Erlaube Pop-ups für diese Seite und versuche es erneut."
+        },
+        "skillPage": {
+            "used": "Genutzt",
+            "size": "Umfang",
+            "from": "Herkunft",
+            "files": "Dateien",
+            "words": "{count} Wort | {count} Wörter",
+            "turnsThisWeek": "{count} Zug diese Woche | {count} Züge diese Woche",
+            "lastUsed": "zuletzt {when}",
+            "notThisWeek": "Diese Woche nicht genutzt",
+            "notUsedYet": "Noch nicht genutzt",
+            "gone": "{name} gibt es hier nicht mehr.",
+            "openConnection": "Verbindung öffnen",
+            "on": "An",
+            "off": "Aus"
         }
     },
     "settings": {
@@ -14415,7 +14431,8 @@
             "management": "Verwaltungspanel",
             "path": "Pfad",
             "preview": "Vorschau",
-            "closeTab": "{title} schließen"
+            "closeTab": "{title} schließen",
+            "skill": "Skill"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} Repos",

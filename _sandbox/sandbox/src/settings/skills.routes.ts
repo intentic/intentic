@@ -2,8 +2,9 @@ import { skillsContract } from "@intentic/sandbox-contract/contracts/skills.cont
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { opt } from "../opt.js";
 import { parseSkillFile } from "../skill-file.js";
-import { readSkillText, skillInventory } from "./skill-inventory.js";
+import { readSkill, skillFolderFiles, skillInventory } from "./skill-inventory.js";
 import { isBakedSkill, ownSkillOn, readOwnSkill, removeOwnSkill, switchOwnSkill, writeOwnSkill } from "./skills.js";
 
 // One read over everything the agent knows, write access to the half the owner authored. An own skill's stored text
@@ -14,11 +15,17 @@ export const createSkillsRoutes = (services: Services) => {
     return {
         list: i.list.handler(() => skillInventory(services)),
         read: i.read.handler(async ({ input }) => {
-            const found = await readSkillText(services, input.id);
+            const found = await readSkill(services, input.id);
             if (found === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no skill with that id, it may have been removed since this list was drawn" });
             }
-            return { id: input.id, name: found.name, body: parseSkillFile(found.text).body };
+            return {
+                id: input.id,
+                name: found.name,
+                body: parseSkillFile(found.text).body,
+                ...opt("folder", found.folder),
+                files: await skillFolderFiles(found.dir),
+            };
         }),
         save: i.save.handler(async ({ input }) => {
             // Refused, not shadowed: both stores write the same file, so the name would silently claim the tool's

@@ -7,6 +7,7 @@ import { useDiffStat } from "../changes/useDiffStat";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import ExtensionDocument from "../../../core-views/ExtensionDocument.vue";
+import { skillView } from "../../../workbench/views/skillView";
 import DirectoryOperator from "../directory-ui/DirectoryOperator.vue";
 import DirectoryUiHost from "../directory-ui/DirectoryUiHost.vue";
 import HomeView from "../home/HomeView.vue";
@@ -167,6 +168,10 @@ const diff = useLoaded(() => ({
         <!-- A directory's document, rendered by whichever extension has something to say about it. -->
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
             <ExtensionDocument :extension="activeTab.extension" :provider="activeTab.provider" :path="activeTab.path" :title="activeTab.title" />
+        </div>
+        <!-- One of the agent's skills, read and written as a page, whichever source it came from. -->
+        <div v-else-if="activeTab?.kind === 'skill'" class="min-h-0 flex-1">
+            <component :is="skillView()" v-if="skillView() !== undefined" :key="activeTab.skill" :skill="activeTab.skill" :name="activeTab.name" />
         </div>
         <!-- The home, whenever there are files to draw; an empty workspace still gets every way to get code in. -->
         <HomeView v-else-if="!empty" />

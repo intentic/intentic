@@ -6,10 +6,12 @@ import { useT } from "@intentic/ui/i18n";
 
 // Two looks, by what the reader is doing. Rewriting a saved skill is editing where it is read: the trigger line and the
 // instructions in the type they are read in, no field boxes, a hover wash saying they can be typed into. Its name is
-// not asked: it is frozen (the invocation key and the directory) and the row already says it.
+// not asked: it is frozen (the invocation key and the directory) and the page's head already says it.
 // Writing a new one is filling in blanks, and a blank has to look like one: every field is a labelled, framed box, with
 // the label strongest, the hint under it quieter, and the example inside the frame, so an example never passes for a
-// value and the form scans as three questions top to bottom. The name is the first of them; the row's head shows it as typed.
+// value and the form scans as three questions top to bottom. The name is the first of them; the page's head shows it as typed.
+// What is typed lives in the caller's models, not here: a Workspace tab unmounts when another is picked, and the text
+// has to outlive that (skillDrafts.ts).
 
 const t = useT();
 
@@ -29,6 +31,8 @@ const {
     saving?: boolean;
     /** Why the last save failed, said beside the button that sent it. */
     error?: string | undefined;
+    /** A doubt about the trigger line worth saying under it (it says what, not when), while nothing is wrong with it. */
+    triggerNote?: string | undefined;
 }>();
 
 const emit = defineEmits<{ save: [SkillDraft]; cancel: [] }>();
@@ -47,8 +51,8 @@ const onName = (event: Event): void => {
 const creating = computed(() => skill === undefined);
 // A phone writes the instructions in a source box that brings its own padding; the document adds none on top of it.
 const { mobile } = useDevice();
-const description = ref(skill?.description ?? ``);
-const body = ref(skill?.body ?? ``);
+const description = defineModel<string>("description", { required: true });
+const body = defineModel<string>("body", { required: true });
 
 // Trailing dashes are leftover from typing (`code-review-`), not part of the intended name.
 const slug = computed(() => (skill === undefined ? name.value.replace(/-+$/, ``) : skill.name));
@@ -197,6 +201,7 @@ const PROBLEM = `flex items-center gap-1.5 text-xs text-danger`;
                 <Icon name="exclamation-circle" class="shrink-0 text-2xs" aria-hidden="true" />
                 {{ shown(`description`) }}
             </p>
+            <p v-else-if="triggerNote !== undefined" class="text-xs text-warning">{{ triggerNote }}</p>
         </div>
 
         <div :class="PAIR">

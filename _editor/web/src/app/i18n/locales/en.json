@@ -7423,16 +7423,17 @@
             "whatGetsStopped": "What gets stopped"
         },
         "agentSkills": {
-            "cameWhatInstalledConnected": "{count} came with what you installed and connected",
-            "couldntReadSkill": "Couldn't read this skill.",
             "couldntSaveSkill": "Couldn't save this skill.",
             "filterSkills": "Filter skills",
             "nameTriggerOrigin": "Name, trigger or origin…",
-            "noSkillsAddedYet": "No skills added yet.",
             "nothingMatchesFilter": "Nothing matches that filter.",
             "readingSandboxsSkills": "Reading this sandbox's skills…",
             "skills": "Skills",
-            "toDropOneDrop": "to drop one, drop the thing that ships it"
+            "connections": "Connections",
+            "extensionsPlugins": "Extensions & plugins",
+            "saysWhatNotWhen": "Says what it is, not when to use it, so the agent rarely picks it.",
+            "noneOfYourOwn": "None of your own yet. Write one to teach the agent how work is done here.",
+            "openSkill": "Open {name}"
         },
         "agentSubagents": {
             "keepRoomForYou": "Room kept for you",
@@ -12079,6 +12080,21 @@
             "bringBack": "Bring back",
             "bringBackNote": "Into the main window",
             "windowBlocked": "The browser blocked the new window. Allow pop-ups for this site, then try again."
+        },
+        "skillPage": {
+            "used": "Used",
+            "size": "Size",
+            "from": "From",
+            "files": "Files",
+            "words": "{count} word | {count} words",
+            "turnsThisWeek": "{count} turn this week | {count} turns this week",
+            "lastUsed": "last {when}",
+            "notThisWeek": "Not used this week",
+            "notUsedYet": "Not used yet",
+            "gone": "{name} isn't here any more.",
+            "openConnection": "Open its connection",
+            "on": "On",
+            "off": "Off"
         }
     },
     "settings": {
@@ -14415,7 +14431,8 @@
             "management": "Management panel",
             "path": "Path",
             "preview": "Preview",
-            "closeTab": "Close {title}"
+            "closeTab": "Close {title}",
+            "skill": "Skill"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} repos",

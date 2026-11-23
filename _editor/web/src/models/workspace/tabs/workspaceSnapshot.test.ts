@@ -93,6 +93,7 @@ describe(`the editor's open tabs`, () => {
             strip(`dir:`, [
                 { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
                 { kind: `directory`, id: `dir:`, dir: `` },
+                { kind: `skill`, id: `skill:extension:pack:review`, skill: `extension:pack:review`, name: `review` },
             ]),
         );
 
@@ -101,6 +102,8 @@ describe(`the editor's open tabs`, () => {
         expect(restored?.tabs).toEqual([
             { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
             { kind: `directory`, id: `dir:`, dir: `` },
+            // A skill's page comes back on its id, under the name it was opened with, before the list has answered.
+            { kind: `skill`, id: `skill:extension:pack:review`, skill: `extension:pack:review`, name: `review` },
         ]);
     });
 

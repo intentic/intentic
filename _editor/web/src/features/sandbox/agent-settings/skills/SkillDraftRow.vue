@@ -6,7 +6,7 @@ import SkillEditor from "./SkillEditor.vue";
 import { skillVisual } from "./skillVisual";
 import { useT } from "@intentic/ui/i18n";
 
-// A skill not saved yet, drawn as the open row it will become: the same head and the editor under one rule, at the top
+// A role kit's skill not saved yet (RoleKitFields.vue), drawn as the open row it will become: the same head and the editor under one rule, at the top
 // of the list where the header's "Write a skill" put it. Not a <DisclosureRow>: it has nothing to fold, and a stray
 // press on its head must not close it and throw away what was typed. The head is a preview, not a field: it reads "New
 // skill" until a name is typed into the form below, then that name, with the mark that name will carry, so what is
@@ -30,6 +30,8 @@ const emit = defineEmits<{ save: [SkillDraft]; cancel: [] }>();
 const tier = useRowDensity(() => undefined);
 
 const name = ref(``);
+const description = ref(``);
+const body = ref(``);
 const named = computed(() => name.value.replace(/-+$/, ``) !== ``);
 
 // Asked of the same tiers a saved row is, as one of the reader's own: no extension or connection can claim it yet.
@@ -66,6 +68,8 @@ onMounted(() => {
             <SkillEditor
                 ref="editor"
                 v-model:name="name"
+                v-model:description="description"
+                v-model:body="body"
                 :taken="taken"
                 :disabled="disabled"
                 :saving="saving"

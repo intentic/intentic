@@ -7423,16 +7423,17 @@
             "whatGetsStopped": "Qué se detiene"
         },
         "agentSkills": {
-            "cameWhatInstalledConnected": "{count} vinieron con lo que instalaste y conectaste",
-            "couldntReadSkill": "No se ha podido leer esta skill.",
             "couldntSaveSkill": "No se ha podido guardar esta skill.",
             "filterSkills": "Filtrar skills",
             "nameTriggerOrigin": "Nombre, disparador u origen…",
-            "noSkillsAddedYet": "Todavía no se han añadido skills.",
             "nothingMatchesFilter": "Nada coincide con ese filtro.",
             "readingSandboxsSkills": "Leyendo las skills de este sandbox…",
             "skills": "Skills",
-            "toDropOneDrop": "para quitar una, quita lo que la trae"
+            "connections": "Conexiones",
+            "extensionsPlugins": "Extensiones y plugins",
+            "saysWhatNotWhen": "Dice qué es, no cuándo usarla, así que el agente rara vez la elige.",
+            "noneOfYourOwn": "Todavía no tienes ninguna propia. Escribe una para enseñar al agente cómo se trabaja aquí.",
+            "openSkill": "Abrir {name}"
         },
         "agentSubagents": {
             "keepRoomForYou": "Margen reservado para ti",
@@ -12079,6 +12080,21 @@
             "bringBack": "Traer de vuelta",
             "bringBackNote": "A la ventana principal",
             "windowBlocked": "El navegador bloqueó la nueva ventana. Permite las ventanas emergentes en este sitio y vuelve a intentarlo."
+        },
+        "skillPage": {
+            "used": "Uso",
+            "size": "Tamaño",
+            "from": "Origen",
+            "files": "Archivos",
+            "words": "{count} palabra | {count} palabras",
+            "turnsThisWeek": "{count} turno esta semana | {count} turnos esta semana",
+            "lastUsed": "la última, {when}",
+            "notThisWeek": "Sin usar esta semana",
+            "notUsedYet": "Todavía sin usar",
+            "gone": "{name} ya no está aquí.",
+            "openConnection": "Abrir su conexión",
+            "on": "Activada",
+            "off": "Desactivada"
         }
     },
     "settings": {
@@ -14415,7 +14431,8 @@
             "management": "Panel de gestión",
             "path": "Ruta",
             "preview": "Vista previa",
-            "closeTab": "Cerrar {title}"
+            "closeTab": "Cerrar {title}",
+            "skill": "Skill"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} repos",
