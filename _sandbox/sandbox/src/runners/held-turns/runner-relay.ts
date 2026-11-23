@@ -171,7 +171,7 @@ const opened = async (context: RelayContext, open: () => Promise<AsyncIterable<A
 };
 
 // What a relay does with each frame before it goes on: the frames relayed for it (none drops it), once whatever it waits
-// on is done (a page it shows brought home, runner-pages.ts).
+// on is done (a page or a picture it shows brought home, runner-pages.ts and runner-pictures.ts).
 export type RelayFrame = (event: AgentEvent) => readonly AgentEvent[] | Promise<readonly AgentEvent[]>;
 
 // One stream's frames, relayed until it ends or dies; a death is logged, not thrown, since the caller reads on elsewhere.

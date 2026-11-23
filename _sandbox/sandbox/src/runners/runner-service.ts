@@ -23,7 +23,8 @@ import type { RunnerIdentity } from "./runner-identity.js";
 import { keepRunnerPresentation } from "./naming/runner-presentation.js";
 import { DISPATCHED_CHILD_NOTES } from "./held-turns/dispatched-child-notes.js";
 import { filePresentationStore } from "../system/presentation/presentation-store.js";
-import { readStoredPage } from "../workspace/files/stored-pages.js";
+import { readStoredPage } from "../workspace/files/stored/stored-pages.js";
+import { ARTIFACT_MAX_BYTES, readArtifact, sha256Of } from "../workspace/files/stored/stored-artifacts.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
 // adapter onto machinery this daemon already has: a turn, its answers and its steers go through the TurnStarter port,
@@ -177,6 +178,16 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
                 throw new ORPCError("NOT_FOUND", { message: `this runner holds no page at ${input.path}` });
             }
             return { html };
+        }),
+        readArtifact: os.readArtifact.handler(async ({ input }) => {
+            const read = await readArtifact(services.workspace.root, input.path);
+            if (read.kind === "none") {
+                throw new ORPCError("NOT_FOUND", { message: `this runner holds no artifact at ${input.path}` });
+            }
+            if (read.kind === "too-large") {
+                throw new ORPCError("PAYLOAD_TOO_LARGE", { message: `${input.path} is over ${ARTIFACT_MAX_BYTES / 1024 / 1024} MiB, so it stays on the runner` });
+            }
+            return sha256Of(read.bytes) === input.have ? {} : { bytesBase64: read.bytes.toString("base64") };
         }),
         ackTurn: os.ackTurn.handler(({ input }) => {
             remoteTurns.ack(input.conversationId, input.after);

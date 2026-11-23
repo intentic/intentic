@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
-import { stateRelPath } from "../../state-paths.js";
-import { resolveRealWithin } from "./workspace-files-paths.js";
+import { stateRelPath } from "../../../state-paths.js";
+import { resolveRealWithin } from "../workspace-files-paths.js";
 
 // The files of the pages chats showed (the agent's show_page, agent/pages/page-store.ts files them), as anything that
 // reads one by the path its transcript names sees them: kept here, below the agent, so a runner's relay can file a page

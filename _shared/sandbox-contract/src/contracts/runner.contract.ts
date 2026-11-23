@@ -43,6 +43,15 @@ export const runnerContract = {
     // reads pages from the parent, can draw it. NOT_FOUND for a path that is not a stored page; an older runner lacks the
     // procedure, and its pages stay on the runner.
     readPage: oc.input(z.object({ path: z.string().min(1) })).output(z.object({ html: z.string() })),
+    // A picture a turn here showed (a screenshot, a generated image), by the workspace path its tool card names, read from
+    // the runner's artifacts folder: the parent files a copy before relaying the card, as it does a page, since the chat
+    // reads every picture from the parent and neither the relay nor the branch's push carries that folder. `have` is the
+    // sha256 of a file the parent already holds at that path; the answer then carries no bytes when the runner's file is
+    // the same. NOT_FOUND for a path outside the artifacts folder or no file there, PAYLOAD_TOO_LARGE past the cap; an
+    // older runner lacks the procedure, and its pictures stay on the runner.
+    readArtifact: oc
+        .input(z.object({ path: z.string().min(1), have: z.string().optional() }))
+        .output(z.object({ bytesBase64: z.string().optional() })),
     // Returns `applied` rather than throwing: a missing id is an ordinary race, same as local NOT_FOUND.
     reply: oc.input(AgentReplySchema).output(z.object({ applied: z.boolean() })),
     // Attachments/editor context travel uncomposed: the note must build against the runner's own workspace root.

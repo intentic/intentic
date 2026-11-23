@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
-import { keepPageCopy } from "../../workspace/files/stored-pages.js";
+import { keepPageCopy } from "../../workspace/files/stored/stored-pages.js";
 import type { RunnerHub } from "../runner-peer.js";
 
 /* THE PAGES A RUNNER'S TURN SHOWED, BROUGHT HOME. `show_page` files the page in the workspace of the machine running the

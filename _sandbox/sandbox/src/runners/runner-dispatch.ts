@@ -16,6 +16,7 @@ import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "
 import { openRunnerTurn } from "./ownership/account-holds.js";
 import { collectHeld, payOwedStop, type RelayContext, type RelayFrame, relayTurn, stopRemoteTurn } from "./held-turns/runner-relay.js";
 import { bringPageHome } from "./held-turns/runner-pages.js";
+import { bringPicturesHome } from "./held-turns/runner-pictures.js";
 
 // One turn executed on a runner, the parent's side of the dispatch: mirrors the
 // isolated arm's local shape, station for station.
@@ -25,7 +26,8 @@ import { bringPageHome } from "./held-turns/runner-pages.js";
 // pushed. A dropped link mid-turn is read through (runner-relay.ts): the runner finishes the turn either way, and the
 // relay reads on from the frame it last had once the runner is back.
 // Attachments ride inline (base64): daemon state, not repo content, so the mirror's git sync can't carry them. For the
-// same reason a page the turn shows is fetched from the runner before its frame is relayed (held-turns/runner-pages.ts).
+// same reason a page the turn shows, and a picture in its artifacts folder a tool card shows (a screenshot), are fetched
+// from the runner before their frame is relayed (held-turns/runner-pages.ts, held-turns/runner-pictures.ts).
 
 // What a dispatch reads of the daemon: the runner's socket, the checkouts it mirrors, and the log.
 export interface DispatchServices {
@@ -189,11 +191,11 @@ export async function* dispatchRemoteTurn(
     const repos = await syncRepos(services, worktree);
     const sync = (op: "pull" | "push"): RunnerSync => ({ op, conversationId, branch: worktree.branch, repos });
     const context: RelayContext = { hub: services.runnerHub, logger: services.logger, runnerId, conversationId, signal };
-    const pagesHome = { hub: services.runnerHub, logger: services.logger, runnerId, workspaceRoot: services.workspace.root };
+    const home = { hub: services.runnerHub, logger: services.logger, runnerId, workspaceRoot: services.workspace.root };
     const cards = noteCards(runnerId, conversationId);
     const relayed: RelayFrame = async (event) => {
-        await bringPageHome(pagesHome, event);
-        return cards(event);
+        await bringPageHome(home, event);
+        return cards(await bringPicturesHome(home, event));
     };
 
     // Stop must reach the runner explicitly: closing the stream alone races the provider, still spending unseen. A

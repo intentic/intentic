@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { readMcpAppData } from "@intentic/sandbox-contract/text/pages";
 import { SHOW_PAGE_TOOL } from "./page-names.js";
-import { PAGE_DRAWING, PAGES_DIR } from "../../workspace/files/stored-pages.js";
+import { PAGE_DRAWING, PAGES_DIR } from "../../workspace/files/stored/stored-pages.js";
 
 // What a page's own scripts threw in a reader's chat, said to the agent that showed it: the chat's frame catches each
 // uncaught error over the bridge (sandbox-contract text/pages.ts) and the editor hands them here. The check the agent

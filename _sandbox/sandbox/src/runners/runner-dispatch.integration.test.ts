@@ -3,10 +3,11 @@ import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { RunnerTurn,RunnerSyncLine,RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { ConversationWorktree } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PAGES_DIR } from "../workspace/files/stored-pages.js";
+import { PAGES_DIR } from "../workspace/files/stored/stored-pages.js";
+import { ARTIFACTS_DIR, sha256Of } from "../workspace/files/stored/stored-artifacts.js";
 import { dispatchRemoteTurn } from "./runner-dispatch.js";
 
 /* The dispatch's OFFLINE answer, the one path that needs no runner to exist: a machine asleep is a normal state. */
@@ -74,7 +75,13 @@ const notHere = (): never => {
 const runnerAt = async (
     turns: RemoteTurns,
     script: readonly AgentEvent[],
-    options: { dieAfter?: number; redial?: () => void; old?: boolean; pages?: Readonly<Record<string, string>> } = {},
+    options: {
+        dieAfter?: number;
+        redial?: () => void;
+        old?: boolean;
+        pages?: Readonly<Record<string, string>>;
+        pictures?: Readonly<Record<string, string>>;
+    } = {},
 ) => {
     const calls: string[] = [];
     const received: RunnerTurn[] = [];
@@ -132,6 +139,15 @@ const runnerAt = async (
                 throw new ORPCError("NOT_FOUND");
             }
             return { html };
+        }),
+        readArtifact: os.readArtifact.handler(({ input }) => {
+            calls.push(`readArtifact:${input.path}`);
+            const text = options.pictures?.[input.path];
+            if (options.old === true || text === undefined) {
+                throw new ORPCError("NOT_FOUND");
+            }
+            const bytes = Buffer.from(text);
+            return sha256Of(bytes) === input.have ? {} : { bytesBase64: bytes.toString("base64") };
         }),
         ping: os.ping.handler(() => ({ ok: true })),
         describe: os.describe.handler(notHere),
@@ -314,6 +330,67 @@ test("a page shown on the runner is filed here before its frame is relayed, and 
         expect(await readFile(join(root, shown), "utf8")).toBe("<p>both layouts</p>");
         await expect(readFile(join(root, lost), "utf8")).rejects.toThrow();
         expect(runner.calls()).toContain(`readPage:${shown}`);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+/* A PICTURE THE RUNNER'S TURN TOOK lands in the runner's artifacts folder; the chat reads pictures from the parent's, so
+   each card naming one waits for its file to come home (held-turns/runner-pictures.ts). boat-pjdf on omen, 2026-11-23:
+   every screenshot at the turn's end drew as "No longer available". */
+
+const shotFrame = (id: string, ...paths: string[]): AgentEvent => ({
+    kind: "tool_call_update",
+    id,
+    status: "completed",
+    content: [{ type: "text", text: "took it" }, ...paths.map((path) => ({ type: "image" as const, path }))],
+});
+
+const picturesIn = (frames: readonly AgentEvent[]): string[] =>
+    frames.flatMap((frame) => (frame.kind === "tool_call_update" ? (frame.content ?? []).flatMap((entry) => (entry.type === "image" ? [entry.path] : [])) : []));
+
+test("a screenshot taken on the runner is filed here before its card is relayed; one already here costs no bytes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "runner-pictures-"));
+    try {
+        const shot = `${ARTIFACTS_DIR}browser/page-1.png`;
+        const attached = `${ARTIFACTS_DIR}attachments/a/image.png`;
+        const lost = `${ARTIFACTS_DIR}browser/lost.png`;
+        // In the checkout: the branch's push brings it, so it is never asked for.
+        const inRepo = "docs/diagram.png";
+        await mkdir(join(root, ARTIFACTS_DIR, "attachments/a"), { recursive: true });
+        await writeFile(join(root, attached), "the person's picture");
+        const { services, dial, leave } = parent(root);
+        const runner = await runnerAt(createRemoteTurns(), [shotFrame("t1", shot, attached), shotFrame("t2", lost, inRepo), done], {
+            pictures: { [shot]: "pixels of page 1", [attached]: "the person's picture" },
+        });
+        dial(runner.client);
+        const frames = await dispatched(services);
+        leave();
+        expect(picturesIn(frames)).toEqual([shot, attached, lost, inRepo]);
+        expect(await readFile(join(root, shot), "utf8")).toBe("pixels of page 1");
+        await expect(readFile(join(root, lost), "utf8")).rejects.toThrow();
+        expect(runner.calls().filter((call) => call.startsWith("readArtifact:"))).toEqual([`readArtifact:${shot}`, `readArtifact:${attached}`, `readArtifact:${lost}`]);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("a runner's shot whose name another picture here already holds is filed under the next free name, and its card says so", async () => {
+    const root = await mkdtemp(join(tmpdir(), "runner-pictures-"));
+    try {
+        const shot = `${ARTIFACTS_DIR}browser/after.png`;
+        await mkdir(join(root, ARTIFACTS_DIR, "browser"), { recursive: true });
+        await writeFile(join(root, shot), "another conversation's after.png");
+        const { services, dial, leave } = parent(root);
+        // The same shot shown twice (taken, then Read back) is filed once.
+        const runner = await runnerAt(createRemoteTurns(), [shotFrame("t1", shot), shotFrame("t2", shot), done], { pictures: { [shot]: "the runner's after.png" } });
+        dial(runner.client);
+        const frames = await dispatched(services);
+        leave();
+        const renamed = `${ARTIFACTS_DIR}browser/after-2.png`;
+        expect(picturesIn(frames)).toEqual([renamed, renamed]);
+        expect(await readFile(join(root, shot), "utf8")).toBe("another conversation's after.png");
+        expect(await readFile(join(root, renamed), "utf8")).toBe("the runner's after.png");
     } finally {
         await rm(root, { recursive: true, force: true });
     }
