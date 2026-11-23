@@ -1,0 +1,1757 @@
+---
+/* The peeks of the big picture: what opens under the drawing when a part is selected. Each is a small drawing with a
+   title and at most one line of text, because a diagram reads faster than a paragraph. BigPictureFigure.astro shows
+   one at a time by its `data-peek` and closes it with any `data-bp-close`. Every word comes from
+   site-content/big-picture.ts. */
+import { bigPictureScene, type BigPictureSandbox } from "@intentic/site-content/big-picture";
+import { HUE, ICON, REACH_ICON, glyph, hostIcon } from "./big-picture-art";
+
+const scene = bigPictureScene;
+const { you, platform, laptop, ola, link } = scene.peeks;
+
+/* The sandbox peek's spokes: one line from the agents to each thing reached. Reach rows are a fixed 48px with 8px
+   between, so the lines can be drawn here, once, at build. */
+const ROW = 48;
+const GAP = 8;
+/* The "Reaches" label over the rows: 16px of text and the 8px gap under it. */
+const LABEL = 24;
+const spokes = (count: number) => {
+    const height = LABEL + count * ROW + (count - 1) * GAP;
+    const mid = height / 2;
+    const ends = Array.from({ length: count }, (_, index) => LABEL + index * (ROW + GAP) + ROW / 2);
+    return {
+        height,
+        mid,
+        paths: ends.map((end) => `M4 ${mid}C34 ${mid} 30 ${end} 60 ${end}`),
+        heads: ends.map((end) => `M58 ${end - 4.5}L64 ${end}L58 ${end + 4.5}`),
+    };
+};
+
+/* What a sandbox cannot reach: everything the other sandboxes reach, each marked with the colour of the one that does. */
+const outOfReach = (sandbox: BigPictureSandbox) =>
+    scene.sandboxes
+        .filter((other) => other.id !== sandbox.id)
+        .flatMap((other) => other.reaches.map((reach) => ({ reach, owner: other })));
+
+const PERSON_ROW = 52;
+const PERSON_GAP = 12;
+const meetHeight = 2 * PERSON_ROW + PERSON_GAP;
+const JOB_ICON = { screen: ICON.eye, machine: ICON.box, tool: ICON.wrench };
+const FACT_ICON = { holds: ICON.key, routes: ICON.relay, stores: ICON.stored };
+const hues = scene.sandboxes.map((sandbox) => HUE[sandbox.id]);
+const home = scene.sandboxes.find((sandbox) => sandbox.id === `home`);
+const game = scene.sandboxes.find((sandbox) => sandbox.id === `game`);
+const work = scene.sandboxes.find((sandbox) => sandbox.id === `work`);
+---
+
+{/* ── A sandbox: its agents, the sign-ins it holds, what they reach, and what stays out of reach ── */}
+{
+    scene.sandboxes.map((sandbox) => {
+        const lines = spokes(sandbox.reaches.length);
+        return (
+            <section class="pk" data-peek={sandbox.id} hidden style={`--h:${HUE[sandbox.id]}`}>
+                <header class="pk-head">
+                    <span class="pk-badge" set:html={glyph(hostIcon(sandbox), 20)} />
+                    <span class="pk-heading">
+                        <span class="pk-title">{sandbox.title}</span>
+                        <span class="pk-line">{sandbox.line}</span>
+                    </span>
+                    <button type="button" class="pk-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+                </header>
+
+                <div class="pk-flow">
+                    <div class="pk-agents">
+                        <p class="pk-label">Agents</p>
+                        {sandbox.agents.map((agent) => (
+                            <div class="pk-agent" data-state={agent.state}>
+                                <span class="pk-face" set:html={glyph(ICON.agent, 13, 2)} />
+                                <span class="pk-agent-text">
+                                    <span class="pk-agent-task">{agent.task}</span>
+                                    <span class="pk-state">
+                                        <span class="pk-dot" />
+                                        {agent.stateLabel}
+                                    </span>
+                                </span>
+                            </div>
+                        ))}
+                        <div class="pk-files">
+                            {sandbox.files.map((file) => (
+                                <span class="pk-file">
+                                    <span set:html={glyph(ICON.folder, 12)} />
+                                    {file}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    <svg class="pk-spokes" viewBox={`0 0 66 ${lines.height}`} width="66" height={lines.height} aria-hidden="true">
+                        <circle cx="4" cy={lines.mid} r="3.5" class="pk-spoke-root" />
+                        {lines.paths.map((d) => (
+                            <path d={d} class="pk-spoke" pathLength="1" />
+                        ))}
+                        {lines.heads.map((d) => (
+                            <path d={d} class="pk-spoke-head" />
+                        ))}
+                    </svg>
+                    <span class="pk-down" set:html={glyph(ICON.arrow, 16)} />
+                    <div class="pk-reaches">
+                        <p class="pk-label">Reaches, with what it holds</p>
+                        {sandbox.reaches.map((reach) => (
+                            <div class="pk-reach">
+                                <span class="pk-coin" set:html={glyph(REACH_ICON[reach.id], 16)} />
+                                <span class="pk-reach-text">
+                                    <span class="pk-reach-name">{reach.name}</span>
+                                    <span class="pk-reach-does">{reach.does}</span>
+                                </span>
+                                <span class="pk-key">
+                                    <span set:html={glyph(ICON.key, 12)} />
+                                    {reach.via}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div class="pk-away">
+                    <span class="pk-away-head">
+                        <span set:html={glyph(ICON.lock, 13)} />
+                        Out of reach
+                    </span>
+                    {outOfReach(sandbox).map(({ reach, owner }) => (
+                        <span class="pk-away-chip" style={`--h:${HUE[owner.id]}`} title={`${reach.name}, kept by ${owner.title}`}>
+                            <span class="pk-away-dot" />
+                            {reach.name}
+                        </span>
+                    ))}
+                </div>
+            </section>
+        );
+    })
+}
+
+{/* ── You: every screen shows the same board, and closing one stops nothing ── */}
+<section class="pk" data-peek="you" hidden style="--h:80;--c:0.09">
+    <header class="pk-head">
+        <span class="pk-badge" set:html={glyph(ICON.person, 20)} />
+        <span class="pk-heading">
+            <span class="pk-title">{you.title}</span>
+            <span class="pk-line">{you.line}</span>
+        </span>
+        <button type="button" class="pk-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+    </header>
+    <div class="pk-devices">
+        {
+            scene.kiosks.map((kiosk) => (
+                <div class="pk-device" data-kind={kiosk.id}>
+                    <span class="pk-device-art" aria-hidden="true">
+                        <span class="pk-device-screen">
+                            {hues.map((hue) => (
+                                <span class="pk-mini" style={`--h:${hue}`} />
+                            ))}
+                        </span>
+                        <span class="pk-device-foot" />
+                    </span>
+                    <span class="pk-device-name">{kiosk.name}</span>
+                    <span class="pk-device-line">{kiosk.line}</span>
+                </div>
+            ))
+        }
+    </div>
+    <div class="pk-carry">
+        <span class="pk-carry-step">
+            <span class="pk-carry-icon" set:html={glyph(ICON.moon, 16)} />
+            {you.closed}
+        </span>
+        <span class="pk-carry-arrow" set:html={glyph(ICON.arrow, 16)} />
+        <span class="pk-carry-step">
+            <span class="pk-carry-faces" aria-hidden="true">
+                {hues.map((hue) => (
+                    <span class="pk-carry-face" style={`--h:${hue}`} set:html={glyph(ICON.agent, 11, 2)} />
+                ))}
+            </span>
+            {you.working}
+        </span>
+    </div>
+</section>
+
+{/* ── intentic.dev: the path a request takes, and what the platform holds, routes and never stores ── */}
+<section class="pk" data-peek="platform" hidden style="--h:80;--c:0.09">
+    <header class="pk-head">
+        <span class="pk-badge" set:html={glyph(ICON.relay, 20)} />
+        <span class="pk-heading">
+            <span class="pk-title">{platform.title}</span>
+            <span class="pk-line">{platform.line}</span>
+        </span>
+        <button type="button" class="pk-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+    </header>
+    <div class="pk-path">
+        <span class="pk-packet" aria-hidden="true" />
+        <div class="pk-node">
+            <span class="pk-node-icon" set:html={glyph(ICON.browser, 22)} />
+            <span class="pk-node-name">{platform.path.screen}</span>
+        </div>
+        <div class="pk-seg" aria-hidden="true"><span class="pk-wire" /></div>
+        <div class="pk-node pk-node-relay">
+            <span class="pk-node-icon" set:html={glyph(ICON.relay, 22)} />
+            <span class="pk-node-name">{platform.path.relay}</span>
+            <span class="pk-node-note">{platform.path.relayNote}</span>
+        </div>
+        <div class="pk-seg">
+            <span class="pk-tunnel" aria-hidden="true">
+                <span class="pk-chevrons">
+                    {[0, 1, 2, 3].map((index) => (
+                        <span style={`--i:${index}`} set:html={glyph(`<path d="m14 6-6 6 6 6"/>`, 14, 2.4)} />
+                    ))}
+                </span>
+            </span>
+            <span class="pk-tunnel-label">{platform.path.tunnel}</span>
+        </div>
+        <div class="pk-node pk-node-sandbox">
+            <span class="pk-node-icon" set:html={glyph(ICON.box, 22)} />
+            <span class="pk-node-name">{platform.path.sandbox}</span>
+            <span class="pk-node-note">{platform.path.sandboxNote}</span>
+        </div>
+    </div>
+    <div class="pk-facts">
+        {
+            platform.facts.map((fact) => (
+                <div class="pk-fact" data-kind={fact.kind}>
+                    <span class="pk-fact-icon" set:html={glyph(FACT_ICON[fact.kind], 17)} />
+                    <span class="pk-fact-label">{fact.label}</span>
+                    <span class="pk-fact-value">{fact.value}</span>
+                </div>
+            ))
+        }
+    </div>
+</section>
+
+{/* ── The laptop: one computer fanning out into three separately granted jobs ── */}
+<section class="pk" data-peek="laptop" hidden style="--h:80;--c:0.09">
+    <header class="pk-head">
+        <span class="pk-badge" set:html={glyph(ICON.laptop, 20)} />
+        <span class="pk-heading">
+            <span class="pk-title">{laptop.title}</span>
+            <span class="pk-line">{laptop.line}</span>
+        </span>
+        <button type="button" class="pk-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+    </header>
+    <div class="pk-hero" aria-hidden="true">
+        <span class="pk-laptop">
+            <span class="pk-laptop-screen" />
+            <span class="pk-laptop-base" />
+        </span>
+        <svg class="pk-fan" viewBox="0 0 300 40" preserveAspectRatio="none">
+            <path d="M150 0C150 22 50 18 50 40" pathLength="1" vector-effect="non-scaling-stroke" />
+            <path d="M150 0V40" pathLength="1" vector-effect="non-scaling-stroke" />
+            <path d="M150 0C150 22 250 18 250 40" pathLength="1" vector-effect="non-scaling-stroke" />
+        </svg>
+    </div>
+    <div class="pk-jobs">
+        {
+            laptop.jobs.map((job) => (
+                <div class="pk-job-cell">
+                    <div class="pk-job">
+                        <span class="pk-job-icon" set:html={glyph(JOB_ICON[job.id], 18)} />
+                        <span class="pk-job-name">{job.name}</span>
+                        <span class="pk-job-line">{job.line}</span>
+                        {job.id === `screen` && (
+                            <span class="pk-job-art pk-job-board" aria-hidden="true">
+                                {hues.map((hue) => (
+                                    <span class="pk-mini" style={`--h:${hue}`} />
+                                ))}
+                            </span>
+                        )}
+                        {job.id === `machine` && (
+                            <span class="pk-job-art pk-job-world" style={`--h:${HUE.home}`} aria-hidden="true">
+                                {home?.title}
+                            </span>
+                        )}
+                        {job.id === `tool` && (
+                            <ul class="pk-switches">
+                                {laptop.switches.map((item) => (
+                                    <li data-on={String(item.on)}>
+                                        <span class="pk-toggle" aria-hidden="true" />
+                                        {item.name}
+                                        <span class="sr-only">{item.on ? `on` : `off`}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        <span class="pk-granted">{job.grantedBy}</span>
+                    </div>
+                </div>
+            ))
+        }
+    </div>
+</section>
+
+{/* ── Sharing: two people, two accounts, one sandbox; the rest of each one's sandboxes out of the other's sight ── */}
+<section class="pk" data-peek="ola" hidden style={`--h:${HUE.work}`}>
+    <header class="pk-head">
+        <span class="pk-badge" set:html={glyph(ICON.people, 20)} />
+        <span class="pk-heading">
+            <span class="pk-title">{ola.title}</span>
+            <span class="pk-line">{ola.line}</span>
+        </span>
+        <button type="button" class="pk-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+    </header>
+    <div class="pk-share">
+        <div class="pk-people">
+            {
+                ola.accounts.map((account) => (
+                    <div class="pk-person" data-who={account.who === scene.colleague.name ? `ola` : `you`}>
+                        <span class="pk-person-face">{account.who === scene.colleague.name ? account.who.slice(0, 1) : <span set:html={glyph(ICON.person, 16)} />}</span>
+                        <span class="pk-person-name">{account.who}</span>
+                        <span class="pk-key">
+                            <span set:html={glyph(ICON.key, 12)} />
+                            {account.key}
+                        </span>
+                    </div>
+                ))
+            }
+        </div>
+        <svg class="pk-meet" viewBox={`0 0 66 ${meetHeight}`} width="66" height={meetHeight} aria-hidden="true">
+            <path d={`M2 ${PERSON_ROW / 2}C34 ${PERSON_ROW / 2} 30 ${meetHeight / 2} 58 ${meetHeight / 2}`} pathLength="1" class="pk-spoke" />
+            <path d={`M2 ${meetHeight - PERSON_ROW / 2}C34 ${meetHeight - PERSON_ROW / 2} 30 ${meetHeight / 2} 58 ${meetHeight / 2}`} pathLength="1" class="pk-spoke" />
+            <path d={`M57 ${meetHeight / 2 - 4.5}L63 ${meetHeight / 2}L57 ${meetHeight / 2 + 4.5}`} class="pk-spoke-head" />
+        </svg>
+        <span class="pk-down" set:html={glyph(ICON.arrow, 16)} />
+        <div class="pk-portal">
+            <span class="pk-portal-title">{work?.title}</span>
+            {
+                ola.accounts.map((account) => (
+                    <span class="pk-role">
+                        <span class="pk-role-who">{account.who}</span>
+                        <span class="pk-role-badge">{account.role}</span>
+                    </span>
+                ))
+            }
+        </div>
+    </div>
+    <div class="pk-apart">
+        <span class="pk-apart-side">
+            <span class="pk-apart-stack">
+                <span style={`--h:${HUE.home}`} />
+                <span style={`--h:${HUE.game}`} />
+            </span>
+            {ola.apart.yours}
+        </span>
+        <span class="pk-apart-mid">
+            <span set:html={glyph(ICON.eyeOff, 15)} />
+            {ola.apart.label}
+        </span>
+        <span class="pk-apart-side">
+            <span class="pk-apart-stack pk-apart-unknown">
+                <span />
+                <span />
+            </span>
+            {ola.apart.hers}
+        </span>
+    </div>
+</section>
+
+{/* ── The link: a task goes over, a report comes back, and every key stays where it was ── */}
+<section class="pk" data-peek="link" hidden style="--h:80;--c:0.09">
+    <header class="pk-head">
+        <span class="pk-badge" set:html={glyph(ICON.link, 20)} />
+        <span class="pk-heading">
+            <span class="pk-title">{link.title}</span>
+            <span class="pk-line">{link.line}</span>
+        </span>
+        <button type="button" class="pk-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+    </header>
+    <div class="pk-trade">
+        {
+            [home, game].map((side) =>
+                side === undefined ? null : (
+                    <div class="pk-side" style={`--h:${HUE[side.id]}`} data-side={side.id}>
+                        <span class="pk-side-title">{side.title}</span>
+                        <span class="pk-side-keys">
+                            {side.reaches.map((reach) => (
+                                <span class="pk-side-key">
+                                    <span set:html={glyph(ICON.lock, 11)} />
+                                    {reach.via}
+                                </span>
+                            ))}
+                        </span>
+                    </div>
+                ),
+            )
+        }
+        <div class="pk-exchange" aria-hidden="true">
+            <span class="pk-lane pk-lane-go">
+                <span class="pk-lane-label">
+                    <span set:html={glyph(ICON.agent, 11, 2)} />
+                    {link.task}
+                </span>
+                <span class="pk-lane-line"><span class="pk-lane-dot" /></span>
+            </span>
+            <span class="pk-lane pk-lane-back">
+                <span class="pk-lane-line"><span class="pk-lane-dot" /></span>
+                <span class="pk-lane-label">{link.report}</span>
+            </span>
+            <span class="pk-stays">
+                <span set:html={glyph(ICON.key, 13)} />
+                {link.stays}
+            </span>
+        </div>
+    </div>
+</section>
+
+<style>
+    /* ── Every peek ───────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk {
+        /* Its colour: the sandbox's own, or the house gold for the parts that are not a sandbox. */
+        --pk-tint: oklch(72% var(--c, 0.11) var(--h, 80));
+        --pk-ink: color-mix(in oklab, var(--pk-tint) 62%, var(--color-content));
+        --pk-surface: color-mix(in oklab, var(--color-content) 5%, transparent);
+        --pk-surface-strong: color-mix(in oklab, var(--color-content) 8%, transparent);
+        --pk-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+        margin-top: 1.25rem;
+        border-radius: 24px;
+        background:
+            radial-gradient(70% 90% at 0% 0%, color-mix(in oklab, var(--pk-tint) 12%, transparent), transparent 70%),
+            color-mix(in oklab, var(--pk-tint) 6%, var(--color-card));
+        padding: clamp(1rem, 2.5vw, 1.5rem);
+        color: var(--color-content);
+    }
+    .pk[hidden] {
+        display: none;
+    }
+    :global(.bp-worlds) .pk {
+        margin-top: 0;
+    }
+    .pk-head {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.85rem;
+        margin-bottom: 1.35rem;
+    }
+    .pk-badge {
+        display: grid;
+        width: 2.6rem;
+        height: 2.6rem;
+        place-items: center;
+        border-radius: 14px;
+        background: color-mix(in oklab, var(--pk-tint) 22%, var(--color-card));
+        color: var(--pk-ink);
+    }
+    .pk-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        min-width: 0;
+    }
+    .pk-title {
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        line-height: 1.25;
+    }
+    .pk-line {
+        font-size: 0.84rem;
+        line-height: 1.45;
+        color: var(--color-muted);
+    }
+    .pk-close {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        place-items: center;
+        align-self: start;
+        border: 0;
+        border-radius: 999px;
+        background: var(--pk-surface);
+        color: var(--color-muted);
+        cursor: pointer;
+    }
+    .pk-close:hover {
+        background: var(--pk-surface-strong);
+        color: var(--color-content);
+    }
+    .pk-close:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+    .pk-label {
+        height: 16px;
+        margin: 0;
+        font-size: 0.74rem;
+        line-height: 16px;
+        font-weight: var(--font-weight-medium);
+        color: var(--pk-ink);
+    }
+    /* The key: what a sandbox holds to reach something, always the same small gold chip. */
+    .pk-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-gold) 15%, transparent);
+        padding: 0.18rem 0.55rem 0.18rem 0.45rem;
+        font-size: 0.7rem;
+        white-space: nowrap;
+        color: color-mix(in oklab, var(--color-gold) 70%, var(--color-content));
+    }
+    .pk-down {
+        display: none;
+        justify-self: center;
+        color: var(--pk-ink);
+        transform: rotate(90deg);
+    }
+
+    /* Lines draw themselves in each time a peek opens. */
+    .pk-spoke {
+        fill: none;
+        stroke: color-mix(in oklab, var(--pk-tint) 75%, transparent);
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-dasharray: 1;
+        animation: pk-draw 0.7s var(--pk-ease) 0.1s backwards;
+    }
+    .pk-spoke-head {
+        fill: none;
+        stroke: var(--pk-tint);
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        animation: pk-appear 0.3s var(--pk-ease) 0.7s backwards;
+    }
+    .pk-spoke-root {
+        fill: var(--pk-tint);
+    }
+    @keyframes pk-draw {
+        from {
+            stroke-dashoffset: 1;
+        }
+        to {
+            stroke-dashoffset: 0;
+        }
+    }
+    @keyframes pk-appear {
+        from {
+            opacity: 0;
+        }
+    }
+
+    /* ── A sandbox ────────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk-flow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "agents" "down" "reaches";
+        row-gap: 0.4rem;
+    }
+    .pk-agents {
+        grid-area: agents;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+    }
+    .pk-spokes {
+        display: none;
+        grid-area: spokes;
+        overflow: visible;
+    }
+    .pk-flow > .pk-down {
+        grid-area: down;
+        display: inline-flex;
+        margin: 0.3rem 0;
+    }
+    .pk-reaches {
+        grid-area: reaches;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+    }
+    .pk-agent {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        border-radius: 16px;
+        background: var(--pk-surface);
+        padding: 0.55rem 0.75rem 0.55rem 0.55rem;
+    }
+    .pk-face {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        flex: none;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--pk-tint) 24%, var(--color-card));
+        box-shadow: inset 0 0 0 2px var(--pk-ring, transparent);
+        color: var(--pk-ink);
+    }
+    .pk-agent[data-state="waiting"] {
+        --pk-ring: var(--color-primary-500);
+        --pk-state: var(--color-primary-500);
+    }
+    .pk-agent[data-state="ready"] {
+        --pk-ring: var(--color-success);
+        --pk-state: var(--color-success);
+    }
+    .pk-agent[data-state="working"] {
+        --pk-ring: color-mix(in oklab, var(--pk-tint) 70%, transparent);
+    }
+    .pk-agent-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.3;
+    }
+    .pk-agent-task {
+        font-size: 0.86rem;
+    }
+    .pk-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.74rem;
+        color: var(--pk-state, var(--color-muted));
+    }
+    .pk-dot {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 999px;
+        background: currentColor;
+    }
+    .pk-agent[data-state="working"] .pk-dot {
+        animation: pk-breathe 2.4s ease-in-out infinite;
+    }
+    @keyframes pk-breathe {
+        50% {
+            opacity: 0.25;
+        }
+    }
+    .pk-files {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin-top: 0.15rem;
+    }
+    .pk-file {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 999px;
+        padding: 0.1rem 0.5rem 0.1rem 0.35rem;
+        font-size: 0.72rem;
+        color: var(--color-muted);
+        background: var(--pk-surface);
+    }
+    .pk-file > span {
+        display: inline-flex;
+        color: var(--pk-ink);
+    }
+    .pk-reach {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.6rem;
+        height: 48px;
+        border-radius: 16px;
+        background: var(--pk-surface);
+        padding: 0 0.55rem 0 0.4rem;
+        animation: pk-arrive 0.4s var(--pk-ease) backwards;
+    }
+    .pk-reach:nth-child(2) {
+        animation-delay: 0.08s;
+    }
+    .pk-reach:nth-child(3) {
+        animation-delay: 0.16s;
+    }
+    @keyframes pk-arrive {
+        from {
+            opacity: 0;
+            transform: translateX(-6px);
+        }
+    }
+    .pk-coin {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--pk-tint) 24%, var(--color-card));
+        color: var(--pk-ink);
+    }
+    .pk-reach-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.25;
+    }
+    .pk-reach-name {
+        overflow: hidden;
+        font-size: 0.84rem;
+        font-weight: var(--font-weight-medium);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .pk-reach-does {
+        overflow: hidden;
+        font-size: 0.72rem;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        color: var(--color-muted);
+    }
+
+    /* Out of reach: the other sandboxes' things, faded, each with the dot of the sandbox that holds it. */
+    .pk-away {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 1.25rem;
+        border-radius: 18px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: 0.6rem 0.75rem;
+    }
+    .pk-away-head {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-right: 0.35rem;
+        font-size: 0.76rem;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-muted);
+    }
+    .pk-away-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 999px;
+        background: var(--pk-surface);
+        padding: 0.12rem 0.55rem 0.12rem 0.45rem;
+        font-size: 0.72rem;
+        color: var(--color-subtle);
+        text-decoration: line-through;
+        text-decoration-color: color-mix(in oklab, var(--color-subtle) 55%, transparent);
+    }
+    .pk-away-dot {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 999px;
+        background: oklch(70% 0.11 var(--h));
+    }
+
+    /* ── You ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk-devices {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem 0.75rem;
+    }
+    .pk-device {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.15rem;
+        text-align: center;
+    }
+    /* Each device is drawn, not iconed: a frame, and on its screen the same three sandboxes. */
+    .pk-device-art {
+        --pk-frame: color-mix(in oklab, var(--color-content) 16%, var(--color-card));
+        display: flex;
+        height: 4.6rem;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        margin-bottom: 0.45rem;
+    }
+    .pk-device-screen {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        width: 5.2rem;
+        height: 3.4rem;
+        border-radius: 8px;
+        background: color-mix(in oklab, var(--color-card) 75%, var(--color-content) 4%);
+        box-shadow:
+            0 0 0 4px var(--pk-frame),
+            0 10px 22px -14px color-mix(in oklab, var(--pk-tint) 80%, transparent);
+    }
+    .pk-mini {
+        width: 0.95rem;
+        height: 1.5rem;
+        border-radius: 5px;
+        background: color-mix(in oklab, oklch(70% 0.11 var(--h)) 55%, var(--color-card));
+        animation: pk-appear 0.4s var(--pk-ease) backwards;
+    }
+    .pk-mini:nth-child(2) {
+        animation-delay: 0.08s;
+    }
+    .pk-mini:nth-child(3) {
+        animation-delay: 0.16s;
+    }
+    .pk-device-foot {
+        display: none;
+    }
+    .pk-device[data-kind="browser"] .pk-device-screen {
+        border-top: 9px solid var(--pk-frame);
+        box-shadow:
+            0 0 0 3px var(--pk-frame),
+            0 10px 22px -14px color-mix(in oklab, var(--pk-tint) 80%, transparent);
+    }
+    .pk-device[data-kind="desktop"] .pk-device-screen {
+        width: 4.8rem;
+        height: 3rem;
+        border-radius: 6px 6px 2px 2px;
+    }
+    .pk-device[data-kind="desktop"] .pk-device-foot {
+        display: block;
+        width: 6.4rem;
+        height: 0.4rem;
+        margin-top: 4px;
+        border-radius: 2px 2px 6px 6px;
+        background: var(--pk-frame);
+    }
+    .pk-device[data-kind="phone"] .pk-device-screen {
+        flex-direction: column;
+        gap: 3px;
+        width: 2.2rem;
+        height: 3.9rem;
+        border-radius: 9px;
+    }
+    .pk-device[data-kind="phone"] .pk-mini {
+        width: 1.35rem;
+        height: 0.62rem;
+        border-radius: 3px;
+    }
+    .pk-device[data-kind="os"] .pk-device-screen {
+        width: 5rem;
+        height: 3.1rem;
+        border-radius: 5px;
+    }
+    .pk-device[data-kind="os"] .pk-device-foot {
+        display: block;
+        width: 1.6rem;
+        height: 0.55rem;
+        margin-top: 4px;
+        border-radius: 0 0 4px 4px;
+        background: var(--pk-frame);
+    }
+    .pk-device-name {
+        font-size: 0.84rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .pk-device-line {
+        font-size: 0.72rem;
+        line-height: 1.3;
+        color: var(--color-muted);
+    }
+    .pk-carry {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem 0.9rem;
+        margin-top: 1.4rem;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: 0.6rem 1rem;
+        font-size: 0.82rem;
+    }
+    .pk-carry-step {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .pk-carry-icon {
+        display: grid;
+        width: 1.8rem;
+        height: 1.8rem;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--pk-surface-strong);
+        color: var(--color-muted);
+    }
+    .pk-carry-arrow {
+        display: inline-flex;
+        color: var(--color-subtle);
+    }
+    .pk-carry-faces {
+        display: inline-flex;
+    }
+    .pk-carry-face {
+        display: grid;
+        width: 1.5rem;
+        height: 1.5rem;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, oklch(70% 0.11 var(--h)) 28%, var(--color-card));
+        box-shadow: 0 0 0 2px var(--color-card);
+        color: color-mix(in oklab, oklch(70% 0.11 var(--h)) 65%, var(--color-content));
+        animation: pk-breathe 2.4s ease-in-out infinite;
+    }
+    .pk-carry-face + .pk-carry-face {
+        margin-left: -0.35rem;
+    }
+    .pk-carry-face:nth-child(2) {
+        animation-delay: 0.4s;
+    }
+    .pk-carry-face:nth-child(3) {
+        animation-delay: 0.8s;
+    }
+
+    /* ── intentic.dev ─────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk-path {
+        --pk-node: 3.25rem;
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr) auto;
+        align-items: start;
+        column-gap: 0.4rem;
+    }
+    .pk-node {
+        display: flex;
+        width: 6.5rem;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.2rem;
+        text-align: center;
+    }
+    .pk-node-icon {
+        display: grid;
+        width: var(--pk-node);
+        height: var(--pk-node);
+        place-items: center;
+        border-radius: 999px;
+        background: var(--pk-surface-strong);
+        color: var(--color-content);
+        margin-bottom: 0.25rem;
+    }
+    .pk-node-relay .pk-node-icon {
+        background: color-mix(in oklab, var(--color-gold) 22%, var(--color-card));
+        color: var(--color-gold);
+        box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-gold) 8%, transparent);
+    }
+    .pk-node-sandbox .pk-node-icon {
+        background: color-mix(in oklab, var(--pk-tint) 24%, var(--color-card));
+        color: var(--pk-ink);
+    }
+    .pk-node-name {
+        font-size: 0.84rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .pk-node-note {
+        font-size: 0.72rem;
+        line-height: 1.3;
+        color: var(--color-muted);
+    }
+    .pk-seg {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
+        padding-top: calc(var(--pk-node) / 2 - 1px);
+    }
+    .pk-wire {
+        width: 100%;
+        height: 2px;
+        border-radius: 2px;
+        background: color-mix(in oklab, var(--color-content) 18%, transparent);
+    }
+    /* The tunnel is a tube the sandbox pushed out to the relay: its chevrons run toward the relay. */
+    .pk-tunnel {
+        display: flex;
+        width: 100%;
+        height: 1.25rem;
+        align-items: center;
+        justify-content: center;
+        margin-top: calc(-0.625rem + 1px);
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-gold) 16%, transparent);
+    }
+    .pk-chevrons {
+        display: flex;
+        gap: 0.2rem;
+        color: var(--color-gold);
+    }
+    .pk-chevrons span {
+        display: inline-flex;
+    }
+    .pk-chevrons span {
+        animation: pk-chevron 1.6s ease-in-out infinite;
+        animation-delay: calc((3 - var(--i)) * 0.18s);
+    }
+    @keyframes pk-chevron {
+        0%,
+        100% {
+            opacity: 0.25;
+        }
+        40% {
+            opacity: 1;
+        }
+    }
+    .pk-tunnel-label {
+        font-size: 0.72rem;
+        line-height: 1.3;
+        text-align: center;
+        color: var(--color-muted);
+    }
+    /* A request crossing from the screen through the relay into the sandbox, pausing where it is routed. */
+    .pk-packet {
+        position: absolute;
+        top: calc(var(--pk-node) / 2 - 5px);
+        left: calc(3.25rem - 5px);
+        z-index: 1;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--color-gold-bright);
+        box-shadow: 0 0 10px 2px color-mix(in oklab, var(--color-gold) 70%, transparent);
+        animation: pk-travel 3.4s var(--pk-ease) 0.4s infinite;
+    }
+    @keyframes pk-travel {
+        0% {
+            left: calc(3.25rem - 5px);
+            opacity: 0;
+        }
+        8% {
+            opacity: 1;
+        }
+        42%,
+        58% {
+            left: calc(50% - 5px);
+        }
+        92% {
+            left: calc(100% - 3.25rem - 5px);
+            opacity: 1;
+        }
+        100% {
+            left: calc(100% - 3.25rem - 5px);
+            opacity: 0;
+        }
+    }
+    .pk-facts {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.5rem;
+        margin-top: 1.4rem;
+    }
+    .pk-fact {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        align-items: center;
+        column-gap: 0.65rem;
+        border-radius: 16px;
+        background: var(--pk-surface);
+        padding: 0.65rem 0.8rem;
+    }
+    .pk-fact-icon {
+        display: grid;
+        grid-row: 1 / 3;
+        width: 2.1rem;
+        height: 2.1rem;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-gold) 18%, var(--color-card));
+        color: var(--color-gold);
+    }
+    .pk-fact[data-kind="stores"] .pk-fact-icon {
+        background: color-mix(in oklab, var(--color-success) 18%, var(--color-card));
+        color: var(--color-success);
+    }
+    .pk-fact-label {
+        font-size: 0.82rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .pk-fact-value {
+        font-size: 0.76rem;
+        line-height: 1.35;
+        color: var(--color-muted);
+    }
+
+    /* ── The laptop ───────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk-hero {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+    }
+    .pk-laptop {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .pk-laptop-screen {
+        width: 5.5rem;
+        height: 3.4rem;
+        border-radius: 8px 8px 3px 3px;
+        background:
+            radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--color-gold) 35%, transparent), transparent 65%),
+            color-mix(in oklab, var(--color-card) 80%, var(--color-content) 5%);
+        box-shadow:
+            0 0 0 4px color-mix(in oklab, var(--color-content) 16%, var(--color-card)),
+            0 12px 28px -14px color-mix(in oklab, var(--color-gold) 80%, transparent);
+    }
+    .pk-laptop-base {
+        width: 7.4rem;
+        height: 0.45rem;
+        margin-top: 5px;
+        border-radius: 2px 2px 7px 7px;
+        background: color-mix(in oklab, var(--color-content) 16%, var(--color-card));
+    }
+    .pk-fan {
+        width: 100%;
+        height: 2.5rem;
+        overflow: visible;
+    }
+    .pk-fan path {
+        fill: none;
+        stroke: color-mix(in oklab, var(--color-gold) 60%, transparent);
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-dasharray: 1;
+        animation: pk-draw 0.7s var(--pk-ease) 0.15s backwards;
+    }
+    .pk-jobs {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.6rem;
+    }
+    .pk-job {
+        display: flex;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.2rem;
+        border-radius: 18px;
+        background: var(--pk-surface);
+        padding: 1rem 0.9rem;
+        text-align: center;
+    }
+    .pk-job-icon {
+        display: grid;
+        width: 2.4rem;
+        height: 2.4rem;
+        place-items: center;
+        margin-bottom: 0.3rem;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-gold) 18%, var(--color-card));
+        color: var(--color-gold);
+    }
+    .pk-job-name {
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+    }
+    .pk-job-line {
+        font-size: 0.8rem;
+        color: var(--color-muted);
+    }
+    .pk-job-art {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0.8rem 0 0.9rem;
+    }
+    .pk-job-board {
+        gap: 4px;
+        width: 5rem;
+        height: 3.1rem;
+        border-radius: 8px;
+        background: color-mix(in oklab, var(--color-card) 75%, var(--color-content) 4%);
+        box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-content) 16%, var(--color-card));
+    }
+    .pk-job-world {
+        width: 5.6rem;
+        height: 3.1rem;
+        border-radius: 14px;
+        background:
+            radial-gradient(90% 70% at 50% 0%, color-mix(in oklab, oklch(70% 0.11 var(--h)) 28%, transparent), transparent 75%),
+            color-mix(in oklab, oklch(70% 0.11 var(--h)) 16%, var(--color-card));
+        font-family: var(--font-display);
+        font-size: 0.95rem;
+        color: var(--color-content);
+    }
+    .pk-granted {
+        margin-top: auto;
+        border-radius: 999px;
+        background: var(--pk-surface-strong);
+        padding: 0.15rem 0.6rem;
+        font-size: 0.7rem;
+        color: var(--color-muted);
+    }
+    .pk-switches {
+        display: flex;
+        flex-direction: column;
+        align-self: stretch;
+        gap: 0.4rem;
+        margin: 0.8rem 0 0.75rem;
+        padding: 0;
+        list-style: none;
+        font-size: 0.76rem;
+        text-align: left;
+    }
+    .pk-switches li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--color-content);
+    }
+    .pk-switches li[data-on="false"] {
+        color: var(--color-subtle);
+    }
+    .pk-toggle {
+        position: relative;
+        width: 1.75rem;
+        height: 1rem;
+        flex: none;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-content) 16%, transparent);
+    }
+    .pk-toggle::after {
+        content: "";
+        position: absolute;
+        top: 0.15rem;
+        left: 0.15rem;
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 999px;
+        background: var(--color-card);
+        box-shadow: 0 1px 2px color-mix(in oklab, black 30%, transparent);
+    }
+    li[data-on="true"] .pk-toggle {
+        background: var(--color-gold);
+    }
+    li[data-on="true"] .pk-toggle::after {
+        left: auto;
+        right: 0.15rem;
+    }
+
+    /* ── Sharing ──────────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk-share {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "people" "down" "portal";
+        row-gap: 0.4rem;
+    }
+    .pk-people {
+        grid-area: people;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .pk-person {
+        display: flex;
+        height: 52px;
+        align-items: center;
+        gap: 0.6rem;
+        border-radius: 999px;
+        background: var(--pk-surface);
+        padding: 0 0.5rem 0 0.4rem;
+    }
+    .pk-person-face {
+        display: grid;
+        width: 2.3rem;
+        height: 2.3rem;
+        flex: none;
+        place-items: center;
+        border-radius: 999px;
+        font-size: 0.9rem;
+        font-weight: var(--font-weight-semibold);
+    }
+    .pk-person[data-who="you"] .pk-person-face {
+        background: radial-gradient(circle at 35% 30%, var(--color-gold-bright), var(--color-gold) 70%);
+        color: var(--color-card);
+    }
+    .pk-person[data-who="ola"] .pk-person-face {
+        background: color-mix(in oklab, var(--pk-tint) 28%, var(--color-card));
+        color: var(--pk-ink);
+    }
+    .pk-person-name {
+        flex: 1;
+        font-size: 0.86rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .pk-meet {
+        display: none;
+        grid-area: meet;
+        overflow: visible;
+    }
+    .pk-share > .pk-down {
+        grid-area: down;
+        display: inline-flex;
+    }
+    .pk-portal {
+        grid-area: portal;
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        border-radius: 22px;
+        background:
+            radial-gradient(80% 80% at 0% 50%, color-mix(in oklab, var(--pk-tint) 22%, transparent), transparent 75%),
+            color-mix(in oklab, var(--pk-tint) 12%, var(--color-card));
+        padding: 0.95rem 1.1rem;
+    }
+    .pk-portal-title {
+        margin-bottom: 0.2rem;
+        font-family: var(--font-display);
+        font-size: 1.15rem;
+    }
+    .pk-role {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+        font-size: 0.84rem;
+    }
+    .pk-role-badge {
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--pk-tint) 26%, var(--color-card));
+        padding: 0.12rem 0.6rem;
+        font-size: 0.72rem;
+        color: var(--pk-ink);
+    }
+    .pk-apart {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem 1rem;
+        margin-top: 1.25rem;
+        border-radius: 18px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: 0.7rem 1rem;
+        font-size: 0.78rem;
+        color: var(--color-muted);
+    }
+    .pk-apart-side {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .pk-apart-stack {
+        display: inline-flex;
+    }
+    .pk-apart-stack span {
+        width: 1.1rem;
+        height: 1.1rem;
+        border-radius: 6px;
+        background: color-mix(in oklab, oklch(70% 0.11 var(--h)) 45%, var(--color-card));
+        box-shadow: 0 0 0 2px var(--color-card);
+    }
+    .pk-apart-stack span + span {
+        margin-left: -0.3rem;
+    }
+    .pk-apart-unknown span {
+        background: color-mix(in oklab, var(--color-content) 14%, var(--color-card));
+    }
+    .pk-apart-mid {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        background: var(--pk-surface-strong);
+        padding: 0.2rem 0.65rem;
+        color: var(--color-content);
+    }
+
+    /* ── The link ─────────────────────────────────────────────────────────────────────────────────────────────── */
+    .pk-trade {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 0.9fr) minmax(0, 1fr);
+        grid-template-areas: "home exchange game";
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+    .pk-side {
+        --pk-side: oklch(70% 0.11 var(--h));
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        border-radius: 20px;
+        background:
+            radial-gradient(90% 80% at 50% 0%, color-mix(in oklab, var(--pk-side) 20%, transparent), transparent 75%),
+            color-mix(in oklab, var(--pk-side) 11%, var(--color-card));
+        padding: 0.9rem;
+    }
+    .pk-side[data-side="home"] {
+        grid-area: home;
+    }
+    .pk-side[data-side="game"] {
+        grid-area: game;
+    }
+    .pk-side-title {
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+    }
+    .pk-side-keys {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+    .pk-side-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--pk-side) 22%, var(--color-card));
+        padding: 0.1rem 0.5rem 0.1rem 0.4rem;
+        font-size: 0.68rem;
+        white-space: nowrap;
+        color: color-mix(in oklab, var(--pk-side) 62%, var(--color-content));
+    }
+    .pk-exchange {
+        grid-area: exchange;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.7rem;
+    }
+    .pk-lane {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        font-size: 0.74rem;
+        color: var(--color-content);
+    }
+    .pk-lane-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3rem;
+    }
+    .pk-lane-label > span {
+        display: inline-flex;
+        color: oklch(70% 0.11 62);
+    }
+    .pk-lane-line {
+        position: relative;
+        height: 2px;
+        border-radius: 2px;
+    }
+    /* Each lane's colour runs from the sandbox it leaves to the one it reaches, with an arrowhead where it lands. */
+    .pk-lane-go .pk-lane-line {
+        background: linear-gradient(90deg, oklch(70% 0.11 62), oklch(70% 0.11 162));
+    }
+    .pk-lane-back .pk-lane-line {
+        background: linear-gradient(90deg, oklch(70% 0.11 62), oklch(70% 0.11 162));
+    }
+    .pk-lane-line::after {
+        content: "";
+        position: absolute;
+        top: -4px;
+        width: 8px;
+        height: 8px;
+        border-top: 2px solid;
+        border-right: 2px solid;
+    }
+    .pk-lane-go .pk-lane-line::after {
+        right: 0;
+        border-color: oklch(70% 0.11 162);
+        transform: rotate(45deg);
+    }
+    .pk-lane-back .pk-lane-line::after {
+        left: 0;
+        border-color: oklch(70% 0.11 62);
+        transform: rotate(-135deg);
+    }
+    .pk-lane-dot {
+        position: absolute;
+        top: -3px;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--color-gold-bright);
+        box-shadow: 0 0 8px color-mix(in oklab, var(--color-gold) 70%, transparent);
+    }
+    .pk-lane-go .pk-lane-dot {
+        animation: pk-lane-go 3.2s var(--pk-ease) infinite;
+    }
+    .pk-lane-back .pk-lane-dot {
+        animation: pk-lane-back 3.2s var(--pk-ease) 1.6s infinite;
+    }
+    @keyframes pk-lane-go {
+        0% {
+            left: 0;
+            opacity: 0;
+        }
+        10%,
+        40% {
+            opacity: 1;
+        }
+        50%,
+        100% {
+            left: calc(100% - 8px);
+            opacity: 0;
+        }
+    }
+    @keyframes pk-lane-back {
+        0% {
+            left: calc(100% - 8px);
+            opacity: 0;
+        }
+        10%,
+        40% {
+            opacity: 1;
+        }
+        50%,
+        100% {
+            left: 0;
+            opacity: 0;
+        }
+    }
+    .pk-stays {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3rem;
+        align-self: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-gold) 14%, transparent);
+        padding: 0.18rem 0.6rem;
+        font-size: 0.7rem;
+        white-space: nowrap;
+        color: color-mix(in oklab, var(--color-gold) 70%, var(--color-content));
+    }
+
+    /* ── Wide enough to lay each drawing out across ───────────────────────────────────────────────────────────── */
+    @container (min-width: 38rem) {
+        .pk-flow {
+            grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1.15fr);
+            grid-template-areas: "agents spokes reaches";
+            column-gap: 0.5rem;
+            align-items: center;
+        }
+        .pk-spokes {
+            display: block;
+        }
+        .pk-flow > .pk-down {
+            display: none;
+        }
+        .pk-devices {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        .pk-facts {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .pk-fact {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: auto;
+            justify-items: start;
+            row-gap: 0.15rem;
+            padding: 0.85rem 0.9rem;
+        }
+        .pk-fact-icon {
+            grid-row: auto;
+            margin-bottom: 0.35rem;
+        }
+        .pk-hero {
+            display: flex;
+        }
+        .pk-jobs {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0;
+        }
+        .pk-job-cell {
+            padding: 0 0.3rem;
+        }
+        .pk-share {
+            grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr);
+            grid-template-areas: "people meet portal";
+            column-gap: 0.5rem;
+            align-items: center;
+        }
+        .pk-meet {
+            display: block;
+        }
+        .pk-share > .pk-down {
+            display: none;
+        }
+        .pk-apart {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        }
+        .pk-apart-side:first-child {
+            justify-self: end;
+        }
+    }
+
+    /* ── A phone: the path and the trade turn to run top to bottom, and the badge gives the title its room ──── */
+    @container (max-width: 37.99rem) {
+        .pk-head {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .pk-badge {
+            display: none;
+        }
+        .pk-path {
+            --pk-node: 3rem;
+            --pk-seg: 2.75rem;
+            grid-template-columns: minmax(0, 1fr);
+            row-gap: 0;
+        }
+        .pk-node {
+            display: grid;
+            width: auto;
+            height: var(--pk-node);
+            grid-template-columns: var(--pk-node) minmax(0, 1fr);
+            grid-template-rows: auto auto;
+            align-content: center;
+            column-gap: 0.75rem;
+            row-gap: 0;
+            text-align: left;
+        }
+        .pk-node-icon {
+            grid-row: 1 / 3;
+            margin: 0;
+        }
+        .pk-node-name {
+            align-self: end;
+        }
+        .pk-node-note {
+            align-self: start;
+        }
+        .pk-node:not(:has(.pk-node-note)) .pk-node-name {
+            grid-row: 1 / 3;
+            align-self: center;
+        }
+        .pk-seg {
+            display: grid;
+            height: var(--pk-seg);
+            grid-template-columns: var(--pk-node) minmax(0, 1fr);
+            align-items: center;
+            column-gap: 0.75rem;
+            padding: 0;
+        }
+        .pk-wire {
+            width: 2px;
+            height: 100%;
+            justify-self: center;
+        }
+        .pk-tunnel {
+            width: 1.25rem;
+            height: 100%;
+            justify-self: center;
+            margin: 0;
+        }
+        /* The chevrons point up now, from the sandbox below to the relay above. */
+        .pk-chevrons {
+            gap: 0;
+            transform: rotate(90deg);
+        }
+        .pk-chevrons span:nth-child(4) {
+            display: none;
+        }
+        .pk-tunnel-label {
+            text-align: left;
+        }
+        .pk-packet {
+            left: calc(var(--pk-node) / 2 - 5px);
+            animation-name: pk-travel-down;
+        }
+        .pk-trade {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-areas: "home" "exchange" "game";
+        }
+        .pk-exchange {
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 1.25rem;
+            padding: 0.3rem 0;
+        }
+        .pk-lane {
+            flex-direction: row;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .pk-lane-back {
+            flex-direction: row-reverse;
+        }
+        .pk-lane-line {
+            width: 2px;
+            height: 2.6rem;
+        }
+        .pk-lane-go .pk-lane-line,
+        .pk-lane-back .pk-lane-line {
+            background: linear-gradient(180deg, oklch(70% 0.11 62), oklch(70% 0.11 162));
+        }
+        .pk-lane-go .pk-lane-line::after {
+            top: auto;
+            right: auto;
+            bottom: 0;
+            left: -3px;
+            transform: rotate(135deg);
+        }
+        .pk-lane-back .pk-lane-line::after {
+            top: 0;
+            left: -3px;
+            transform: rotate(-45deg);
+        }
+        .pk-lane-dot {
+            left: -3px;
+        }
+        .pk-lane-go .pk-lane-dot {
+            animation-name: pk-lane-down;
+        }
+        .pk-lane-back .pk-lane-dot {
+            animation-name: pk-lane-up;
+        }
+    }
+    @keyframes pk-travel-down {
+        0% {
+            top: calc(var(--pk-node) / 2 - 5px);
+            opacity: 0;
+        }
+        8% {
+            opacity: 1;
+        }
+        42%,
+        58% {
+            top: calc(var(--pk-node) * 1.5 + var(--pk-seg) - 5px);
+        }
+        92% {
+            top: calc(var(--pk-node) * 2.5 + var(--pk-seg) * 2 - 5px);
+            opacity: 1;
+        }
+        100% {
+            top: calc(var(--pk-node) * 2.5 + var(--pk-seg) * 2 - 5px);
+            opacity: 0;
+        }
+    }
+    @keyframes pk-lane-down {
+        0% {
+            top: 0;
+            opacity: 0;
+        }
+        10%,
+        40% {
+            opacity: 1;
+        }
+        50%,
+        100% {
+            top: calc(100% - 8px);
+            opacity: 0;
+        }
+    }
+    @keyframes pk-lane-up {
+        0% {
+            top: calc(100% - 8px);
+            opacity: 0;
+        }
+        10%,
+        40% {
+            opacity: 1;
+        }
+        50%,
+        100% {
+            top: 0;
+            opacity: 0;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .pk *,
+        .pk *::after {
+            animation: none !important;
+        }
+        .pk-packet,
+        .pk-lane-dot {
+            display: none;
+        }
+    }
+</style>

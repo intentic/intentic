@@ -3,7 +3,9 @@
    you at the top, one line fanning out through intentic.dev into three sandboxes, each in its own colour. Selecting a
    part opens a peek under the drawing with the detail. The script only draws the lines where the layout put things,
    and lights what the pointer is on. Every word comes from site-content/big-picture.ts. */
-import { bigPictureScene, type BigPictureReach, type BigPictureSandbox } from "@intentic/site-content/big-picture";
+import { bigPictureScene, type BigPictureSandbox } from "@intentic/site-content/big-picture";
+import BigPicturePeeks from "./BigPicturePeeks.astro";
+import { HUE, ICON, REACH_ICON, glyph, hostIcon } from "./big-picture-art";
 
 const scene = bigPictureScene;
 const ids = scene.sandboxes.map((sandbox) => sandbox.id);
@@ -22,42 +24,7 @@ const lights = {
     work: [`world-work`, `line-work`, `trunk`, `gate`, `you`, `ola`, `ola-line`, `ola-gate`],
 } satisfies Record<keyof typeof scene.peeks | BigPictureSandbox["id"], string[]>;
 
-/* Each sandbox's own colour: a hue on the oklch wheel, mixed into whichever skin is on. */
-const HUE = { home: 62, game: 162, work: 248 } satisfies Record<BigPictureSandbox["id"], number>;
-
-const ICON = {
-    browser: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9.5h18"/>',
-    desktop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/>',
-    phone: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>',
-    os: '<path d="M12 3.5v7"/><path d="M6.8 6.8a7.3 7.3 0 1 0 10.4 0"/>',
-    person: '<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/>',
-    laptop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/>',
-    cloud: '<path d="M7 18.5h10a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7.1 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
-    server: '<rect x="3.5" y="4.5" width="17" height="6" rx="2"/><rect x="3.5" y="13.5" width="17" height="6" rx="2"/><path d="M7 7.5h.01"/><path d="M7 16.5h.01"/>',
-    agent: '<path d="m12 3 1.8 5 5 1.8-5 1.8L12 16.6l-1.8-5-5-1.8 5-1.8z"/>',
-    home: '<path d="M4 11 12 4l8 7"/><path d="M6.5 9.5V20h11V9.5"/>',
-    branch: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="8.5" r="2"/><path d="M6 7.5v9"/><path d="M18 10.5c0 4-6 3-12 6"/>',
-    wave: '<path d="M3 12h2"/><path d="M7.5 8v8"/><path d="M12 5v14"/><path d="M16.5 9v6"/><path d="M21 11v2"/>',
-    drive: '<path d="M9 4h6l6 10.5-3 5.5H6l-3-5.5z"/>',
-    link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
-    close: '<path d="M6 6l12 12"/><path d="M18 6 6 18"/>',
-};
-const glyph = (paths: string, size = 14, width = 1.7) =>
-    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
-
-const REACH_ICON = {
-    laptop: ICON.laptop,
-    phone: ICON.phone,
-    assistant: ICON.home,
-    server: ICON.server,
-    github: ICON.branch,
-    elevenlabs: ICON.wave,
-    drive: ICON.drive,
-} satisfies Record<BigPictureReach["id"], string>;
 const keys = (...parts: (string | false | undefined)[]): string => parts.filter(Boolean).join(` `);
-const runsIcon = (sandbox: BigPictureSandbox): string =>
-    sandbox.host.kind === `hosted` ? ICON.cloud : sandbox.host.laptop ? ICON.laptop : ICON.server;
-const plainPeeks = Object.entries(scene.peeks);
 ---
 
 <figure class="bp" data-bp data-lights={JSON.stringify(lights)} aria-label={scene.label}>
@@ -160,12 +127,12 @@ const plainPeeks = Object.entries(scene.peeks);
                                 aria-expanded="false"
                                 aria-controls="bp-peek"
                             >
-                                <span set:html={glyph(runsIcon(sandbox), 14)} />
+                                <span set:html={glyph(hostIcon(sandbox), 14)} />
                                 Runs on {sandbox.host.name}
                             </button>
                         ) : (
                             <span class="bp-runs" data-k={worldOf(sandbox.id)}>
-                                <span set:html={glyph(runsIcon(sandbox), 14)} />
+                                <span set:html={glyph(hostIcon(sandbox), 14)} />
                                 Runs on {sandbox.host.name}
                             </span>
                         )}
@@ -179,70 +146,7 @@ const plainPeeks = Object.entries(scene.peeks);
     {/* The peek: one part's detail, opened by selecting it. */}
     <div class="bp-peek" id="bp-peek" data-bp-peek data-open="false">
         <div class="bp-peek-clip">
-            {
-                plainPeeks.map(([id, peek]) => (
-                    <section class="bp-peek-card" data-peek={id} hidden style={id === `ola` ? `--h:${HUE.work}` : undefined}>
-                        <header class="bp-peek-head">
-                            <p class="bp-peek-title">{peek.title}</p>
-                            <button type="button" class="bp-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
-                        </header>
-                        <p class="bp-peek-body">{peek.body}</p>
-                        {peek.facts && (
-                            <dl class="bp-facts">
-                                {peek.facts.map((fact) => (
-                                    <div>
-                                        <dt>{fact.label}</dt>
-                                        <dd>{fact.value}</dd>
-                                    </div>
-                                ))}
-                            </dl>
-                        )}
-                    </section>
-                ))
-            }
-            {
-                scene.sandboxes.map((sandbox) => (
-                    <section class="bp-peek-card" data-peek={sandbox.id} hidden style={`--h:${HUE[sandbox.id]}`}>
-                        <header class="bp-peek-head">
-                            <p class="bp-peek-title">{sandbox.peek.title}</p>
-                            <button type="button" class="bp-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
-                        </header>
-                        <p class="bp-peek-body">{sandbox.peek.body}</p>
-                        <div class="bp-groups">
-                            <div class="bp-group">
-                                <p class="bp-group-name">Agents</p>
-                                <ul>
-                                    {sandbox.agents.map((agent) => (
-                                        <li class="bp-agent" data-state={agent.state}>
-                                            <span class="bp-agent-task">{agent.task}</span>
-                                            <span class="bp-agent-state">{agent.stateLabel}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                            <div class="bp-group">
-                                <p class="bp-group-name">Reaches</p>
-                                <ul>
-                                    {sandbox.reaches.map((reach) => (
-                                        <li>
-                                            {reach.name}
-                                            <span class="bp-group-sub">{reach.line}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                            <div class="bp-group">
-                                <p class="bp-group-name">Keeps</p>
-                                <ul>
-                                    {[...sandbox.files, ...sandbox.keys].map((item) => (
-                                        <li>{item}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </div>
-                    </section>
-                ))
-            }
+            <BigPicturePeeks />
         </div>
     </div>
     <p class="bp-hint" data-bp-hint>{scene.hint}</p>
@@ -964,114 +868,6 @@ const plainPeeks = Object.entries(scene.peeks);
         min-height: 0;
         overflow: hidden;
     }
-    .bp-peek-card {
-        --bp-tint: var(--color-gold);
-        margin-top: 1.25rem;
-        border-radius: 22px;
-        background: color-mix(in oklab, var(--bp-tint) 8%, var(--color-card));
-        padding: 1.2rem 1.35rem 1.35rem;
-    }
-    .bp-worlds .bp-peek-card {
-        margin-top: 0;
-    }
-    .bp-peek-card[style] {
-        --bp-tint: oklch(70% 0.11 var(--h));
-    }
-    .bp-peek-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 1rem;
-    }
-    .bp-peek-title {
-        margin: 0;
-        font-family: var(--font-display);
-        font-size: 1.25rem;
-        line-height: 1.3;
-        color: var(--color-content);
-    }
-    .bp-close {
-        display: grid;
-        width: 2rem;
-        height: 2rem;
-        flex: none;
-        place-items: center;
-        border: 0;
-        border-radius: 999px;
-        background: var(--bp-wash);
-        color: var(--color-muted);
-        cursor: pointer;
-    }
-    .bp-close:hover {
-        background: var(--bp-wash-strong);
-        color: var(--color-content);
-    }
-    .bp-close:focus-visible {
-        outline: 2px solid var(--color-accent);
-        outline-offset: 2px;
-    }
-    .bp-peek-body {
-        margin: 0.45rem 0 0;
-        max-width: 62ch;
-        font-size: 0.9rem;
-        line-height: 1.6;
-        color: var(--color-muted);
-    }
-    .bp-facts {
-        display: grid;
-        grid-template-columns: max-content minmax(0, 1fr);
-        gap: 0.4rem 1.25rem;
-        margin: 1rem 0 0;
-    }
-    .bp-facts div {
-        display: contents;
-    }
-    .bp-facts dt {
-        font-size: 0.82rem;
-        font-weight: var(--font-weight-medium);
-        color: var(--color-content);
-    }
-    .bp-facts dd {
-        margin: 0;
-        font-size: 0.82rem;
-        color: var(--color-muted);
-    }
-    .bp-groups {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-        gap: 1rem 1.5rem;
-        margin-top: 1.1rem;
-    }
-    .bp-group-name {
-        margin: 0 0 0.35rem;
-        font-size: 0.78rem;
-        font-weight: var(--font-weight-medium);
-        color: color-mix(in oklab, var(--bp-tint) 62%, var(--color-content));
-    }
-    .bp-group ul {
-        display: flex;
-        flex-direction: column;
-        gap: 0.3rem;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        font-size: 0.82rem;
-        line-height: 1.35;
-        color: var(--color-content);
-    }
-    .bp-group-sub,
-    .bp-agent-state {
-        display: block;
-        font-size: 0.74rem;
-        color: var(--color-subtle);
-    }
-    .bp-agent[data-state="waiting"] .bp-agent-state {
-        color: var(--color-primary-500);
-    }
-    .bp-agent[data-state="ready"] .bp-agent-state {
-        color: var(--color-success);
-    }
-
     .bp-hint {
         margin: 1.1rem 0 0;
         text-align: center;
