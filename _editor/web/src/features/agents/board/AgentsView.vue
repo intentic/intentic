@@ -630,7 +630,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         {{ archiveHidden }} {{ t(`agents.agentsView.more`) }}
                     </button>
                     </div>
-                    <div v-if="withCorner && lane.key === 'finished'" class="mt-auto flex min-h-0 flex-col pt-2.5"><slot name="corner" /></div>
+                    <!-- Its top padding is a breath above the corner, wider than the gap between cards, so the corner does not read as one more of them. -->
+                    <div v-if="withCorner && lane.key === 'finished'" class="mt-auto flex min-h-0 flex-col pt-6"><slot name="corner" /></div>
                 </section>
             </div>
             <NoMatchesNote v-if="noMatches" v-model:query="query" v-model:match-case="matchCase" />
