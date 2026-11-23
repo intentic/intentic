@@ -2,7 +2,7 @@
     "name": "@intentic/agent-context",
     "version": "0.0.0",
     "private": true,
-    "description": "What a coding agent is told as a session opens, and the per-session readings that show whether it helped, shared by the sandbox daemon and the Claude Code plugin",
+    "description": "What a coding agent is told as a session opens, and the per-session readings that show whether it helped, read by the sandbox daemon and its benches",
     "license": "MIT",
     "type": "module",
     "repository": {

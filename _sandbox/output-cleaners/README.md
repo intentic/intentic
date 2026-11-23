@@ -5,12 +5,10 @@ Trims a coding agent's Bash output before the model reads it, keeps the raw text
 ```mermaid
 flowchart LR
     pane["Sandbox<br/>tmux-run pane pipeline"] --> run(["filterRun"])
-    hook["Claude Code plugin<br/>PostToolUse hook"] --> run
     run --> out["Trimmed output<br/>+ retrieve-output footer"]
     run --> logs["logsDir<br/>raw-output · output-cache · filter-stats.jsonl"]
     logs --> stats(["summarizeStats"])
     stats --> daemon["Daemon savings route"]
-    stats --> plugin["/intentic:stats"]
 ```
 
 - Plain node-builtin `.mjs` with hand-written `.d.mts` beside each, so the sandbox image copies the files as written
@@ -19,8 +17,8 @@ flowchart LR
   at load, and every command falls back to raw output without a sound. A test in `src/tests/agent-output-filter.test.mjs` holds the line to the
   import graph.
 - `filterRun` is one command's whole pass with its inputs resolved. The sandbox's adapter is `main` in
-  `agent-output-filter.mjs` (argv, `INTENTIC_OUTPUT_CLEANERS`, `INTENTIC_OUTPUT_HOLDOUT`, the pane log);
-  the Claude Code plugin's is its PostToolUse hook. Both keep the same three things under `logsDir`.
+  `agent-output-filter.mjs` (argv, `INTENTIC_OUTPUT_CLEANERS`, `INTENTIC_OUTPUT_HOLDOUT`, the pane log).
+  It keeps three things under `logsDir`.
 - Success runs the matching command cleaners, shape folds and the generic cap. A failure keeps its detail up to a
   generous tail. Caps give errors, warnings, stack frames and summaries priority, then at most one neighbouring line
   on each side; priority lines still share the line and byte budget. Repeated diagnostics stay verbatim until a cap
@@ -46,8 +44,8 @@ flowchart LR
   retrieval footer as a cut inside a wide line, including folds below the usual 20-dropped-line threshold. If a raw
   handle cannot be kept, or the complete footer would grow the output, those summaries are skipped. A cap after
   JSON compaction also requests retrieval, even when the original JSON occupied only one line.
-- `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the plugin's stats command
-  both call `summarizeStats`, so the two reports cannot disagree.
+- `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the cleaner bench both call
+  `summarizeStats`, so the two cannot disagree.
 - Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists, all in the auth
   root: `sandbox-secrets.json`, the capability vault, `keyring-copies.json` (entries a keyring on the owner's computer shares in `copy` mode) and
   `keyring-released.json` (values a keyring released for one use, which the daemon writes only so they mask here and
@@ -105,7 +103,7 @@ flowchart LR
   commit and what failed there, beside CI's failures, through `mainBaselines` (`@intentic/output-cleaners/outcomes`).
 - The sandbox adapter records under the logs directory and names the run's conversation (`INTENTIC_TURN_OWNER`).
   A turn with no logs directory (an agent domain) gets the digest without the record. `INTENTIC_TEST_OUTCOMES=0` turns
-  both off. The plugin's hook passes no `outcomes`, so it makes neither.
+  both off.
 
 ## MCP output
 

@@ -1,5 +1,5 @@
 // Aggregates agent-output-filter's telemetry (filter-stats.jsonl) into the savings report: the one implementation, read by
-// the sandbox daemon's savings route, the cleaner bench and the Claude Code plugin's stats command alike. Row shape:
+// the sandbox daemon's savings route and the cleaner bench alike. Row shape:
 // { rawBytes, emittedBytes, matched: string[], heldOut: boolean, command, stageBytes: { [id]: bytesRemoved } }; tokens
 // are ~4 chars/token, matching @intentic/base/format's estimateTokens.
 

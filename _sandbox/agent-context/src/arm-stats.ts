@@ -2,8 +2,7 @@
 // than asserting their value: each mechanism holds a share of conversations out as a control, and this compares the two
 // arms. A mechanism that applies every turn averages a conversation's turns into one sample; the map applies once, so
 // its sample is the opening turn alone. A delta is shown only once both arms reach MIN_ARM_TURNS and the margin excludes
-// zero; otherwise the reading reports arm sizes with no claim. The sandbox daemon reads its usage ledger through this
-// and the Claude Code plugin its session transcripts, so the two reports are one arithmetic.
+// zero; otherwise the reading reports arm sizes with no claim. The sandbox daemon reads its usage ledger through this.
 
 // Turns per arm before a delta is reported; where the normal approximation behind the margin starts to hold.
 export const MIN_ARM_TURNS = 30;

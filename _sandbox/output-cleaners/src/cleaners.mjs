@@ -235,7 +235,7 @@ export const CREDENTIAL_ISSUERS = [
 ];
 export const CREDENTIAL_ISSUER_PREFIXES = CREDENTIAL_ISSUERS.map(({ prefix }) => prefix);
 
-// RegExp.escape is Node 24; the plugin runs this file on whatever node a person has.
+// RegExp.escape is Node 24; spelled out so the file does not depend on the node it runs on.
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 const ISSUER_PREFIX = new RegExp(`^(?:${CREDENTIAL_ISSUER_PREFIXES.map(escapeRegExp).join("|")})`);
 // Starts where no word or kebab-case word runs into it: `task-sk-runner-config-file` is a name, not a key. The other

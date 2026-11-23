@@ -415,14 +415,6 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/trial/trial-ladder.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/claude-plugin/hooks/register.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/claude-plugin/src/features.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/claude-plugin/src/hook-io.ts": {
-        "count": 2,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/claude-plugin/src/sessions.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/claude-plugin/src/stats.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/fileq/src/commands/derive.command.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/fileq/src/lib/check/package.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/fileq/src/lib/derivers/pptx.ts": "standing when the check arrived (2026-10-16)",

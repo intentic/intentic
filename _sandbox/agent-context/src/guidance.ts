@@ -1,7 +1,6 @@
 // The parts of this product's working guidance that hold for any Claude Code session, sandbox or not. The sandbox's
 // guidance registry (the daemon's agent/prompt/guidance.ts) takes these paragraphs as they are, word for word, so its
-// experiment cohort does not move; the Claude Code plugin composes its opt-in output style from them. A wording change
-// here is a change to both.
+// experiment cohort does not move. A wording change here is a change there.
 
 export const BATCHING_GUIDANCE =
     "While you are ORIENTING, locating code, checking what exists, reading the files around a change, put every " +

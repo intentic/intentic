@@ -207,7 +207,7 @@ export const writeSidecar = async (workspaceRoot: string, input: WriteSidecarInp
     return written;
 };
 
-// The shadow tree ignores itself: outside the sandbox (fileq from npm, the Claude Code plugin) it lands inside somebody's
+// The shadow tree ignores itself: outside the sandbox (fileq from npm) it lands inside somebody's
 // repository, where a `git add -A` would sweep derived text of every document into a commit. `wx` leaves an existing
 // file alone, so an owner's own edit to it wins; any other failure costs only the ignore, never the shadow.
 export const ignoreShadowsInGit = async (workspaceRoot: string): Promise<void> => {

@@ -2,7 +2,7 @@ import { isAbsolute, relative } from "node:path";
 
 // Cross-runtime tool-call vocabulary: what a call is called, what kind of act it was, what it aimed at, and the
 // questions the turn readings ask of it (did it search, list, or reach a file). Every runtime maps its native calls
-// through these, so the sandbox's live readings, its benches and the Claude Code plugin's transcript readings agree.
+// through these, so the sandbox's live readings and its benches' transcript readings agree.
 
 // ACP's tool kinds, the categories every card icon and reading is keyed on.
 export type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "other";

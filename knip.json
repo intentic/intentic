@@ -264,12 +264,6 @@
         "_platform/*": {
             "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
-        // Hooks run by path from hooks/hooks.json, and a suite outside src/.
-        "_sandbox/claude-plugin": {
-            "entry": ["src/emit.ts", "src/**/*.test.{ts,mts,mjs}", "tests/**", "build.mjs"],
-            // `claude-code/testing` is provided by `claude plugin test`, which runs tests/ (test-mod.mjs).
-            "ignoreDependencies": ["claude-code"]
-        },
         // OCR runs in a worker thread loaded by path.
         "_sandbox/ocr": {
             "entry": ["src/index.ts", "src/**/*-worker.ts", "src/**/*.test.{ts,mts,mjs}"]

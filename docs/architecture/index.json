@@ -1091,36 +1091,6 @@
       "to": "_tools/tsconfig"
     },
     {
-      "dev": true,
-      "from": "_sandbox/claude-plugin",
-      "to": "_sandbox/agent-context"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/claude-plugin",
-      "to": "_sandbox/fileq"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/claude-plugin",
-      "to": "_sandbox/output-cleaners"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/claude-plugin",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/claude-plugin",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/claude-plugin",
-      "to": "_tools/tsconfig"
-    },
-    {
       "dev": false,
       "from": "_sandbox/cli",
       "to": "_sandbox/scaffold"
@@ -4536,20 +4506,6 @@
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
       "updatedAt": 1795224626000
-    },
-    {
-      "anchors": [],
-      "behind": 0,
-      "component": "sandbox",
-      "dir": "_sandbox/claude-plugin",
-      "files": 20,
-      "hasTests": true,
-      "loc": 1784,
-      "name": "@intentic/claude-plugin",
-      "oneLiner": "Trims Bash output before Claude reads it, opens each session with a map of the project, teaches the fileq CLI, and reports what each of these saved.",
-      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
-      "stale": false,
-      "updatedAt": 1795012866000
     },
     {
       "anchors": [

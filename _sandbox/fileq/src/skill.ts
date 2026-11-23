@@ -2,13 +2,13 @@ import { DERIVED_DIR } from "./lib/sidecar.js";
 import { AUTHORING_RULES } from "./skill-authoring.js";
 
 // fileq's own teaching: the SKILL.md every agent that has fileq on its PATH is given. It lives with the CLI it describes
-// so a new flag and its sentence land together, and so the two hosts that ship it cannot drift: the sandbox writes it
-// into the workspace's skills (the daemon's settings/skills.ts), the Claude Code plugin ships it as its fileq skill.
+// so a new flag and its sentence land together: the sandbox writes it into the workspace's skills (the daemon's
+// settings/skills.ts), and a standalone install of fileq reads the same text.
 // Only what the host itself provides differs: the sandbox image carries the `ocr` command (PaddleOCR, its models in the
 // privacy image pack) and wires fileq as git's textconv; a standalone install has neither until its owner adds them.
 
 export interface FileqSkillHost {
-    // "sandbox": the Intentic sandbox image. "standalone": fileq on anyone's machine (the Claude Code plugin, npm).
+    // "sandbox": the Intentic sandbox image. "standalone": fileq on anyone's machine (npm).
     readonly host: "sandbox" | "standalone";
 }
 

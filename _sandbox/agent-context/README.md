@@ -1,26 +1,22 @@
 # agent-context
 
-What a coding agent is told as a session opens, and the per-session readings that show whether it helped, shared by the sandbox daemon and the Claude Code plugin.
+What a coding agent is told as a session opens, and the per-session readings that show whether it helped, read by the sandbox daemon and its benches.
 
 ```mermaid
 flowchart LR
     tree["Project tree<br/>and its git history"] --> map(["workspace-map"])
     map --> daemon["Sandbox daemon<br/>turn composition"]
-    map --> plugin["Claude Code plugin<br/>SessionStart hook"]
     frames["Daemon frames"] --> metrics(["turn-metrics"])
     transcripts["Claude Code transcripts"] --> reader(["claude-transcript"]) --> metrics
     metrics --> stats(["arm-stats"])
     stats --> savings["Savings route"]
-    stats --> report["/intentic:stats"]
 ```
 
 - Runtime-neutral on purpose: nothing here knows the daemon's event shapes, settings or state paths. The daemon adapts
-  its frames onto `createTurnMetrics`; the plugin does the same from hook payloads and
-  `~/.claude/projects`.
+  its frames onto `createTurnMetrics`, and the benches do the same from `~/.claude/projects` transcripts.
 - `workspace-map` recomputes a project's areas from the filesystem every time (1,400-character ceiling): every area
   by size with its languages, the biggest opened up, and each one's purpose (a README's or manifest's first sentence,
-  markup stripped and cut at a clause). The plugin and the daemon send the same note; the daemon measures it against
-  no map at all.
+  markup stripped and cut at a clause). The daemon measures it against no map at all.
   - 2026-10-12: a `compact` form (the areas recent commits touched, the rest by name, and the folders three weeks of
     commits landed in) ran against this one for six days and was removed. On 101 against 107 opening turns it changed
     nothing measurable: opening listings 0.13 against 0.15, calls before the edited file 39.3 against 28.6 (+37% ±55,
@@ -46,11 +42,10 @@ flowchart LR
   that reached an answer, so a restarted comparison does not wipe a finding off the screen while it is early.
   Cold session trimming compares opening prompt tokens and failed calls on eligible follow-ups, grouped by conversation.
 - `claude-transcript` reads a Claude Code session, subagents included, into the same turns and calls, so the
-  sandbox's benches and the plugin's report count identically. Which user line a person wrote (a prompt, a slash
+  sandbox's benches and its live readings count identically. Which user line a person wrote (a prompt, a slash
   command, or a compaction summary, an interruption, a harness line) is `transcript-lines`' `promptOf`; a turn starts
   at a typed prompt or a slash command, including a prompt that carried only images.
-- `guidance` holds the working-guidance paragraphs that hold outside the sandbox; the daemon's guidance registry
-  takes them word for word.
+- `guidance` holds working-guidance paragraphs the daemon's guidance registry takes word for word.
 
 ## Key files
 

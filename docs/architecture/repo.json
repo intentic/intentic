@@ -24,7 +24,6 @@
             "packages": [
                 "_sandbox/agent-context",
                 "_sandbox/castd",
-                "_sandbox/claude-plugin",
                 "_sandbox/cli",
                 "_sandbox/fileq",
                 "_sandbox/netd",

@@ -4,8 +4,8 @@ import { imageSize } from "image-size";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
 // exifr is CommonJS behind a `main` field with no exports map, so a named `import { parse }` type-checks but throws at
-// load; the default import is its module.exports under Node and under a bundler alike (the Claude Code plugin bundles
-// fileq, and so does the desktop app's compiled file server, and a `createRequire` call is the one form a bundle cannot
+// load; the default import is its module.exports under Node and under a bundler alike (the desktop app's compiled file server
+// bundles fileq, and a `createRequire` call is the one form a bundle cannot
 // follow: there it failed every derive with "Cannot find module 'exifr'").
 // oxlint-disable-next-line import/no-named-as-default-member -- the named import this rule asks for is the one that throws at load.
 const { parse: parseExif } = exifr;

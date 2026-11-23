@@ -2,7 +2,7 @@ import { isFileWorkCall, isRootListing, isSearchCall, searchPrecedesFileWork, ty
 
 // What one turn did before its first edit, read off its tool calls in order. Order matters and three of the four readings
 // share state (has work started, which paths seen), so they are kept in one ledger rather than four independent counters.
-// Runtime-neutral: the sandbox daemon feeds it the frames of a live turn, the Claude Code plugin the tool_use blocks of a
+// Runtime-neutral: the sandbox daemon feeds it the frames of a live turn, the benches the tool_use blocks of a
 // transcript, and both get the same numbers for the same calls. A subagent's calls count toward `calls()` and toward no
 // reading: they interleave with the main agent's, so "before the first file" has no order across the two, and the
 // treatment the readings judge (the map) does not reach a subagent. Counted as the turn's own, a first turn that sent

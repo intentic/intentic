@@ -5,7 +5,7 @@ import { filterRun, retainIn } from "../agent-output-filter.mjs";
 import { CACHE_MARKER } from "../cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../stats/filter-stats.mjs";
 
-// filterRun is the pass both runtimes share (the sandbox's pane pipeline and the Claude Code plugin's hook), so these
+// filterRun is the sandbox pane pipeline's whole pass, so these
 // pin what it keeps under logsDir and that a keeping failure never costs the trim itself.
 
 const dirs: string[] = [];
@@ -35,13 +35,6 @@ test("keeps the raw text a footer names and ledgers one row per command", () => 
     const rows = parseStatsFile(readFileSync(join(logsDir, "filter-stats.jsonl"), "utf8"));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ ts: 1234, command: "./build.sh", exit: "0", rawBytes: LONG.length, emittedBytes: out.length, heldOut: false });
-});
-
-test("tags ride on the ledger row, and never displace the pass's own fields", () => {
-    const logsDir = tempDir();
-    filterRun("ok\n", { command: "true", logsDir, tags: { project: "/src/app", session: "s9", heldOut: "forged" }, now: () => 7 });
-    const rows = parseStatsFile(readFileSync(join(logsDir, "filter-stats.jsonl"), "utf8"));
-    expect(rows[0]).toMatchObject({ project: "/src/app", session: "s9", heldOut: false, ts: 7 });
 });
 
 test("a held-out command reaches the model untrimmed, keeps no raw copy, and is ledgered as the control", () => {

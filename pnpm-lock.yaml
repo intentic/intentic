@@ -2275,39 +2275,6 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  _sandbox/claude-plugin:
-    devDependencies:
-      '@intentic/agent-context':
-        specifier: workspace:*
-        version: link:../agent-context
-      '@intentic/base':
-        specifier: workspace:*
-        version: link:../../_tools/base
-      '@intentic/fileq':
-        specifier: workspace:*
-        version: link:../fileq
-      '@intentic/output-cleaners':
-        specifier: workspace:*
-        version: link:../output-cleaners
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.4
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.19.2
-      esbuild:
-        specifier: 'catalog:'
-        version: 0.28.2
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
   _sandbox/cli:
     dependencies:
       '@intentic/base':

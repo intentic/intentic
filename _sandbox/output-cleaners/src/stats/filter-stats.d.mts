@@ -13,9 +13,6 @@ export interface StatRow {
     readonly heldOut?: boolean;
     // Bytes each stage removed on this command, keyed by stage id (negative when it added, like the footer).
     readonly stageBytes?: Readonly<Record<string, number>>;
-    // Tags a runtime filed the row under (the Claude Code plugin's project and session).
-    readonly project?: string;
-    readonly session?: string;
 }
 
 export interface SavingsSummary {

@@ -231,7 +231,7 @@ const coverageOf = (note: MapNote | undefined, paths: readonly string[], files: 
 
 const pathsOf = (call: TranscriptCall): string[] => (call.locations ?? []).map((location) => location.path);
 
-// The transcript is read by @intentic/agent-context's reader, the one the Claude Code plugin's stats read with, and
+// The transcript is read by @intentic/agent-context's reader and
 // located with the daemon's own toolLocations so a path under a linked state directory resolves as it does live.
 export const readSession = (file: string, agentRoot: string): Session | undefined => {
     const text = readFileSync(file, "utf8");

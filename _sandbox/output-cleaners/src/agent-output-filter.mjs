@@ -3,7 +3,7 @@
 // output before the model sees it, running ./cleaners.mjs on success, passing through non-ANSI content on failure.
 // Fails open; copied into the image as /usr/local/bin/agent-output-filter with ./cleaners.mjs alongside it.
 // `filterRun` is the whole pass with its inputs resolved; this file's `main` is the sandbox's adapter onto it (argv and
-// the daemon's env), and the Claude Code plugin's PostToolUse hook is the other.
+// the daemon's env).
 
 import { appendFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -368,8 +368,7 @@ const withTestDigest = (raw, filtered, { command, outcomes, now }) => {
 // One command's whole pass, every input already resolved by the runtime calling it. `logsDir` holds what a pass keeps:
 // `raw-output/` (the unfiltered text a footer points at), `output-cache/` (the per-session repeat detector) and
 // `filter-stats.jsonl` (the savings ledger); undefined keeps none of them. `runName` names this run's raw-output file
-// and must be unique per command; `sessionKey` scopes the cache; `tags` ride on the ledger row as they are (the plugin
-// files each row under its project and session). Never throws: any failure answers with the raw text, and redaction
+// and must be unique per command; `sessionKey` scopes the cache. Never throws: any failure answers with the raw text, and redaction
 // runs on every path.
 export const filterRun = (
     raw,
@@ -384,7 +383,6 @@ export const filterRun = (
         runName,
         sessionKey,
         values = [],
-        tags = {},
         outcomes,
         random = Math.random,
         now = Date.now,
@@ -421,7 +419,6 @@ export const filterRun = (
         try {
             const matched = matchedCleaners(command, enabled);
             const stat = {
-                ...tags,
                 ts: now(),
                 command: command.slice(0, 200),
                 exit: exitCode,
