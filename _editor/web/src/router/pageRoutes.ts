@@ -110,7 +110,7 @@ const SANDBOX_VIEWS = {
         component: asyncView(
             () => import(`../features/sandbox/SandboxHub.vue`),
             hubOutline(
-                () => t(`shared.sandboxSettings`),
+                () => t(`shared.settings`),
                 () => ``,
                 7,
                 { search: true },
@@ -130,7 +130,7 @@ const SANDBOX_VIEWS = {
 } satisfies Record<SandboxPageName, PageView>;
 
 const ACCOUNT_VIEWS = {
-    account: { title: () => t(`shared.settings`), component: accountSettingsView() },
+    account: { title: () => t(`shared.account`), component: accountSettingsView() },
     // The account's deleted sandboxes: every sandbox the account deleted, wherever it ran, so a page of the account's.
     deletedSandboxes: {
         title: () => t(`sandbox.words.recentlyDeleted`),

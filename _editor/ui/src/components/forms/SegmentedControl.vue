@@ -100,8 +100,8 @@ const nameOf = (option: { label: string; title?: TooltipValue; markTitle?: Toolt
 // the pill's 16px line box: at the label's own size it filled that box edge to edge and read as a second control
 // rather than a count on one. The rail's is bigger because it floats in a tile's corner, owing no line its height.
 const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-center rounded-full px-[0.3em] text-3xs font-semibold leading-none tabular-nums`;
-// A title's count is a quiet number on its word's baseline: a plate beside a 14px title read as a second control.
-const TITLE_COUNT = `ml-1.5 text-xs font-medium tabular-nums text-muted`;
+// A title's count is a quiet number on its word's baseline: a plate beside a title in the bar read as a second control.
+const TITLE_COUNT = `ml-1 text-xs tabular-nums text-muted`;
 
 // One step up the type scale from the pill of the same `size`, deliberately: a pill labels a control, where a tab
 // names what the reader is looking at, and at the pill's size it read as a control that had lost its box. The

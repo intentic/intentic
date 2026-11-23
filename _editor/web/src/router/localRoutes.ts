@@ -100,7 +100,7 @@ export const localRoutes = (): RouteRecordRaw[] => [
             {
                 path: LOCAL_PAGES.account,
                 name: `settings`,
-                meta: { page: `account`, title: () => t(`shared.settings`) },
+                meta: { page: `account`, title: () => t(`shared.account`) },
                 beforeEnter: requireAccount,
                 component: accountSettingsView(),
             },

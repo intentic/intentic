@@ -20,13 +20,14 @@ export const segmented = tv({
         //   outgrow it SCROLL (the open one kept in view, SegmentedControl.vue) rather than wrap, since a wrapped row
         //   leaves the first line's rule floating over the second, under no line at all.
         // - title: a column's NAME that switches, in its segment of the window's top bar (`.view-header`): the open part is
-        //   the bar's title, at the size every view's name stands in there (text-sm semibold), and the others are quieter
-        //   words beside it (the Workspace's Files | Changes). No rule and no line: an underline here stood on the bar's own
-        //   line and turned the bar into a tab strip (2026-11-23). One line, scrolling like tabs where it outgrows it.
+        //   the bar's title, in the type every name in the bar takes (13px, regular, as ViewBar's and the chat's), at full
+        //   ink, and the others are quieter words beside it (the Workspace's Files | Changes). No rule and no line: an
+        //   underline here stood on the bar's own line and turned the bar into a tab strip (2026-11-23). One line,
+        //   scrolling like tabs where it outgrows it.
         variant: {
             pills: { option: `rounded-md font-medium` },
             underline: { track: ui.tabStrip(`scrollbar-none items-end gap-4 overflow-x-auto`) },
-            title: { track: `scrollbar-none gap-3.5 overflow-x-auto`, option: `touch-target shrink-0 whitespace-nowrap text-sm font-semibold` },
+            title: { track: `scrollbar-none gap-3.5 overflow-x-auto`, option: `touch-target shrink-0 whitespace-nowrap text-[0.8125rem]` },
         },
         // Full-width, thumb-height track for a task step on a narrow screen (pills only).
         stretch: { true: {}, false: {} },

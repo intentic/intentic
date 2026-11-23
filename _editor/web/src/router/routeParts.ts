@@ -22,7 +22,7 @@ export const hubOutline = (
 
 /** The account's settings, as both tables draw them; the outline mirrors the page's own heading (SettingsHub.vue). */
 export const accountSettingsView = (): Component =>
-    asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5, { search: true }));
+    asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.account`), () => ``, 5, { search: true }));
 
 // Voice and Data were Settings rows of their own until 2026-10-17; each is drawn at the foot of another section now
 // (settingsNav.ts `within`), so its old address opens that section at the part's anchor. `base` is where the account's

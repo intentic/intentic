@@ -144,7 +144,7 @@ useSectionWarmup(() => sections.value.flatMap((section) => pageOf(section.slug))
 </script>
 
 <template>
-    <HubLayout :title="t(`shared.settings`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading" :search="search">
+    <HubLayout :title="t(`shared.account`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading" :search="search">
         <template #default="{ slug }">
             <div class="flex flex-col gap-6">
                 <SettingsProfile v-if="slug === `profile`" />

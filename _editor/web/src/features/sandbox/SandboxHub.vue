@@ -298,7 +298,7 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
 
 <template>
     <HubLayout
-        :title="t(`shared.sandboxSettings`)"
+        :title="t(`shared.settings`)"
         :route-name="HUB"
         :default-slug="defaultSlug"
         :addressable="isGuest"
