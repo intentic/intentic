@@ -330,5 +330,6 @@ onBeforeUnmount(() => {
 
 <template>
 <!-- Every press here is the editor's: its gutter selects lines under an arrow cursor (workbench/window/windowGesture.ts). -->
-    <div ref="host" class="h-full w-full bg-canvas" data-window-no-drag></div>
+    <!-- Monaco keeps its old width during a seam drag; clip it until followHostSize catches up. -->
+    <div ref="host" class="h-full w-full overflow-hidden bg-canvas" data-window-no-drag></div>
 </template>
