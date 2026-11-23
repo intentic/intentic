@@ -64,7 +64,7 @@ const back = computed(() => {
         :aria-label="launch.title"
         :aria-busy="!refused"
         class="flex w-full select-none flex-col rounded-2xl border text-left"
-        :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4', refused ? toneRim(`danger`, `soft`, `bg-card`) : 'border-dashed border-line-strong bg-card/50']"
+        :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-3.5', refused ? toneRim(`danger`, `soft`, `bg-card`) : 'border-dashed border-line-strong bg-card/50']"
     >
         <div class="flex items-center gap-2.5">
             <!-- Where an agent card has its identity tile: nothing to identify yet, only the wait or the refusal. -->
@@ -77,7 +77,7 @@ const back = computed(() => {
             <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a vertical overrun. -->
             <span
                 class="min-w-0 flex-1 font-semibold"
-                :class="[dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug', refused ? 'text-content' : 'text-muted']"
+                :class="[dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-xs leading-snug', refused ? 'text-content' : 'text-muted']"
                 >{{ launch.title }}</span
             >
             <span v-if="refused" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`danger`)">{{ t(`agents.launchCard.notStarted`) }}</span>

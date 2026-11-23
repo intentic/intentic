@@ -32,7 +32,7 @@ export const showChat = (): void => setChatTucked(false);
 export const chatOnScreen = computed(() => floating.here.value || (chatInSidePanel.value && !chatTucked.value));
 
 // WHETHER THE CHAT'S OWN SIDE RAIL (its checklist, then Usage left) IS DRAWN IN THIS WINDOW, written by the panel
-// (ChatPanel.vue `showsRail`). The Agents board puts Usage left under itself only while it is not (features/agents/fleet/Agents.vue),
+// (ChatPanel.vue `showsRail`). The Agents board puts Usage left in its own corner only while it is not (features/agents/fleet/Agents.vue),
 // so the figures are on screen once, wherever there is room for them.
 // allow(module-state): what this window's one chat panel draws, published for a page beside it to read
 export const chatRailDrawn = shallowRef(false);

@@ -491,8 +491,9 @@ flowchart LR
   Changes tab instead of in the header. _2026-09-29: an index page, not a strip of section chips wrapping above
   every section. With extensions installed that strip was seventeen chips over every page of the sandbox hub._
 - **The agents board between a phone and a desktop.** The board measures its own width, not the window's, so a docked
-  chat counts. Under 48rem the lanes stack; from 48rem to 72rem it is two columns, Attention over Active in the first
-  and Finished in the second; from 72rem it is three. On a desktop a card's header keeps only its filing press
+  chat counts. Under 48rem the lanes stack; from 48rem to 56rem it is two columns, Attention over Active in the first
+  and Finished in the second; from 56rem it is three, and from 66rem three whatever the lanes hold (a 1600px screen
+  beside the chat at its default width). Card titles are the chat's 12px. On a desktop a card's header keeps only its filing press
   (archive, close or restore) and one ⋯. The ⋯ opens the same menu a right-click does, and the card's other presses
   (rename, add a reaction, review) are rows in that menu. A touch screen too wide to count as a phone, such as a
   tablet, shows the ⋯ without hover. _2026-10-15: three columns from 48rem, with a hidden 30px seat per press, left a
@@ -505,7 +506,8 @@ flowchart LR
   New agent stands once too: the chat header's + while the chat is open beside the board, the board header's button
   while it is folded into its strip or in a window of its own (`chatPanelLayout.ts` `chatOnScreen`).
   Usage left stands once: in the chat's side rail, under its checklist, once the chat is wide enough for that rail,
-  otherwise under the board (`features/agents/fleet/Agents.vue`, `chatPanelLayout.ts` `chatRailOnScreen`). A popped-out
+  otherwise as the same one column at the foot of the board's bottom-right lane (`features/agents/fleet/Agents.vue`,
+  `chatPanelLayout.ts` `chatRailOnScreen`). A popped-out
   chat's window draws the same board on its left (`shell/window/FloatingBoard.vue`), and any navigation a press there
   makes goes to the main window. _2026-11-23: until then the chat could also live behind a rail tile as a full-window
   /chat, with a list of chats or the board in its left column and a quick bar elsewhere._

@@ -58,7 +58,7 @@ const grab = (event: PointerEvent): void => {
         role="group"
         :aria-label="sealedTitle()"
         class="session-card group flex w-full select-none flex-col rounded-2xl border text-left outline-none"
-        :class="[live ? 'gap-2.5 p-4' : 'gap-2 p-3.5', lane === 'attention' ? 'session-card-attention' : '', selected ? 'session-card-on' : '']"
+        :class="[live ? 'gap-2.5 p-3.5' : 'gap-2 p-3.5', lane === 'attention' ? 'session-card-attention' : '', selected ? 'session-card-on' : '']"
         data-sealed-card
         @pointerdown="grab"
         @dragstart.prevent
@@ -69,8 +69,7 @@ const grab = (event: PointerEvent): void => {
             <Avatar :size="22" :name="fullName(author)" :hue="identityHue(author?.email ?? agent.id)" class="shrink-0" />
             <button
                 type="button"
-                class="inline-flex min-w-0 grow basis-28 items-center gap-1.5 rounded-sm text-left italic text-muted"
-                :class="live ? 'text-sm' : 'text-xs'"
+                class="inline-flex min-w-0 grow basis-28 items-center gap-1.5 rounded-sm text-left italic text-muted text-xs"
                 :aria-label="t(`agents.sealedCard.open`, { name: fullName(author) })"
                 @click.stop="emit(`open`, $event)"
             >

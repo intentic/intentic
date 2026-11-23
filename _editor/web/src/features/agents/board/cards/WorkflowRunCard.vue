@@ -63,7 +63,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         class="session-card group flex w-full select-none flex-col rounded-2xl border border-dashed text-left outline-none [--card-border:var(--color-line-strong)]"
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
-            bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
+            bigLane ? 'gap-2.5 p-3.5' : 'gap-2 p-3.5',
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them.
                The dashes take their ink from `--card-border` above, since `.session-card` rests every card's border at transparent:
                left there, the run read as one more agent card. */
@@ -91,7 +91,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
                 class="min-w-0 flex-1 rounded-sm text-left font-semibold text-content"
-                :class="bigLane ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
+                :class="bigLane ? 'line-clamp-2 break-words text-xs leading-snug' : 'truncate text-xs'"
                 @click.stop="emit(`open`)"
             >
                 {{ run.workflow.name }}

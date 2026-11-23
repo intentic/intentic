@@ -5,18 +5,19 @@ import type { BoardView, ViewEvent } from "./boardView";
 import type { LaneContent } from "./phoneLanes";
 
 // The board's own width, measured (useNarrow): a container query's `container-type` would contain the fixed drag ghost.
-// THREE SHAPES BY WIDTH. Under 48rem the lanes stack. From there to 72rem (a tablet, a small laptop, a desktop with the
-// chat docked) three columns leave a card about 300px wide, and after its glyph, standing and presses its title kept
-// some 60px of that ("Soft-delet…"); so the board is two columns there: the lanes about work in flight (Attention over
-// Active, both short) share the first, and Finished, the long ledger, has the second. Reading order is the same in all
-// shapes: Attention, Active, Finished.
+// THREE SHAPES BY WIDTH. Under 48rem the lanes stack. From there to 56rem (a tablet, a narrow window) three columns would
+// leave a card under 260px, where its title gives way to the standing beside it; so the board is two columns there: the
+// lanes about work in flight (Attention over Active, both short) share the first, and Finished, the long ledger, has the
+// second. Reading order is the same in all shapes: Attention, Active, Finished. Until 2026-11-23 two columns held to 72rem,
+// set when a live card's title was 14px; at the chat's 12px a 270px card wraps its title to two readable lines, and a
+// 1600px screen beside the docked chat was left with two wide columns and a third of the board empty.
 const NARROW_BOARD_REM = 48;
-const PAIRED_BOARD_REM = 72;
-// From here three columns give each lane some 460px, enough for a card's title and facts on one line: reshaping a board
-// this wide would only stretch the cards (two columns of 700px put a card's time a screen's width from its title), so a
-// roomy board keeps its three lanes whatever they hold. Low enough that a 4K screen at 150% (2560px) keeps three lanes
-// beside a chat docked wide enough for its Usage left rail (pinned in boardGrid.test.ts).
-export const ROOMY_BOARD_REM = 90;
+const PAIRED_BOARD_REM = 56;
+// From here three columns give each lane some 330px, enough for a card's title on two lines beside its standing: reshaping
+// a board this wide would only stretch the cards (two columns of 500px put a card's time far from its title), so a roomy
+// board keeps its three lanes whatever they hold. 66rem is a 1600px screen beside the chat at its default width; it was
+// 90rem until 2026-11-23, which kept that screen in two columns whenever a lane was empty (pinned in boardGrid.test.ts).
+export const ROOMY_BOARD_REM = 66;
 
 // AND BY WHAT THE LANES HOLD. On a wide board an empty lane still took a third of it for one sentence, while the lane
 // with something to read cut its titles short beside it. So an empty lane gives its column away and says its sentence
@@ -58,6 +59,8 @@ export const boardLayout = (narrow: boolean, underThree: boolean, quiet: QuietLa
     }
     return { kind: underThree ? `paired` : `three` };
 };
+
+const cornerLane = ({ kind, wide }: LaneLayout): FleetLane => (kind === `ledger` && wide !== undefined ? wide : `finished`);
 
 // Where each lane sits in the paired shape: Finished spans both rows of the second column, so the first column's rows
 // size to Attention and Active alone (`grid-rows-[auto_1fr]`: the second row takes whatever Finished needs past them).
@@ -139,6 +142,9 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
     };
     // The ledger's wide lane spans the board, so its cards take two columns of it rather than one line each.
     const spans = (lane: FleetLane): boolean => layout.value.kind === `ledger` && layout.value.wide === lane;
+    // The lane holding the board's bottom-right corner, at whose foot the host's corner slot stands (AgentsView.vue): the
+    // ledger's spanning lane, else Finished, which closes the reading order in every other shape.
+    const corner = computed((): FleetLane => cornerLane(layout.value));
     // An empty lane in a layout that gave its column away says so on its header's line, not on a line of its own; while a
     // card is in hand it keeps the full line, so the lane stays a target worth aiming at.
     const sayInHeader = (lane: FleetLane): boolean => placed.value && !dragging.value && !first.value && saysEmpty(lane);
@@ -157,5 +163,5 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
             lane.scrollIntoView({ block: `start` });
         }
     };
-    return { narrow, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished };
+    return { narrow, placed, laneGrid, placeOf, spans, corner, sayInHeader, toggleFinished };
 };

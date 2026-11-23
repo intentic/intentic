@@ -292,7 +292,7 @@ const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
 const { drawnLanes, bareLane, saysEmpty, content } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });
 // The lanes' grid at the board's width and by which in-flight lanes are empty, and Finished's fold (boardGrid.ts).
-const { narrow, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging });
+const { narrow, placed, laneGrid, placeOf, spans, corner, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -388,8 +388,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
              one they keep, and the first agent's card arrives in the slot drawn where it will sit. -->
         <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
         <div class="scrollbar-stable min-h-0 flex-1 overflow-auto">
-            <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
-            <!-- A phone's board ends with room for the floating New agent, so its last card never sits under the press. -->
+            <!-- `content-start` keeps stacked rows from stretching to `h-full`; a phone's board ends with room for the floating New agent. -->
             <!-- NEVER SIDEWAYS (`overflow-x-clip`). The lanes are fractions of this width, so anything wider is something spilling
                  past its card, and from the right-hand lane that handed the board a horizontal scrollbar. Cut at the edge the
                  scroller already cut it at; a clip rather than a scroller, so the sticky headers still pin to the board's. -->
@@ -404,7 +403,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     :data-reveal-column="narrow ? undefined : ``"
                     :data-drop="lane.key === 'finished' && view.archive ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
-                    :class="[!dragging && !narrow && !placed ? 'min-h-0' : '', placeOf(lane.key), laneDropClass(lane.key)]"
+                    :class="[!dragging && !narrow && !placed ? 'min-h-0' : '', placeOf(lane.key), laneDropClass(lane.key), $slots.corner && lane.key === corner ? 'self-stretch' : '']"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
                     <LaneHeader :label="lane.label" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-card'">
@@ -642,6 +641,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         <Icon name="chevron-down" class="text-2xs" />
                         {{ archiveHidden }} {{ t(`agents.agentsView.more`) }}
                     </button>
+                    <!-- The host's bottom-right corner (Agents.vue), at the foot of the lane stretched to that cell: in the flow, never over a card. -->
+                    <div v-if="$slots.corner && lane.key === corner" class="mt-auto pt-2.5" :class="spans(lane.key) ? 'w-1/2 self-end' : ''"><slot name="corner" /></div>
                 </section>
             </div>
             <NoMatchesNote v-if="noMatches" v-model:query="query" v-model:match-case="matchCase" />

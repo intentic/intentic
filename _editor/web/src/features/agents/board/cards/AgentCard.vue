@@ -572,8 +572,10 @@ const grab = (event: PointerEvent): void => {
         :aria-label="displayTitle"
         class="session-card group relative flex w-full select-none flex-col rounded-2xl border text-left"
         :class="[
-            /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
-            live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
+            /* A LIVE CARD IS A ROOMIER CARD (see `live`): the two lanes about work in flight get a wider gap and a title that wraps to
+               two lines, the ledger's clips to one. Both titles are the chat's 12px (its own cards', its prompts', its answers'): at
+               14px the board read a size louder than the chat beside it. */
+            live ? 'gap-2.5 p-3.5' : 'gap-2 p-3.5',
             /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
             lane === 'attention' ? 'session-card-attention' : '',
             selected ? 'session-card-on' : '',
@@ -617,8 +619,7 @@ const grab = (event: PointerEvent): void => {
                 type="text"
                 maxlength="80"
                 :aria-label="t(`agents.words.agentTitle`)"
-                class="ui-field-box ui-field-inline min-w-0 grow basis-28 select-text px-1 font-semibold"
-                :class="live ? 'text-sm' : 'text-xs'"
+                class="ui-field-box ui-field-inline min-w-0 grow basis-28 select-text px-1 font-semibold text-xs"
                 @click.stop
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -632,8 +633,8 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     v-tooltip.top.overflow="displayTitle"
                     :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-                    class="min-w-0 grow basis-28 rounded-sm text-left font-semibold text-content"
-                    :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
+                    class="min-w-0 grow basis-28 rounded-sm text-left text-xs font-semibold text-content"
+                    :class="live ? 'line-clamp-2 break-words leading-snug' : 'truncate'"
                     @click.stop="openCard"
                     @dblclick.stop="openPage"
                 >

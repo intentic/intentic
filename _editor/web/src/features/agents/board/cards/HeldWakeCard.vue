@@ -49,7 +49,7 @@ const autoRunLabel = computed(() => {
 <template>
     <div
         class="group flex w-full select-none flex-col rounded-xl border border-dashed border-line bg-card text-left"
-        :class="dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4'"
+        :class="dense ? 'gap-2 p-3.5' : 'gap-2.5 p-3.5'"
     >
         <div class="flex items-center gap-2.5">
             <!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
@@ -62,7 +62,7 @@ const autoRunLabel = computed(() => {
             <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun. -->
             <span
                 class="min-w-0 flex-1 font-semibold text-content"
-                :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug'"
+                :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-xs leading-snug'"
                 >{{ entry.title ?? entry.automationId }}</span
             >
             <span class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{ t(`agents.heldWakeCard.held`) }}</span>

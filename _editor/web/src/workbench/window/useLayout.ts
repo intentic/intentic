@@ -28,7 +28,7 @@ const WIDTH_KEY = `ui-chat-width`;
 export const MIN_PANE_PX = 352;
 
 // Default leaves slack above the floor for the composer's optional controls; max stays under the viewport.
-const DEFAULT_CHAT_WIDTH = 432;
+export const DEFAULT_CHAT_WIDTH = 432;
 const NARROW_DEFAULT_CHAT_WIDTH = 360;
 const MIN_CHAT_WIDTH = MIN_PANE_PX;
 const MAX_CHAT_WIDTH = 4000;

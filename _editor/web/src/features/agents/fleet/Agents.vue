@@ -18,8 +18,10 @@ import AgentsView from "../board/AgentsView.vue";
 
 /* USAGE LEFT STANDS ONCE, WHERE THERE IS ROOM FOR IT. The chat beside the board draws it in its own side rail, under its
    checklist, once the chat is wide enough for that rail (ChatPanel.vue `showsRail`). Until then, and while the chat is
-   folded into its strip or in a window of its own, it stands under the board instead, the same rows laid across. A phone's
-   board is a screen of its own, with no room under it. */
+   folded into its strip or in a window of its own, it stands in the board's bottom-right corner instead (AgentsView's
+   `corner` slot), the same one column the chat draws, on a card's ground. Until 2026-11-23 it was a strip under the
+   whole board with the providers laid side by side, which read as a table of bars no one could follow. A phone's board is
+   a screen of its own, with no room for it. */
 const { mobile } = useDevice();
 const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value);
 // The focused chat's account, marked in Usage left as the one the reader typing beside it is spending (ChatSideRail's rule).
@@ -49,9 +51,10 @@ useShellChatLink(() => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col" :class="{ 'ground-card bg-card': plain }">
-        <!-- `flex-1` outranks the board's own `h-full` (a flex basis wins over a height), so the strip below keeps its rows. -->
-        <AgentsView class="min-h-0 flex-1" />
-        <!-- At most a part of the column, scrolling past that. -->
-        <ChatCapacityRail v-if="usageHere" :mine="mine" across class="max-h-[40%] shrink-0 border-t border-line" />
+        <AgentsView class="min-h-0 flex-1">
+            <template v-if="usageHere" #corner>
+                <ChatCapacityRail :mine="mine" class="rounded-2xl border border-line bg-card" />
+            </template>
+        </AgentsView>
     </div>
 </template>

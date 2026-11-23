@@ -1,6 +1,7 @@
 import { NARROW_HYSTERESIS_REM } from "@intentic/ui";
 import { CAPACITY_RAIL_PX, PANE_COMFORT_PX } from "../../../../chat/panel/capacity/chatCapacity";
 import { ICON_RAIL_SCREEN_PX } from "../../../../../workbench/window/iconRailWidth";
+import { DEFAULT_CHAT_WIDTH } from "../../../../../workbench/window/useLayout";
 import { boardLayout, LOUD, ROOMY_BOARD_REM } from "../boardGrid";
 
 // Pins how the board lays its lanes out: by its width, and by which lanes are empty, so an empty lane gives its column
@@ -57,6 +58,17 @@ describe(`the roomy board's width`, () => {
         const screen = 3840 / 1.5;
         const chrome = 48 + 10 + 1;
         const board = screen - ICON_RAIL_SCREEN_PX - (PANE_COMFORT_PX + CAPACITY_RAIL_PX) - chrome;
+        expect(board).toBeGreaterThanOrEqual((ROOMY_BOARD_REM + NARROW_HYSTERESIS_REM) * 16);
+    });
+});
+
+// A 1600px screen beside the chat at its default width keeps three lanes, whatever they hold. Until 2026-11-23 the roomy
+// width was 90rem, so that board (69.9rem, measured in the demo) folded into two wide columns whenever one lane was empty,
+// and the owner found three columns arriving too late. The board's element is what is measured, so only the chat's seam
+// (1px) comes off besides the rail and the chat.
+describe(`a laptop-sized board`, () => {
+    it(`keeps three lanes on a 1600px screen beside the chat at its default width`, () => {
+        const board = 1600 - ICON_RAIL_SCREEN_PX - DEFAULT_CHAT_WIDTH - 1;
         expect(board).toBeGreaterThanOrEqual((ROOMY_BOARD_REM + NARROW_HYSTERESIS_REM) * 16);
     });
 });
