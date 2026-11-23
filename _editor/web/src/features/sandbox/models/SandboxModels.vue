@@ -545,7 +545,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         <Notice v-if="keyNotice" :of="keyNotice" />
 
         <!-- The grid: every way in, always the same tiles in the same places; fluid columns, so a scrollbar never reflows it. -->
-        <div role="group" :aria-label="t(`shared.models`)" class="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-1">
+        <div role="group" :aria-label="t(`shared.models`)" class="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1">
             <ProviderTile
                 v-for="tile in tiles"
                 :key="tile"

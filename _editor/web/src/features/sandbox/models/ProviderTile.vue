@@ -61,7 +61,7 @@ watch(
     <button
         v-tooltip.top="tip"
         type="button"
-        class="ui-row-select group relative flex min-w-0 flex-col items-center gap-1.5 rounded-xl px-2 pb-2 pt-6"
+        class="ui-row-select group relative flex aspect-square min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-5"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
@@ -93,10 +93,10 @@ watch(
         <span class="w-full truncate text-center text-xs font-medium leading-tight" :class="selected ? `text-content` : `text-muted`">{{
             name
         }}</span>
-        <!-- The line's room is kept whether or not it says anything: a sign-in starting grew the tile by a line and shoved the
+        <!-- The line sits on the square's bottom edge, out of the flow: a sign-in starting must not grow the tile and shove the
              whole grid and the panel under it down, then up again when it landed. Its words fade in where they will stand. -->
         <span
-            class="h-4 max-w-full truncate text-[0.65rem] leading-4 transition-opacity"
+            class="absolute inset-x-2 bottom-1 h-4 truncate text-center text-[0.65rem] leading-4 transition-opacity"
             :class="[shown === undefined ? `` : LINE[shown.tone], line ? `opacity-100` : `opacity-0`]"
             :aria-hidden="line === undefined"
             >{{ shown?.text }}</span
