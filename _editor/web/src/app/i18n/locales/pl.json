@@ -4318,13 +4318,11 @@
         "chatTabs": {
             "archiveChat": "Zarchiwizuj czat",
             "couldntRenameAgent": "Nie udało się zmienić nazwy agenta.",
-            "need": "Czeka na Ciebie: {attentionCount}",
             "newWindow": "Nowe okno",
             "nextNeedsYou": "Następny czat, który na ciebie czeka",
             "openNextBeside": "Otwórz następny obok",
             "pastChats": "Poprzednie czaty",
             "previous": "Poprzedni",
-            "running": "W toku: {runningCount}",
             "switch": "Przełącz…",
             "switchChatOpen": "Przełącz czat (otwarte: {count})",
             "tuckAway": "Zwiń",

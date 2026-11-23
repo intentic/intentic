@@ -4318,13 +4318,11 @@
         "chatTabs": {
             "archiveChat": "Archiver le chat",
             "couldntRenameAgent": "Impossible de renommer l'agent.",
-            "need": "{attentionCount} ont besoin de vous",
             "newWindow": "Nouvelle fenêtre",
             "nextNeedsYou": "Chat suivant qui a besoin de vous",
             "openNextBeside": "Ouvrir le suivant à côté",
             "pastChats": "Chats passés",
             "previous": "Précédent",
-            "running": "{runningCount} en marche",
             "switch": "Changer…",
             "switchChatOpen": "Changer de chat : {count} ouverts",
             "tuckAway": "Replier",
