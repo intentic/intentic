@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vu
 import type { DocsState } from "./contract.js";
 import { forceSaveDocument, type KeptOriginal, openDocument, originalOf, restoreOriginal, startDocs } from "./docs.js";
 import { host } from "./host.js";
-import type { ConflictChoice, PageMessage } from "./protocol.js";
+import { type ConflictChoice, MEDIA_LIMIT_MB, type MediaProblem, type PageMessage } from "./protocol.js";
 import { AUTO_START, ENGINE, engineOf } from "./settings.js";
 import { EditorSlot, reportUnsaved, type UnsavedReport, WAIT_MS } from "./slot.js";
 import { t } from "./i18n.js";
@@ -34,7 +34,8 @@ type Note =
     | { readonly kind: `save-failed`; readonly detail: string }
     | { readonly kind: `copied`; readonly path: string }
     | { readonly kind: `open-failed`; readonly detail: string }
-    | { readonly kind: `restore-failed`; readonly detail: string };
+    | { readonly kind: `restore-failed`; readonly detail: string }
+    | { readonly kind: `media-problem`; readonly problem: MediaProblem };
 
 const slot = ref<HTMLElement>();
 // Whether an editor is in the slot, and whether it has its document open. The card shows until both hold: in the
@@ -161,6 +162,12 @@ const heard = (message: PageMessage): void => {
             break;
         case `open-failed`:
             note.value = { kind: `open-failed`, detail: message.detail };
+            break;
+        case `media-problem`:
+            // A courtesy: it never takes the place of a conflict or a failure, which ask something of the reader.
+            if (note.value === undefined || note.value.kind === `copied` || note.value.kind === `media-problem`) {
+                note.value = { kind: `media-problem`, problem: message.problem };
+            }
             break;
         case `saved`:
             note.value = message.path === path ? undefined : { kind: `copied`, path: message.path };
@@ -333,6 +340,17 @@ const downloading = computed(() => {
     }
     return percent.value === undefined ? t(`onlyOfficeViewer.downloading`) : t(`onlyOfficeViewer.downloadingPercent`, { percent: percent.value });
 });
+// What the reader is told about a medium that was not added, or one that cannot be played here.
+const mediaProblemText = (problem: MediaProblem): string => {
+    switch (problem) {
+        case `too-large`:
+            return t(`onlyOfficeViewer.mediaTooLarge`, { limit: MEDIA_LIMIT_MB });
+        case `unreadable`:
+            return t(`onlyOfficeViewer.mediaUnreadable`);
+        case `unplayable`:
+            return t(`onlyOfficeViewer.mediaUnplayable`);
+    }
+};
 // The editor's own word that it could not open the document, while the card still covers it; once it is on screen,
 // the notice above it says so instead.
 const openFailed = computed(() => (!revealed.value && note.value?.kind === `open-failed` ? note.value.detail : undefined));
@@ -390,6 +408,12 @@ const capabilitiesLink = appLink(host().href(host().links.capabilities()), () =>
             <Notice
                 v-else-if="note.kind === 'open-failed'"
                 :of="{ tone: `danger`, title: t(`onlyOfficeViewer.couldNotOpen`), detail: note.detail, action: { label: t(`onlyOfficeViewer.tryAgain`), run: reopen } }"
+            />
+            <Notice
+                v-else-if="note.kind === 'media-problem'"
+                :of="{ tone: `warning`, title: mediaProblemText(note.problem) }"
+                :dismiss-label="t(`onlyOfficeViewer.dismiss`)"
+                @dismiss="note = undefined"
             />
             <Notice
                 v-else-if="note.kind === 'restore-failed'"

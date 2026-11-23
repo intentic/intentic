@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { parseJsonOr } from "@intentic/base/json";
-import { CHANNEL, CONFIG_ELEMENT_ID, viewerMessage, type EditorPageConfig, type PageMessage } from "../../src/protocol.js";
+import { CHANNEL, CONFIG_ELEMENT_ID, MEDIA_INSERT_FLAG, viewerMessage, type EditorPageConfig, type PageMessage } from "../../src/protocol.js";
 import { changePoint, exportDocument, frameWindow, markSaved } from "./frame.js";
 import { prepareEditorFrame, type FrameHooks } from "./guards/index.js";
+import { insertsMedia } from "./guards/media-insert.js";
 import { SaveController } from "./save.js";
 import { downloadFile, writeDocument } from "./workspace.js";
 
@@ -22,8 +23,9 @@ interface FileStream {
     readonly buffer?: ArrayBuffer;
 }
 
-// SAFETY: the page's own global, read by the offline build's x2t helper; only this flag is written.
-const page = window as Window & { OO_FILE_STREAM_ONLY?: boolean; DocsAPI?: DocsApi };
+// SAFETY: the page's own globals, read by the offline build's x2t helper and by the bundle's media patch; only these
+// flags are written.
+const page = window as Window & { OO_FILE_STREAM_ONLY?: boolean; DocsAPI?: DocsApi } & { [MEDIA_INSERT_FLAG]?: boolean };
 // Tells the offline build's x2t helper to hand exported bytes to this page rather than start a download itself.
 page.OO_FILE_STREAM_ONLY = true;
 
@@ -143,6 +145,8 @@ const start = (config: EditorPageConfig, api: DocsApi): void => {
     };
     // The viewer covers the frame until `ready`: an editor still booting is no picture of the document.
     post({ channel: CHANNEL, type: `loading` });
+    // Read by the editor's toolbar as it is built, so set before the editor is.
+    page[MEDIA_INSERT_FLAG] = insertsMedia(config);
     // Set before a reload the owner chose, so the page's own unsaved-changes prompt does not ask them again.
     let leaving = false;
     let opened = false;
@@ -169,6 +173,8 @@ const start = (config: EditorPageConfig, api: DocsApi): void => {
             openFailed: (detail) => post({ channel: CHANNEL, type: `open-failed`, detail }),
             exportFailed: (detail) => save.exportFailed(detail),
             userSave: () => save.request(),
+            mediaProblem: (problem) => post({ channel: CHANNEL, type: `media-problem`, problem }),
+            lang: config.lang,
         },
         () => opened,
     );

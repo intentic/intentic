@@ -13,7 +13,7 @@ const watched = new WeakSet<HTMLElement>();
 
 const SOURCES: readonly { readonly label: string; readonly url: string }[] = [
     { label: `Editor page`, url: `https://github.com/intentic/intentic/tree/main/_extensions/onlyoffice/editor` },
-    { label: `Editor bundle`, url: `https://github.com/ranuts/document/tree/1301bb8bdac9092c4eb88a6f2f4ff5080cec68bd` },
+    { label: `Editor bundle`, url: `https://github.com/ranuts/document/tree/4cc2bc5440abf0df4fbff93824ae372d5aacd6b2` },
 ];
 
 const renderNotice = (doc: Document, panel: HTMLElement): void => {

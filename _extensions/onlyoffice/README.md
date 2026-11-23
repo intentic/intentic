@@ -70,13 +70,38 @@ flowchart LR
   licences, the source of both, and what was modified. The MIT code here reaches the page only through postMessage and
   HTTP.
 
+### Audio and video in presentations
+
+- ONLYOFFICE inserts and plays slide media only in its desktop app: the Insert > Audio and Video buttons are hidden
+  anywhere else, and the editor hands playback to the desktop app's native player. Everything in between is in the
+  bundle already: the editor's media model, slideshow play and pause, and x2t reading and writing media in PPTX.
+- A patch of the bundle shows the buttons when the page sets `MEDIA_INSERT_FLAG` (`src/protocol.ts`) before the
+  editor loads, which it does for an editable pptx, pptm or potx. ODP does not keep an embedded video, and a legacy
+  .ppt is never saved. The page answers the buttons itself
+  ([editor/src/guards/media-insert.ts](editor/src/guards/media-insert.ts)): the reader picks an MP4, M4V or MOV video
+  or an MP3, M4A or WAV clip (formats this browser and PowerPoint both play), the browser draws a poster from a frame
+  of the video, and the editor's own media insert places it at its own size.
+- The medium and its poster must share a name of the form `display8image…`: x2t pairs a picture with its medium only
+  under that name, and saves any other as a link to a file called `maskFile.mp4` that does not exist, losing the
+  medium. _(2026-11-23) Found by replaying the editor's save in x2t._
+- Every save carries the media through x2t in the browser while the editor waits, so a medium is limited to
+  `MEDIA_LIMIT_MB`: a 190 MB video took 13 s to save and 10 s to open (measured).
+- Playback ([editor/src/guards/media-player.ts](editor/src/guards/media-player.ts)) lays an HTML video over the
+  medium's picture and a control bar where the editor would place the desktop app's, for a selected medium while
+  editing and a hovered one in a slideshow, and follows the slideshow's own play and pause. While editing it is cut to
+  the editing area; in a fullscreen slideshow it goes inside the fullscreen element, outside which nothing shows.
+- A file refused at insert, and a medium in the document this browser cannot play (a .wmv from an old deck), reach the
+  viewer as `media-problem` and show as a notice. Media already in a presentation keep their bytes through every save.
+- The server engine keeps ONLYOFFICE's own behaviour: no media buttons, and media show as their pictures.
+
 ## The server engine
 
-- It needs the sandbox's Docker engine; without it the viewer shows `docker-off`. The first start pulls a
-  multi-gigabyte image and takes minutes; `autoStart` brings the container up at boot, and an idle container is
+- It needs the sandbox's Docker engine; without it the viewer shows `docker-off`. The first start pulls a 1 GB image
+  (3 GB unpacked) and takes minutes; `autoStart` brings the container up at boot, and an idle container is
   stopped. An editor with its socket open counts as use, however long nobody types.
 - The image regenerates fonts, theme previews, script caches, plugins and a gzip of every static file on each start.
-  The container runs it with each step skipped once done, so only its first start takes minutes and every later one
+  The container runs it with each step skipped once done (`SETUP_ONCE` in `src/server/document-server.ts`, which reads
+  the image's own markers and changes with each image), so only its first start takes minutes and every later one
   takes seconds. Each container also gets its own cache tag, so the static files keep their URLs across restarts and
   the browser's cache of them survives.
 - A document key stands for one file content, so two tabs on one file co-edit. The server holds a key as outdated once

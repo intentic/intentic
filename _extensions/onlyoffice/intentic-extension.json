@@ -20,7 +20,7 @@
                 "enumItemLabels": ["In your browser", "Document server"],
                 "enumDescriptions": [
                     "A one-time download of about 200 MB, no Docker. Tabs on one file don't co-edit; a save that would overwrite someone else's change asks first.",
-                    "ONLYOFFICE Docs in this sandbox's Docker: a 2 GB image and a two-minute cold start. Tabs on one file co-edit live."
+                    "ONLYOFFICE Docs in this sandbox's Docker: a 1 GB download and a two-minute first start. Tabs on one file co-edit live."
                 ],
                 "title": "Editor engine",
                 "description": "Documents on your own computer, opened in the desktop app, always use the browser.",

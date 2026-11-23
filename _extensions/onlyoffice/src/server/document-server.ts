@@ -9,7 +9,7 @@ import type { ContainerState, DockerEngine } from "./docker.js";
 // start, brought back up on demand after that, and answered for as a DocsState the viewer draws.
 
 // Pinned: an upgrade is a deliberate change here, and a container built from another image is recreated to match.
-export const IMAGE = "onlyoffice/documentserver:9.4.0.1";
+export const IMAGE = "onlyoffice/documentserver:10.0.0.1";
 export const CONTAINER = "intentic-onlyoffice";
 export const CONTAINER_LABELS: Readonly<Record<string, string>> = { "dev.intentic.extension": "intentic.onlyoffice" };
 // The engine brings the container back at every boot: a cold start is minutes of generation nobody should wait on. An
@@ -17,25 +17,24 @@ export const CONTAINER_LABELS: Readonly<Record<string, string>> = { "dev.intenti
 export const RESTART_POLICY = "unless-stopped";
 
 // A container's first start is about two and a half minutes (fonts, presentation themes, script caches and gzip are
-// generated, none of it baked into the image), longer on a busy machine; a pull that just extracted 2 GB is slower
+// generated, none of it finished in the image), longer on a busy machine; a pull that just extracted 3 GB is slower
 // still. Every start after that is seconds (SETUP_ONCE).
 const HEALTHY_WITHIN_MS = 8 * 60 * 1000;
 const HEALTH_POLL_MS = 1000;
 const HEALTH_TIMEOUT_MS = 3000;
 
-// The image's entrypoint redoes its whole setup on every start: font lists and thumbnails, presentation theme previews
-// and the converter's script caches (~80 s), the default plugins fetched again from the marketplace, and a `gzip -9` of
-// ~10k static files (~60 s). All of it lands in the container's own layer and stays valid for the container's life, so
-// this runs the image's entrypoint with each step turned off once it has been done, and a start after the first (a
-// sandbox boot, the open after an idle stop) takes seconds instead of minutes. A new image means a new container,
-// which does it all once more.
+// The image's entrypoint redoes its setup on every start: font lists and thumbnails, presentation theme previews and
+// the converter's script caches, then a `gzip -9` of every static file, and the default plugins fetched again from the
+// marketplace. All of it lands in the container's own layer and stays valid for the container's life, so this runs the
+// image's entrypoint with each step turned off once it has been done, and a start after the first (a sandbox boot, the
+// open after an idle stop) takes seconds instead of minutes. A new image means a new container, which does it all once
+// more. nginx compresses what has no gzip beside it as it serves it (api.js, rewritten at every start).
 export const SETUP_ONCE = [
     `DS=/var/www/onlyoffice/documentserver`,
-    // The script caches are the pass's last step, so their presence means fonts and themes were finished too.
-    `if [ -s "$DS/sdkjs/common/AllFonts.js" ] && [ -s "$DS/sdkjs/word/sdk-all.cache" ] && [ -s "$DS/sdkjs/cell/sdk-all.cache" ] && [ -s "$DS/sdkjs/slide/sdk-all.cache" ]; then export GENERATE_FONTS=false; fi`,
+    // The font pass ends by gzipping the static files, so that gzip means fonts, themes and script caches were finished.
+    // The script caches themselves (sdk-all.bin) ship in the image and say nothing.
+    `if [ -s "$DS/sdkjs/common/AllFonts.js" ] && [ -s "$DS/sdkjs/word/sdk-all-min.js.gz" ] && [ -s "$DS/sdkjs/slide/sdk-all-min.js.gz" ]; then export GENERATE_FONTS=false; fi`,
     `if ls -d "$DS"/sdkjs-plugins/{*} >/dev/null 2>&1; then export PLUGINS_ENABLED=false; fi`,
-    // After one full pass only api.js wants it again: the cache-tag step rewrites it, and drops its .gz, every start.
-    `if [ -s "$DS/sdkjs/word/sdk-all-min.js.gz" ]; then printf '#!/bin/sh\\ngzip -kf9 %s/web-apps/apps/api/documents/api.js\\n' "$DS" > /usr/bin/documentserver-static-gzip.sh; fi`,
     `exec /app/ds/run-document-server.sh`,
 ].join("\n");
 export const ENTRYPOINT: readonly string[] = ["/bin/bash", "-c", SETUP_ONCE];

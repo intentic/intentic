@@ -39,11 +39,16 @@ sequenceDiagram
   such a row the styled faces of the row sharing its regular face, once the catalog is built and before a document
   asks it for faces.
 
+- In a presentation the page answers Insert > Audio and Video and plays slide media, both of which ONLYOFFICE leaves
+  to its desktop app ([src/guards/media-insert.ts](src/guards/media-insert.ts),
+  [src/guards/media-player.ts](src/guards/media-player.ts); the package README says how).
+
 ## Key files
 
 - [src/main.ts](src/main.ts) — builds the editor, applies the corrections, wires saves to the listener and messages to the viewer.
 - [src/save.ts](src/save.ts) — the save controller: when to export, what to write, a conflict held until the owner answers.
 - [src/guards/index.ts](src/guards/index.ts) — every runtime correction, and which ones a document needs before it opens.
+- [src/guards/media-player.ts](src/guards/media-player.ts) — slide audio and video played over the editor, where ONLYOFFICE only plays them in its desktop app.
 - [NOTICE](NOTICE) — the licences involved, where the source of the page and the bundle is, and what was modified.
 
 ## Updating the bundle
@@ -51,5 +56,7 @@ sequenceDiagram
 The pin is [../src/server/bundle-pin.ts](../src/server/bundle-pin.ts). A new pin needs a new `id`, the archive `url`,
 and the `files` and `digest` of the kept tree, which `treeDigest` in [../src/server/bundle.ts](../src/server/bundle.ts)
 computes. Each patch must still find its text exactly once, or the install fails rather than serve an unpatched file.
-The corrections in src/guards/ reach into minified vendor internals, so check a new pin by opening, editing and saving
-a document of each type (and one with an image) before shipping it.
+Patches are applied when a tree is installed, and an installed tree is kept under its `id`: a patch added to a pin
+already shipped reaches nobody until the `id` changes. The corrections in src/guards/ reach into minified vendor
+internals, so check a new pin by opening, editing and saving a document of each type (and one with an image, and a
+presentation with a video, played and saved) before shipping it.

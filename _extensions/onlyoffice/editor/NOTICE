@@ -66,7 +66,7 @@ sponsored by or endorsed by Ascensio System SIA.
 
 The bundle is the vendor tree of ranuts/document (AGPL-3.0,
 https://github.com/ranuts/document), taken at commit
-1301bb8bdac9092c4eb88a6f2f4ff5080cec68bd: public/sdkjs, public/web-apps,
+4cc2bc5440abf0df4fbff93824ae372d5aacd6b2: public/sdkjs, public/web-apps,
 public/fonts, public/plugins.json, public/themes.json,
 public/document_editor_service_worker.js, and that project's LICENSE, NOTICE and
 docs/font-licenses.md, which ship inside the bundle. It holds a third-party
@@ -84,8 +84,14 @@ Intentic's modifications to the bundle, applied after verification
 (the `patches` of src/server/bundle-pin.ts):
 
   * sdkjs/common/wasm/x2t/x2t_helper.js -- an exported document is posted to
-    the editor page that asked for it, addressed to that page's own origin,
-    instead of to the page and the top window with any origin.
+    the editor page that asked for it addressed to that page's own origin,
+    instead of to any origin.
+  * web-apps/apps/*/main/index*.html and web-apps/apps/common/index.html -- the
+    style ranuts/document added to hide the ONLYOFFICE logo in the header and
+    the About pane is taken out, so the logo shows as Section 7(b) asks.
+  * web-apps/apps/presentationeditor/main/app.js -- the Insert > Audio and Video
+    buttons, which the editor offers only in ONLYOFFICE's desktop app, are
+    offered too when the editor page sets OO_MEDIA_INSERT.
 
 Intentic's modification to the bundle as it is served, leaving the files on
 disk as they were verified (src/server/locale-fallback.ts):
@@ -103,8 +109,11 @@ corrections to the offline build ported from ranuts/document's
 lib/onlyoffice/ at the same commit (AGPL-3.0); each file names the file it came
 from and says what was changed. src/guards/font-faces.ts is Intentic's: it gives
 a font catalog row that names only a regular face the styled faces of the row
-sharing that face (Calibri takes Carlito's bold and italic). They patch the
-editor at run time and leave the bundle's files as they were verified.
+sharing that face (Calibri takes Carlito's bold and italic).
+src/guards/media-insert.ts and src/guards/media-player.ts are Intentic's: they
+answer the presentation editor's media buttons and play slide audio and video,
+which the editors leave to ONLYOFFICE's desktop app. They patch the editor at
+run time and leave the bundle's files as they were verified.
 
 
 How the terms are honoured

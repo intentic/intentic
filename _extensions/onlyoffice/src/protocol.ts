@@ -28,6 +28,25 @@ export interface EditorPageConfig {
 
 export const CONFIG_ELEMENT_ID = "intentic-editor-config";
 
+// The page's global that turns on the presentation editor's Insert > Audio and Video buttons, which ONLYOFFICE offers
+// only in its desktop app (a patch of the bundle reads it: src/server/bundle-pin.ts). The page sets it before the editor
+// loads, for a presentation it can store media in, and answers those buttons itself.
+export const MEDIA_INSERT_FLAG = "OO_MEDIA_INSERT";
+
+// The presentations whose media x2t writes back: the OOXML ones. A legacy .ppt is never saved, and an OpenDocument one
+// does not keep an embedded video.
+export const MEDIA_FILE_TYPES: readonly string[] = ["pptx", "pptm", "potx"];
+
+// The largest audio or video file the page embeds. Every save carries the media through x2t in this browser and blocks
+// the editor while it does: a 190 MB video took 13 s to save and 10 s to open (measured, 2026-11-23).
+export const MEDIA_LIMIT_MB = 200;
+
+// Why a medium could not be added or played: larger than MEDIA_LIMIT_MB, a file this browser cannot decode (so neither
+// a poster nor playback could come of it), or a medium in the document in a format this browser does not play.
+export type MediaProblem = "too-large" | "unreadable" | "unplayable";
+
+const MEDIA_PROBLEMS: readonly MediaProblem[] = ["too-large", "unreadable", "unplayable"];
+
 // How a save whose file changed on disk meanwhile is settled: write over the change, write beside it, or drop the
 // edits and load what is on disk now.
 export type ConflictChoice = "overwrite" | "copy" | "reload";
@@ -46,7 +65,9 @@ export type PageMessage =
     | { readonly channel: typeof CHANNEL; readonly type: "save-failed"; readonly detail: string }
     // The file changed on disk since the editor loaded or last saved it; nothing was written, the owner decides.
     | { readonly channel: typeof CHANNEL; readonly type: "conflict" }
-    | { readonly channel: typeof CHANNEL; readonly type: "open-failed"; readonly detail: string };
+    | { readonly channel: typeof CHANNEL; readonly type: "open-failed"; readonly detail: string }
+    // A medium the reader picked was not added, or one in the document cannot be played here.
+    | { readonly channel: typeof CHANNEL; readonly type: "media-problem"; readonly problem: MediaProblem };
 
 // Viewer to page.
 export type ViewerMessage =
@@ -82,6 +103,10 @@ export const pageMessage = (data: unknown): PageMessage | undefined => {
         case "save-failed":
         case "open-failed":
             return typeof message["detail"] === "string" ? { channel: CHANNEL, type: message["type"], detail: message["detail"] } : undefined;
+        case "media-problem": {
+            const problem = MEDIA_PROBLEMS.find((known) => known === message["problem"]);
+            return problem === undefined ? undefined : { channel: CHANNEL, type: "media-problem", problem };
+        }
         default:
             return undefined;
     }

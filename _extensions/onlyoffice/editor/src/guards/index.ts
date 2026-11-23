@@ -10,9 +10,12 @@ import {
     installServerlessImagePipeline,
     installServerlessSaveSemantics,
 } from "./api-guards.js";
+import type { MediaProblem } from "../../../src/protocol.js";
 import { installFamilyFacesFix } from "./font-faces.js";
 import type { FontSystemWindow } from "./font-system.js";
 import { injectLocalChromeCss, installCanvasLossGuard, installFetchFontsGuard, installHintFallbackGuard, installSingleUnloadPrompt, shadowSharedWorker } from "./frame-guards.js";
+import { installMediaInsert } from "./media-insert.js";
+import { installMediaPlayer } from "./media-player.js";
 import { installOpenFailureGuard, type OpenFailureHooks } from "./open-failure.js";
 import { releaseWasmBinary } from "./wasm-binary-release.js";
 import { installX2tWorkerProxy } from "./x2t-worker.js";
@@ -25,6 +28,10 @@ import { installX2tWorkerProxy } from "./x2t-worker.js";
 export interface FrameHooks extends OpenFailureHooks {
     // The reader asked to save (Ctrl+S, the Save button).
     readonly userSave: () => void;
+    // A medium the reader picked was not added, or one in the document cannot be played in this browser.
+    readonly mediaProblem: (problem: MediaProblem) => void;
+    // The interface language, for the media player's controls.
+    readonly lang: string;
 }
 
 // Applies every correction to the editor frame `win`; true once those a document needs to open and save have landed.
@@ -51,5 +58,7 @@ export const prepareEditorFrame = (win: Window, hooks: FrameHooks): boolean => {
     installHintFallbackGuard(win);
     installBadImageUrlGuard(win);
     installAboutSourceNotice(doc);
+    installMediaInsert(win, hooks.mediaProblem);
+    installMediaPlayer(win, hooks);
     return essential.every(Boolean);
 };
