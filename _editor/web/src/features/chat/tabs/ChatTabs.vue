@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
+import { ContextMenu, isOverlayTarget, SearchBar, type Tip } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
@@ -8,14 +8,11 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useDriveRefusal } from "../session/driveRefusal";
-import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { canArchive } from "../../../models/fleet/useAgents-fleet";
-import OriginMark from "../../../parts/fleet/OriginMark.vue";
 import RailLane from "../../../components/RailLane.vue";
-import { headerGlyph, statusLookOf } from "./statusLook";
 import { toggleChatFloating, toggleChatTucked } from "../../../models/conversations/panel/chatPanelLayout";
-import { allTabs, isArchived, laneOfTab, needsYouQueue, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
+import { allTabs, needsYouQueue, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
 import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
@@ -68,20 +65,12 @@ const floatLabel = computed(() =>
 const tuckHint = computed((): Tip => ({ ...shortcutTip(t(`chat.chatTabs.tuckAway`), `chat.toggleTucked`), note: t(`chat.chatTabs.tuckAwayNote`) }));
 const tuckLabel = computed(() => withShortcut(t(`chat.chatTabs.tuckAway`), `chat.toggleTucked`));
 
-// The one thing the old strip did that /agents can't: say from elsewhere (a terminal, settings) that other
-// chats are alive. Counts are over chats open in this window, and each mark disappears at zero.
-const runningCount = computed(
-    () =>
-        conversations.value.filter((conversation) => {
-            const agent = agentById(conversation.conversationId);
-            return agent !== undefined ? turnInFlight(agent) : conversation.turn.streaming.value;
-        }).length,
-);
-// What the open chat is doing, as its card says it (the rail's own reading, statusLook.ts), its window's only without one.
-const activeLook = computed(() => statusLookOf(active.value, agentById(active.value.conversationId)));
-const attentionCount = computed(
-    () => conversations.value.filter((conversation) => laneOfTab(conversation, agentById(conversation.conversationId)) === `attention`).length,
-);
+// The bar's corner, as wide as the presses it holds (`h-7 w-7`, `gap-1`): new chat unless the reader can't start one, fold
+// unless the panel has its own window, and the window toggle always. The left side takes the same floor (template).
+const cornerWidth = computed(() => {
+    const presses = (readOnly.value ? 0 : 1) + (floats.value ? 0 : 1) + 1;
+    return `calc(${presses} * 1.75rem + ${presses - 1} * 0.25rem)`;
+});
 
 // Not an AnchoredOverlay: that dismisses on any outside pointerdown, including the row menu's teleported
 // target, before Rename shows its input. Closed by Escape, a second header press, a pick, or an outside click
@@ -314,11 +303,21 @@ onBeforeUnmount(() => {
 
 <template>
     <!-- One line across the column top, with the list on a sheet below it. NO RULE UNDER IT: the bar and the transcript are
-         one surface, the title's size says which line is the header, and what scrolls up dissolves under the bar
-         (`.chat-pane::before`, chat.css) instead of being cut at a line. -->
-    <!-- Two groups, by what a press is about: which chat (the switcher and a new one) on the left, where this panel lives
-         (fold it, its own window) in the corner, where window controls are. -->
-    <header ref="bar" class="chat-bar view-header relative flex items-center gap-1 px-1.5" @contextmenu="onBarContextMenu">
+         one surface, and what scrolls up dissolves under the bar (`.chat-pane::before`, chat.css) instead of being cut at a
+         line. -->
+    <!-- THE TITLE AND NOTHING ELSE, CENTRED, with the presses in the corner. Three columns: two equal sides keep the title on
+         the bar's middle (a long one takes what the sides leave, and truncates), the left one bare background that drags
+         the window on desktop (windowGesture.ts) and opens the bar's own menu on right-click. What other chats are doing
+         is the board's to say and the tucked strip's (ChatTucked.vue), not a count beside this one's name. -->
+    <!-- `--chat-bar-side` is the corner's width, held by BOTH sides as their floor: a title too long for the middle then
+         truncates between two equal sides instead of the empty one giving way and pushing it off centre. -->
+    <header
+        ref="bar"
+        class="chat-bar view-header relative grid grid-cols-[minmax(var(--chat-bar-side),1fr)_minmax(0,auto)_minmax(var(--chat-bar-side),1fr)] items-center gap-2 px-1.5"
+        :style="{ '--chat-bar-side': cornerWidth }"
+        @contextmenu="onBarContextMenu"
+    >
+        <span aria-hidden="true"></span>
         <input
             v-if="edit.editing && renaming"
             v-model="edit.draft"
@@ -326,19 +325,20 @@ onBeforeUnmount(() => {
             maxlength="80"
             :aria-label="t(`chat.words.chatTitle`)"
             :placeholder="active.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`)"
-            class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-[0.8125rem]"
+            class="ui-field-box ui-field-inline h-7 w-[min(24rem,100%)] min-w-0 select-text px-2 text-center text-[0.8125rem]"
             @keydown.enter.stop.prevent="edit.commit()"
             @keydown.esc.stop.prevent="edit.cancel()"
             @blur="edit.blurCommit()"
             @vue:mounted="edit.focusInput"
         />
-        <!-- Only as wide as its title: the rest of the bar stays bare background, which drags the window on desktop
-             (windowGesture.ts) and opens the bar's own menu on right-click. -->
+        <!-- Soft at rest (the bar's quiet ink, regular weight), full ink under the pointer or open: the transcript is what
+             the column is for, and its name only has to be findable. The chevron, shown on hover, says it opens a list;
+             `pl-5` matches it and the right padding, so the words, not the button, sit on the bar's middle. -->
         <button
             v-else
             type="button"
             data-chat-switcher
-            class="chat-tab group flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-2xs"
+            class="chat-tab group flex h-7 min-w-0 items-center gap-1 rounded-md pr-1.5 pl-5"
             :class="{ 'chat-tab-on': listOpen }"
             :aria-expanded="listOpen"
             aria-haspopup="dialog"
@@ -346,59 +346,27 @@ onBeforeUnmount(() => {
             @click="listOpen = !listOpen"
             @dblclick.prevent.stop="beginRename()"
         >
-            <!-- What this chat is doing; rendered (dim) even when idle so the row's left edge never shifts. -->
-            <Icon v-bind="headerGlyph(activeLook)" :aria-label="activeLook.label" class="shrink-0" />
-            <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
-            <OriginMark :origin="originOf(active)" compact />
-            <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
-            <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
-                <Icon name="box" class="text-2xs text-subtle" />
-            </span>
-            <!-- The column's name, in the text's own ink: the glyph before it already says what the chat is doing. -->
-            <span class="min-w-0 truncate text-left text-[0.8125rem] font-medium text-content" v-tooltip.bottom.overflow="tabLabel(active)">{{
-                tabLabel(active)
-            }}</span>
-            <!-- Members with this same conversation active right now. -->
+            <span class="min-w-0 truncate text-[0.8125rem]" v-tooltip.bottom.overflow="tabLabel(active)">{{ tabLabel(active) }}</span>
+            <Icon name="chevron-down" class="chat-tab-chevron shrink-0 text-2xs text-subtle" :class="{ 'rotate-180': listOpen }" />
+        </button>
+        <!-- The corner: who else is in this chat (only when someone is), a new chat, then the two ways out of the way
+             (folded into the strip, its own window). Past chats live in the switcher's sheet, not here. -->
+        <div class="flex items-center justify-end gap-1">
             <PresenceAvatars
                 v-if="active.session.value !== undefined"
                 :members="viewersOfSession(active.session.value.id)"
                 :label="t(`chat.words.inChat`)"
             />
-            <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
-            <span
-                v-if="runningCount > 0"
-                class="flex shrink-0 items-center gap-1 text-subtle"
-                :aria-label="t(`chat.chatTabs.running`, { runningCount })"
+            <button
+                v-if="!readOnly"
+                type="button"
+                class="composer-ghost h-7 w-7 shrink-0"
+                @click="startAgent()"
+                v-tooltip.bottom="vocabulary.newAgent"
+                :aria-label="vocabulary.newAgent"
             >
-                <Icon name="spinner" spin class="text-2xs" />{{ runningCount }}
-            </span>
-            <span
-                v-if="attentionCount > 0"
-                class="ui-status-pill shrink-0 font-semibold"
-                :class="toneWash(`warning`)"
-                :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
-            >
-                <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
-            </span>
-            <!-- Shown on hover, focus and while open; held in place at rest so the counts never shift. -->
-            <Icon name="chevron-down" class="chat-tab-chevron shrink-0 text-2xs text-subtle" :class="{ 'rotate-180': listOpen }" />
-        </button>
-        <!-- Beside the switcher it answers the same question (which chat), and `mr-auto` keeps the rest of the bar bare
-             background (above). -->
-        <button
-            v-if="!readOnly"
-            type="button"
-            class="composer-ghost h-7 w-7 shrink-0"
-            @click="startAgent()"
-            v-tooltip.bottom="vocabulary.newAgent"
-            :aria-label="vocabulary.newAgent"
-        >
-            <Icon name="plus" class="text-sm" />
-        </button>
-        <span class="mr-auto" aria-hidden="true"></span>
-        <!-- The two ways out of the way: folded into the strip, its own window. Past chats live in the switcher's sheet, not here.
-             `ml-2`: a long title in a narrow column leaves the spacer no room, and the two groups still read as two. -->
-        <div class="ml-2 flex shrink-0 items-center gap-1">
+                <Icon name="plus" class="text-sm" />
+            </button>
             <!-- Not in a window of its own, which has no edge to fold into. -->
             <button
                 v-if="!floats"
@@ -421,15 +389,14 @@ onBeforeUnmount(() => {
             </button>
         </div>
 
-
         <!-- A MENU, AND IT LOOKS LIKE ONE: the skin's own overlay surface (opaque, with the drop every menu wears), so it stands
              above the transcript instead of reading as a darker hole cut into it, and its open chats are rows on it
-             (`ground-menu`, styles.css), not cards boxed inside a box. Hung from the switcher's left edge at a menu's
-             width rather than stretched across a wide column, where a title and its status ended up a screen apart;
-             capped in height so the transcript is never fully covered. -->
+             (`ground-menu`, styles.css), not cards boxed inside a box. Hung centred under the title at a menu's width
+             rather than stretched across a wide column, where a title and its status ended up a screen apart; capped in
+             height so the transcript is never fully covered. -->
         <div
             v-if="listOpen"
-            class="ui-anchored-surface ground-menu absolute left-1.5 top-full z-30 mt-1 max-h-[60vh] w-[min(40rem,calc(100%-0.75rem))] rounded-xl p-1.5"
+            class="ui-anchored-surface ground-menu absolute left-1/2 top-full z-30 mt-1 max-h-[60vh] w-[min(40rem,calc(100%-0.75rem))] -translate-x-1/2 rounded-xl p-1.5"
         >
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
                 <template #after>

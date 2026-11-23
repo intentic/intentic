@@ -6,8 +6,8 @@ import { statusIcon, statusLabel } from "../models/catalog";
 
 // WHAT A CHAT IS DOING, AS ITS GLYPH SAYS IT: read off the board's card for it whenever there is one, and off the
 // conversation's own status (a window's reading of its own refs) only where there is none: another box's chat, or a
-// fleet not joined yet. The rail's corner and the chat's header (its bar, the phone's header, the switcher sheet) draw
-// from this one reading, so they cannot say different things about one chat. The header once read the window's own
+// fleet not joined yet. The rail's corner and the chat's header (the phone's header, the switcher sheet; the desktop bar
+// names the chat alone) draw from this one reading, so they cannot say different things about one chat. The header once read the window's own
 // status alone, which a reload resets (the board said error while the chat above said idle) and which has no word for a
 // turn this window did not start, nor for resuming, landing or interrupted.
 
