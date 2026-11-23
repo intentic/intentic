@@ -224,3 +224,5 @@ rules are about what a test stands the code up with, not about how it asserts.
 - Mock a workspace package with every name the code under test imports from it – the `test-programs` check reads
   every `jest.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands up
   import from that package, and refuses a missing one.
+
+- Adding or editing a capability (any connection form) shows no wall of text: a field is its label and its control, nothing more. Keep it as simple as possible; anything more a reader might want goes behind a hover (an (i) beside the label), never as lines under the field.
