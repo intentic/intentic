@@ -81,8 +81,9 @@ const menu = (event: MouseEvent): void => {
             }}<template v-if="look.fresh.label !== undefined && look.fresh.result !== undefined"> · {{ look.fresh.result }}</template></span
         >
         <!-- Right of the title; the title gives way first. The ladder and the clock keep fixed widths, so the model names,
-             ladders and clocks of a tray's rows end on one edge rather than each hugging its own title. -->
-        <span v-if="look.run !== undefined" class="flex shrink-0 items-center text-2xs text-subtle">
+             ladders and clocks of a tray's rows end on one edge rather than each hugging its own title. Under a compact board
+             card's 13rem the row keeps its title and standing, which the model and ladder had squeezed to nothing. -->
+        <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @[13rem]:flex">
             <RunFacts :run="look.run" columns />
         </span>
         <span

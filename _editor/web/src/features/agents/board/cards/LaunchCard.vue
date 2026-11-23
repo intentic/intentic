@@ -3,15 +3,18 @@
      so it never passes for an agent you can open; what the start waits on and for how long is its one line. Refused, it
      goes solid and says why, in the sandbox's words, with the way back to where the press was made. -->
 <script setup lang="ts">
-import { Button, formatElapsed, Icon, toneRim, toneWash } from "@intentic/ui";
+import { Button, formatElapsed, Icon, toneRim, toneWash, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref } from "vue";
 import type { AgentLaunch } from "../../../../models/fleet/launches/agentLaunches";
+import type { CardFit } from "../view/boardGrid";
 
 const t = useT();
 
-const { launch, dense = false } = defineProps<{ launch: AgentLaunch; dense?: boolean }>();
+// `fit`, the board's room for a card (boardGrid.ts `CardFit`): slim, the title takes its line whole and the wait goes under
+// it without the blanked facts line; a tile is the glyph, the title in its hover.
+const { launch, dense = false, fit = `full` } = defineProps<{ launch: AgentLaunch; dense?: boolean; fit?: CardFit }>();
 const emit = defineEmits<{ dismiss: []; back: [path: string] }>();
 
 const refused = computed(() => launch.failure !== undefined);
@@ -64,11 +67,15 @@ const back = computed(() => {
         :aria-label="launch.title"
         :aria-busy="!refused"
         class="flex w-full select-none flex-col rounded-2xl border text-left"
-        :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-3.5', refused ? toneRim(`danger`, `soft`, `bg-card`) : 'border-dashed border-line-strong bg-card/50']"
+        :class="[
+            fit === `tile` ? 'items-center gap-1 px-1 py-2' : fit !== `full` ? 'gap-2 p-3' : dense ? 'gap-2 p-3.5' : 'gap-2.5 p-3.5',
+            refused ? toneRim(`danger`, `soft`, `bg-card`) : 'border-dashed border-line-strong bg-card/50',
+        ]"
     >
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2.5" :class="fit !== `full` ? 'flex-wrap gap-y-2' : ''">
             <!-- Where an agent card has its identity tile: nothing to identify yet, only the wait or the refusal. -->
             <span
+                v-tooltip.right="fit === `tile` ? launch.title : undefined"
                 class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full"
                 :class="refused ? toneWash(`danger`) : 'text-muted'"
             >
@@ -76,16 +83,18 @@ const back = computed(() => {
             </span>
             <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a vertical overrun. -->
             <span
+                v-if="fit !== `tile`"
                 class="min-w-0 flex-1 font-semibold"
-                :class="[dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-xs leading-snug', refused ? 'text-content' : 'text-muted']"
+                :class="[fit !== `full` ? 'line-clamp-3 basis-[calc(100%-2rem)] break-words text-xs leading-snug' : dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-xs leading-snug', refused ? 'text-content' : 'text-muted']"
                 >{{ launch.title }}</span
             >
-            <span v-if="refused" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`danger`)">{{ t(`agents.launchCard.notStarted`) }}</span>
+            <span v-if="refused && fit !== `tile`" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`danger`)">{{ t(`agents.launchCard.notStarted`) }}</span>
         </div>
         <!-- THE AGENT CARD'S OWN BODY, BLANKED: the model line as skeleton bars and the wait in the clock's seat at the right of
              the summary line, laid out with AgentCard's own classes, so the card that replaces this one lands at the height,
              and with its lines in the places, this one held for it. -->
-        <div v-if="!refused" :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
+        <p v-if="!refused && fit !== `full` && fit !== `tile`" class="min-w-0 truncate text-2xs tabular-nums text-subtle">{{ line }}</p>
+        <div v-else-if="!refused && fit === `full`" :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
             <div class="flex h-4 min-w-0 items-center gap-x-3" aria-hidden="true">
                 <span class="skeleton block h-2 w-20" />
                 <span class="skeleton block h-2 w-14" />
@@ -95,9 +104,19 @@ const back = computed(() => {
                 <span class="min-w-0 truncate tabular-nums">{{ line }}</span>
             </div>
         </div>
-        <template v-else>
-            <p class="select-text break-words text-xs text-content">{{ launch.failure }}</p>
-            <div class="flex flex-wrap items-center justify-end gap-2">
+        <template v-else-if="refused">
+            <p v-if="fit !== `tile`" class="select-text break-words text-xs text-content">{{ launch.failure }}</p>
+            <button
+                v-if="fit === `tile`"
+                type="button"
+                :class="ui.iconButton()"
+                :aria-label="t(`ui.action.dismiss`)"
+                v-tooltip.right="t(`ui.action.dismiss`)"
+                @click="emit(`dismiss`)"
+            >
+                <Icon name="times" class="text-xs" />
+            </button>
+            <div v-else class="flex flex-wrap items-center justify-end gap-2">
                 <Button v-if="back !== undefined" size="small" tier="quiet" thumb :label="back.label" @click="emit(`back`, back.path)">
                     <template #icon><Icon name="arrow-left" /></template>
                 </Button>

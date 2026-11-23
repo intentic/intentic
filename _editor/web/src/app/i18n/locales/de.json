@@ -582,6 +582,7 @@
             "relandConfirmBody": "{agent}: Die Dateien, die nach dem Übernehmen seiner Arbeit herausgenommen wurden, werden so zurückgelegt, wie sie auf seinem Branch sind.",
             "thoseExactCapitals": "“ mit genau dieser Groß-/Kleinschreibung.",
             "undoArchive": "Archivieren rückgängig",
+            "whoseSessions": "Wessen Sitzungen",
             "willStartTurn": "{agent} startet einen Zug: er rebaset seinen Branch auf Ihren aktuellen Workspace, löst den Konflikt in seinem eigenen Worktree und landet das Ergebnis, wenn er fertig ist.",
             "workTheyAlreadyLanded": "Arbeit, die sie bereits gelandet haben, bleibt in Ihrem Workspace. Nur was ihre Branches nie verlassen hat, geht verloren. Agenten, die noch auf dem Board sind, bleiben unangetastet.",
             "archiveFamily": "{title} und seinen {count} Subagenten archivieren? | {title} und seine {count} Subagenten archivieren?",

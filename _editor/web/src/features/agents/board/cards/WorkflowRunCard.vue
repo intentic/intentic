@@ -8,6 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 import { runCardKey } from "../../../../models/sandbox/liveMetrics";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
+import type { CardFit } from "../view/boardGrid";
 
 // A workflow run's row on the board, an agent card's sibling, not one: same shell (radius, border, lane bar, hover)
 // since it shares the column, but no provider/branch/worktree/transcript, so Land/Archive/diff don't apply.
@@ -19,7 +20,15 @@ import SessionMetrics from "../../metrics/SessionMetrics.vue";
 // that it is drawn at the ledger's weight, since a stacked board's lanes are told apart by their order.
 const t = useT();
 
-const { run, dense, selected } = defineProps<{ run: WorkflowRun; dense?: boolean; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
+// `fit`: how much of the card the board's width leaves room for (boardGrid.ts `CardFit`), as for an agent card.
+const { run, dense, selected, fit = `full` } = defineProps<{
+    run: WorkflowRun;
+    dense?: boolean;
+    selected?: boolean;
+    needsYou?: boolean;
+    stopping?: boolean;
+    fit?: CardFit;
+}>();
 const emit = defineEmits<{ open: []; stop: []; graph: []; archive: []; restore: [] }>();
 
 const lane = computed(() => laneOfRun(run));
@@ -36,6 +45,17 @@ const done = computed(() => run.steps.filter((step) => step.state === `done`).le
 // It has to agree with the agent cards or a lane draws two card sizes in one column, which reads as a bug rather
 // than as a hierarchy.
 const bigLane = computed(() => dense !== true && lane.value !== `finished`);
+// A slim card's name takes its first line whole and its presses wrap under it; a tile card is its glyph alone.
+const slim = computed(() => fit !== `full`);
+const pad = computed(() => {
+    if (fit === `tile`) {
+        return `items-center px-1 py-2`;
+    }
+    if (slim.value) {
+        return `gap-2 p-3`;
+    }
+    return bigLane.value ? `gap-2.5 p-3.5` : `gap-2 p-3.5`;
+});
 
 // The row's presses that wait for a hover, drawn at rest where there is no hover (a touch screen); the diagram's also on
 // the row the chat is showing, where pressing the row again only points at the chat: one reader pressed a selected row
@@ -63,7 +83,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         class="session-card group flex w-full select-none flex-col rounded-2xl border border-dashed text-left outline-none [--card-border:var(--color-line-strong)]"
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
-            bigLane ? 'gap-2.5 p-3.5' : 'gap-2 p-3.5',
+            pad,
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them.
                The dashes take their ink from `--card-border` above, since `.session-card` rests every card's border at transparent:
                left there, the run read as one more agent card. */
@@ -79,7 +99,23 @@ const TONE: Record<WorkflowRun["state"], string> = {
         :style="blade"
         @click="emit(`open`)"
     >
-        <div class="flex items-center gap-2.5">
+        <!-- A tile card: the glyph, a dot while a step waits on the reader, the name in the hover. -->
+        <button
+            v-if="fit === `tile`"
+            type="button"
+            class="relative rounded-full"
+            v-tooltip.right="run.workflow.name"
+            :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
+            @click.stop="emit(`open`)"
+        >
+            <span class="flex h-7 w-7 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
+                <Icon name="sitemap" class="text-xs text-link" />
+            </span>
+            <span v-if="needsYou" class="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full" :class="toneWash(`warning`)">
+                <span class="block size-1.5 rounded-full bg-current" />
+            </span>
+        </button>
+        <div v-else class="flex items-center gap-2.5" :class="slim ? 'flex-wrap gap-y-2' : ''">
             <!-- Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a session. -->
             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
                 <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
@@ -91,7 +127,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
                 class="min-w-0 flex-1 rounded-sm text-left font-semibold text-content"
-                :class="bigLane ? 'line-clamp-2 break-words text-xs leading-snug' : 'truncate text-xs'"
+                :class="slim ? 'line-clamp-3 basis-[calc(100%-2.375rem)] break-words text-xs leading-snug' : bigLane ? 'line-clamp-2 break-words text-xs leading-snug' : 'truncate text-xs'"
                 @click.stop="emit(`open`)"
             >
                 {{ run.workflow.name }}
@@ -109,7 +145,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 :aria-label="t(`agents.workflowRunCard.openRunsGraph`)"
                 v-tooltip.top="t(`agents.workflowRunCard.openGraph`)"
                 class="shrink-0 rounded p-1 text-subtle hover:text-content"
-                :class="graphAction"
+                :class="[graphAction, slim ? 'ml-auto' : '']"
                 @click.stop="emit(`graph`)"
             >
                 <Icon name="external-link" class="text-2xs" />
@@ -160,25 +196,27 @@ const TONE: Record<WorkflowRun["state"], string> = {
         </div>
 
         <!-- What it was asked to do; absent for a run started on the workflows page, with no composer to read one from. -->
-        <p v-if="run.request" class="line-clamp-2 text-2xs italic leading-4 text-muted">{{ run.request }}</p>
+        <p v-if="run.request && !slim" class="line-clamp-2 text-2xs italic leading-4 text-muted">{{ run.request }}</p>
 
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted">
+        <div v-if="fit === `full` || fit === `compact`" class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted">
             <span :class="TONE[run.state]">{{ run.state === `running` ? t(`agents.workflowRunCard.live`, { count: live.length }) : run.state }}</span>
             <span>{{ t(`agents.workflowRunCard.steps`, { done, count: run.steps.length }) }}</span>
-            <span v-if="spent > 0">{{ formatMoney(spent) }}</span>
-            <!-- Opt-in geek metrics, as an agent card draws them: what every step's processes hold now, together. -->
-            <SessionMetrics :card="runCardKey(run.runId)" />
+            <template v-if="!slim">
+                <span v-if="spent > 0">{{ formatMoney(spent) }}</span>
+                <!-- Opt-in geek metrics, as an agent card draws them: what every step's processes hold now, together. -->
+                <SessionMetrics :card="runCardKey(run.runId)" />
+            </template>
             <!-- Archived rows date by filing, not start, like the agent card: "when" means "when I put it away". -->
             <span v-if="run.archivedAt !== undefined">{{ t(`agents.workflowRunCard.archived`, { archivedAt: formatAge(run.archivedAt) }) }}</span>
             <span v-else>{{ formatAge(run.startedAt) }}</span>
         </div>
 
         <!-- Usage reports the active work, not only the completed step count. -->
-        <p v-if="doing.length > 0" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
+        <p v-if="doing.length > 0 && (fit === `full` || fit === `compact`)" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
             <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
             <span class="truncate">{{ doing.join(` · `) }}</span>
         </p>
-        <p v-else-if="run.detail" class="line-clamp-2 text-2xs leading-4" :class="lane === `attention` ? `text-warning` : `text-subtle`">
+        <p v-else-if="run.detail && fit === `full`" class="line-clamp-2 text-2xs leading-4" :class="lane === `attention` ? `text-warning` : `text-subtle`">
             {{ run.detail }}
         </p>
     </div>

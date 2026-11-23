@@ -6,8 +6,6 @@ import {
     ContextMenu,
     FloatingAction,
     ProjectChip,
-    SearchBar,
-    SegmentedControl,
     SwipeRow,
     toneWash,
     ui,
@@ -57,6 +55,9 @@ import LaunchCards from "./cards/LaunchCards.vue";
 import AttentionElsewhere from "./cards/AttentionElsewhere.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import ActiveGroupHead from "./ActiveGroupHead.vue";
+import FinishedLaneActions from "./FinishedLaneActions.vue";
+import BoardSearch from "./BoardSearch.vue";
+import BoardOwnerScope from "./BoardOwnerScope.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
@@ -70,7 +71,7 @@ import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
-import { useBoardGrid } from "./view/boardGrid";
+import { GRID_PAD, LANE_GLYPH, useBoardGrid } from "./view/boardGrid";
 import { useCornerFit } from "./view/cornerFit";
 import { useCardMenu } from "./view/cardMenu";
 import { useFamilyArchive } from "./view/familyArchive";
@@ -110,7 +111,7 @@ const pendingFor = (agent: FleetAgent) => pendingOf(agent, pendingOn(agent.id, a
 // Its field is always on the header, not behind a glyph, so nobody has to learn the board is searchable.
 const filter = useAgentFilter();
 const { query, needle, matchCase, active: filtering, snippetOf, idMatchOf, sessionMatches, searching, partial: searchPartial } = filter;
-const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
+const filterField = ref<InstanceType<typeof BoardSearch> | undefined>(undefined);
 const { view, move } = useBoardView(needle);
 const workflows = useWorkflowRuns();
 const { roles } = useRoles();
@@ -293,7 +294,13 @@ const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
 const { drawnLanes, bareLane, saysEmpty, content } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });
 // The lanes' grid at the board's width and by which in-flight lanes are empty, and Finished's fold (boardGrid.ts).
-const { narrow, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging, anchored: computed(() => withCorner) });
+const { narrow, fit, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging, anchored: computed(() => withCorner) });
+// A slim board's header (boardGrid.ts `CardFit`): the owner filter a picker, the field a glyph that takes the row once open,
+// and only what still fits beside them; a sliver of a board keeps the field alone.
+const slim = computed(() => fit.value !== `full` && !mobile.value);
+const sliver = computed(() => fit.value === `mini` || fit.value === `tile`);
+const searchOpen = ref(false);
+const searchRow = computed(() => slim.value && (searchOpen.value || query.value !== ``));
 const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
@@ -330,51 +337,50 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             class="view-header view-header-blend items-center gap-2 px-3"
             :class="mobile ? 'view-header-wrap flex flex-wrap gap-y-1 py-1' : narrow ? 'flex' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
         >
-            <div class="col-start-1 flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : narrow ? `shrink-0` : ``">
-                <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
-                <SegmentedControl
-                    v-if="user !== null && sharedAccess && !first"
-                    v-model="ownerScope"
-                    :options="ownerOptions"
-                    size="xs"
-                    :wrap="mobile"
-                    class="max-w-full"
-                />
+            <div v-show="!searchRow" class="col-start-1 flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : slim ? `min-w-0 flex-1` : narrow ? `shrink-0` : ``">
+                <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, on a first run, with no sessions to split, and on a tile board, whose header holds the filter alone. -->
+                <BoardOwnerScope v-if="user !== null && sharedAccess && !first && fit !== `tile`" v-model="ownerScope" :options="ownerOptions" :folded="slim" :mobile="mobile" />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>
             <!-- Not on a first run: there is nothing yet to filter, and a field over an empty board reads as the board's
                  point. It arrives with the first card, in the place it keeps. -->
-            <SearchBar
+            <BoardSearch
                 v-if="!first || filtering"
                 ref="filterField"
                 v-model="query"
                 v-model:match-case="matchCase"
-                variant="field"
+                v-model:open="searchOpen"
+                :folds="slim"
                 :dense="!mobile"
-                clearable
                 :busy="searching"
-                :aria-label="t(`agents.agentsView.filterAgentsByMessages`)"
-                :placeholder="t(`agents.words.filterByMessages`)"
-                :class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'col-start-2 mx-auto w-72 max-w-full shrink-0'"
-                @keydown.enter="onFieldEnter"
+                :field-class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'col-start-2 mx-auto w-72 max-w-full shrink-0'"
+                @enter="onFieldEnter"
             />
             <!-- One row, never two: what is here gives way inside it (the metrics step down with this container's width,
                  SandboxMetricsSummary.vue) rather than pushing New agent under the rest. -->
-            <div class="col-start-3 flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : narrow ? 'shrink-0' : '@container/tools'">
+            <div v-show="!searchRow" class="col-start-3 flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : narrow ? 'shrink-0' : '@container/tools'">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
-                <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
+                <span v-if="filtering && !sliver" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The geek metrics, while the reader opted in: three small meters beside New agent, the full readout a
                      popover off them (BoardMetrics.vue). In the header, so they take none of the board's height. -->
-                <BoardMetrics v-if="!mobile && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow" />
+                <BoardMetrics v-if="!mobile && !sliver && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow" />
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
-                <Button v-if="chatStrip.panes.length >= 2" size="small" tier="boring" :disabled="synthesizing" class="shrink-0" @click="synthesize">
-                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />{{ t(`agents.agentsView.synthesize`) }}
+                <Button
+                    v-if="chatStrip.panes.length >= 2"
+                    size="small"
+                    tier="boring"
+                    :disabled="synthesizing"
+                    class="shrink-0"
+                    v-tooltip.bottom="slim ? t(`agents.agentsView.synthesize`) : undefined"
+                    @click="synthesize"
+                >
+                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" /><template v-if="!slim">{{ t(`agents.agentsView.synthesize`) }}</template>
                     {{ chatStrip.panes.length }}
                 </Button>
                 <!-- The night begun by hand, for an evening someone goes to bed before their night hours: a bare moon at rest,
                      lit with the morning while it is night (BoardNight.vue). On a phone it holds this corner alone. -->
-                <BoardNight />
+                <BoardNight v-if="!sliver" />
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. Beside an
                      open chat it is the chat header's + instead, the same press a column away; folded into its strip or
                      in a window of its own, the chat has no + on this page, and this one comes back. -->
@@ -392,7 +398,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <div ref="scrollerEl" class="scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- `content-start` keeps stacked rows from stretching to `h-full`; a phone's board ends with room for the floating New agent. -->
             <!-- NEVER SIDEWAYS (`overflow-x-clip`): wider than its fraction is a card spilling, which handed the board a horizontal scrollbar; a clip, so sticky headers still pin. -->
-            <div ref="gridEl" class="grid gap-3.5 overflow-x-clip p-3.5 sm:gap-4 sm:p-4" :class="[laneGrid, noMatches ? '' : placed || cornered ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']">
+            <div ref="gridEl" class="grid overflow-x-clip" :class="[GRID_PAD[fit], laneGrid, noMatches ? '' : placed || cornered ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']">
                 <section
                     v-for="lane in drawnLanes"
                     :key="lane.key"
@@ -416,63 +422,34 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
                         </template>
+                        <!-- A tile board's lane is its glyph, the name in its hover: a name cut to "ATTE…" said nothing. -->
+                        <template v-else-if="fit === `tile`" #mark>
+                            <Icon :name="LANE_GLYPH[lane.key]" v-tooltip.right="lane.label" :aria-label="lane.label" role="img" class="mx-auto text-xs text-subtle" />
+                        </template>
                         <template v-if="lane.key === 'finished' && view.archive" #label>{{ t(`shared.archived`) }}</template>
+                        <template v-else-if="fit === `tile`" #label><span class="sr-only">{{ lane.label }}</span></template>
                         <template v-if="lane.key === 'finished' && view.archive && archiveLoading" #info>
                             <Icon name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template v-else-if="sayInHeader(lane.key)" #info>
                             <span class="ml-2 min-w-0 truncate text-2xs text-subtle">{{ filtering ? t(`agents.agentsView.noMatchesInLane`) : lane.empty }}</span>
                         </template>
-                        <template #actions>
-                            <template v-if="lane.key === 'finished' && !view.archive">
-                                <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. Sized as the
-                                     archive counter beside it (sm, 20px), so the header's chips read as one set. -->
-                                <button
-                                    v-if="view.all && !filtering && hiddenFinished > 0"
-                                    type="button"
-                                    :class="ui.chip({ size: `sm` }, `shrink-0`)"
-                                    :aria-label="t(`ui.action.showFewer`)"
-                                    @click="toggleFinished"
-                                >
-                                    <Icon name="chevron-up" class="text-2xs" />{{ t(`ui.action.showFewer`) }}
-                                </button>
-                                <!-- Archive feedback highlights the destination counter. sm (20px), not the md chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
-                                <button
-                                    v-if="archiveSize > 0"
-                                    type="button"
-                                    :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
-                                    v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: words.agents, value: archiveSize }], note: t(`agents.words.allKept`) }"
-                                    :class="ui.chip({ on: pulsing, size: `sm` }, `shrink-0`, pulsing && `ring-1 ring-primary-500/50`)"
-                                    @click="toggleArchive"
-                                >
-                                    <Icon name="history" class="text-2xs" />{{ archiveSize }}
-                                </button>
-                                <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
-                                <Button
-                                    v-if="clearable > 0 && !filtering && clears"
-                                    size="small"
-                                    tier="quiet" thumb
-                                    class="shrink-0"
-                                    :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
-                                    v-tooltip.bottom="{ title: t(`agents.agentsView.archiveAll`), rows: [{ label: words.agents, value: clearable }], note: t(`agents.words.undoable`) }"
-                                    @click="archive()"
-                                >
-                                    {{ t(`ui.action.clear`) }}
-                                </Button>
-                            </template>
-                            <!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
-                            <Button
-                                v-if="lane.key === 'finished' && view.archive && archiveSize > 0 && !filtering"
-                                size="small"
-                                tier="quiet" tone="danger"
-                                class="shrink-0"
-                                :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
-                                :disabled="purging"
-                                v-tooltip.bottom="{ title: t(`agents.agentsView.deleteAll`), rows: [{ label: words.agents, value: archived.length }], note: t(`agents.words.cantUndo`) }"
-                                @click="pendingPurge = true"
-                            >
-                                <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}
-                            </Button>
+                        <template v-if="lane.key === 'finished'" #actions>
+                            <FinishedLaneActions
+                                :view="view"
+                                :filtering="filtering"
+                                :hidden="hiddenFinished"
+                                :archive-size="archiveSize"
+                                :pulsing="pulsing"
+                                :clearable="clears ? clearable : 0"
+                                :archived="archived.length"
+                                :purging="purging"
+                                :fit="fit"
+                                @fewer="toggleFinished"
+                                @door="toggleArchive"
+                                @clear="archive()"
+                                @purge="pendingPurge = true"
+                            />
                         </template>
                     </LaneHeader>
                     <div :ref="lane.key === 'finished' ? attachCorner : undefined" :class="lane.key === 'finished' ? cornerCards : 'contents'">
@@ -485,11 +462,12 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             data-reveal
                             :entry="entry"
                             :dense="narrow"
+                            :fit="fit"
                             @approve="releaseWake(entry.id, `approve`)"
                             @reject="releaseWake(entry.id, `reject`)"
                         />
                     </div>
-                    <LaunchCards v-if="lane.key === 'active'" :launching="launching" :dense="narrow" />
+                    <LaunchCards v-if="lane.key === 'active'" :launching="launching" :dense="narrow" :fit="fit" />
                     <!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-3.5 pb-2.5">
                         <WorkflowRunCard
@@ -498,6 +476,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             data-reveal data-fit-unit
                             :run="run"
                             :dense="narrow"
+                            :fit="fit"
                             :selected="chatStrip.run?.runId === run.runId"
                             :needs-you="needingYou.has(run.runId)"
                             :stopping="stoppingRuns.has(run.runId)"
@@ -531,7 +510,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     </div>
                     <!-- An emptied lane keeps its header; where its column went to the others, its sentence rides that header (boardGrid.ts). -->
                     <template v-else-if="saysEmpty(lane.key)">
-                        <p v-if="!sayInHeader(lane.key)" class="px-1 pb-3 text-2xs text-subtle">
+                        <p v-if="!sayInHeader(lane.key) && fit !== `tile`" class="px-1 pb-3 text-2xs text-subtle">
                             {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
                         </p>
                     </template>
@@ -550,6 +529,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 v-memo="[
                                     agent,
                                     narrow,
+                                    fit,
                                     draggedId === agent.id && dragging,
                                     familyOf(agent).length,
                                     callOf(agent),
@@ -580,6 +560,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                             :ref="(el) => setCardEl(agent.id, el)"
                                             :agent="agent"
                                             :dense="narrow || group.rows"
+                                            :fit="fit"
                                             :dragging="draggedId === agent.id && dragging"
                                             :pending="pendingFor(agent)"
                                             :selected="ringed(agent.id)"
@@ -610,10 +591,13 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                             @menu="(event, presses) => openCardMenu(agent, event, presses)"
                                         />
                                     </SwipeRow>
+                                    <!-- A mini or tile card has no width for its rows: its corner names a child's ask (`call`), its chat the rest. -->
                                     <ChildRows
+                                        v-if="fit === `full` || fit === `compact`"
                                         :agent="agent"
                                         :focused="ringed(agent.id)"
                                         :live="!narrow && lane.key !== `finished`"
+                                        :compact="fit === `compact`"
                                         :class="draggedId === agent.id && dragging ? `opacity-40` : ``"
                                     />
                                 </div>
@@ -625,11 +609,13 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         v-if="lane.key === 'finished' && !view.archive && !filtering && !waiting && tailed"
                         type="button"
                         :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
+                        :aria-label="fit === `tile` ? (view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier })) : undefined"
                         data-fit-tail
                         @click="toggleFinished"
                     >
                         <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier }) }}
+                        <template v-if="fit === `tile`">{{ view.all ? `` : earlier }}</template>
+                        <template v-else>{{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier }) }}</template>
                     </button>
                     <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button
@@ -755,7 +741,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <!-- A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
             <div class="opacity-90 shadow-lg">
-                <AgentCard :agent="dragged" :dense="narrow" />
+                <AgentCard :agent="dragged" :dense="narrow" :fit="fit" />
             </div>
             <p
                 class="mt-1 inline-block rounded px-2 py-1 text-2xs font-medium"

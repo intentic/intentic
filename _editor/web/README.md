@@ -503,6 +503,14 @@ flowchart LR
   (rename, add a reaction, review) are rows in that menu. A touch screen too wide to count as a phone, such as a
   tablet, shows the ⋯ without hover. _2026-10-15: three columns from 48rem, with a hidden 30px seat per press, left a
   card's title some 60px on a small laptop._
+- **The agents board squeezed by a wide chat.** The chat may take 95% of the window, so a stacked board can narrow to a
+  sliver, and its cards step down with it (`features/agents/board/view/boardGrid.ts` `CardFit`). Under 20rem a card's
+  title takes its whole width, its time and standing move to the line under it, and of its presses only the one it asks
+  for stays (answer, land, resolve). Under 12rem the title goes under the progress ring and every press moves to the
+  card's menu. Under 7rem a card is its ring alone, with the title's initials, a dot while it needs the reader, and the
+  title in its hover; a lane is its glyph. The header folds too: the owner filter becomes a picker, and the search field a
+  glyph that takes the row when pressed. _2026-11-23: the row card kept its time and standing beside the title at any
+  width, which cut a 240px board's titles to a few letters, or none._
 - **The board and the chat, one page.** The chat stands at the right of every page; on Agents that makes the board the
   list of chats beside it, a card's press opening its chat there (out of its strip if it was tucked). A desktop's /chat
   redirects here, its query kept (`?focus=`, the desktop app's `?shellChat=`); a phone's is the conversation's own screen.

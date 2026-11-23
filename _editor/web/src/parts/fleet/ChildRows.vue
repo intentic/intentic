@@ -27,6 +27,8 @@ const props = defineProps<{
     live?: boolean;
     // Hung from a chat list's card (RailCard) rather than the board's: its identity tile is smaller and sits further left.
     rail?: boolean;
+    // Hung from a compact board card (boardGrid.ts `CardFit`), whose padding is a step tighter.
+    compact?: boolean;
     // The card this hangs from is the one the reader is on (its ring), which opens the tray.
     focused: boolean;
 }>();
@@ -86,8 +88,8 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
 const drawn = computed(() => shown.value || (tray.value?.asks.length ?? 0) > 0 || runs.value.length > 0);
 // Where the rows start: the card's title edge (its border, padding, identity tile and the gap after it) less a row's
 // own `px-2`, so the glyph, not the hover wash, lines up with the title. RailCard: 1 + 12 + 24 + 8; AgentCard: 1 + 14
-// (16 live) + 28 + 10.
-const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` : `ml-11.25`));
+// (16 live) + 28 + 10; a compact AgentCard: 1 + 12 + 22 + 10.
+const inset = computed(() => (props.rail || props.compact ? `ml-9.25` : props.live ? `ml-11.75` : `ml-11.25`));
 </script>
 
 <template>

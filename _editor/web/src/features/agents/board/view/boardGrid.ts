@@ -1,4 +1,4 @@
-import { useNarrow } from "@intentic/ui";
+import { type IconName, useNarrow } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, watch } from "vue";
 import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
 import type { BoardView, ViewEvent } from "./boardView";
@@ -18,6 +18,44 @@ const PAIRED_BOARD_REM = 56;
 // board keeps its three lanes whatever they hold. 66rem is a 1600px screen beside the chat at its default width; it was
 // 90rem until 2026-11-23, which kept that screen in two columns whenever a lane was empty (pinned in boardGrid.test.ts).
 export const ROOMY_BOARD_REM = 66;
+
+// HOW MUCH OF A CARD FITS, read off the same measured width. Beside a chat stretched wide the stacked board narrows to a
+// sliver (the chat may take 95% of the window, useLayout's maxChatWidth), and the row card's corner, which never wraps,
+// left its title a few letters ("Re…") or none at all. So under 20rem a card sheds what it carries and keeps what a
+// squeezed board is scanned for: which agent, whether it needs the reader, how far it got, and when.
+// - full:    the card as it is.
+// - compact: the title takes the card's width; the "when", the stamps and the standing share the line under it; then the
+//            failure's one line and the one press the card asks for (Land, Resolve). The facts line goes.
+// - mini:    the progress ring with the "when" beside it, the title under them, the standing's word last.
+// - tile:    a column of rings, as the rail draws sandboxes: the ring, a dot while it asks for the reader, the "when" while
+//            it fits. The title is the hover.
+export type CardFit = `full` | `compact` | `mini` | `tile`;
+// 20rem keeps a phone (360px and up) on the full card; 12rem is where the standing and the "when" stop fitting on one
+// line under a title; under 7rem a title would break every few letters, so the card is its ring alone.
+const COMPACT_BOARD_REM = 20;
+const MINI_BOARD_REM = 12;
+const TILE_BOARD_REM = 7;
+
+export const cardFit = (underCompact: boolean, underMini: boolean, underTile: boolean): CardFit => {
+    if (underTile) {
+        return `tile`;
+    }
+    if (underMini) {
+        return `mini`;
+    }
+    return underCompact ? `compact` : `full`;
+};
+
+// A tile board's lane headers, which have no room for a name: the lane's glyph, its name in the hover (AgentsView).
+export const LANE_GLYPH = { attention: `exclamation-circle`, active: `bolt`, finished: `check-circle` } satisfies Record<FleetLane, IconName>;
+
+// The lane grid's padding by fit: a mini or tile board spends its few pixels on the cards rather than on the gutter.
+export const GRID_PAD = {
+    full: `gap-3.5 p-3.5 sm:gap-4 sm:p-4`,
+    compact: `gap-3.5 p-3`,
+    mini: `gap-3 p-2`,
+    tile: `gap-2.5 px-1.5 py-2`,
+} satisfies Record<CardFit, string>;
 
 // AND BY WHAT THE LANES HOLD. On a wide board an empty lane still took a third of it for one sentence, while the lane
 // with something to read cut its titles short beside it. So an empty lane gives its column away and says its sentence
@@ -110,6 +148,10 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
     const narrow = useNarrow(board, NARROW_BOARD_REM);
     const underThree = useNarrow(board, PAIRED_BOARD_REM);
     const underRoomy = useNarrow(board, ROOMY_BOARD_REM);
+    const underCompact = useNarrow(board, COMPACT_BOARD_REM);
+    const underMini = useNarrow(board, MINI_BOARD_REM);
+    const underTile = useNarrow(board, TILE_BOARD_REM);
+    const fit = computed<CardFit>(() => cardFit(underCompact.value, underMini.value, underTile.value));
     const quiet = computed<QuietLanes>(() => ({
         attention: content(`attention`) !== `rows`,
         active: content(`active`) !== `rows`,
@@ -161,5 +203,5 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
             lane.scrollIntoView({ block: `start` });
         }
     };
-    return { narrow, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished };
+    return { narrow, fit, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished };
 };

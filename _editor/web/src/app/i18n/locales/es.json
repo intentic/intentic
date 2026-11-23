@@ -582,6 +582,7 @@
             "relandConfirmBody": "{agent}: los archivos quitados después de que entrara su trabajo se vuelven a poner, tal como están en su rama.",
             "thoseExactCapitals": "» con esas mayúsculas exactas.",
             "undoArchive": "Deshacer archivar",
+            "whoseSessions": "De quién son las sesiones",
             "willStartTurn": "{agent} empezará un turno: rebasa su rama sobre tu espacio de trabajo actual, resuelve el conflicto en su propio worktree e integra el resultado cuando termine.",
             "workTheyAlreadyLanded": "El trabajo que ya integraron se queda en tu espacio de trabajo. Solo se pierde lo que nunca salió de sus ramas. Los agentes que siguen en el tablero no se tocan.",
             "archiveFamily": "¿Archivar {title} y su {count} subagente? | ¿Archivar {title} y sus {count} subagentes?",

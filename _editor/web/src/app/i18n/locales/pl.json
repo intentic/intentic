@@ -582,6 +582,7 @@
             "relandConfirmBody": "{agent}: pliki usunięte po wprowadzeniu jego pracy wrócą, w wersji z jego gałęzi.",
             "thoseExactCapitals": "” dokładnie z taką wielkością liter.",
             "undoArchive": "Cofnij archiwizację",
+            "whoseSessions": "Czyje sesje",
             "willStartTurn": "{agent} zacznie turę: przerebasuje swoją gałąź na Twoją obecną przestrzeń roboczą, rozwiąże konflikt we własnym worktree i scali wynik, gdy skończy.",
             "workTheyAlreadyLanded": "Praca, którą już scaliły, zostaje w Twojej przestrzeni roboczej. Przepada tylko to, co nigdy nie opuściło ich gałęzi. Agenty wciąż na tablicy pozostają nietknięte.",
             "archiveFamily": "Zarchiwizować {title} i jego {count} podagenta? | Zarchiwizować {title} i jego {count} podagenty? | Zarchiwizować {title} i jego {count} podagentów?",

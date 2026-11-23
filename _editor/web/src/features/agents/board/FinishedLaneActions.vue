@@ -1,0 +1,85 @@
+<!-- The Finished lane's header acts (AgentsView): the expanded lane's fold, the archive's counter that opens it, the
+     lane's Clear, and inside the archive its Delete all. A slim board (boardGrid.ts `CardFit`) keeps fewer of them: a mini
+     one drops Clear, the one bulk act nobody needs from a sliver, and a tile one keeps none, its lane's glyph being all
+     the header there is. -->
+<script setup lang="ts">
+import { Button, ui } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
+import type { BoardView } from "./view/boardView";
+import type { CardFit } from "./view/boardGrid";
+
+defineProps<{
+    view: BoardView;
+    filtering: boolean;
+    // Finished cards the lane's window leaves out, and how many sit in the archive.
+    hidden: number;
+    archiveSize: number;
+    // The archive's counter flashes as a card lands in it (archiveDoor.ts).
+    pulsing: boolean;
+    // How many cards Clear would file away; 0 where Clear is not this reader's to press.
+    clearable: number;
+    // How many the archive holds on this sandbox, which its Delete all deletes.
+    archived: number;
+    purging: boolean;
+    fit: CardFit;
+}>();
+const emit = defineEmits<{ fewer: []; door: []; clear: []; purge: [] }>();
+
+const t = useT();
+const words = useVocabulary();
+</script>
+
+<template>
+    <template v-if="fit !== `tile` && !view.archive">
+        <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. Sized as the
+             archive counter beside it (sm, 20px), so the header's chips read as one set. -->
+        <button
+            v-if="view.all && !filtering && hidden > 0"
+            type="button"
+            :class="ui.chip({ size: `sm` }, `shrink-0`)"
+            :aria-label="t(`ui.action.showFewer`)"
+            @click="emit(`fewer`)"
+        >
+            <Icon name="chevron-up" class="text-2xs" />{{ t(`ui.action.showFewer`) }}
+        </button>
+        <!-- Archive feedback highlights the destination counter. sm (20px), not the md chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
+        <button
+            v-if="archiveSize > 0"
+            type="button"
+            :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
+            v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: words.agents, value: archiveSize }], note: t(`agents.words.allKept`) }"
+            :class="ui.chip({ on: pulsing, size: `sm` }, `shrink-0`, pulsing && `ring-1 ring-primary-500/50`)"
+            @click="emit(`door`)"
+        >
+            <Icon name="history" class="text-2xs" />{{ archiveSize }}
+        </button>
+        <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
+        <Button
+            v-if="clearable > 0 && !filtering && fit !== `mini`"
+            size="small"
+            tier="quiet"
+            thumb
+            class="shrink-0"
+            :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
+            v-tooltip.bottom="{ title: t(`agents.agentsView.archiveAll`), rows: [{ label: words.agents, value: clearable }], note: t(`agents.words.undoable`) }"
+            @click="emit(`clear`)"
+        >
+            {{ t(`ui.action.clear`) }}
+        </Button>
+    </template>
+    <!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
+    <Button
+        v-else-if="fit !== `tile` && archiveSize > 0 && !filtering"
+        size="small"
+        tier="quiet"
+        tone="danger"
+        class="shrink-0"
+        :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived })"
+        :disabled="purging"
+        v-tooltip.bottom="{ title: t(`agents.agentsView.deleteAll`), rows: [{ label: words.agents, value: archived }], note: t(`agents.words.cantUndo`) }"
+        @click="emit(`purge`)"
+    >
+        <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}
+    </Button>
+</template>

@@ -582,6 +582,7 @@
             "relandConfirmBody": "{agent} : les fichiers retirés après l'intégration de son travail sont remis, tels qu'ils sont sur sa branche.",
             "thoseExactCapitals": " » avec exactement ces majuscules.",
             "undoArchive": "Annuler l'archivage",
+            "whoseSessions": "Sessions de qui",
             "willStartTurn": "{agent} lancera un tour : il rebase sa branche sur votre espace de travail actuel, résout le conflit dans son propre worktree et intègre le résultat quand il a fini.",
             "workTheyAlreadyLanded": "Le travail qu'ils ont déjà intégré reste dans votre espace de travail. Seul ce qui n'a jamais quitté leurs branches est perdu. Les agents encore sur le tableau ne sont pas touchés.",
             "archiveFamily": "Archiver {title} et son {count} sous-agent ? | Archiver {title} et ses {count} sous-agents ?",

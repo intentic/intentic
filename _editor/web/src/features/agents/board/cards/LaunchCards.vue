@@ -4,8 +4,9 @@
 import { useRouter } from "vue-router";
 import { type AgentLaunch, dismissLaunch } from "../../../../models/fleet/launches/agentLaunches";
 import LaunchCard from "./LaunchCard.vue";
+import type { CardFit } from "../view/boardGrid";
 
-const { launching, dense = false } = defineProps<{ launching: readonly AgentLaunch[]; dense?: boolean }>();
+const { launching, dense = false, fit = `full` } = defineProps<{ launching: readonly AgentLaunch[]; dense?: boolean; fit?: CardFit }>();
 
 const router = useRouter();
 // A refused card's way back to where the press was made, which is where the refusal is acted on (a re-run, a model pick).
@@ -22,6 +23,7 @@ const back = (launch: AgentLaunch, path: string): void => {
             :key="launch.key"
             :launch="launch"
             :dense="dense"
+            :fit="fit"
             @dismiss="dismissLaunch(launch.key)"
             @back="(path) => back(launch, path)"
         />

@@ -582,6 +582,7 @@
             "relandConfirmBody": "{agent}: the files taken out after its work went in are put back, as they are on its branch.",
             "thoseExactCapitals": "\" with those exact capitals.",
             "undoArchive": "Undo Archive",
+            "whoseSessions": "Whose sessions",
             "willStartTurn": "{agent} will start a turn: it rebases its branch onto your current workspace, resolves the conflict in its own worktree, and lands the result when it's done.",
             "workTheyAlreadyLanded": "Work they already landed stays in your workspace. Only what never left their branches is lost. Agents still on the board are untouched.",
             "archiveFamily": "Archive {title} and its {count} subagent? | Archive {title} and its {count} subagents?",

@@ -2,7 +2,7 @@ import { NARROW_HYSTERESIS_REM } from "@intentic/ui";
 import { CAPACITY_RAIL_PX, PANE_COMFORT_PX } from "../../../../chat/panel/capacity/chatCapacity";
 import { ICON_RAIL_SCREEN_PX } from "../../../../../workbench/window/iconRailWidth";
 import { DEFAULT_CHAT_WIDTH } from "../../../../../workbench/window/useLayout";
-import { boardLayout, LOUD, ROOMY_BOARD_REM } from "../boardGrid";
+import { boardLayout, cardFit, LOUD, ROOMY_BOARD_REM } from "../boardGrid";
 
 // Pins how the board lays its lanes out: by its width, and by which lanes are empty, so an empty lane gives its column
 // to the lanes with something to read.
@@ -46,6 +46,19 @@ describe(`boardLayout`, () => {
     it(`keeps the width's layout on a board with nothing in any lane`, () => {
         expect(boardLayout(false, false, quiet(`attention`, `active`, `finished`))).toEqual({ kind: `three` });
         expect(boardLayout(false, true, quiet(`attention`, `active`, `finished`))).toEqual({ kind: `paired` });
+    });
+});
+
+// How much of a card a squeezed board draws, by the narrowest width it is under: each step keeps less, never more.
+describe(`cardFit`, () => {
+    it(`keeps the full card until the board is under its compact width`, () => {
+        expect(cardFit(false, false, false)).toBe(`full`);
+        expect(cardFit(true, false, false)).toBe(`compact`);
+    });
+
+    it(`steps down to mini and then to the tile as the board narrows`, () => {
+        expect(cardFit(true, true, false)).toBe(`mini`);
+        expect(cardFit(true, true, true)).toBe(`tile`);
     });
 });
 

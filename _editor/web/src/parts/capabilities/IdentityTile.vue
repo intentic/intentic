@@ -8,7 +8,8 @@ import type { ChildTally } from "../fleet/childCount";
 // Undefined for a chat no agent stands behind yet: it reads as the everyday single agent, uncoloured.
 // `children`, where given, is what the disc holds instead of the kind's glyph: the board card counts its family here
 // (null when it started nothing), as its branch already says what kind of session it is.
-const props = defineProps<{ session: SessionFacts | undefined; children?: ChildTally | null | undefined }>();
+// `initials`: what the disc says when it would say nothing else, for a host that shows no title beside it (a tile card).
+const props = defineProps<{ session: SessionFacts | undefined; children?: ChildTally | null | undefined; initials?: string }>();
 const counted = computed(() => props.children !== undefined);
 const kind = computed(() => sessionKind(props.session));
 // An amber wash and an amber mark as the context window fills, a solid amber plate once it is nearly spent (contextPressure).
@@ -44,6 +45,8 @@ const running = computed(() => props.session?.subagents?.running ?? 0);
         <!-- The everyday kind draws nothing inside the disc: a mark on every card would tell none of them apart. -->
         <Icon v-else-if="!counted && kind.icon !== undefined" :name="kind.icon" aria-hidden="true" />
         <span v-else-if="pressure === `filling`" class="size-[0.45em] rounded-full bg-current" aria-hidden="true"></span>
+        <!-- Where no title stands beside it, the title's initials are what tells one card from the next. -->
+        <span v-else-if="initials" class="pt-px text-[0.5625rem] font-semibold leading-none" aria-hidden="true" data-initials>{{ initials }}</span>
         <!-- `ring-canvas` parts the count from the disc it overlaps, as every badge pinned to an avatar does. -->
         <span
             v-if="!counted && running > 0"
