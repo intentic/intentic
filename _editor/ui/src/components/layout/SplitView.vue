@@ -104,8 +104,8 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
                 >
                     <!-- WHAT THIS SCREEN IS ("Settings", "Account", "Capabilities"), as the index's segment of the window's top bar,
                          over the index it heads and the search that tops it: blended (`.view-header-blend`, utilities.css), so
-                         the index's ground runs up under it with no line, in the type every name in the bar takes (13px,
-                         regular, muted, as ViewBar's and the chat's). One word where one will do. The body beside it has no
+                         the index's ground runs up under it with no line, at a column heading's size and full ink, as it
+                         always stood here (a muted 13px, the chat title's, read too faint for it). One word where one will do. The body beside it has no
                          segment at all: the page starts at the top, its own head over what it acts on (2026-11-23: a centred
                          title over the body read as a bar fixed over the page, and the owner had it brought back here).
                          Never whose it is: the shell's rail already wears the sandbox's face and the overview its name, and a
@@ -120,7 +120,7 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
                         >
                             <Icon name="arrow-left" />
                         </button>
-                        <h1 class="min-w-0 flex-1 truncate text-[0.8125rem] font-normal text-muted">{{ title }}</h1>
+                        <h1 class="min-w-0 flex-1 truncate text-sm font-semibold">{{ title }}</h1>
                         <slot name="info" />
                     </header>
                     <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pb-(--ui-page-padding) pl-4 pr-2 pt-3">
