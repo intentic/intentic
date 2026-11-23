@@ -70,7 +70,11 @@ echo "api is serving"
 WEB_URL="${PLATFORM_WEB_URL:-https://app.intentic.dev}"
 WEB_IMAGE="${PLATFORM_WEB_IMAGE:-ghcr.io/intentic/web:latest}"
 
-docker pull -q "$WEB_IMAGE" >/dev/null
+# Through image_pull, not a bare pull: the shared runner's containerd can lose a layer mid-unpack ("failed commit
+# on ref ... rename .../ingest/...: no such file or directory"), which a fresh pull clears and a bare one reads as
+# a failed deploy after the roll already landed (run 45278253477).
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/image-pull.sh"
+image_pull "$WEB_IMAGE"
 EXPECTED="$(docker image inspect "$WEB_IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^WEB_BUILD=//p' | head -1)"
 if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
     echo >&2 "error: $WEB_IMAGE carries no WEB_BUILD, so a deploy of it could not be verified."

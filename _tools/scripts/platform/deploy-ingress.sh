@@ -60,7 +60,11 @@ fi
 # docker-release.sh bakes the content-addressed tag it pushes into INGRESS_BUILD (ingress/Dockerfile ARG
 # BUILD_ID), so the image is the only thing that knows this value and the deploy cannot claim a build it is
 # not carrying. The pull is a no-op on the image this job just built.
-docker pull -q "$IMAGE" >/dev/null
+# Through image_pull, not a bare pull: the shared runner's containerd can lose a layer mid-unpack ("failed commit
+# on ref ... rename .../ingest/...: no such file or directory"), which a fresh pull clears and a bare one reads as
+# a failed deploy after the roll already landed (run 45278253477).
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/image-pull.sh"
+image_pull "$IMAGE"
 EXPECTED="$(docker image inspect "$IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^INGRESS_BUILD=//p' | head -1)"
 if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
     echo >&2 "error: $IMAGE carries no INGRESS_BUILD, so a deploy of it could not be verified."
