@@ -183,7 +183,7 @@ export class TranscriptFold {
                 const [index, opened] = this.open();
                 const tool = cardOf(event, this.now?.());
                 const row = this.rows[index]!;
-                row.tools = [...(row.tools ?? []), tool];
+                (row.tools ??= []).push(tool);
                 this.cards.set(tool.id, { tool, row: index });
                 this.claimById(tool);
                 return [...opened, { op: "tool", index, tool: structuredClone(tool) }];
@@ -518,7 +518,7 @@ export class TranscriptFold {
         }
         if (event.kind === "tool_call") {
             const child = cardOf(event, this.now?.());
-            place.tool.children = [...(place.tool.children ?? []), child];
+            (place.tool.children ??= []).push(child);
             this.cards.set(child.id, { tool: child, row: place.row, parent });
             this.claimById(child);
             return [{ op: "tool", index: place.row, tool: structuredClone(child), parent }];
