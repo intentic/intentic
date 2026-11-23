@@ -1,8 +1,10 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { t } from "@intentic/ui/i18n";
 
 // A change to a connection's settings in the words its form uses: the setting's label, and a value by its option's
-// label ("Allowed", not `on`) wherever the field offers a choice, so a card reads like the page the change lands on.
+// label ("Allowed", not `on`) wherever the field offers a choice or is a switch, so a card reads like the page the
+// change lands on.
 
 export interface SettingChange {
     readonly key: string;
@@ -16,7 +18,12 @@ export interface SettingChange {
 
 type Field = CapabilityCatalogEntry[`fields`][number];
 
-const valueWords = (field: Field | undefined, value: string): string => field?.options?.find((option) => option.value === value)?.label ?? value;
+// A switch carries "on"/"off" and draws no words of its own, so a card says what the switch means for the connection.
+const switchWords = (value: string): string | undefined =>
+    value === `on` ? t(`needs.card.switchOn`) : value === `off` ? t(`needs.card.switchOff`) : undefined;
+
+const valueWords = (field: Field | undefined, value: string): string =>
+    (field?.boolean === true ? switchWords(value) : field?.options?.find((option) => option.value === value)?.label) ?? value;
 
 export const settingChanges = (
     fields: readonly Field[],
@@ -31,6 +38,6 @@ export const settingChanges = (
             label: field?.label ?? key,
             from: was === undefined ? undefined : valueWords(field, String(was)),
             to: valueWords(field, to),
-            raw: field?.options === undefined,
+            raw: field?.options === undefined && field?.boolean !== true,
         };
     });

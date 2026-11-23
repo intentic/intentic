@@ -13922,6 +13922,8 @@
         "card": {
             "unattended": "Zapytał o to przebieg, którego nikt nie obserwował, więc poczekał na Ciebie.",
             "settingUp": "Czekam na koniec konfiguracji…",
+            "switchOff": "Zablokowane",
+            "switchOn": "Dozwolone",
             "approvedRebuild": "Zatwierdzone. Pojawi się po przebudowie sandboxa.",
             "toldQueued": "Agent dowie się o tym, gdy tylko skończy bieżącą pracę.",
             "toldNot": "Agent jeszcze o tym nie wie: dowie się przy następnym uruchomieniu tej rozmowy.",

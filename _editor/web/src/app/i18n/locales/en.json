@@ -6312,6 +6312,8 @@
         "card": {
             "unattended": "Asked by a run nobody was watching, so it waited for you.",
             "settingUp": "Waiting for the setup to finish…",
+            "switchOff": "Blocked",
+            "switchOn": "Allowed",
             "approvedRebuild": "Approved. It arrives when the sandbox is rebuilt.",
             "toldQueued": "The agent hears it as soon as its current work ends.",
             "toldNot": "The agent has not been told yet: it hears when this conversation next runs.",

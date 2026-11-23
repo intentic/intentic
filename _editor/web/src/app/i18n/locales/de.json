@@ -6312,6 +6312,8 @@
         "card": {
             "unattended": "Von einem unbeaufsichtigten Lauf angefragt, daher hat er auf Sie gewartet.",
             "settingUp": "Wartet, bis die Einrichtung fertig ist…",
+            "switchOff": "Blockiert",
+            "switchOn": "Erlaubt",
             "approvedRebuild": "Genehmigt. Kommt beim nächsten Neubau der Sandbox an.",
             "toldQueued": "Der Agent erfährt es, sobald seine laufende Arbeit endet.",
             "toldNot": "Der Agent wurde noch nicht informiert: Er erfährt es, wenn diese Unterhaltung das nächste Mal läuft.",

@@ -576,7 +576,9 @@ describe("a need the agent never hears of", () => {
         await needs.recheck();
         expect(woken).toEqual([]);
         expect(steered).toEqual([]);
-        expect((await deps.store.all()).map((need) => [need.id, need.status, need.told])).toEqual([
+        // By id, not as listed: the store lists newest first, and the three are a millisecond apart only on a slow run.
+        const ended = (await deps.store.all()).map((need) => [need.id, need.status, need.told]);
+        expect(ended.toSorted(([left], [right]) => String(left).localeCompare(String(right)))).toEqual([
             [approved.id, "met", undefined],
             [declined.id, "declined", undefined],
             [fixed.id, "met", undefined],

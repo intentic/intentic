@@ -6312,6 +6312,8 @@
         "card": {
             "unattended": "Demandé par une exécution que personne ne surveillait : elle vous a donc attendu.",
             "settingUp": "En attente de la fin de la configuration…",
+            "switchOff": "Bloqué",
+            "switchOn": "Autorisé",
             "approvedRebuild": "Approuvé. Arrive lors de la reconstruction du sandbox.",
             "toldQueued": "L'agent l'apprend dès que son travail en cours se termine.",
             "toldNot": "L'agent n'a pas encore été informé : il l'apprendra à la prochaine exécution de cette conversation.",
