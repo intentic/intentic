@@ -637,6 +637,7 @@
             },
             "processesLabel": "Processus",
             "pressureLabel": "Pression",
+            "ioLabel": "E/S",
             "pressureValue": "CPU {cpu} · mémoire {memory} · E/S {io}",
             "daemonLabel": "Démon",
             "loop": "boucle {percent}",

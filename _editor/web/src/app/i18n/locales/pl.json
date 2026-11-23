@@ -725,6 +725,7 @@
             "minutes": "{count} min",
             "pressToOpen": "Naciśnij, by otworzyć",
             "pressureLabel": "Presja",
+            "ioLabel": "I/O",
             "pressureNote": "Powyżej zera: kolejka",
             "pressureValue": "CPU {cpu} · pamięć {memory} · I/O {io}",
             "processesLabel": "Procesy",

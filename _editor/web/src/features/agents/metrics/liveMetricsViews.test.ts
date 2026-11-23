@@ -218,13 +218,23 @@ describe("the sandbox segment", () => {
             `CPU 23%`,
             `Memory 15 / 16 GiB`,
             `Disk 400 / 1,000 GiB`,
-            `Pressure CPU 0.0% · memory 30% · I/O 0.0%`,
-            `Daemon 412 MiB · 2.0% CPU · loop 95%`,
+            // As glyphs, each label for a screen reader only: pressure names only the resource waited on, the daemon only
+            // the event loop it was raised for.
+            `Pressure Memory 30%`,
+            `Daemon Event loop 95%`,
         ]);
         const tinted = [...el.querySelectorAll(`[data-figure]`)].filter(
             (figure) => figure.matches(`.text-warning`) || figure.querySelector(`.text-warning`) !== null,
         );
         expect(tinted.map((figure) => wordsOf(figure).split(` `)[0])).toEqual([`Memory`, `Pressure`, `Daemon`]);
+    });
+
+    it("tints the resource stalling within pressure, and leaves one merely queuing muted", () => {
+        const el = mount(SandboxMetricsSummary, { metrics: reading({ sandbox: { pressure: { cpu: 2, memory: 0, io: 15 } } }) });
+        const pressure = figuresOf(el).find((figure) => figure.startsWith(`Pressure`));
+        expect(pressure).toBe(`Pressure CPU 2.0% I/O 15%`);
+        const muted = [...el.querySelectorAll(`[data-figure] .text-muted`)].map((part) => wordsOf(part));
+        expect(muted).toEqual([`CPU 2.0%`]);
     });
 });
 

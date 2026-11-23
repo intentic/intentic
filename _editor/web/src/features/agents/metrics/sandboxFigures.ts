@@ -1,5 +1,5 @@
 import { PROCESS_ROLES, type SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
-import type { Tip } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 import { formatBinaryBytes, formatFixed, formatPercent } from "@intentic/ui/format";
 import { type TypedT, useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
@@ -34,13 +34,30 @@ export interface Gauge {
     readonly warn: boolean;
 }
 
+// One reading inside a figure, as the board's header draws it: a glyph where one names it, the figure, and its label for a
+// screen reader and the hover only.
+export interface FigurePart {
+    readonly key: string;
+    readonly glyph?: IconName;
+    readonly label: string;
+    readonly value: string;
+    readonly warn: boolean;
+}
+
 export interface Figure {
     readonly key: string;
     readonly label: string;
     readonly value: string;
     readonly hint: Tip;
     readonly warn: boolean;
+    // How the header draws it when it is raised there (an alert): a glyph in place of its label, and only the readings
+    // that matter, each behind the glyph of what it measures. Without them the header falls back to label and value.
+    readonly glyph?: IconName;
+    readonly parts?: readonly FigurePart[];
 }
+
+// The glyph of each thing that runs out, the same in the gauges and wherever a figure is about one of them (pressure).
+export const GAUGE_GLYPH = { cpu: `cpu`, memory: `memory`, disk: `database` } as const satisfies Record<Gauge[`key`], IconName>;
 
 export interface RoleRow {
     readonly key: string;
@@ -178,6 +195,65 @@ export const memoryRowsOf = (t: TypedT, sandbox: SandboxMetrics[`sandbox`]): Mem
     });
 };
 
+// How long work waited on each resource, as one figure, or none while nothing waits long enough to name.
+const pressureOf = (t: TypedT, pressure: SandboxMetrics[`sandbox`][`pressure`]): Figure[] => {
+    const worst = pressure === undefined ? 0 : Math.max(pressure.cpu, pressure.memory, pressure.io);
+    if (pressure === undefined || worst < PRESSURE_WORTH_SHOWING) {
+        return [];
+    }
+    const resources: { key: string; glyph: IconName; label: string; share: number }[] = [
+        { key: `cpu`, glyph: GAUGE_GLYPH.cpu, label: t(`agents.liveMetrics.cpuLabel`), share: pressure.cpu },
+        { key: `memory`, glyph: GAUGE_GLYPH.memory, label: t(`agents.liveMetrics.memoryLabel`), share: pressure.memory },
+        { key: `io`, glyph: GAUGE_GLYPH.disk, label: t(`agents.liveMetrics.ioLabel`), share: pressure.io },
+    ];
+    return [
+        {
+            key: `pressure`,
+            label: t(`agents.liveMetrics.pressureLabel`),
+            value: t(`agents.liveMetrics.pressureValue`, {
+                cpu: formatPercent(pressure.cpu),
+                memory: formatPercent(pressure.memory),
+                io: formatPercent(pressure.io),
+            }),
+            hint: { title: t(`agents.liveMetrics.pressureLabel`), note: t(`agents.liveMetrics.pressureNote`) },
+            warn: worst >= PRESSURE_STALLING,
+            // Waiting, then only what is waited on, each behind its gauge's glyph: a zero says nothing, and the
+            // resource stalling is tinted against those merely queuing.
+            glyph: `clock`,
+            parts: resources
+                .filter(({ share }) => share >= PRESSURE_WORTH_SHOWING)
+                .map(({ share, ...part }) => ({ ...part, value: formatPercent(share), warn: share >= PRESSURE_STALLING })),
+        },
+    ];
+};
+
+// The daemon's own share, warned on its event loop, which is what makes the editor lag.
+const daemonOf = (t: TypedT, daemon: SandboxMetrics[`daemon`]): Figure => ({
+    key: `daemon`,
+    label: t(`agents.liveMetrics.daemonLabel`),
+    value: [
+        formatBinaryBytes(daemon.rssBytes),
+        ...(daemon.cpuPercent === undefined ? [] : [t(`agents.liveMetrics.cpu`, { percent: formatPercent(daemon.cpuPercent) })]),
+        ...(daemon.eventLoopPercent === undefined ? [] : [t(`agents.liveMetrics.loop`, { percent: formatPercent(daemon.eventLoopPercent) })]),
+    ].join(` · `),
+    hint: {
+        title: t(`agents.liveMetrics.daemonLabel`),
+        rows: [
+            { label: t(`agents.liveMetrics.rssLabel`), value: formatBinaryBytes(daemon.rssBytes) },
+            { label: t(`agents.liveMetrics.cpuLabel`), value: daemon.cpuPercent === undefined ? `` : formatPercent(daemon.cpuPercent) },
+            { label: t(`agents.liveMetrics.eventLoop`), value: daemon.eventLoopPercent === undefined ? `` : formatPercent(daemon.eventLoopPercent) },
+        ],
+        note: t(`agents.liveMetrics.daemonNote`),
+    },
+    warn: (daemon.eventLoopPercent ?? 0) >= NEAR_LIMIT * 100,
+    // Raised only for its event loop, so that is the one figure the header gives it.
+    glyph: `cog`,
+    parts:
+        daemon.eventLoopPercent === undefined
+            ? []
+            : [{ key: `loop`, label: t(`agents.liveMetrics.eventLoop`), value: formatPercent(daemon.eventLoopPercent), warn: true }],
+});
+
 // `cards` is the reading folded into the board's cards (CARD_METRICS_KEY); without it every conversation is its own row.
 export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => CardMetrics | undefined): ComputedRef<SandboxReadout> {
     const t = useT();
@@ -248,8 +324,9 @@ export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => C
     };
 
     const figuresOf = ({ sandbox, daemon }: SandboxMetrics): Figure[] => {
-        const { pressure } = sandbox;
-        const worst = pressure === undefined ? 0 : Math.max(pressure.cpu, pressure.memory, pressure.io);
+        // Against what swap can hold where the daemon says, since a full swap is what makes it count.
+        const swapValue =
+            sandbox.swapLimitBytes === undefined ? formatBinaryBytes(sandbox.swapBytes ?? 0) : usedOf(sandbox.swapBytes ?? 0, sandbox.swapLimitBytes);
         return [
             ...(sandbox.swapBytes === undefined || sandbox.swapBytes === 0
                 ? []
@@ -257,17 +334,15 @@ export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => C
                       {
                           key: `swap`,
                           label: t(`agents.liveMetrics.swapLabel`),
-                          // Against what swap can hold where the daemon says, since a full swap is what makes it count.
-                          value:
-                              sandbox.swapLimitBytes === undefined
-                                  ? formatBinaryBytes(sandbox.swapBytes)
-                                  : usedOf(sandbox.swapBytes, sandbox.swapLimitBytes),
+                          value: swapValue,
                           hint: {
                               title: t(`agents.liveMetrics.swapLabel`),
                               note: sandbox.swapFull === true ? t(`agents.liveMetrics.swapFullNote`) : t(`agents.liveMetrics.swapNote`),
                           },
                           warn: sandbox.swapFull === true,
-                      },
+                          glyph: `arrows-h`,
+                          parts: [{ key: `swap`, label: t(`agents.liveMetrics.swapLabel`), value: swapValue, warn: true }],
+                      } satisfies Figure,
                   ]),
             loadOf(sandbox),
             {
@@ -278,45 +353,8 @@ export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => C
                 warn: false,
             },
             // Below the threshold nothing is waiting, and three zeros are noise even in the panel.
-            ...(pressure === undefined || worst < PRESSURE_WORTH_SHOWING
-                ? []
-                : [
-                      {
-                          key: `pressure`,
-                          label: t(`agents.liveMetrics.pressureLabel`),
-                          value: t(`agents.liveMetrics.pressureValue`, {
-                              cpu: formatPercent(pressure.cpu),
-                              memory: formatPercent(pressure.memory),
-                              io: formatPercent(pressure.io),
-                          }),
-                          hint: { title: t(`agents.liveMetrics.pressureLabel`), note: t(`agents.liveMetrics.pressureNote`) },
-                          warn: worst >= PRESSURE_STALLING,
-                      },
-                  ]),
-            {
-                key: `daemon`,
-                label: t(`agents.liveMetrics.daemonLabel`),
-                value: [
-                    formatBinaryBytes(daemon.rssBytes),
-                    ...(daemon.cpuPercent === undefined ? [] : [t(`agents.liveMetrics.cpu`, { percent: formatPercent(daemon.cpuPercent) })]),
-                    ...(daemon.eventLoopPercent === undefined
-                        ? []
-                        : [t(`agents.liveMetrics.loop`, { percent: formatPercent(daemon.eventLoopPercent) })]),
-                ].join(` · `),
-                hint: {
-                    title: t(`agents.liveMetrics.daemonLabel`),
-                    rows: [
-                        { label: t(`agents.liveMetrics.rssLabel`), value: formatBinaryBytes(daemon.rssBytes) },
-                        { label: t(`agents.liveMetrics.cpuLabel`), value: daemon.cpuPercent === undefined ? `` : formatPercent(daemon.cpuPercent) },
-                        {
-                            label: t(`agents.liveMetrics.eventLoop`),
-                            value: daemon.eventLoopPercent === undefined ? `` : formatPercent(daemon.eventLoopPercent),
-                        },
-                    ],
-                    note: t(`agents.liveMetrics.daemonNote`),
-                },
-                warn: (daemon.eventLoopPercent ?? 0) >= NEAR_LIMIT * 100,
-            },
+            ...pressureOf(t, sandbox.pressure),
+            daemonOf(t, daemon),
         ];
     };
 

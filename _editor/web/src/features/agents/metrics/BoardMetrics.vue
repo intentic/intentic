@@ -18,11 +18,12 @@ const props = defineProps<{
 }>();
 
 const t = useT();
-// The hover names what the bare meters are, with their figures, since the header draws only glyphs and meters.
+// The hover names what the bare meters are, with their figures, since the header draws only glyphs and meters; a figure
+// raised past its limit is drawn as glyphs too, so its words follow the gauges'.
 const readout = useSandboxReadout(() => props.metrics);
 const tip = computed(() => ({
     title: t(`agents.liveMetrics.sandboxLabel`),
-    rows: readout.value.gauges.map((gauge) => ({ label: gauge.label, value: gauge.value })),
+    rows: [...readout.value.gauges, ...readout.value.alerts].map((figure) => ({ label: figure.label, value: figure.value })),
 }));
 const anchor = ref<HTMLElement>();
 const open = ref(false);

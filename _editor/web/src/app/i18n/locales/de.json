@@ -637,6 +637,7 @@
             },
             "processesLabel": "Prozesse",
             "pressureLabel": "Druck",
+            "ioLabel": "E/A",
             "pressureValue": "CPU {cpu} · Speicher {memory} · E/A {io}",
             "daemonLabel": "Daemon",
             "loop": "Schleife {percent}",
