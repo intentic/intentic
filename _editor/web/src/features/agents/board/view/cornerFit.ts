@@ -25,6 +25,10 @@ export interface CornerFitHost {
 
 // A card's hover bar and drop shadow reach past its edge; the scrolling box gives them this much room inside its clip.
 const BLEED = `-mx-2 -mt-3 px-2 pt-3`;
+// That room above reaches 12px up over the lane's header, which paints no ground under a wallpaper: scrolled, a card
+// sliding through it drew over the header's name and chips. Once the box is scrolled at all, that band is masked out,
+// so the cards end at the header's foot; at the top it stays open, for the first card's hover bar.
+const SCROLLED_MASK = `[mask-image:linear-gradient(to_bottom,transparent_0.75rem,#000_0.75rem)]`;
 
 // The card list's own bottom padding (AgentsView's `pb-2.5`), between the last card and the "N earlier" row; and that
 // row's height, until one is drawn to measure.
@@ -113,6 +117,17 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished }:
     const room = ref<LaneRoom>({ top: 0, height: 0 });
     // How many of the drawn cards are hidden for want of room.
     const cut = ref(0);
+    // Whether the card box is scrolled off its top (it scrolls only while `scrolls`).
+    const scrolled = ref(false);
+    const onScroll = (): void => {
+        scrolled.value = (box.value?.scrollTop ?? 0) > 0;
+    };
+    watch(box, (el, was) => {
+        was?.removeEventListener(`scroll`, onScroll);
+        el?.addEventListener(`scroll`, onScroll, { passive: true });
+        onScroll();
+    });
+    onBeforeUnmount(() => box.value?.removeEventListener(`scroll`, onScroll));
     const schedule = useWatchedBox(box, scroller, () => {
         if (scroller.value !== undefined && grid.value !== undefined) {
             room.value = roomIn(scroller.value, grid.value);
@@ -135,7 +150,7 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished }:
         if (!active.value) {
             return `contents`;
         }
-        return scrolls.value ? `flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain ${BLEED}` : `flex min-h-0 flex-1 flex-col overflow-y-clip [overflow-clip-margin:0.75rem]`;
+        return scrolls.value ? `flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain ${BLEED}${scrolled.value ? ` ${SCROLLED_MASK}` : ``}` : `flex min-h-0 flex-1 flex-col overflow-y-clip [overflow-clip-margin:0.75rem]`;
     });
     // Finished's tail counts the cards its window leaves out and the ones the corner left no room for; expanded, it
     // always offers the fold back, since the corner's cut is not counted while the lane scrolls.

@@ -31,10 +31,11 @@ const readout = useSandboxReadout(() => props.metrics);
             >
         </span>
         <!-- Only past a limit: a figure worth acting on shouldn't hide behind a click. -->
-        <span v-for="alert in readout.alerts" :key="alert.key" data-figure class="inline-flex min-w-0 items-center gap-1.5 text-warning">
+        <!-- Short of room an alert gives up its figure first, then truncates its label, and never spills into the next one. -->
+        <span v-for="alert in readout.alerts" :key="alert.key" data-figure class="inline-flex min-w-0 items-center gap-1.5 overflow-hidden text-warning">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
-            <span class="shrink-0">{{ alert.label }}</span>
-            <span class="truncate tabular-nums">{{ alert.value }}</span>
+            <span class="min-w-0 truncate">{{ alert.label }}</span>
+            <span class="min-w-0 shrink-[100] truncate tabular-nums">{{ alert.value }}</span>
         </span>
     </span>
 </template>
