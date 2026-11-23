@@ -48,7 +48,7 @@ flowchart LR
   line under it, an inset shadow a selected tab's rule covers. A segment that is its column's own head (the board's
   filter, the chat's title, a view's title, an empty segment) is `.view-header-blend`: no ground, no line, held to the
   rest by the height alone. A segment's controls are h-7 or lower so they share a centre line. A skin tunes
-  `--view-header-fill` and `--view-header-rule`. `SplitView` with an index puts the screen's name in the index's segment,
+  `--view-header-fill` and `--view-header-rule`. `SplitView` with an index leaves the index's segment empty and names the screen under it,
   over its search, and gives the body no segment at all, so the page starts at the top; without one, the name and its
   `#actions` take the segment over the page, centred (`ViewBar.vue`). A phone, which has no window bar, keeps `PageHeader`.
 - **Chips and pills.** Their sizes are decided once, in `utilities.css`. A chip presses: `ui.chip({ size })` is `sm`

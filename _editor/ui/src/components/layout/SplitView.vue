@@ -102,25 +102,26 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
                     :class="scroll === `page` ? `sticky top-0 max-h-dvh` : `flex-1`"
                     :style="viewport === undefined ? undefined : { maxHeight: viewport }"
                 >
-                    <!-- WHAT THIS SCREEN IS ("Settings", "Account", "Capabilities"), as the index's segment of the window's top bar,
-                         over the index it heads and the search that tops it: blended (`.view-header-blend`, utilities.css), so
-                         the index's ground runs up under it with no line, at a column heading's size and full ink, as it
-                         always stood here (a muted 13px, the chat title's, read too faint for it). One word where one will do. The body beside it has no
-                         segment at all: the page starts at the top, its own head over what it acts on (2026-11-23: a centred
-                         title over the body read as a bar fixed over the page, and the owner had it brought back here).
-                         Never whose it is: the shell's rail already wears the sandbox's face and the overview its name, and a
-                         third copy of either was noise (2026-11-09). -->
-                    <header class="view-header view-header-blend flex items-center gap-2 pl-5 pr-2">
+                    <!-- The index's segment of the window's top bar, empty and blended (`.view-header-blend`, utilities.css): the
+                         index's own ground runs up under it, with no line, and only its height ties it to the segments beside it. -->
+                    <div class="view-header view-header-blend" aria-hidden="true"></div>
+                    <!-- WHAT THIS INDEX IS ("Settings", "Account", "Capabilities"), under the bar rather than in it, at a column
+                         heading's size: the body beside it carries its own headings, and a 2xl name in a 16rem column outweighed all
+                         of them. One word where one will do. The body beside it has no segment of its own: its page starts at the
+                         top (2026-11-23: in the bar, centred over the body or small over the index, the name read as chrome, and
+                         the owner had it brought back here). Never whose it is: the shell's rail already wears the sandbox's face
+                         and the overview its name, and a third copy of either was noise (2026-11-09). -->
+                    <header class="flex min-h-9 shrink-0 items-center gap-3 pl-5 pr-4">
                         <button
                             v-if="back"
                             type="button"
-                            :class="ui.iconButton({ size: `md` }, `-ml-2 -mr-1 shrink-0`)"
+                            :class="ui.iconButton({ size: `md` }, `-ml-1 -mr-1 shrink-0`)"
                             :aria-label="back.label"
                             @click="back.go()"
                         >
                             <Icon name="arrow-left" />
                         </button>
-                        <h1 class="min-w-0 flex-1 truncate text-sm font-semibold">{{ title }}</h1>
+                        <h1 class="min-w-0 flex-1 truncate text-base leading-tight font-semibold">{{ title }}</h1>
                         <slot name="info" />
                     </header>
                     <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pb-(--ui-page-padding) pl-4 pr-2 pt-3">
