@@ -125,8 +125,11 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished }:
     const attach = (el: Element | ComponentPublicInstance | null): void => {
         box.value = el instanceof HTMLElement ? el : undefined;
     };
-    // The lane itself: pinned at the grid's top padding, exactly the height left under it.
-    const lane = computed((): CSSProperties | undefined => (active.value ? { top: `${room.value.top}px`, height: `${room.value.height}px` } : undefined));
+    // The lane itself: pinned at the grid's top padding, exactly the height left under it; not before that height is read,
+    // or its first frame is a lane of no height whose corner then drops into place.
+    const lane = computed((): CSSProperties | undefined =>
+        active.value && room.value.height > 0 ? { top: `${room.value.top}px`, height: `${room.value.height}px` } : undefined,
+    );
     // Its card box: the room between its header and the corner, cutting or scrolling; else no box at all.
     const cards = computed((): string => {
         if (!active.value) {

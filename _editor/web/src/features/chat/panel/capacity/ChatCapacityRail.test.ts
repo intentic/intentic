@@ -84,8 +84,10 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
     expect(barWidths(el)).toEqual([`${100 - (4 + 44 + 100 + 30 + 12 + 7) / 6}%`]);
     // Not one address shown: the reader can't pick among these, so naming one would read as the account in use.
     expect(el.textContent).not.toContain(`radarsuspam`);
-    // The pool's depth is carried by the count instead; 5/6 means one credential is exhausted (spentOutright).
-    expect(el.textContent).toContain(`5/6`);
+    // The pool's depth is the screen reader's count (drawn, a fraction beside every name was noise the bar answers): five
+    // of six means one credential is exhausted (spentOutright).
+    expect(spoken(el)[0]).toMatch(/^5 of 6 accounts have room/);
+    expect(drawn(el)).not.toContain(`5/6`);
 });
 
 // A credential nothing can run on used to reach this column as neither an offer nor an absence: it sank below every
@@ -115,7 +117,7 @@ it(`names a credential that can serve nothing, and leaves it out of the ratio`, 
     expect(el.textContent).toContain(`no Antigravity project on this Google account`);
     expect(el.textContent).toContain(`reconnect on the Agent tab`);
     // One of the two accounts that could have room does; the third is not part of that question.
-    expect(el.textContent).toContain(`1/2`);
+    expect(el.textContent).toContain(`1 of 2 accounts have room`);
 });
 
 // "Most room" names a comparison; a plan that publishes no limits has had none made, so it must not appear beside

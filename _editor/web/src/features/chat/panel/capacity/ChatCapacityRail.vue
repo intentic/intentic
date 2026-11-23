@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useLoaded } from "@intentic/extension-api";
-import { Await, Section, SectionHeader, type Tip, type TipRow, ui } from "@intentic/ui";
+import { Await, SectionHeader, type Tip, type TipRow, ui } from "@intentic/ui";
 import { useRowReveal } from "@intentic/ui/motion";
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import ChatCapacityLane from "./ChatCapacityLane.vue";
@@ -61,21 +61,22 @@ onBeforeUnmount(() => {
 // "This chat" on the heading only when no row below carries it: on Auto, or a provider whose one row has no figures.
 const headingMine = (entry: CapacityProvider): boolean => entry.mine && !entry.rows.some((row) => row.mine);
 
-// Motion for rows a re-read adds or reorders: arrivals fade in and settle, reorders slide (FLIP). A leaving row just
-// goes, since sliding it out would need it lifted from the flow and the rows closing the gap already show the change.
-// The motion switch (@intentic/ui/motion) stills both for a reader who turned motion off.
-const motion = {
-    moveClass: `transition-transform duration-500 ease-out`,
-    enterActiveClass: `transition duration-300 ease-out`,
-    enterFromClass: `opacity-0 -translate-y-1`,
-} as const;
-
-// THE READINGS REPLACE THEIR SKELETON ROW BY ROW, as the board's and the chat's lanes open (reveal.ts): each provider's
-// heading, then its accounts, down the column, so it resolves in the order it is read instead of popping in whole. A
-// row a later re-read adds is the TransitionGroups' to bring in (`motion` above).
+// THE READINGS REPLACE THEIR SKELETON ROW BY ROW, as the chat's checklist above it opens (ChatRailChecklist.vue,
+// reveal.ts): each provider's heading, then its accounts, down the column, so it resolves in the order it is read
+// instead of popping in whole, and a row a later re-read adds plays in on its own. Nothing slides: until 2026-11-23 a
+// re-read's rows moved from where they had been drawn (a FLIP), which in the board's corner, laid out before its lane
+// had a height, flew them in from the column's top-left.
 const column = ref<HTMLElement>();
 useRowReveal(column, {
-    key: () => [accountsLoaded.value, ...measuredProviders.value.flatMap((entry) => [entry.provider, ...entry.rows.map((row) => row.id)])].join(`,`),
+    key: () =>
+        [
+            accountsLoaded.value,
+            ...measuredProviders.value.flatMap((entry) => [entry.provider, ...entry.rows.map((row) => row.id)]),
+            ...unmeasuredProviders.value.map((entry) => entry.provider),
+            ...capacity.value.out.map((entry) => entry.provider),
+            ...capacity.value.blocked.map((entry) => entry.fix),
+        ].join(`,`),
+    arrivals: true,
 });
 
 // Full row as one sentence (hover + screen reader): every lane in drawn order, reset in parentheses per lane.
@@ -262,28 +263,26 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
             <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
             <div
                 ref="column"
-                class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3"
+                class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3"
             >
                 <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
 
                 <!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
-                <!-- A re-read that reorders providers slides them to their new places rather than jumping, so the one that moved is seen moving. -->
-                <TransitionGroup tag="div" class="flex flex-col gap-5" v-bind="motion">
+                <div class="flex flex-col gap-4">
                     <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
                         <div class="flex items-center gap-1.5" data-reveal>
                             <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                             <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
                             <span v-if="headingMine(entry)" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
-                            <!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
-                            <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
-                                >{{ entry.ready }}/{{ entry.total }}</span
-                            >
+                            <!-- How many accounts have room is the screen reader's: drawn, "24/32" beside every name was a column of
+                                 fractions the bars already answer (a spent account has no bar). -->
+                            <span v-if="entry.total > 1" class="sr-only">{{ countDetail(entry) }}</span>
                         </div>
 
                         <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
                         <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
-                        <TransitionGroup tag="div" class="flex flex-col gap-2.5" v-bind="motion">
+                        <div class="flex flex-col gap-2.5">
                             <!-- The chat's own account sits on a faint neutral wash that holds its bars together as one block, bleeding
                                  into the gutter so they stay in line with the rows around it; the words say what the wash means. Not the
                                  picker's selected style: its gold edge reads as a press, and nothing in this column is pressed. -->
@@ -311,25 +310,22 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                                 </div>
                                 <span class="sr-only">{{ rowDetail(row, entry) }}</span>
                             </div>
-                        </TransitionGroup>
+                        </div>
 
                         <!-- Never a silent cap: a partial list still says how many more have room. -->
                         <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
                             t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
                         }}</span>
                     </div>
-                </TransitionGroup>
+                </div>
 
-                <!-- Unmeasured providers collapsed to title row and grouped together -->
-                <div v-if="unmeasuredProviders.length > 0" class="flex flex-col gap-1.5">
+                <!-- One line each, grouped: providers with nothing to measure, then what cannot run. -->
+                <div v-if="unmeasuredProviders.length > 0 || capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1.5">
                     <div v-for="entry in unmeasuredProviders" :key="entry.provider" data-reveal>
                         <div class="flex items-center gap-1.5" aria-hidden="true">
                             <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                             <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
                             <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
-                            <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
-                                >{{ entry.ready }}/{{ entry.total }}</span
-                            >
                             <span class="shrink-0 text-2xs text-subtle">{{ entry.rows[0]?.note }}</span>
                         </div>
                         <span class="sr-only">{{ entry.rows[0] ? rowDetail(entry.rows[0], entry) : entry.label }}</span>
@@ -337,38 +333,30 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                             t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
                         }}</span>
                     </div>
-                </div>
 
-                <!-- Provider rows distinguish spent capacity from an unconnected provider. -->
-                <Section
-                    v-if="capacity.out.length > 0 || capacity.blocked.length > 0"
-                    :label="t(`chat.chatCapacityRail.unavailable`)"
-                    density="dense"
-                    class="border-t border-line pt-3"
-                    data-reveal
-                >
-                    <div class="flex flex-col gap-1">
-                        <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
-                            <span class="min-w-0 flex-1 truncate text-2xs" :class="entry.mine ? `text-content` : `text-muted`">{{ entry.label }}</span>
-                            <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
-                            <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
-                        </div>
-                        <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
-                             own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
-                        <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
-                            <div class="flex items-baseline gap-2" aria-hidden="true">
-                                <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{
-                                    t(`chat.chatCapacityRail.cantServe`, { count: entry.count })
-                                }}</span>
-                                <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
-                            </div>
-                            <span class="sr-only"
-                                >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} ·
-                                {{ blockedDetail(entry) }}</span
-                            >
-                        </div>
+                    <!-- WHAT CANNOT RUN IS SAID BY TONE, NOT A HEADING: the name dimmed, what holds it in the danger ink (spent) or the
+                         warning ink (a fix someone must make), on the same one line as the rows above. Until 2026-11-23 a rule and an
+                         "Unavailable" heading took two rows of the column for it; the word is still the screen reader's. -->
+                    <span v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="sr-only">{{ t(`chat.chatCapacityRail.unavailable`) }}</span>
+                    <div v-for="entry in capacity.out" :key="`out:${entry.provider}`" class="flex items-center gap-1.5" data-reveal>
+                        <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-subtle" />
+                        <span class="min-w-0 flex-1 truncate text-2xs" :class="entry.mine ? `text-muted` : `text-subtle`">{{ entry.label }}</span>
+                        <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
+                        <span class="shrink-0 text-2xs text-danger">{{ outNote(entry) }}</span>
                     </div>
-                </Section>
+                    <!-- Counted, not listed, one line per condition. Which accounts, the provider's own words and the fix ride the
+                         hover: this rail says what can't run, the Agent tab is where it's fixed. -->
+                    <div v-for="entry in capacity.blocked" :key="`fix:${entry.fix}`" v-tooltip.left="blockedTip(entry)" data-reveal>
+                        <div class="flex items-center gap-1.5" aria-hidden="true">
+                            <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
+                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }}</span>
+                            <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
+                        </div>
+                        <span class="sr-only"
+                            >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} · {{ blockedDetail(entry) }}</span
+                        >
+                    </div>
+                </div>
             </div>
         </Await>
     </section>

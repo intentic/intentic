@@ -54,7 +54,9 @@ useShellChatLink(() => {
     <div class="flex h-full min-h-0 flex-col" :class="{ 'ground-card bg-card': plain }">
         <AgentsView class="min-h-0 flex-1" :with-corner="usageHere">
             <template v-if="usageHere" #corner>
-                <ChatCapacityRail :mine="mine" class="rounded-2xl border border-line bg-card" />
+                <!-- A reveal column of its own, so the board's opening plays its rows from its top, as its own reveal does, rather than
+                     as more of Finished's cards. -->
+                <ChatCapacityRail :mine="mine" data-reveal-column class="rounded-2xl border border-line bg-card" />
             </template>
         </AgentsView>
     </div>
