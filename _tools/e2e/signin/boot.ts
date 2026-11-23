@@ -12,7 +12,7 @@ import { API_HARNESS, API_PACKAGE, CACHE_DIR, ENV_API_URL, ENV_DATABASE, ENV_GOO
 // Boots the sign-in tier and returns its teardown: Postgres with the migration history replayed, the api harness
 // (_platform/api/src/e2e/browser-api.ts) on it, and the web build served beside it. Everything listens on loopback
 // inside this process's own machine, and Postgres is reached through testcontainers' host/port mapping, so the tier runs
-// inside a CI job container the way `e2e-billing` does (the assumption the browser tier cannot make).
+// inside a CI job container the way the billing step of `e2e-platform` does (the assumption the browser tier cannot make).
 //
 // SIGNIN_E2E_DATABASE_URL: a Postgres to use instead of a container (it is migrated, and each spec's person is new).
 // SIGNIN_E2E_REUSE_BUILD=1: serve the `dist` already there. Otherwise the web is built first, unless turbo already did

@@ -87,7 +87,7 @@ const inspect = async (browser) => {
 // api's redeem call. In 1.318.0 a router guard took `handoff` off this address first, so every desktop sign-in stopped
 // on "This sign-in link is incomplete" while this smoke, which only looked at /login, passed. A made-up handoff is
 // refused by the api (the page ends on its failure frame either way), so what tells the two apart is whether the redeem
-// call went out. The sign-in gate (_tools/e2e/signin, `e2e-signin` in ci.yml) runs the whole chain before a deploy;
+// call went out. The sign-in gate (_tools/e2e/signin, `e2e-platform` in ci.yml) runs the whole chain before a deploy;
 // this is the same question asked of what actually shipped.
 const REDEEM_PATH = "/rpc/desktop/redeem";
 const LANDING_STOPPED = /Back to sign in/i;

@@ -39,10 +39,10 @@ ARCH_SUFFIX="${ARCH_SUFFIX:-}"
 # Each package must be set to public once, by hand, at github.com/orgs/intentic/packages.
 REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 # PUSH=0 BUILDS AND PUBLISHES NOTHING: the image lands in this machine's docker store (`--load`) under the tags asked
-# for, to be booted by smoke-image.sh with SMOKE_PULL=0. It is ci.yml's `images-dry`, which proves the image a commit
-# would ship when a gate in front of `images` failed, so the build and boot failures underneath are said in the same
-# run rather than after the gate is fixed. The registry is still READ (every --cache-from below), which is what keeps
-# a dry build warm; the job that sets this holds a read-only token as well, so a push could not succeed regardless.
+# for, to be booted by smoke-image.sh with SMOKE_PULL=0: a local dry run of what `images` would build and boot. CI no
+# longer runs one (ci.yml's `images-dry` was removed 2026-11: it ran only on pushes whose gates had already failed, and
+# its failures were those gates' own errors again or buildkit running out of memory). The registry is still READ
+# (every --cache-from below), which is what keeps a dry build warm.
 PUSH="${PUSH:-1}"
 # Monorepo root (_tools/scripts -> up two). The sandbox image's build context is the whole monorepo so
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
@@ -111,11 +111,11 @@ publish() {
     # (_sandbox/ic/src/docker.rs, too_old_to_unpack). Level 9 is klauspost's "better" encoder: built once per release,
     # pulled by every host.
     #
-    # A dry build writes no cache. Its image is loaded, booted once and removed (ci.yml images-dry), so cache keys
-    # written into it reach no later build, and preparing them is the one step that outgrew the runner: from
-    # 2026-10-18 buildkitd climbed past 22 GB on "preparing layers for inline cache" for the sandbox image and the
-    # kernel killed it (exit 255, or `buildkitd.sock: connection refused`), failing every images-dry since. The
-    # pushing builds keep `--cache-to type=inline`, which is the cache every build, this one included, reads back.
+    # A dry build writes no cache. Its image is loaded, booted once and removed, so cache keys written into it reach
+    # no later build, and preparing them is the one step that outgrew the runner: from 2026-10-18 buildkitd climbed
+    # past 22 GB on "preparing layers for inline cache" for the sandbox image and the kernel killed it (exit 255, or
+    # `buildkitd.sock: connection refused`). The pushing builds keep `--cache-to type=inline`, which is the cache
+    # every build, this one included, reads back.
     local output=--push cache_to=(--cache-to "type=inline")
     if [ "$PUSH" = "0" ]; then
         output=--load

@@ -13,7 +13,7 @@ flowchart LR
     specs --> web
 ```
 
-- `signin/` is the sign-in gate, and the platform deploy waits on it (`e2e-signin` in ci.yml). A new person signs in
+- `signin/` is the sign-in gate, and the platform deploy waits on it (the signin step of `e2e-platform` in ci.yml). A new person signs in
   four ways: on the web, through the desktop app from a signed-out browser, from a browser already signed in (no
   press), and after "Ask an agent about this" on a file. Everything it runs is what ships: the `vite build` output
   served as the web image serves it (`serve-web.ts`), the api's own app from `_platform/api/src/e2e/browser-api.ts`,
@@ -41,7 +41,7 @@ flowchart LR
   call the daemon refused, a read that failed, an uncaught error, any gate left standing, or the "too old" page. The
   daemon runs with its auth off, so its session is seeded once in the signed-in page's storage rather than exchanged,
   which the sign-in tier and the daemon's own suites cover. Service workers are blocked in this tier so every visit
-  loads the server's build directly and Google's fixture remains under Playwright's routing. CI runs it as `e2e-compat`
+  loads the server's build directly and Google's fixture remains under Playwright's routing. CI runs it as the compat step of `e2e-platform`
   before the platform deploys and nightly as `compat-stable`. The daemon's template source is a local git fixture copied into its container, so opening the
   starter site's apps uses the released daemon's own manifest parser without fetching the moving canonical repository.
   - 2026-10-15: written after the editor on main called `org.policy` on every released daemon, none of which had it.

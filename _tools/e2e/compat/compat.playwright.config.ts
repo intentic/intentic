@@ -5,7 +5,7 @@ import { RESULTS_DIR } from "./compat-tier.js";
 // to main, while a sandbox takes a release a few times a day, so the editor that deploys always meets daemons older than
 // itself. This boots the released daemon beside the sign-in tier's stack and walks the main pages, failing on a call the
 // daemon refused, a read that failed, an uncaught error or the "too old" page. CI runs it nightly (`compat-stable`) and
-// before the platform deploys (`e2e-compat`).
+// before the platform deploys (`e2e-platform`).
 export default defineConfig({
     testDir: `.`,
     testMatch: `*.spec.ts`,

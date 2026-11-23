@@ -1,0 +1,39 @@
+# The release a quiet main would otherwise strand. ci.yml's release holds a planned release while the last one is younger
+# than RELEASE_MIN_INTERVAL_MINUTES (release-hold.mjs); a later push past the interval releases everything held, and
+# when no push comes this does: hourly, if main's head verified green, its release was held, and the hold is over, it
+# dispatches CI at main the way ci.yml's autofix job does. release-flush.mjs says what it checks and when it stands down.
+#
+# ON GITHUB'S RUNNERS: it reads four API answers and maybe sends one, and the fleet's runners are the scarce thing.
+name: Release flush
+
+on:
+  schedule:
+    # Hourly, off the hour.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-flush
+  cancel-in-progress: false
+
+jobs:
+  flush:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Reads CI's runs and jobs, and dispatches ci.yml: a dispatch is the one event GITHUB_TOKEN may start a run with.
+      actions: write
+      # The `Release held` annotation on the held run's plan job.
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: _tools/scripts/release
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node _tools/scripts/release/release-flush.mjs

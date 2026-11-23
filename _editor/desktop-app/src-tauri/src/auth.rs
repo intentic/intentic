@@ -391,7 +391,7 @@ fn finish(
 /// Nobody is moved by it: the reader is still in the window they pressed in. _(2026-10-17 to 2026-10-26) It brought
 /// the local window that asked forward, on its folder's way to a sandbox._
 ///
-/// The sign-in gate (_tools/e2e/signin/desktop.ts, `e2e-signin` in ci.yml) plays this file's half of the sign-in
+/// The sign-in gate (_tools/e2e/signin/desktop.ts, `e2e-platform` in ci.yml) plays this file's half of the sign-in
 /// in TypeScript, `start`'s page and this path included, since it runs the web app without Tauri: a change to
 /// either shape changes it there too, or the gate goes on proving a sign-in this app no longer does.
 ///

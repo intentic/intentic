@@ -1,5 +1,5 @@
 # Independent core/platform/desktop verification groups gate only their artifacts; verification runs even when other checks fail.
-# Publishing requires every relevant proof, including preflight; images-dry still builds/boots recipe changes when a gate fails.
+# Publishing requires every relevant proof, including preflight. A red push builds no image: the next green push's `images` (or the release) builds and boots it before any tag moves.
 # Bootstrap ci-base once before the first pipeline: jobs run inside it. ci-desktop's host-side build detects and repairs a missing image.
 # Node/pnpm pins live in package.json/ci-base; docs/ops/ci-runner.md describes the shared fleet and caches.
 name: CI
@@ -139,7 +139,6 @@ jobs:
       ic: ${{ steps.filter.outputs.ic }}
       netd: ${{ steps.filter.outputs.netd }}
       images: ${{ steps.filter.outputs.images }}
-      images-recipe: ${{ steps.filter.outputs.images-recipe }}
       platform: ${{ steps.filter.outputs.platform }}
       local-face: ${{ steps.filter.outputs.local-face }}
       signin: ${{ steps.filter.outputs.signin }}
@@ -730,7 +729,7 @@ jobs:
 
   # The hosted platform — api, web, prisma, api-contract, capability-catalog, e2e — and their closure, which
   # reaches every extension, because web declares their UI bundles as workspace dependencies and compiles them
-  # in. Gates images-platform, and is the only thing that does: this job alone decides whether production rolls.
+  # in. Gates images-platform, which rolls the api and the edge, and the release, which ships the hosted editor.
   #
   # THE ONE JOB THAT RUNS THE WEB'S SUITE (875 files, the largest in the repo). It used to run in five jobs a push:
   # here, verify-site, desktop-check and both verify-clocks legs, at 19 to 25 minutes each on one worker, which was half
@@ -1339,60 +1338,43 @@ jobs:
       # engine is what a new PC without Docker Desktop gets, so a regression there is every new user.
       engine: true
 
-  # Gate platform deployment on the paid-checkout -> webhook -> plan -> entitlement/wake chain, using the real API and migrated Postgres.
-  # Stub Stripe at its client seam; local testcontainer port mapping keeps the suite hermetic without vendor credentials.
-  # Select this filter separately from sandbox/SSH e2e so their boot costs/failures do not gate billing; platform changes root it at changes.
-  e2e-billing:
-    needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
-    runs-on: [self-hosted, intentic]
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-e2e-billing
-      cancel-in-progress: true
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-        # Postgres comes up through the host's daemon; testcontainers resolves the address it answers on.
-        - /var/run/docker.sock:/var/run/docker.sock
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-        with:
-          lockfile-drift: measure
-      - run: pnpm turbo run e2e:hermetic --filter=@intentic/api
-
-  # Exercise web and desktop sign-in as one chain using the shipping web build, API harness and migrated Postgres testcontainer.
-  # Stub only Google's browser/JWKS edges; local Docker/Chromium need no vendor credentials. See _tools/e2e/signin for harness scope.
-  # Run on platform as well as signin changes so images-platform always has this proof before deploying the editor.
-  e2e-signin:
+  # THE PLATFORM'S END-TO-END TIERS, ONE JOB. Three tiers gate the platform deploy (images-platform), and they used to be
+  # three jobs with the same container, checkout, install and Chromium, each starting its own testcontainer Postgres and
+  # two of them building the web: 1.1 + 5.0 + 3.2 minutes of median work behind three runner slots on every platform
+  # push (2026-10-16..11-23, 410 pushes), on a fleet whose six omen workers pause for every release's Windows smoke.
+  # As steps they share one setup and one web build (turbo replays signin's for compat), and each still runs whatever
+  # the one before it said, so a failed tier names itself and hides nothing. The job still finishes inside
+  # verify-platform's 10 to 17 minutes, which images-platform waits on anyway.
+  #
+  # - billing: the paid-checkout -> webhook -> plan -> entitlement/wake chain against the real API and a migrated
+  #   Postgres, Stripe stubbed at its client seam. On `platform` only: it is the api's chain, and the sign-in harness
+  #   changing says nothing about it.
+  # - signin: web and desktop sign-in as one chain on the shipping web build, the API harness and migrated Postgres;
+  #   only Google's browser/JWKS edges are stubbed (_tools/e2e/signin says the scope).
+  # - compat: today's editor against the released stable daemon; same-checkout tests cannot see a new RPC call the
+  #   released daemon refuses. It walks board/files/chat/Sandbox and rejects errors or the too-old page.
+  #
+  # Run on platform as well as signin changes so images-platform always has every proof before deploying the editor.
+  e2e-platform:
     needs: [changes, preflight]
     if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-e2e-signin
+      group: ${{ github.workflow }}-${{ github.ref }}-e2e-platform
       cancel-in-progress: true
-    timeout-minutes: 25
+    # The three jobs' 20 + 25 + 25, less the setup they no longer repeat.
+    timeout-minutes: 45
     container:
       image: ghcr.io/intentic/ci-base:latest
       volumes:
         - /ci-cache:/ci-cache
-        # Postgres comes up through the host's daemon; testcontainers resolves the address it answers on.
+        # Postgres and the released daemon come up through the host's daemon; testcontainers resolves the address each
+        # answers on.
         - /var/run/docker.sock:/var/run/docker.sock
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      PNPM_STORE: /ci-cache/pnpm-store
-      TURBO_CACHE_DIR: /ci-cache/turbo
       # Not $HOME, which a job container maps to a throwaway /github/home.
       PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
     steps:
@@ -1400,10 +1382,23 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      - uses: ./.github/actions/pnpm-setup
+      - id: setup
+        uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - name: Install Chromium and its system dependencies
+      - id: billing
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && needs.changes.outputs.platform == 'true' }}
+        run: pnpm turbo run e2e:hermetic --filter=@intentic/api
+      # The released image is public; the login is for the pull's rate limit, client-side, since the host daemon behind
+      # the mounted socket holds no registry credential (nightly.yml's e2e job says the same). Whatever billing said.
+      - uses: ./.github/actions/ghcr-login
+        if: ${{ !cancelled() }}
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: chromium
+        name: Install Chromium and its system dependencies
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         shell: bash
         run: |
           # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
@@ -1416,76 +1411,26 @@ jobs:
             sleep "$((attempt * 15))"
           done
       # Builds the web first (turbo.json `e2e:signin` depends on `@intentic/web#build`), so the tier serves this commit.
-      - run: pnpm e2e:signin
+      - id: signin
+        if: ${{ !cancelled() && steps.chromium.outcome == 'success' }}
+        run: pnpm e2e:signin
+      # The same web build, replayed from the step above by turbo (`e2e:compat` depends on it too).
+      - id: compat
+        if: ${{ !cancelled() && steps.chromium.outcome == 'success' }}
+        run: pnpm e2e:compat
+        env:
+          # Include container IDs and cleanup-helper selection when setup fails before Playwright records a trace.
+          DEBUG: testcontainers
       - uses: ./.github/actions/upload-artifact-retry
-        if: failure()
+        if: ${{ !cancelled() && steps.signin.outcome == 'failure' }}
         with:
           name: signin-results
           path: |
             _tools/e2e/.cache/signin-results/
             _tools/e2e/.cache/signin/api.log
           retention-days: 7
-
-  # Gate platform deploys on today's editor against the released stable daemon; same-checkout tests cannot detect unsupported new RPC calls.
-  # Reuse the sign-in harness plus the released-image testcontainer; walk board/files/chat/Sandbox and reject errors or the too-old page.
-  # Run on sign-in/platform triggers so every images-platform deployment has this backward-compatibility proof.
-  e2e-compat:
-    needs: [changes, preflight]
-    if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
-    runs-on: [self-hosted, intentic]
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-e2e-compat
-      cancel-in-progress: true
-    timeout-minutes: 25
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-        # Postgres and the released daemon come up through the host's daemon; testcontainers resolves the address each
-        # answers on.
-        - /var/run/docker.sock:/var/run/docker.sock
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      PNPM_STORE: /ci-cache/pnpm-store
-      TURBO_CACHE_DIR: /ci-cache/turbo
-      # Not $HOME, which a job container maps to a throwaway /github/home.
-      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-        with:
-          lockfile-drift: measure
-      # The image is public; the login is for the pull's rate limit, client-side, since the host daemon behind the
-      # mounted socket holds no registry credential (nightly.yml's e2e job says the same).
-      - uses: ./.github/actions/ghcr-login
-        with:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Chromium and its system dependencies
-        shell: bash
-        run: |
-          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
-          # with an empty package index does not become a permanent "Unable to locate package" failure.
-          for attempt in 1 2 3; do
-            if pnpm --filter @intentic/e2e exec playwright install --with-deps chromium; then
-              exit 0
-            fi
-            [ "$attempt" -lt 3 ] || exit 1
-            sleep "$((attempt * 15))"
-          done
-      # Builds the web first (turbo.json `e2e:compat` depends on `@intentic/web#build`), so the tier serves this commit.
-      - run: pnpm e2e:compat
-        env:
-          # Include container IDs and cleanup-helper selection when setup fails before Playwright records a trace.
-          DEBUG: testcontainers
       - uses: ./.github/actions/upload-artifact-retry
-        if: failure()
+        if: ${{ !cancelled() && steps.compat.outcome == 'failure' }}
         with:
           name: compat-results
           path: |
@@ -1561,64 +1506,6 @@ jobs:
       # sandbox halves are in, so the two images move together or neither does.
       - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
         shell: bash
-
-  # When a main push's image recipe changes and a gate fails, build/boot both amd64 profiles locally to expose image defects in the same run.
-  # packages:read enforces a dry run; PUSH=0 loads images and SMOKE_PULL=0 probes those local bytes. Remove them afterwards.
-  # Skip source-only changes and cancelled/superseded gates; published images still smoke-test source changes before tags move.
-  # Leave dind-host and hosted arm64 builds to images; this job owns only the sandbox boot proof.
-  images-dry:
-    needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
-    if: |
-      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
-      && needs.changes.outputs.images-recipe == 'true'
-      && (needs.release.outputs.version == '' || needs.release.result != 'success')
-      && !(needs.preflight.result == 'success'
-        && needs.verify-core.result == 'success'
-        && needs.verify-machine.result == 'success'
-        && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped'))
-      && needs.verify-core.result != 'cancelled'
-      && needs.verify-machine.result != 'cancelled'
-      && needs.netd-check.result != 'cancelled'
-    runs-on: [self-hosted, intentic]
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-        - /var/run/docker.sock:/var/run/docker.sock
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      packages: read
-    env:
-      REGISTRIES: ghcr.io/intentic
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      # `fail` on a stale lockfile, as `images` does: the image is built from the lockfile, so one that no longer
-      # matches the manifests cannot be built faithfully, and preflight already says so.
-      - uses: ./.github/actions/pnpm-setup
-      # Read-only, for the --cache-from reads that keep this build warm.
-      - uses: ./.github/actions/ghcr-login
-        with:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - run: bash _tools/scripts/image/prepare-image-trees.sh
-      - run: PUSH=0 TAGS="dry-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
-        shell: bash
-      # SMOKE_RMI=1 drops each image from the store once it has been judged: on the fleet a dry image is nobody's warm
-      # parent (the registry's `latest` is), and two ~5 GB images per failing push are how a runner's disk fills.
-      - run: SMOKE_PULL=0 SMOKE_RMI=1 bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:dry-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-dry-${GITHUB_SHA::8}-amd64"
-        shell: bash
-      # Whatever happened above, including a build that loaded one profile and failed the other, or a cancel.
-      - name: Remove the dry images
-        if: always()
-        shell: bash
-        run: docker image rm "ghcr.io/intentic/sandbox:dry-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-dry-${GITHUB_SHA::8}-amd64" >/dev/null 2>&1 || true
 
   # The sandbox image's arm64 half, natively built — GitHub's hosted arm runners rather than the x86 fleet,
   # because the trees payload must be prepared on the arch it ships for (pnpm deploy fetches the HOST arch's
@@ -1756,19 +1643,17 @@ jobs:
           TURBO_HASH: ''
 
   # Publish platform images from job-side builds, then roll Komodo/Fly; TURBO_HASH aliases unchanged content without rebuilding.
-  # Require billing/sign-in end-to-end proofs, released-sandbox editor compatibility, append-only/replayable migrations and preflight.
+  # Require the billing/sign-in/compat end-to-end proofs (e2e-platform), append-only/replayable migrations and preflight.
   # All proof triggers must cover this deploy trigger, or a missing/skipped gate could withhold or accidentally permit production changes.
   images-platform:
-    needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, e2e-compat, netd-check]
+    needs: [changes, preflight, migrations, verify-platform, e2e-platform, netd-check]
     if: |
       !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
       && needs.preflight.result == 'success'
       && needs.migrations.result == 'success'
       && needs.verify-platform.result == 'success'
-      && needs.e2e-billing.result == 'success'
-      && needs.e2e-signin.result == 'success'
-      && needs.e2e-compat.result == 'success'
+      && needs.e2e-platform.result == 'success'
       && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')
     runs-on: [self-hosted, intentic]
     container:
@@ -1867,6 +1752,11 @@ jobs:
         env:
           WEB_ORIGIN: https://app.intentic.dev
 
+  # AT MOST ONE RELEASE PER RELEASE INTERVAL (RELEASE_MIN_INTERVAL_MINUTES, 180 unless the repository variable says
+  # otherwise): release.yml's plan holds a release whose predecessor is younger, the run publishes `latest` through
+  # `images` instead, and release-flush.yml dispatches CI for a held head once the interval is over. Every green push
+  # used to release: 179 attempts over 2026-10-16..11-23, 30% of the pipeline's job-minutes.
+  #
   # The whole release lifecycle is one reusable-workflow call because the exact NSIS candidate has to cross an
   # OS boundary before semantic-release may publish. The call holds the `release` concurrency lock throughout:
   # plan version → cross-build once → execute on Windows → stage those same bytes → publish. A lock on only the
@@ -1879,12 +1769,17 @@ jobs:
   # the daemon's end of its socket moved, so it is held to success-or-skipped, as images-platform holds it: a skip is
   # "nothing of netd's moved", while a cancel is "a newer push superseded this one", which proves nothing.
   # Preflight is required by name, for the reason `images` spells out: the verify groups no longer carry its verdict.
+  # verify-platform is required too, because the release SHIPS THE HOSTED EDITOR: images-amd64 builds @intentic/web at
+  # the version and publish rolls app.intentic.dev onto it (ship-web.sh), and the web's own typecheck and suite run in
+  # verify-platform alone (verify-core subtracts web). Before this, 21 of main's pushes 2026-10-16..11-23 had
+  # verify-platform as their only failing gate, and every one of those could cut a release carrying that editor.
   release:
-    needs: [preflight, verify-core, verify-providers, verify-machine, netd-check, ci-base, ci-desktop]
+    needs: [preflight, verify-core, verify-platform, verify-providers, verify-machine, netd-check, ci-base, ci-desktop]
     if: |
       !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.before != '') && github.ref == 'refs/heads/main'
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
+      && needs.verify-platform.result == 'success'
       && needs.verify-providers.result == 'success'
       && needs.verify-machine.result == 'success'
       && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')

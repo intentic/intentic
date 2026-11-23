@@ -79,10 +79,23 @@ jobs:
           fetch-depth: 0
           clean: false
       - uses: ./.github/actions/pnpm-setup
+      # AT MOST ONE RELEASE PER INTERVAL. A push whose last release is younger than RELEASE_MIN_INTERVAL_MINUTES plans
+      # nothing (release-hold.mjs says why): it still verified, `images` publishes its `latest`, and its commits ride the
+      # next release, which release-flush.yml dispatches once the interval is over if no push has. The variable is a
+      # repository variable; 180 when unset, 0 releases every green push as before.
       - id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MIN_INTERVAL_MINUTES: ${{ vars.RELEASE_MIN_INTERVAL_MINUTES || '180' }}
         run: node _tools/scripts/release/release-plan.mjs >> "$GITHUB_OUTPUT"
+      # The annotation release-flush.mjs looks for on this job, title and text both: it reads the hold's end out of it.
+      - name: Say what was held back
+        if: ${{ steps.release.outputs.held != '' }}
+        env:
+          HELD: ${{ steps.release.outputs.held }}
+        run: |
+          echo "::notice title=Release held::$HELD"
+          echo "Release held: $HELD" >> "$GITHUB_STEP_SUMMARY"
 
       # THE RELEASE THAT CANNOT PUBLISH IS THE ONE THAT MUST NOT BE CUT. npm refuses a name it has never seen
       # from a trusted publisher (check-publishable.mjs says why), and publish-npm.sh reads that at publish
@@ -501,6 +514,8 @@ jobs:
       artifact-name: windows-release-candidate
       installer: Intentic-${{ needs.plan.outputs.version }}-x64-setup.exe
       expected-version: ${{ needs.plan.outputs.version }}
+      # At most 10 minutes waiting for the fleet's busy workers (windows-smoke.yml's drain-minutes says why).
+      drain-minutes: 10
 
   # semantic-release recomputes the plan as a safety check. release-prepare.sh refuses if it differs, then
   # ASSEMBLES rather than builds: every artifact arrives from the parallel jobs above, already verified —

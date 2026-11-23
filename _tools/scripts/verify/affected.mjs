@@ -146,21 +146,6 @@ for (const trigger of Object.keys(LOOSE)) {
         }${viaPath.length > 0 ? ` · paths: ${viaPath.slice(0, 4).join(", ")}${viaPath.length > 4 ? ` +${viaPath.length - 4}` : ""}` : ""}`,
     );
 }
-// `images-recipe`, for ci.yml's images-dry alone: the push changed what the image is BUILT FROM rather than only the source
-// in it. The image's own recipe (the `images` paths: Dockerfile, packs, the image scripts, netd, the workflows), or a
-// manifest or lockfile that reaches the payload, since that is what `pnpm deploy --prod` prunes by. A failing push
-// that changed only source no longer builds a dry image: the next push whose gates pass builds and boots the real one
-// in `images` before any tag moves, so what such a push could break about the image is found one round later instead.
-const MANIFEST = /(^|\/)package\.json$|^pnpm-(lock|workspace)\.yaml$/;
-const manifestReach = affectedBy(graph, changed.filter((path) => MANIFEST.test(path)));
-const recipeViaManifest = [...imagePayload].filter((name) => manifestReach.affected.has(name));
-const recipeViaPath = changed.filter((path) => LOOSE.images.test(path));
-answers["images-recipe"] = recipeViaManifest.length > 0 || recipeViaPath.length > 0;
-note(
-    `images-recipe=${answers["images-recipe"]}${recipeViaManifest.length > 0 ? ` · manifests reach: ${recipeViaManifest.slice(0, 6).join(", ")}` : ""}${
-        recipeViaPath.length > 0 ? ` · paths: ${recipeViaPath.slice(0, 4).join(", ")}` : ""
-    }`,
-);
 for (const [trigger, value] of Object.entries(answers)) {
     process.stdout.write(`${trigger}=${value}\n`);
 }

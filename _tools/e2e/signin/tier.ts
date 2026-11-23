@@ -17,7 +17,7 @@ export const API_PACKAGE = join(REPO, `_platform/api`);
 // The api as this tier boots it; run by bun from the api's own directory, so its workspace imports resolve as its own.
 export const API_HARNESS = join(API_PACKAGE, `src`, `e2e`, `browser-api.ts`);
 
-// The pin the platform's compose file, its migrations job and `e2e-billing` all run, so the schema here is production's.
+// The pin the platform's compose file, its migrations job and `e2e-platform`'s billing step all run, so the schema here is production's.
 export const POSTGRES_IMAGE = `postgres:18.6-alpine3.24`;
 
 // Set by the global setup; read by the specs through `stackUrls`.

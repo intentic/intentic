@@ -21,8 +21,10 @@ flowchart LR
 - CI-produced Turbo entries may use the standard remote named by repository `TURBO_API`/`TURBO_TEAM` variables and the `TURBO_TOKEN` secret. With any of them unset, only `/ci-cache/turbo` is used. Every Turbo invocation gives up on a remote request after 10 seconds (`TURBO_REMOTE_CACHE_TIMEOUT`) and on an artifact upload after 30 (`TURBO_REMOTE_CACHE_UPLOAD_TIMEOUT`, which turbo times separately), so a slow or unreachable remote falls back to execution. The verify graph also runs at most four cache operations at once (`--cache-workers=4`; turbo reads no environment variable for it), where every other invocation keeps turbo's ten. CI must never read directly from the sandbox-facing Turbo service, whose read set includes quarantined writes: sandbox results enter only through `import.mjs`, which validates them against CI's own hashes and accepts logs alone.
 - A newer push supersedes the older one's measurement. Every job that only measures carries a per-job concurrency group with `cancel-in-progress`, so its copy for the older push stops when the newer push's starts; the jobs that publish or deploy carry none. A superseded push publishes nothing, because every publishing job requires its gates to have succeeded, and the push on top publishes instead.
 - The host's Docker Desktop also runs the owner's sandboxes, so nothing here prunes a tagged image or a volume.
-- Off the fleet: CodeQL, Scorecard, npm publish (provenance needs a GitHub-hosted builder), the arm64 sandbox image, the mobile builds and the engines bump.
-- A failing commit still costs a whole pipeline. Every verification job in `ci.yml` runs whatever preflight concluded, so one run reports everything wrong with a commit, and only the jobs that push or deploy wait on proofs. When a gate in front of `images` fails, `images-dry` builds the amd64 sandbox image into the host's docker store and boots it, holding a read-only token. It runs only when the push changed the image's recipe (its Dockerfile, packs or scripts, or a manifest or lockfile that reaches the payload: affected.mjs `images-recipe`), so that is one more image build per failing main push of that kind.
+- Off the fleet: CodeQL, Scorecard, npm publish (provenance needs a GitHub-hosted builder), the arm64 sandbox image, the mobile builds, the engines bump and the hourly release flush.
+- A failing commit still costs a whole pipeline. Every verification job in `ci.yml` runs whatever preflight concluded, so one run reports everything wrong with a commit, and only the jobs that push or deploy wait on proofs. A failing commit builds no image: the next push whose gates pass builds and boots it in `images` (or the release does) before any tag moves. `images-dry`, which built and booted one for a failing push, was removed in November 2026: it ran only on pushes that were already red, and over 79 runs its failures were those gates' own errors again or buildkit running out of memory.
+
+- A green push to main releases at most once per `RELEASE_MIN_INTERVAL_MINUTES` (a repository variable; 180 when unset, `0` releases every green push). Inside the interval `release.yml`'s plan job holds the release with a `Release held` notice, the run publishes `latest` through `images`, and the commits ride the next release. [`release-flush.yml`](../../.github/workflows/release-flush.yml) checks hourly on a GitHub-hosted runner and dispatches CI at main once a held head's interval is over and no push has come since ([`release-flush.mjs`](../../_tools/scripts/release/release-flush.mjs)). Before the interval every green push released: 179 attempts from 2026-10-16 to 11-23, 30% of the pipeline's job-minutes, each also pausing omen's six workers for the Windows smoke.
 
 Dispatch `CI` on a repair branch with `desktop_smoke` or `windows_smoke` to verify installers on their runners.
 `platform_image_smoke` builds and pushes the web image as `ci-<run-id>-<attempt>`, without updating `latest`,
@@ -44,7 +46,7 @@ the job before the suites run.
 
 The repository is public and the runners hold release credentials, a shared cache and the host docker socket, so a fork's code must never reach them.
 
-- In `ci.yml`, the two DAG roots (`changes`, `preflight`) and `e2e-hermetic` skip a pull request whose head repository is not this one; every other job hangs off a root or runs only on main. [`workflow-policy.mjs`](../../_tools/checks/workflow-policy.mjs) fails any job a fork could reach.
+- In `ci.yml`, the two DAG roots (`changes`, `preflight`) skip a pull request whose head repository is not this one; every other job hangs off a root or runs only on main. [`workflow-policy.mjs`](../../_tools/checks/workflow-policy.mjs) fails any job a fork could reach.
 - The repository setting that requires approval for all outside contributors covers a fork that edits the workflow file itself.
 - To run CI on an outside contribution, read the diff, push the branch here and open the pull request from it.
 
@@ -74,7 +76,6 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 | `/ci-cache/pnpm-store`, `/ci-cache/cargo` | the janitor, above 20 GB |
 | any other `/ci-cache` entry (`xwin`, `ms-playwright`, ...) | the janitor, above 15 GB |
 | buildx builder `intentic-cache` | age sweep in `publish-images.sh`; the janitor keeps 25 GB |
-| `sandbox:dry-*` images `images-dry` loads | the job itself: `SMOKE_RMI=1` after each boot, and a final `docker image rm` that runs whatever happened |
 | dangling images | `docker image prune` in `nightly.yml` |
 | a drill's throwaway Docker host (`lib/dind-host.sh`) and its anonymous `/var/lib/docker` volume, 8 GB each | the drill's own trap, `docker rm -fv`; the hourly guard removes any anonymous volume left unused |
 | host disk | the fleet task prunes build cache under `-LowDiskGb` |

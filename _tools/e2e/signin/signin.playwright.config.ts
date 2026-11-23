@@ -3,7 +3,7 @@ import { RESULTS_DIR } from "./tier.js";
 
 // THE SIGN-IN GATE: a person with no session signs in, on the web and through the desktop app, against the real web
 // build, the real api and real Postgres, with only Google stood in for (google.ts says where and why). CI runs it as
-// `e2e-signin`, and the platform deploy (`images-platform`) waits on it: a build nobody can sign in to never ships.
+// `e2e-platform`, and the platform deploy (`images-platform`) waits on it: a build nobody can sign in to never ships.
 export default defineConfig({
     testDir: `.`,
     testMatch: `*.spec.ts`,

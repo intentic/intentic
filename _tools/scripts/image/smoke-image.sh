@@ -35,7 +35,7 @@ TIMEOUT="${SMOKE_TIMEOUT:-240}"
 RMI="${SMOKE_RMI:-0}"
 
 # SMOKE_PULL=0 boots what this machine's docker store already holds and fetches nothing: the image was built here
-# with `--load` and was never pushed (publish-images.sh's PUSH=0, ci.yml's `images-dry`), so the registry has no such
+# with `--load` and was never pushed (publish-images.sh's PUSH=0), so the registry has no such
 # tag to give. A ref the store does not hold is then a failed build, said as one, rather than a pull error.
 PULL="${SMOKE_PULL:-1}"
 

@@ -61,6 +61,15 @@ on:
         required: false
         default: 45
         type: number
+      drain-minutes:
+        description: >-
+          How long the pause below waits for the fleet's busy workers before the tiers start. A worker still busy then
+          stops the moment its job ends (wsl-workers.sh), so the tiers run beside at most the jobs already running.
+          The release passes 10: a full drain took a median 6 and a p90 25 minutes on its critical path (2026-10-16..
+          11-23). The default waits the whole 40, which the deep tiers' engine and Docker work want.
+        required: false
+        default: 40
+        type: number
 
 permissions:
   contents: read
@@ -123,10 +132,11 @@ jobs:
           }
           # Past this job's own timeout, so the timer never gives the workers back while the tiers still run.
           $failsafe = [int]$env:JOB_TIMEOUT_MINUTES + 15
-          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe
+          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe $env:DRAIN_MINUTES
         env:
           FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
           JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+          DRAIN_MINUTES: ${{ inputs.drain-minutes }}
 
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ (inputs.deep && !inputs.engine-only) || inputs.engine-move }}
