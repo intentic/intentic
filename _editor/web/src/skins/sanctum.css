@@ -219,12 +219,6 @@
         background-image: var(--sanctum-tooth);
     }
 
-    /* The line under the window's top bar, which runs on from column to column (`.view-header`, the kit's utilities.css), in
-       the stone's own rule. */
-    [data-skin="sanctum"] .view-header {
-        --view-header-rule: var(--sanctum-rule-strong);
-    }
-
     /* OVERLAYS Opaque, deliberately and without exception. */
     [data-skin="sanctum"] .p-popover,
     [data-skin="sanctum"] .p-menu,

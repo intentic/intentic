@@ -303,8 +303,8 @@ onBeforeUnmount(() => {
 
 <template>
     <!-- One line across the column top, with the list on a sheet below it: the chat's segment of the window's top bar
-         (`.view-header`), on the same ground and over the same line as the board's or the Workspace's beside it, so the
-         columns' tops read as one bar. What scrolls up still softens just under it (`.chat-pane::before`, chat.css). -->
+         (`.view-header`), blended, so the title sits on the chat's own surface and only the soft line the board's and the
+         Workspace's segments share runs under it. What scrolls up still softens just under it (`.chat-pane::before`). -->
     <!-- THE TITLE AND NOTHING ELSE, CENTRED, with the presses in the corner. Three columns: two equal sides keep the title on
          the bar's middle (a long one takes what the sides leave, and truncates), the left one bare background that drags
          the window on desktop (windowGesture.ts) and opens the bar's own menu on right-click. What other chats are doing
@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
          truncates between two equal sides instead of the empty one giving way and pushing it off centre. -->
     <header
         ref="bar"
-        class="chat-bar view-header relative grid grid-cols-[minmax(var(--chat-bar-side),1fr)_minmax(0,auto)_minmax(var(--chat-bar-side),1fr)] items-center gap-2 px-1.5"
+        class="chat-bar view-header view-header-blend relative grid grid-cols-[minmax(var(--chat-bar-side),1fr)_minmax(0,auto)_minmax(var(--chat-bar-side),1fr)] items-center gap-2 px-1.5"
         :style="{ '--chat-bar-side': cornerWidth }"
         @contextmenu="onBarContextMenu"
     >

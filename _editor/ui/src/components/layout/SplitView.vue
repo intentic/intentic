@@ -121,7 +121,7 @@ const hasDetailHead = computed(() => (description !== undefined && description !
             <div class="flex min-w-0 flex-1 flex-col" :class="scroll === `panes` ? `min-h-0` : ``">
                 <!-- The body's segment of the top bar, empty: the line runs on from the index to the window's edge, and the body's
                      own head (its sentence and actions) stays over what it acts on. Pinned while the page scrolls under it. -->
-                <div class="view-header" :class="scroll === `page` ? `sticky top-0 z-10` : ``"></div>
+                <div class="view-header view-header-blend" :class="scroll === `page` ? `sticky top-0 z-10 bg-canvas` : ``"></div>
                 <div class="flex min-w-0 flex-1 flex-col p-(--ui-page-padding)" :class="scroll === `panes` ? `min-h-0` : ``">
                     <!-- 60rem, the body's width when it sat beside the rail in the 80rem page, so no screen's rows reflow; centred in
                          what the index leaves, so a wide pane keeps the body in its middle rather than against the index. -->

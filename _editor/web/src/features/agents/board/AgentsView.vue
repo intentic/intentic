@@ -320,13 +320,14 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
-        <!-- The board's segment of the window's top bar (`.view-header`): one row, never two, so its line meets the chat's.
+        <!-- The board's segment of the window's top bar (`.view-header`), blended: the wallpaper runs up under it (wallpapers.css
+             paints `.agents-board`), and it is one row, never two, so its line meets the chat's.
              Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
              either side of it (the owner filters on the left, the geek metrics and New agent on the right). Narrow, the
              groups keep their controls' width and the search takes what is left. A phone has no such bar: there the search
              takes a row of its own, at a finger's height. -->
         <div
-            class="view-header items-center gap-2 px-3"
+            class="view-header view-header-blend items-center gap-2 px-3"
             :class="mobile ? 'view-header-wrap flex flex-wrap gap-y-1 py-1' : narrow ? 'flex' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
         >
             <div class="col-start-1 flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : narrow ? `shrink-0` : ``">
