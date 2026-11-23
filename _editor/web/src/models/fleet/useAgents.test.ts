@@ -880,6 +880,40 @@ describe("diff invalidation", () => {
     });
 });
 
+// The composer and an open agent's card answer the same question: what the next turn runs on. The roster's model is the
+// last turn's, so it cannot outrank a pick made since that turn settled (the reported Codex limit → Opus switch).
+describe("registered cards and the composer's model", () => {
+    beforeEach(() => {
+        resetSandboxScope();
+    });
+
+    it("follows a model picked after the last turn, including across providers", () => {
+        const conversation = new Conversation(`spent`);
+        conversation.registered.value = true;
+        conversation.session.value = { id: `session-spent`, provider: `codex`, harness: `native` };
+        conversation.selection.apply({ kind: `set`, picks: { provider: `codex`, model: `gpt-6-luna` } });
+        useChat().conversations.value = [conversation];
+        setAgents([
+            {
+                id: `spent`,
+                status: `error`,
+                provider: `codex`,
+                harness: `native`,
+                model: `gpt-6-luna`,
+                updatedAt: 1_000,
+                seenAt: 2_000,
+                attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+            },
+        ], 1);
+
+        expect(useAgents().agentById(`spent`)).toMatchObject({ provider: `codex`, model: `gpt-6-luna` });
+
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5-5` } });
+
+        expect(useAgents().agentById(`spent`)).toMatchObject({ provider: `claude`, model: `claude-opus-5-5` });
+    });
+});
+
 // A draft is the fleet's one client-only card, latched as a one-way rule (never registered) rather than derived
 // from "absent on the live roster", which also matched archived agents and every agent while the stream was down.
 describe("draft cards", () => {

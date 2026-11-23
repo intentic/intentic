@@ -282,6 +282,11 @@ export const fleet = computed<FleetAgent[]>(() => {
                 return [];
             }
             const tab = unsent.get(agent.id);
+            // An open conversation's selection is where its NEXT turn goes; the roster's provider/model describe the
+            // last one. Overlay the pick so the card and composer cannot disagree after a model switch, including one
+            // made to escape a spent allowance. Account deliberately stays the roster's: that chip says who served
+            // the last turn, not a routing prediction.
+            const open = live.get(agent.id);
             const card: FleetAgent = {
                 ...agent,
                 open: openIds.has(agent.id),
@@ -289,12 +294,21 @@ export const fleet = computed<FleetAgent[]>(() => {
                 unsent: tab !== undefined,
                 draftAt: tab?.at,
             };
+            const picked: FleetAgent =
+                open === undefined
+                    ? card
+                    : {
+                          ...card,
+                          provider: open.serves.agent,
+                          harness: open.serves.harness,
+                          model: open.serves.model,
+                          effort: open.serves.effort,
+                      };
             // `running`, not the client-only `starting`: this agent IS registered, and `starting` would seed its next
             // tab as unregistered. The turn's own start rides with it, or the card's elapsed clock would count from
             // the previous turn.
-            const open = live.get(agent.id);
             const startedAt = sendingNow(agent, open);
-            const shown = overlaid(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
+            const shown = overlaid(startedAt === undefined ? picked : asStarted(picked, startedAt), agent, undefined);
             return shown === undefined ? [] : [endedHere(withdrawnHere(shown, open), open)];
         }),
         ...drafts,

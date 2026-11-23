@@ -383,8 +383,8 @@ const openWarm = (event: MouseEvent): void => {
     warmAnchor.value = event.currentTarget as HTMLElement;
     warmOpen.value = true;
 };
-// Says which provider runs it exactly once: the tile wears no provider's mark, so a card with no recorded model names
-// at least the provider.
+// Which provider/model the next turn is picked to run on: an open conversation's selection reaches this card through
+// the fleet projection, so this agrees with the composer even before that turn starts. The tile wears no provider mark.
 const model = computed(() => {
     if (maker.value) {
         return undefined;

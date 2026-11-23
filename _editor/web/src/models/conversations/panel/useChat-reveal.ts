@@ -195,7 +195,8 @@ export interface AgentTabSeed {
     // posture.
     branch?: string;
     account?: string;
-    // What the agent's turns actually ran with; absent only for an agent that has never run one.
+    // The model picked for the next turn where a live selection reached the card, else what its last turn ran with;
+    // absent only for an agent that has never run one.
     model?: string;
     effort?: string;
     thinking?: boolean;

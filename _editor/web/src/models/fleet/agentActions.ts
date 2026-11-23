@@ -352,8 +352,8 @@ const rejudged = async (id: string): Promise<ResolveAsk> => {
     }
 };
 
-// What the agent's own turns ran on, as the registry recorded them: the model AND the account that paid for it. Absent
-// for an agent that has never run one, which leaves the tab's picks alone — there is nothing better to put there.
+// What the agent's next turn is picked to run on: an open chat's current selection, else the registry's last run. The
+// account that paid for that run rides with it. Absent for an agent that has never run one, leaving the tab's picks alone.
 const wearAgentRun = (conversation: Conversation, agent: FleetAgent | undefined): void => {
     if (agent === undefined) {
         return;
