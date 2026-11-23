@@ -864,12 +864,15 @@
         box-shadow: inset 0 -1px 0 var(--view-header-rule);
     }
 
-    /* A SEGMENT THAT BLENDS WITH ITS COLUMN: no ground of its own, so the column's (the board's wallpaper, the chat's own
-       surface, a settings page's canvas) runs up under it, and only the soft line and the height tie it to the segments
-       beside it. For a top that is its column's own head (the board's filter, the chat's title, an empty segment), not
-       chrome laid over something else (a row of tabs, a toolbar over a web page), which keeps the ground. */
+    /* A SEGMENT THAT BLENDS WITH ITS COLUMN: no ground and no line, so the column's own surface (the board's wallpaper, the
+       chat's surface, a settings page's canvas, an extension's view) runs up under it, and only the height ties it to the
+       segments beside it: their controls share one centre line, and that is enough to read as one bar. For a top that is
+       its column's own head (the board's filter, the chat's title, a view's title, an empty segment), not chrome laid
+       over something else (a row of tabs, a toolbar over a web page), which keeps its ground and line. (2026-11-23: the
+       soft line stayed on a blended segment for one round, and the owner found it unnecessary.) */
     .view-header-blend {
         --view-header-fill: transparent;
+        --view-header-rule: transparent;
     }
 
     /* A segment whose controls may take a second line where its column is too narrow for one (a device's screen). */

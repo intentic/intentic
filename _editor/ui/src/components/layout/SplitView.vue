@@ -3,8 +3,8 @@
 import { computed, ref, useSlots } from "vue";
 import Page from "./Page.vue";
 import PageHeader from "./PageHeader.vue";
-import { usePageBack } from "./pageBack.js";
-import { ui } from "../../lib/ui.js";
+import ViewBar from "./ViewBar.vue";
+import { useDevice } from "../../composables/useDevice.js";
 import { useNarrow } from "../../composables/useNarrow.js";
 import { useScrollReset } from "../../composables/useScrollReset.js";
 import { useScrollportHeight } from "../../composables/useScrollportHeight.js";
@@ -36,8 +36,8 @@ const {
 }>();
 
 const slots = useSlots();
-// The docked head draws its own way back: PageHeader's is sized for a page's title, this one for a column's.
-const back = usePageBack();
+// A phone has no window top bar to share: its pages keep PageHeader's large title, a padding below the top.
+const { mobile: phone } = useDevice();
 
 // One width for all screens, not a per-caller scale: 17rem fits a package path in the index's 13px mono (the
 // documentation's `_sandbox/privacy-detect`) beside its mark; anything longer truncates.
@@ -78,7 +78,9 @@ provideCompact(narrow);
 const scrollport = useScrollportHeight(root);
 const viewport = computed(() => (docked.value && scroll === `page` && scrollport.value !== undefined ? `${scrollport.value}px` : undefined));
 
-const hasDetailHead = computed(() => (description !== undefined && description !== ``) || slots[`actions`] !== undefined);
+const hasDescription = computed(() => description !== undefined && description !== ``);
+// Pinned while the page scrolls under it, on the canvas it covers; with panes that scroll, nothing passes under it.
+const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas` : ``));
 </script>
 
 <template>
@@ -96,32 +98,24 @@ const hasDetailHead = computed(() => (description !== undefined && description !
                     :class="scroll === `page` ? `sticky top-0 max-h-dvh` : `flex-1`"
                     :style="viewport === undefined ? undefined : { maxHeight: viewport }"
                 >
-                    <!-- WHAT THIS INDEX IS ("Sandbox settings", "Capabilities"), as the index's segment of the window's top bar
-                         (`.view-header`, utilities.css), at a column heading's size: the body beside it carries its own headings.
-                         Never whose it is: the shell's rail already wears the sandbox's face and the overview its name, and a
-                         third copy of either here was noise (2026-11-09). -->
-                    <header class="view-header flex items-center gap-2 pl-5 pr-2">
-                        <button
-                            v-if="back"
-                            type="button"
-                            :class="ui.iconButton({ size: `md` }, `-ml-2 -mr-1 shrink-0`)"
-                            :aria-label="back.label"
-                            @click="back.go()"
-                        >
-                            <Icon name="arrow-left" />
-                        </button>
-                        <h1 class="min-w-0 flex-1 truncate text-sm font-semibold">{{ title }}</h1>
-                        <slot name="info" />
-                    </header>
+                    <!-- The index's segment of the window's top bar, empty and blended (`.view-header-blend`, utilities.css): the
+                         index's own ground runs up under it, with no line. What the screen is ("Settings", "Capabilities") is
+                         said over the body, where every view's name stands (ViewBar.vue); it headed this index until
+                         2026-11-23. Never whose it is: the shell's rail already wears the sandbox's face and the overview its
+                         name, and a third copy of either was noise (2026-11-09). -->
+                    <div class="view-header view-header-blend" aria-hidden="true"></div>
                     <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pb-(--ui-page-padding) pl-4 pr-2 pt-3">
                         <slot name="rail" />
                     </div>
                 </div>
             </div>
             <div class="flex min-w-0 flex-1 flex-col" :class="scroll === `panes` ? `min-h-0` : ``">
-                <!-- The body's segment of the top bar, empty: the line runs on from the index to the window's edge, and the body's
-                     own head (its sentence and actions) stays over what it acts on. Pinned while the page scrolls under it. -->
-                <div class="view-header view-header-blend" :class="scroll === `page` ? `sticky top-0 z-10 bg-canvas` : ``"></div>
+                <!-- The body's segment of the top bar: the screen's name over the body's column, its controls at that column's
+                     right edge. -->
+                <ViewBar :title="title" :align="width === `full` ? `` : `max-w-240`" class="px-(--ui-page-padding)" :class="barPin">
+                    <template v-if="$slots[`info`]" #info><slot name="info" /></template>
+                    <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
+                </ViewBar>
                 <div class="flex min-w-0 flex-1 flex-col p-(--ui-page-padding)" :class="scroll === `panes` ? `min-h-0` : ``">
                     <!-- 60rem, the body's width when it sat beside the rail in the 80rem page, so no screen's rows reflow; centred in
                          what the index leaves, so a wide pane keeps the body in its middle rather than against the index. -->
@@ -129,17 +123,8 @@ const hasDetailHead = computed(() => (description !== undefined && description !
                         class="mx-auto flex w-full min-w-0 flex-col"
                         :class="[width === `full` ? `` : `max-w-240`, scroll === `panes` ? `min-h-0 flex-1` : ``]"
                     >
-                        <!-- What the title row carried besides the title: a sentence about what is shown, and its actions, over
-                             the body they act on. -->
-                        <header
-                            v-if="hasDetailHead"
-                            class="ui-page-header mb-4 flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2"
-                        >
-                            <p v-if="description" class="min-w-0 flex-auto text-sm text-muted">{{ description }}</p>
-                            <div v-if="$slots[`actions`]" class="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                                <slot name="actions" />
-                            </div>
-                        </header>
+                        <!-- A sentence about what is shown, the first line of the body it is about. -->
+                        <p v-if="hasDescription" class="mb-4 shrink-0 text-sm text-muted">{{ description }}</p>
                         <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
                         <slot name="detail" :compact="false" />
                     </div>
@@ -147,13 +132,26 @@ const hasDetailHead = computed(() => (description !== undefined && description !
             </div>
         </div>
 
-        <!-- The head does not scroll: the title and anything pinned under it stay put while you read. With panes that
-             scroll, the page is the full height its container gives it, and nothing past it: no column of its own to fill. -->
-        <Page v-else :width="width" class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
-            <PageHeader :title="title" :description="description">
+        <!-- UNDOCKED (no index, or a pane too narrow for one beside the body): the screen's name and controls in the top bar
+             over the page, as beside an index, lined up with the page's column (Page's cap and gutters); on a phone, in
+             PageHeader. The head does not scroll: the bar stays put while you read, and with panes that scroll so does
+             anything pinned under it. With panes, the page is the height its container leaves under the bar, and nothing
+             past it: no column of its own to fill. -->
+        <ViewBar
+            v-if="!docked && !phone"
+            :title="title"
+            :align="width === `full` ? `px-(--ui-page-padding)` : `max-w-320 px-(--ui-page-padding)`"
+            :class="barPin"
+        >
+            <template v-if="$slots[`info`]" #info><slot name="info" /></template>
+            <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
+        </ViewBar>
+        <Page v-if="!docked" :width="width" class="flex flex-col" :class="scroll === `panes` ? `min-h-0 flex-1 overflow-hidden` : ``">
+            <PageHeader v-if="phone" :title="title" :description="description">
                 <template v-if="$slots[`info`]" #info><slot name="info" /></template>
                 <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
             </PageHeader>
+            <p v-else-if="hasDescription" class="mb-4 shrink-0 text-sm text-muted">{{ description }}</p>
 
             <!-- Screen-wide banners (error, live run, draft), above the split so they're never inside the pane they describe. -->
             <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>

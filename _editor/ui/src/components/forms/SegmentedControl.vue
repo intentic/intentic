@@ -1,4 +1,4 @@
-<!-- SegmentedControl: one of a few exclusive options. Pills pick a mode, filter or value (Preview/Source, All/Mine, Linux/Windows); `variant="underline"` is tabs, which switch between the parts of a page or pane (Jobs/Instructions/Tools). -->
+<!-- SegmentedControl: one of a few exclusive options. Pills pick a mode, filter or value (Preview/Source, All/Mine, Linux/Windows); `variant="underline"` is tabs, which switch between the parts of a page or pane (Jobs/Instructions/Tools); `variant="title"` is a column's name in the top bar that switches (Files/Changes). -->
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
@@ -48,8 +48,11 @@ const {
     //   a page whose sections were pills drew its navigation exactly like the settings inside them. The one exception
     //   is a phone's top bar, where two parts are switched by the segmented thumb that platform draws there (the
     //   workspace's Files | Changes, an agent's Chat | Changes).
+    // - title: parts too, where they name a column in its segment of the window's top bar: the open one is the bar's
+    //   title and the others quieter words beside it, with no rule to stand on the bar's own line (segmented.ts). A
+    //   count is a plain number after its word there, not a plate.
     // `stretch` is a pills-only shape; underline sizes itself to its labels, since a tab reads as a heading.
-    variant?: `pills` | `underline`;
+    variant?: `pills` | `underline` | `title`;
     // Full-width, thumb-height track for a task step on a narrow screen; compact is a mouse control elsewhere.
     stretch?: boolean;
     // Lets the row, not a pill, break when options overflow; off by default since a toolbar row is fixed-height.
@@ -97,6 +100,8 @@ const nameOf = (option: { label: string; title?: TooltipValue; markTitle?: Toolt
 // the pill's 16px line box: at the label's own size it filled that box edge to edge and read as a second control
 // rather than a count on one. The rail's is bigger because it floats in a tile's corner, owing no line its height.
 const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-center rounded-full px-[0.3em] text-3xs font-semibold leading-none tabular-nums`;
+// A title's count is a quiet number on its word's baseline: a plate beside a 14px title read as a second control.
+const TITLE_COUNT = `ml-1.5 text-xs font-medium tabular-nums text-muted`;
 
 // One step up the type scale from the pill of the same `size`, deliberately: a pill labels a control, where a tab
 // names what the reader is looking at, and at the pill's size it read as a control that had lost its box. The
@@ -228,7 +233,7 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
             overlap the glyph they badge and need separating from it, where this one sits beside a label.
          --><span v-if="option.mark !== undefined" :class="[CHIP, countBadgePlate()]"
                 ><Icon :name="option.mark" :spin="option.markSpin === true" /></span
-            ><span v-else-if="option.badge !== undefined && option.badge > 0" :class="[CHIP, countBadgePlate()]">{{
+            ><span v-else-if="option.badge !== undefined && option.badge > 0" :class="variant === `title` ? TITLE_COUNT : [CHIP, countBadgePlate()]">{{
                 countBadgeText(option.badge)
             }}</span>
         </button>

@@ -303,8 +303,8 @@ onBeforeUnmount(() => {
 
 <template>
     <!-- One line across the column top, with the list on a sheet below it: the chat's segment of the window's top bar
-         (`.view-header`), blended, so the title sits on the chat's own surface and only the soft line the board's and the
-         Workspace's segments share runs under it. What scrolls up still softens just under it (`.chat-pane::before`). -->
+         (`.view-header`), blended, so the title sits on the chat's own surface with no line under it, tied to the board's
+         segment beside it by the height alone. What scrolls up still softens just under it (`.chat-pane::before`). -->
     <!-- THE TITLE AND NOTHING ELSE, CENTRED, with the presses in the corner. Three columns: two equal sides keep the title on
          the bar's middle (a long one takes what the sides leave, and truncates), the left one bare background that drags
          the window on desktop (windowGesture.ts) and opens the bar's own menu on right-click. What other chats are doing

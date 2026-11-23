@@ -19,9 +19,14 @@ export const segmented = tv({
         //   with nothing boxing a tab, the space beside it is all that separates the two. One line, always: tabs that
         //   outgrow it SCROLL (the open one kept in view, SegmentedControl.vue) rather than wrap, since a wrapped row
         //   leaves the first line's rule floating over the second, under no line at all.
+        // - title: a column's NAME that switches, in its segment of the window's top bar (`.view-header`): the open part is
+        //   the bar's title, at the size every view's name stands in there (text-sm semibold), and the others are quieter
+        //   words beside it (the Workspace's Files | Changes). No rule and no line: an underline here stood on the bar's own
+        //   line and turned the bar into a tab strip (2026-11-23). One line, scrolling like tabs where it outgrows it.
         variant: {
             pills: { option: `rounded-md font-medium` },
             underline: { track: ui.tabStrip(`scrollbar-none items-end gap-4 overflow-x-auto`) },
+            title: { track: `scrollbar-none gap-3.5 overflow-x-auto`, option: `touch-target shrink-0 whitespace-nowrap text-sm font-semibold` },
         },
         // Full-width, thumb-height track for a task step on a narrow screen (pills only).
         stretch: { true: {}, false: {} },
@@ -35,6 +40,8 @@ export const segmented = tv({
         { variant: `pills`, wrap: true, class: { track: `flex-wrap gap-y-1` } },
         { variant: `pills`, active: true, class: { option: `ui-pill-on` } },
         { variant: `pills`, active: false, class: { option: `text-muted hover:text-content` } },
+        { variant: `title`, active: true, class: { option: `text-content` } },
+        { variant: `title`, active: false, class: { option: `text-subtle hover:text-content` } },
         // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is 2.25rem), so a pill
         // that breaks doesn't merely look wrong: it stands taller than the bar holding it and than every bar beside it.
         // Nowrap also fixes the cause rather than the symptom: an unbreakable pill's min-content IS its full width, so

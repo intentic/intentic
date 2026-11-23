@@ -321,7 +321,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
 <template>
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
         <!-- The board's segment of the window's top bar (`.view-header`), blended: the wallpaper runs up under it (wallpapers.css
-             paints `.agents-board`), and it is one row, never two, so its line meets the chat's.
+             paints `.agents-board`) with no line, and it is one row, never two, so its height meets the chat's.
              Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
              either side of it (the owner filters on the left, the geek metrics and New agent on the right). Narrow, the
              groups keep their controls' width and the search takes what is left. A phone has no such bar: there the search

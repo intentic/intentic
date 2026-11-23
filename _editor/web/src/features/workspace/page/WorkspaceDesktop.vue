@@ -675,11 +675,11 @@ const homeTooltip = computed((): Tip => ({
                 :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
             >
                 <!-- Files and Changes are the primary modes; restore history is deliberately quieter, sharing one resize handle. -->
-                <!-- No bar rule, as no column's bar has one: the tabs' own line is the header's foot, up to its buttons. -->
-                <!-- Tabs, not pills: they name the column, and pills here read as one more mode beside the search's own Name | Text below. -->
+                <!-- The column's NAME, switching (`variant="title"`): the open mode is the segment's title, the other a quieter word.
+                     No line: underlined tabs stood on the bar's line and made it a tab strip (2026-11-23). Not pills: they read as one more mode beside the search's own Name | Text below. -->
                 <!-- "Files" starts 12px in, on the line the text of the chips below (Name, From) starts on, not on the 8px box edge: there it read as touching the rail. -->
-                <div class="view-header flex items-center gap-1 pl-3 pr-2">
-                    <SegmentedControl v-model="sidebarMode" size="xs" variant="underline" :options="sidebarModeOptions" class="min-w-0 flex-1 self-stretch" />
+                <div class="view-header view-header-blend flex items-center gap-1 pl-3 pr-2">
+                    <SegmentedControl v-model="sidebarMode" variant="title" :options="sidebarModeOptions" class="min-w-0 flex-1" />
                     <button
                         type="button"
                         :class="ui.iconButton({ on: layout.sidebarPanel.value === 'history' })"

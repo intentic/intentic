@@ -44,8 +44,13 @@ flowchart LR
 - **The window's top bar.** No component draws it. Every column that runs the window's height (a board, a sidebar, a pane
   of tabs, `SplitView`'s index and body, the chat) starts with a `.view-header`, and side by side those read as one bar:
   each column fills its own segment (or leaves it empty), and `utilities.css` draws, once, what makes them one: the
-  height (`--bar-height`), the ground and the line under them, an inset shadow a selected tab's rule covers. A segment's
-  controls are h-7 or lower so they share a centre line. A skin tunes `--view-header-fill` and `--view-header-rule`.
+  height (`--bar-height`), and for chrome over something else (a row of tabs, a toolbar over a web page) a ground and a
+  line under it, an inset shadow a selected tab's rule covers. A segment that is its column's own head (the board's
+  filter, the chat's title, a view's title, an empty segment) is `.view-header-blend`: no ground, no line, held to the
+  rest by the height alone. A segment's controls are h-7 or lower so they share a centre line. A skin tunes
+  `--view-header-fill` and `--view-header-rule`. `SplitView` puts the view's name and its `#actions` in the segment over
+  its body, with or without an index beside it (`ViewBar.vue`), and leaves the index's segment empty; a phone, which has
+  no window bar, keeps `PageHeader`.
 - **Chips and pills.** Their sizes are decided once, in `utilities.css`. A chip presses: `ui.chip({ size })` is `sm`
   20px (a list header's fold, a viewer toolbar's toggle, a token in a field), `md` 26px by default (the dense control's
   height, as `<Button size="small">` and the `sm` field are, so the three share a toolbar's line) or `lg` 32px (a phone

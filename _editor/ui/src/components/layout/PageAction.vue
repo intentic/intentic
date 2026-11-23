@@ -47,11 +47,12 @@ const tooltip = computed((): TooltipValue => {
 </script>
 
 <template>
+    <!-- In a top bar (ViewBar.vue) the glyph takes the bar's control height, h-7, so the bar keeps its own. -->
     <component
         :is="href === undefined ? `button` : `a`"
         v-if="iconOnly"
         :type="href === undefined ? `button` : undefined"
-        :class="ui.iconButton({ size: `lg` }, `text-base disabled:pointer-events-none`)"
+        :class="ui.iconButton({ size: `lg` }, `text-base disabled:pointer-events-none in-[.view-header]:size-7 in-[.view-header]:text-sm`)"
         :disabled="disabled"
         :aria-label="label"
         v-tooltip.bottom="tooltip"
