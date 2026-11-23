@@ -890,7 +890,7 @@ describe("registered cards and the composer's model", () => {
     it("follows a model picked after the last turn, including across providers", () => {
         const conversation = new Conversation(`spent`);
         conversation.registered.value = true;
-        conversation.session.value = { id: `session-spent`, provider: `codex`, harness: `native` };
+        conversation.session.value = { id: `session-spent`, provider: `codex`, account: undefined, harness: `native` };
         conversation.selection.apply({ kind: `set`, picks: { provider: `codex`, model: `gpt-6-luna` } });
         useChat().conversations.value = [conversation];
         setAgents([
