@@ -1294,16 +1294,16 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
              The 2px above and below keep a focus ring inside the scroller's clip; the negative margin gives it back. -->
         <div v-if="chipRowShown" class="scrollbar-none -mb-0.5 flex shrink-0 items-center gap-1 overflow-x-auto pl-3 pr-2 pt-1.5 pb-0.5">
             <span class="shrink-0 text-2xs text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
-            <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
-                 wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,
-                 so a lone chip still visibly changes without out-shouting the panel. -->
+            <!-- Resting chips are hollow: a hairline edge, no plate, the logo's hue (the same hue its rows' badges wear)
+                 held back until hover. A filled resting plate read as already lit next to the lit one's /15 wash, so
+                 "on" is the whole change at once: fill, hued edge and full-strength logo arriving together. -->
             <button
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="ui-chip min-w-0 max-w-full shrink"
+                class="group/origin ui-chip min-w-0 max-w-full shrink"
                 :class="[
-                    originFilter === entry.id ? ['chip-blade', originHue(entry.id).chip] : '',
+                    originFilter === entry.id ? ['chip-blade border-current/30', originHue(entry.id).chip] : 'border-line bg-transparent',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
                 ]"
                 :style="originFilter === entry.id ? originBlade : undefined"
@@ -1314,7 +1314,10 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                 :aria-label="originChipLabel(entry.id, entry.files)"
                 :aria-pressed="originFilter === entry.id"
             >
-                <span class="relative flex shrink-0" :class="originHue(entry.id).text">
+                <span
+                    class="relative flex shrink-0 transition-opacity"
+                    :class="[originHue(entry.id).text, originFilter === entry.id ? '' : 'opacity-60 group-hover/origin:opacity-100']"
+                >
                     <Icon v-if="landingIds.has(entry.id)" name="spinner" spin class="text-2xs" />
                     <ProviderLogo v-else-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="text-2xs" />
                     <Icon v-else name="sparkles" class="text-2xs" />
@@ -1356,7 +1359,7 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                 v-if="legend.yours > 0"
                 type="button"
                 class="shrink-0"
-                :class="[ui.chip({ on: originFilter === YOURS }), originFilter === YOURS ? 'chip-blade' : '', originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : '']"
+                :class="[ui.chip({ on: originFilter === YOURS }), originFilter === YOURS ? 'chip-blade' : 'border-line bg-transparent', originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : '']"
                 :style="originFilter === YOURS ? originBlade : undefined"
                 :disabled="changes.actionBusy.value"
                 :aria-pressed="originFilter === YOURS"
