@@ -12,6 +12,7 @@ import { BROWSERS_SIDE_VIEW, browsersFront, browsersOpened } from "../../workben
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
+import { panelEpoch } from "../../features/chat/panel/panelFocusWatch";
 import { loadChunk } from "@intentic/ui/chunk";
 import AccessGate from "../../components/access/AccessGate.vue";
 import { useHeldPlace } from "../../components/heldPlace";
@@ -75,7 +76,8 @@ browsers.onDocked(() => {
         <!-- In the master view, its one chat: the same panel a popped-out window draws, without the tab row (HomeChatSlot.vue).
              Around a page of a sandbox (sandboxBeside), the sandbox's own chat, the rail folded or unrolled. -->
         <ChatPanel v-if="homeChat" :tabs="false" :only="homeConversation" style="grid-area: chat" />
-        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" :bar="inBar" style="grid-area: chat" />
+        <!-- Keyed by its build, which the focus check bumps to build a panel again that stopped following the focus (panelFocusWatch.ts). -->
+        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" :key="`chat-${panelEpoch}`" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <div

@@ -16,6 +16,7 @@ import { useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
 import { MIN_PANE_PX, useLayout } from "../../../workbench/window/useLayout";
 import { toAppPx, uiLength } from "../../../workbench/window/uiScale";
 import ChatPane from "./ChatPane.vue";
+import { livePanel } from "./panelFocusWatch";
 import ChatSubagentPane from "./subagent/ChatSubagentPane.vue";
 import SealGate from "./seal/SealGate.vue";
 import { isSealed } from "../../../models/agent-status/sealView";
@@ -51,6 +52,9 @@ const { mobile } = useDevice();
 
 // The panel's own element; its width decides whether the capacity rail fits.
 const root = ref<HTMLElement>();
+// This panel's id on its root, live until it unmounts: what tells it from markup a panel left behind (panelFocusWatch.ts).
+const panelMark = livePanel();
+onBeforeUnmount(panelMark.release);
 
 // How narrow a chat may shrink (useLayout's MIN_PANE_PX), imported rather than restated since the docked column
 // shares the same floor. Written as a custom property in app pixels, not rem, so it can't drift from the column's
@@ -202,6 +206,16 @@ const barRun = computed(() => trackedRun.value);
 // session exists.
 const showingGraph = computed(() => showingRunGraph(shownRun.value, chatRun.value, paneIds.value));
 
+// The chat this panel draws as its focused one, stamped on its root for the check that tells a panel which stopped
+// following the focus from one that follows it (panelFocusWatch.ts): the focused chat when it has a column, else the
+// column drawn first, which is the floor `active` falls to. The run's diagram draws no chat at all, and claims none.
+const drawnFocus = computed(() => {
+    if (showingGraph.value && shownRun.value !== undefined && !bar) {
+        return activeId.value;
+    }
+    return (shown.value.find((conversation) => conversation.conversationId === activeId.value) ?? shown.value[0])?.conversationId;
+});
+
 // The way out of the diagram; a watch here, not a rule in `setActive`, since useChat owns tabs/panes but not
 // which workflow a chat came from (rule: runOnFocus). Runs on every focus gesture, including reclicking the same
 // chat (tabReveal), and on `trackedRun`, including when the ledger has no reading for it.
@@ -296,6 +310,8 @@ watch(
         class="chat-panel relative flex min-h-0 flex-col"
         :class="[ground, { 'chat-panel-wide': chatWide && !bar }]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px`, '--capacity-balance': tabs ? `0px` : `var(--capacity-rail)` }"
+        :data-chat-panel="panelMark.id"
+        :data-chat-focus="only === undefined ? drawnFocus : undefined"
         data-window-band
     >
         <template v-if="tabs && !bar">

@@ -29,6 +29,9 @@ export const traceFocus = (what: string, detail: Record<string, unknown>): void 
     console.info(`[intentic focus] ${line(entry)}`);
 };
 
+/** The newest `count` entries as lines, for a report that has to carry the moments before it (panelFocusWatch.ts). */
+export const focusTraceTail = (count: number): string[] => entries.slice(-count).map(line);
+
 declare global {
     interface Window {
         /** The trace as one pasteable block. */
