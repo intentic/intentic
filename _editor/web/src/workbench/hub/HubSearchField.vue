@@ -6,12 +6,10 @@ import type { HubSearchPanel } from "./useHubSearchPanel";
 
 const t = useT();
 
-const { search, listId, dense = false } = defineProps<{
+const { search, listId } = defineProps<{
     search: HubSearchPanel;
     /** The answers' listbox, which the field drives: the highlight lives there, not here. */
     listId: string;
-    /** At the top bar's control height, where it stands in the index's segment of that bar (<SplitView #railHead>). */
-    dense?: boolean;
 }>();
 
 const activeId = (): string | undefined =>
@@ -25,14 +23,13 @@ const activeId = (): string | undefined =>
     <SearchBar
         v-model="search.query.value"
         variant="field"
-        :dense="dense"
         shortcut="/"
         :placeholder="t(`shell.hubSearch.placeholder`)"
         :aria-label="t(`shell.hubSearch.placeholder`)"
         :aria-controls="listId"
         :aria-activedescendant="activeId()"
         clearable
-        class="w-full shrink-0"
+        class="shrink-0"
         @keydown.down.prevent="search.move(1)"
         @keydown.up.prevent="search.move(-1)"
         @keydown.enter.prevent="search.openActive()"

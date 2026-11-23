@@ -14,11 +14,11 @@ const back = usePageBack();
 </script>
 
 <template>
-    <!-- THE VIEW'S NAME, IN THE TOP BAR, OVER THE PAGE IT NAMES (2026-11-23). Blended (`.view-header-blend`, the kit's
-         utilities.css): no ground and no line, so only the bar's height ties it to the segments beside it (the board's
-         filter, the chat's title), and its name and controls share their centre line. It used to be a text-2xl title a
-         page's padding below the top, or, beside an index, the index's own heading, so a view's name sat in a different
-         place, at a different size, depending on whether it had an index.
+    <!-- THE NAME OF A VIEW WITH NO INDEX, IN THE TOP BAR, OVER THE PAGE IT NAMES (2026-11-23): Run, Pipelines, an
+         extension's board. A view with an index docked beside it says its name over the index instead (SplitView.vue).
+         Blended (`.view-header-blend`, the kit's utilities.css): no ground and no line, so only the bar's height ties it
+         to the segments beside it (the board's filter, the chat's title), and its name and controls share their centre
+         line. It used to be a text-2xl title a page's padding below the top.
          CENTRED, IN THE CHAT TITLE'S TYPE: the name on the middle of the body's column, at the size and quiet ink the
          chat's title rests in (13px, regular, muted), so the window's names read as one voice and none out-shouts the
          page under it. Three columns, the outer two of equal share, as the chat's bar and the board's search: what the
