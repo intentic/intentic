@@ -18,6 +18,8 @@ set -euo pipefail
 # GHCR refuses a burst of manifest PUTs with a 403 that is a clock, not a permissions problem — one pipeline
 # writes this image six times. registry-retry.sh says the rest; every push below goes through it.
 . "$(dirname "$0")/../lib/registry-retry.sh"
+# BuildKit failures are a separate class from the registry's: publish builds through both retry helpers.
+. "$(dirname "$0")/../lib/buildkit-retry.sh"
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
 # Which of the two images to build — the multi-arch flow builds `sandbox` per arch on different runners while
@@ -121,7 +123,7 @@ publish() {
     elif [ "${ZSTD:-0}" = "1" ]; then
         output="--output=type=registry,oci-mediatypes=true,compression=zstd,compression-level=9,force-compression=true"
     fi
-    registry_retry docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
+    buildkit_retry registry_retry docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         "${cache_to[@]}" \
         "$@" "$output" "$context"
 }

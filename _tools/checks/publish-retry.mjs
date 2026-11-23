@@ -28,6 +28,10 @@ const SUBJECTS = [
                 "the runner lost its route to Docker Hub resolving the syntax frontend (killed e2e in run 42359893687)",
                 'ERROR: failed to build: failed to solve: failed to resolve source metadata for docker.io/docker/dockerfile:1: failed to do request: Head "https://registry-1.docker.io/v2/docker/dockerfile/manifests/1": dial tcp 52.0.154.85:443: connect: no route to host',
             ],
+            [
+                "a cached lower snapshot disappeared (killed release images-amd64 in run 45077143861)",
+                "ERROR: failed to build: failed to solve: failed to compute cache key: failed to apply diffs: failed to stat lower snapshot hyj6mo6bqv67q9ewajxcr88x0: snapshot hyj6mo6bqv67q9ewajxcr88x0 does not exist: not found",
+            ],
         ],
         failAtOnce: [
             ["an image that does not exist", "ERROR: failed to solve: failed to resolve source metadata for docker.io/library/nope:1: docker.io/library/nope:1: not found"],
@@ -43,6 +47,7 @@ const SUBJECTS = [
 export BUILDKIT_RETRY_ATTEMPTS=3 BUILDKIT_RETRY_DELAY=0
 DROPPED='ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"'
 BROKEN='ERROR: process "/bin/sh -c cargo build --release" did not complete successfully: exit code: 101'
+SNAPSHOT='ERROR: failed to build: failed to solve: failed to compute cache key: failed to apply diffs: failed to stat lower snapshot hyj6mo6bqv67q9ewajxcr88x0: snapshot hyj6mo6bqv67q9ewajxcr88x0 does not exist: not found'
 
 flaky() {
     echo x >> "$count"
@@ -50,16 +55,23 @@ flaky() {
     printf '%s\n' "$DROPPED" >&2
     return 1
 }
+snapshot_lost() {
+    echo x >> "$count"
+    [ "$(wc -l < "$count")" -ge 2 ] && return 0
+    printf '%s\n' "$SNAPSHOT" >&2
+    return 1
+}
 disconnected() { echo x >> "$count"; printf '%s\n' "$DROPPED" >&2; return 1; }
 broken() { echo x >> "$count"; printf '%s\n' "$BROKEN" >&2; return 101; }
 timed_out() { echo x >> "$count"; return 124; }
 
 run flaky buildkit_retry flaky
+run snapshot buildkit_retry snapshot_lost
 run disconnected buildkit_retry disconnected
 run broken buildkit_retry broken
 run timed-out buildkit_retry timed_out
 `,
-        expect: { flaky: [2, 0], disconnected: [3, 1], broken: [1, 101], "timed-out": [1, 124] },
+        expect: { flaky: [2, 0], snapshot: [2, 0], disconnected: [3, 1], broken: [1, 101], "timed-out": [1, 124] },
     },
     {
         id: "registry-retry",
