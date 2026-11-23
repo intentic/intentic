@@ -6,7 +6,6 @@ import type { DiffPayload } from "@intentic/extension-api";
 // directory → a repository's management surface (DirectoryOperator).
 // document → open-ended: whatever an extension's document provider says about a directory (architecture, git
 // history), rendered beside the code it explains (documentRegistry.ts).
-// skill → one of the agent's skills, read and written as a page (SkillPage.vue), whatever source it came from.
 
 // Jump to a line in the open file, from a content-search match. `seq` gives every jump a fresh identity, so
 // re-clicking the same hit still re-reveals it.
@@ -33,12 +32,7 @@ export type WorkspaceTab =
           // Copied onto the tab, not read from the provider, so a restored tab has a label before activation.
           readonly title: string;
           readonly icon: string;
-      }
-    // `skill` is the daemon's id for it (a bare name, or `<origin>:<owner>:<name>`), or NEW_SKILL for one being written;
-    // `name` is copied on, like a document's title, so a restored tab has a label before the list answers.
-    | { readonly kind: "skill"; readonly id: string; readonly skill: string; readonly name: string };
-
-export const skillTabId = (skill: string): string => `skill:${skill}`;
+      };
 
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;
 

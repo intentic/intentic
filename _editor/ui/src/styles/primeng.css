@@ -338,6 +338,15 @@
         --p-toggleswitch-gap: 0.125rem;
     }
 
+    /* Inside a pill (a chip): shorter than what it sits in, with room to see the pill around it. A list's switch filled
+       a chip edge to edge and read as a second pill pressed onto the first. */
+    .ui-switch-xs {
+        --p-toggleswitch-width: 1.5rem;
+        --p-toggleswitch-height: 0.875rem;
+        --p-toggleswitch-handle-size: 0.625rem;
+        --p-toggleswitch-gap: 0.125rem;
+    }
+
     /* A checked-and-disabled toggle remains unmistakably ON while dimmed for un-editability. */
     .p-toggleswitch.p-disabled.p-toggleswitch-checked .p-toggleswitch-slider {
         background: color-mix(in srgb, var(--color-primary-fill) 45%, var(--color-surface-700));

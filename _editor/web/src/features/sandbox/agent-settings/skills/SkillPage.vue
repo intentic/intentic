@@ -5,15 +5,13 @@ import { Await, BrandMark, CopyButton, formatCompact, MarkdownDocument, timeAgo,
 import { useQueryClient } from "@tanstack/vue-query";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { here, page } from "../../../../lib/routes/links";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../../models/extensions/useExtensions";
-import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
-import { skillTabId } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useSkills } from "../../environment/useSkills";
 import SkillDelete from "./SkillDelete.vue";
 import SkillEditor from "./SkillEditor.vue";
@@ -23,36 +21,44 @@ import { skillVisual } from "./skillVisual";
 import { provenanceOf } from "./skillWords";
 import { useT } from "@intentic/ui/i18n";
 
-// One skill as a page: a Workspace tab on a desktop (EditorPane), a sheet over Settings on a phone (AgentSkills). The
-// reader's own skill is written where it is read (<SkillEditor>); anybody else's is read as the document it is. Beside
-// it, the facts a reader asks of a skill and the list had no room for: whether turns still reach for it, what it costs
-// when they do, where it came from, and the files in its folder, each opening as a file of the workspace when the folder
-// is what the agent reads (a dropped skill is edited that way, as the file it is).
+// One skill as a page: a tab of the side panel beside whatever section is open (SideSkill.vue), a sheet over Settings on a
+// phone (AgentSkills). The reader's own skill is written where it is read (<SkillEditor>); anybody else's is read as the
+// document it is. Beside it, the facts a reader asks of a skill and the list had no room for: whether turns still reach
+// for it, what it costs when they do, where it came from, and the files in its folder, each opening as a file of the
+// workspace when the folder is what the agent reads (a dropped skill is edited that way, as the file it is). What
+// becomes of the tab or sheet holding it (closed, replaced, kept) is its host's to decide, from what the page reports.
 
 const t = useT();
 
 const {
     skill: id,
     name,
-    host = `tab`,
+    host = `side`,
 } = defineProps<{
     /** The daemon's id for the skill, or NEW_SKILL for one being written. Fixed for the page's life: a tab is keyed by it. */
     skill: string;
     /** The name the tab was opened under, shown while the list is still being read. */
     name: string;
-    /** What holds the page; a sheet has its own title bar, and a tab is closed by the page itself when its skill goes. */
-    host?: `tab` | `sheet`;
+    /** What holds the page: a side tab scrolls on its own and titles it; a sheet has its own title bar and scroller. */
+    host?: `side` | `sheet`;
 }>();
 
-const emit = defineEmits<{ gone: []; saved: [name: string] }>();
+const emit = defineEmits<{
+    /** Deleted, or a new one cancelled: there is nothing left to show. */
+    gone: [];
+    /** A new skill was saved under this name; its page is now that skill's. */
+    saved: [name: string];
+    /** A file of its folder was asked for, as a workspace path. */
+    "open-file": [path: string];
+    /** Something was typed that is not saved yet: a host that replaces what it shows on the next open should keep this. */
+    edited: [];
+}>();
 
 const creating = id === NEW_SKILL;
-const router = useRouter();
 const queryClient = useQueryClient();
 const { skills, settings, loaded: listLoaded, save, remove, setEnabled } = useSkills();
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
-const { openFile, closeTabIds, replaceSkill } = useWorkspaceTabs();
 
 const summary = computed<SkillSummary | undefined>(() => skills.value.find((entry) => entry.id === id));
 const { query: bodyQuery, loaded: bodyLoaded } = useSandboxQuery({ ...rpcQuery(`skills.read`, { id }), enabled: !creating });
@@ -107,6 +113,9 @@ watch([draftName, description, body], () => {
         ? [typed.name, typed.description, typed.body].some((value) => value.trim() !== ``)
         : base !== undefined && (typed.description.trim() !== base.description.trim() || typed.body.trim() !== base.body.trim());
     if (dirty) {
+        if (heldDraft(id) === undefined) {
+            emit(`edited`);
+        }
         holdDraft(id, typed);
     } else {
         dropDraft(id);
@@ -115,12 +124,6 @@ watch([draftName, description, body], () => {
 
 const saveError = ref<string | undefined>();
 const takenNames = computed(() => skills.value.map((entry) => entry.name));
-
-const closeOwnTab = (): void => {
-    if (host === `tab`) {
-        closeTabIds(new Set([skillTabId(id)]));
-    }
-};
 
 // The daemon decides how the saved skill reads (a new one starts on), so the list and this body are read again before
 // the editor stops showing "saving": comparing against the old body would say "not saved yet" for a moment.
@@ -135,9 +138,6 @@ const onSave = async (draft: SkillDraft): Promise<void> => {
     }
     dropDraft(id);
     if (creating) {
-        if (host === `tab`) {
-            replaceSkill(NEW_SKILL, draft.name, draft.name);
-        }
         emit(`saved`, draft.name);
     }
 };
@@ -147,7 +147,6 @@ const onCancel = (): void => {
     dropDraft(id);
     saveError.value = undefined;
     if (creating) {
-        closeOwnTab();
         emit(`gone`);
         return;
     }
@@ -160,7 +159,6 @@ const onRemove = (): void => {
     }
     remove.mutate(summary.value.name);
     dropDraft(id);
-    closeOwnTab();
     emit(`gone`);
 };
 
@@ -193,15 +191,9 @@ const folder = computed(() => read.value?.folder);
 const files = computed(() => (read.value === undefined ? [] : [...(folder.value === undefined ? [] : [`SKILL.md`]), ...read.value.files]));
 
 const openInWorkspace = (file: string): void => {
-    if (folder.value === undefined) {
-        return;
+    if (folder.value !== undefined) {
+        emit(`open-file`, `${folder.value}/${file}`);
     }
-    const path = `${folder.value}/${file}`;
-    if (host === `tab`) {
-        openFile(path);
-        return;
-    }
-    void router.push(here(page.workspace(path)));
 };
 
 const title = computed(() => (creating ? draftName.value.replace(/-+$/u, ``) : (summary.value?.name ?? name)));
@@ -212,13 +204,13 @@ const LABEL = `text-xs text-subtle pt-0.5`;
 
 <template>
     <!-- `@container`: the page reflows against its pane, which a split or the docked chat can leave narrow. -->
-    <!-- Its own scroller only as a tab: in a sheet the sheet's body scrolls, and a second one inside it scrolled sideways. -->
-    <div class="@container" :class="host === `tab` ? `h-full overflow-y-auto` : ``">
-        <div class="mx-auto flex max-w-5xl flex-col gap-5" :class="host === `tab` ? `px-6 py-5` : ``">
+    <!-- Its own scroller only as a side tab: in a sheet the sheet's body scrolls, and a second one inside it scrolled sideways. -->
+    <div class="@container" :class="host === `side` ? `h-full overflow-y-auto` : ``">
+        <div class="mx-auto flex max-w-5xl flex-col gap-5" :class="host === `side` ? `px-5 py-4` : ``">
             <header class="flex items-center gap-3">
                 <!-- Only a brand: an origin glyph beside the name would say again what the facts column says. -->
                 <BrandMark v-if="visual?.logo !== undefined" :size="28" :name="title" :logo="visual.logo" :icon="visual.icon" :idle="summary?.enabled === false" />
-                <h1 v-if="host === `tab`" class="min-w-0 flex-1 truncate font-mono text-lg font-semibold" :class="summary?.enabled === false ? `text-muted` : `text-content`">
+                <h1 v-if="host === `side`" class="min-w-0 flex-1 truncate font-mono text-lg font-semibold" :class="summary?.enabled === false ? `text-muted` : `text-content`">
                     <template v-if="title !== ``">{{ title }}</template>
                     <span v-else class="font-sans font-normal text-muted">{{ t(`sandbox.skillForm.newSkill`) }}</span>
                 </h1>

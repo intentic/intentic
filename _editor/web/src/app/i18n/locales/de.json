@@ -7435,8 +7435,11 @@
             "connections": "Verbindungen",
             "extensionsPlugins": "Erweiterungen & Plugins",
             "saysWhatNotWhen": "Sagt, was er ist, aber nicht, wann er gebraucht wird, daher wählt der Agent ihn selten.",
-            "noneOfYourOwn": "Noch keine eigenen. Schreiben Sie einen, um dem Agenten beizubringen, wie hier gearbeitet wird.",
-            "openSkill": "{name} öffnen"
+            "noneOfYourOwn": "Noch keine. Schreiben Sie einen, um dem Agenten beizubringen, wie hier gearbeitet wird.",
+            "noTrigger": "Kein Auslöser",
+            "vagueTrigger": "Vager Auslöser",
+            "yours": "Eigene",
+            "roles": "Rollen"
         },
         "agentSubagents": {
             "keepRoomForYou": "Für dich freigehaltener Spielraum",
@@ -14434,8 +14437,7 @@
             "management": "Verwaltungspanel",
             "path": "Pfad",
             "preview": "Vorschau",
-            "closeTab": "{title} schließen",
-            "skill": "Skill"
+            "closeTab": "{title} schließen"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} Repos",

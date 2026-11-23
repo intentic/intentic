@@ -7435,8 +7435,11 @@
             "connections": "Connexions",
             "extensionsPlugins": "Extensions et plugins",
             "saysWhatNotWhen": "Dit ce qu'il est, pas quand l'utiliser : l'agent le choisit donc rarement.",
-            "noneOfYourOwn": "Aucun des vôtres pour l'instant. Écrivez-en un pour apprendre à l'agent comment on travaille ici.",
-            "openSkill": "Ouvrir {name}"
+            "noneOfYourOwn": "Aucun pour l'instant. Écrivez-en un pour apprendre à l'agent comment on travaille ici.",
+            "noTrigger": "Aucun déclencheur",
+            "vagueTrigger": "Déclencheur flou",
+            "yours": "Les vôtres",
+            "roles": "Rôles"
         },
         "agentSubagents": {
             "keepRoomForYou": "Marge gardée pour vous",
@@ -14434,8 +14437,7 @@
             "management": "Panneau de gestion",
             "path": "Chemin",
             "preview": "Aperçu",
-            "closeTab": "Fermer {title}",
-            "skill": "Skill"
+            "closeTab": "Fermer {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} dépôts",

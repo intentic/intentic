@@ -1,27 +1,27 @@
 <script setup lang="ts">
 import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
-import { Await, Button, Card, Icon, Modal, Row, SearchBar, Section, SkeletonRows, ui, useDevice } from "@intentic/ui";
+import { Await, Button, Card, Icon, Modal, Row, SearchBar, Section, SkeletonRows, useDevice } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { here, page } from "../../../../lib/routes/links";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../../models/extensions/useExtensions";
-import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
-import { sectionReachable } from "../../../../workbench/views/registry";
+import { sideDocked } from "../../../../workbench/side/sideTabs";
+import { revealSideView } from "../../../../workbench/side/sideViews";
 import { useSkills } from "../../environment/useSkills";
-import SkillCard from "./SkillCard.vue";
 import SkillChip from "./SkillChip.vue";
 import SkillPage from "./SkillPage.vue";
 import { NEW_SKILL } from "./skillDrafts";
-import { bySection, isWorkspaceSkill, matchesSkill, shelvesOf } from "./skillList";
+import { bySection, matchesSkill, type SkillShelf, shelfLabel, shelvesOf } from "./skillList";
+import { SKILL_SIDE_VIEW, skillSideInput } from "./skillSide";
 import type { SkillSources } from "./skillVisual";
 import { useT } from "@intentic/ui/i18n";
 
-// Every skill the agent carries, from any source, as a catalog: the reader's own words as cards with room for their
-// whole trigger line, then what arrived with connections, extensions and the image as names on labelled shelves, the way
-// the Connections catalog groups what brought them. A skill is read and written on its own page, a Workspace tab beside
-// the files a skill is made of (SkillPage.vue), never in a drawer squeezed into this column; a phone, whose Workspace
-// shows files only, opens that page as a sheet here. Writing a new one opens the page it will become, empty.
+// Every skill the agent carries, from any source, as names on labelled shelves: the reader's own first, then each role's
+// kit, then what connections, extensions and the image brought, grouped the way the Connections catalog groups what
+// brought them. A press opens the skill's page beside this section (the side panel's skill view, SideSkill.vue), as a
+// look the next press replaces, so the reader browses without leaving Settings; a phone, with no side panel, opens it as
+// a sheet here. Writing a new one opens the page it will become, empty.
 
 const t = useT();
 
@@ -30,7 +30,6 @@ const FILTERABLE_FROM = 8;
 const { skills, settings, loaded, setEnabled } = useSkills();
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
-const { openSkill } = useWorkspaceTabs();
 const { mobile } = useDevice();
 const router = useRouter();
 
@@ -45,22 +44,30 @@ const matches = computed<SkillSummary[]>(() => {
 // Enabled, not installed: a disabled extension doesn't claim the card its connection came from.
 const sources = computed<SkillSources>(() => ({ capabilities: capabilities.value, extensions: enabledExtensions.value }));
 
-const own = computed(() => matches.value.filter(isWorkspaceSkill));
-const shelves = computed(() => shelvesOf(matches.value, sources.value));
+// The reader's own shelf stays when it is empty and nothing is filtered: it is where "write one" is said.
+const shelves = computed<SkillShelf[]>(() => {
+    const found = shelvesOf(matches.value, sources.value);
+    return filtering.value || found.some((shelf) => shelf.key === `yours`) ? found : [{ key: `yours`, label: shelfLabel(`yours`), skills: [] }, ...found];
+});
 
-// The page a phone shows over this list, since its Workspace has no tab to put one in.
+// The page a phone shows over this list, since it has no side panel to put one in.
 const sheet = ref<{ readonly id: string; readonly name: string } | undefined>();
 
+// A new skill is opened kept: it is being written, and the next press elsewhere must not throw it away.
 const open = (id: string, name: string): void => {
-    if (mobile.value || !sectionReachable(here(page.workspace()))) {
-        sheet.value = { id, name };
+    if (sideDocked.value && !mobile.value) {
+        revealSideView(SKILL_SIDE_VIEW, skillSideInput(id, name), { keep: id === NEW_SKILL });
         return;
     }
-    openSkill(id, name);
-    void router.push(here(page.workspace()));
+    sheet.value = { id, name };
 };
 
 const startAdd = (): void => open(NEW_SKILL, t(`sandbox.skillForm.newSkill`));
+
+// From the phone's sheet, a file of a skill's folder opens where a phone shows files: the Workspace, full screen.
+const openFileFromSheet = (path: string): void => {
+    void router.push(here(page.workspace(path)));
+};
 </script>
 
 <template>
@@ -109,18 +116,6 @@ const startAdd = (): void => open(NEW_SKILL, t(`sandbox.skillForm.newSkill`));
                         <Icon name="exclamation-triangle" class="text-2xs" aria-hidden="true" />{{ refreshError }}
                     </p>
 
-                    <div v-if="own.length > 0" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2">
-                        <SkillCard
-                            v-for="skill in own"
-                            :key="skill.id"
-                            :skill="skill"
-                            :disabled="settings === undefined"
-                            @open="open(skill.id, skill.name)"
-                            @enable="(value: boolean) => setEnabled(skill, value)"
-                        />
-                    </div>
-                    <p v-else-if="!filtering" :class="ui.emptyState()">{{ t(`sandbox.agentSkills.noneOfYourOwn`) }}</p>
-
                     <!-- One surface holding every shelf: a label beside its names, as a properties column reads. -->
                     <Card v-if="shelves.length > 0">
                         <dl class="flex flex-col gap-3">
@@ -136,6 +131,7 @@ const startAdd = (): void => open(NEW_SKILL, t(`sandbox.skillForm.newSkill`));
                                         @open="open(skill.id, skill.name)"
                                         @enable="(value: boolean) => setEnabled(skill, value)"
                                     />
+                                    <span v-if="shelf.skills.length === 0" class="text-xs text-muted @xl:pt-1.5">{{ t(`sandbox.agentSkills.noneOfYourOwn`) }}</span>
                                 </dd>
                             </div>
                         </dl>
@@ -156,6 +152,7 @@ const startAdd = (): void => open(NEW_SKILL, t(`sandbox.skillForm.newSkill`));
                     host="sheet"
                     @gone="sheet = undefined"
                     @saved="(name: string) => (sheet = { id: name, name })"
+                    @open-file="openFileFromSheet"
                 />
             </Modal>
         </template>

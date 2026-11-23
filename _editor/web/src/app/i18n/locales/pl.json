@@ -6824,8 +6824,11 @@
             "connections": "Połączenia",
             "extensionsPlugins": "Rozszerzenia i wtyczki",
             "saysWhatNotWhen": "Mówi, czym jest, a nie kiedy jej używać, więc agent rzadko ją wybiera.",
-            "noneOfYourOwn": "Nie masz jeszcze własnych. Napisz jedną, żeby nauczyć agenta, jak się tu pracuje.",
-            "openSkill": "Otwórz {name}"
+            "noneOfYourOwn": "Jeszcze żadnej. Napisz jedną, żeby nauczyć agenta, jak się tu pracuje.",
+            "noTrigger": "Brak wyzwalacza",
+            "vagueTrigger": "Niejasny wyzwalacz",
+            "yours": "Twoje",
+            "roles": "Role"
         },
         "agentSubagents": {
             "keepRoomForYou": "Zapas zostawiony dla ciebie",
@@ -13823,8 +13826,7 @@
             "management": "Panel zarządzania",
             "path": "Ścieżka",
             "preview": "Podgląd",
-            "closeTab": "Zamknij {title}",
-            "skill": "Umiejętność"
+            "closeTab": "Zamknij {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, repozytoria: {count}",

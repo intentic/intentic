@@ -6,12 +6,12 @@ import { capabilityCategory } from "../../../../models/capabilities/tiles";
 import type { SkillSources } from "./skillVisual";
 import { provenanceOf } from "./skillWords";
 
-// Orders, splits and filters the skills list. The reader's own words (written here, a role's kit, a file dropped into
-// the workspace) are cards, each with room for its whole trigger line; everything that arrived with something else is
-// a name on a shelf, grouped the way the Connections catalog groups the things that brought them, since that half grows
-// with every account connected (four Product Hunt logins are four skills) and is read for what is there, not for its text.
+// Orders, groups and filters the skills list: every skill a name on a labelled shelf. The reader's own words first (written
+// here or dropped into the workspace, then each role's kit), then what arrived with something else, grouped the way the
+// Connections catalog groups the things that brought them, since that half grows with every account connected (four
+// Product Hunt logins are four skills). The list is read for what is there; what a skill says is its page's.
 
-/** The reader's own: written here, a role card's kit, or a file dropped into the workspace. Drawn as cards. */
+/** The reader's own: written here, a role card's kit, or a file dropped into the workspace. */
 export const isWorkspaceSkill = (skill: SkillSummary): boolean => skill.origin === `own` || skill.origin === `role` || skill.origin === `dropped`;
 
 // Editorial, not alphabetical: own skills first, then unclaimed files and built-ins; installed before connected.
@@ -35,7 +35,7 @@ const skillHaystack = (skill: SkillSummary): string => `${skill.name} ${skill.de
 
 export const matchesSkill = (skill: SkillSummary, needle: string): boolean => needle === `` || skillHaystack(skill).includes(needle);
 
-/** One labelled line of names under the cards. */
+/** One labelled line of names. */
 export interface SkillShelf {
     readonly key: string;
     readonly label: string;
@@ -44,10 +44,16 @@ export interface SkillShelf {
 
 // A connection's skill sits under its tile's catalog section; one whose connection is gone or unknown to the catalog,
 // under a plain "Connections" after the sections.
-type ShelfKey = CapabilityCategory | `connections` | `extensions` | `builtin`;
-const SHELF_ORDER: readonly ShelfKey[] = [...CAPABILITY_CATEGORIES.map((category) => category.id), `connections`, `extensions`, `builtin`];
+export type ShelfKey = `yours` | `roles` | CapabilityCategory | `connections` | `extensions` | `builtin`;
+const SHELF_ORDER: readonly ShelfKey[] = [`yours`, `roles`, ...CAPABILITY_CATEGORIES.map((category) => category.id), `connections`, `extensions`, `builtin`];
 
 const shelfKeyOf = (skill: SkillSummary, sources: SkillSources): ShelfKey => {
+    if (skill.origin === `own` || skill.origin === `dropped`) {
+        return `yours`;
+    }
+    if (skill.origin === `role`) {
+        return `roles`;
+    }
     if (skill.origin === `builtin`) {
         return `builtin`;
     }
@@ -58,7 +64,13 @@ const shelfKeyOf = (skill: SkillSummary, sources: SkillSources): ShelfKey => {
     return (capability === undefined ? undefined : capabilityCategory(capability, sources.extensions)) ?? `connections`;
 };
 
-const shelfLabel = (key: ShelfKey): string => {
+export const shelfLabel = (key: ShelfKey): string => {
+    if (key === `yours`) {
+        return t(`sandbox.agentSkills.yours`);
+    }
+    if (key === `roles`) {
+        return t(`sandbox.agentSkills.roles`);
+    }
     if (key === `connections`) {
         return t(`sandbox.agentSkills.connections`);
     }
@@ -72,10 +84,10 @@ const shelfLabel = (key: ShelfKey): string => {
     return category === undefined ? key : categoryLabel(category);
 };
 
-/** Everything that is not the reader's own, grouped and ordered; empty shelves are left out. Names sort inside a shelf. */
+/** Every skill, grouped and ordered; empty shelves are left out. Names sort inside a shelf. */
 export const shelvesOf = (skills: readonly SkillSummary[], sources: SkillSources): SkillShelf[] => {
     const held = new Map<ShelfKey, SkillSummary[]>();
-    for (const skill of skills.filter((entry) => !isWorkspaceSkill(entry))) {
+    for (const skill of skills) {
         const key = shelfKeyOf(skill, sources);
         held.set(key, [...(held.get(key) ?? []), skill]);
     }

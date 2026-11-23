@@ -16,7 +16,6 @@ import {
     type PaneState,
     paneOf,
     placeTab,
-    skillTabId,
     type WorkspaceTab,
 } from "./workspaceTabs";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -256,28 +255,6 @@ const openDocument = (extension: string, provider: string, path: string, title: 
     place(paneOf(strip.value, id) ?? focused.value, { kind: `document`, id, extension, provider, path, title, icon }, `keep`);
 };
 
-// A skill's page, keyed by the daemon's id so re-opening one focuses it rather than stacking a second. Always kept, never
-// a preview: it is opened on purpose, from Settings or from the page of the skill it replaces.
-const openSkill = (skill: string, name: string): void => {
-    const id = skillTabId(skill);
-    place(paneOf(strip.value, id) ?? focused.value, { kind: `skill`, id, skill, name }, `keep`);
-};
-
-// Puts one skill's tab where another's was, same pane, same place, focused: a new skill's page becoming the saved
-// skill's once the daemon has it. Opens it where the reader is if the first tab is gone by then.
-const replaceSkill = (from: string, skill: string, name: string): void => {
-    const which = paneOf(strip.value, skillTabId(from));
-    const id = skillTabId(skill);
-    if (which === undefined || paneOf(strip.value, id) !== undefined) {
-        closeTabIds(new Set([skillTabId(from)]));
-        openSkill(skill, name);
-        return;
-    }
-    const swapped = pane(which).tabs.map((tab) => (tab.id === skillTabId(from) ? { kind: `skill` as const, id, skill, name } : tab));
-    setPane(which, { tabs: swapped, active: id, preview: pane(which).preview === skillTabId(from) ? null : pane(which).preview });
-    focused.value = which;
-};
-
 // Shows what is under the tabs (the home) without closing any: the pane's active tab is unset, and the next click on a
 // tab brings it back. Main in practice: a side pane exists only while it holds tabs, and one of them is always active.
 const deselect = (which: EditorPane = `main`): void => {
@@ -410,8 +387,6 @@ export function useWorkspaceTabs() {
         fillDiff,
         openDirectory,
         openDocument,
-        openSkill,
-        replaceSkill,
         selectTab,
         deselect,
         keepTab,

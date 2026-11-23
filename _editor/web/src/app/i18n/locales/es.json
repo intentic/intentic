@@ -7435,8 +7435,11 @@
             "connections": "Conexiones",
             "extensionsPlugins": "Extensiones y plugins",
             "saysWhatNotWhen": "Dice qué es, no cuándo usarla, así que el agente rara vez la elige.",
-            "noneOfYourOwn": "Todavía no tienes ninguna propia. Escribe una para enseñar al agente cómo se trabaja aquí.",
-            "openSkill": "Abrir {name}"
+            "noneOfYourOwn": "Todavía ninguna. Escribe una para enseñar al agente cómo se trabaja aquí.",
+            "noTrigger": "Sin activador",
+            "vagueTrigger": "Activador vago",
+            "yours": "Tuyas",
+            "roles": "Roles"
         },
         "agentSubagents": {
             "keepRoomForYou": "Margen reservado para ti",
@@ -14434,8 +14437,7 @@
             "management": "Panel de gestión",
             "path": "Ruta",
             "preview": "Vista previa",
-            "closeTab": "Cerrar {title}",
-            "skill": "Skill"
+            "closeTab": "Cerrar {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} repos",

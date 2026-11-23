@@ -1,6 +1,5 @@
-// The reader's own skills are cards with their whole trigger line; everything that arrived with something else is a name
-// on a labelled shelf. A switch appears only where the daemon says the skill is switchable, and a press anywhere else on
-// a skill opens its page: a Workspace tab on a desktop, so the list never grows a drawer.
+// Every skill is a name on a labelled shelf, the reader's own first. A switch appears only where the daemon says the skill
+// is switchable, and a press anywhere else on a skill opens its page beside Settings, so the reader never leaves it.
 import "@intentic/testing/dom";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
@@ -19,7 +18,7 @@ const skills = ref<SkillSummary[]>([]);
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const capabilities = ref<CapabilitySummary[]>([]);
 const setEnabled = jest.fn();
-const openSkill = jest.fn();
+const revealSideView = jest.fn((_view: string, _input: object, _options: object) => true);
 const push = jest.fn();
 
 jest.mock(`../../environment/useSkills`, () => ({
@@ -32,8 +31,9 @@ jest.mock(`../../environment/useSkills`, () => ({
 }));
 jest.mock(`../../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 jest.mock(`../../../../models/extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: ref<ExtensionSummary[]>([]) }) }));
-jest.mock(`../../../../models/workspace/tabs/useWorkspaceTabs`, () => ({ useWorkspaceTabs: () => ({ openSkill }) }));
-jest.mock(`../../../../workbench/views/registry`, () => ({ sectionReachable: () => true }));
+// A desktop window: the shell has docked a side panel to open things beside the section.
+jest.mock(`../../../../workbench/side/sideTabs`, () => ({ sideDocked: ref(true) }));
+jest.mock(`../../../../workbench/side/sideViews`, () => ({ revealSideView }));
 jest.mock(`vue-router`, () => ({ useRouter: () => ({ push }) }));
 // The page is SkillPage's own test; here it only matters that a phone would get one.
 jest.mock(`./SkillPage.vue`, () => ({ default: { name: `SkillPageStub`, render: () => null } }));
@@ -77,14 +77,20 @@ afterEach(() => {
     capabilities.value = [];
     settings.value = SandboxSettingsSchema.parse({});
     setEnabled.mockClear();
-    openSkill.mockClear();
+    revealSideView.mockClear();
     push.mockClear();
 });
 
-const cards = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`[data-skill-card]`)];
 const chips = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`[data-skill-chip]`)];
-const switches = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`[role="switch"], input[type="checkbox"]`)];
-const shelfLabels = (host: HTMLElement): string[] => [...host.querySelectorAll(`dt`)].map((term) => term.textContent?.trim() ?? ``);
+const chip = (host: HTMLElement, name: string): HTMLElement | undefined =>
+    chips(host).find((entry) => entry.querySelector(`[data-skill-name]`)?.textContent?.trim() === name);
+const shelves = (host: HTMLElement): [string, string[]][] =>
+    [...host.querySelectorAll(`dl > div`)].map((row) => [
+        row.querySelector(`dt`)?.textContent?.trim() ?? ``,
+        [...row.querySelectorAll(`[data-skill-name]`)].map((name) => name.textContent?.trim() ?? ``),
+    ]);
+const switchOf = (element: HTMLElement | undefined): HTMLElement | null =>
+    element?.querySelector<HTMLElement>(`[role="switch"], input[type="checkbox"]`) ?? null;
 const button = (host: HTMLElement, label: string): HTMLElement | undefined =>
     [...host.querySelectorAll<HTMLElement>(`button`)].find((element) => element.textContent?.trim() === label);
 const filterField = (host: HTMLElement): HTMLInputElement | null => host.querySelector<HTMLInputElement>(`[role="searchbox"]`);
@@ -94,7 +100,7 @@ const type = async (field: HTMLInputElement, value: string): Promise<void> => {
     await nextTick();
 };
 
-test(`the reader's own words are cards, and what came with something else sits on shelves named for where it came from`, () => {
+test(`every skill is a name on a shelf: the reader's own first, then role kits, then where the rest came from`, () => {
     skills.value = [
         skill({ id: `notes`, name: `notes` }),
         skill({ id: `triage`, name: `triage`, origin: `role`, owner: `Support`, switchable: false, editable: false, removable: false }),
@@ -105,15 +111,17 @@ test(`the reader's own words are cards, and what came with something else sits o
     ];
     capabilities.value = [{ id: `prod`, kind: `ssh`, status: { state: `active` }, config: {}, secrets: [] }];
     const host = mount();
-    expect(cards(host).map((card) => card.querySelector(`button`)?.textContent?.trim())).toEqual([`notes`, `triage`, `scratch`]);
-    expect(chips(host).map((chip) => chip.textContent?.trim())).toEqual([`prod-box`, `product-copy`, `lsp`]);
-    // The Connections catalog's own section names, then extensions together, then what the image ships.
-    expect(shelfLabels(host)).toEqual([`Servers`, `Extensions & plugins`, `Built in`]);
-    // A role's kit says whose turns it reaches, the one fact a card can't otherwise show.
-    expect(cards(host)[1]?.textContent).toContain(`Role · Support`);
+    // The Connections catalog's own section names after the reader's own, then extensions together, then the image's.
+    expect(shelves(host)).toEqual([
+        [`Yours`, [`notes`, `scratch`]],
+        [`Roles`, [`triage`]],
+        [`Servers`, [`prod-box`]],
+        [`Extensions & plugins`, [`product-copy`]],
+        [`Built in`, [`lsp`]],
+    ]);
 });
 
-test(`a switch appears only where the daemon says one works, and writes that skill`, async () => {
+test(`a switch appears only where the daemon says one works, and writes that skill without opening it`, async () => {
     skills.value = [
         skill({ id: `notes`, name: `notes` }),
         skill({ id: `lsp`, name: `lsp`, origin: `builtin`, enabled: false, editable: false, removable: false }),
@@ -121,71 +129,58 @@ test(`a switch appears only where the daemon says one works, and writes that ski
         borrowed(`product-copy`, `extension`, `Storefront`),
     ];
     const host = mount();
-    expect(switches(host)).toHaveLength(2);
-    expect(chips(host).find((chip) => chip.textContent?.includes(`product-copy`))?.querySelector(`[role="switch"], input[type="checkbox"]`)).toBeNull();
+    expect(switchOf(chip(host, `notes`))).not.toBeNull();
+    expect(switchOf(chip(host, `product-copy`))).toBeNull();
     // An off built-in is an offer: it keeps its switch, drawn quieter.
-    const offChip = chips(host).find((chip) => chip.textContent?.includes(`lsp`));
-    offChip?.querySelector<HTMLElement>(`input[type="checkbox"], [role="switch"]`)?.click();
+    switchOf(chip(host, `lsp`))?.click();
     await nextTick();
     expect(setEnabled).toHaveBeenCalledWith(expect.objectContaining({ name: `lsp` }), true);
-    expect(openSkill).not.toHaveBeenCalled();
+    expect(revealSideView).not.toHaveBeenCalled();
 });
 
-test(`pressing a skill opens its page as a Workspace tab, card or chip alike`, async () => {
+test(`pressing a skill opens its page beside Settings, as a look the next press replaces, and never leaves the section`, async () => {
     skills.value = [skill({ id: `notes`, name: `notes` }), borrowed(`product-copy`, `extension`, `Storefront`)];
     const host = mount();
-    cards(host)[0]?.querySelector<HTMLElement>(`button`)?.click();
-    chips(host)[0]?.querySelector<HTMLElement>(`button`)?.click();
+    chip(host, `notes`)?.querySelector<HTMLElement>(`button`)?.click();
+    chip(host, `product-copy`)?.querySelector<HTMLElement>(`button`)?.click();
     await nextTick();
-    expect(openSkill.mock.calls).toEqual([
-        [`notes`, `notes`],
-        [`extension:Storefront:product-copy`, `product-copy`],
+    expect(revealSideView.mock.calls).toEqual([
+        [`skill`, { skill: `notes`, name: `notes` }, { keep: false }],
+        [`skill`, { skill: `extension:Storefront:product-copy`, name: `product-copy` }, { keep: false }],
     ]);
-    expect(push).toHaveBeenCalledTimes(2);
+    expect(push).not.toHaveBeenCalled();
 });
 
-test(`Write a skill is the section's header action, and opens the page the new skill will become`, async () => {
+test(`Write a skill opens the page the new skill will become, kept, so the next press elsewhere can't replace it`, async () => {
     const host = mount();
     button(host, `Write a skill`)?.click();
     await nextTick();
-    expect(openSkill).toHaveBeenCalledWith(`+new`, `New skill`);
+    expect(revealSideView).toHaveBeenCalledWith(`skill`, { skill: `+new`, name: `New skill` }, { keep: true });
 });
 
-test(`a missing or vague trigger line is called out on its card, since it is what the agent picks a skill by`, () => {
+test(`a trigger line the reader can fix is flagged on their own skill when it names no occasion, and nowhere else`, () => {
     skills.value = [
         skill({ id: `blank`, name: `blank`, description: `` }),
         skill({ id: `label`, name: `label`, description: `The summary scanner brief for Replay vision` }),
         skill({ id: `fine`, name: `fine` }),
+        // Nobody here can rewrite an extension's trigger line, so a doubt about it would only be noise.
+        { ...borrowed(`terse`, `extension`, `Storefront`), description: `A brief` },
     ];
     const host = mount();
-    const card = (name: string): HTMLElement | undefined => cards(host).find((entry) => entry.querySelector(`button`)?.textContent?.trim() === name);
-    const [blank, label, fine] = [card(`blank`), card(`label`), card(`fine`)];
-    expect(blank?.textContent).toContain(`No description`);
-    expect(label?.textContent).toContain(`not when to use it`);
-    expect(fine?.textContent).not.toContain(`not when to use it`);
+    expect(chip(host, `blank`)?.textContent).toContain(`No trigger`);
+    expect(chip(host, `label`)?.textContent).toContain(`Vague trigger`);
+    expect(chip(host, `fine`)?.textContent).not.toContain(`trigger`);
+    expect(chip(host, `terse`)?.textContent).not.toContain(`trigger`);
 });
 
-test(`a card says how often turns reach for it, and nothing at all where the sandbox does not count`, () => {
-    skills.value = [
-        skill({ id: `busy`, name: `busy`, uses: { week: 9, last: new Date().toISOString() } }),
-        skill({ id: `idle`, name: `idle`, uses: { week: 0 } }),
-        skill({ id: `older`, name: `older` }),
-    ];
-    const host = mount();
-    const [busy, idle, older] = cards(host);
-    expect(busy?.textContent).toContain(`9 turns this week`);
-    expect(idle?.textContent).toContain(`Not used this week`);
-    expect(older?.textContent).not.toContain(`this week`);
-});
-
-test(`with none of their own, the reader is told so rather than shown an empty grid`, () => {
+test(`with none of their own, the reader's shelf stays and says how to start`, () => {
     skills.value = [skill({ id: `lsp`, name: `lsp`, origin: `builtin`, editable: false, removable: false })];
     const host = mount();
-    expect(cards(host)).toHaveLength(0);
-    expect(host.textContent).toContain(`None of your own yet`);
+    expect(shelves(host)[0]).toEqual([`Yours`, []]);
+    expect(host.textContent).toContain(`None yet. Write one`);
 });
 
-test(`no filter until the list is long enough to need one, then it reaches cards and shelves, by name and by origin`, async () => {
+test(`no filter until the list is long enough to need one, then it reaches every shelf, by name and by origin`, async () => {
     skills.value = [skill({ id: `notes`, name: `notes` })];
     const short = mount();
     expect(filterField(short)).toBeNull();
@@ -200,10 +195,9 @@ test(`no filter until the list is long enough to need one, then it reaches cards
     const field = filterField(host);
     expect(field).not.toBeNull();
     await type(field as HTMLInputElement, `storefront`);
-    expect(cards(host)).toHaveLength(0);
-    expect(chips(host).map((chip) => chip.textContent?.trim())).toEqual([`product-copy`]);
+    expect(shelves(host)).toEqual([[`Extensions & plugins`, [`product-copy`]]]);
     await type(field as HTMLInputElement, `nothing-like-this`);
     expect(host.textContent).toContain(`Nothing matches that filter.`);
-    // A filter that hides every card is not an empty workspace.
-    expect(host.textContent).not.toContain(`None of your own yet`);
+    // A filter that hides every one of the reader's own is not an empty shelf to fill.
+    expect(host.textContent).not.toContain(`None yet. Write one`);
 });

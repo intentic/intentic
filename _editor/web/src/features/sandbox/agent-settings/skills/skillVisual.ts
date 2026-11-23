@@ -160,3 +160,6 @@ export const skillVisual = (skill: SkillSummary, sources: SkillSources): SkillVi
     }
     return { icon: glyph ?? origin };
 };
+
+/** Whether a mark would say only what kind of thing brought the skill: the shelf it sits on already says that. */
+export const marksOnlyOrigin = (skill: SkillSummary, visual: SkillVisual): boolean => visual.logo === undefined && visual.icon === ORIGIN_ICONS[skill.origin];

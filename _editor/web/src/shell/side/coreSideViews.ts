@@ -22,7 +22,8 @@ import { openInWorkspace } from "../../models/workspace/files/openFileRef";
 import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { navigation } from "../../workbench/navigation/navigation";
-import { isPage } from "../../lib/routes/links";
+import { SKILL_SIDE_VIEW, SkillSideInputSchema } from "../../features/sandbox/agent-settings/skills/skillSide";
+import { here, isPage, page } from "../../lib/routes/links";
 import { screenRoute, selectedKey } from "../../models/sandbox/devices/deviceLinks";
 import { SCREEN_SIDE_VIEW, ScreenAtSchema } from "../../models/sandbox/devices/remote/screenPlaces";
 import { handOffToMainWindow } from "../../workbench/window/mainWindow";
@@ -92,6 +93,23 @@ const registerScreenSideView = (): Disposable =>
             const route = navigation().currentRoute.value;
             return isPage(route, `devices`) && selectedKey(route.query[`screen`]) === input[`device`];
         },
+    });
+
+// One of the agent's skills, beside whatever section is open (opened from Settings ▸ Agent ▸ Instructions), and back to
+// that list by "Open in Skills".
+const registerSkillSideView = (): Disposable =>
+    registerSideView({
+        id: SKILL_SIDE_VIEW,
+        owner: `builtin`,
+        get label() {
+            return t(`sandbox.agentSkills.skills`);
+        },
+        describe: (input) => ({ title: SkillSideInputSchema.safeParse(input).data?.name ?? ``, icon: `book` }),
+        home: () => ({
+            label: t(`sandbox.agentSkills.skills`),
+            open: () => void navigation().push(here(page.sandboxSettings(`agent`, { query: { section: `instructions` } }))),
+        }),
+        component: async () => (await import(`./SideSkill.vue`)).default,
     });
 
 // The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
@@ -181,5 +199,5 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         lent: () => browsersSlot.value !== null,
     });
 
-    return [file, browsers, registerScreenSideView()];
+    return [file, browsers, registerScreenSideView(), registerSkillSideView()];
 };

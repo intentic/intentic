@@ -1,6 +1,6 @@
 // One skill as a page. The reader's own is written where it is read and survives the tab being switched away; anybody
-// else's reads as its document, beside the facts the list had no room for, and a file of a folder the agent reads opens
-// as that file in the Workspace. A new skill's page becomes the saved skill's page once the daemon has it.
+// else's reads as its document, beside the facts the list had no room for, and a file of a folder the agent reads is asked
+// for as that workspace file. What becomes of the tab holding it is its host's: the page reports, it never reaches in.
 import "@intentic/testing/dom";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
@@ -20,8 +20,9 @@ const saveMutate = jest.fn();
 const removeMutate = jest.fn();
 const setEnabled = jest.fn();
 const openFile = jest.fn();
-const closeTabIds = jest.fn();
-const replaceSkill = jest.fn();
+const gone = jest.fn();
+const saved = jest.fn();
+const edited = jest.fn();
 const invalidateQueries = jest.fn(async () => undefined);
 
 const ready = <T,>(data: T) => ({ state: `ready` as const, data, refreshing: false, refreshError: undefined });
@@ -47,7 +48,6 @@ jest.mock(`vue-router`, () => ({
 }));
 jest.mock(`../../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref<CapabilitySummary[]>([]) }) }));
 jest.mock(`../../../../models/extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: ref<ExtensionSummary[]>([]) }) }));
-jest.mock(`../../../../models/workspace/tabs/useWorkspaceTabs`, () => ({ useWorkspaceTabs: () => ({ openFile, closeTabIds, replaceSkill }) }));
 
 const { default: SkillPage } = await import("./SkillPage.vue");
 const { dropDraft, heldDraft, holdDraft, NEW_SKILL } = await import("./skillDrafts");
@@ -69,7 +69,7 @@ let app: App | undefined;
 const mount = (skill: string, name = skill): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
-    app = createApp({ render: () => h(SkillPage, { skill, name }) });
+    app = createApp({ render: () => h(SkillPage, { skill, name, onGone: gone, onSaved: saved, onEdited: edited, onOpenFile: openFile }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -87,7 +87,7 @@ afterEach(() => {
     unmount();
     skills.value = [];
     body.value = undefined;
-    for (const fn of [saveMutate, removeMutate, setEnabled, openFile, closeTabIds, replaceSkill, invalidateQueries]) {
+    for (const fn of [saveMutate, removeMutate, setEnabled, openFile, gone, saved, edited, invalidateQueries]) {
         fn.mockClear();
     }
     saveMutate.mockReset();
@@ -123,7 +123,7 @@ test(`somebody else's skill reads as its document, beside how often turns reach 
     expect(host.querySelector(`textarea`)).toBeNull();
 });
 
-test(`a file of a folder the agent reads opens as that file in the Workspace, SKILL.md first`, async () => {
+test(`a file of a folder the agent reads is asked for as that workspace file, SKILL.md first`, async () => {
     skills.value = [own({ id: `unsloppify`, name: `unsloppify`, origin: `dropped`, switchable: false, editable: false })];
     body.value = { id: `unsloppify`, name: `unsloppify`, body: `Body.`, folder: `.agents/skills/unsloppify`, files: [`references/patterns.md`, `scripts/scan.sh`] };
     const host = mount(`unsloppify`);
@@ -143,7 +143,7 @@ test(`a folder outside the workspace lists its files without offering to open th
     expect(button(host, `SKILL.md`)).toBeUndefined();
 });
 
-test(`a loose file deletes from its facts, on a second press, and takes its tab with it`, async () => {
+test(`a loose file deletes from its facts, on a second press, and says it is gone`, async () => {
     skills.value = [own({ id: `scratch`, name: `scratch`, origin: `dropped`, switchable: false, editable: false })];
     body.value = { id: `scratch`, name: `scratch`, body: `Body.`, folder: `.agents/skills/scratch`, files: [] };
     const host = mount(`scratch`);
@@ -153,7 +153,7 @@ test(`a loose file deletes from its facts, on a second press, and takes its tab 
     expect(removeMutate).not.toHaveBeenCalled();
     button(host, `Delete`)?.click();
     expect(removeMutate).toHaveBeenCalledWith(`scratch`);
-    expect(closeTabIds).toHaveBeenCalledWith(new Set([`skill:scratch`]));
+    expect(gone).toHaveBeenCalledTimes(1);
 });
 
 test(`the reader's own skill is written where it is read, and what was typed outlives the tab being switched away`, async () => {
@@ -164,6 +164,8 @@ test(`the reader's own skill is written where it is read, and what was typed out
     expect(button(first, `Save changes`)?.hasAttribute(`disabled`)).toBe(true);
     await typeInto(first.querySelector(`textarea`)!, `Use when the user asks for meeting notes.`);
     expect(heldDraft(`notes`)?.description).toBe(`Use when the user asks for meeting notes.`);
+    // Said once, so a host that replaces what it shows on the next open keeps this one.
+    expect(edited).toHaveBeenCalledTimes(1);
     unmount();
 
     // Another tab was picked and this one picked again: the page mounts afresh, on what was typed.
@@ -221,7 +223,7 @@ test(`a new skill can't take a name already in the list`, async () => {
     expect(host.textContent).toContain(`There's already a skill called notes.`);
 });
 
-test(`a new skill's page becomes the saved skill's page, in the same tab`, async () => {
+test(`a new skill's page says which skill it became once saved`, async () => {
     holdDraft(NEW_SKILL, { name: `changelog`, description: `Use when asked for a changelog.`, body: `Group by Added, Changed, Fixed.` });
     const host = mount(NEW_SKILL, `New skill`);
     await settle();
@@ -230,7 +232,7 @@ test(`a new skill's page becomes the saved skill's page, in the same tab`, async
     button(host, `Add skill`)?.click();
     await settle();
     expect(saveMutate).toHaveBeenCalledWith({ name: `changelog`, description: `Use when asked for a changelog.`, body: `Group by Added, Changed, Fixed.` });
-    expect(replaceSkill).toHaveBeenCalledWith(NEW_SKILL, `changelog`, `changelog`);
+    expect(saved).toHaveBeenCalledWith(`changelog`);
     expect(heldDraft(NEW_SKILL)).toBeUndefined();
 });
 

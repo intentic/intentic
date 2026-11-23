@@ -7435,8 +7435,11 @@
             "connections": "Connections",
             "extensionsPlugins": "Extensions & plugins",
             "saysWhatNotWhen": "Says what it is, not when to use it, so the agent rarely picks it.",
-            "noneOfYourOwn": "None of your own yet. Write one to teach the agent how work is done here.",
-            "openSkill": "Open {name}"
+            "noneOfYourOwn": "None yet. Write one to teach the agent how work is done here.",
+            "noTrigger": "No trigger",
+            "vagueTrigger": "Vague trigger",
+            "yours": "Yours",
+            "roles": "Roles"
         },
         "agentSubagents": {
             "keepRoomForYou": "Room kept for you",
@@ -14434,8 +14437,7 @@
             "management": "Management panel",
             "path": "Path",
             "preview": "Preview",
-            "closeTab": "Close {title}",
-            "skill": "Skill"
+            "closeTab": "Close {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} repos",

@@ -1,8 +1,8 @@
 // WHAT THE LIST LOOKED LIKE BEFORE: forty-one rows in the order the daemon happened to return them, of which
 // twelve could be switched and the rest were cheatsheets that arrived with an account. Four of those rows were
 // the same Product Hunt skill under four connected logins, and the two the reader had written themselves were
-// somewhere in the middle of it. What is pinned here is which skills get a card and which a name on a shelf, the
-// order of both, why the filter reads more than the name, and when a trigger line earns a doubt.
+// somewhere in the middle of it. What is pinned here is which shelf each skill sits on and in what order, why the
+// filter reads more than the name, and when a trigger line earns a doubt.
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { bySection, isWorkspaceSkill, matchesSkill, shelvesOf, triggerDoubt } from "./skillList";
@@ -26,7 +26,7 @@ const connection = (id: string, kind: CapabilitySummary[`kind`]): CapabilitySumm
     secrets: [],
 });
 
-it(`gives a card to the reader's own words, wherever they were written, and to nothing that came with something else`, () => {
+it(`counts as the reader's own whatever they wrote, wherever it was written, and nothing that came with something else`, () => {
     const own = skill({ name: `notes` });
     // A role card's kit is also the reader's own writing, scoped to that role's turns.
     const role = skill({ name: `triage`, origin: `role`, owner: `Support` });
@@ -50,7 +50,7 @@ it(`opens on what the reader wrote and ends on what their connections brought`, 
     expect(list.map((entry) => entry.name)).toEqual([`notes`, `scratch`, `lsp`, `documenting`, `review`, `github`]);
 });
 
-it(`shelves a connection's skill under its tile's catalog section, extensions and plugins together, and built-ins last`, () => {
+it(`shelves the reader's own first, then role kits, then each connection's tile section, extensions together, built-ins last`, () => {
     const list = [
         skill({ name: `prod-box`, origin: `capability`, owner: `prod` }),
         skill({ name: `lsp`, origin: `builtin`, switchable: true }),
@@ -59,16 +59,19 @@ it(`shelves a connection's skill under its tile's catalog section, extensions an
         // Its connection is gone or unknown to the catalog: still listed, under a plain heading after the sections.
         skill({ name: `orphan`, origin: `capability`, owner: `removed-long-ago` }),
         skill({ name: `notes` }),
+        skill({ name: `scratch`, origin: `dropped`, removable: true }),
+        skill({ name: `triage`, origin: `role`, owner: `Support` }),
     ];
     const shelves = shelvesOf(list, { capabilities: [connection(`prod`, `ssh`)], extensions: [] });
     expect(shelves.map((shelf) => [shelf.key, shelf.skills.map((entry) => entry.name)])).toEqual([
+        // Written here or dropped into the workspace: both are the reader's to change.
+        [`yours`, [`notes`, `scratch`]],
+        [`roles`, [`triage`]],
         [`servers`, [`prod-box`]],
         [`connections`, [`orphan`]],
         [`extensions`, [`documenting`, `review`]],
         [`builtin`, [`lsp`]],
     ]);
-    // The reader's own skill is a card, never a shelf.
-    expect(shelves.flatMap((shelf) => shelf.skills).some((entry) => entry.name === `notes`)).toBe(false);
 });
 
 it(`sorts by name inside one shelf, so four logins of one site read in order`, () => {
