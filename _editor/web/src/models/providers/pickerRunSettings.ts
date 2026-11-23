@@ -2,7 +2,7 @@ import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-co
 import { capabilitiesOf, fastAllowed, loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { computed, type Ref } from "vue";
 import { t } from "@intentic/ui/i18n";
-import { clampEffort, effortLabelOf, effortsFor } from "./effortScale";
+import { clampEffort, effortLabelOf, effortsFor, ownsReasoning } from "./effortScale";
 import { providerModels } from "./providerCatalog";
 import { offeredLoops, selectedLoop } from "./offeredLoops";
 
@@ -34,14 +34,17 @@ export const thinkingOfferedFor = (provider: AgentProvider): boolean => provider
 const badgesFor = (provider: AgentProvider, modelId: string | undefined) =>
     (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.badges;
 
+// Whether a pin names an effort: where the runtime takes one, but never for an agent that owns its reasoning settings.
+const pinsEffort = (provider: AgentProvider, harness: AgentHarness): boolean =>
+    capabilitiesOf(provider, harness).effort && !ownsReasoning(provider, harness);
+
 // Defaults for a stored pin: only knobs the provider and harness would honor on a turn.
 export const defaultPinRunSettings = (
     provider: AgentProvider,
     harness: AgentHarness,
 ): Partial<Pick<ModelPin, `effort` | `thinking` | `fast`>> => {
-    const capabilities = capabilitiesOf(provider, harness);
     return {
-        ...(capabilities.effort ? { effort: DEFAULT_EFFORT } : {}),
+        ...(pinsEffort(provider, harness) ? { effort: DEFAULT_EFFORT } : {}),
         ...(thinkingOfferedFor(provider) ? { thinking: DEFAULT_THINKING } : {}),
     };
 };
@@ -55,9 +58,8 @@ export const carryPinKnobs = (
     if (from === undefined) {
         return {};
     }
-    const capabilities = capabilitiesOf(provider, harness);
     return {
-        ...(capabilities.effort && from.effort !== undefined && from.effort !== `` ? { effort: from.effort } : {}),
+        ...(pinsEffort(provider, harness) && from.effort !== undefined && from.effort !== `` ? { effort: from.effort } : {}),
         ...(thinkingOfferedFor(provider) && from.thinking !== undefined ? { thinking: from.thinking } : {}),
     };
 };
@@ -71,7 +73,7 @@ export const honoredPinKnobs = (pin: ModelPin): ModelPin => {
         provider: pin.provider,
         model: pin.model,
         ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
-        ...(capabilities.effort && pin.effort !== undefined && pin.effort !== `` ? { effort: pin.effort } : {}),
+        ...(pinsEffort(pin.provider, harness) && pin.effort !== undefined && pin.effort !== `` ? { effort: pin.effort } : {}),
         ...(thinkingOfferedFor(pin.provider) && pin.thinking !== undefined ? { thinking: pin.thinking } : {}),
         ...(pin.fast === true && fastAllowed(capabilities, pin.provider, badges) ? { fast: true } : {}),
     };

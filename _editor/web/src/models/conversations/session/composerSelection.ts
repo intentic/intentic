@@ -10,7 +10,7 @@ import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { daemonRecordsSwitches } from "../../../client/sandbox/daemon/recordedSwitches";
 import { followPick } from "./queueCalls";
 import { runServing } from "../accounts/runServing";
-import { clampEffort } from "../../providers/effortScale";
+import { clampEffort, ownsReasoning } from "../../providers/effortScale";
 import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
 import { accountIntent, readsAsContinuing, type SessionRef, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
@@ -180,8 +180,11 @@ export class ComposerSelection {
         ),
     );
 
-    // Effort the next turn actually runs at: the pick clamped to what the current provider+model+thinking triple offers.
-    readonly effort = computed<string>(() => clampEffort(this.effortPick.value, this.provider.value, this.model.value, this.thinking.value));
+    // Effort the next turn actually runs at: the pick clamped to what the current provider+model+thinking triple offers,
+    // and none on an agent that owns its reasoning settings (ownsReasoning).
+    readonly effort = computed<string>(() =>
+        ownsReasoning(this.provider.value, this.harness.value) ? `` : clampEffort(this.effortPick.value, this.provider.value, this.model.value, this.thinking.value),
+    );
 
     // Posture the next turn starts in: the pick clamped to what this conversation's runtime can hold.
     readonly mode = computed<PermissionMode>(() => clampMode(this.modePick.value, this.capabilities.value));

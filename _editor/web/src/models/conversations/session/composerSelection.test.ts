@@ -152,6 +152,24 @@ describe(`ComposerSelection`, () => {
         expect(selection.movedFrom.value).toBeUndefined();
     });
 
+    // The picker draws an installed agent no effort scale, so the pick carried over from Claude must not set its
+    // reasoning depth unseen; back on Claude, the pick is still there.
+    it(`a turn on an installed ACP agent names no effort, and the pick survives for the next provider`, () => {
+        const { selection } = selectionOf();
+
+        selection.apply({ kind: `selectProvider`, provider: `qwen-code` });
+
+        expect(selection.provider.value).toBe(`qwen-code`);
+        expect(selection.effortPick.value).toBe(`high`);
+        expect(selection.effort.value).toBe(``);
+        expect(selection.turnSettings().effort).toBe(``);
+        expect(selection.followRouting.value.effort).toBeUndefined();
+
+        selection.apply({ kind: `selectProvider`, provider: `claude` });
+
+        expect(selection.effort.value).toBe(`high`);
+    });
+
     it(`a provider switch re-scopes the picks, forgets what the old segment reported, and is remembered`, () => {
         const { selection, host } = selectionOf();
 

@@ -12,6 +12,15 @@ test("carryPinKnobs keeps effort across effort-capable providers, Google include
     expect(carryPinKnobs({ provider: `claude`, model: `claude-haiku-4-5`, effort: `high`, thinking: false }, `gemini`, `native`)).toEqual({ effort: `high` });
 });
 
+// An installed ACP agent's runtime forwards an effort a turn names (a spawn's), but the agent owns its reasoning settings
+// and the picker draws it no scale: a pin naming one would set its depth where nobody can see or change it.
+test("a pin on an installed ACP agent names no effort: none by default, none carried, none kept", () => {
+    expect(defaultPinRunSettings(`qwen-code`, `native`)).toEqual({});
+    expect(carryPinKnobs({ provider: `claude`, model: `claude-opus-5-5`, effort: `high` }, `qwen-code`, `native`)).toEqual({});
+    expect(honoredPinKnobs({ provider: `qwen-code`, model: `qwen4-max`, effort: `xhigh` })).toEqual({ provider: `qwen-code`, model: `qwen4-max` });
+    expect(pinKnobSummary({ provider: `qwen-code`, model: `qwen4-max`, effort: `xhigh` })).toBeUndefined();
+});
+
 test("honoredPinKnobs and pinKnobSummary omit the knob Google cannot run, and keep the one it can", () => {
     const pin = { provider: `gemini` as const, model: `gemini-3-flash-lite`, effort: `xhigh`, thinking: true };
     expect(honoredPinKnobs(pin)).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite`, effort: `xhigh` });

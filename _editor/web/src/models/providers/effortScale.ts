@@ -1,5 +1,5 @@
-import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { type CatalogOption, effortAllowed, EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf, type CatalogOption, effortAllowed, EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { keyedBeside, providerModels } from "./providerCatalog";
 import { t } from "@intentic/ui/i18n";
@@ -31,6 +31,11 @@ const floorFor = (provider: AgentProvider): readonly string[] => (provider === `
 // gateway's or a local server's models say nothing about what they take.
 const ladderOwner = (provider: AgentProvider): NativeProvider | undefined =>
     NATIVE_PROVIDERS.find((native) => native === provider) ?? keyedBeside(provider);
+
+// An installed ACP agent owns its reasoning settings: drawn no scale, so no pick names an effort for it, and only one a
+// turn names itself (a spawn's) reaches its `thought_level` option. Otherwise a pick made on another model, never shown
+// here, would set it.
+export const ownsReasoning = (provider: AgentProvider, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).runtime === `acp`;
 
 // The tiers a catalog publishes for one model, when it publishes any.
 const publishedEfforts = (provider: AgentProvider, modelId: string | undefined): readonly string[] | undefined => {

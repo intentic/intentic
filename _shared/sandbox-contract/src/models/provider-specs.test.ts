@@ -165,12 +165,12 @@ test("cursor holds every mode, a tool list, the terminal panel and its own skill
 });
 
 // Devin runs the ACP floor under its own name: what the floor gained (approvals, questions) it has too, and the effort
-// scale it does not advertise stays off.
+// scale it does not advertise stays off, the one place it differs from the floor.
 test("devin is the ACP floor under its own name", () => {
     const devin = capabilitiesOf("devin", "native");
     const floor = capabilitiesOf("some-installed-agent", "native");
     expect(devin.runtime).toBe("devin");
-    expect({ ...devin, runtime: floor.runtime }).toEqual(floor);
+    expect({ ...devin, runtime: floor.runtime, effort: floor.effort }).toEqual(floor);
     expect(devin.permissions).toBe("modes");
     expect(devin.questions).toBe(true);
     expect(devin.effort).toBe(false);

@@ -66,6 +66,19 @@ test("a named model switches the session before the prompt, and the turn announc
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
+// Qwen Code qualifies each id with its route (`qwen4-max(anthropic)`), so a spawn naming the bare id means that one.
+test("a bare id names the one choice the agent qualifies with a suffix, and two such choices refuse it", async () => {
+    const one = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["qwen4-max-preview(anthropic)", "qwen4-max(anthropic)"] }))), TIMEOUTS);
+    const events = await collect(one, request("hello"), undefined, { model: "qwen4-max" });
+    expect(events.filter((event) => event.kind === "init")).toEqual([{ kind: "init", model: "qwen4-max(anthropic)" }]);
+    expect(events.at(-1)).toEqual({ kind: "done" });
+
+    const two = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["qwen4-max(anthropic)", "qwen4-max(openai)"] }))), TIMEOUTS);
+    const refused = await collect(two, request("hello"), undefined, { model: "qwen4-max" });
+    expect(refused).toContainEqual(expect.objectContaining({ kind: "error", code: "model-unavailable" }));
+    expect(refused.some((event) => event.kind === "delta")).toBe(false);
+});
+
 test("a model the session's own list leaves out refuses the turn before anything is sent", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["swe", "opus"] }))), TIMEOUTS);
     const events = await collect(agent, request("hello"), undefined, { model: "gpt" });

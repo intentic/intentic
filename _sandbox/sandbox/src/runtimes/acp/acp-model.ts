@@ -45,7 +45,17 @@ const selectOf = (options: readonly SessionConfigOption[] | null | undefined, ca
     };
 };
 
-// Undefined when the agent offers no model option: it keeps its model to itself, as the installed ACP floor assumes.
+// The choice a turn's model names: its own id, else the one choice the agent qualifies with a trailing suffix (Qwen Code
+// offers `qwen4-max(anthropic)` for `qwen4-max`). Undefined when none answers to it, or more than one does.
+export const offeredChoice = (models: SessionModels, asked: string): string | undefined => {
+    if (models.choices.some((choice) => choice.value === asked)) {
+        return asked;
+    }
+    const qualified = models.choices.filter((choice) => choice.value.replace(/\([^()]*\)$/u, "") === asked);
+    return qualified.length === 1 ? qualified[0]?.value : undefined;
+};
+
+// Undefined when the agent offers no model option: it keeps its model to itself.
 export const sessionModelsOf = (options: readonly SessionConfigOption[] | null | undefined): SessionModels | undefined => selectOf(options, "model");
 
 // Undefined when the agent offers no reasoning-depth option (the protocol's `thought_level` category).

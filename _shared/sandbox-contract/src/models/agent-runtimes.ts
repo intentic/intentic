@@ -268,9 +268,10 @@ export const ACP: AgentCapabilities = {
     mcp: "tools",
     // The JS backend is the door's `code` server, each script asked of the turn's gate before it runs.
     execution: ["shell", "js"],
-    // A session's `thought_level` option takes the turn's effort where the agent offers one (acp-model.ts), but this
-    // record is every agent's and most offer none, so the picker shows no scale.
-    effort: false,
+    // A session's `thought_level` option takes the turn's effort where the agent offers one (acp-model.ts); one offering
+    // none keeps its own level. The agent owns its reasoning settings, so the picker draws no scale and names no effort
+    // for it (the editor's effortScale.ts ownsReasoning): only an effort a turn names itself, a spawn's, reaches it.
+    effort: true,
     fastMode: false,
     // One warm process serves every conversation on the agent, each session in its own cwd; a mount namespace belongs to
     // one turn, so a process shared across conversations can stand in none of them. Keying the pool by namespace would

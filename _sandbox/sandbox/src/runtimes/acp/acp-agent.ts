@@ -40,7 +40,7 @@ import { answerElicitation } from "./acp-elicitation.js";
 import { sessionMissing } from "./acp-session-missing.js";
 import { acpMcpProxyFile, stdioProxyServer } from "./acp-mcp-proxy.js";
 import { sessionUpdateEvent } from "./acp-events.js";
-import { recordOptions, thoughtFor } from "./acp-model.js";
+import { offeredChoice, recordOptions, thoughtFor } from "./acp-model.js";
 import { isBypassMode, modeFor, noteMode, recordModes } from "./acp-modes.js";
 import {
     allowedBy,
@@ -59,12 +59,13 @@ import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 
 // The ACP provider adapter, the seam runAgent/createCodexAgent/createOpenCodeAgent share: AgentRequest in, AgentEvent out,
 // over any agent speaking the Agent Client Protocol. One warm connection per agent, one session per conversation. A
-// documented floor, not the native ceiling: an installed agent owns its model settings, MCP tools pass through only when
-// advertised. A native provider on this runtime (Devin) names the model through AcpTurnOptions. What the agent advertises
+// documented floor, not the native ceiling: MCP tools pass through only when advertised, and a turn names a model through
+// AcpTurnOptions only where someone picked one (a native provider's catalog, a spawn naming one). What the agent advertises
 // per session is used where it is: its modes for the turn's posture (acp-modes.ts), its `thought_level` option for the
 // turn's effort, and form elicitation for questions (acp-elicitation.ts).
 
-// What a provider built on this runtime decides per turn beyond the request. An installed agent card decides none of it.
+// What a provider built on this runtime decides per turn beyond the request: Devin's and the vendor CLIs' arms from their
+// catalogs, an installed agent's from the model its turn names (acp-adapter.ts).
 export interface AcpTurnOptions {
     // A value the session's model option offers (acp-model.ts): the session is switched to it before the prompt and the
     // turn announces it. Absent, the agent keeps its own pick and nothing is announced.
@@ -179,18 +180,22 @@ async function* sessionFor(
 }
 
 // Puts the session on the model asked for and answers what it now runs on. Undefined when the agent offers no model
-// option for this session: it keeps its own, as an installed agent does. Asking for one it does not offer throws
-// ModelNotOffered rather than running the turn on a model nobody picked.
-const settleModel = async (connection: AcpConnection, sessionId: string, wanted: string): Promise<string | undefined> => {
+// option for this session: it keeps its own. Asking for one it does not offer throws ModelNotOffered rather than
+// running the turn on a model nobody picked.
+const settleModel = async (connection: AcpConnection, sessionId: string, asked: string): Promise<string | undefined> => {
     const models = connection.models.get(sessionId);
-    if (models === undefined || models.current === wanted) {
-        return models?.current;
+    if (models === undefined) {
+        return undefined;
     }
-    if (!models.choices.some((choice) => choice.value === wanted)) {
+    const wanted = offeredChoice(models, asked);
+    if (wanted === undefined) {
         const offered = models.choices.map((choice) => choice.name).join(", ");
         throw new ModelNotOffered(
-            `${wanted} is not one of the models this account offers${offered === "" ? "" : ` (${offered})`}. Pick another model.`,
+            `${asked} is not one of the models this account offers${offered === "" ? "" : ` (${offered})`}. Pick another model.`,
         );
+    }
+    if (models.current === wanted) {
+        return models.current;
     }
     const answer = await connection.agent.request(methods.agent.session.setConfigOption, { sessionId, configId: models.configId, value: wanted });
     return recordOptions(connection, sessionId, answer.configOptions)?.current ?? wanted;

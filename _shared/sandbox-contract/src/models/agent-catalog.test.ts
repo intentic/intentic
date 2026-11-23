@@ -275,14 +275,17 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(acp).not.toContain("no code runs, shell only");
     expect(acpCaps.commands).toBe(true);
     expect(acpCaps.terminals).toBe(true);
-    // Per-tool approvals and questions ride the protocol's own seams (request_permission, form elicitation); effort and
-    // isolation stay off, since the record is every agent's and the pooled process is every conversation's. Recovery is
-    // the turn's one exit's (a failure coded by its words, a silent agent coded an outage), so it is every agent's too.
+    // Per-tool approvals, questions and effort ride the protocol's own seams (request_permission, form elicitation, the
+    // session's `thought_level` option where the agent offers one); isolation stays off, since the pooled process is
+    // every conversation's. Recovery is the turn's one exit's (a failure coded by its words, a silent agent coded an
+    // outage), so it is every agent's too.
     expect(acpCaps.permissions).toBe("modes");
     expect(acpCaps.questions).toBe(true);
+    expect(acpCaps.effort).toBe(true);
     expect(acp).not.toContain("no per-tool approvals");
     expect(acp).not.toContain("no clarifying questions");
-    expect(acp).toEqual(expect.arrayContaining(["no effort control", "worktree by cwd only"]));
+    expect(acp).not.toContain("no effort control");
+    expect(acp).toContain("worktree by cwd only");
     expect(acp).not.toContain("no auto-resume after outage");
 
     // Codex takes the daemon's own servers too, over the door, so only plugins are missing.
