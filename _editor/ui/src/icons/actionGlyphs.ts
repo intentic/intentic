@@ -36,6 +36,8 @@ export const ACTION_GLYPHS = {
     eraser: { outline: `m3 14 11-11 8 8-10 10H8Z M8 9l8 8 M12 21h9` },
     pin: { outline: `M8 3h8 M9 3v7l-4 5h14l-4-5V3 M12 15v7` },
     play: { outline: `m7 3 14 9-14 9Z` },
+    // The arrow a mouse moves: a hand on the mouse and keyboard, whoever's it is.
+    pointer: { outline: `M5 2v16l4-4 3 7 3-1-3-7h5Z` },
     backward: { outline: `M4 4v16 M20 4 8 12l12 8Z` },
     forward: { outline: `M20 4v16 M4 4l12 8-12 8Z` },
     compress: { outline: `M3 8h5V3 M16 3v5h5 M21 16h-5v5 M8 21v-5H3` },

@@ -3,13 +3,15 @@ import { Button, Icon, SandboxLogo } from "@intentic/ui";
 import type { IconName } from "@intentic/ui/icons";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import AccessMapTies from "./AccessMapTies.vue";
+import AccessMapStrip from "./AccessMapStrip.vue";
 import type { AccountGraph, GraphMachine, GraphSandbox, Standing } from "./accountGraph";
-import { machineName, readWords, sandboxLine, tierWord } from "./accessMapWords";
+import { machineName, readWords, sandboxLine, tieHead, tierWord } from "./accessMapWords";
+import { tiesOf } from "./ties";
 
-// THE ACCESS MAP IN WORDS: every sandbox the account reaches with what it is tied to, then every computer and server
+// THE ACCESS MAP AS A LIST: every sandbox the account reaches with what it is tied to, then every computer and server
 // with which sandboxes reach it. What a narrow window shows in place of the drawing, and what a reader who would rather
-// read than point picks; it says everything the lines say.
+// read than point picks; it says everything the lines say. Each tie is one row, its other end named and what it allows
+// drawn as the same row of glyphs the map draws, so rows line up and compare by shape.
 
 const t = useT();
 
@@ -34,6 +36,10 @@ const MACHINE_ICONS = { computer: `desktop`, phone: `mobile`, browser: `browsers
 
 const facts = (sandbox: GraphSandbox): string =>
     [sandboxLine(sandbox), readWords(sandbox.read, sandbox.readAt, now)].filter((part) => part !== undefined && part !== ``).join(` · `);
+
+// One row per tie, in the order a reader asks about them (ties.ts); the account's way in is the section it sits in.
+const rowsOf = (id: string) =>
+    tiesOf(graph, id).map((tie) => ({ key: `${tie.verb}:${tie.edge.id}`, head: tieHead(graph, tie), tie, broken: tie.edge.answer === `revoked` }));
 
 const fleetWords = (sandbox: GraphSandbox): string | undefined => {
     if (sandbox.fleet === undefined) {
@@ -75,10 +81,15 @@ const fleetWords = (sandbox: GraphSandbox): string | undefined => {
                     <p v-if="sandbox.platformTier !== undefined" class="pl-8 text-xs text-subtle">
                         {{ t(`settings.accessMap.platformSays`, { tier: tierWord(sandbox.platformTier) }) }}
                     </p>
-                    <div class="pl-8">
-                        <AccessMapTies :graph :id="sandbox.id" />
-                        <p v-if="fleetWords(sandbox) !== undefined" class="text-sm text-content">{{ fleetWords(sandbox) }}</p>
-                    </div>
+                    <ul v-if="rowsOf(sandbox.id).length > 0" class="flex flex-col gap-1 pl-8">
+                        <li v-for="row in rowsOf(sandbox.id)" :key="row.key" class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-0.5">
+                            <span class="w-56 max-w-full shrink-0 truncate text-sm" :class="row.broken ? `text-muted line-through` : `text-content`">{{ row.head }}</span>
+                            <AccessMapStrip :edge="row.tie.edge" :verb="row.tie.verb" />
+                        </li>
+                    </ul>
+                    <p v-if="fleetWords(sandbox) !== undefined" class="flex items-center gap-2 pl-8 text-sm text-content">
+                        <Icon name="key" class="text-xs text-muted" />{{ fleetWords(sandbox) }}
+                    </p>
                 </article>
             </div>
         </section>
@@ -101,9 +112,12 @@ const fleetWords = (sandbox: GraphSandbox): string | undefined => {
                             machine.online ? t(`settings.accessMap.connected`) : t(`settings.accessMap.notConnected`)
                         }}</span>
                     </header>
-                    <div class="pl-8">
-                        <AccessMapTies :graph :id="machine.id" />
-                    </div>
+                    <ul v-if="rowsOf(machine.id).length > 0" class="flex flex-col gap-1 pl-8">
+                        <li v-for="row in rowsOf(machine.id)" :key="row.key" class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-0.5">
+                            <span class="w-56 max-w-full shrink-0 truncate text-sm text-content">{{ row.head }}</span>
+                            <AccessMapStrip :edge="row.tie.edge" :verb="row.tie.verb" />
+                        </li>
+                    </ul>
                 </article>
             </div>
         </section>

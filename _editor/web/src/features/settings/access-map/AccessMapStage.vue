@@ -22,7 +22,7 @@ const { graph, lighting, focus, pinned, now, picture } = defineProps<{
     now: number;
     picture?: string | null | undefined;
 }>();
-const emit = defineEmits<{ point: [id: string | undefined]; press: [id: string]; clear: [] }>();
+const emit = defineEmits<{ point: [id: string | undefined]; press: [id: string]; clear: []; read: [sandboxId: string] }>();
 
 // Wider gutters from here, for the lines to bend in; the columns stop growing at the third and the drawing centres.
 const ROOMY_FROM = 900;
@@ -151,10 +151,12 @@ const orgWord = (org: AccountGraph[`you`][`orgs`][number]): string =>
                         :graph
                         :id="sandbox.id"
                         :lit="litOf(sandbox.id)"
+                        :lit-edges="lighting?.edges"
                         :pinned="pinned === sandbox.id"
                         :now
                         @point="(on) => emit(`point`, on ? sandbox.id : undefined)"
                         @press="emit(`press`, sandbox.id)"
+                        @read="(sandboxId) => emit(`read`, sandboxId)"
                     />
                 </div>
             </section>
@@ -168,6 +170,7 @@ const orgWord = (org: AccountGraph[`you`][`orgs`][number]): string =>
                         :graph
                         :id="machine.id"
                         :lit="litOf(machine.id)"
+                        :lit-edges="lighting?.edges"
                         :pinned="pinned === machine.id"
                         :now
                         @point="(on) => emit(`point`, on ? machine.id : undefined)"

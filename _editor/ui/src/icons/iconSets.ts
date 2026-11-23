@@ -119,6 +119,7 @@ export const ICONS = {
     pin: ACTION_GLYPHS[`pin`],
     pipelines: NAVIGATION_GLYPHS[`pipelines`],
     play: ACTION_GLYPHS[`play`],
+    pointer: ACTION_GLYPHS[`pointer`],
     plug: OBJECT_GLYPHS[`plug`],
     print: OBJECT_GLYPHS[`print`],
     plus: NAVIGATION_GLYPHS[`plus`],

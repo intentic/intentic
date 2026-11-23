@@ -7,15 +7,16 @@ import { useAuth } from "../../../client/auth/useAuth";
 import AccessMapExposures from "./AccessMapExposures.vue";
 import AccessMapList from "./AccessMapList.vue";
 import AccessMapStage from "./AccessMapStage.vue";
-import AccessMapTies from "./AccessMapTies.vue";
 import { lightingOf } from "./accountGraph";
-import { nodeName, readWhen } from "./accessMapWords";
+import { readWhen } from "./accessMapWords";
 import { useAccountReach } from "./useAccountReach";
 
 // SETTINGS ▸ ACCESS MAP: everything the signed-in account reaches, across every sandbox it is in. The account on the left,
 // its sandboxes in the middle (its own, those shared with it, and those met only at the far end of a link), and the
 // computers, phones, browsers, servers and cloud they reach on the right. What deserves reading first is said above it in
-// sentences. Pointing at anything lights what it is tied to and says it in words below; pressing keeps it lit.
+// sentences. What each tie allows is drawn on the card it lands on, as a row of glyphs that each name themselves when
+// pointed at, so nothing has to be read in a caption. Pointing at anything lights what it is tied to; pressing keeps it
+// lit.
 //
 // Read only, like the sandbox's own map: every line comes from what each sandbox's daemon enforces (GET /system/reach),
 // read under the reader's own session there, and every change is made on the page that owns it. docs/architecture/accounts.md
@@ -140,12 +141,6 @@ const again = async (): Promise<void> => {
 };
 const readOne = (sandboxId: string): void => void readNow(sandboxId);
 
-// The focus said in words, under the drawing: what it is and everything it is tied to.
-const focusSandboxId = computed(() => {
-    const node = focus.value === undefined ? undefined : graph.value.nodes.get(focus.value);
-    return node !== undefined && `standing` in node && node.read === `signin` ? node.sandboxId : undefined;
-});
-
 // The focus's ink, mixed into the theme so it tints rather than shouts, as on the sandbox's map (SandboxMap.vue); a tie
 // between two sandboxes keeps a little of the link ink at rest.
 const look = {
@@ -190,38 +185,16 @@ const look = {
             <AccessMapExposures :graph :showable="drawn === `map`" @show="press" />
 
             <template v-if="drawn === `map`">
-                <!-- One line, the same height whatever is in focus: a bar that grew with the focus pushed the drawing down
-                     under the pointer, which moved the focus, which shrank the bar again. -->
+                <!-- One line: the four kinds of line, then the two marks that say whose a row of glyphs is. -->
                 <ul class="flex h-5 min-w-0 flex-wrap items-center gap-x-4 overflow-hidden text-xs text-subtle" aria-hidden="true">
                     <li class="flex items-center gap-1.5"><span class="h-px w-5 bg-(--map-line)" />{{ t(`settings.accessMap.legend.yours`) }}</li>
                     <li class="flex items-center gap-1.5"><span class="w-5 border-t border-dashed border-(--map-line) opacity-60" />{{ t(`settings.accessMap.legend.others`) }}</li>
                     <li class="flex items-center gap-1.5"><span class="h-px w-5 bg-(--access-link)" />{{ t(`settings.accessMap.legend.link`) }}</li>
                     <li class="flex items-center gap-1.5"><span class="w-5 border-t border-dotted border-(--map-line)" />{{ t(`settings.accessMap.legend.runs`) }}</li>
+                    <li class="flex items-center gap-1.5"><Icon name="robot" />{{ t(`settings.accessMap.glyph.agents`) }}</li>
+                    <li class="flex items-center gap-1.5"><Icon name="users" />{{ t(`settings.accessMap.glyph.people`) }}</li>
                 </ul>
-                <AccessMapStage :graph :lighting :focus :pinned :now :picture="user?.image" @point="point" @press="press" @clear="clear" />
-                <!-- The focus in words, under the drawing and held at the window's foot while the drawing is taller than it:
-                     below the cards, so however long it grows it moves none of them. Where it lies over the drawing the
-                     pointer passes through it to the card beneath, so covering the card it describes never ends the focus. -->
-                <div
-                    v-if="focus !== undefined"
-                    class="pointer-events-none sticky bottom-0 z-10 -mx-1 flex min-w-0 items-start gap-3 rounded-lg border border-line-subtle bg-card px-3 py-2.5 shadow-sm"
-                    aria-live="polite"
-                >
-                    <div class="flex min-w-0 flex-1 flex-col gap-1">
-                        <span class="text-sm font-medium text-content">{{ nodeName(graph, focus) }}</span>
-                        <AccessMapTies :graph :id="focus" />
-                        <span v-if="pinned !== undefined" class="text-xs text-subtle">{{ t(`settings.accessMap.pinned`) }}</span>
-                    </div>
-                    <Button
-                        v-if="focusSandboxId !== undefined"
-                        class="pointer-events-auto"
-                        size="small"
-                        tier="boring"
-                        :label="t(`settings.accessMap.read`)"
-                        @click="readOne(focusSandboxId)"
-                    />
-                    <Button v-if="pinned !== undefined" class="pointer-events-auto" size="small" tier="quiet" :label="t(`settings.accessMap.letGo`)" @click="clear" />
-                </div>
+                <AccessMapStage :graph :lighting :focus :pinned :now :picture="user?.image" @point="point" @press="press" @clear="clear" @read="readOne" />
             </template>
             <template v-else>
                 <p v-if="narrow" class="text-xs text-subtle">{{ t(`settings.accessMap.narrow`) }}</p>

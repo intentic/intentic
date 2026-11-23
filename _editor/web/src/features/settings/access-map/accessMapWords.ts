@@ -3,6 +3,7 @@ import { timeAgo } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import type { AccountGraph, Exposure, GraphEdge, GraphMachine, GraphSandbox, ReadState } from "./accountGraph";
 import type { Tie } from "./ties";
+import type { StripGroupKey, StripName } from "./tieStrip";
 
 // THE ACCESS MAP IN THE READER'S WORDS. Every function reads the language when it is called, so a label follows a change
 // of language (docs/architecture/languages.md); none is evaluated at import.
@@ -101,7 +102,7 @@ const termWords = (edge: GraphEdge): string[] => {
 };
 
 /** What one tie lets its holder do, in a few words, most important first. */
-export const tieDetails = (edge: GraphEdge): string[] => {
+const tieDetails = (edge: GraphEdge): string[] => {
     switch (edge.kind) {
         case `link`: {
             const answer = edge.answer === `revoked` ? t(`settings.accessMap.answer.revoked`) : edge.answer === `silent` ? t(`settings.accessMap.answer.silent`) : undefined;
@@ -127,7 +128,7 @@ export const tieDetails = (edge: GraphEdge): string[] => {
  * Whose tie it is beside the reader: others who can use it too, or that the reader's own conversations cannot. Said of
  * a tie a sandbox drives; work handed in from elsewhere is driven over there, so nothing about the reader is said of it.
  */
-export const tieWho = (edge: GraphEdge, verb: Tie[`verb`]): string[] => [
+const tieWho = (edge: GraphEdge, verb: Tie[`verb`]): string[] => [
     ...(edge.kind !== `member` && edge.kind !== `runs` && verb !== `takesFrom` && !edge.yours ? [t(`settings.accessMap.notYours`)] : []),
     ...((edge.others ?? 0) > 0 ? [t(`settings.accessMap.others`, { count: edge.others }, edge.others ?? 0)] : []),
 ];
@@ -184,3 +185,53 @@ export const exposureWords = (graph: AccountGraph, exposure: Exposure): string =
             return ``;
     }
 };
+
+// The glyphs a tie's row draws (tieStrip.ts), each named in a word or two for its tooltip.
+const SLOT_WORDS = {
+    shell: () => t(`settings.accessMap.glyph.shell`),
+    write: () => t(`settings.accessMap.glyph.write`),
+    screen: () => t(`settings.accessMap.glyph.screen`),
+    control: () => t(`settings.accessMap.glyph.control`),
+    sandboxes: () => t(`settings.accessMap.glyph.sandboxes`),
+    destructive: () => t(`settings.accessMap.glyph.destructive`),
+    programs: () => t(`settings.accessMap.glyph.programs`),
+    remoteView: () => t(`settings.accessMap.glyph.remoteView`),
+    remoteControl: () => t(`settings.accessMap.glyph.remoteControl`),
+    remoteTerminal: () => t(`settings.accessMap.glyph.remoteTerminal`),
+    tasks: () => t(`settings.accessMap.glyph.tasks`),
+    records: () => t(`settings.accessMap.glyph.records`),
+    operate: () => t(`settings.accessMap.glyph.shell`),
+    approve: () => t(`settings.accessMap.glyph.approve`),
+} as const;
+
+const isSlot = (key: string): key is keyof typeof SLOT_WORDS => Object.hasOwn(SLOT_WORDS, key);
+
+/** One glyph's name; a switch a newer daemon added reads as its own name. */
+export const slotLabel = (key: string): string => (isSlot(key) ? SLOT_WORDS[key]() : key);
+
+/** Who a group of glyphs speaks for, said by the mark before it. */
+export const groupLabel = (key: StripGroupKey): string | undefined => {
+    switch (key) {
+        case `agents`:
+            return t(`settings.accessMap.glyph.agents`);
+        case `people`:
+            return t(`settings.accessMap.glyph.people`);
+        default:
+            return undefined;
+    }
+};
+
+/** What a name on a row is: the role a link's tasks wear, the service they act as, the account a server signs in as. */
+export const stripNameLabel = (key: StripName[`key`]): string => {
+    switch (key) {
+        case `role`:
+            return t(`settings.accessMap.glyph.role`);
+        case `runAs`:
+            return t(`settings.accessMap.glyph.runAs`);
+        default:
+            return t(`settings.accessMap.glyph.user`);
+    }
+};
+
+/** A tie in words, for a screen reader and for the reader who reads rather than points: what it allows, then whose it is. */
+export const tieSaid = (edge: GraphEdge, verb: Tie[`verb`]): string => [...tieDetails(edge), ...tieWho(edge, verb)].join(`, `);
