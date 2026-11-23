@@ -4,7 +4,7 @@ export type Answer = { "answer": "preview", route: PreviewRoute, } | { "answer":
 /**
  * The member whose ticket opened it, lowercased; absent when the daemon runs without auth.
  */
-member?: string, } | { "answer": "pong" };
+member?: string, } | { "answer": "pong" } | { "answer": "runnerView", allowed: boolean, member?: string, reason?: string, };
 
 /**
  * A PEM certificate chain and its PEM private key.
@@ -31,7 +31,7 @@ export type FromNode = { "kind": "hello", build: string, pid: number, generation
  * run it (2026-11-11). netd dials nothing until Node sends a tunnel again, and tells Node `Superseded` rather than
  * a plain "off". A netd older than it reads the frame as a bare stand-down, which stops dialling all the same.
  */
-superseded?: string, } | { "kind": "ask", id: number, question: NetdQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, } | { "kind": "deviceUplink", device: string, tokenSha256: string, } | { "kind": "deviceWithdraw", device: string, };
+superseded?: string, } | { "kind": "ask", id: number, question: NetdQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, } | { "kind": "deviceUplink", device: string, tokenSha256: string, } | { "kind": "deviceWithdraw", device: string, } | { "kind": "parentUplink", uplink?: ParentUplinkConfig, } | { "kind": "runnerUplink", runner: string, tokenSha256: string, } | { "kind": "runnerWithdraw", runner: string, };
 
 /**
  * Every port netd binds, as Node's config names them; an absent one is not bound.
@@ -61,7 +61,7 @@ export type NetdAnswer = { "answer": "sync", generations: Array<number | null>, 
  * Request headers only netd sets on what it forwards to Node; it strips them from everything arriving outside.
  * Exported as a literal type, so a Node constant naming one that drifts from this spelling fails to compile.
  */
-export type NetdHeader = "x-intentic-preview" | "x-intentic-preview-unreachable" | "x-intentic-listener";
+export type NetdHeader = "x-intentic-preview" | "x-intentic-preview-unreachable" | "x-intentic-listener" | "x-intentic-runner-port";
 
 /**
  * A question Node asks netd.
@@ -72,6 +72,13 @@ export type NetdQuestion = { "question": "sync", dirs: Array<string>, };
  * An answer Node renders whole when asked, for netd to write as it stands: a refusal page, or the probe's report.
  */
 export type Page = { status: number, headers: { [key in string]: string }, body: string, };
+
+/**
+ * A runner's uplink to its parent sandbox (2026-11-23): the parent's address (`http(s)://` or `ws(s)://`, its origin is
+ * what counts), this runner's id as the parent enrolled it, and the durable token it presents there. The runner's netd
+ * dials browser-wire's `RUNNER_UPLINK_PATH` on that origin and serves every stream the parent opens as its own.
+ */
+export type ParentUplinkConfig = { url: string, runner: string, token: string, };
 
 /**
  * Which preview hosts need the sandbox's pass, and how netd checks one (2026-10-27). netd applies it to requests on
@@ -106,12 +113,17 @@ passPath: string, };
 /**
  * What becomes of a preview host's request, decided by Node once, when asked.
  */
-export type PreviewRoute = { "to": "upstream", upstream: Upstream, } | { "to": "page", page: Page, } | { "to": "outbox" };
+export type PreviewRoute = { "to": "upstream", upstream: Upstream, } | { "to": "page", page: Page, } | { "to": "outbox" } | { "to": "runner", runner: string, port: number, frameable: boolean, };
 
 /**
  * A question netd asks Node.
  */
-export type Question = { "question": "preview", host: string, probe: boolean, } | { "question": "terminal", query: string, } | { "question": "ping" };
+export type Question = { "question": "preview", host: string, probe: boolean, } | { "question": "terminal", query: string, } | { "question": "runnerView", runner: string, path: string, query: string, } | { "question": "ping" };
+
+/**
+ * A registered runner's uplink as a parent's netd holds it.
+ */
+export type RunnerUplinkState = { runner: string, connected: boolean, };
 
 export type Scheme = "http" | "https";
 
@@ -123,7 +135,7 @@ export type TerminalPlan = { "plan": "session", name: string, createIn?: string,
 /**
  * Everything netd sends Node.
  */
-export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: NetdAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, } | { "kind": "hiddenLine", session: string, prompt: string, value: string, } | { "kind": "deviceUplinks", uplinks: Array<DeviceUplinkState>, };
+export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: NetdAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, } | { "kind": "hiddenLine", session: string, prompt: string, value: string, } | { "kind": "deviceUplinks", uplinks: Array<DeviceUplinkState>, } | { "kind": "parentUplink", connected: boolean, reason?: string, } | { "kind": "runnerUplinks", uplinks: Array<RunnerUplinkState>, };
 
 /**
  * The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces

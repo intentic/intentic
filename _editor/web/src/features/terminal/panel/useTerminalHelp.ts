@@ -7,12 +7,14 @@ import { computed, ref, type Ref, watch } from "vue";
 export interface TerminalHelpHost {
     readonly sessions: Readonly<Ref<readonly TerminalSession[]>>;
     readonly activeName: Readonly<Ref<string | undefined>>;
-    // Answers the ask on this sandbox's own daemon, the one that raised it.
+    // An ask the list does not carry, for a tab that is not this sandbox's own session (a runner's, runnerTerminals.ts).
+    readonly helpOf?: (name: string | undefined) => { readonly requestId: string; readonly message: string } | undefined;
+    // Answers the ask on this sandbox's own daemon, the one that raised it (and carries a runner's on to it).
     readonly reply: (answer: { kind: `terminal_help`; requestId: string; helped: boolean; note?: string }) => Promise<unknown>;
 }
 
-export const useTerminalHelp = ({ sessions, activeName, reply }: TerminalHelpHost) => {
-    const help = computed(() => sessions.value.find((session) => session.name === activeName.value)?.help);
+export const useTerminalHelp = ({ sessions, activeName, helpOf, reply }: TerminalHelpHost) => {
+    const help = computed(() => sessions.value.find((session) => session.name === activeName.value)?.help ?? helpOf?.(activeName.value));
     const helpNote = ref(``);
     const replying = ref(false);
     watch(activeName, () => (helpNote.value = ``));

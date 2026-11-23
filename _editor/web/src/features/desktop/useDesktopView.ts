@@ -4,7 +4,7 @@ import { keyMessage, pointerMessage, wheelGauge, type DesktopKey, type DesktopMo
 import { mediaKey, mediaPointer, mediaScroll } from "../../models/browsers/media/mediaHands";
 import type { MediaPicture } from "../../models/browsers/media/mediaPicture";
 import { type Screencast, type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
-import { socketUrl } from "../../client/sandbox/streams/wsTicket";
+import { desktopSocketUrl } from "./runnerDesktops";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
 // display, or of one window on it, into a canvas, and, once the owner takes over, their pointer and keys back onto it.
@@ -78,6 +78,8 @@ export interface DesktopViewOptions {
     // One window on the desktop, by its id (DesktopWindow.id): the picture is that window alone, following it as it
     // moves, and the view ends with `gone` once it closes. Absent for the whole display.
     readonly window?: string | undefined;
+    // The runner whose desktop this is, for a conversation that runs there (runnerDesktops.ts); absent for this sandbox's.
+    readonly runner?: string | undefined;
     // Whether anyone can see the picture (its tab in front, its view not parked): the daemon stops grabbing the display
     // while not, as it does for a hidden document, and a hold taken here is handed back.
     readonly visible?: Ref<boolean>;
@@ -197,7 +199,7 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
     // H.264 of the display, or of one window on it (3 keyframe, 4 delta; videocast.ts encodeVideo), measured in the
     // desktop's own pixels (agent-desktop.ts DESKTOP_SIZE until `ready` says otherwise).
     const cast = useScreencast<DesktopPointerAction, DesktopMouse, Outgoing>({
-        mint: () => (windowId === undefined ? socketUrl(`/system/desktop-view`) : socketUrl(`/system/desktop-view`, { window: windowId })),
+        mint: () => desktopSocketUrl({ window: windowId, runner: options.runner }),
         pointer: pointerMessage,
         media: true,
         onMediaDrop: () => {

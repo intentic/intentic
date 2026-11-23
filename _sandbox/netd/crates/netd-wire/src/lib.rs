@@ -65,22 +65,37 @@ pub enum NetdHeader {
     /// admit the desktop app's own bundled page there (its CORS, app.ts), and nowhere a stranger could send from.
     #[serde(rename = "x-intentic-listener")]
     Listener,
+    /// netd to netd, never Node: on a runner-slot preview a parent's netd carries down a runner's uplink, the runner's
+    /// loopback port to relay it to (2026-11-23). The runner's netd honours it only on a stream its parent uplink brought
+    /// and strips it, like every header here, from everything arriving any other way.
+    #[serde(rename = "x-intentic-runner-port")]
+    RunnerPort,
 }
 
 impl NetdHeader {
-    pub const ALL: [Self; 3] = [Self::Preview, Self::PreviewUnreachable, Self::Listener];
+    pub const ALL: [Self; 4] = [
+        Self::Preview,
+        Self::PreviewUnreachable,
+        Self::Listener,
+        Self::RunnerPort,
+    ];
 
     pub const fn name(self) -> &'static str {
         match self {
             Self::Preview => "x-intentic-preview",
             Self::PreviewUnreachable => "x-intentic-preview-unreachable",
             Self::Listener => "x-intentic-listener",
+            Self::RunnerPort => "x-intentic-runner-port",
         }
     }
 }
 
 /// The value [`NetdHeader::Listener`] carries on a request that arrived on the loopback port.
 pub const LOOPBACK_LISTENER: &str = "loopback";
+
+/// The value [`NetdHeader::Listener`] carries on a request a runner's netd took from its parent's uplink (2026-11-23):
+/// the parent's netd already gated it, and the daemon must never read it as the machine's own loopback.
+pub const PARENT_LISTENER: &str = "parent";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
@@ -163,6 +178,18 @@ pub struct TunnelConfig {
     pub bulk: Vec<String>,
 }
 
+/// A runner's uplink to its parent sandbox (2026-11-23): the parent's address (`http(s)://` or `ws(s)://`, its origin is
+/// what counts), this runner's id as the parent enrolled it, and the durable token it presents there. The runner's netd
+/// dials browser-wire's `RUNNER_UPLINK_PATH` on that origin and serves every stream the parent opens as its own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[ts(export, export_to = "wire.ts")]
+pub struct ParentUplinkConfig {
+    pub url: String,
+    pub runner: String,
+    pub token: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
@@ -208,6 +235,14 @@ pub enum PreviewRoute {
     Page { page: Page },
     /// The sandbox's outbox: handed back to Node marked `outbox`, which serves the file it names.
     Outbox,
+    /// A port on one of this sandbox's runners (2026-11-23): netd carries the request down that runner's uplink with
+    /// `NetdHeader::RunnerPort`, and the runner's netd relays it to its own `localhost:<port>`. `frameable` as an
+    /// upstream's. A netd older than it cannot read the answer and refuses its own question.
+    Runner {
+        runner: String,
+        port: u16,
+        frameable: bool,
+    },
 }
 
 /// What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.
@@ -248,6 +283,15 @@ pub enum Question {
     },
     /// A terminal socket asking to open, its query string as the browser sent it.
     Terminal { query: String },
+    /// A person's view of a runner asking to open through `RUNNER_VIEW_PATH` (2026-11-23): the runner, the path it asks
+    /// for on the runner (one of netd's allowlist: `/system/terminal`, `/system/browser-view`, `/system/desktop-view`),
+    /// and its query string as the browser sent it, ticket included. Node redeems the ticket it minted for exactly that
+    /// runner, view and session, and answers `RunnerView`; anything else (a refusal, an older Node) refuses the view.
+    RunnerView {
+        runner: String,
+        path: String,
+        query: String,
+    },
     /// Whether Node's event loop turns, and how fast: answered `pong` at once, by the link itself. netd sends one
     /// every 2 s once the previous one is answered, and reports the round trip as the vitals' lag. An older Node answers
     /// with a refusal, or with an answer netd cannot read, and either still counts as answered.
@@ -270,6 +314,17 @@ pub enum Answer {
         member: Option<String>,
     },
     Pong,
+    /// Whether a runner view may open, and for which member (lowercased; absent when the daemon runs without auth), whose
+    /// revocation then closes it. `reason` says why not, for netd's log.
+    RunnerView {
+        allowed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        member: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        reason: Option<String>,
+    },
 }
 
 /// A question Node asks netd.
@@ -383,6 +438,26 @@ pub enum FromNode {
     DeviceWithdraw {
         device: String,
     },
+    /// On a runner: dial this parent's uplink, or stop dialling it with none (2026-11-23). The same config again changes
+    /// nothing. Send only to a netd that told `ParentUplink`: an older one closes the link on a kind it does not know.
+    ParentUplink {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        uplink: Option<ParentUplinkConfig>,
+    },
+    /// On a parent: lets the runner `runner` hold an uplink (browser-wire's `RUNNER_UPLINK_PATH`) presenting the token
+    /// whose SHA-256 is `token_sha256`, as `DeviceUplink` does for a device and in a registry of its own, so a device's
+    /// token never opens a runner's uplink (2026-11-23). Send only to a netd that told `RunnerUplinks`.
+    RunnerUplink {
+        runner: String,
+        #[serde(rename = "tokenSha256")]
+        token_sha256: String,
+    },
+    /// Withdraws `runner`'s registration: its uplink is closed with browser-wire's `RUNNER_UPLINK_WITHDRAWN` and a later
+    /// dial refused.
+    RunnerWithdraw {
+        runner: String,
+    },
 }
 
 /// A registered device's uplink as netd holds it.
@@ -393,6 +468,16 @@ pub enum FromNode {
 pub struct DeviceUplinkState {
     pub device: String,
     /// Its remoted's uplink is up, and the daemon's socket for it (`<DEVICE_SOCKET_DIR>/<device>.sock`) answers.
+    pub connected: bool,
+}
+
+/// A registered runner's uplink as a parent's netd holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "wire.ts")]
+pub struct RunnerUplinkState {
+    pub runner: String,
     pub connected: bool,
 }
 
@@ -459,6 +544,20 @@ pub enum ToNode {
     /// registration to a netd that has not. An older Node ignores it.
     DeviceUplinks {
         uplinks: Vec<DeviceUplinkState>,
+    },
+    /// On a runner: where its uplink to the parent stands, told on every change and again to each Node that says hello,
+    /// configured or not (2026-11-23). `reason` says why it is not held. It is how a Node knows this netd dials parents
+    /// at all: a Node sends `FromNode::ParentUplink` only to a netd that told it. An older Node ignores it.
+    ParentUplink {
+        connected: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        reason: Option<String>,
+    },
+    /// On a parent: every runner registered with `FromNode::RunnerUplink` and whether its uplink is up, told whole on
+    /// every change and again to each Node that says hello, as `DeviceUplinks` is (2026-11-23).
+    RunnerUplinks {
+        uplinks: Vec<RunnerUplinkState>,
     },
 }
 
@@ -792,6 +891,99 @@ mod tests {
             })
             .unwrap(),
             r#"{"kind":"deviceUplinks","uplinks":[{"device":"rog","connected":true}]}"#
+        );
+    }
+
+    // A runner's dial, a parent's registrations and the reports either netd tells, as each side spells them.
+    #[test]
+    fn a_runner_uplink_is_configured_registered_and_reported() {
+        let dial: FromNode = serde_json::from_str(
+            r#"{"kind":"parentUplink","uplink":{"url":"https://p.example","runner":"r1","token":"irt_x"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            dial,
+            FromNode::ParentUplink {
+                uplink: Some(ParentUplinkConfig {
+                    url: "https://p.example".into(),
+                    runner: "r1".into(),
+                    token: "irt_x".into()
+                })
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&FromNode::ParentUplink { uplink: None }).unwrap(),
+            r#"{"kind":"parentUplink"}"#
+        );
+        let registered: FromNode =
+            serde_json::from_str(r#"{"kind":"runnerUplink","runner":"r1","tokenSha256":"ab"}"#)
+                .unwrap();
+        assert_eq!(
+            registered,
+            FromNode::RunnerUplink {
+                runner: "r1".into(),
+                token_sha256: "ab".into()
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&FromNode::RunnerWithdraw {
+                runner: "r1".into()
+            })
+            .unwrap(),
+            r#"{"kind":"runnerWithdraw","runner":"r1"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ToNode::ParentUplink {
+                connected: false,
+                reason: None
+            })
+            .unwrap(),
+            r#"{"kind":"parentUplink","connected":false}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ToNode::RunnerUplinks {
+                uplinks: vec![RunnerUplinkState {
+                    runner: "r1".into(),
+                    connected: true
+                }]
+            })
+            .unwrap(),
+            r#"{"kind":"runnerUplinks","uplinks":[{"runner":"r1","connected":true}]}"#
+        );
+    }
+
+    #[test]
+    fn a_runner_view_is_asked_and_answered_and_a_runner_port_routed() {
+        assert_eq!(
+            serde_json::to_string(&Question::RunnerView {
+                runner: "r1".into(),
+                path: "/system/terminal".into(),
+                query: "session=agent-1&ticket=t".into()
+            })
+            .unwrap(),
+            r#"{"question":"runnerView","runner":"r1","path":"/system/terminal","query":"session=agent-1&ticket=t"}"#
+        );
+        let allowed: Answer =
+            serde_json::from_str(r#"{"answer":"runnerView","allowed":true,"member":"a@b.c"}"#)
+                .unwrap();
+        assert_eq!(
+            allowed,
+            Answer::RunnerView {
+                allowed: true,
+                member: Some("a@b.c".into()),
+                reason: None
+            }
+        );
+        let route: PreviewRoute =
+            serde_json::from_str(r#"{"to":"runner","runner":"r1","port":5173,"frameable":true}"#)
+                .unwrap();
+        assert_eq!(
+            route,
+            PreviewRoute::Runner {
+                runner: "r1".into(),
+                port: 5173,
+                frameable: true
+            }
         );
     }
 

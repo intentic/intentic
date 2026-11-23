@@ -23,6 +23,11 @@ import {
     MEDIA_TOKEN_GRACE_SECONDS,
     RTC_CHANNELS,
     RTC_MESSAGE_MAX,
+    RUNNER_HEADER,
+    RUNNER_UPLINK_CLOSE_CODES,
+    RUNNER_UPLINK_PATH,
+    RUNNER_VIEW_PATH,
+    RUNNER_VIEW_TICKET,
     TERMINAL_PATH,
     WEBTRANSPORT_PATH,
 } from "./browser-wire.js";
@@ -75,6 +80,7 @@ const browser = manifest("browser-wire") as {
         socketDir: string;
         closeCodes: Record<string, number>;
     };
+    runner: { uplinkPath: string; header: string; viewPath: string; viewTicket: string; closeCodes: Record<string, number> };
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
     terminal: { path: string; upgrade: string };
     vitals: { path: string; file: string; body: { $defs: { NodeLink: { oneOf: { const: string }[] } } } };
@@ -159,6 +165,16 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
             socketDir: browser.device.socketDir,
         });
         expect<Record<string, number>>(DEVICE_UPLINK_CLOSE_CODES).toEqual(browser.device.closeCodes);
+    });
+
+    it("dials a runner's uplink and opens a runner's views where browser-wire says", () => {
+        expect({ uplink: RUNNER_UPLINK_PATH, header: RUNNER_HEADER, view: RUNNER_VIEW_PATH, ticket: RUNNER_VIEW_TICKET }).toEqual({
+            uplink: browser.runner.uplinkPath,
+            header: browser.runner.header,
+            view: browser.runner.viewPath,
+            ticket: browser.runner.viewTicket,
+        });
+        expect<Record<string, number>>(RUNNER_UPLINK_CLOSE_CODES).toEqual(browser.runner.closeCodes);
     });
 
     it("finds netd's vitals where browser-wire says it answers them, in the states it names", () => {

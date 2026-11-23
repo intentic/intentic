@@ -28,8 +28,13 @@ jest.mock("../../../models/fleet/useAgents", () => ({
         stopWatching: async (id: string) => {
             stub.unwatched.add(id);
         },
+        // A job that had already exited answers that nothing stopped (useAgents-actions.ts StopOutcome), never a refusal.
         stopJob: async (id: string, jobId: string) => {
+            if (jobId.startsWith(`exited`)) {
+                return { stopped: false, stopReason: `that job has already ended` };
+            }
             stub.stoppedJobs.add(`${id}/${jobId}`);
+            return { stopped: true };
         },
         agentById: (id: string) => stub.agents.get(id),
     }),
@@ -187,6 +192,21 @@ it("the watch's Stop ends the command a job's watch waits on, and only disarms a
     await unwatchNow(`ci`);
     expect([...stub.stoppedJobs]).toEqual([`held/job-9672`]);
     expect([...stub.unwatched]).toEqual([`ci`]);
+});
+
+// A job that exited a moment before the press stops nothing, and the watches no job holds are still disarmed (2026-11-23).
+it("the watch's Stop still disarms the other watches when one job had already exited", async () => {
+    const { unwatchNow } = useAgentDrag();
+    stub.agents.set(`racing`, {
+        watches: [{ id: `watch-a` }, { id: `watch-b` }, { id: `watch-free` }],
+        jobs: [
+            { id: `exited-1`, watch: `watch-a` },
+            { id: `job-2`, watch: `watch-b` },
+        ],
+    });
+    await unwatchNow(`racing`);
+    expect([...stub.stoppedJobs]).toEqual([`racing/job-2`]);
+    expect([...stub.unwatched]).toEqual([`racing`]);
 });
 
 // SOMEBODY ELSE'S CONVERSATION ASKS BEFORE IT LANDS. The question comes before the card is held, so a no leaves the card

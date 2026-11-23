@@ -6,7 +6,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useAgents } from "../../../../models/fleet/useAgents";
+import { stoppedOrSay } from "./stopOutcome";
 import { portTargetId } from "../../../../models/preview/previewModel";
+import { previewRunnerPort } from "../../../../models/preview/runnerPreviews";
 import { openPreviewBeside } from "../../../../workbench/browsers/browsersSurface";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
@@ -122,14 +124,15 @@ const press = (row: Row, act: () => Promise<void>): void => {
     });
 };
 
+const nothingStopped = (reason: string): string => t(`chat.chatLeftRunning.nothingStopped`, { reason });
 const stop = (row: Row): void => {
     const id = conversation.value.conversationId;
     if (row.job !== undefined) {
         const jobId = row.job.id;
-        press(row, () => stopJob(id, jobId));
+        press(row, async () => stoppedOrSay(await stopJob(id, jobId), nothingStopped));
     } else if (row.watch !== undefined) {
         const watchId = row.watch.id;
-        press(row, () => stopWatching(id, watchId));
+        press(row, async () => stoppedOrSay(await stopWatching(id, watchId), nothingStopped));
     }
 };
 
@@ -138,11 +141,23 @@ const stop = (row: Row): void => {
 // Offered only with a port to open: on 2026-11-05 four servers handed over with `ports: []` each showed the button, and
 // a press did nothing at all.
 const previewable = (job: AgentJob | undefined): job is AgentJob => job?.handed === true && job.stoppedBy === undefined && portOf(job) !== undefined;
+// A runner's server (the conversation runs on one) is the runner's port: forwarded through this sandbox first, and a
+// refusal (a port the runner will not show, a runner offline) said where a refused stop is.
 const preview = (job: AgentJob): void => {
     const port = portOf(job);
-    if (port !== undefined) {
-        openPreviewBeside(router, portTargetId(port));
+    const runner = agent.value?.runner;
+    if (port === undefined) {
+        return;
     }
+    if (runner === undefined) {
+        openPreviewBeside(router, portTargetId(port));
+        return;
+    }
+    void stops.run(`preview:${job.id}`, {
+        what: t(`chat.chatLeftRunning.openInPreview`),
+        failed: t(`chat.chatLeftRunning.previewFailed`),
+        task: async () => openPreviewBeside(router, (await previewRunnerPort(runner, port, job.label)).id),
+    });
 };
 </script>
 

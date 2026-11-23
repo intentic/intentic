@@ -27,6 +27,8 @@ export const KINDS = {
     process: { icon: `cog`, work: false, logs: true, counted: undefined },
     // Not counted on the rail, which counts this sandbox's own sessions; it lives on the computer it names.
     device: { icon: `desktop`, work: false, logs: false, counted: undefined },
+    // Nor is a runner's: it lives on the runner its conversation runs on.
+    runner: { icon: `server`, work: false, logs: false, counted: undefined },
 } as const satisfies Record<TerminalKind, { icon: IconName; work: boolean; logs: boolean; counted: ((count: number) => string) | undefined }>;
 
 export const isWork = <T extends { readonly kind: TerminalKind }>(tab: T): tab is T & { readonly kind: `agent` | `job` } => KINDS[tab.kind].work;

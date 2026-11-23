@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NeedsActionSchema } from "../../policy/needs-action.js";
+import { AgentJobsSchema, AgentWatchesSchema } from "../../schemas/agent-background.js";
 import type { PeerLink } from "../peer-dial.js";
 
 // The runner link's edges: the /system/runners/connect handshake, boot env, and turn placement (procedures live in
@@ -127,6 +128,25 @@ export const RUNNER_FLEET_DOOR_HEADER = "x-intentic-runner-fleet";
 // The door's refusal of a conversation the parent did not place on that runner: the runner reads its own record instead.
 export const RunnerFleetNotPlacedSchema = z.object({ ok: z.literal(false), placed: z.literal(false), message: z.string() });
 export type RunnerFleetNotPlaced = z.infer<typeof RunnerFleetNotPlacedSchema>;
+
+// The subagents door (2026-11-23): a runner's turn calling one of its `subagents` tools (spawn, wait, send, cancel, …)
+// for a conversation the parent placed there has it run by the parent, whose registry owns the child. POST the tool's
+// arguments as JSON to `/system/runners/subagents/<tool>`, naming the conversation in RUNNER_FLEET_CONVERSATION_HEADER.
+// Answered with the tool's own MCP result; refused with RunnerFleetNotPlacedSchema (404) for a conversation the parent did
+// not place on that runner, or RunnerSubagentNoToolSchema (404) for a tool this parent does not run for runners.
+export const runnerSubagentsPath = "/system/runners/subagents";
+export const runnerSubagentsUrl = (parentUrl: string, tool: string): string =>
+    `${parentUrl.replace(/\/$/, "")}${runnerSubagentsPath}/${encodeURIComponent(tool)}`;
+// Set on every answer the subagents door gives a runner it knows, as RUNNER_FLEET_DOOR_HEADER is on the fleet door's.
+export const RUNNER_SUBAGENTS_DOOR_HEADER = "x-intentic-runner-subagents";
+export const RunnerSubagentNoToolSchema = z.object({ ok: z.literal(false), tool: z.literal(false), message: z.string() });
+export type RunnerSubagentNoTool = z.infer<typeof RunnerSubagentNoToolSchema>;
+// A tool's answer as the parent ran it: MCP content blocks (text, in practice), relayed to the runner's turn as they came.
+export const RunnerSubagentResultSchema = z.object({
+    content: z.array(z.looseObject({ type: z.string() })),
+    isError: z.boolean().optional(),
+});
+export type RunnerSubagentResult = z.infer<typeof RunnerSubagentResultSchema>;
 
 export const RunnerCredentialRequestSchema = z.object({
     // Provider as the turn names it (absent = claude); an open vocabulary, including endpoint/<id>.
@@ -422,3 +442,29 @@ export type RunnerCommandFrame = z.infer<typeof RunnerCommandFrameSchema>;
 // the sender. `runner` implies isolation since a remote conversation is branch-anchored; absent means local.
 export const AgentPlacementSchema = z.union([z.object({ kind: z.literal("local") }), z.object({ kind: z.literal("runner"), id: z.string().min(1) })]);
 export type AgentPlacement = z.infer<typeof AgentPlacementSchema>;
+
+// LIVE VIEWS OF A RUNNER CONVERSATION (2026-11-23). A runner's conversations keep their background jobs and armed watches
+// in the runner's own actors, and its browsers and desktop are the runner's, so the parent's card would show none of them.
+// The runner's `feed` door is the stream the parent opens each time the runner connects: one `cards` frame for every
+// conversation it holds jobs or watches for at once, then a `card` frame whenever one changes, and a `changed` frame when
+// its browser windows or its desktop do, for the parent to re-read and announce to its editors. The shapes are the
+// card's own (AgentSummary `jobs`, `watches`), so the parent shows them as it shows its own.
+export const RunnerFeedCardSchema = z.object({
+    conversationId: z.string().min(1),
+    // AgentSummary `jobs` and `watches`, whole: an empty list once the last one ends.
+    jobs: AgentJobsSchema.unwrap(),
+    watches: AgentWatchesSchema.unwrap(),
+});
+export type RunnerFeedCard = z.infer<typeof RunnerFeedCardSchema>;
+export const RunnerFeedFrameSchema = z.union([
+    z.object({ kind: z.literal("cards"), cards: z.array(RunnerFeedCardSchema) }),
+    z.object({ kind: z.literal("card"), card: RunnerFeedCardSchema }),
+    z.object({ kind: z.literal("changed"), domain: z.enum(["browsers", "desktop"]) }),
+]);
+export type RunnerFeedFrame = z.infer<typeof RunnerFeedFrameSchema>;
+
+// What a stop on a runner conversation's card did there: false when there was nothing left to stop.
+export const RunnerStoppedSchema = z.object({ stopped: z.boolean() });
+
+// Which of the parent's people's views a revocation ends on the runner: one member's, or (absent) everyone's.
+export const RunnerRevokeSchema = z.object({ member: z.string().optional() });

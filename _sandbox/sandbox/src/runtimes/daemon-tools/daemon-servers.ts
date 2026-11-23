@@ -35,7 +35,7 @@ import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 import type { Services } from "../../composition.js";
 import { conversationProfile } from "../../conversations/registry/agents-store.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
-import { pageMediaKeyPath } from "../../agent/pages/page-media.js";
+import { pageMediaKeyPath } from "../../workspace/files/stored/stored-page-media.js";
 
 // The daemon's own tools for a runtime that is not the Claude Code loop: the same servers that loop mounts in-process
 // (harness-servers.ts, agent.ts), built for this turn, held to the same role decisions, and served through the MCP door

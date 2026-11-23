@@ -36,8 +36,8 @@ export interface TerminalTab {
     readonly running: boolean;
     // Epoch ms of last output, 0 meaning unknown (not 1970); feeds the inactive sweep and the work popover's dates.
     readonly activityAt: number;
-    // shell (numbered), panel (dev server), agent (Bash), job (daemon flow), process (background service), device (remote).
-    readonly kind: "shell" | "panel" | "agent" | "job" | "process" | "device";
+    // shell (numbered), panel (dev server), agent (Bash), job (daemon flow), process (background service), device/runner (remote).
+    readonly kind: "shell" | "panel" | "agent" | "job" | "process" | "device" | "runner";
     // Present when this session is a declared extension process, addressing its /extensions start/stop routes.
     readonly extensionId?: string;
     readonly processName?: string;
@@ -50,7 +50,7 @@ export interface TerminalTabsSource {
     readonly create?: () => string;
     // Resolves once the shared list has settled; never rejects, since a failed kill is the source's to reconcile.
     readonly kill?: (name: string) => Promise<void>;
-    // Where a tab dials when it is not the sandbox's own tmux (models/terminal/deviceTerminals.ts), and its end.
+    // Where a tab dials when not the sandbox's own tmux (models/terminal/deviceTerminals.ts, runnerTerminals.ts); its end.
     readonly door?: (tab: TerminalTab) => TerminalDoor | undefined;
     readonly ended?: (name: string) => void;
 }

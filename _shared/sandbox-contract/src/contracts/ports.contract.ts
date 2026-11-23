@@ -1,7 +1,7 @@
 import { procedure } from "../protocol/route-meta.js";
 import {
+    PortForwardInputSchema,
     PortForwardResultSchema,
-    PortParamSchema,
     PortsListSchema,
     PreviewGuardSchema,
     PreviewPassRequestSchema,
@@ -30,9 +30,9 @@ export const portsContract = {
             path: "/ports/forward",
             summary: "Make a port reachable",
             description:
-                "Gives one port an address on the outside. Asking twice is harmless: the second call hands back the address the first one made.",
+                "Gives one port an address on the outside. Asking twice is harmless: the second call hands back the address the first one made. Naming a runner forwards that runner's own port, for a conversation that runs there.",
         })
-        .input(PortParamSchema)
+        .input(PortForwardInputSchema)
         .output(PortForwardResultSchema),
     unforward: procedure
         .route({
@@ -41,7 +41,7 @@ export const portsContract = {
             summary: "Stop exposing a port",
             description: "Frees the slot at once. The address keeps resolving; it simply stops leading anywhere.",
         })
-        .input(PortParamSchema)
+        .input(PortForwardInputSchema)
         .output(OkSchema),
     // The owner's guard on previews (schemas/ports.ts): any member reads it, since the editor asks for a pass only where
     // it is on; only the owner changes it, like the passkey policy.

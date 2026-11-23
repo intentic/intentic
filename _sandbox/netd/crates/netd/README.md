@@ -24,5 +24,7 @@ The binary of the sandbox's network daemon: it owns every port and the ingress t
 - [src/records.rs](src/records.rs) — `memory-kills.jsonl`, `netd-kills.jsonl` and `pressure.jsonl`, in the daemon's
   shapes.
 - [src/tunnel.rs](src/tunnel.rs) — dials the edge and serves a stream per request.
-- [src/devices.rs](src/devices.rs) — connected computers' uplinks, which their screens and terminals are carried down.
+- [src/uplinks.rs](src/uplinks.rs) — connected computers' and runners' uplinks, which their screens, terminals and
+  previews are carried down.
+- [src/parent.rs](src/parent.rs) — on a runner, the uplink it dials to its parent and serves as `Listener::Parent`.
 - [tests/routes.rs](tests/routes.rs) — the real binary on real ports: routing, preview relay, TLS, upgrades.

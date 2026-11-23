@@ -43,6 +43,15 @@ pub enum Pushed {
     },
     /// The device's uplink is withdrawn.
     DeviceWithdraw(String),
+    /// On a runner: the parent to dial, or none.
+    ParentUplink(Option<netd_wire::ParentUplinkConfig>),
+    /// On a parent: a runner's netd may hold an uplink presenting the token with this SHA-256 (hex).
+    RunnerUplink {
+        runner: String,
+        digest: String,
+    },
+    /// The runner's uplink is withdrawn.
+    RunnerWithdraw(String),
     /// A question Node asked; whoever applies it answers with `Link::answer` and this id.
     Asked {
         id: u32,
@@ -514,6 +523,21 @@ impl Link {
             }
             FromNode::DeviceWithdraw { device } => {
                 let _ = self.pushed.send(Pushed::DeviceWithdraw(device));
+            }
+            FromNode::ParentUplink { uplink } => {
+                let _ = self.pushed.send(Pushed::ParentUplink(uplink));
+            }
+            FromNode::RunnerUplink {
+                runner,
+                token_sha256,
+            } => {
+                let _ = self.pushed.send(Pushed::RunnerUplink {
+                    runner,
+                    digest: token_sha256,
+                });
+            }
+            FromNode::RunnerWithdraw { runner } => {
+                let _ = self.pushed.send(Pushed::RunnerWithdraw(runner));
             }
             FromNode::Ask { id, question } => {
                 let _ = self.pushed.send(Pushed::Asked { id, question });

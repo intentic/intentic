@@ -4,19 +4,27 @@ import { killTerminal, listTerminals } from "./terminalsQuery";
 import { closeDeviceTerminal, deviceDoorFor, deviceTerminalTabs, forgetDeviceTerminal, isDeviceTab } from "./deviceTerminals";
 import type { TerminalTabsSource } from "../../features/terminal/useTerminal";
 import { uuid } from "../../lib/uuid";
+import { forgetRunnerTerminal, holdRunnerTerminal, runnerDoorFor, runnerTerminalTabs } from "./runnerTerminals";
+import { isRunnerTab } from "./runnerTabNames";
 
 // Global terminal panel: sandbox-wide tmux sessions, backed by terminalsQuery's shared list so the strip and badge
 // agree. A live command's output belongs in a terminal, never a dialog or `<pre>`; a dialog only tracks state and
 // offers actions. A frozen transcript record or a settled failure message is text: nothing more is coming.
 
 // Beside them, the shells on the owner's connected computers this browser has open (deviceTerminals.ts): listed after
-// the sandbox's own, dialled through their own door, and closed on their computer when their tab is.
+// the sandbox's own, dialled through their own door, and closed on their computer when their tab is. Then the sessions on
+// the runners conversations run on that this browser has open (runnerTerminals.ts): closing one only forgets it, since
+// the session is the runner's and its agent may still be using it.
 export const globalTerminalSource: TerminalTabsSource = {
-    list: async () => [...(await listTerminals()), ...deviceTerminalTabs()],
+    list: async () => [...(await listTerminals()), ...deviceTerminalTabs(), ...runnerTerminalTabs()],
     create: () => `web-${uuid().slice(0, 8)}`,
     // Logged only: the tab's already gone from the strip, and there is no error surface beyond that; the shared list
     // puts a refused kill's row back (killTerminal).
     kill: async (name) => {
+        if (isRunnerTab(name)) {
+            forgetRunnerTerminal(name);
+            return;
+        }
         if (isDeviceTab(name)) {
             await closeDeviceTerminal(name);
             return;
@@ -27,8 +35,8 @@ export const globalTerminalSource: TerminalTabsSource = {
             console.error(`terminal ${name}: kill failed`, error);
         }
     },
-    door: deviceDoorFor,
-    ended: forgetDeviceTerminal,
+    door: (tab) => (tab.kind === `runner` ? runnerDoorFor(tab) : deviceDoorFor(tab)),
+    ended: (name) => (isRunnerTab(name) ? forgetRunnerTerminal(name) : forgetDeviceTerminal(name)),
 };
 
 // What a surface asks the panel to open, and what it may say while the tab is on its way. A flow knows what it started;
@@ -80,6 +88,8 @@ export const clearTerminalRequest = (): void => {
 export function useTerminalPanel() {
     const layout = useLayout();
     const openFocused = (name: string, about?: Omit<TerminalRequest, `name`>): void => {
+        // A runner's session is listed only while this browser holds it, so it is held before the panel looks for it.
+        holdRunnerTerminal(name);
         // Sets `requested` before opening so an already-mounting panel observes the transition.
         requested.value = { name, ...about };
         layout.setTerminalOpen(true);

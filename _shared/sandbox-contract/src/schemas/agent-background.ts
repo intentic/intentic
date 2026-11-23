@@ -85,3 +85,20 @@ export const AgentFamilyStoppedSchema = z.object({
     agents: z.number().int().min(0).describe("How many agents below it had work stopped: a running turn, a start still waiting, a re-run the sandbox had booked."),
 });
 export type AgentFamilyStopped = z.infer<typeof AgentFamilyStoppedSchema>;
+
+// Outside conditions a conversation is parked on; a finished-looking card can restart itself when one fires, and an
+// armed watch keeps a hosted machine (and its bill) awake. The check command itself never rides the wire, since it
+// may hold a secret.
+export const AgentWatchesSchema = z
+    .array(
+        z.object({
+            id: z.string().describe("The daemon's handle for this watch, the same one the agent was given when it armed it."),
+            note: z.string().describe("The agent's own line on what it is waiting for."),
+            intervalSeconds: z.number().int().min(1).describe("How often the check runs."),
+            deadlineAt: z.number().describe("When it gives up and wakes the conversation anyway, in milliseconds. Every watch has one."),
+        }),
+    )
+    .optional()
+    .describe(
+        "Outside conditions this conversation is parked on, each of which will wake it. Absent means none, which is nearly every conversation: an armed watch is why a finished-looking agent starts working by itself, and why a hosted machine will not go idle.",
+    );

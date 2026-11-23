@@ -130,6 +130,17 @@ export function steerTurn(
     if (!conversations.steer(conversationId, steer.text)) {
         return false;
     }
+    noteSteered(conversations, conversationId, steer);
+    return true;
+}
+
+/** What words a live turn took leave here: the turn tainted by their outside source, and their row (a person's is the
+ *  route's to draw). Shared with words a runner's turn took (agent/run/turn/runner-steer.ts). */
+export function noteSteered(
+    conversations: Pick<ConversationActors, "send" | "holdings">,
+    conversationId: string,
+    steer: Pick<Steer, "text" | "voice" | "outside" | "errand">,
+): void {
     if (steer.outside !== undefined) {
         markConversationTaint(conversationId, steer.outside);
     }
@@ -138,5 +149,4 @@ export function steerTurn(
     } else {
         turnRunOf(conversations, conversationId)?.push({ kind: "steer", text: steer.text, sentAt: Date.now(), voice: steer.voice, ...opt("errand", steer.errand) });
     }
-    return true;
 }

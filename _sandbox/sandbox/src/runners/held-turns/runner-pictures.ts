@@ -1,51 +1,58 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
-import type { Logger } from "pino";
 import { opt } from "../../opt.js";
-import { ARTIFACTS_DIR, artifactDigest, keepArtifactCopy } from "../../workspace/files/stored/stored-artifacts.js";
-import type { RunnerHub } from "../runner-peer.js";
+import { ARTIFACTS_DIR } from "../../workspace/files/stored/stored-artifacts.js";
+import { type ArtifactsHomeContext, askOptions, fetchHome } from "./runner-artifacts.js";
 
 /* THE PICTURES A RUNNER'S TURN SHOWED, BROUGHT HOME. A screenshot or a generated picture is written into the artifacts
    folder of the machine running the turn, and its tool card names it by workspace path; the chat reads every picture
    from this sandbox's workspace, and neither the relay nor the branch's push carries that folder. So every screenshot a
    runner's turn took drew as "No longer available" (boat-pjdf, bird-mdu4 and arena-6hpr on omen, 2026-11-23). Each card
    naming one now waits while the file is fetched from the runner and filed here, so the card reaches the chat with its
-   picture in place: a picture asked for before it lands is refused, and the chat keeps that refusal for the session. */
+   picture in place: a picture asked for before it lands is refused, and the chat keeps that refusal for the session. A
+   picture the turn Read from its own checkout is fetched from that checkout and filed under the artifacts folder's
+   runner/<conversation>/, the card renamed to it (2026-11-23): the mirror here has no file the checkout never committed. */
 
-const ASK_MS = 30_000;
-
-export interface PicturesHomeContext {
-    readonly hub: Pick<RunnerHub, "client">;
-    readonly logger: Pick<Logger, "warn">;
-    readonly runnerId: string;
-    readonly workspaceRoot: string;
+export interface PicturesHomeContext extends ArtifactsHomeContext {
+    // The conversation whose turn showed them: a picture its turn Read from its own checkout is asked for there.
+    readonly conversationId?: string;
 }
 
-// The workspace paths of the pictures a frame's card carries that live in the artifacts folder; a picture elsewhere is
-// in the conversation's checkout, which the branch's push brings back.
+// The workspace paths of the pictures a frame's card carries.
 const picturesOf = (event: AgentEvent): readonly string[] =>
     event.kind === "tool_call" || event.kind === "tool_call_update"
-        ? [...new Set((event.content ?? []).flatMap((entry) => (entry.type === "image" && entry.path.startsWith(ARTIFACTS_DIR) ? [entry.path] : [])))]
+        ? [...new Set((event.content ?? []).flatMap((entry) => (entry.type === "image" ? [entry.path] : [])))]
         : [];
+
+// Where a picture is asked for and filed: one in the artifacts folder under its own path; one the turn Read from its own
+// checkout, which the runner resolves in that checkout, under the artifacts folder's runner/<conversation>/, since the
+// mirror here lacks what the checkout never committed (an ignored or uncommitted file) and has nothing of it mid-turn.
+const sourceOf = (context: PicturesHomeContext, path: string): { readonly filedAs: string; readonly conversationId?: string } | undefined => {
+    if (path.startsWith(ARTIFACTS_DIR)) {
+        return { filedAs: path };
+    }
+    const id = context.conversationId;
+    return id === undefined ? undefined : { filedAs: `${ARTIFACTS_DIR}runner/${id}/${path}`, conversationId: id };
+};
 
 // Where one picture is filed here: its own path, or another when this workspace already held different bytes under it;
 // its own path again when it cannot be fetched, so the card still says what the turn took.
 const fileHome = async (context: PicturesHomeContext, path: string): Promise<string> => {
     const client = context.hub.client(context.runnerId);
-    if (client === undefined) {
+    const source = sourceOf(context, path);
+    if (client === undefined || source === undefined) {
         return path;
     }
     try {
-        const have = await artifactDigest(context.workspaceRoot, path);
-        const { bytesBase64 } = await client.readArtifact({ path, ...opt("have", have) }, { signal: AbortSignal.timeout(ASK_MS) });
-        if (bytesBase64 === undefined) {
+        // An older runner ignores `conversationId` and answers NOT_FOUND for a path outside its artifacts folder.
+        const fetched = await fetchHome(context, source.filedAs, (range) =>
+            client.readArtifact({ path, ...opt("conversationId", source.conversationId), ...range }, askOptions()),
+        );
+        if (fetched.kind !== "filed") {
+            context.logger.warn({ runner: context.runnerId, path, why: fetched.kind }, "runner dispatch: a picture the runner showed was not filed here");
             return path;
         }
-        const filed = await keepArtifactCopy(context.workspaceRoot, path, Buffer.from(bytesBase64, "base64"));
-        if (filed === undefined) {
-            context.logger.warn({ runner: context.runnerId, path }, "runner dispatch: a picture the runner showed had nowhere to be filed");
-        }
-        return filed ?? path;
+        return fetched.path;
     } catch (error) {
         context.logger.warn({ err: error, runner: context.runnerId, path }, "runner dispatch: a picture the runner showed could not be brought home");
         return path;

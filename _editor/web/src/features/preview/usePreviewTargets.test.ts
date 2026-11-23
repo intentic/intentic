@@ -14,7 +14,7 @@ jest.mock(`../../models/workspace/push/usePublicOutbox`, () => ({ usePublicOutbo
 jest.mock(`../../models/sandbox/environment/usePorts`, () => ({ usePorts: () => ({ offered: ref([]) }) }));
 jest.mock(`../../client/sandbox/useSandboxQuery`, () => ({ useSandboxQuery: () => ({ query: { data: ref(undefined) } }) }));
 jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: {} }));
-jest.mock(`../../models/fleet/useAgents-actions`, () => ({ stopJob: async () => undefined }));
+jest.mock(`../../models/fleet/useAgents-actions`, () => ({ stopJob: async () => ({ stopped: true }) }));
 
 const { usePreviewTargets } = await import("./usePreviewTargets");
 

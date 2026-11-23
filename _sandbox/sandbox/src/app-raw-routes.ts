@@ -50,6 +50,7 @@ import { arrivalRawRoutes } from "./portability/arrival.routes.js";
 import { bundleRawRoutes } from "./portability/bundle.routes.js";
 import { gatewayRawRoutes } from "./privacy/gateway/gateway.routes.js";
 import { runnerFleetRawRoutes } from "./runners/fleet/runner-fleet.routes.js";
+import { runnerSubagentsRawRoutes } from "./runners/fleet/runner-subagents.routes.js";
 import { runnerCredentialRawRoutes } from "./runners/runner-credentials.routes.js";
 import { runnerGitRawRoutes } from "./runners/runner-git.routes.js";
 import { runnerDefinitionRawRoutes } from "./runners/runner.routes.js";
@@ -113,6 +114,7 @@ export const appRawRoutes = (services: Services) =>
         bundleRawRoutes(services),
         gatewayRawRoutes(services),
         runnerFleetRawRoutes(services),
+        runnerSubagentsRawRoutes(services),
         runnerCredentialRawRoutes(services),
         runnerGitRawRoutes(services),
         runnerDefinitionRawRoutes(services),

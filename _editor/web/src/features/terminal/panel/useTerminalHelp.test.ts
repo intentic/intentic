@@ -15,13 +15,13 @@ const listed = (name: string, help?: TerminalSession[`help`]): TerminalSession =
     ...(help === undefined ? {} : { help }),
 });
 
-const stage = () => {
+const stage = (helpOf?: (name: string | undefined) => { requestId: string; message: string } | undefined) => {
     const sessions = ref<TerminalSession[]>([listed(`a`, { requestId: `r1`, message: `Enter the 2FA code`, requestedAt: 1_000 }), listed(`b`)]);
     const activeName = ref<string | undefined>(`a`);
     const reply = jest.fn(async (_answer: unknown) => true);
     const scope = effectScope();
     scopes.push(scope);
-    const help = scope.run(() => useTerminalHelp({ sessions, activeName, reply }))!;
+    const help = scope.run(() => useTerminalHelp({ sessions, activeName, reply, helpOf }))!;
     return { activeName, reply, help };
 };
 
@@ -38,6 +38,17 @@ describe(`the handover ask`, () => {
         activeName.value = `b`;
         await nextTick();
         expect(help.help.value).toBe(undefined);
+    });
+
+    it(`shows an ask the list does not carry, for a tab that is not this sandbox's own session`, async () => {
+        const runnerTab = `runner~rog~conv-1~agent-9`;
+        const { activeName, reply, help } = stage((name) => (name === runnerTab ? { requestId: `r9`, message: `Touch the key` } : undefined));
+        expect(help.help.value?.message).toBe(`Enter the 2FA code`);
+        activeName.value = runnerTab;
+        await nextTick();
+        expect(help.help.value).toEqual({ requestId: `r9`, message: `Touch the key` });
+        await help.resolveHelp(true);
+        expect(reply.mock.calls).toEqual([[{ kind: `terminal_help`, requestId: `r9`, helped: true }]]);
     });
 
     it(`answers once, with the trimmed note when there is one`, async () => {

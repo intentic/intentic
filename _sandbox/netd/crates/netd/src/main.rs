@@ -3,13 +3,13 @@
 
 mod cgroup;
 mod connect;
-mod devices;
 mod fallback;
 mod feed;
 mod guard;
 mod link;
 mod listen;
 mod memguard;
+mod parent;
 mod proxy;
 mod quic;
 mod records;
@@ -21,6 +21,7 @@ mod synccap;
 mod term;
 mod tls;
 mod tunnel;
+mod uplinks;
 mod vitals;
 
 use std::ffi::OsString;
@@ -34,11 +35,11 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{Mutex, mpsc, watch};
 use tracing_subscriber::EnvFilter;
 
-use crate::devices::Devices;
 use crate::feed::Feed;
 use crate::link::{Link, Pushed};
 use crate::listen::Listeners;
 use crate::memguard::Container;
+use crate::parent::ParentUplink;
 use crate::proxy::Netd;
 use crate::records::Records;
 use crate::standing::Standing;
@@ -46,6 +47,7 @@ use crate::supervise::{NodeCommand, Restarts};
 use crate::term::{Hubs, Terminals, Tmux};
 use crate::tls::CertificateSlot;
 use crate::tunnel::Tunnel;
+use crate::uplinks::{Kind, Uplinks};
 use crate::vitals::Vitals;
 
 const USAGE: &str = "usage: intentic-netd [--run-dir DIR] -- NODE_COMMAND [ARGS...]";
@@ -176,12 +178,12 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     } else {
         run_dir.join("devices")
     };
-    let devices = Arc::new(Devices::new(
-        devices_dir,
-        Arc::new(move |message| {
-            let _ = link.tell(message);
-        }),
-    ));
+    let telling: uplinks::Tell = Arc::new(move |message| {
+        let _ = link.tell(message);
+    });
+    let devices = Arc::new(Uplinks::new(Kind::device(devices_dir), telling.clone()));
+    // This sandbox's runners, when it is a parent: a registry of their own, so no device's token opens one.
+    let runners = Arc::new(Uplinks::new(Kind::runner(), telling.clone()));
     let netd = Arc::new(Netd::new(
         link,
         http.clone(),
@@ -190,7 +192,11 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         vitals,
         cast_dir,
         devices.clone(),
+        runners.clone(),
     ));
+    // This sandbox's uplink to its parent, when it is a runner: nothing is dialled until Node names the parent.
+    let mut parent_uplink = ParentUplink::new(netd.clone(), telling);
+    let revoking = netd.clone();
     let certificates = Arc::new(CertificateSlot::default());
     let mut listeners = Listeners::new(netd.clone(), certificates.clone());
     let tunnel = Arc::new(Mutex::new(Tunnel::new(netd, link, identity, standing)));
@@ -270,13 +276,21 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
                 Pushed::Hello => {
                     applying.lock().await.report_again();
                     devices.report_again();
+                    runners.report_again();
+                    parent_uplink.report_again();
                     if let Some(feed) = &feed {
                         feed.reset();
                     }
                 }
-                Pushed::Revoke(member) => terminals.revoke(member.as_deref()),
+                Pushed::Revoke(member) => {
+                    terminals.revoke(member.as_deref());
+                    revoking.revoke_views(member.as_deref());
+                }
                 Pushed::DeviceUplink { device, digest } => devices.register(device, digest),
                 Pushed::DeviceWithdraw(device) => devices.withdraw(&device),
+                Pushed::ParentUplink(uplink) => parent_uplink.configure(uplink),
+                Pushed::RunnerUplink { runner, digest } => runners.register(runner, digest),
+                Pushed::RunnerWithdraw(runner) => runners.withdraw(&runner),
                 Pushed::Watch(checkout) => {
                     if let Some(feed) = feed.clone() {
                         tokio::task::spawn_blocking(move || feed.watch(&checkout));

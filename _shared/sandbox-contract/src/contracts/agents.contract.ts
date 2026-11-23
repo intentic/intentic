@@ -3,7 +3,7 @@ import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, SessionTranscriptSchema } from "../events/transcript.js";
 import { AgentTranscriptSchema } from "../events/agent-transcript.js";
 import { AgentFamilyStoppedSchema, AgentStopFamilySchema } from "../schemas/agent-background.js";
-import { AgentAssignSchema, AgentAutoLandSchema, AgentNotifySchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
+import { AgentAssignSchema, AgentAutoLandSchema, AgentNotifySchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopAnswerSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
 import { AgentSearchQuerySchema, AgentSearchResultSchema } from "../schemas/agent-search.js";
 import { AgentsAttentionSchema, AgentsListSchema, HomeConversationSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
@@ -323,20 +323,20 @@ export const agentsContract = {
             path: "/agents/{id}/stop-watching",
             summary: "Stop a conversation's condition watches",
             description:
-                "Disarms this conversation's outside-condition watches, so they will not wake it. Named without a watch id it disarms all of them, because that is what the press means when it is made about a card; a press made about one watch's own row names that watch and leaves the rest armed. Nothing else about the conversation changes.",
+                "Disarms this conversation's outside-condition watches, so they will not wake it. Named without a watch id it disarms all of them, because that is what the press means when it is made about a card; a press made about one watch's own row names that watch and leaves the rest armed. Nothing else about the conversation changes. The answer says whether anything was disarmed, and why not.",
         })
         .input(AgentStopWatchingSchema)
-        .output(AgentSummarySchema),
+        .output(AgentStopAnswerSchema),
     stopJob: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/stop-job",
             summary: "Stop one of a conversation's background jobs",
             description:
-                "Ends a command this conversation left running: the server it handed over, or the build it is waiting on. The watch that would have woken the conversation on its exit is disarmed first, so stopping it wakes nothing. Stopping a job that already ended is not an error.",
+                "Ends a command this conversation left running: the server it handed over, or the build it is waiting on. The watch that would have woken the conversation on its exit is disarmed first, so stopping it wakes nothing. Stopping a job that already ended is not an error: the answer says nothing was stopped, and why.",
         })
         .input(AgentStopJobSchema)
-        .output(AgentSummarySchema),
+        .output(AgentStopAnswerSchema),
     stopFamily: procedure
         .route({
             method: "POST",

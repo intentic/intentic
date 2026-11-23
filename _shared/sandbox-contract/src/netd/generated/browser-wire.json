@@ -1660,6 +1660,16 @@
       "title": "EdgeVerdict"
     }
   },
+  "runner": {
+    "closeCodes": {
+      "displaced": 4001,
+      "withdrawn": 4003
+    },
+    "header": "x-intentic-runner",
+    "uplinkPath": "/system/runner-uplink",
+    "viewPath": "/system/runner-view",
+    "viewTicket": "ticket"
+  },
   "terminal": {
     "client": {
       "description": "What the browser sends on a terminal socket, each a JSON text message.",

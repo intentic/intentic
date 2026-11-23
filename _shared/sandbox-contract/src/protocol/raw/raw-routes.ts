@@ -305,6 +305,9 @@ export const RAW_ROUTES = {
     "GET /system/runners/fleet": { auth: "door", control: "never" },
     "GET /system/runners/fleet/{handle}": { auth: "door", control: "never" },
     "GET /system/runners/fleet/{handle}/bundle": { auth: "door", control: "never" },
+    // A runner's turn calling one of its `subagents` tools for the conversation it was placed there for (runner-protocol.ts
+    // runnerSubagentsPath), run here as that conversation's turn running here runs it. A `wait` parks for up to 31 minutes.
+    "POST /system/runners/subagents/{tool}": { auth: "door", control: "never", stream: true },
     [`ALL ${runnerTranslatorPath}/*` as const]: { auth: "door", control: "never" },
     // The privacy shield's gateway: every shielded runtime's model requests, on the signed session its base URL carries
     // (privacy/gateway/session-token.ts), which names the provider and the only upstream it may forward to. Held open

@@ -3,8 +3,11 @@ import type { Services } from "../composition.js";
 import { parentCredentialSource } from "./runner-credentials.js";
 import { ensureRunnerIdentity, readRunnerIdentity } from "./runner-identity.js";
 import { startRunnerLink } from "./runner-link.js";
+import type { RunnerCardStops } from "./live/runner-live-wiring.js";
+import { parentUplink } from "./uplink/parent-uplink.js";
 import { parentWake } from "./ownership/wake.js";
 import { parentFleetRead } from "./fleet/parent-fleet.js";
+import { parentSubagentCall } from "./fleet/parent-subagents.js";
 import { seedRunnerPresentation } from "./naming/runner-presentation.js";
 import { filePresentationStore } from "../system/presentation/presentation-store.js";
 
@@ -33,7 +36,8 @@ export const runnerModeRequested = (env: NodeJS.ProcessEnv): RunnerModeEnv | und
 // Redeems the pairing on first boot (later boots read identity off /history), then holds the parent link for the
 // daemon's life. A failed enrollment is fatal-by-log, not fatal-by-exit: no crash loop against an already-burned
 // pairing.
-export const startRunnerMode = async (services: Services, env: RunnerModeEnv | undefined, working: () => number): Promise<void> => {
+// `stops`: a person's stops on a card, the agent layer's, handed in by main.ts for the parent's card of a conversation here.
+export const startRunnerMode = async (services: Services, env: RunnerModeEnv | undefined, working: () => number, stops?: RunnerCardStops): Promise<void> => {
     // A stripped env still has its stored identity; neither present means an ordinary sandbox boot, a no-op.
     const identity = env !== undefined ? await ensureRunnerIdentity(services.config.historyRoot, env) : await readRunnerIdentity(services.config.historyRoot);
     if (identity === undefined) {
@@ -51,6 +55,11 @@ export const startRunnerMode = async (services: Services, env: RunnerModeEnv | u
         ...parentCredentialSource(identity, services.logger),
         wake: parentWake(identity, services.logger),
         fleet: parentFleetRead(identity),
+        // And the subagents its turns supervise are the parent's: spawned, placed, supervised and landed there.
+        subagents: parentSubagentCall(identity),
     };
-    startRunnerLink(services, identity, working);
+    startRunnerLink(services, identity, working, undefined, stops);
+    // The parent reaches this runner's netd only down the uplink netd dials with the runner's own token (netd's
+    // parent.rs): its terminals, browser and desktop views and previews, for the parent's people (parent-uplink.ts).
+    parentUplink.want(identity);
 };

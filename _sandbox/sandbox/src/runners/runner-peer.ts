@@ -21,6 +21,7 @@ import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../defin
 import { refreshRunnerFacts } from "./fleet-facts.js";
 import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/enrollment.js";
 import { pushRunnerPresentation } from "./naming/runner-label.js";
+import { followRunnerFeed } from "./live/runner-feed.js";
 
 // A runner is a peer door (peers/): this sandbox's own execution container elsewhere, dialling in with its durable
 // token and serving runnerContract. Every pairing is minted replayable, since it ends up immortal once burned into a
@@ -169,5 +170,12 @@ export const runnerPeerRoutes = (services: Services) =>
         hub: services.runnerHub,
         summaries: () => runnerSummaries(services),
         // Fire-and-forget by the door's contract: a connect never waits on a name.
-        onConnected: (id) => void pushRunnerPresentation(services, id),
+        onConnected: (id) => {
+            void pushRunnerPresentation(services, id);
+            // Its conversations' jobs and watches, and word of its browsers and desktop, for as long as this socket holds.
+            const client = services.runnerHub.client(id);
+            if (client !== undefined) {
+                void followRunnerFeed(services, id, client);
+            }
+        },
     });

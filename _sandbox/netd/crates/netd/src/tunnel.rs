@@ -311,7 +311,10 @@ async fn dial_once(carrier: &Carrier, closed: watch::Receiver<Option<Close>>) ->
     let accepting = tokio::spawn(async move {
         while let Some(stream) = streams.recv().await {
             let netd = serving.clone();
-            tokio::spawn(async move { netd.serve_stream(stream).await });
+            tokio::spawn(async move {
+                netd.serve_stream(stream, crate::route::Listener::Tunnel)
+                    .await
+            });
         }
     });
     if lane == Lane::Interactive {
@@ -425,7 +428,7 @@ fn notsent_lowat(tcp: &TcpStream, bytes: libc::c_int) {
     }
 }
 
-fn client_tls() -> Arc<rustls::ClientConfig> {
+pub(crate) fn client_tls() -> Arc<rustls::ClientConfig> {
     Arc::new(
         rustls::ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),

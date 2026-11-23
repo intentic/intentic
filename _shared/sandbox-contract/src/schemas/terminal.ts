@@ -190,6 +190,12 @@ export const BrowserSessionSchema = z.object({
         .boolean()
         .optional()
         .describe("Your own window, opened from the browser view rather than by an agent. Yours to use whenever it is open; no agent drives it."),
+    // (2026-11-23) A window on one of this sandbox's runners, listed by the parent beside its own: its `name` is then
+    // `<runner>~<the runner's own name>`, so the two never collide, and its view opens through `runners.openView`.
+    runner: z
+        .string()
+        .optional()
+        .describe("The runner this window is open on, for a conversation that runs there. Absent means this sandbox."),
     // The conversation whose agent opened it; the client reads that agent's turn to know whether it is driving now.
     owner: z
         .string()
@@ -211,6 +217,8 @@ export const BrowserPageParamSchema = z.object({
 });
 export const OpenBrowserInputSchema = z.object({
     url: z.string().optional().describe("Where the new tab goes. Absent opens a blank tab, the way a browser's own new tab does."),
+    // (2026-11-23) The runner's own window instead, for a conversation that runs there; answered by its merged name.
+    runner: z.string().optional().describe("Open the tab in this runner's own window instead of this sandbox's. Absent means this sandbox."),
 });
 export type OpenBrowserInput = z.infer<typeof OpenBrowserInputSchema>;
 export const OpenBrowserResultSchema = z.object({
@@ -267,6 +275,20 @@ export const DesktopStateSchema = z.object({
         .describe("Each window open on it, absent when it is not running or has no window manager to ask."),
 });
 export type DesktopState = z.infer<typeof DesktopStateSchema>;
+// (2026-11-23) The sandbox's desktop as `system.desktop` answers it: its own, and each connected runner's, for a
+// conversation that runs there. A runner's picture opens through `runners.openView` with `desktop-view`.
+export const RunnerDesktopSchema = z.object({
+    runner: z.string().describe("The runner whose desktop this is."),
+    state: DesktopStateSchema.describe("Its desktop, as the runner says."),
+});
+export type RunnerDesktop = z.infer<typeof RunnerDesktopSchema>;
+export const SystemDesktopSchema = DesktopStateSchema.extend({
+    runners: z
+        .array(RunnerDesktopSchema)
+        .optional()
+        .describe("Each connected runner's desktop, for the conversations that run there. Absent when this sandbox has no runner connected."),
+});
+export type SystemDesktop = z.infer<typeof SystemDesktopSchema>;
 // A subagent is any agent another agent started, and every surface shows one the same way whichever mechanism started
 // it. The kind names the mechanism, never a second sort of thing:
 // subagent: in-process, the runtime's own Agent/Task tool, tracked via SubagentStart/Stop hooks and task_* messages

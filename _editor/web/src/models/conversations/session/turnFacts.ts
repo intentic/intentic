@@ -8,6 +8,8 @@ import type { Conversation } from "./conversation";
 import { withAgentStatus, withFileDraft, withPageDraft } from "./turnLiveState";
 import { agentScope, SHARED_SCOPE } from "../../../app/workspaceScope";
 import { followFileDrafts } from "../../workspace/files/fileDrafts";
+import { runnerTabName } from "../../terminal/runnerTabNames";
+import { runnerWindowName } from "../../browsers/runnerWindows";
 
 // What a run's entries mean to the conversation beyond its rows, which the transcript has already drawn: the session
 // the turn minted, the worktree it runs in, its live posture and model, the terminal and browser it drives, and how it
@@ -134,12 +136,23 @@ const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
     // raw frame was a second reading of one fact, which could outrank the daemon's by its later stamp.
     account_usage: () => undefined,
     // The agent started running Bash in its tmux terminal; remembered so Bash cards can offer to watch it.
+    // Relayed from a runner (`runner` set), the session is the runner's: held as the tab that dials it, never surfaced in
+    // this sandbox's own list, where no such session is.
     terminal: (conversation, fact) => {
+        if (fact.runner !== undefined) {
+            conversation.agentTerminal.value = runnerTabName({ runner: fact.runner, conversationId: conversation.conversationId, session: fact.session });
+            return;
+        }
         conversation.agentTerminal.value = fact.session;
         surfaceSession(conversation, fact.session);
     },
-    // The agent just used a browser tool; handled like the terminal above, an equally watchable resource.
+    // The agent just used a browser tool; handled like the terminal above, an equally watchable resource. A runner's
+    // window is listed here under its merged name (runnerWindows.ts).
     browser: (conversation, fact) => {
+        if (fact.runner !== undefined) {
+            conversation.agentBrowser.value = runnerWindowName(fact.runner, fact.session);
+            return;
+        }
         conversation.agentBrowser.value = fact.session;
         surfaceSession(conversation, fact.session);
     },

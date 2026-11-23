@@ -77,8 +77,10 @@ interface BrowsersFacts {
     readonly apps: number;
     /** Of those, the ones a tab of the view shows; the rest are said on the hover card but not counted. */
     readonly appsOpen: number;
-    /** Windows open on the desktop; undefined for a reader who may not drive it. */
+    /** Windows open on the desktops (this sandbox's and its runners'); undefined for a reader who may not drive them. */
     readonly desktopWindows: number | undefined;
+    /** The Browsers tab of the desktop with the most windows open (`desktop`, `desktop:<runner>`); absent reads `desktop`. */
+    readonly desktopTab?: string | undefined;
     /** What this reader calls a live app (the vocabulary's word). */
     readonly appsLabel: string;
     readonly here: boolean;
@@ -115,7 +117,7 @@ const browsersTarget = (facts: BrowsersFacts, desktop: number): PageLink => {
     if (facts.apps > 0) {
         return page.browsers(undefined, { query: { preview: `1` } });
     }
-    return page.browsers(window === undefined ? `desktop` : window.name);
+    return page.browsers(window === undefined ? (facts.desktopTab ?? `desktop`) : window.name);
 };
 
 export const browsersChip = (facts: BrowsersFacts): RuntimeChip => {

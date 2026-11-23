@@ -1,3 +1,4 @@
+import { createBrowserWindowRoutes } from "../browser/browser-windows.routes.js";
 import { noteAudit } from "../audit/audit-http.js";
 import { standbyInfo } from "./standby/standby.js";
 import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
@@ -16,10 +17,7 @@ import { cachedAsync } from "@intentic/base/held";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
-import { browserSessionPage, closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
-import { openOwnBrowser } from "../browser/sessions/own-browser.js";
 import { createBrowserTabRoutes } from "../browser/tabs/browser-tabs.routes.js";
-import { desktopState } from "../desktop/agent-desktop.js";
 import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -513,42 +511,10 @@ export const createSystemRoutes = (services: Services) => {
         // the whole wave. Keyed by the domain's publish count, so a read that follows an announced change never gets a
         // listing taken before it; a change nobody announced is the sampler's to publish, within its two seconds.
         terminals: i.terminals.handler(() => terminalsWave.get(runtimeGeneration("terminals"), () => listTerminals(services))),
-        // The agent's Chromiums and open pages; records this daemon keeps itself, not shelled out for.
-        browsers: i.browsers.handler(() => ({ sessions: listBrowserSessions() })),
-        // The person's own window: a tab in it, starting it first when it is closed. A start that fails says why (no
-        // browser installed, no display) rather than leaving the view waiting on a window that will never come.
-        openBrowser: i.openBrowser.handler(async ({ input }) => {
-            try {
-                return await openOwnBrowser(
-                    {
-                        root: services.workspace.root,
-                        warn: (fields, message) => services.logger.warn(fields, message),
-                        info: (fields, message) => services.logger.info(fields, message),
-                    },
-                    input.url,
-                );
-            } catch (error) {
-                services.logger.warn({ err: error }, "own browser: could not open");
-                throw new ORPCError("SERVICE_UNAVAILABLE", { message: `Couldn't open your browser: ${errorMessage(error)}` });
-            }
-        }),
-        closeBrowser: i.closeBrowser.handler(async ({ input }) => {
-            await closeBrowserSession(input.name);
-            return { ok: true };
-        }),
-        // Closing what is already gone is the outcome asked for; the roster relists either way, as after a close over
-        // the picture's socket (browser-view.ts).
-        closeBrowserPage: i.closeBrowserPage.handler(async ({ input }) => {
-            await browserSessionPage(input.name, input.pageId)
-                ?.close()
-                // allow(silent-catch): a page or browser already gone is the close asked for
-                .catch(() => undefined);
-            return { ok: true };
-        }),
+        // The browser windows, the person's own one and the desktop, this sandbox's and its runners' (browser-windows.routes.ts).
+        ...createBrowserWindowRoutes(services),
         // A tab's own menu and the strip's drag, beside the tabs they act on.
-        ...createBrowserTabRoutes(),
-        // The sandbox's own desktop: whether it is up and how many windows it has, which never starts it.
-        desktop: i.desktop.handler(() => desktopState()),
+        ...createBrowserTabRoutes(services),
         // Subagents this sandbox's conversations started, from the roster, each caller told only of the ones started by
         // conversations it may see. Paired against meta files first: the only model source for a child the daemon never
         // watched spawn.

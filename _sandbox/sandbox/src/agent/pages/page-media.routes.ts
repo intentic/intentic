@@ -1,15 +1,12 @@
-import { constants } from "node:fs";
-import { type FileHandle, open, realpath } from "node:fs/promises";
 import { Readable } from "node:stream";
 import type { Context } from "hono";
-import { isInside } from "@intentic/base/contained";
 import { webStream } from "@intentic/base/web-stream";
 import type { PageMediaFile } from "@intentic/sandbox-contract/text/pages";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { parseByteRange } from "../../workspace/files/workspace-files-download.js";
-import { holdsStreamedMedia, pageMediaKeyPath, pageMediaRoots, streamedTypeOf, verifiedPageMedia } from "./page-media.js";
+import { NOT_SERVED, openRecorded, pageMediaKeyPath, pageMediaRoots, verifiedPageMedia } from "../../workspace/files/stored/stored-page-media.js";
 import { readStoredPage } from "../../workspace/files/stored/stored-pages.js";
 
 // GET /pages/media/{ticket}/{index}: a shown page's video or audio, streamed in byte ranges to the player inside the
@@ -47,62 +44,6 @@ const manifestOf = async (deps: PageMediaRoutesDeps, page: string): Promise<read
         }
     }
     return media;
-};
-
-// The recorded file, opened, or why it is not served now. Asked again on every request, not trusted from the manifest
-// alone: a manifest is text in the records, and the file it names may have been moved, linked elsewhere or rewritten
-// since. Everything after the open is asked of the open file itself, and the bytes are streamed from that same handle:
-// a name swapped for a link between a check and the read (a race an agent can run in its own checkout) would otherwise
-// stream whatever the link leads to under the size and type of the take that passed.
-type Refusal = { readonly status: 404 | 409 | 415; readonly message: string };
-type Opened = { readonly handle: FileHandle; readonly type: string } | Refusal;
-// The one answer for a file that is not served, whatever the reason short of a change to the very file the page showed.
-const NOT_SERVED = {
-    status: 404,
-    message: "This page has no such video or audio to play: the agent may have moved or removed it after showing the page.",
-} as const satisfies Refusal;
-const openRecorded = async (file: PageMediaFile, roots: readonly string[]): Promise<Opened> => {
-    const inside = (path: string): boolean => roots.some((root) => isInside(root, path));
-    // Asked of the recorded path before anything is asked of the disk, so a path outside is never looked at.
-    if (!inside(file.path)) {
-        return NOT_SERVED;
-    }
-    // allow(silent-catch): a file that cannot be resolved is not served, in the one answer every such file gets.
-    const real = await realpath(file.path).catch(() => undefined);
-    // Served as the type its name says, never the manifest's word for it.
-    const type = real === undefined ? undefined : streamedTypeOf(real);
-    if (real === undefined || real !== file.path || type === undefined || !inside(real)) {
-        return NOT_SERVED;
-    }
-    // Without following a link, and without waiting: a pipe named like a take would otherwise hold the open, and a thread of
-    // the daemon's file I/O with it, until something wrote to it. Neither changes how a regular file reads.
-    // allow(silent-catch): a file that cannot be opened (gone, or its last part now a link) is answered as gone.
-    const handle = await open(real, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => undefined);
-    if (handle === undefined) {
-        return NOT_SERVED;
-    }
-    let refused: Awaited<ReturnType<typeof refusalOf>> | "unasked" = "unasked";
-    try {
-        refused = await refusalOf(handle, file);
-    } finally {
-        if (refused !== undefined) {
-            await handle.close();
-        }
-    }
-    return refused === undefined ? { handle, type } : refused;
-};
-
-// Why the open file is not the one recorded, or undefined when it is: unchanged since the page was shown (its size and
-// modification time, which only its writer sets) and still holding the format its name says.
-const refusalOf = async (handle: FileHandle, file: PageMediaFile): Promise<Refusal | undefined> => {
-    const info = await handle.stat();
-    if (!info.isFile()) {
-        return NOT_SERVED;
-    }
-    if (info.size !== file.size || info.mtimeMs !== file.mtimeMs) {
-        return { status: 409, message: "This file changed after the page was shown, so it no longer plays here: ask the agent to show the new version." };
-    }
-    return (await holdsStreamedMedia(file.path, handle)) ? undefined : { status: 415, message: "This file is not the video or audio its name says." };
 };
 
 const plain = (c: Context<AppEnv>, status: 401 | 404 | 409 | 415, message: string): Response =>

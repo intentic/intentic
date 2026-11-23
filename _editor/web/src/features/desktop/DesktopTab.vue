@@ -9,15 +9,23 @@ import { computed, nextTick, ref, toRef, watch } from "vue";
 import { type DesktopStatus, useDesktopView } from "./useDesktopView";
 import type { DesktopPointerAction } from "./desktopInput";
 import { useDesktopQuery } from "./desktopQuery";
+import { desktopStateOf } from "./runnerDesktops";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useTier } from "../../client/sandbox/useTier";
 import { useAudience } from "../../app/useAudience";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useBusySince, useLineWithElapsed } from "../../components/progress/useProgress";
 
-const { window: windowId, active, toolsTo } = defineProps<{
+const {
+    window: windowId,
+    runner,
+    active,
+    toolsTo,
+} = defineProps<{
     // One window on the desktop, by its id; absent for the whole display. Fixed for the tab's life, as its key is.
     window?: string | undefined;
+    // The runner whose desktop it is (runnerDesktops.ts), absent for this sandbox's own; fixed like the window.
+    runner?: string | undefined;
     // In front and on screen: the picture streams, and this tab's verbs are in the toolbar.
     active: boolean;
     toolsTo: HTMLElement | undefined;
@@ -28,7 +36,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const t = useT();
 const { activeSandboxId } = useSandbox();
-const view = useDesktopView(activeSandboxId, { window: windowId, visible: toRef(() => active) });
+const view = useDesktopView(activeSandboxId, { window: windowId, runner, visible: toRef(() => active) });
 
 const stageEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLCanvasElement | null>(null);
@@ -81,12 +89,13 @@ const messageLine = useLineWithElapsed(message, useBusySince(() => view.status.v
 // old to say, or a desktop with no window manager), since "nothing is open" would then be a guess; never for one
 // window's tab, which is of something that is there.
 const desk = useDesktopQuery();
-const empty = computed(() => windowId === undefined && view.status.value === undefined && desk.windows.value === 0);
+const state = computed(() => desktopStateOf(desk.state.value, runner));
+const empty = computed(() => windowId === undefined && view.status.value === undefined && state.value?.running === true && state.value.windows === 0);
 // The do-it-yourself half is a shell's, so it goes to whoever has the rail's terminal (ShellDesktop.vue).
 const { canShip } = useTier();
 const { maker } = useAudience();
 const terminal = useTerminalPanel();
-const exportLine = computed(() => (desk.state.value?.display === undefined ? undefined : `export DISPLAY=${desk.state.value.display}`));
+const exportLine = computed(() => (state.value?.display === undefined ? undefined : `export DISPLAY=${state.value.display}`));
 
 const toggle = async (): Promise<void> => {
     if (view.driving.value) {

@@ -23,6 +23,7 @@ import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { assistantsOf, refuseUnlessReachable } from "../../roles/role-reach.js";
 import { opt } from "../../opt.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
+import { inlineFiles } from "../../runners/files/runner-files.js";
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
@@ -95,6 +96,30 @@ const switchAnswer = (outcome: AccountSwitch): { readonly run?: string } => {
         throw new ORPCError("BAD_REQUEST", { message: "that conversation runs on an API key, which has no accounts: pick a model of the account's provider instead" });
     }
     return outcome.run === undefined ? {} : { run: outcome.run };
+};
+
+// An answer to a card minted on a runner, forwarded there; false when no runner holds the card or it did not apply. The
+// files an own-words answer attaches are uploads here, which the runner's mirror lacks, so they go as bytes.
+const replyOnRunner = async (services: Services, input: AgentReply): Promise<boolean> => {
+    const remote = remoteRequestOf(input.requestId);
+    const client = remote === undefined ? undefined : services.runnerHub.client(remote.runnerId);
+    if (remote === undefined || client === undefined) {
+        return false;
+    }
+    if (input.kind === "question" && input.cancelled === true) {
+        services.conversations.send(remote.conversationId, { kind: "stop", ending: "dismissed" });
+    }
+    const attached = input.kind === "question" ? Object.values(input.attachments ?? {}).flat() : [];
+    // One resolving outside the workspace stays behind: the answer still names it, as it does here (question-answers.ts).
+    const files = attached.length === 0 ? undefined : (await inlineFiles(services.workspace.root, services.logger, { mentions: attached })).files;
+    const answered = await client.reply({ ...input, ...opt("files", files) }).catch((error: unknown) => {
+        services.logger.warn({ err: error, runner: remote.runnerId }, "runner: forwarding an answer failed");
+        return { applied: false };
+    });
+    if (answered.applied) {
+        forgetRemoteRequest(input.requestId);
+    }
+    return answered.applied;
 };
 
 export const createAgentRoutes = (services: Services) => {
@@ -272,20 +297,8 @@ export const createAgentRoutes = (services: Services) => {
                 return { ok: true } as const;
             }
             // Remote: nothing held here is unusual, the question was minted on the runner instead.
-            const remote = remoteRequestOf(input.requestId);
-            const client = remote === undefined ? undefined : services.runnerHub.client(remote.runnerId);
-            if (remote !== undefined && client !== undefined) {
-                if (input.kind === "question" && input.cancelled === true) {
-                    services.conversations.send(remote.conversationId, { kind: "stop", ending: "dismissed" });
-                }
-                const answered = await client.reply(input).catch((error: unknown) => {
-                    services.logger.warn({ err: error, runner: remote.runnerId }, "runner: forwarding an answer failed");
-                    return { applied: false };
-                });
-                if (answered.applied) {
-                    forgetRemoteRequest(input.requestId);
-                    return { ok: true } as const;
-                }
+            if (await replyOnRunner(services, input)) {
+                return { ok: true } as const;
             }
             throw new ORPCError("NOT_FOUND", { message: `no pending ${input.kind} for that request` });
         }),

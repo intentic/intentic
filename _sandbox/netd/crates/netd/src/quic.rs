@@ -178,7 +178,10 @@ async fn dial_once(
             let probed = probed.clone();
             tokio::spawn(async move {
                 match tunnel::quic::accepted(send, recv).await {
-                    Some(stream) => netd.serve_stream(stream).await,
+                    Some(stream) => {
+                        netd.serve_stream(stream, crate::route::Listener::Tunnel)
+                            .await
+                    }
                     None => probed.answer(),
                 }
             });

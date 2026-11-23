@@ -20,6 +20,7 @@ import { useShieldedMarks } from "../panel/privacy/useShieldedWords";
 import { openFileRefFromEvent } from "../../../models/workspace/files/openFileRef";
 import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../workbench/side/sideLinks";
 import { openLoopbackPreview } from "../../../models/terminal/portPreview";
+import { runnerOf } from "../../../models/placement/runnerPlacement";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatReadAloud from "../voice/ChatReadAloud.vue";
@@ -167,12 +168,12 @@ const onMarkdownClick = (event: MouseEvent): void => {
         return;
     }
     // A `localhost` link an agent wrote names the sandbox's own loopback, dead from here: opened through the sandbox's
-    // forwarded port instead, as the terminal does.
+    // forwarded port instead, as the terminal does: the runner's, for a conversation that runs on one.
     const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(`a[href]`) : null;
     const local = link === null ? undefined : parseLoopbackLink(link.href);
     if (local !== undefined) {
         event.preventDefault();
-        openLoopbackPreview(local);
+        openLoopbackPreview(local, runnerOf(conversation.value.conversationId));
     }
 };
 

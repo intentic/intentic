@@ -41,10 +41,11 @@ export interface ScreencastMedia {
 
 const withMedia = (url: string): string => `${url}${url.includes(`?`) ? `&` : `?`}media=1`;
 
-// The sandbox's base as the window's socket was dialled on it, everything before its `/system/` route: the media
-// socket opens on the same sandbox, by the same way in, as the socket that named it.
+// The sandbox's base as the window's socket was dialled on it, everything before its last `/system/` route: the media
+// socket opens on the same sandbox, by the same way in, as the socket that named it. A runner's window is dialled under
+// `/system/runner-view/<runner>/system/browser-view`, so its media goes `…/system/runner-view/<runner>/system/browser-media`.
 const baseOf = (url: string): string | undefined => {
-    const at = url.indexOf(`/system/`);
+    const at = url.lastIndexOf(`/system/`);
     return at < 0 ? undefined : url.slice(0, at);
 };
 

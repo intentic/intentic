@@ -3,7 +3,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Page, PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_TITLE_MAX } from "@intentic/sandbox-contract/events/requests";
 import { intoHead, type PageMediaFile, pageMediaScript, standalonePage } from "@intentic/sandbox-contract/text/pages";
-import { signPageMedia } from "./page-media.js";
+import { signPageMedia } from "../../workspace/files/stored/stored-page-media.js";
 import { stateRelPath } from "../../state-paths.js";
 import { folderOf } from "../../sessions/conversation-purge.js";
 

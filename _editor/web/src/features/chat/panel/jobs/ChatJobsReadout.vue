@@ -3,7 +3,7 @@ import { AnchoredOverlay, formatElapsed, SectionHeader, ui } from "@intentic/ui"
 import { useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
-import { openWorkTerminal } from "../../../../models/terminal/useWorkTerminals";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useT } from "@intentic/ui/i18n";
@@ -14,6 +14,7 @@ const t = useT();
 
 const { conversation } = usePaneView();
 const { agentById } = useAgents();
+const surface = useChatSurface();
 
 const jobs = computed(() => runningJobs(agentById(conversation.value.conversationId)?.jobs));
 
@@ -21,9 +22,10 @@ const trigger = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
 const now = useNow(() => open.value && jobs.value.length > 0);
 
+// Through the pane's own Watch, as the footer's rows: a runner conversation's job opens the runner's terminal tab.
 const watchJob = (session: string): void => {
     open.value = false;
-    openWorkTerminal(session);
+    surface.watchTerminal?.(session);
 };
 </script>
 

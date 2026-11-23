@@ -2,6 +2,7 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
+import { stoppedOrSay } from "../../panel/jobs/stopOutcome";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useOperation } from "../../../../workbench/operations/operations";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
@@ -30,7 +31,7 @@ const stop = async (): Promise<void> => {
         what: t(`chat.chatLeftRunning.stoppingRow`, { label }),
         failed: t(`chat.noticeWatchStop.couldNotStop`),
         done: () => t(`chat.chatLeftRunning.stoppedRow`, { label }),
-        task: () => stopWatching(id, watchId),
+        task: async () => stoppedOrSay(await stopWatching(id, watchId), (reason) => t(`chat.chatLeftRunning.nothingStopped`, { reason })),
     });
 };
 </script>

@@ -15,8 +15,12 @@ import { tunnelBulkRoutes } from "@intentic/sandbox-contract/protocol/tunnel-bul
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import { createApp } from "../app.js";
-import { connectNetd, type NetdAsks, type NetdLink, type TunnelReport } from "../netd/netd-link.js";
+import { connectNetd, type NetdAsks, type NetdLink, type RunnerUplinksReport, type TunnelReport } from "../netd/netd-link.js";
 import { netdUplinks } from "../hosts/remote/netd-uplinks.js";
+import { parentUplink } from "../runners/uplink/parent-uplink.js";
+import { enrolledRunnersAt, runnerUplinks } from "../runners/uplink/runner-uplinks.js";
+import { runnerViewTickets } from "../runners/uplink/runner-view-tickets.js";
+import { tellRunnersRevoked } from "../runners/live/runner-revoke.js";
 import { netdCheckoutFeed, useCheckoutFeed } from "../git/feed/checkout-feed.js";
 import { answerPreview, isHandedBackPreview, PREVIEW_PROBE_PATH, type PreviewDeps, previewRoute } from "../panels/preview-routes.js";
 import { type ReachPosture, reachPosture, tunnelUrl } from "../system/listeners/reach-posture.js";
@@ -306,6 +310,33 @@ const handTunnel = ({ config, logger, traits, standby }: BootPhase, link: NetdLi
     return reach;
 };
 
+// What takes netd's runner report, set once the link it reports on is up.
+interface RunnersHeard {
+    current?: (report: RunnerUplinksReport) => void;
+}
+
+// This sandbox's two runner roles at its netd (2026-11-23). As a parent: every enrolled runner registered with netd by
+// its token's digest and withdrawn once revoked (runners/uplink/runner-uplinks.ts), and a revoked member's runner view tickets
+// dropped (netd closes their open views on the `revoke` relayed below). As a runner: netd told to dial the parent once
+// runner mode names it (runners/uplink/parent-uplink.ts). Returns what takes netd's report of the runners' uplinks.
+const useRunnerUplinks = ({ config, logger, services, shutdown }: BootPhase, link: NetdLink): ((report: RunnerUplinksReport) => void) => {
+    const runners = runnerUplinks(
+        (message) => link.tell(message),
+        enrolledRunnersAt(config.historyRoot),
+        (error) => logger.warn({ err: error }, "netd door: the runners' uplinks could not be registered with netd"),
+    );
+    shutdown.push(() => runners.stop());
+    const untickets = services.auth?.connections.onRevoke((member) => {
+        runnerViewTickets.revoke(member);
+        // netd closes the views it carried for them; each runner ends the picture tokens their views minted there.
+        void tellRunnersRevoked(services, member, (runner, error) => logger.warn({ err: error, runner }, "netd door: a runner was not told of a revocation"));
+    });
+    shutdown.push(() => untickets?.());
+    parentUplink.useNetd((message) => link.tell(message));
+    shutdown.push(() => parentUplink.useNetd(undefined));
+    return runners.heard;
+};
+
 // Returns the reach posture once, since the platform's reachability probe needs the same answer the tunnel was given.
 // Node's HTTP server on netd's socket. Previews netd hands back skip the app: they answer for a preview host,
 // which the app's routes never see.
@@ -363,6 +394,8 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
     const terminal = terminalDepsOf(phase);
     const hiddenLines = createTerminalCapture({ link: services.keyringLink, logger });
     let stopping = false;
+    // Set as soon as the link is up; a report before that has no registry to reach yet, and netd repeats it after hello.
+    const runnersHeard: RunnersHeard = {};
     const link = await connectNetd({
         path: controlPath,
         answer: async (question: NetdAsks): Promise<Answer> => {
@@ -373,6 +406,9 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
                     const answer = planTerminal(terminal, question.query);
                     return answer.plan.plan === "session" ? jailedTerminal(phase, answer) : answer;
                 }
+                // A person's view of one of this sandbox's runners, admitted only by a ticket minted for it.
+                case "runnerView":
+                    return runnerViewTickets.redeem(question);
             }
         },
         // netd repeats where the tunnel stands to every Node that says hello; only a change is news.
@@ -381,6 +417,8 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
         onHiddenLine: ({ session, prompt, value }) => hiddenLines.entered(session, prompt, value),
         // Where the computers' uplinks stand, for remote access (hosts/remote/), which registers them with netd.
         onDeviceUplinks: (report) => services.remoteAccess.heard(report),
+        onRunnerUplinks: (report) => runnersHeard.current?.(report),
+        onParentUplink: (report) => parentUplink.heard(report),
         onFault: (error) => logger.warn({ err: error }, "netd link: fault on the control socket"),
         // The link closing unasked: netd dropped it (a frame it could not read) or is going away. Either way this daemon
         // cannot serve without it, and exits for a fresh start; netd going down takes no notice of the code.
@@ -396,6 +434,7 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
         link.close();
     });
     services.remoteAccess.useNetd(netdUplinks((message) => link.tell(message)));
+    runnersHeard.current = useRunnerUplinks(phase, link);
     shutdown.push(() => services.remoteAccess.useNetd(undefined));
     // Status reads keyed on netd's change counts from here on (git/feed/checkout-feed.ts).
     useCheckoutFeed(netdCheckoutFeed(link));

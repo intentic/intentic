@@ -14,6 +14,7 @@ import type { Services } from "../composition.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runner-git.routes.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { pushToParent, syncFromParent } from "./runner-sync.js";
+import { syncHeld } from "./runner-service.js";
 
 // End-to-end against a real parent: git dirs served over a live socket through the smart-HTTP doors, driven by the
 // runner's sync using stock git. A wrong bearer refuses outright, and a push to the checked-out branch is refused by
@@ -223,6 +224,50 @@ test("a pull keeps work the parent never received before it resets the conversat
     expect(await git(runner.workspaceRoot, ["merge-base", "--is-ancestor", unpushed, kept]).then(() => true, () => false)).toBe(true);
     // The checkout itself is the parent's branch again, as before.
     expect(existsSync(join(checkout, "unpushed.md"))).toBe(false);
+});
+
+// 2026-11-23: a failed or stopped turn never reaches the land that commits a checkout's leftovers, so its push carried
+// the branch's tip alone, and the next pull moved its edits to a rescue ref on the runner. The push commits them first.
+test("a push commits what the turn left uncommitted in its checkout before delivering the branch", async () => {
+    await git(parentWork, ["branch", "-f", "agent/conv4", mainBranch]);
+    const runner = freshRunner();
+    const conv4 = { ...sync("pull"), conversationId: "conv4", branch: "agent/conv4" };
+    await syncFromParent(runner, identity, conv4, () => undefined);
+    const checkout = join(mkdtempSync(join(tmpdir(), "runner-checkout-")), "conv4");
+    await git(runner.workspaceRoot, ["worktree", "add", checkout, "agent/conv4"]);
+    const attached = { ...runner, worktrees: { attached: async () => true, worktreeDir: () => checkout }, titleOf: () => "Fix the readme" };
+    await writeFile(join(checkout, "readme.md"), "edited by a turn that failed\n");
+    await writeFile(join(checkout, "new.md"), "untracked\n");
+
+    await pushToParent(attached, identity, { ...conv4, op: "push" }, () => undefined);
+
+    const delivered = runnerIncomingRef("conv4");
+    expect(await git(parentWork, ["show", `${delivered}:readme.md`])).toBe("edited by a turn that failed");
+    expect(await git(parentWork, ["show", `${delivered}:new.md`])).toBe("untracked");
+    expect(await git(parentWork, ["log", "-1", "--format=%s", delivered])).toBe("Agent: Fix the readme");
+    expect(await git(checkout, ["status", "--porcelain"])).toBe("");
+});
+
+// Review, 2026-11-23: a push while the runner's turn is still running (the parent stopped following it, or its link
+// dropped) must not commit the checkout mid-write: the branch's tip goes alone, and the edits stay where they are.
+test("a push while the runner's turn still runs delivers the branch's tip alone and leaves the checkout as it is", async () => {
+    await git(parentWork, ["branch", "-f", "agent/conv5", mainBranch]);
+    const runner = freshRunner();
+    const conv5 = { ...sync("pull"), conversationId: "conv5", branch: "agent/conv5" };
+    await syncFromParent(runner, identity, conv5, () => undefined);
+    const checkout = join(mkdtempSync(join(tmpdir(), "runner-checkout-")), "conv5");
+    await git(runner.workspaceRoot, ["worktree", "add", checkout, "agent/conv5"]);
+    const attached = { ...runner, worktrees: { attached: async () => true, worktreeDir: () => checkout } };
+    await writeFile(join(checkout, "readme.md"), "half written\n");
+    const tip = await git(checkout, ["rev-parse", "HEAD"]);
+    const live = { held: () => ({ state: "live" as const, events: 1, acked: 0 }), settle: async () => undefined, delivered: () => undefined };
+
+    for await (const line of syncHeld(live, attached, identity, { ...conv5, op: "push" })) {
+        void line;
+    }
+
+    expect(await git(parentWork, ["rev-parse", runnerIncomingRef("conv5")])).toBe(tip);
+    expect(await git(checkout, ["status", "--porcelain"])).toBe("M readme.md");
 });
 
 // The shinobi-society audit (2026-11-17): every runner placement failed with "Your local changes ... would be overwritten

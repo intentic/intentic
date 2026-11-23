@@ -4,7 +4,8 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { readCappedBytes } from "@intentic/base/capped-read";
 import { isInside } from "@intentic/base/contained";
 import { withoutPageMedia } from "@intentic/sandbox-contract/text/pages";
-import { type MediaTally, mediaRecorder, STREAMED_EXTENSIONS } from "./page-media.js";
+import { type MediaTally, mediaRecorder } from "./page-media.js";
+import { STREAMED_EXTENSIONS } from "../../workspace/files/stored/stored-page-media.js";
 
 // A page carries everything it shows inside itself, since the chat draws it in a frame that can reach nothing: the
 // pictures, stylesheets and scripts it names on disk are read in as data, and the ones it names on a well-known

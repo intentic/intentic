@@ -713,6 +713,13 @@ const rows: readonly Row[] = [
         effects: BROADCAST,
     },
     {
+        name: "what a runner holds of the jobs and watches goes beside the card's own, never replacing them, and publishes it",
+        from: { ...idle(), jobs: [{ ...JOB, id: "j-local" }] },
+        event: { kind: "runner-shown", jobs: [JOB], watches: [WATCH] },
+        to: { ...idle(), jobs: [{ ...JOB, id: "j-local" }], runnerJobs: [JOB], runnerWatches: [WATCH] },
+        effects: BROADCAST,
+    },
+    {
         name: "a loop's standing replaces the last one on the card, and publishes it",
         from: { ...running(), loop: { state: "running", iteration: 1, maxIterations: 5, goal: "passing suite" } },
         event: { kind: "loop-shown", loop: { state: "exhausted", iteration: 5, maxIterations: 5, goal: "passing suite" } },

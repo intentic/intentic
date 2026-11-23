@@ -6,7 +6,8 @@ import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js
 import { opt } from "../../../opt.js";
 import type { Steer } from "../../../seams/turn-starter.js";
 import { resolveExistingWithin, resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
-import { steerTurn } from "../../checkpoints/agent-steering.js";
+import { noteSteered, steerTurn } from "../../checkpoints/agent-steering.js";
+import { runnerOfConversation, steerOnRunner } from "./runner-steer.js";
 import { withAttachmentNote } from "../../../sessions/vocabulary/attachment-note.js";
 
 // applyReply and composeSteerText are functions rather than route bodies: a parent sandbox forwards a remote card's answer
@@ -84,11 +85,23 @@ export const composeSteerText = async (root: string, input: SteerInput): Promise
 // Words for a turn running in this sandbox, composed against its workspace and handed over with everything the steer
 // names, which the row they become carries. The port's steer door and admission both go through here, so neither drops a
 // field the other keeps.
+// A conversation placed on a runner takes them there, uncomposed (runner-steer.ts), whoever sends them.
 export const steerComposed = async (
-    services: Pick<Services, "workspace" | "conversations">,
+    services: Pick<Services, "workspace" | "conversations"> & Partial<Pick<Services, "agents" | "runnerHub" | "logger">>,
     conversationId: string,
     steer: Steer,
 ): Promise<boolean | { readonly invalid: string }> => {
+    const runnerId = runnerOfConversation(services, conversationId);
+    if (runnerId !== undefined && services.runnerHub !== undefined && services.logger !== undefined) {
+        const handed = await steerOnRunner({ runnerHub: services.runnerHub, workspace: services.workspace, logger: services.logger }, runnerId, conversationId, steer);
+        if (handed !== true) {
+            return "invalid" in handed ? { invalid: handed.invalid } : false;
+        }
+        if (steer.voice !== "person") {
+            noteSteered(services.conversations, conversationId, steer);
+        }
+        return true;
+    }
     const composed = await composeSteerText(services.workspace.root, steer);
     if (composed.invalid !== undefined) {
         return { invalid: composed.invalid };

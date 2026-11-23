@@ -9,7 +9,10 @@ import {
     RunnerDefinitionAppliedSchema,
     RunnerFactsSchema,
     RunnerHeldTurnSchema,
+    RunnerFeedFrameSchema,
     RunnerPresentationSchema,
+    RunnerRevokeSchema,
+    RunnerStoppedSchema,
     RunnerSyncLineSchema,
     RunnerSyncSchema,
     RunnerTurnSchema,
@@ -17,6 +20,17 @@ import {
 import { EditorContextSchema } from "../schemas/agent.js";
 import { AgentReplySchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
+import {
+    BrowserPageActionInputSchema,
+    MoveBrowserPageInputSchema,
+    ReopenBrowserPageInputSchema,
+    BrowserNameParamSchema,
+    BrowserPageParamSchema, BrowsersListSchema, DesktopStateSchema, OpenBrowserInputSchema, OpenBrowserResultSchema } from "../schemas/terminal.js";
+import { PortParamSchema } from "../schemas/ports.js";
+import { TurnErrandSchema } from "../schemas/speaker.js";
+
+// Files a message names, as bytes: the runner resolves no path of the parent's. `path` is workspace-relative.
+const RunnerFilesSchema = z.array(z.object({ path: z.string().min(1), bytesBase64: z.string() }));
 
 // What a runner can be asked, over the socket it opened; same inversion as deviceContract, the runner is the oRPC server,
 // the parent the client. No `.route()`: the procedure path is the address. Typed throughout, unlike deviceContract's
@@ -49,12 +63,53 @@ export const runnerContract = {
     // sha256 of a file the parent already holds at that path; the answer then carries no bytes when the runner's file is
     // the same. NOT_FOUND for a path outside the artifacts folder or no file there, PAYLOAD_TOO_LARGE past the cap; an
     // older runner lacks the procedure, and its pictures stay on the runner.
+    // `conversationId` asks for a file in that conversation's checkout instead (a picture a turn Read from its own tree,
+    // `path` relative to the checkout), which the parent files under the artifacts folder's `runner/<id>/`; an older runner
+    // ignores it and answers NOT_FOUND, the path being outside its artifacts folder. `offset` and `length` ask for one
+    // piece of a file past a socket frame (up to 512 MiB in all), answered with the whole file's `size`; an older runner
+    // ignores them and answers the whole file, or PAYLOAD_TOO_LARGE. `have` is compared with the whole file either way.
+    // The first piece (offset 0) carries the whole file's `sha256`, which the parent checks the assembled copy against.
     readArtifact: oc
-        .input(z.object({ path: z.string().min(1), have: z.string().optional() }))
-        .output(z.object({ bytesBase64: z.string().optional() })),
-    // Returns `applied` rather than throwing: a missing id is an ordinary race, same as local NOT_FOUND.
-    reply: oc.input(AgentReplySchema).output(z.object({ applied: z.boolean() })),
-    // Attachments/editor context travel uncomposed: the note must build against the runner's own workspace root.
+        .input(
+            z.object({
+                path: z.string().min(1),
+                have: z.string().optional(),
+                conversationId: z.string().min(1).optional(),
+                offset: z.number().int().nonnegative().optional(),
+                length: z.number().int().positive().optional(),
+            }),
+        )
+        .output(z.object({ bytesBase64: z.string().optional(), size: z.number().optional(), sha256: z.string().optional() })),
+    // The files in the runner's artifacts folder modified within the last `withinMs` (a duration, so neither machine's
+    // clock is read against the other's), the person's uploads and pages left out: what a turn here left there (a PDF, a
+    // video, a trace), swept home by the parent before it relays the turn's `done` and fetched with `readArtifact`. An
+    // older runner lacks the procedure (NOT_FOUND), and those files stay on the runner.
+    listArtifacts: oc
+        .input(z.object({ withinMs: z.number().int().positive() }))
+        .output(z.object({ files: z.array(z.object({ path: z.string().min(1), size: z.number(), mtimeMs: z.number() })) })),
+    // One piece of the `index`th video or audio file a stored page here streams (`show_page` media, agent/pages/page-media.ts),
+    // served only while the page's manifest verifies under this runner's own key and the file is still the one shown. The
+    // parent copies each into its artifacts folder and re-signs the manifest for its copies before filing the page.
+    // NOT_FOUND for anything else; an older runner lacks the procedure, and its pages' media plays nowhere, as before.
+    readPageMedia: oc
+        .input(
+            z.object({
+                page: z.string().min(1),
+                index: z.number().int().nonnegative(),
+                offset: z.number().int().nonnegative(),
+                length: z.number().int().positive(),
+            }),
+        )
+        // The first piece (offset 0) carries the file's `sha256`, as `readArtifact` does.
+        .output(z.object({ bytesBase64: z.string(), size: z.number(), sha256: z.string().optional() })),
+    // Returns `applied` rather than throwing: a missing id is an ordinary race, same as local NOT_FOUND. `files` carries
+    // the bytes of the files an answer attaches (a question's own-words answer), written at their workspace paths before
+    // the answer applies, since the runner resolves no path of the parent's; an older runner ignores it.
+    reply: oc.input(AgentReplySchema.and(z.object({ files: RunnerFilesSchema.optional() }))).output(z.object({ applied: z.boolean() })),
+    // Attachments/editor context travel uncomposed: the note must build against the runner's own workspace root. `files`
+    // carries the bytes of what attachments and mentions name, written before the steer applies. `voice` (default
+    // "person"), `outside` and `errand` say whose words they are when not the person's: an agent's message to a working
+    // child, a wake, a page's error report. An older runner ignores all four, and takes every steer as the person's.
     steer: oc
         .input(
             z.object({
@@ -63,6 +118,10 @@ export const runnerContract = {
                 attachments: z.array(z.string()).optional(),
                 mentions: z.array(z.string()).optional(),
                 editorContext: EditorContextSchema.optional(),
+                voice: z.enum(["person", "sandbox", "agent"]).optional(),
+                outside: z.string().optional(),
+                errand: TurnErrandSchema.optional(),
+                files: RunnerFilesSchema.optional(),
             }),
         )
         .output(z.object({ applied: z.boolean(), invalid: z.string().optional() })),
@@ -82,4 +141,40 @@ export const runnerContract = {
     cancelCommand: oc.input(RunnerCommandSchema.pick({ runId: true })).output(OkSchema),
     // Liveness driven by the parent: keepalive and gone-detection in one.
     ping: oc.output(OkSchema),
+    // LIVE VIEWS (2026-11-23): what the parent's editor shows of a conversation running here, beside the views netd carries
+    // down the uplink (a terminal, a browser's or the desktop's picture). Each degrades on an older runner, which lacks the
+    // procedure (NOT_FOUND): the parent then shows what it has, as before.
+    // The stream the parent opens each time this runner connects: every conversation's jobs and watches, then each change,
+    // and a word when the browsers or the desktop changed (runner-protocol.ts RunnerFeedFrameSchema).
+    feed: oc.output(streamOf(RunnerFeedFrameSchema)),
+    // This runner's browser windows, as its own `system.browsers` lists them; the parent namespaces their names.
+    browsers: oc.output(BrowsersListSchema),
+    // The window acts the parent's browser routes forward for one of this runner's windows, by the runner's own name.
+    openBrowser: oc.input(OpenBrowserInputSchema).output(OpenBrowserResultSchema),
+    closeBrowser: oc.input(BrowserNameParamSchema).output(OkSchema),
+    closeBrowserPage: oc.input(BrowserPageParamSchema).output(OkSchema),
+    // This runner's desktop, as its own `system.desktop` says; starts nothing.
+    desktop: oc.output(DesktopStateSchema),
+    // A person's stops on a runner conversation's card, applied here where the job or watch lives; `stopped` false when
+    // nothing was left to stop. Naming no watch disarms them all.
+    stopJob: oc.input(z.object({ conversationId: z.string().min(1), jobId: z.string().min(1) })).output(RunnerStoppedSchema),
+    stopWatching: oc.input(z.object({ conversationId: z.string().min(1), watchId: z.string().optional() })).output(RunnerStoppedSchema),
+    // Whether a port here may be previewed through the parent: something listens on it, reachable on loopback, and it is
+    // not a browser's DevTools port. A refusal is answered, with the reason the parent's own forward would give, never
+    // thrown: a NOT_FOUND is only ever an older runner without the door.
+    vetPort: oc.input(PortParamSchema).output(z.object({ refused: z.string().optional() })),
+    // The parent revoked a member's access (or everyone's): the picture sockets and tokens this runner's castd holds are
+    // ended, as the parent's own are; the parent's netd already closed every view it carried for them.
+    revoke: oc.input(RunnerRevokeSchema).output(OkSchema),
+    // A tab's own menu and the strip's drag on one of this runner's windows, by its own name (`system.reopenBrowserPage`,
+    // `moveBrowserPage`, `browserPageAction` there): answers the tab acted on or opened, nothing for a move.
+    browserTab: oc
+        .input(
+            z.union([
+                ReopenBrowserPageInputSchema.extend({ op: z.literal("reopen") }),
+                MoveBrowserPageInputSchema.extend({ op: z.literal("move") }),
+                BrowserPageActionInputSchema.extend({ op: z.literal("action") }),
+            ]),
+        )
+        .output(OpenBrowserResultSchema.partial()),
 };

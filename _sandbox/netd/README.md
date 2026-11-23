@@ -80,7 +80,7 @@ flowchart LR
   is how castd knows its viewer runs on this computer and gives it the local profile and exact pictures (2026-11-20). No castd listening is netd's own 502 naming the session. A test's netd looks in
   `cast/` beside its run directory. (Rejected: relaying through Node, which the daemon does only behind a netd older
   than this route, `browser/media/media-relay.ts`.)
-- A connected computer's screen and terminals are carried here too, and served there (2026-11-20, `devices.rs`). The
+- A connected computer's screen and terminals are carried here too, and served there (2026-11-20, `uplinks.rs`). The
   computer's `intentic-remoted` dials `GET /system/device-uplink` (browser-wire's `DEVICE_UPLINK_PATH`) on the daemon's
   host, from any listener or the tunnel, with `authorization: Bearer <uplink token>` and `x-intentic-device`, and the
   WebSocket then carries one yamux session: the tunnel crate's own, its ends swapped, so here netd opens a stream per
@@ -98,6 +98,35 @@ flowchart LR
   netd tells every Node that says hello which devices it holds and whether each uplink is up
   (`ToNode::DeviceUplinks`); a Node registers nothing with a netd that never told it, since an older netd closes the
   link on a frame kind it does not know.
+- A runner's views and previews are carried here too (2026-11-23). A runner is another machine's sandbox container
+  running a conversation's turns for a parent; it publishes no port and runs without auth, so the parent's netd is its
+  only gate. **On the runner** (`parent.rs`) Node sends `FromNode::ParentUplink` with the parent's address, the runner's
+  id and its durable token, and netd dials `GET /system/runner-uplink` (browser-wire's `RUNNER_UPLINK_PATH`) on the
+  parent's origin (`http(s)` becomes `ws(s)`) with `authorization: Bearer <token>` and `x-intentic-runner: <id>`, then
+  serves every yamux stream the parent opens as one HTTP/1.1 connection on `Listener::Parent`: routed as the loopback
+  port is, never guarded, and marked `x-intentic-listener: parent` (netd-wire's `PARENT_LISTENER`) to Node and castd,
+  never `loopback`, so no proof or origin bound to this machine follows from it. It redials at the tunnel's pace
+  (`standing::Pace`): a drop on the ladder; a displacement (4001) or a refusal (401, 403, 404 from a parent older than
+  the route, or 4003 withdrawn) standing back 60-120 s, and after three refusals in a row every 15 minutes. It tells Node
+  `ToNode::ParentUplink` on every change and after each hello, configured or not, which is how Node knows to send the
+  config at all. **On the parent** runners are a registry of their own beside devices' (`uplinks.rs`, one `Uplinks` per
+  `Kind`), so a device's token never opens a runner's uplink: `FromNode::RunnerUplink` registers a runner by its token's
+  SHA-256, `FromNode::RunnerWithdraw` closes it, `ToNode::RunnerUplinks` reports them whole. A stream a runner opens is
+  refused. A person's view goes through `/system/runner-view/<runner>/<path on the runner>` (`RUNNER_VIEW_PATH`), only
+  as an upgrade (426), only for a runner name `[A-Za-z0-9_-]{1,64}` and a path matched as written against the allowlist
+  `system/terminal`, `system/browser-view`, `system/desktop-view` and `system/browser-media/<session>` (anything else is
+  404, before Node is asked). For the first three netd asks Node `Question::RunnerView{runner, path, query}`, which
+  redeems a one-shot ticket its daemon minted for that runner, view and session (`runners/uplink/runner-view-tickets.ts`), and
+  anything but an answer that allows it is 403; a media socket rides castd's own token. What goes down the uplink is the
+  path on the runner with the query less its `ticket`, without `authorization`, `cookie` or `origin`, and Host
+  `localhost`; the splice is recorded with the ticket's member, and `FromNode::Revoke` ends that member's views (any
+  revocation ends every runner media socket, whose viewers redial with fresh tokens). No uplink is netd's own 502. A
+  runner-slot preview is `PreviewRoute::Runner{runner, port, frameable}` from Node: the parent runs its preview guard,
+  carries the request down the uplink with `x-intentic-runner-port` (`NetdHeader::RunnerPort`), and applies `frameable`
+  and the pass to the answer; the runner's netd honours that header only on `Listener::Parent`, read before every netd
+  header is stripped, relaying to its own `localhost:<port>` without asking its Node. A port that is one of the runner's own listeners (daemon, preview, loopback) is refused 403 without a dial, and so is any local preview upstream on a loopback host and one of netd's own listener ports, on any sandbox: either would put the daemon, its loopback port's proof included, at a preview's address. (Rejected: reusing the loopback
+  listener value for parent streams, which the daemon reads as this machine's own proof; and generalising the edge's
+  carrier, `tunnel.rs`, whose identity and lanes a runner has no use for.)
 - In the editor's own sessions (`web-…`, never an agent's) netd also notices a password typed at a hidden prompt (2026-10-19,
   `term/hidden.rs`): output that stopped on a password-ish question, then keystrokes while the pane's tty has echo off
   (asked of the tty with `tcgetattr`). The line is edited as the tty does and told to Node once (`ToNode::HiddenLine`),
@@ -239,7 +268,7 @@ flowchart LR
 - [crates/netd/src/tunnel.rs](crates/netd/src/tunnel.rs) — the ingress tunnel: grant, then a stream per request.
 - [crates/netd/src/standing.rs](crates/netd/src/standing.rs) — where the tunnel stands for Node and the vitals, and
   each carrier's redial pace.
-- [crates/netd/src/devices.rs](crates/netd/src/devices.rs) — connected computers' uplinks: who may dial, one yamux
+- [crates/netd/src/uplinks.rs](crates/netd/src/uplinks.rs) — connected computers' and runners' uplinks: who may dial, one yamux
   session each, and the socket Node reaches remoted on.
 - [crates/netd/src/term/mod.rs](crates/netd/src/term/mod.rs) — a terminal socket from Node's plan to its close.
 - [crates/netd/src/term/hidden.rs](crates/netd/src/term/hidden.rs) — a password typed at a hidden prompt in an editor terminal: the line edited as the tty does and told to Node once (`ToNode::HiddenLine`), for Passwords.

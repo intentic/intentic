@@ -4,6 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -16,22 +17,22 @@ use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use netd_wire::{
-    Answer, LOOPBACK_LISTENER, ListenConfig, NetdHeader, Page, PreviewRoute, Question, Scheme,
-    TerminalPlan, Upstream,
+    Answer, LOOPBACK_LISTENER, ListenConfig, NetdHeader, PARENT_LISTENER, Page, PreviewRoute,
+    Question, Scheme, TerminalPlan, Upstream,
 };
 use relay::body::{self, Body};
 use relay::{for_next_hop, host_of, is_upgrade, strip_hop_by_hop};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio::sync::watch;
 use tower_service::Service;
 
 use crate::connect::{self, Io, NodeConnector, Pool, UpstreamConnector};
-use crate::devices::Devices;
 use crate::guard::{self, Verdict};
 use crate::link::Link;
 use crate::route::{self, Listener, Target};
 use crate::term::{self, Terminals};
+use crate::uplinks::Uplinks;
 use crate::vitals::{self, Vitals};
 
 // What a preview request handed back to Node is, named on it (`NetdHeader::Preview`): the outbox Node decided it is,
@@ -66,6 +67,56 @@ const DEVICE_UPGRADES: &str = "a device's screen or terminal opens as a WebSocke
 const DEVICE_NAMES: &str =
     "a device's screen or terminal names its device and session: [A-Za-z0-9_-]{1,64} each";
 
+const RUNNER_NAMES: &str = "a runner's view names its runner: [A-Za-z0-9_-]{1,64}";
+
+const RUNNER_ALLOWED: &str =
+    "a runner's view opens only its terminal, browser view, desktop view or a media socket";
+
+const RUNNER_UPGRADES: &str = "a runner's view opens as a WebSocket";
+
+const RUNNER_REFUSED: &str = "this runner view was not admitted";
+
+// The Host a runner's view is sent on with: never a preview's name, so the runner's netd hands it to its own routes.
+const RUNNER_HOST: &str = "localhost";
+
+const OWN_LISTENER: &str = "a preview never reaches one of this sandbox's own listeners";
+
+// A host that dials this machine: `localhost` and its subdomains, a loopback address, or the unspecified one (which
+// connects to the local host). netd's listeners bind these or a wildcard that covers them.
+fn is_loopback_host(host: &str) -> bool {
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.');
+    if host.eq_ignore_ascii_case("localhost") || host.to_ascii_lowercase().ends_with(".localhost") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .is_ok_and(|address| address.is_loopback() || address.is_unspecified())
+}
+
+// What a runner view's splice is buffered by between the person's socket and the runner's stream.
+const VIEW_BUFFER: usize = 64 * 1024;
+
+// A runner's loopback port a runner-slot preview reaches, as the runner's netd relays it: `localhost`, so a dev server
+// bound to `::1` alone is reached too, and Host and Origin rewritten as for any port forward.
+fn runner_port_upstream(port: u16) -> Upstream {
+    Upstream {
+        host: "localhost".into(),
+        port,
+        scheme: Scheme::Http,
+        localhost: true,
+        frameable: false,
+    }
+}
+
+// An open runner view: whose ticket opened it (none for a media socket, or a daemon without auth), and what ends it.
+struct View {
+    member: Option<String>,
+    media: bool,
+    ending: watch::Sender<bool>,
+}
+
 pub struct Netd {
     link: &'static Link,
     node: Pool<NodeConnector>,
@@ -73,15 +124,21 @@ pub struct Netd {
     upstream: Pool<UpstreamConnector>,
     upstream_connector: UpstreamConnector,
     config: watch::Receiver<Option<Arc<ListenConfig>>>,
-    previews: Mutex<HashMap<String, (Instant, Upstream)>>,
+    // Only routes netd relays itself are held: a local upstream, or a runner's port.
+    previews: Mutex<HashMap<String, (Instant, PreviewRoute)>>,
     refreshing: Mutex<HashSet<String>>,
     terminals: Arc<Terminals>,
     vitals: Arc<Vitals>,
     /// Where each window's castd listens, `<session>.sock` (browser-wire's `BROWSER_MEDIA_SOCKET_DIR` for the
     /// container's own netd).
     cast_dir: PathBuf,
-    /// Connected computers' uplinks, which their screens and terminals are carried down (`devices.rs`).
-    devices: Arc<Devices>,
+    /// Connected computers' uplinks, which their screens and terminals are carried down (`uplinks.rs`).
+    devices: Arc<Uplinks>,
+    /// This sandbox's runners' uplinks, which a person's view of a runner and a runner-slot preview are carried down.
+    runners: Arc<Uplinks>,
+    /// Every runner view spliced now, so a member's revocation ends theirs.
+    views: Arc<Mutex<HashMap<u64, View>>>,
+    next_view: AtomicU64,
 }
 
 enum Destination {
@@ -95,12 +152,22 @@ enum Destination {
         proto: &'static str,
         ancestors: Vec<String>,
     },
+    /// A port on one of this sandbox's runners, carried down its uplink.
+    Runner {
+        runner: String,
+        port: u16,
+        frameable: bool,
+        host: String,
+        ancestors: Vec<String>,
+    },
     /// Node's own answer, rendered when netd asked where the request goes.
     Page(Page),
     Unavailable,
 }
 
 impl Netd {
+    // Each is a part of netd main.rs builds once and hands in; a struct of them would only be this list again.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         link: &'static Link,
         node_socket: std::path::PathBuf,
@@ -108,13 +175,17 @@ impl Netd {
         terminals: Arc<Terminals>,
         vitals: Arc<Vitals>,
         cast_dir: PathBuf,
-        devices: Arc<Devices>,
+        devices: Arc<Uplinks>,
+        runners: Arc<Uplinks>,
     ) -> Self {
         let node_connector = NodeConnector::new(node_socket);
         let upstream_connector = UpstreamConnector::new();
         Self {
             cast_dir,
             devices,
+            runners,
+            views: Arc::default(),
+            next_view: AtomicU64::new(1),
             link,
             node: connect::pool(node_connector.clone()),
             node_connector,
@@ -133,6 +204,9 @@ impl Netd {
         listener: Listener,
         mut request: Request<Incoming>,
     ) -> Response<Body> {
+        // Read before every netd header is stripped, and only off a stream the parent's uplink brought: from anywhere
+        // else it is a stranger's, and goes with the rest.
+        let runner_port = runner_port_of(listener, request.headers());
         strip_netd_headers(request.headers_mut());
         // Two Hosts name two targets, and a hop after this one may read the other (RFC 9112 §3.2).
         if request
@@ -145,6 +219,25 @@ impl Netd {
             return plain(StatusCode::BAD_REQUEST, ONE_HOST);
         }
         let host = host_of(&request);
+        // A runner-slot preview the parent carried here: this runner's own port, Node never asked. Never one of netd's own
+        // listeners: the loopback port there would serve this runner's whole daemon, unauthenticated and marked as the
+        // machine's own, at a preview's address (2026-11-23 review).
+        if let Some(port) = runner_port {
+            if self.own_port(port) {
+                tracing::warn!(
+                    port,
+                    "refused a runner-slot preview aimed at one of netd's own listeners"
+                );
+                return plain(StatusCode::FORBIDDEN, OWN_LISTENER);
+            }
+            let destination = Destination::Upstream {
+                upstream: runner_port_upstream(port),
+                host: host.clone(),
+                proto: "http",
+                ancestors: Vec::new(),
+            };
+            return self.forward(destination, listener, request, None).await;
+        }
         // Answered before anything waits for Node: it is how a caller tells a busy or restarting Node from a dead box.
         if vitals::serves(request.uri().path()) && self.target(listener, &host) == Target::Node {
             return self.vitals.respond(request.method(), request.headers());
@@ -176,6 +269,13 @@ impl Netd {
                     route::DeviceView::BadName => None,
                 };
                 return self.device_view(named, listener, request).await;
+            }
+            // A runner dialling this parent, and a person's view of a runner carried down its uplink.
+            if route::is_runner_uplink(request.uri().path()) {
+                return self.runners.uplink(request);
+            }
+            if let Some(asked) = route::runner_view(request.uri().path()) {
+                return self.runner_view(asked, request).await;
             }
         }
         // The owner's guard is checked before Node is asked anything, so a visitor without a pass costs Node nothing
@@ -214,6 +314,30 @@ impl Netd {
         }
         if is_netd_route(&destination, request.method(), request.uri().path()) {
             return self.terminal(request).await;
+        }
+        self.forward(destination, listener, request, guarded).await
+    }
+
+    // Relays a request to the destination it resolved to: a fresh connection for an upgrade, else the pool; a runner's
+    // port down that runner's uplink, a stream per exchange.
+    async fn forward(
+        &self,
+        destination: Destination,
+        listener: Listener,
+        request: Request<Incoming>,
+        guarded: Option<Arc<ListenConfig>>,
+    ) -> Response<Body> {
+        if let Destination::Runner { .. } = destination {
+            return self.runner_preview(destination, request, guarded).await;
+        }
+        // A preview is a dev server's, never netd's own door: a loopback upstream on one of netd's listener ports would
+        // hand a preview host the daemon, its loopback port's proofs included.
+        if let Destination::Upstream { upstream, .. } = &destination
+            && is_loopback_host(&upstream.host)
+            && self.own_port(upstream.port)
+        {
+            tracing::warn!(port = upstream.port, host = %upstream.host, "refused a preview upstream that is one of netd's own listeners");
+            return plain(StatusCode::FORBIDDEN, OWN_LISTENER);
         }
         let upgrade = is_upgrade(request.headers(), request.version());
         let (mut parts, incoming) = request.into_parts();
@@ -265,16 +389,17 @@ impl Netd {
         }
     }
 
-    /// Serves one stream a tunnel carrier brought (a QUIC stream, or a `/tunnel/v2` yamux one) as the HTTP/1.1
-    /// connection it is: every request on it routed like any listener's, and an upgrade itself.
-    pub async fn serve_stream<S>(self: &Arc<Self>, stream: S)
+    /// Serves one stream a carrier brought (a QUIC stream or a `/tunnel/v2` yamux one, `Listener::Tunnel`; a stream down
+    /// a runner's uplink from its parent, `Listener::Parent`) as the HTTP/1.1 connection it is: every request on it
+    /// routed like any listener's, and an upgrade itself.
+    pub async fn serve_stream<S>(self: &Arc<Self>, stream: S, listener: Listener)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let netd = self.clone();
         let service = service_fn(move |request| {
             let netd = netd.clone();
-            async move { Ok::<_, Infallible>(netd.handle(Listener::Tunnel, request).await) }
+            async move { Ok::<_, Infallible>(netd.handle(listener, request).await) }
         });
         let _ = hyper::server::conn::http1::Builder::new()
             .serve_connection(TokioIo::new(stream), service)
@@ -313,13 +438,7 @@ impl Netd {
         };
         let (mut parts, incoming) = request.into_parts();
         for_next_hop(&mut parts.headers, true);
-        // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
-        if matches!(listener, Listener::Loopback { .. }) {
-            parts.headers.insert(
-                NetdHeader::Listener.name(),
-                HeaderValue::from_static(LOOPBACK_LISTENER),
-            );
-        }
+        stamp_listener(&mut parts.headers, listener);
         parts.version = Version::HTTP_11;
         let outbound = in_origin_form(Request::from_parts(parts, body::incoming(incoming)));
         relay::exchange(io, outbound)
@@ -367,18 +486,240 @@ impl Netd {
             Err(_) => return plain(StatusCode::BAD_REQUEST, DEVICE_NAMES),
         };
         for_next_hop(&mut parts.headers, true);
-        // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
-        if matches!(listener, Listener::Loopback { .. }) {
-            parts.headers.insert(
-                NetdHeader::Listener.name(),
-                HeaderValue::from_static(LOOPBACK_LISTENER),
-            );
-        }
+        stamp_listener(&mut parts.headers, listener);
         parts.version = Version::HTTP_11;
         let outbound = Request::from_parts(parts, body::incoming(incoming));
         relay::exchange(TokioIo::new(stream), outbound)
             .await
             .unwrap_or_else(|error| bad_gateway(&error.to_string()))
+    }
+
+    // A person's view of a runner, carried down its uplink (2026-11-23). Only what the allowlist names, only as an
+    // upgrade, and each view but a media socket only once the daemon redeemed the ticket it minted for exactly that
+    // runner, view and session (`Question::RunnerView`). What reaches the runner is the path on the runner with the query
+    // less its ticket, no credentials (`authorization`, `cookie`), no `origin`, and a Host that is no preview's; the
+    // runner runs without auth, so this is its only gate. The splice is ended by the member's revocation.
+    async fn runner_view(
+        &self,
+        asked: route::RunnerView,
+        request: Request<Incoming>,
+    ) -> Response<Body> {
+        let (runner, route) = match asked {
+            route::RunnerView::Route { runner, route } => (runner, route),
+            route::RunnerView::BadName => return plain(StatusCode::NOT_FOUND, RUNNER_NAMES),
+            route::RunnerView::NotAllowed => return plain(StatusCode::NOT_FOUND, RUNNER_ALLOWED),
+        };
+        if !is_upgrade(request.headers(), request.version()) {
+            return plain(StatusCode::UPGRADE_REQUIRED, RUNNER_UPGRADES);
+        }
+        let path = route.path();
+        let query = request.uri().query().unwrap_or_default().to_owned();
+        let member = if route.ticketed() {
+            match self.admit_runner_view(&runner, &path, &query).await {
+                Ok(member) => member,
+                Err(refusal) => return *refusal,
+            }
+        } else {
+            None
+        };
+        let Some(opener) = self.runners.opener(&runner) else {
+            return bad_gateway(&format!(
+                "the runner {runner} has no uplink: it is not connected to this sandbox"
+            ));
+        };
+        let far = match opener.open().await {
+            Ok(far) => far,
+            Err(error) => {
+                tracing::debug!(%error, %runner, "the runner's uplink opened no stream");
+                return bad_gateway(&format!(
+                    "the runner {runner}'s uplink did not open a stream"
+                ));
+            }
+        };
+        let (mut parts, incoming) = request.into_parts();
+        let kept = without_ticket(&query);
+        let target = if kept.is_empty() {
+            path
+        } else {
+            format!("{path}?{kept}")
+        };
+        parts.uri = match target.parse() {
+            Ok(uri) => uri,
+            Err(_) => return plain(StatusCode::BAD_REQUEST, RUNNER_ALLOWED),
+        };
+        for_next_hop(&mut parts.headers, true);
+        for credential in [header::AUTHORIZATION, header::COOKIE, header::ORIGIN] {
+            parts.headers.remove(credential);
+        }
+        parts
+            .headers
+            .insert(header::HOST, HeaderValue::from_static(RUNNER_HOST));
+        parts.version = Version::HTTP_11;
+        let near = self.revocable(far, member, !route.ticketed());
+        let outbound = Request::from_parts(parts, body::incoming(incoming));
+        relay::exchange(TokioIo::new(near), outbound)
+            .await
+            .unwrap_or_else(|error| bad_gateway(&error.to_string()))
+    }
+
+    // Asks the daemon whether this view may open; its member, or the refusal to answer with. Anything but an answer
+    // that allows it refuses it: an older daemon refuses a question it does not know.
+    async fn admit_runner_view(
+        &self,
+        runner: &str,
+        path: &str,
+        query: &str,
+    ) -> Result<Option<String>, Box<Response<Body>>> {
+        if !self.link.ready(NODE_PATIENCE).await {
+            return Err(Box::new(unavailable()));
+        }
+        let asked = self
+            .link
+            .ask(Question::RunnerView {
+                runner: runner.to_owned(),
+                path: path.to_owned(),
+                query: query.to_owned(),
+            })
+            .await;
+        match asked {
+            Ok(Answer::RunnerView {
+                allowed: true,
+                member,
+                ..
+            }) => Ok(member),
+            Ok(Answer::RunnerView { reason, .. }) => {
+                tracing::info!(%runner, path, reason = reason.as_deref().unwrap_or("none given"), "refused a runner view");
+                Err(Box::new(plain(StatusCode::FORBIDDEN, RUNNER_REFUSED)))
+            }
+            Ok(other) => {
+                tracing::error!(
+                    ?other,
+                    "the daemon answered a runner view's question with another"
+                );
+                Err(Box::new(plain(StatusCode::FORBIDDEN, RUNNER_REFUSED)))
+            }
+            Err(error) => {
+                tracing::warn!(%error, %runner, path, "the daemon did not admit a runner view");
+                Err(Box::new(plain(StatusCode::FORBIDDEN, RUNNER_REFUSED)))
+            }
+        }
+    }
+
+    // The near end of a runner view's splice: a buffer whose far side is copied to the runner's stream until either ends
+    // or the view is revoked, which drops both and so closes the person's socket.
+    fn revocable<S>(
+        &self,
+        mut far: S,
+        member: Option<String>,
+        media: bool,
+    ) -> tokio::io::DuplexStream
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let (near, mut inner) = tokio::io::duplex(VIEW_BUFFER);
+        let (ending, mut ended) = watch::channel(false);
+        let id = self.next_view.fetch_add(1, Ordering::Relaxed);
+        self.views.lock().expect("views poisoned").insert(
+            id,
+            View {
+                member,
+                media,
+                ending,
+            },
+        );
+        let views = self.views.clone();
+        tokio::spawn(async move {
+            let revoked = tokio::select! {
+                _ = tokio::io::copy_bidirectional(&mut inner, &mut far) => false,
+                _ = ended.wait_for(|ended| *ended) => true,
+            };
+            if revoked {
+                let _ = far.shutdown().await;
+            }
+            views.lock().expect("views poisoned").remove(&id);
+        });
+        near
+    }
+
+    /// Ends the runner views a member's ticket opened, or every member's; any revocation ends every runner media socket
+    /// too, whose viewers dial again with fresh tokens over a view socket that is still entitled.
+    pub fn revoke_views(&self, member: Option<&str>) {
+        for view in self.views.lock().expect("views poisoned").values() {
+            let theirs =
+                view.member.is_some() && (member.is_none() || view.member.as_deref() == member);
+            if theirs || view.media {
+                view.ending.send_replace(true);
+            }
+        }
+    }
+
+    // A runner-slot preview, carried down the runner's uplink as the request it is with the runner's port named on it,
+    // a stream per exchange. The owner's guard ran before this, as for any preview; frameable and the pass are applied to
+    // the answer as for a local upstream.
+    async fn runner_preview(
+        &self,
+        destination: Destination,
+        request: Request<Incoming>,
+        guarded: Option<Arc<ListenConfig>>,
+    ) -> Response<Body> {
+        let Destination::Runner {
+            runner,
+            port,
+            frameable,
+            host,
+            ancestors,
+        } = destination
+        else {
+            unreachable!("only a runner destination is relayed to a runner");
+        };
+        let far = match self.runners.opener(&runner) {
+            Some(opener) => opener.open().await.ok(),
+            None => None,
+        };
+        let Some(far) = far else {
+            self.previews
+                .lock()
+                .expect("preview cache poisoned")
+                .remove(&host);
+            return bad_gateway(&format!(
+                "the runner {runner} has no uplink: its port {port} cannot be reached"
+            ));
+        };
+        let upgrade = is_upgrade(request.headers(), request.version());
+        let (mut parts, incoming) = request.into_parts();
+        if let Some(authority) = parts
+            .uri
+            .authority()
+            .and_then(|authority| HeaderValue::from_str(authority.as_str()).ok())
+        {
+            parts.headers.insert(header::HOST, authority);
+        }
+        for_next_hop(&mut parts.headers, upgrade);
+        if !parts.headers.contains_key("x-forwarded-proto") {
+            parts
+                .headers
+                .insert("x-forwarded-proto", HeaderValue::from_static("https"));
+        }
+        parts
+            .headers
+            .insert(NetdHeader::RunnerPort.name(), HeaderValue::from(port));
+        parts.version = Version::HTTP_11;
+        let outbound = in_origin_form(Request::from_parts(parts, body::incoming(incoming)));
+        let mut answer = match relay::exchange(TokioIo::new(far), outbound).await {
+            Ok(answer) => answer,
+            Err(error) => return bad_gateway(&error.to_string()),
+        };
+        timing_allowed(answer.headers_mut());
+        if frameable {
+            frameable_headers(answer.headers_mut(), &ancestors);
+        }
+        if let Some(guard) = guarded
+            .as_deref()
+            .and_then(|config| config.preview_guard.as_ref())
+        {
+            guard::keep_pass(answer.headers_mut(), &guard.cookie);
+        }
+        answer
     }
 
     async fn terminal(self: &Arc<Self>, mut request: Request<Incoming>) -> Response<Body> {
@@ -450,6 +791,16 @@ impl Netd {
         .then_some(config)
     }
 
+    // Whether `port` is one netd's listen config binds: the daemon's, the preview port or the loopback port.
+    fn own_port(&self, port: u16) -> bool {
+        self.config.borrow().as_deref().is_some_and(|config| {
+            std::iter::once(&config.daemon)
+                .chain(config.preview.as_ref())
+                .chain(config.loopback.as_ref())
+                .any(|endpoint| endpoint.port == port)
+        })
+    }
+
     fn target(&self, listener: Listener, host: &str) -> Target {
         let config = self.config.borrow();
         let sandbox_id = config
@@ -481,6 +832,17 @@ impl Netd {
                     self.preview_route(host).await
                 };
                 match routed {
+                    Ok(PreviewRoute::Runner {
+                        runner,
+                        port,
+                        frameable,
+                    }) => Destination::Runner {
+                        runner,
+                        port,
+                        frameable,
+                        host: host.to_owned(),
+                        ancestors: config.frame_ancestors.clone(),
+                    },
                     Ok(PreviewRoute::Upstream { upstream }) => Destination::Upstream {
                         upstream,
                         host: host.to_owned(),
@@ -517,12 +879,12 @@ impl Netd {
             .expect("preview cache poisoned")
             .get(host)
             .cloned();
-        if let Some((at, upstream)) = cached {
+        if let Some((at, route)) = cached {
             if at.elapsed() >= PREVIEW_ROUTE_FRESH && at.elapsed() < PREVIEW_ROUTE_STALE {
                 self.refresh(host);
             }
             if at.elapsed() < PREVIEW_ROUTE_STALE {
-                return Ok(PreviewRoute::Upstream { upstream });
+                return Ok(route);
             }
         }
         self.resolve(host, false).await
@@ -568,13 +930,13 @@ impl Netd {
         };
         let mut previews = self.previews.lock().expect("preview cache poisoned");
         match &route {
-            PreviewRoute::Upstream { upstream } if !probe => {
+            PreviewRoute::Upstream { .. } | PreviewRoute::Runner { .. } if !probe => {
                 if previews.len() >= PREVIEW_ROUTE_ROOM {
                     previews.retain(|_, (at, _)| at.elapsed() < PREVIEW_ROUTE_STALE);
                 }
-                previews.insert(host.to_owned(), (Instant::now(), upstream.clone()));
+                previews.insert(host.to_owned(), (Instant::now(), route.clone()));
             }
-            PreviewRoute::Upstream { .. } => {}
+            PreviewRoute::Upstream { .. } | PreviewRoute::Runner { .. } => {}
             PreviewRoute::Page { .. } | PreviewRoute::Outbox => {
                 previews.remove(host);
             }
@@ -616,6 +978,46 @@ fn strip_netd_headers(headers: &mut HeaderMap) {
     }
 }
 
+// The runner port a parent's netd named on a runner-slot preview: only on `Listener::Parent`, never 0, else none.
+fn runner_port_of(listener: Listener, headers: &HeaderMap) -> Option<u16> {
+    if listener != Listener::Parent {
+        return None;
+    }
+    headers
+        .get(NetdHeader::RunnerPort.name())?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|port| *port != 0)
+}
+
+// Says which way a request came in, to Node and castd: `loopback` from the machine-published loopback port, `parent`
+// down a runner's uplink, nothing otherwise. Said only by netd, which stripped any copy the request arrived with
+// (`strip_netd_headers`).
+fn stamp_listener(headers: &mut HeaderMap, listener: Listener) {
+    let value = match listener {
+        Listener::Loopback { .. } => LOOPBACK_LISTENER,
+        Listener::Parent => PARENT_LISTENER,
+        Listener::Daemon | Listener::Preview | Listener::Tunnel => return,
+    };
+    headers.insert(NetdHeader::Listener.name(), HeaderValue::from_static(value));
+}
+
+// A query without its runner view ticket, every other pair kept as written.
+fn without_ticket(query: &str) -> String {
+    query
+        .split('&')
+        .filter(|pair| {
+            !pair.is_empty()
+                && pair.split_once('=').map_or(*pair, |(key, _)| key)
+                    != browser_wire::RUNNER_VIEW_TICKET
+        })
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 // Rewrites a request for its destination: an h1 request to that address, Host present, hop-by-hop headers gone. A
 // target naming its authority (h2's `:authority`, an h1 absolute form) was routed by it, so it is the Host sent on,
 // whatever Host the request came with (RFC 9112 §3.2.2).
@@ -640,13 +1042,7 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool, listene
                     .headers
                     .insert(NetdHeader::Preview.name(), HeaderValue::from_static(handed));
             }
-            // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
-            if matches!(listener, Listener::Loopback { .. }) {
-                parts.headers.insert(
-                    NetdHeader::Listener.name(),
-                    HeaderValue::from_static(LOOPBACK_LISTENER),
-                );
-            }
+            stamp_listener(&mut parts.headers, listener);
             "http://node".to_owned()
         }
         Destination::Upstream {
@@ -677,9 +1073,9 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool, listene
             }
             format!("{scheme}://{}:{}", uri_host(&upstream.host), upstream.port)
         }
-        Destination::Page(_) | Destination::Unavailable => {
+        Destination::Runner { .. } | Destination::Page(_) | Destination::Unavailable => {
             unreachable!(
-                "a page and an unavailable destination are answered before a request is rewritten for them"
+                "a runner's port, a page and an unavailable destination are answered before a request is rewritten for them"
             )
         }
     };
@@ -727,7 +1123,7 @@ fn from_far_side(
     strip_hop_by_hop(&mut parts.headers);
     timing_allowed(&mut parts.headers);
     if let Some(ancestors) = frame_ancestors {
-        frameable(&mut parts.headers, ancestors);
+        frameable_headers(&mut parts.headers, ancestors);
     }
     Response::from_parts(parts, body::incoming(incoming))
 }
@@ -742,7 +1138,7 @@ fn timing_allowed(headers: &mut HeaderMap) {
 
 // A preview may be framed by the editor's origins and by itself (an app framing its own pages is checked against the
 // preview's origin too), whatever the upstream app's own policy says.
-fn frameable(headers: &mut HeaderMap, ancestors: &[String]) {
+fn frameable_headers(headers: &mut HeaderMap, ancestors: &[String]) {
     headers.remove("x-frame-options");
     let sources = std::iter::once("'self'")
         .chain(ancestors.iter().map(String::as_str))
@@ -891,6 +1287,74 @@ mod tests {
         assert_eq!(forwarded(Listener::Tunnel, Some(LOOPBACK_LISTENER)), None);
         assert_eq!(forwarded(Listener::Daemon, Some(LOOPBACK_LISTENER)), None);
         assert_eq!(forwarded(Listener::Preview, None), None);
+        assert_eq!(
+            forwarded(Listener::Parent, Some(LOOPBACK_LISTENER)).as_deref(),
+            Some(PARENT_LISTENER)
+        );
+        assert_eq!(forwarded(Listener::Tunnel, Some(PARENT_LISTENER)), None);
+    }
+
+    /// A runner port is read only off a stream from the parent, and is gone from every request once read.
+    #[test]
+    fn a_runner_port_is_honoured_only_from_the_parent() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            NetdHeader::RunnerPort.name(),
+            HeaderValue::from_static("5173"),
+        );
+        assert_eq!(runner_port_of(Listener::Parent, &headers), Some(5173));
+        for listener in [
+            Listener::Daemon,
+            Listener::Preview,
+            Listener::Tunnel,
+            Listener::Loopback { tls: false },
+        ] {
+            assert_eq!(runner_port_of(listener, &headers), None, "{listener:?}");
+        }
+        headers.insert(NetdHeader::RunnerPort.name(), HeaderValue::from_static("0"));
+        assert_eq!(runner_port_of(Listener::Parent, &headers), None);
+        headers.insert(NetdHeader::RunnerPort.name(), HeaderValue::from_static("x"));
+        assert_eq!(runner_port_of(Listener::Parent, &headers), None);
+        strip_netd_headers(&mut headers);
+        assert!(headers.is_empty());
+    }
+
+    #[test]
+    fn a_loopback_host_is_any_name_that_dials_this_machine() {
+        for local in [
+            "localhost",
+            "LocalHost",
+            "localhost.",
+            "app.localhost",
+            "127.0.0.1",
+            "127.1.2.3",
+            "::1",
+            "[::1]",
+            "0.0.0.0",
+            "::",
+        ] {
+            assert!(is_loopback_host(local), "{local}");
+        }
+        for remote in [
+            "example.test",
+            "10.0.0.5",
+            "localhost.example.test",
+            "2001:db8::1",
+        ] {
+            assert!(!is_loopback_host(remote), "{remote}");
+        }
+    }
+
+    #[test]
+    fn a_runner_view_loses_its_ticket_and_keeps_the_rest() {
+        assert_eq!(
+            without_ticket("session=agent-1&ticket=abc&deflate=1"),
+            "session=agent-1&deflate=1"
+        );
+        assert_eq!(without_ticket("ticket=abc"), "");
+        assert_eq!(without_ticket("ticket"), "");
+        assert_eq!(without_ticket("tickets=1&&x=ticket"), "tickets=1&x=ticket");
+        assert_eq!(without_ticket(""), "");
     }
 
     #[test]
@@ -919,7 +1383,7 @@ mod tests {
     fn a_frameable_answer_drops_x_frame_options_and_sets_its_ancestors() {
         let mut headers = HeaderMap::new();
         headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
-        frameable(&mut headers, &["https://app.example".to_owned()]);
+        frameable_headers(&mut headers, &["https://app.example".to_owned()]);
         assert!(!headers.contains_key("x-frame-options"));
         assert_eq!(
             headers[header::CONTENT_SECURITY_POLICY],

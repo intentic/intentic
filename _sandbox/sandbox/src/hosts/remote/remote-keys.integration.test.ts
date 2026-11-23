@@ -35,6 +35,6 @@ test("a connection key that is already a name is the uplink id; any other is mad
     expect(uplinkIdOf("rog::wsl:arch.linux")).not.toBe(uplinkIdOf("rog::wsl:arch-linux"));
     const long = uplinkIdOf(`${"a".repeat(60)}::wsl:${"b".repeat(60)}`);
     expect(long).toMatch(/^[A-Za-z0-9_-]{64}$/u);
-    // `printf token | sha256sum`, the digest netd computes of what remoted presents (netd's devices.rs).
+    // `printf token | sha256sum`, the digest netd computes of what remoted presents (netd's uplinks.rs).
     expect(digestOf("token")).toBe("3c469e9d6c5875d37a43f353d4f88e61fcf812c66eee3457465a40b0da4153e0");
 });

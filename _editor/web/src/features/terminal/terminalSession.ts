@@ -23,6 +23,7 @@ import { applyTerminalGrid, requestTerminalGrid, resetTerminalGrid, type Termina
 import { presenceChange, presenceReport, showsPane } from "./terminalPresence";
 import { terminalPaint } from "./terminalTheme";
 import { openLoopbackPreview } from "../../models/terminal/portPreview";
+import { parseRunnerTab } from "../../models/terminal/runnerTabNames";
 import "@xterm/xterm/css/xterm.css";
 
 // One xterm bound to one tmux session over /system/terminal, always a WebSocket: spoken on a stream of the edge's
@@ -67,14 +68,15 @@ export type TerminalSession = TerminalSizing & {
 };
 
 // Ctrl/Cmd+click (or any tap on a coarse pointer) opens a link, from the linkifier's trusted mouseup. A sandbox
-// loopback URL opens as a port preview instead of a dead tab; anything else opens with no opener.
-const openLink = (event: MouseEvent, uri: string): void => {
+// loopback URL opens as a port preview instead of a dead tab (a runner tab's, the runner's port); anything else opens
+// with no opener.
+const openLink = (runner: string | undefined) => (event: MouseEvent, uri: string): void => {
     if (!event.ctrlKey && !event.metaKey && !useDevice().coarse.value) {
         return;
     }
     const loopback = parseLoopbackLink(uri);
     if (loopback !== undefined) {
-        openLoopbackPreview(loopback);
+        openLoopbackPreview(loopback, runner);
         return;
     }
     window.open(uri, `_blank`, `noopener`);
@@ -391,7 +393,7 @@ export const createTerminalSession = (
         fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
         fontSize: toScreenPx(FONT_PX),
         // OSC 8 hyperlink support; without it xterm falls back to a blocking confirm() dialog.
-        linkHandler: { activate: openLink },
+        linkHandler: { activate: openLink(parseRunnerTab(name)?.runner) },
         // Scrollback depth; deeper than the daemon's replay so long output stays reachable without reattaching.
         scrollback: 30_000,
         // Right-click on a bare word selects it first, so the context menu's Copy has something to copy.
@@ -408,7 +410,7 @@ export const createTerminalSession = (
     const search = new SearchAddon();
     term.loadAddon(search);
     // Makes plain-text URLs Ctrl/Cmd-clickable, including ones a program hard-wrapped across rows.
-    registerUrlLinks(term, openLink);
+    registerUrlLinks(term, openLink(parseRunnerTab(name)?.runner));
     // Makes file references Ctrl/Cmd-clickable, opening the editor at that line; registered after the URL provider.
     registerFilePathLinks(term);
     // OSC 52 forwards a clipboard copy to the browser via the terminal's window; reads go unanswered.

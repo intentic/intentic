@@ -42,6 +42,13 @@ export type HiddenLineReport = Extract<ToNode, { readonly kind: "hiddenLine" }>;
 // after each hello, and never by a netd older than device uplinks.
 export type DeviceUplinksReport = Extract<ToNode, { readonly kind: "deviceUplinks" }>;
 
+// On a runner: where its netd's uplink to the parent stands (2026-11-23), told after each hello whether configured or
+// not, and never by a netd older than runner uplinks.
+export type ParentUplinkReport = Extract<ToNode, { readonly kind: "parentUplink" }>;
+
+// On a parent: every runner netd holds a registration for, and whether its uplink is up (2026-11-23).
+export type RunnerUplinksReport = Extract<ToNode, { readonly kind: "runnerUplinks" }>;
+
 export interface NetdLinkOptions {
     readonly path: string;
     // Answers netd's questions; a throw goes back as a refusal carrying its message.
@@ -52,6 +59,10 @@ export interface NetdLinkOptions {
     readonly onHiddenLine?: (line: HiddenLineReport) => void;
     // Where the computers' uplinks stand (hosts/remote/netd-uplinks.ts). Absent: the report is dropped where it lands.
     readonly onDeviceUplinks?: (report: DeviceUplinksReport) => void;
+    // Where this runner's uplink to its parent stands (runners/uplink/parent-uplink.ts). Absent: dropped where it lands.
+    readonly onParentUplink?: (report: ParentUplinkReport) => void;
+    // Where this parent's runners' uplinks stand (runners/uplink/runner-uplinks.ts). Absent: dropped where it lands.
+    readonly onRunnerUplinks?: (report: RunnerUplinksReport) => void;
     readonly onClose: () => void;
     // What went wrong on the link that is not a question's own refusal: a frame that would not parse (skipped, the rest
     // still read), a length past the cap or a socket error (the link is then dropped, and `onClose` follows).
@@ -112,6 +123,23 @@ const syncOver =
         }
     };
 
+// A report netd tells and nothing answers, handed to whoever takes it; one with no taker is dropped where it lands.
+const hand = (options: NetdLinkOptions, message: Extract<ToNode, { readonly kind: "hiddenLine" | "deviceUplinks" | "parentUplink" | "runnerUplinks" }>): void => {
+    switch (message.kind) {
+        case "hiddenLine":
+            options.onHiddenLine?.(message);
+            return;
+        case "deviceUplinks":
+            options.onDeviceUplinks?.(message);
+            return;
+        case "parentUplink":
+            options.onParentUplink?.(message);
+            return;
+        case "runnerUplinks":
+            options.onRunnerUplinks?.(message);
+    }
+};
+
 export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> => {
     const socket = await new Promise<Socket>((resolve, reject) => {
         const dialed = connect(options.path);
@@ -155,10 +183,10 @@ export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> =
                 options.onTunnel(message.connected, message);
                 return;
             case "hiddenLine":
-                options.onHiddenLine?.(message);
-                return;
             case "deviceUplinks":
-                options.onDeviceUplinks?.(message);
+            case "parentUplink":
+            case "runnerUplinks":
+                hand(options, message);
                 return;
             case "answer":
                 settle(message.id, message.answer);

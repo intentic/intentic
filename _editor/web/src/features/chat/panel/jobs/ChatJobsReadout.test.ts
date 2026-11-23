@@ -27,7 +27,8 @@ jest.mock("@intentic/ui", async () => {
 });
 jest.mock("../../../../models/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
 jest.mock("../../../../models/conversations/panel/useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
-jest.mock("../../../../models/terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
+// The pane's Watch, which turns a runner conversation's session into its runner tab (paneSurface.ts).
+jest.mock("../../../../models/conversations/tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: opened }) }));
 
 const { default: ChatJobsReadout } = await import("./ChatJobsReadout.vue");
 

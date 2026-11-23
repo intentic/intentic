@@ -228,9 +228,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     }),
     // The agent started running Bash in its live `agent-<id>` tmux session; one per turn, reused across all of a turn's
     // commands including subagents'.
-    z.object({ kind: z.literal("terminal"), session: z.string() }),
+    // `runner` (2026-11-23): stamped by the parent on a frame relayed from a runner, whose session lives there.
+    z.object({ kind: z.literal("terminal"), session: z.string(), runner: z.string().optional() }),
     // The agent used a browser tool; one per turn, since one Chromium serves every browser call the turn makes.
-    z.object({ kind: z.literal("browser"), session: z.string() }),
+    z.object({ kind: z.literal("browser"), session: z.string(), runner: z.string().optional() }),
     // One frame per subagent a turn starts, whichever mechanism starts it, then `subagent_update` as it works, mirroring
     // `tool_call`/`tool_call_update`. `id` is its roster id: the spawning call's own id for an in-process subagent (the
     // runtime's Agent/Task tool), its own conversation id for a spawned one, whose card is the call whose result names

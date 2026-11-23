@@ -294,7 +294,7 @@ describe("a write drawn from the press", () => {
     // The daemon's own word, different from both `before` and every drawn value, so a lingering draw shows.
     const answered = card(`a1`, { status: `idle`, title: `The daemon's name`, autoLand: false, outagePolicy: `retry`, watches: [first] });
     // Each write, the procedure it goes through, and the fields it draws until that procedure answers.
-    const writes: [string, () => Promise<void>, keyof typeof daemon, Partial<AgentSummary>][] = [
+    const writes: [string, () => Promise<object | void>, keyof typeof daemon, Partial<AgentSummary>][] = [
         [`a rename, trimmed`, () => useAgents().rename(`a1`, `  New name `), `rename`, { title: `New name` }],
         [`an auto-land cleared back to inherit`, () => useAgents().setAutoLand(`a1`, null), `autoLand`, { autoLand: undefined }],
         [

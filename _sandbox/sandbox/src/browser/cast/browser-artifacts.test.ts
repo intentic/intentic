@@ -1,4 +1,4 @@
-import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { join } from "node:path";
 import { browserOutputDir, placeArtifact, placedNote, screenshotImage, writesFilename } from "./browser-artifacts.js";
 
@@ -34,6 +34,17 @@ test("a subdirectory the agent asked for is honoured inside the output dir", asy
 
 test("a free name already resolved into the output dir is left as it is", async () => {
     expect(await place("/work/.intentic/records/artifacts/browser/shot.png")).toBe("/work/.intentic/records/artifacts/browser/shot.png");
+});
+
+// arena-6hpr, 2026-11-23: a name spelled from the workspace root landed nested, inside a second copy of the output path.
+test.each([
+    [`${STATE_DIR}/records/artifacts/browser/x.png`, "x.png"],
+    [`${STATE_DIR}/records/artifacts/browser/before/nav.png`, "before/nav.png"],
+    [`${HISTORY_ROOT}/worktrees/c1/${STATE_DIR}/records/artifacts/browser/x.png`, "x.png"],
+    // The workspace root without its leading slash.
+    [`${WORKSPACE_ROOT.slice(1)}/${STATE_DIR}/records/artifacts/browser/x.png`, "x.png"],
+])("a name that already spells the output dir lands in it, not nested inside it: %s", async (filename, rel) => {
+    expect(await place(filename)).toBe(inOutput(rel));
 });
 
 // A reused name used to overwrite the earlier shot, so an older transcript showed a newer, unrelated picture.

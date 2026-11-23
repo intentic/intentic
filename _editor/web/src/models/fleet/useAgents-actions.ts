@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentStopAnswer, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { standingFrom, unregistered } from "../agent-status/agentStatus-standing";
 import { useChat } from "../conversations/run/useChat";
@@ -94,22 +94,41 @@ export const resumeHeldTurn = (id: string): Promise<void> =>
 
 // Disarms outside conditions this conversation is parked on: all of them, or the one named. Drawn from the press, since
 // dropping the watches is what moves the card out of Active.
-export const stopWatching = (id: string, watchId?: string): Promise<void> => {
+// What a stop answered (2026-11-23): whether anything stopped, and why not when nothing did (it had already ended, or the
+// runner it runs on is out of reach). Never an error: a caller stopping several things goes on to the next.
+export interface StopOutcome {
+    readonly stopped: boolean;
+    readonly stopReason?: string;
+}
+
+// The write, its answer kept for the caller beside the card it brings.
+const stopWrite = async (id: string, patch: Partial<AgentSummary>, write: () => Promise<AgentStopAnswer>): Promise<StopOutcome> => {
+    let outcome: StopOutcome = { stopped: true };
+    await optimistic(id, patch, async () => {
+        const answer = await write();
+        // An older daemon answers the card alone, having stopped what it could.
+        outcome = answer.stopReason === undefined ? { stopped: answer.stopped ?? true } : { stopped: answer.stopped ?? true, stopReason: answer.stopReason };
+        return answer;
+    });
+    return outcome;
+};
+
+export const stopWatching = (id: string, watchId?: string): Promise<StopOutcome> => {
     const held = agentById(id)?.watches ?? [];
     const kept = watchId === undefined ? [] : held.filter((watch) => watch.id !== watchId);
     // An empty array is not absence: the registry reads absence as "never watched", which would redraw the card.
     // The daemon's reading goes with them until it says again, so the card is read by the watches it still holds.
-    return optimistic(id, { watches: kept.length > 0 ? kept : undefined, awaitingWake: undefined }, () => sandboxRpc.agents.stopWatching({ id, watchId }));
+    return stopWrite(id, { watches: kept.length > 0 ? kept : undefined, awaitingWake: undefined }, () => sandboxRpc.agents.stopWatching({ id, watchId }));
 };
 
 // Ends a command this conversation left running (a server handed over, a build it waits on). Drawn from the press as
 // stopping, with the watch its exit would have woken the chat through gone, since the daemon disarms that first.
-export const stopJob = (id: string, jobId: string): Promise<void> => {
+export const stopJob = (id: string, jobId: string): Promise<StopOutcome> => {
     const agent = agentById(id);
     const job = agent?.jobs?.find((entry) => entry.id === jobId);
     const jobs = agent?.jobs?.map((entry) => (entry.id === jobId ? { ...entry, stoppedBy: `person` as const, watch: undefined, handed: undefined } : entry));
     const watches = agent?.watches?.filter((watch) => watch.id !== job?.watch);
-    return optimistic(
+    return stopWrite(
         id,
         { ...(jobs === undefined ? {} : { jobs }), ...(agent?.watches === undefined ? {} : { watches: watches !== undefined && watches.length > 0 ? watches : undefined }) },
         () => sandboxRpc.agents.stopJob({ id, jobId }),

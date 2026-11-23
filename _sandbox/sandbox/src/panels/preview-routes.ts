@@ -53,6 +53,7 @@ interface ProbeBody {
 
 type Resolved =
     | { readonly kind: "upstream"; readonly upstream: Upstream }
+    | { readonly kind: "runner"; readonly runner: string; readonly port: number }
     | { readonly kind: "outbox" }
     | { readonly kind: "probe"; readonly body: ProbeBody }
     | ({ readonly kind: "refused" } & Refusal);
@@ -131,6 +132,10 @@ const resolve = async (host: string | undefined, deps: PreviewDeps, probing: boo
                 message: `nothing is forwarded here, re-open the preview from the Ports view or the terminal link`,
             };
         }
+        // A runner's port: netd carries it down that runner's uplink, and the runner's netd dials its own localhost.
+        if (target.runner !== undefined) {
+            return { kind: "runner", runner: target.runner, port: target.port };
+        }
         return { kind: "upstream", upstream: { host: target.host, port: target.port, scheme: target.scheme, localhost: true, frameable: true } };
     }
     // One salted outbox slot per sandbox; any other public- slot is a stray subdomain the wildcard caught.
@@ -162,6 +167,8 @@ export const previewRoute = async (host: string, probe: boolean, deps: PreviewDe
     switch (resolved.kind) {
         case "upstream":
             return { to: "upstream", upstream: resolved.upstream };
+        case "runner":
+            return { to: "runner", runner: resolved.runner, port: resolved.port, frameable: true };
         case "outbox":
             return { to: "outbox" };
         case "probe":

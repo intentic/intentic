@@ -50,6 +50,16 @@ describe("previewRoute", () => {
         });
     });
 
+    test("a runner's port slot is carried down that runner's uplink, framed like any forward", async () => {
+        const targets: SlotResolver = (slot) => (slot === "a" ? { port: 5173, host: "127.0.0.1", scheme: "http", runner: "r1" } : undefined);
+        expect(await previewRoute("port-a.example.com", false, deps({ slotTargetOf: targets }))).toEqual({
+            to: "runner",
+            runner: "r1",
+            port: 5173,
+            frameable: true,
+        });
+    });
+
     test("everything that is not a serving upstream is a page rendered now, so nothing is resolved twice", async () => {
         const panelOf = panelsOf({ app: { state: "starting" } });
         const status = async (host: string, previewDeps: PreviewDeps): Promise<[string, number | undefined]> => {

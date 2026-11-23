@@ -14,6 +14,9 @@ import { selectionCopy } from "../../models/browsers/selectionCopy";
 import type { MediaPicture } from "../../models/browsers/media/mediaPicture";
 import { type PaintedPicture, type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../client/sandbox/streams/wsTicket";
+import type { RunnerOpenViewInput } from "@intentic/sandbox-contract/schemas/runner-views";
+import { runnerSocketUrl } from "../../models/runners/runnerViews";
+import { runnerViewOf } from "./browsersQuery";
 import { useLineWithElapsed } from "../../components/progress/useProgress";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
@@ -131,6 +134,11 @@ export interface BrowserViewOptions {
     // Whether anyone can see the picture (its tab in front, its view not parked): the daemon stops sending frames while
     // not, as it does for a hidden document, and resumes one frame away.
     readonly visible?: Ref<boolean>;
+    // What a runner's window's picture is opened with (`runners.openView`), undefined for this sandbox's own; read at
+    // every dial, since a ticket opens one socket.
+    readonly runnerView?: (name: string) => RunnerOpenViewInput | undefined;
+    // Where a runner's view socket dials, given what it is opened with; a test's to replace.
+    readonly runnerUrl?: (input: RunnerOpenViewInput) => Promise<string | undefined>;
 }
 
 // The window a `state` message carries, if it is the one this view watches; anything else is not this view's to show.
@@ -309,7 +317,8 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
     const cast = useScreencast({
         mint: async () => {
             const session = name.value;
-            return session === undefined ? undefined : socketUrl(session);
+            const runner = session === undefined ? undefined : (options.runnerView ?? runnerViewOf)(session);
+            return session === undefined ? undefined : runner === undefined ? socketUrl(session) : (options.runnerUrl ?? runnerSocketUrl)(runner);
         },
         pointer: pointerFrame,
         frames: true,

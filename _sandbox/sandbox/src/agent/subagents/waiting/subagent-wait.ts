@@ -43,6 +43,9 @@ export interface SubagentWaitDeps {
     // (agent/subagents/workflows/script-run-tools.ts), which reach the child engine from above, so this server never names them.
     readonly extraTools?: readonly ServerTool[];
     readonly logsDir?: string;
+    // Hands each report over whole, for a caller that bounds it where its reader can retrieve the rest: the parent answering
+    // a runner's turn (runners/fleet/runner-subagents.routes.ts), whose retained file would be on the wrong machine.
+    readonly wholeReports?: boolean;
 }
 
 // How much of one report a wait hands over whole: its head and its tail, the rest kept behind a retrieval handle.
@@ -69,12 +72,14 @@ export const boundChildReport = (report: string | undefined, options: McpOutputO
     return `${report.slice(0, bound.head)}\n… report middle omitted …\n${report.slice(-bound.tail)}\n--- ${report.length - kept} chars cut · full: retrieve-output ${path} [pattern]`;
 };
 
+/** How much of a report a turn of this conversation is handed whole. */
+export const reportBoundOf = (conversationId: string | undefined): ReportBound =>
+    conversationId !== undefined && isHomeConversationId(conversationId) ? HOME_REPORT_BOUND : REPORT_BOUND;
+
 const reportOf = (deps: SubagentWaitDeps, childId: string): string | undefined =>
-    boundChildReport(
-        deps.children?.report(childId),
-        { logsDir: deps.logsDir ?? join(HISTORY_ROOT, "logs") },
-        deps.conversationId !== undefined && isHomeConversationId(deps.conversationId) ? HOME_REPORT_BOUND : REPORT_BOUND,
-    );
+    deps.wholeReports === true
+        ? deps.children?.report(childId)
+        : boundChildReport(deps.children?.report(childId), { logsDir: deps.logsDir ?? join(HISTORY_ROOT, "logs") }, reportBoundOf(deps.conversationId));
 
 // What a wait reads of a spawned child beyond its row, from the child engine where this turn has one.
 const lookupsOf = (deps: SubagentWaitDeps): ChildLookups => ({
@@ -335,155 +340,155 @@ const commandTools = (deps: SubagentWaitDeps): ServerTool[] => [
     ),
 ];
 
-export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWithInstance =>
+// Starting children: what they could run on, and the spawn itself.
+const spawningTools = (deps: SubagentWaitDeps): ServerTool[] => [
+    sdk().tool(
+        "providers",
+        "What a subagent could be spawned on right now: every provider this sandbox has connected, its models, " +
+            "how much allowance each still has and in which pool (a five-hour window, a weekly one), how many of " +
+            "this sandbox's agents already run on each provider, and when each last ran out, how far into its " +
+            "window and under how many agents. Call it before spawn when you do not already know which model you " +
+            "want, and before a fan-out: spawn requires a provider and a model, models the records call spent are " +
+            "left out of this list, and a spawn naming one is refused before it takes a seat. What it shows is what " +
+            "is not known to be spent, which is weaker than a promise: a provider publishing no allowance reads as " +
+            "not metered, and the only thing that ever measures one of those is a turn it has already refused. Each " +
+            "figure is one account's, and subagents started together spend together, so the sandbox does the " +
+            "arithmetic: each provider with metered accounts carries a budget line saying how many more children of " +
+            "its usual model fit through their windows now. Spawn what the work needs: each child is placed on the " +
+            "account whose allowance renews first among those that can carry it, and one the accounts cannot carry waits as pending and starts " +
+            "by itself as running ones end or a window reopens.",
+        {},
+        async () => {
+            const children = deps.children;
+            if (children === undefined) {
+                return answer({ ok: false, message: "This turn cannot spawn agents." });
+            }
+            // The listing as the CLI prints it: what each model has left and in which pool, how many
+            // agents already run on each provider, when each last ran out. Raw rows once went out
+            // here instead, and every word added to the listing for a fan-out never reached the model.
+            return { content: [{ type: "text" as const, text: spawnCatalogText(await children.providers()) }] };
+        },
+        { annotations: toolAnnotations("read") },
+    ),
+    sdk().tool(
+        "spawn",
+        SPAWN_WORDS,
+        SPAWN_FIELDS,
+        async (args) => {
+            const children = deps.children;
+            if (children === undefined) {
+                return answer({ ok: false, message: "This turn cannot spawn agents." });
+            }
+            const asked = spawnAsked(args);
+            if ("refused" in asked) {
+                return answer({ ok: false, message: asked.refused });
+            }
+            const result = await children.spawn(asked);
+            return answer(
+                result.ok
+                    ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note, result.held === true) }
+                    : { ok: false, message: result.message },
+            );
+        },
+        // Commits a provider's allowance to a new agent, and nothing later gives it back.
+        { annotations: toolAnnotations("destructive") },
+    ),
+];
+
+// Steering children once they run: words, a stop, an answer, and bringing in or settling their held work.
+const steeringTools = (children: ChildSupervisor): ServerTool[] => [
+    sdk().tool(
+        "send",
+        SEND_WORDS,
+        {
+            child: z.string().min(1).describe("The subagent's id, from spawn."),
+            message: z.string().min(1).describe("What to tell it, self-contained."),
+            ...REHOME_FIELDS,
+        },
+        async (args) => {
+            const rehome = rehomeOf(args);
+            if (rehome === undefined && [args.provider, args.model, args.harness, args.effort].some((part) => part !== undefined)) {
+                return answer(HALF_A_MOVE);
+            }
+            return answer(await children.send(args.child, args.message, rehome));
+        },
+        { annotations: toolAnnotations("write") },
+    ),
+    sdk().tool(
+        "cancel",
+        "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the " +
+            "sandbox booked for it by itself after a spent allowance or a turn that stopped short (wait shows " +
+            "that as status `paused`). Use it when you will do the work another way, so the original never " +
+            "resumes and duplicates it. What it already wrote stays in its worktree, and a later send carries on " +
+            "from there. A start or message waiting on the owner's card is theirs to decline, not yours to withdraw.",
+        { child: z.string().min(1).describe("The subagent's id, from spawn.") },
+        async (args) => {
+            return answer(await children.cancel(args.child));
+        },
+        // Ends work in flight, and nothing gives it back but a new message.
+        { annotations: toolAnnotations("destructive") },
+    ),
+    sdk().tool(
+        "answer",
+        "Answer a QUESTION a subagent you spawned is parked on (wait reports blocked and carries the question). " +
+            "Pass one entry per question: its own text, and your picks as chosen option labels or your own words. " +
+            "Only questions: a permission hold or a plan approval is the owner's consent to give, and this tool " +
+            "refuses those.",
+        {
+            child: z.string().min(1).describe("The subagent's id, from spawn."),
+            // Never z.record: the SDK's JSON-schema converter throws on one, emptying this server's tools/list.
+            answers: z
+                .array(
+                    z.object({
+                        question: z.string().min(1).describe("The question's own text."),
+                        picks: z.array(z.string()).describe("The chosen option labels, or your own words."),
+                    }),
+                )
+                .describe("Your picks, one entry per question."),
+        },
+        async (args) => {
+            const picks = Object.fromEntries(args.answers.map((entry) => [entry.question, entry.picks]));
+            return answer(await children.answer(args.child, picks));
+        },
+        { annotations: toolAnnotations("write") },
+    ),
+    sdk().tool(
+        "merge",
+        "Bring a subagent's finished work into your own checkout when it was held on its branch: its changes " +
+            "clashed with your edits, or you are a conversation that judges its subagents' work before taking " +
+            "it (a home conversation holds all of it), as its report or wait's `landing` says. Writes them with " +
+            "conflict markers where they clash, for you to resolve, as you would merge a branch yourself. " +
+            "Otherwise its work reaches your checkout by itself.",
+        { child: z.string().min(1).describe("The subagent's id, from spawn.") },
+        async (args) => {
+            return answer(await children.merge(args.child));
+        },
+        { annotations: toolAnnotations("write") },
+    ),
+    settleTool(children),
+];
+
+/** The `wait` tool over this turn's children and commands, on the signal `deps` names. */
+const subagentWaitTool = (deps: SubagentWaitDeps): ServerTool =>
+    waitTool({ conversationId: deps.conversationId, conversations: deps.conversations, signal: deps.signal, lookups: lookupsOf(deps) });
+
+// What the mount may do with the server's tools: hand some elsewhere, given a `wait` of this turn's on a signal of its own.
+export type SubagentToolsWrap = (tools: ServerTool[], waitOn: (signal: AbortSignal) => ServerTool) => ServerTool[];
+
+/** Every tool of the `subagents` server for this turn, as the server mounts them and the parent's runner door runs them. */
+export const subagentTools = (deps: SubagentWaitDeps): ServerTool[] => [
+    ...(deps.children === undefined ? [] : [...spawningTools(deps), ...steeringTools(deps.children)]),
+    subagentWaitTool(deps),
+    ...(deps.result === undefined ? [] : [resultTool(deps.result)]),
+    ...(deps.extraTools ?? []),
+    ...commandTools(deps),
+];
+
+export const subagentWaitServer = (deps: SubagentWaitDeps, wrap: SubagentToolsWrap = (tools) => tools): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
         name: "subagents",
         // In the prompt, not behind tool search: a supervising parent reaches for this mid-flight.
         alwaysLoad: true,
-        tools: [
-            ...(deps.children === undefined
-                ? []
-                : [
-                      sdk().tool(
-                          "providers",
-                          "What a subagent could be spawned on right now: every provider this sandbox has connected, its models, " +
-                              "how much allowance each still has and in which pool (a five-hour window, a weekly one), how many of " +
-                              "this sandbox's agents already run on each provider, and when each last ran out, how far into its " +
-                              "window and under how many agents. Call it before spawn when you do not already know which model you " +
-                              "want, and before a fan-out: spawn requires a provider and a model, models the records call spent are " +
-                              "left out of this list, and a spawn naming one is refused before it takes a seat. What it shows is what " +
-                              "is not known to be spent, which is weaker than a promise: a provider publishing no allowance reads as " +
-                              "not metered, and the only thing that ever measures one of those is a turn it has already refused. Each " +
-                              "figure is one account's, and subagents started together spend together, so the sandbox does the " +
-                              "arithmetic: each provider with metered accounts carries a budget line saying how many more children of " +
-                              "its usual model fit through their windows now. Spawn what the work needs: each child is placed on the " +
-                              "account whose allowance renews first among those that can carry it, and one the accounts cannot carry waits as pending and starts " +
-                              "by itself as running ones end or a window reopens.",
-                          {},
-                          async () => {
-                              const children = deps.children;
-                              if (children === undefined) {
-                                  return answer({ ok: false, message: "This turn cannot spawn agents." });
-                              }
-                              // The listing as the CLI prints it: what each model has left and in which pool, how many
-                              // agents already run on each provider, when each last ran out. Raw rows once went out
-                              // here instead, and every word added to the listing for a fan-out never reached the model.
-                              return { content: [{ type: "text" as const, text: spawnCatalogText(await children.providers()) }] };
-                          },
-                          { annotations: toolAnnotations("read") },
-                      ),
-                      sdk().tool(
-                          "spawn",
-                          SPAWN_WORDS,
-                          SPAWN_FIELDS,
-                          async (args) => {
-                              const children = deps.children;
-                              if (children === undefined) {
-                                  return answer({ ok: false, message: "This turn cannot spawn agents." });
-                              }
-                              const asked = spawnAsked(args);
-                              if ("refused" in asked) {
-                                  return answer({ ok: false, message: asked.refused });
-                              }
-                              const result = await children.spawn(asked);
-                              return answer(
-                                  result.ok
-                                      ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note, result.held === true) }
-                                      : { ok: false, message: result.message },
-                              );
-                          },
-                          // Commits a provider's allowance to a new agent, and nothing later gives it back.
-                          { annotations: toolAnnotations("destructive") },
-                      ),
-                      sdk().tool(
-                          "send",
-                          SEND_WORDS,
-                          {
-                              child: z.string().min(1).describe("The subagent's id, from spawn."),
-                              message: z.string().min(1).describe("What to tell it, self-contained."),
-                              ...REHOME_FIELDS,
-                          },
-                          async (args) => {
-                              const children = deps.children;
-                              if (children === undefined) {
-                                  return answer({ ok: false, message: "This turn cannot supervise agents." });
-                              }
-                              const rehome = rehomeOf(args);
-                              if (rehome === undefined && [args.provider, args.model, args.harness, args.effort].some((part) => part !== undefined)) {
-                                  return answer(HALF_A_MOVE);
-                              }
-                              return answer(await children.send(args.child, args.message, rehome));
-                          },
-                          { annotations: toolAnnotations("write") },
-                      ),
-                      sdk().tool(
-                          "cancel",
-                          "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the " +
-                              "sandbox booked for it by itself after a spent allowance or a turn that stopped short (wait shows " +
-                              "that as status `paused`). Use it when you will do the work another way, so the original never " +
-                              "resumes and duplicates it. What it already wrote stays in its worktree, and a later send carries on " +
-                              "from there. A start or message waiting on the owner's card is theirs to decline, not yours to withdraw.",
-                          { child: z.string().min(1).describe("The subagent's id, from spawn.") },
-                          async (args) => {
-                              const children = deps.children;
-                              if (children === undefined) {
-                                  return answer({ ok: false, message: "This turn cannot supervise agents." });
-                              }
-                              return answer(await children.cancel(args.child));
-                          },
-                          // Ends work in flight, and nothing gives it back but a new message.
-                          { annotations: toolAnnotations("destructive") },
-                      ),
-                      sdk().tool(
-                          "answer",
-                          "Answer a QUESTION a subagent you spawned is parked on (wait reports blocked and carries the question). " +
-                              "Pass one entry per question: its own text, and your picks as chosen option labels or your own words. " +
-                              "Only questions: a permission hold or a plan approval is the owner's consent to give, and this tool " +
-                              "refuses those.",
-                          {
-                              child: z.string().min(1).describe("The subagent's id, from spawn."),
-                              // Never z.record: the SDK's JSON-schema converter throws on one, emptying this server's tools/list.
-                              answers: z
-                                  .array(
-                                      z.object({
-                                          question: z.string().min(1).describe("The question's own text."),
-                                          picks: z.array(z.string()).describe("The chosen option labels, or your own words."),
-                                      }),
-                                  )
-                                  .describe("Your picks, one entry per question."),
-                          },
-                          async (args) => {
-                              const children = deps.children;
-                              if (children === undefined) {
-                                  return answer({ ok: false, message: "This turn cannot supervise agents." });
-                              }
-                              const picks = Object.fromEntries(args.answers.map((entry) => [entry.question, entry.picks]));
-                              return answer(await children.answer(args.child, picks));
-                          },
-                          { annotations: toolAnnotations("write") },
-                      ),
-                      sdk().tool(
-                          "merge",
-                          "Bring a subagent's finished work into your own checkout when it was held on its branch: its changes " +
-                              "clashed with your edits, or you are a conversation that judges its subagents' work before taking " +
-                              "it (a home conversation holds all of it), as its report or wait's `landing` says. Writes them with " +
-                              "conflict markers where they clash, for you to resolve, as you would merge a branch yourself. " +
-                              "Otherwise its work reaches your checkout by itself.",
-                          { child: z.string().min(1).describe("The subagent's id, from spawn.") },
-                          async (args) => {
-                              const children = deps.children;
-                              if (children === undefined) {
-                                  return answer({ ok: false, message: "This turn cannot supervise agents." });
-                              }
-                              return answer(await children.merge(args.child));
-                          },
-                          { annotations: toolAnnotations("write") },
-                      ),
-                      settleTool(deps.children),
-                  ]),
-            waitTool({ conversationId: deps.conversationId, conversations: deps.conversations, signal: deps.signal, lookups: lookupsOf(deps) }),
-            ...(deps.result === undefined ? [] : [resultTool(deps.result)]),
-            ...(deps.extraTools ?? []),
-            ...commandTools(deps),
-        ],
+        // `wrap` lets the mount hand some tools elsewhere (a runner's to its parent, parent-forward.ts).
+        tools: wrap(subagentTools(deps), (signal) => subagentWaitTool({ ...deps, signal })),
     });

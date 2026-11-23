@@ -89,6 +89,8 @@ export const capacityRailKey = sandboxKeys(`intentic.capacityRail.`);
 export const rosterKey = sandboxKeys(`intentic.roster.`);
 // The terminals on the owner's connected computers this browser has open as tabs, per sandbox (models/terminal/deviceTerminals.ts).
 export const deviceTerminalsKey = sandboxKeys(`intentic.deviceTerminals.`);
+// The terminals of conversations that run on a runner this browser has open as tabs, per sandbox (models/terminal/runnerTerminals.ts).
+export const runnerTerminalsKey = sandboxKeys(`intentic.runnerTerminals.`);
 
 // The transcript mirror (models/conversations/transcript/transcriptCache.ts): up to its last few hundred messages per
 // conversation, in IndexedDB, one database per account (accountDatabases.ts). Deleted with that account; a window holding

@@ -64,6 +64,35 @@
               "answer"
             ],
             "type": "object"
+          },
+          {
+            "description": "Whether a runner view may open, and for which member (lowercased; absent when the daemon runs without auth), whose\nrevocation then closes it. `reason` says why not, for netd's log.",
+            "properties": {
+              "allowed": {
+                "type": "boolean"
+              },
+              "answer": {
+                "const": "runnerView",
+                "type": "string"
+              },
+              "member": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "answer",
+              "allowed"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -215,6 +244,26 @@
         ],
         "type": "object"
       },
+      "ParentUplinkConfig": {
+        "description": "A runner's uplink to its parent sandbox (2026-11-23): the parent's address (`http(s)://` or `ws(s)://`, its origin is\nwhat counts), this runner's id as the parent enrolled it, and the durable token it presents there. The runner's netd\ndials browser-wire's `RUNNER_UPLINK_PATH` on that origin and serves every stream the parent opens as its own.",
+        "properties": {
+          "runner": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "runner",
+          "token"
+        ],
+        "type": "object"
+      },
       "PreviewGuard": {
         "description": "Which preview hosts need the sandbox's pass, and how netd checks one (2026-10-27). netd applies it to requests on\nthe preview port and the tunnel only, never on the machine's loopback port, and never to the outbox (`public-`).\nA covered host lets through a pass that verifies (its cookie taken off before the upstream sees it), the probe, a\nCORS preflight, and the pass's exchange (handed back to Node); a navigation without a pass is handed back for Node's\npage, and anything else is answered 401 by netd itself, without asking Node.",
         "properties": {
@@ -295,6 +344,34 @@
             },
             "required": [
               "to"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A port on one of this sandbox's runners (2026-11-23): netd carries the request down that runner's uplink with\n`NetdHeader::RunnerPort`, and the runner's netd relays it to its own `localhost:<port>`. `frameable` as an\nupstream's. A netd older than it cannot read the answer and refuses its own question.",
+            "properties": {
+              "frameable": {
+                "type": "boolean"
+              },
+              "port": {
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "runner": {
+                "type": "string"
+              },
+              "to": {
+                "const": "runner",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "runner",
+              "port",
+              "frameable"
             ],
             "type": "object"
           }
@@ -731,6 +808,67 @@
           "device"
         ],
         "type": "object"
+      },
+      {
+        "description": "On a runner: dial this parent's uplink, or stop dialling it with none (2026-11-23). The same config again changes\nnothing. Send only to a netd that told `ParentUplink`: an older one closes the link on a kind it does not know.",
+        "properties": {
+          "kind": {
+            "const": "parentUplink",
+            "type": "string"
+          },
+          "uplink": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ParentUplinkConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "On a parent: lets the runner `runner` hold an uplink (browser-wire's `RUNNER_UPLINK_PATH`) presenting the token\nwhose SHA-256 is `token_sha256`, as `DeviceUplink` does for a device and in a registry of its own, so a device's\ntoken never opens a runner's uplink (2026-11-23). Send only to a netd that told `RunnerUplinks`.",
+        "properties": {
+          "kind": {
+            "const": "runnerUplink",
+            "type": "string"
+          },
+          "runner": {
+            "type": "string"
+          },
+          "tokenSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "runner",
+          "tokenSha256"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Withdraws `runner`'s registration: its uplink is closed with browser-wire's `RUNNER_UPLINK_WITHDRAWN` and a later\ndial refused.",
+        "properties": {
+          "kind": {
+            "const": "runnerWithdraw",
+            "type": "string"
+          },
+          "runner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "runner"
+        ],
+        "type": "object"
       }
     ],
     "title": "FromNode"
@@ -738,7 +876,8 @@
   "headers": [
     "x-intentic-preview",
     "x-intentic-preview-unreachable",
-    "x-intentic-listener"
+    "x-intentic-listener",
+    "x-intentic-runner-port"
   ],
   "toNode": {
     "$defs": {
@@ -830,6 +969,31 @@
             "type": "object"
           },
           {
+            "description": "A person's view of a runner asking to open through `RUNNER_VIEW_PATH` (2026-11-23): the runner, the path it asks\nfor on the runner (one of netd's allowlist: `/system/terminal`, `/system/browser-view`, `/system/desktop-view`),\nand its query string as the browser sent it, ticket included. Node redeems the ticket it minted for exactly that\nrunner, view and session, and answers `RunnerView`; anything else (a refusal, an older Node) refuses the view.",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string"
+              },
+              "question": {
+                "const": "runnerView",
+                "type": "string"
+              },
+              "runner": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "runner",
+              "path",
+              "query"
+            ],
+            "type": "object"
+          },
+          {
             "description": "Whether Node's event loop turns, and how fast: answered `pong` at once, by the link itself. netd sends one\nevery 2 s once the previous one is answered, and reports the round trip as the vitals' lag. An older Node answers\nwith a refusal, or with an answer netd cannot read, and either still counts as answered.",
             "properties": {
               "question": {
@@ -843,6 +1007,22 @@
             "type": "object"
           }
         ]
+      },
+      "RunnerUplinkState": {
+        "description": "A registered runner's uplink as a parent's netd holds it.",
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "runner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner",
+          "connected"
+        ],
+        "type": "object"
       },
       "TunnelRefusal": {
         "description": "Why netd stopped dialling the ingress at its usual pace, past an ordinary drop it redials at once.",
@@ -1033,6 +1213,49 @@
           "uplinks": {
             "items": {
               "$ref": "#/$defs/DeviceUplinkState"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "uplinks"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "On a runner: where its uplink to the parent stands, told on every change and again to each Node that says hello,\nconfigured or not (2026-11-23). `reason` says why it is not held. It is how a Node knows this netd dials parents\nat all: a Node sends `FromNode::ParentUplink` only to a netd that told it. An older Node ignores it.",
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "kind": {
+            "const": "parentUplink",
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "connected"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "On a parent: every runner registered with `FromNode::RunnerUplink` and whether its uplink is up, told whole on\nevery change and again to each Node that says hello, as `DeviceUplinks` is (2026-11-23).",
+        "properties": {
+          "kind": {
+            "const": "runnerUplinks",
+            "type": "string"
+          },
+          "uplinks": {
+            "items": {
+              "$ref": "#/$defs/RunnerUplinkState"
             },
             "type": "array"
           }

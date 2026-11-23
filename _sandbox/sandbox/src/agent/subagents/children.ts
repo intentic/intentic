@@ -14,7 +14,6 @@ import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor
 import { stopRunsOf } from "./workflows/live-runs.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
-import { steerTurn } from "../checkpoints/agent-steering.js";
 import { markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
 import { type KillCause, killNote, runtimeKilled, witnessedKillCause } from "./child-death.js";
 import { ownKillOf, recentMemoryKills } from "../run/turn/holds/memory-kill.js";
@@ -1341,8 +1340,9 @@ const deliverToChild = async (
     }
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, capabilitiesOf(kid.spec.provider, childRouting(kid.spec).harness));
     if (kid.running) {
-        // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet.
-        return steerTurn(services.conversations, childId, { text: message, voice: "agent" })
+        // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet. Through
+        // the port, so a child placed on a runner takes them there (agent/run/turn/runner-steer.ts).
+        return (await services.turns.steer(childId, { text: message, voice: "agent" })) === true
             ? { ok: true, note: "Steered: the message lands between its tool calls." }
             : { ok: false, message: "It is mid-turn on a runtime that takes no mid-turn input: wait for it to finish, then send again." };
     }

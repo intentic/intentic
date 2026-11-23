@@ -79,6 +79,11 @@ export const PortsListSchema = z.object({
 });
 export type PortsList = z.infer<typeof PortsListSchema>;
 export const PortParamSchema = z.object({ port: z.number().int().min(1).max(65535).describe("Which port.") });
+// (2026-11-23) A port on one of this sandbox's runners, for a conversation that runs there: previewed through the
+// runner's uplink at an address of this sandbox's own.
+export const PortForwardInputSchema = PortParamSchema.extend({
+    runner: z.string().min(1).optional().describe("The runner whose own port this is. Absent means a port of this sandbox."),
+});
 export const PortForwardResultSchema = z.object({
     previewUrl: z
         .string()

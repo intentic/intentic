@@ -27,7 +27,7 @@ import type { HeldTurn } from "../turn/holds/held-turn.js";
 const VERIFICATION_CHECK_CHARS = 200;
 
 // How fresh a reading must be before a settled turn re-reads it; a fleet costs one sweep.
-const SETTLE_MAX_AGE_MS = 10_000;
+export const SETTLE_MAX_AGE_MS = 10_000;
 
 export type TurnOutcome = "ok" | "error" | "cancelled";
 
@@ -67,6 +67,9 @@ export interface SettlementPlan {
     readonly skills: readonly string[];
 }
 
+// What settling reads of the request: the model it resolved, and what the allowance re-read is made with, where known.
+export type SettledRequest = { readonly spec: Pick<AgentRequest["spec"], "model"> } & Partial<Pick<AgentRequest, "credential" | "policy">>;
+
 // How the turn ended, as far as settling it goes.
 export interface TurnEnd {
     readonly input: RoutedTurn;
@@ -78,8 +81,9 @@ export interface TurnEnd {
     // The stored account that served it, where one did.
     readonly account?: string | undefined;
     readonly attribution: Attribution;
-    // The request the runtime was handed: its resolved model.
-    readonly request: AgentRequest;
+    // The request the runtime was handed: its resolved model, and the credential and policy a settled re-read needs. A
+    // runner's turn (runner-settlement.ts) names only its model, since its request was built on the runner.
+    readonly request: SettledRequest;
     readonly aborted: boolean;
     readonly isolated: boolean;
     // A spawned child's proof is its parent's report to carry, not a card of its own.
@@ -244,6 +248,15 @@ const outcomeOf = (end: TurnEnd): TurnOutcome => {
     return end.frames.readings().failure === undefined ? "ok" : "error";
 };
 
+// What the account's allowance is re-read from once the turn has settled; nothing for a request that does not say how
+// it authenticated.
+const settledOf = (end: TurnEnd): SettledTurn | undefined => {
+    const { credential, policy } = end.request;
+    return credential === undefined || policy === undefined
+        ? undefined
+        : { provider: end.provider, account: end.account, request: { credential, policy }, aborted: end.aborted };
+};
+
 export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPlan => {
     const outcome = outcomeOf(end);
     const { kind: _kind, ...billed } = end.frames.readings().usage ?? { kind: "usage" };
@@ -257,7 +270,7 @@ export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPl
         // Every turn's, a spawned child's too: unlike its proof, where its work went is its own card's to say.
         reach: end.input.conversationId === undefined ? undefined : end.frames.reach.reading(),
         snapshot: end.isolated ? undefined : end.input.prompt,
-        settledUsage: { provider: end.provider, account: end.account, request: end.request, aborted: end.aborted },
+        ...opt("settledUsage", settledOf(end)),
         commands: commandRunLines(
             {
                 at: now,

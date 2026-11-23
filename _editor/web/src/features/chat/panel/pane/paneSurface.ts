@@ -11,6 +11,8 @@ import { focusComposer } from "../../../../models/conversations/tabs/useChat-tab
 import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { openWorkTerminal } from "../../../../models/terminal/useWorkTerminals";
+import { terminalTabFor } from "../../../../models/terminal/runnerTerminals";
+import { runnerOf } from "../../../../models/placement/runnerPlacement";
 import { openWorkspaceRef } from "../../../../models/workspace/files/openFileRef";
 import { picture } from "../../../../models/workspace/home/thumbnails";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
@@ -55,7 +57,8 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
         // Same file-link decoration as the assistant's own prose, rebuilt per fragment since `agent` can change under it.
         decorate: (fragment) => fileLinkDecorator({ agent: agent() })(fragment),
         commandTerminal: () => conversation().agentTerminal.value,
-        watchTerminal: openWorkTerminal,
+        // A session of a conversation that runs on a runner (a job's, its agent's) is the runner's: opened as its tab.
+        watchTerminal: (session) => openWorkTerminal(terminalTabFor(conversation().conversationId, session, runnerOf)),
         commandBrowser: () => conversation().agentBrowser.value,
         watchBrowser: (session) => navigate(here(page.browsers(session))),
         toolChildren: (toolId) => {

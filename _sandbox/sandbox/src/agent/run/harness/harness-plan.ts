@@ -33,7 +33,7 @@ import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAcc
 import { surroundingsNote } from "../../prompt/surroundings.js";
 import { claudeCodeRuntime } from "../../prompt/guidance.js";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import { pageMediaKeyPath } from "../../pages/page-media.js";
+import { pageMediaKeyPath } from "../../../workspace/files/stored/stored-page-media.js";
 
 // The Claude Code loop's own arm: the request no single provider owns, built for native Claude and every provider routed
 // through the harness. Everything it reads of the daemon is named in HarnessPlanDeps; the planner never imports it.

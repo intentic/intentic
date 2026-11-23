@@ -644,6 +644,34 @@ pub const DEVICE_UPLINK_DISPLACED: u16 = 4001;
 /// disconnected): remoted stops dialling until it is started again.
 pub const DEVICE_UPLINK_WITHDRAWN: u16 = 4003;
 
+/// Where a runner's netd dials its parent sandbox (2026-11-23): a WebSocket upgrade on the parent's own address carrying
+/// `authorization: Bearer <runner token>` and [`RUNNER_HEADER`], whose binary messages then carry one yamux session the
+/// parent's netd opens a stream on per person's view or preview, each one HTTP/1.1 connection the runner's netd serves as
+/// its own. The parent's netd takes it only for a token its daemon registered for that runner, in a registry of its own
+/// (a device's token never opens it), and the newest uplink of a runner replaces the one before it.
+pub const RUNNER_UPLINK_PATH: &str = "/system/runner-uplink";
+
+/// The runner an uplink is for, on its upgrade: its id as the parent enrolled it, `[A-Za-z0-9_-]{1,64}`. The token
+/// decides; a header naming another runner than the token's is refused.
+pub const RUNNER_HEADER: &str = "x-intentic-runner";
+
+/// Where a person opens a view of a runner on the parent's address (2026-11-23):
+/// `/system/runner-view/<runner>/<path on the runner>?<its query>&ticket=<runner view ticket>`, only as a WebSocket
+/// upgrade. The path on the runner is one of `system/terminal`, `system/browser-view`, `system/desktop-view` (each
+/// opened only with a one-shot ticket the parent's daemon minted for that runner, view and session) and
+/// `system/browser-media/<session>` (castd's own token decides, handed out over a view socket). Anything else is 404.
+pub const RUNNER_VIEW_PATH: &str = "/system/runner-view";
+
+/// The query parameter a runner view's ticket rides in; the parent's netd takes it off before the runner sees it.
+pub const RUNNER_VIEW_TICKET: &str = "ticket";
+
+/// The close code of a runner's uplink a newer uplink of the same runner replaced.
+pub const RUNNER_UPLINK_DISPLACED: u16 = 4001;
+
+/// The close code of a runner's uplink the parent's daemon withdrew (the runner was revoked or removed, or another token
+/// registered for it): the runner's netd stands back and dials again slowly.
+pub const RUNNER_UPLINK_WITHDRAWN: u16 = 4003;
+
 /// Whether a key event presses, releases, or does both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
@@ -974,6 +1002,16 @@ mod tests {
                 "closeCodes": {
                     "displaced": DEVICE_UPLINK_DISPLACED,
                     "withdrawn": DEVICE_UPLINK_WITHDRAWN,
+                },
+            },
+            "runner": {
+                "uplinkPath": RUNNER_UPLINK_PATH,
+                "header": RUNNER_HEADER,
+                "viewPath": RUNNER_VIEW_PATH,
+                "viewTicket": RUNNER_VIEW_TICKET,
+                "closeCodes": {
+                    "displaced": RUNNER_UPLINK_DISPLACED,
+                    "withdrawn": RUNNER_UPLINK_WITHDRAWN,
                 },
             },
             "terminal": {

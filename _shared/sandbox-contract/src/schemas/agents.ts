@@ -12,7 +12,7 @@ import { KeepWarmSchema } from "./keep-warm.js";
 import { proceedOverride } from "./proceed-without-asking.js";
 import { autoApproveMark } from "./auto-approve.js";
 import { AgentNeedSchema } from "./needs.js";
-import { AgentJobsSchema, AgentScriptRunsSchema } from "./agent-background.js";
+import { AgentJobsSchema, AgentScriptRunsSchema, AgentWatchesSchema } from "./agent-background.js";
 import { StrandedCloneSchema } from "./stranded-clone.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 import { ProgramAskSchema } from "../events/requests.js";
@@ -723,22 +723,8 @@ export const AgentSummarySchema = z.object({
         .describe(
             "Whether this conversation runs again by itself with nobody pressing anything: a watch is armed on it, or words the sandbox or another agent sent wait for it. A finished-looking card that is awaiting a wake is not finished yet.",
         ),
-    // Outside conditions a conversation is parked on; a finished-looking card can restart itself when one fires, and an
-    // armed watch keeps a hosted machine (and its bill) awake. The check command itself never rides the wire, since it
-    // may hold a secret.
-    watches: z
-        .array(
-            z.object({
-                id: z.string().describe("The daemon's handle for this watch, the same one the agent was given when it armed it."),
-                note: z.string().describe("The agent's own line on what it is waiting for."),
-                intervalSeconds: z.number().int().min(1).describe("How often the check runs."),
-                deadlineAt: z.number().describe("When it gives up and wakes the conversation anyway, in milliseconds. Every watch has one."),
-            }),
-        )
-        .optional()
-        .describe(
-            "Outside conditions this conversation is parked on, each of which will wake it. Absent means none, which is nearly every conversation: an armed watch is why a finished-looking agent starts working by itself, and why a hosted machine will not go idle.",
-        ),
+    // Outside conditions a conversation is parked on (agent-background.ts).
+    watches: AgentWatchesSchema,
     // Kept in the needs store, so unlike `jobs` this survives a restart and stands while the conversation is idle.
     needs: z
         .array(AgentNeedSchema)
@@ -779,6 +765,18 @@ export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which co
 export const AgentStopWatchingSchema = AgentIdSchema.extend({
     watchId: z.string().optional().describe("Which watch to disarm. Absent disarms every watch this conversation is parked on."),
 });
+
+// What a person's stop on a card answers (2026-11-23): the card as the press left it, and whether anything stopped. A job
+// that had already ended, a watch that had already fired, or a runner out of reach is `stopped: false` with the reason,
+// never an error: the press was heard, and the card shows what is still going.
+export const AgentStopAnswerSchema = AgentSummarySchema.extend({
+    stopped: z.boolean().describe("Whether anything was stopped by this press."),
+    stopReason: z
+        .string()
+        .optional()
+        .describe("Why nothing (or not everything) was stopped: it had already ended, or the runner it runs on is out of reach."),
+});
+export type AgentStopAnswer = z.infer<typeof AgentStopAnswerSchema>;
 
 export const AgentStopJobSchema = AgentIdSchema.extend({
     jobId: z.string().min(1).describe("Which of its background jobs, by the id its card and transcript row carry."),

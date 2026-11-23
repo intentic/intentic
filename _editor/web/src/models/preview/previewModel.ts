@@ -15,7 +15,7 @@ import { t } from "@intentic/ui/i18n";
 export type PreviewKind = `repo` | `app` | `port` | `public`;
 
 export interface PreviewTarget {
-    // `repo:<repo>` | `app:<repo>/<app>` | `port:<n>` | `public`; what a Browsers tab's key carries.
+    // `repo:<repo>` | `app:<repo>/<app>` | `port:<n>` | `port:<runner>:<n>` | `public`; what a Browsers tab's key carries.
     readonly id: string;
     readonly kind: PreviewKind;
     // What the switcher row says: the app's name, the repo's, the port, or "Public site".
@@ -115,6 +115,30 @@ export const appTargets = (repo: string, apps: readonly RepoApp[], repoWindows: 
 
 // One forwarded port's target id; the panel also forwards ports itself and needs to name what it made.
 export const portTargetId = (port: number): string => `port:${port}`;
+
+// A port on the runner a conversation runs on, previewed at an address of this sandbox's own (`ports.forward` with its
+// `runner`): `port:<runner>:<port>`, apart from this sandbox's own `port:<n>`. No list of this sandbox's names it, so the
+// target is built from the forward's answer (runnerPreviews.ts).
+export const runnerPortTargetId = (runner: string, port: number): string => `port:${runner}:${port}`;
+export const runnerPortTarget = (runner: string, port: number, url: string | undefined, detail?: string): PreviewTarget => ({
+    id: runnerPortTargetId(runner, port),
+    kind: `port`,
+    label: t(`preview.previewModel.port`, { port }),
+    detail: detail ?? runner,
+    repo: undefined,
+    app: undefined,
+    url,
+    servers: [],
+    running: true,
+    healthy: true,
+    session: undefined,
+    startable: false,
+    installed: true,
+    launch: undefined,
+    runs: undefined,
+    builds: false,
+    windows: [],
+});
 
 // A link to a server on the sandbox's own loopback (`http://localhost:5173`, the address an agent's dev server prints):
 // the preview target of that port, while the preview has one, which is only once the port is forwarded or was left

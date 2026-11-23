@@ -49,6 +49,7 @@ import PreviewStage from "../../features/preview/PreviewStage.vue";
 import { phoneById, phonePickerGroups, phoneUserAgent, storePhoneId, storedPhoneId } from "../../features/preview/phoneModels";
 import DesktopTab from "../../features/desktop/DesktopTab.vue";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
+import { appAddress, deskEntries, deskWindowOf, desktopAddress, windowLabel } from "../../features/desktop/runnerDesktops";
 import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useTier } from "../../client/sandbox/useTier";
 import { runViewLink, useRunReachable } from "../../models/runs/runView";
@@ -287,14 +288,10 @@ const frontPreview = computed(() => (front.value.kind === `preview` ? previewHan
 
 // ===== The desktop =====
 
+// This sandbox's own and each runner's (runnerDesktops.ts), a window on one named by its id and the runner it is on.
 const desk = useDesktopQuery();
-const deskWindows = computed<readonly DesktopWindow[]>(() => desk.state.value?.list ?? []);
-const windowOf = (id: string): DesktopWindow | undefined => deskWindows.value.find((entry) => entry.id === id);
-// How a window is named on its tab and in its address: its title, else its program.
-const windowLabel = (entry: DesktopWindow | undefined, id: string): string => entry?.title || entry?.app || id;
-const appAddress = (entry: DesktopWindow | undefined, id: string): string =>
-    `app://${(entry?.app ?? id).toLowerCase().replaceAll(/[^a-z0-9.-]+/gu, `-`)}`;
-const DESKTOP_ADDRESS = `desktop://`;
+const windowOf = (id: string, runner?: string): DesktopWindow | undefined => deskWindowOf(desk.state.value, id, runner);
+const desktopLabel = (runner: string | undefined): string => (runner === undefined ? t(`shared.desktop`) : t(`browsers.launcher.runnerDesktop`, { runner }));
 
 // ===== The strip =====
 
@@ -319,9 +316,9 @@ const pinTab = (pin: PinnedTab): StripTab => {
             };
         }
         case `desktop`:
-            return { id, label: t(`shared.desktop`), note: DESKTOP_ADDRESS, icon: `screen`, closable: true, pinned: true };
+            return { id, label: desktopLabel(pin.runner), note: desktopAddress(pin.runner), icon: `screen`, closable: true, pinned: true };
         case `app`: {
-            const entry = windowOf(pin.id);
+            const entry = windowOf(pin.id, pin.runner);
             return {
                 id,
                 label: windowLabel(entry, pin.id),
@@ -640,10 +637,10 @@ const address = computed<string>(() => {
         return frontPreview.value?.address ?? targetOf(tab.id)?.url ?? ``;
     }
     if (tab.kind === `desktop`) {
-        return DESKTOP_ADDRESS;
+        return desktopAddress(tab.runner);
     }
     if (tab.kind === `app`) {
-        return appAddress(windowOf(tab.id), tab.id);
+        return appAddress(windowOf(tab.id, tab.runner), tab.id);
     }
     return typed.shown.value ?? (blankOnTheWay.value || webAddress.value === BLANK ? `` : webAddress.value);
 });
@@ -866,19 +863,7 @@ const appItems = computed(() =>
 // The desktop is a maintainer's to drive (the daemon refuses the rest), so only they are offered it.
 const deskItems = computed(() =>
     canShip.value
-        ? [
-              { key: tabKey({ kind: `desktop` }), label: t(`shared.desktop`), detail: DESKTOP_ADDRESS, icon: `screen` as const, open: pinnedKeys.value.has(`desktop`) },
-              ...deskWindows.value.map((entry) => {
-                  const key = tabKey({ kind: `app`, id: entry.id });
-                  return {
-                      key,
-                      label: windowLabel(entry, entry.id),
-                      detail: appAddress(entry, entry.id),
-                      icon: `window-maximize` as const,
-                      open: pinnedKeys.value.has(key),
-                  };
-              }),
-          ]
+        ? deskEntries(desk.state.value, desktopLabel).map(({ tab, label, detail, icon }) => ({ key: tabKey(tab), label, detail, icon, open: pinnedKeys.value.has(tabKey(tab)) }))
         : [],
 );
 const launchGroups = computed<readonly LaunchGroup[]>(() => [
@@ -1713,7 +1698,7 @@ const { floats } = useBrowsersFloating();
 
             <!-- The desktop and the windows on it, each its own stream, paused behind the one in front. -->
             <div v-for="pin in deskPins" v-show="isFront(pin)" :key="tabKey(pin)" class="absolute inset-0">
-                <DesktopTab :window="pin.kind === `app` ? pin.id : undefined" :active="live(pin)" :tools-to="toolsEl" @close="unpinTab(pin)" />
+                <DesktopTab :window="pin.kind === `app` ? pin.id : undefined" :runner="pin.runner" :active="live(pin)" :tools-to="toolsEl" @close="unpinTab(pin)" />
             </div>
         </div>
         <DevToolsPanel v-if="webInFront" :tools="tools.page" :title="activePage?.title" />

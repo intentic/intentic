@@ -129,3 +129,16 @@ export const DEVICE_SOCKET_DIR = "/run/intentic/devices";
 // The codes netd closes a device's uplink with: `displaced`, a newer uplink of the same device replaced it; `withdrawn`,
 // the daemon withdrew the device's registration.
 export const DEVICE_UPLINK_CLOSE_CODES = { displaced: 4001, withdrawn: 4003 } as const;
+
+// A runner's uplink to its parent (2026-11-23): the runner's netd dials RUNNER_UPLINK_PATH on the parent's address with
+// its durable token and RUNNER_HEADER naming its id, and a person's view of the runner opens on the parent at
+// `${RUNNER_VIEW_PATH}/<runner>/<path on the runner>?<its query>&ticket=…`, the path one of `system/terminal`,
+// `system/browser-view`, `system/desktop-view` (each needing a runner view ticket the parent minted) or
+// `system/browser-media/<session>` (castd's token decides). The parent's netd takes the ticket off before the runner sees it.
+export const RUNNER_UPLINK_PATH = "/system/runner-uplink";
+export const RUNNER_HEADER = "x-intentic-runner";
+export const RUNNER_VIEW_PATH = "/system/runner-view";
+export const RUNNER_VIEW_TICKET = "ticket";
+
+// The codes a parent's netd closes a runner's uplink with, as a device's.
+export const RUNNER_UPLINK_CLOSE_CODES = { displaced: 4001, withdrawn: 4003 } as const;

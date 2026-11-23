@@ -226,3 +226,33 @@ test.each(domainRefusals)("a senderless sandbox message is kept with its attachm
     expect(fleet.agents.entry("c1")?.totals).toEqual(UNCHANGED_TOTALS);
     expect(policyRead).toHaveBeenCalledTimes(1);
 });
+
+// 2026-11-23: a child's report said into a running turn went into the parent's own live-input queue, which nothing drains
+// when the turn runs on a runner, and was marked delivered. The same for a wake the runner relayed home. Every voice now
+// reaches the runner's steer door, saying whose words they are (runner-steer.ts).
+test("a child's report said into a turn running on a runner reaches the runner's steer door in the child's voice", async () => {
+    const fleet = notedFleet(() => {});
+    await beginTurn(fleet.conversations, { conversationId: "c-remote", isolated: true, runner: "rog", prompt: "go", profile: {} }, 1);
+    const steered: unknown[] = [];
+    const services = unstubbed<Services>("services", {
+        agents: fleet.agents,
+        conversations: fleet.conversations,
+        events: createDomainEvents(() => {}),
+        runnerParent: {},
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/nowhere/runner-steer" }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {} }),
+        runnerHub: unstubbed<Services["runnerHub"]>("runnerHub", {
+            client: () =>
+                unstubbed<NonNullable<ReturnType<Services["runnerHub"]["client"]>>>("client", {
+                    steer: async (input: unknown) => {
+                        steered.push(input);
+                        return { applied: true };
+                    },
+                }),
+        }),
+    });
+    const turns = turnDoors(() => services, async function* () {});
+    const said = await turns.say({ voice: "agent", turn: { conversationId: "c-remote", prompt: "Your subagent `sub-kid` finished: it works." } });
+    expect(said).toMatchObject({ delivered: "steered" });
+    expect(steered).toMatchObject([{ conversationId: "c-remote", text: "Your subagent `sub-kid` finished: it works.", voice: "agent" }]);
+});

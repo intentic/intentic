@@ -2,12 +2,14 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { exitCodeOf } from "@intentic/base/errors";
+import { errorMessage, exitCodeOf } from "@intentic/base/errors";
 import { gitHeaderEnv } from "@intentic/base/git";
 import { untranslatedEnv } from "@intentic/base/process";
 import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import { DEFINITION_SOURCES } from "../definition/definition.js";
+import { withConversationTrailer } from "../git-identity.js";
+import { commitWorktreeRemainder } from "../git/remote/root-repo.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
@@ -44,6 +46,8 @@ export interface RunnerSyncDeps {
     readonly workspaceRoot: string;
     readonly historyRoot: string;
     readonly worktrees: Pick<AgentWorktrees, "attached" | "worktreeDir">;
+    // The conversation's title as this runner knows it, for the commit that carries a turn's leftovers home.
+    readonly titleOf?: (conversationId: string) => string | undefined;
 }
 
 export const gitEnv = (identity: RunnerIdentity): NodeJS.ProcessEnv => ({
@@ -196,8 +200,14 @@ const setAsideOwnUntracked = async (identity: RunnerIdentity, cwd: string): Prom
 export const syncFromParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
     exclusively(() => pullFromParent(deps, identity, input, onLine));
 
-export const pushToParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
-    exclusively(() => deliverToParent(deps, identity, input, onLine));
+// `leftovers` false pushes the branch's tip alone: the turn is still running there, so its checkout is mid-write.
+export const pushToParent = (
+    deps: RunnerSyncDeps,
+    identity: RunnerIdentity,
+    input: RunnerSync,
+    onLine: (line: string) => void,
+    options: { readonly leftovers?: boolean } = {},
+): Promise<void> => exclusively(() => deliverToParent(deps, identity, input, onLine, options.leftovers ?? true));
 
 const pullFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> => {
     for (const { repo, dir, mainBranch } of input.repos) {
@@ -245,10 +255,32 @@ const pullFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, in
     }
 };
 
-const deliverToParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> => {
+// What a turn left uncommitted in its checkout (staged, unstaged, untracked), committed onto its branch before the push,
+// as a clean turn's land would, whatever the turn's outcome. A push used to carry the branch's tip alone and only a land
+// committed leftovers, which a failed or stopped turn never reaches; the next pull then moved the edits to a rescue ref
+// on the runner and reset, and the resumed session went on without them.
+const commitLeftovers = async (deps: RunnerSyncDeps, repo: string, conversationId: string, onLine: (line: string) => void): Promise<void> => {
+    if (!(await deps.worktrees.attached(conversationId, repo))) {
+        return;
+    }
+    const message = withConversationTrailer(`Agent: ${deps.titleOf?.(conversationId) ?? conversationId}`, conversationId);
+    try {
+        if (await commitWorktreeRemainder(repo, deps.worktrees.worktreeDir(conversationId, repo), message, deps.workspaceRoot)) {
+            onLine(`${repo}: committed what the turn left uncommitted`);
+        }
+    } catch (error) {
+        // The branch still goes: what is committed is worth delivering, and the next pull keeps the rest on a rescue ref.
+        onLine(`${repo}: what the turn left uncommitted could not be committed (${errorMessage(error)}), so only the branch's commits go`);
+    }
+};
+
+const deliverToParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void, leftovers: boolean): Promise<void> => {
     for (const { repo, dir } of input.repos) {
         const workingDir = workingDirOf(deps, dir);
         const url = runnerGitUrl(identity.parentUrl, repo);
+        if (leftovers) {
+            await commitLeftovers(deps, repo, input.conversationId, onLine);
+        }
         const tip = await git(identity, workingDir, ["rev-parse", "--verify", "--quiet", `refs/heads/${input.branch}`]).catch(() => "");
         if (tip === "") {
             // A repo the turn never touched has no branch here; nothing to deliver is a normal answer.

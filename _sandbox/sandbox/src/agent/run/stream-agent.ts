@@ -52,8 +52,8 @@ import { withSwitchTold } from "./turn/turn-switch.js";
 import type { HeldTurn } from "./turn/holds/held-turn.js";
 import { keepableOf, keptWarmOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
-import { dispatchToRunner } from "./placement/runner-child-note.js";
-import { remoteFailuresHere, unbooked } from "../../runners/held-turns/remote-failure.js";
+import { dispatchSettled } from "./settle/runner-settlement.js";
+import { unbooked } from "../../runners/held-turns/remote-failure.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
@@ -203,8 +203,8 @@ const placementOf = (
             { conversationId: id, snapshot, runner, signal },
             {
                 compose: () => ensureComposedWorktree(services, input, id, input.worktreeBase, entersNamespace(input), { mirror: true }),
-                // What carries a failed turn on is this sandbox's to decide, never the runner's (remote-failure.ts).
-                dispatch: (worktree) => remoteFailuresHere(services, { ...input, conversationId: id }, runner, dispatchToRunner(services, { ...input, conversationId: id }, runner, worktree, signal)),
+                // A failed turn is carried on by this sandbox, never the runner, and the turn is settled here too (runner-settlement.ts).
+                dispatch: (worktree) => dispatchSettled(services, { ...input, conversationId: id }, runner, worktree, signal),
             },
         );
     }

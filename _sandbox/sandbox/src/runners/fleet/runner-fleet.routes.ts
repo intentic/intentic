@@ -23,15 +23,18 @@ import { bearerPeer } from "../../peers/peer-store.js";
 
 export type RunnerFleetDeps = Pick<Services, "runners" | "agents">;
 
-/** Undefined when the request is a runner reading for a conversation placed on it; otherwise the answer that refuses it. */
-const refuseUnplaced = async (services: RunnerFleetDeps, c: Context<AppEnv>): Promise<Response | undefined> => {
+/**
+ * The conversation a runner's request names, where this sandbox placed it on that runner; otherwise the answer that
+ * refuses it, marked with `doorHeader` so the runner tells this door's refusal from a parent without the door.
+ */
+export const placedOnRunner = async (services: RunnerFleetDeps, c: Context<AppEnv>, doorHeader: string): Promise<string | Response> => {
     const runner = await bearerPeer(services.runners, c);
     if (runner instanceof Response) {
         return runner;
     }
     const conversationId = c.req.header(RUNNER_FLEET_CONVERSATION_HEADER) ?? "";
     if (conversationId !== "" && worktreeOf(services.agents.entry(conversationId))?.runner === runner) {
-        return undefined;
+        return conversationId;
     }
     // Said apart from a handle nobody answers to, so the runner reads its own record instead: a conversation this sandbox
     // never placed there (a child a runner turn started) is the runner's.
@@ -40,16 +43,16 @@ const refuseUnplaced = async (services: RunnerFleetDeps, c: Context<AppEnv>): Pr
         placed: false,
         message: `This sandbox placed no conversation ${conversationId === "" ? "" : `\`${conversationId}\` `}on the runner "${runner}".`,
     };
-    return c.json(refusal, 404, { [RUNNER_FLEET_DOOR_HEADER]: "1" });
+    return c.json(refusal, 404, { [doorHeader]: "1" });
 };
 
 /** One fleet read behind the door: answered only for a runner reading for a conversation placed on it. */
 export const runnerFleetDoor =
     (services: RunnerFleetDeps, read: (c: Context<AppEnv>) => Promise<Response>) =>
     async (c: Context<AppEnv>): Promise<Response> => {
-        const refused = await refuseUnplaced(services, c);
-        if (refused !== undefined) {
-            return refused;
+        const placed = await placedOnRunner(services, c, RUNNER_FLEET_DOOR_HEADER);
+        if (placed instanceof Response) {
+            return placed;
         }
         const answer = await read(c);
         answer.headers.set(RUNNER_FLEET_DOOR_HEADER, "1");

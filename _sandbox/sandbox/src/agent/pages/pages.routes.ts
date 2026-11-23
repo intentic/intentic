@@ -11,7 +11,7 @@ import { workspaceReads } from "../../workspace/workspace-reads.js";
 import { liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { callForApp } from "./mcp-apps.js";
 import { reportPageErrors } from "./page-errors.js";
-import { pageMediaKeyPath, verifiedPageMedia } from "./page-media.js";
+import { pageMediaKeyPath, verifiedPageMedia } from "../../workspace/files/stored/stored-page-media.js";
 import { pageMediaBinding } from "./page-media.routes.js";
 import { PAGES_DIR,readStoredPage } from "../../workspace/files/stored/stored-pages.js";
 

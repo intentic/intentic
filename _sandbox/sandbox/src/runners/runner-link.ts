@@ -20,6 +20,8 @@ import { opt } from "../opt.js";
 import { version } from "../version.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { createRunnerService } from "./runner-service.js";
+import type { RunnerCardStops } from "./live/runner-live-wiring.js";
+import { parentUplink } from "./uplink/parent-uplink.js";
 
 /* A runner holds one parent socket through the sandbox-contract peer dial. */
 
@@ -45,8 +47,14 @@ const writeReading = async (path: string, reading: RunnerLinkReading): Promise<v
 // answers (a turn's events, a patch of up to 32 MiB, files of up to 8 MiB as base64) are most of what crosses this link,
 // and the parent negotiates permessage-deflate on it (http/peer-deflate.ts).
 // `working` is the work a restart would cut (bootstrap/working-now.ts, handed in by main.ts: runners/ reads nothing of bootstrap/).
-export const startRunnerLink = (services: Services, identity: RunnerIdentity, working: () => number, readingPath = RUNNER_LINK_PATH): PeerLink => {
-    const handler = new RPCHandler(createRunnerService(services, identity));
+export const startRunnerLink = (
+    services: Services,
+    identity: RunnerIdentity,
+    working: () => number,
+    readingPath = RUNNER_LINK_PATH,
+    stops?: RunnerCardStops,
+): PeerLink => {
+    const handler = new RPCHandler(createRunnerService(services, identity, stops));
     let revoked = false;
     // Called only from the loop's callbacks, which it makes from its first dial on, never before dialPeer has returned
     // (that dial awaits `open`), and from the refresh below: `link` is always assigned by then.
@@ -89,6 +97,8 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity, wo
         },
         revoked: () => {
             revoked = true;
+            // A revoked runner's token opens nothing at the parent: its netd stops dialling it too.
+            parentUplink.want(undefined);
             publish();
             services.logger.error(
                 { id: identity.id },

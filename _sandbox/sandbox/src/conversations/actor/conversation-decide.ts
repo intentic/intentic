@@ -188,8 +188,9 @@ export type ConversationEvent =
     // The card's lists of the conversation's background jobs and of its workflow runs still going, each whole, as read now.
     | { readonly kind: "jobs-shown"; readonly jobs: readonly AgentJob[] }
     | { readonly kind: "script-runs-shown"; readonly runs: readonly AgentScriptRun[] }
-    // The card's list of its armed watches, whole; empty once the last one fires or is stopped.
+    // The card's list of its armed watches, whole; empty once the last one fires or is stopped. `runner-shown`: its runner's.
     | { readonly kind: "watches-shown"; readonly watches: readonly AgentWatch[] }
+    | { readonly kind: "runner-shown"; readonly jobs: readonly AgentJob[]; readonly watches: readonly AgentWatch[] }
     // A turn the sandbox had on its way to it (conversation-holdings.ts) went nowhere: a card at rest reads its own ending again.
     | { readonly kind: "turn-not-coming" }
     // The card's list of what it still waits on people for, whole; empty once the last need is met or answered.
@@ -742,15 +743,12 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "jobs-shown": (state, event) => ({ state: { ...state, jobs: event.jobs }, effects: BROADCAST, reply: undefined }),
     "script-runs-shown": (state, event) => ({ state: { ...state, scriptRuns: event.runs }, effects: BROADCAST, reply: undefined }),
     "watches-shown": (state, event) => ({ state: { ...state, watches: event.watches }, effects: BROADCAST, reply: undefined }),
+    "runner-shown": (state, { jobs, watches }) => ({ state: { ...state, runnerJobs: jobs, runnerWatches: watches }, effects: BROADCAST, reply: undefined }),
     "turn-not-coming": (state) => (state.phase.kind === "running" ? unchanged(state, undefined) : { state, effects: BROADCAST, reply: undefined }),
     "needs-shown": (state, event) => ({ state: { ...state, needs: event.needs }, effects: BROADCAST, reply: undefined }),
     "loop-shown": (state, event) => ({ state: { ...state, loop: event.loop }, effects: BROADCAST, reply: undefined }),
     "workflow-shown": (state, event) => ({ state: { ...state, workflow: event.workflow }, effects: BROADCAST, reply: undefined }),
-    "steers-taken": (state) =>
-        unchanged(
-            { ...state, steers: { ...state.steers, slots: [] } },
-            state.steers.slots.map((box) => box.checkpoint),
-        ),
+    "steers-taken": (state) => unchanged({ ...state, steers: { ...state.steers, slots: [] } }, state.steers.slots.map((box) => box.checkpoint)),
     "queue-joined": (state, event) => withQueue(state, joined(state.queue, event.item), undefined),
     "queue-scheduled": (state, event) => {
         const booked = withQueue(state, scheduled(state.queue, event.item, event.booking), undefined);

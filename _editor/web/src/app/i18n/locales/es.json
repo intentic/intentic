@@ -1437,6 +1437,7 @@
             "open": "Abierta",
             "apps": "Apps",
             "webDetail": "Una página en tu propio navegador",
+            "runnerDesktop": "Escritorio en {runner}",
             "more": "Abrir app",
             "startIn": "Iniciar una app en {section}",
             "runDetail": "En el sandbox o en tus ordenadores"
@@ -3852,7 +3853,9 @@
             "disarm": "Desactivar",
             "endNow": "Terminar ya",
             "leftForYou": "El agente dejó esto en marcha para ti.",
+            "nothingStopped": "No se detuvo nada: {reason}",
             "openInPreview": "Abrir en la vista previa",
+            "previewFailed": "No se pudo abrir la vista previa de ese servidor.",
             "running": "En marcha · {elapsed}",
             "servedNowhere": "Dejado en marcha para ti · {elapsed}",
             "servedOn": "Dejado en marcha para ti en {ports} · {elapsed}",

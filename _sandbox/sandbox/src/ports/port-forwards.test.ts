@@ -59,3 +59,25 @@ test("unforward frees the slot for the next forward", async () => {
     tick();
     expect(await forwards.forward(4000, "127.0.0.1")).toBe("a");
 });
+
+test("a runner's port takes a slot of the same table, apart from this sandbox's port of the same number", async () => {
+    const probe = jest.fn(async () => "http" as const);
+    const forwards = createPortForwards(SLOTS, probe);
+    expect(await forwards.forward(5173, "127.0.0.1")).toBe("a");
+    tick();
+    expect(forwards.forwardRunner("r1", 5173)).toBe("b");
+    tick();
+    expect(forwards.forwardRunner("r2", 5173)).toBe("c");
+    // Idempotent per runner and port, and never probed: the port is the runner's.
+    expect(forwards.forwardRunner("r1", 5173)).toBe("b");
+    expect(forwards.slotOf(5173)).toBe("a");
+    expect(forwards.slotOfRunner("r1", 5173)).toBe("b");
+    expect(forwards.targetOf("b")).toEqual({ port: 5173, host: "127.0.0.1", scheme: "http", runner: "r1" });
+    expect(forwards.targetOf("a")).toEqual({ port: 5173, host: "127.0.0.1", scheme: "http" });
+    expect(probe).toHaveBeenCalledTimes(1);
+    // A local forward of the same number keeps its own slot; unforwarding the runner's frees only its.
+    expect(await forwards.forward(5173, "127.0.0.1")).toBe("a");
+    forwards.unforwardRunner("r1", 5173);
+    expect(forwards.targetOf("b")).toBeUndefined();
+    expect(forwards.targetOf("c")).toMatchObject({ runner: "r2" });
+});

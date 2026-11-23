@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import { allLoaded } from "@intentic/extension-api";
 import { computed, type Ref } from "vue";
@@ -8,6 +9,7 @@ import { stopJob } from "../../models/fleet/useAgents-actions";
 import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { usePublicOutbox } from "../../models/workspace/push/usePublicOutbox";
+import { runnerPreviewTargets } from "../../models/preview/runnerPreviews";
 import { appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "../../models/preview/previewModel";
 
 // The live list. `active` gates the per-monorepo apps fan-out while the panel is mounted; panels/outbox ride reads the
@@ -45,7 +47,7 @@ export function usePreviewTargets(active: Ref<boolean>) {
             (appsQuery.data.value ?? []).flatMap(({ repo, apps }) =>
                 appTargets(repo, apps, panels.value.find((panel) => panel.repo === repo)?.windows ?? []),
             ),
-            portTargets(offered.value),
+            [...portTargets(offered.value), ...runnerPreviewTargets()],
             publicTarget(publicFiles.value),
         ),
     );
@@ -54,8 +56,12 @@ export function usePreviewTargets(active: Ref<boolean>) {
     // left running for the person is stopped through its conversation, the one place that knows it as a job.
     const act = async (target: PreviewTarget, verb: `start` | `stop`): Promise<void> => {
         if (target.job !== undefined && verb === `stop`) {
-            await stopJob(target.job.conversationId, target.job.jobId);
+            // The ports list is read again whatever came of it: a job that had already ended is off it too.
+            const outcome = await stopJob(target.job.conversationId, target.job.jobId);
             await queryClient.invalidateQueries({ queryKey: rpcPrefix(`ports.list`) });
+            if (!outcome.stopped) {
+                throw new Error(t(`chat.chatLeftRunning.nothingStopped`, { reason: outcome.stopReason ?? `` }));
+            }
             return;
         }
         if (target.kind === `repo` && target.repo !== undefined) {

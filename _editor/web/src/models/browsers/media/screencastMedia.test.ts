@@ -112,6 +112,9 @@ it("opens the media socket on the base the window's socket was dialled on, loopb
     // A mint that found no sandbox keeps the way in the last socket took.
     media.address(undefined);
     expect(base?.()).toBe(`wss://sandbox-abcdef012345.sbx.example.test`);
+    // A runner's window: cut at the last `/system/`, so its media goes down the same runner's uplink.
+    media.address(`wss://sandbox-abcdef012345.sbx.example.test/system/runner-view/rog/system/browser-view?ticket=d&session=browser-1`);
+    expect(base?.()).toBe(`wss://sandbox-abcdef012345.sbx.example.test/system/runner-view/rog`);
 });
 
 it("stops waiting to give up once castd says hello", () => {

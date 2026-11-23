@@ -33,6 +33,7 @@ import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
 import { createRemoteRoutes } from "./hosts/remote/remote.routes.js";
+import { createRunnerViewsRoutes } from "./runners/live/runner-views.routes.js";
 import { createBrowsingSystemRoutes } from "./browser/history/browsing.routes.js";
 import { createBookmarksRoutes } from "./browser/bookmarks/bookmarks.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
@@ -186,6 +187,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     roles: createRolesRoutes(services),
+    // A person's live view of the runner a conversation runs on (runners/live/).
+    runners: createRunnerViewsRoutes(services),
     services: createServicesRoutes(services),
     org: createOrgRoutes(services),
     privacy: createPrivacyRoutes(services),

@@ -15,6 +15,8 @@ import WorkTerminals from "./WorkTerminals.vue";
 import { useTerminalFloating } from "./terminalFloating";
 import { fetchScrollback } from "./terminalScrollback";
 import { useTerminalsQuery } from "../../models/terminal/terminalsQuery";
+import { runnerTerminalHelp } from "../../models/terminal/runnerTerminals";
+import { useChat } from "../../models/conversations/run/useChat";
 import { createTerminalTabs, type TerminalTabsSource, terminalSessionOf } from "./useTerminal";
 import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "../../models/terminal/useTerminalPanel";
 import { labelFor, stripIndex } from "./panel/stripSegments";
@@ -92,6 +94,7 @@ watch(useSandbox().reachable, (isReachable) => {
 const { help, helpNote, resolveHelp } = useTerminalHelp({
     sessions: listed.sessions,
     activeName,
+    helpOf: (name) => runnerTerminalHelp(name, (id) => useChat().conversations.value.find((open) => open.conversationId === id)?.transcript.messages.value),
     reply: (body) => postTurnControl(undefined, `reply`, body),
 });
 const {

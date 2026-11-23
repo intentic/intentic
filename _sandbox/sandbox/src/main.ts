@@ -1,3 +1,4 @@
+import { stopOwnJob, stopOwnWatches } from "./conversations/card-stops.routes.js";
 import { setRunnerEnv } from "@intentic/base/git";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { HISTORY_ROOT } from "@intentic/constants";
@@ -313,7 +314,11 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep, left }: Ready,
 
     // Parent link, for a runner (or one that ever was: an identity on /history outlives an env-stripping rebuild).
     // After the gate, since a parent's first act dispatches a turn. Never fatal: a failed enrollment just logs once.
-    void startRunnerMode(services, runnerEnv, () => workingNow(services, "restart").length).catch((error: unknown) => logger.error({ err: error }, "runner: could not come online"));
+    // A person's stops on the parent's card of a conversation here reach the same functions a local card's do.
+    const cardStops = { stopJob: (id: string, jobId: string) => stopOwnJob(services, id, jobId), stopWatches: stopOwnWatches };
+    void startRunnerMode(services, runnerEnv, () => workingNow(services, "restart").length, cardStops).catch((error: unknown) =>
+        logger.error({ err: error }, "runner: could not come online"),
+    );
 
     startPhase(logger, "sweeps", () => startBootSweeps(phase));
     startPhase(logger, "restores", () => startBootRestores(phase));

@@ -35,7 +35,15 @@ const roster = {
     activity: undefined as AgentActivity | undefined,
 };
 // Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
-const stopWatching = jest.fn(async () => undefined);
+// A stop answers whether anything stopped (useAgents-actions.ts StopOutcome).
+// A press's async work through the operation that holds it, to the render it ends in.
+const flushed = async (): Promise<void> => {
+    for (let turn = 0; turn < 5; turn += 1) {
+        await Promise.resolve();
+    }
+    await nextTick();
+};
+const stopWatching = jest.fn(async (): Promise<{ stopped: boolean; stopReason?: string }> => ({ stopped: true }));
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it. The rows and
 // the held queue are what a notice's send press reads to decide whether it still has anything to send.
 const pane = {
@@ -202,6 +210,8 @@ jest.mock("../../../../lib/markdown/useMarkdown", () => {
 });
 jest.mock("../../../../models/workspace/files/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
 jest.mock("../../../../models/terminal/portPreview", () => ({ openLoopbackPreview }));
+// The conversation runs here: its `localhost:` links preview this sandbox's own ports.
+jest.mock("../../../../models/placement/runnerPlacement", () => ({ runnerOf: () => undefined }));
 jest.mock("../../../../models/changes/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
 jest.mock("../../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
 // The shield's marks read the privacy settings and a daemon query per pane; which words they mark is shieldedWords'
@@ -930,7 +940,8 @@ describe(`ChatMessageView answer body`, () => {
         markdown.parts = [{ kind: `html`, html: `<a href="http://localhost:4750/demo?x=1">Open preview</a>` }];
         const element = mount(body);
         element.querySelector<HTMLAnchorElement>(`a[href]`)!.click();
-        expect(openLoopbackPreview).toHaveBeenCalledWith({ port: 4750, path: `/demo?x=1` });
+        // No runner: the conversation runs here.
+        expect(openLoopbackPreview).toHaveBeenCalledWith({ port: 4750, path: `/demo?x=1` }, undefined);
     });
 });
 
@@ -1653,6 +1664,17 @@ describe(`condition watches`, () => {
         expect(stopWatching).toHaveBeenCalledWith(`agent-1`, `watch-2`);
     });
 
+    it(`says a stop that disarmed nothing, with the daemon's reason, rather than reading it as done`, async () => {
+        roster.watches = [armed()];
+        stopWatching.mockImplementationOnce(async () => ({ stopped: false, stopReason: `that watch has already fired or was stopped` }));
+        const element = mount(armedRow());
+
+        [...element.querySelectorAll(`button`)].find((button) => button.textContent === `Stop watching`)!.click();
+        await flushed();
+
+        expect(element.querySelector(`[role="alert"]`)?.textContent).toContain(`that watch has already fired or was stopped`);
+    });
+
     it(`says why a stop the daemon refused didn't take, since the watch keeps waking the agent`, async () => {
         roster.watches = [armed()];
         stopWatching.mockImplementationOnce(async () => {
@@ -1662,8 +1684,7 @@ describe(`condition watches`, () => {
 
         [...element.querySelectorAll(`button`)].find((button) => button.textContent === `Stop watching`)!.click();
         // The refusal settles, then the row redraws with it.
-        await nextTick();
-        await nextTick();
+        await flushed();
 
         expect(element.querySelector(`[role="alert"]`)?.textContent).toBe(`The watch registry is read-only.`);
         expect(element.textContent).not.toContain(`this chat stays put instead of picking itself back up`);

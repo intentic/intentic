@@ -20,7 +20,7 @@ use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use netd_wire::{
     Answer, DeviceUplinkState, FromNode, LENGTH_BYTES, NetdAnswer, NetdQuestion, Page,
-    PreviewRoute, Question, TerminalPlan, ToNode, frame,
+    PreviewRoute, Question, RunnerUplinkState, TerminalPlan, ToNode, frame,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::unix::OwnedWriteHalf;
@@ -91,6 +91,17 @@ pub fn nothing_here() -> PreviewRoute {
 /// Node's answer to a terminal's query string: its plan, and the member it opens for.
 pub type Planner = Arc<dyn Fn(&str) -> (TerminalPlan, Option<String>) + Send + Sync>;
 
+/// Node's answer to whether a runner view may open: the runner, the path on it, and the query as the browser sent it.
+pub type Viewer = Arc<dyn Fn(&str, &str, &str) -> Answer + Send + Sync>;
+
+fn no_views() -> Viewer {
+    Arc::new(|_, _, _| Answer::RunnerView {
+        allowed: false,
+        member: None,
+        reason: Some("no views here".into()),
+    })
+}
+
 fn no_terminals() -> Planner {
     Arc::new(|_| {
         (
@@ -111,6 +122,11 @@ pub struct Harness {
     pub reports: watch::Receiver<Vec<ToNode>>,
     /// The device uplinks netd last reported (`ToNode::DeviceUplinks`), and how many reports it sent.
     pub devices: watch::Receiver<(usize, Vec<DeviceUplinkState>)>,
+    /// The runner uplinks netd last reported (`ToNode::RunnerUplinks`), and how many reports it sent.
+    pub runners: watch::Receiver<(usize, Vec<RunnerUplinkState>)>,
+    /// Where this netd's own uplink to a parent stands (`ToNode::ParentUplink`): connected, reason, how many reports.
+    pub parent: watch::Receiver<(usize, bool, Option<String>)>,
+    viewer: Arc<std::sync::Mutex<Viewer>>,
     synced: Mutex<mpsc::UnboundedReceiver<(u32, Vec<Option<u64>>)>>,
     _netd: Child,
 }
@@ -156,6 +172,10 @@ impl Harness {
         let (tunnel_sender, tunnel) = watch::channel(None);
         let (reports_sender, reports) = watch::channel(Vec::new());
         let (devices_sender, devices) = watch::channel((0, Vec::new()));
+        let (runners_sender, runners) = watch::channel((0, Vec::new()));
+        let (parent_sender, parent) = watch::channel((0, false, None));
+        let viewer = Arc::new(std::sync::Mutex::new(no_views()));
+        let viewing = viewer.clone();
         let (synced_sender, synced) = mpsc::unbounded_channel();
         let answering = writer.clone();
         tokio::spawn(async move {
@@ -202,6 +222,27 @@ impl Harness {
                     }
                     ToNode::Ask {
                         id,
+                        question:
+                            Question::RunnerView {
+                                runner,
+                                path,
+                                query,
+                            },
+                    } => {
+                        let view = viewing.lock().unwrap().clone();
+                        let answer = FromNode::Answer {
+                            id,
+                            answer: view(&runner, &path, &query),
+                        };
+                        answering
+                            .lock()
+                            .await
+                            .write_all(&frame(&answer).unwrap())
+                            .await
+                            .unwrap();
+                    }
+                    ToNode::Ask {
+                        id,
                         question: Question::Ping,
                     } => {
                         let answer = FromNode::Answer {
@@ -236,6 +277,19 @@ impl Harness {
                             *held = uplinks;
                         });
                     }
+                    ToNode::RunnerUplinks { uplinks } => {
+                        runners_sender.send_modify(|(told, held)| {
+                            *told += 1;
+                            *held = uplinks;
+                        });
+                    }
+                    ToNode::ParentUplink { connected, reason } => {
+                        parent_sender.send_modify(|(told, up, why)| {
+                            *told += 1;
+                            *up = connected;
+                            *why = reason;
+                        });
+                    }
                 }
             }
         });
@@ -245,9 +299,17 @@ impl Harness {
             tunnel,
             reports,
             devices,
+            runners,
+            parent,
+            viewer,
             synced: Mutex::new(synced),
             _netd: netd,
         }
+    }
+
+    /// How this Node answers `Question::RunnerView` from now on.
+    pub fn set_viewer(&self, viewer: Viewer) {
+        *self.viewer.lock().unwrap() = viewer;
     }
 
     pub async fn send(&self, message: &FromNode) {
@@ -344,6 +406,30 @@ async fn serve_node_http(path: PathBuf) {
                                 .header("upgrade", "echo")
                                 // The request-target as it arrived: a relay must send origin form.
                                 .header("x-node-saw", request.uri().to_string())
+                                // Which way netd said it came in, and every header name it arrived with.
+                                .header(
+                                    "x-node-listener",
+                                    request
+                                        .headers()
+                                        .get("x-intentic-listener")
+                                        .map_or("-", |value| value.to_str().unwrap_or("?")),
+                                )
+                                .header(
+                                    "x-node-headers",
+                                    request
+                                        .headers()
+                                        .keys()
+                                        .map(|name| name.as_str())
+                                        .collect::<Vec<_>>()
+                                        .join(","),
+                                )
+                                .header(
+                                    "x-node-host",
+                                    request
+                                        .headers()
+                                        .get("host")
+                                        .map_or("-", |value| value.to_str().unwrap_or("?")),
+                                )
                                 .body(Full::new(Bytes::new()))
                                 .unwrap(),
                         );

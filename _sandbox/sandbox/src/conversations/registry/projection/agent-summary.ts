@@ -46,8 +46,15 @@ const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined
 };
 
 // What the actor keeps for its card between turns; nothing for a conversation this daemon has not heard from.
+// A runner conversation's jobs and watches, which its runner holds, are listed after this daemon's own.
 const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "scriptRuns" | "needs">> =>
-    state ?? {};
+    state === undefined
+        ? {}
+        : {
+              ...state,
+              jobs: state.runnerJobs.length === 0 ? state.jobs : [...state.jobs, ...state.runnerJobs],
+              watches: state.runnerWatches.length === 0 ? state.watches : [...state.watches, ...state.runnerWatches],
+          };
 
 // The per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the card's
 // menu and the chat's control read them together.

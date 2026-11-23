@@ -4,20 +4,26 @@ import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, shallowRef } from "vue";
 
 const roster = { jobs: undefined as AgentJob[] | undefined, watches: undefined as AgentWatch[] | undefined };
+// The runner the conversation runs on, absent for one that runs here.
+let runner: string | undefined;
 const pane = { streaming: shallowRef(false) };
-const stopJob = jest.fn((_id: string, _jobId: string) => Promise.resolve());
-const stopWatching = jest.fn((_id: string, _watchId?: string) => Promise.resolve());
+// What a stop answers: whether anything stopped, and why not (useAgents-actions.ts StopOutcome).
+type Outcome = { stopped: boolean; stopReason?: string };
+const stopJob = jest.fn((_id: string, _jobId: string): Promise<Outcome> => Promise.resolve({ stopped: true }));
+const stopWatching = jest.fn((_id: string, _watchId?: string): Promise<Outcome> => Promise.resolve({ stopped: true }));
 const previewed = jest.fn((_router: unknown, _target?: string) => undefined);
 const watched = jest.fn((_session: string) => undefined);
+const forwarded = jest.fn(async (on: string, port: number, _detail?: string) => ({ id: `port:${on}:${port}` }));
 
 jest.mock("../../../../models/fleet/useAgents", () => ({
-    useAgents: () => ({ agentById: () => ({ jobs: roster.jobs, watches: roster.watches }), stopJob, stopWatching }),
+    useAgents: () => ({ agentById: () => ({ jobs: roster.jobs, watches: roster.watches, runner }), stopJob, stopWatching }),
 }));
 jest.mock("../../../../models/conversations/panel/useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
 jest.mock("../../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
 jest.mock("../../../../models/conversations/tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
 jest.mock("../../../../workbench/browsers/browsersSurface", () => ({ openPreviewBeside: previewed }));
 jest.mock("vue-router", () => ({ useRouter: () => ({}) }));
+jest.mock("../../../../models/preview/runnerPreviews", () => ({ previewRunnerPort: forwarded }));
 
 const { default: ChatLeftRunning } = await import("./ChatLeftRunning.vue");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");
@@ -38,6 +44,14 @@ const NOW = 10_000_000;
 const job = (over: Partial<AgentJob>): AgentJob => ({ id: `job`, label: `Build`, session: `agent-1`, startedAt: NOW - 65_000, ...over });
 const watch = (over: Partial<AgentWatch>): AgentWatch => ({ id: `watch-1`, note: `CI on the pushed branch`, intervalSeconds: 60, deadlineAt: NOW + 3_600_000, ...over });
 
+// A press's async work, through the operation that holds it, to the render it ends in.
+const settled = async (): Promise<void> => {
+    for (let turn = 0; turn < 5; turn += 1) {
+        await Promise.resolve();
+    }
+    await nextTick();
+};
+
 const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`button`)];
 const labelled = (element: HTMLElement, text: string): HTMLButtonElement | undefined => buttons(element).find((button) => button.textContent?.trim() === text);
 
@@ -46,8 +60,9 @@ beforeEach(() => {
     jest.setSystemTime(NOW);
     roster.jobs = undefined;
     roster.watches = undefined;
+    runner = undefined;
     pane.streaming.value = false;
-    for (const mock of [stopJob, stopWatching, previewed, watched]) {
+    for (const mock of [stopJob, stopWatching, previewed, watched, forwarded]) {
         mock.mockClear();
     }
 });
@@ -99,6 +114,28 @@ describe(`ChatLeftRunning`, () => {
         expect(stopJob).toHaveBeenCalledWith(`agent-1`, `web`);
     });
 
+    it(`forwards a runner conversation's server through the runner before previewing it`, async () => {
+        runner = `rog`;
+        roster.jobs = [job({ id: `web`, label: `Start the web dev server`, handed: true, ports: [5173] })];
+        const element = mount();
+        labelled(element, `Open in Live app`)?.click();
+        await settled();
+        expect(forwarded).toHaveBeenCalledWith(`rog`, 5173, `Start the web dev server`);
+        expect(previewed).toHaveBeenCalledWith(expect.anything(), `port:rog:5173`);
+    });
+
+    it(`says why a runner's server would not preview, under the card`, async () => {
+        runner = `rog`;
+        roster.jobs = [job({ id: `web`, handed: true, ports: [5173] })];
+        forwarded.mockImplementationOnce(() => Promise.reject(new Error(`The runner "rog" is offline.`)));
+        const element = mount();
+        labelled(element, `Open in Live app`)?.click();
+        await settled();
+        await nextTick();
+        expect(previewed).not.toHaveBeenCalled();
+        expect(element.querySelector(`[role="alert"]`)?.textContent).toContain(`The runner "rog" is offline.`);
+    });
+
     // 2026-11-05: a server handed over before it listened showed "Left running for you on  · …" and a button that opened
     // nothing.
     it(`offers no Preview for a server left with no port yet, and names no empty port`, () => {
@@ -128,13 +165,22 @@ describe(`ChatLeftRunning`, () => {
         expect(labelled(element, `Open in Live app`)).toBeUndefined();
     });
 
+    it(`says the daemon's word when nothing was stopped, rather than reading it as done`, async () => {
+        roster.jobs = [job({ id: `web`, handed: true, ports: [5173] })];
+        // Answered, not thrown: the daemon heard the press and stopped nothing.
+        stopJob.mockImplementationOnce(() => Promise.resolve({ stopped: false, stopReason: `that job has already ended` }));
+        const element = mount();
+        labelled(element, `Stop`)?.click();
+        await settled();
+        expect(element.querySelector(`[role="alert"]`)?.textContent).toContain(`that job has already ended`);
+    });
+
     it(`says why a stop was refused, under the card`, async () => {
         roster.jobs = [job({ id: `web`, handed: true, ports: [5173] })];
         stopJob.mockImplementationOnce(() => Promise.reject(new Error(`sandbox unreachable`)));
         const element = mount();
         labelled(element, `Stop`)?.click();
-        await Promise.resolve();
-        await nextTick();
+        await settled();
         expect(element.querySelector(`[role="alert"]`)?.textContent).toContain(`sandbox unreachable`);
     });
 

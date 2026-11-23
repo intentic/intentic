@@ -156,6 +156,37 @@ test("a view waiting to retry dials again the moment the sandbox is reachable, n
     warn.mockRestore();
 });
 
+// A runner's window (another machine a conversation runs on) is dialled through `runners.openView`, never this
+// sandbox's own browser-view route; this sandbox's own windows still dial theirs.
+test("a runner's window dials the view runners.openView answers, asked afresh, and this sandbox's own window its own route", async () => {
+    const urls: string[] = [];
+    stubGlobal(
+        `WebSocket`,
+        class extends FakeSocket {
+            constructor(url: string) {
+                super();
+                urls.push(url);
+            }
+        },
+    );
+    socketUrl.mockClear();
+    const asked: unknown[] = [];
+    const runnerView = (name: string) => (name === `rog~browser-1` ? { conversationId: `conv-1`, kind: `browser-view` as const, session: `browser-1` } : undefined);
+    const runnerUrl = async (input: unknown) => {
+        asked.push(input);
+        return `wss://sandbox.test/system/runner-view/rog/system/browser-view?ticket=t1&session=browser-1`;
+    };
+    effectScope().run(() => useBrowserView(ref(`rog~browser-1`), { runnerView, runnerUrl }));
+    await waitFor(() => expect(urls).toHaveLength(1));
+    expect(urls[0]).toBe(`wss://sandbox.test/system/runner-view/rog/system/browser-view?ticket=t1&session=browser-1&media=1`);
+    expect(asked).toEqual([{ conversationId: `conv-1`, kind: `browser-view`, session: `browser-1` }]);
+    expect(socketUrl).not.toHaveBeenCalled();
+    effectScope().run(() => useBrowserView(ref(`browser-abc12345`), { runnerView, runnerUrl }));
+    await waitFor(() => expect(urls).toHaveLength(2));
+    expect(socketUrl).toHaveBeenCalledTimes(1);
+    expect(asked).toHaveLength(1);
+});
+
 test("a paste from the user's own machine arrives as text the remote page can receive", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;

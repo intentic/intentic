@@ -1437,6 +1437,7 @@
             "open": "Otwarte",
             "apps": "Aplikacje",
             "webDetail": "Strona w Twojej własnej przeglądarce",
+            "runnerDesktop": "Pulpit na {runner}",
             "more": "Otwórz aplikację",
             "startIn": "Uruchom aplikację: {section}",
             "runDetail": "W sandboxie albo na Twoich komputerach"
@@ -3852,7 +3853,9 @@
             "disarm": "Rozbrój",
             "endNow": "Zakończ teraz",
             "leftForYou": "Agent zostawił je uruchomione dla ciebie.",
+            "nothingStopped": "Nic nie zostało zatrzymane: {reason}",
             "openInPreview": "Otwórz w podglądzie",
+            "previewFailed": "Nie udało się otworzyć podglądu tego serwera.",
             "running": "Działa · {elapsed}",
             "servedNowhere": "Zostawione dla ciebie · {elapsed}",
             "servedOn": "Zostawione dla ciebie na {ports} · {elapsed}",

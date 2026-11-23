@@ -7,7 +7,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { directMode } from "../../../client/directory/directState";
 import { platformHealth } from "../../../lib/platform/platformHealth";
 import { useBrowsersQuery } from "../../../features/browsers/browsersQuery";
-import { useDesktopQuery } from "../../../features/desktop/desktopQuery";
+import { desktopsSummary, useDesktopQuery } from "../../../features/desktop/desktopQuery";
 import { usePanels } from "../../../models/extensions/usePanels";
 import { previewHealthyCount, previewOpenCount } from "../../../models/preview/previewModel";
 import { useLiveLinks } from "../../../models/sandbox/devices/useLiveLinks";
@@ -50,7 +50,8 @@ export function useRuntimeChips(): RuntimeChips {
     const terminal = useTerminalPanel();
     const activity = useTerminalActivity();
     const { sessions: browsers } = useBrowsersQuery();
-    const { windows } = useDesktopQuery();
+    const desk = useDesktopQuery();
+    const desktops = computed(() => desktopsSummary(desk.state.value));
     const { panels } = usePanels();
     const { forwarded } = usePorts();
     const { files: publicFiles } = usePublicOutbox();
@@ -78,7 +79,8 @@ export function useRuntimeChips(): RuntimeChips {
                     browsersPinned.value.flatMap((tab) => (tab.kind === `preview` ? [tab.id] : [])),
                 ),
                 // The daemon lets nobody below maintainer drive the desktop.
-                desktopWindows: canShip.value ? (windows.value ?? 0) : undefined,
+                desktopWindows: canShip.value ? (desktops.value.windows ?? 0) : undefined,
+                desktopTab: desktops.value.tab,
                 appsLabel: words.value.preview,
                 here: showing(page.browsers()),
             }),

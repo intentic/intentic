@@ -8,7 +8,7 @@ import type { AppEnv } from "../../app-env.js";
 import { createMediaTickets } from "../../auth/tokens/media-tickets.js";
 import { serveRawRoutes } from "../../http/raw-route-server.js";
 import { carryPage } from "./page-assets.js";
-import { pageMediaKeyPath } from "./page-media.js";
+import { pageMediaKeyPath } from "../../workspace/files/stored/stored-page-media.js";
 import { pageMediaBinding, pageMediaRawRoutes, type PageMediaRoutesDeps } from "./page-media.routes.js";
 import { publishPage } from "./page-store.js";
 

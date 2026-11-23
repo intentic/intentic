@@ -47,6 +47,10 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     // Loopback, as a suite's daemon is unless it says otherwise; the preview guard off until a test turns it on.
     auth: undefined,
     previewGuards: memoryPreviewGuards({ sandboxId: sandboxIdFromToken("tok"), zone: "example.com" }),
+    // No runner enrolled, and no conversation runs on one, until a test says so.
+    agents: { list: () => [], entry: () => undefined },
+    runners: { list: async () => [] },
+    runnerHub: { client: () => undefined, offline: (id: string) => `${id} is offline` },
     ...overrides,
 });
 
@@ -173,6 +177,8 @@ test("ports.forward maps a listener onto a slot and refuses reserved/dead ports"
     expect(await client.forward({ port: 3000 })).toEqual({ previewUrl: portUrl(SLOT, "example.com", sandboxIdFromToken("tok")) });
     // The daemon's own surfaces are never forwardable; an unlistened port is NOT_FOUND.
     expect(await errorCode(client.forward({ port: 8787 }))).toBe("BAD_REQUEST");
+    // Nor the loopback listener netd binds on every interface, which answers the daemon's whole API.
+    expect(await errorCode(client.forward({ port: routedConfig.local.port }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.forward({ port: 4000 }))).toBe("NOT_FOUND");
     // Unforward frees the slot; the port reads unforwarded again.
     expect(await client.unforward({ port: 3000 })).toEqual({ ok: true });
@@ -233,6 +239,45 @@ test("ports.list names the conversation's job on a port an agent's turn left run
     } finally {
         rmSync(tmp, { recursive: true, force: true });
     }
+});
+
+// A runner's port (2026-11-23): vetted by the runner, then a slot of this sandbox's own that netd carries down its uplink.
+test("ports.forward with a runner maps the runner's port once the runner says it may, and unforward frees it", async () => {
+    const portForwards = createPortForwards(portSlotsFromToken("tok"), async () => "http");
+    const vetted: number[] = [];
+    const client = routesClient(
+        portsContract,
+        createPortsRoutes(
+            portsDeps({
+                portForwards,
+                // A conversation runs on r1; this daemon signs nobody in, so the owner's own tools may read it.
+                agents: { list: () => [{ id: "c1", runner: "r1" }], entry: () => undefined },
+                runners: { list: async () => [{ id: "r1" }] },
+                runnerHub: {
+                    client: (id: string) =>
+                        id === "r1"
+                            ? {
+                                  vetPort: async ({ port }: { port: number }) => {
+                                      vetted.push(port);
+                                      return port === 9222 ? { refused: "port 9222 is a browser's DevTools port" } : {};
+                                  },
+                              }
+                            : undefined,
+                    offline: (id: string) => `${id} is offline`,
+                },
+            }),
+        ),
+    );
+    expect(await client.forward({ port: 5173, runner: "r1" })).toEqual({ previewUrl: portUrl(SLOT, "example.com", sandboxIdFromToken("tok")) });
+    expect(portForwards.targetOf(SLOT)).toMatchObject({ port: 5173, runner: "r1" });
+    // This sandbox's own port 5173 is another forward; nothing listens on it here.
+    expect(portForwards.slotOf(5173)).toBeUndefined();
+    expect(await errorCode(client.forward({ port: 9222, runner: "r1" }))).toBe("BAD_REQUEST");
+    // No conversation runs on r2: refused before anything of it is asked.
+    expect(await errorCode(client.forward({ port: 5173, runner: "r2" }))).toBe("FORBIDDEN");
+    expect(vetted).toEqual([5173, 9222]);
+    expect(await client.unforward({ port: 5173, runner: "r1" })).toEqual({ ok: true });
+    expect(portForwards.slotOfRunner("r1", 5173)).toBeUndefined();
 });
 
 // A DevTools port is the whole browser: anyone who reaches it reads every cookie and drives every tab of whichever

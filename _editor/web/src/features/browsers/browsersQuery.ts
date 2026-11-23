@@ -1,4 +1,4 @@
-import type { BrowserSession, BrowsersList, OpenBrowserResult } from "@intentic/sandbox-contract/schemas/terminal";
+import type { BrowserSession, BrowsersList, OpenBrowserInput, OpenBrowserResult } from "@intentic/sandbox-contract/schemas/terminal";
 import { computed, type ComputedRef } from "vue";
 import { optimisticUpdate } from "../../lib/optimistic";
 import { queryClient } from "../../lib/queryPersistence";
@@ -6,6 +6,9 @@ import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import type { RunnerOpenViewInput } from "@intentic/sandbox-contract/schemas/runner-views";
+import { runnerWindowView } from "../../models/browsers/runnerWindows";
+import { rosterConversationOn } from "../../models/placement/runnerPlacement";
 
 // One shared roster of the agent's browsers for the status bar's chip and the Browsers view (like terminalsQuery), so they
 // can't disagree. No pending-claim half like terminals need: the daemon mints an agent browser itself, so this
@@ -68,8 +71,23 @@ export const closeBrowserPage = async (name: string, pageId: string): Promise<vo
 // A tab in the person's own window, starting the window first when it isn't running; answers where it opened, so the
 // view can go there and put the new tab in front. The list is re-read rather than patched: the daemon pushes the
 // window's arrival anyway, and this keeps the first frame from waiting on that push.
-export const openBrowser = async (url?: string): Promise<OpenBrowserResult> => {
-    const opened = await sandboxRpc.system.openBrowser(url === undefined ? {} : { url });
+// With `runner`, the tab opens in that runner's own window, for a conversation that runs there, answered by its merged name.
+export const openBrowser = async (url?: string, runner?: string): Promise<OpenBrowserResult> => {
+    const input: OpenBrowserInput = {};
+    if (url !== undefined) {
+        input.url = url;
+    }
+    if (runner !== undefined) {
+        input.runner = runner;
+    }
+    const opened = await sandboxRpc.system.openBrowser(input);
     void queryClient.invalidateQueries({ queryKey: browsersKey });
     return opened;
+};
+
+// What a window's picture asks `runners.openView` for when the window is a runner's, read off the shared list as it
+// stands at the dial; undefined for this sandbox's own (and for one the list does not hold yet).
+export const runnerViewOf = (name: string): RunnerOpenViewInput | undefined => {
+    const window = queryClient.getQueryData<BrowsersList>(browsersKey)?.sessions.find((session) => session.name === name);
+    return window === undefined ? undefined : runnerWindowView(window, rosterConversationOn);
 };

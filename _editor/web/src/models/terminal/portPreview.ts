@@ -5,14 +5,15 @@ import { useNotifications } from "../../workbench/notifications/notifications";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 
-/* Ctrl+clicking a localhost link in a terminal, or a tap on one in a chat message. */
+/* Ctrl+clicking a localhost link in a terminal, or a tap on one in a chat message. A link in the reply of a conversation
+   that runs on a runner names the runner's loopback, so its port is forwarded with that `runner`. */
 
 // A forward that got no answer at all (fetch's TypeError, "Failed to fetch") leaves no line in the daemon's log, since
 // it may never have reached the daemon: this line, with the failed call's request id that reportClient attaches, is
 // the only record of which route the browser was on when it happened.
-const forward = async (port: number): Promise<string | undefined> => {
+const forward = async (port: number, runner?: string): Promise<string | undefined> => {
     try {
-        return (await sandboxRpc.ports.forward({ port })).previewUrl;
+        return (await sandboxRpc.ports.forward(runner === undefined ? { port } : { port, runner })).previewUrl;
     } catch (error) {
         if (error instanceof TypeError) {
             reportClient(`preview.forward-unanswered`, `forwarding port ${port} got no answer: ${error.message}`, {
@@ -23,25 +24,29 @@ const forward = async (port: number): Promise<string | undefined> => {
     }
 };
 
-// The address the daemon lists for the port once it is forwarded: what the Ports view's link opens.
-const listed = async (port: number): Promise<string | undefined> => {
+// The address the daemon lists for the port once it is forwarded: what the Ports view's link opens. A runner's port is in
+// no list of this sandbox's: the forward's own answer is all there is.
+const listed = async (port: number, runner?: string): Promise<string | undefined> => {
+    if (runner !== undefined) {
+        return undefined;
+    }
     const { ports } = await sandboxRpc.ports.list();
     return ports.find((entry) => entry.port === port && entry.forwarded)?.previewUrl;
 };
 
 // The desktop app sends every `window.open` to the system browser, a blank held tab included (as `about:blank`, which
 // Windows answers with a Store prompt), so there the finished address is handed over instead and a failure is a toast.
-export const openLoopbackPreview = (link: { port: number; path: string }): void => {
+export const openLoopbackPreview = (link: { port: number; path: string }, runner?: string): void => {
+    const ways = { forward: (port: number) => forward(port, runner), listed: (port: number) => listed(port, runner) };
     if (desktopApp() === undefined) {
-        openForwardedPort({ port: link.port, path: link.path, forward, listed });
+        openForwardedPort({ port: link.port, path: link.path, ...ways });
         return;
     }
     const { warn } = useNotifications();
     openForwardedPort({
         port: link.port,
         path: link.path,
-        forward,
-        listed,
+        ...ways,
         onError: warn,
         handOff: (url) => {
             window.open(url);

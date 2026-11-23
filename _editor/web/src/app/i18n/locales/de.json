@@ -1437,6 +1437,7 @@
             "open": "Offen",
             "apps": "Apps",
             "webDetail": "Eine Seite in deinem eigenen Browser",
+            "runnerDesktop": "Desktop auf {runner}",
             "more": "App öffnen",
             "startIn": "App starten unter {section}",
             "runDetail": "In der Sandbox oder auf deinen Computern"
@@ -3852,7 +3853,9 @@
             "disarm": "Entschärfen",
             "endNow": "Jetzt beenden",
             "leftForYou": "Der Agent hat diese für dich laufen lassen.",
+            "nothingStopped": "Nichts wurde gestoppt: {reason}",
             "openInPreview": "In der Vorschau öffnen",
+            "previewFailed": "Die Vorschau dieses Servers ließ sich nicht öffnen.",
             "running": "Läuft · {elapsed}",
             "servedNowhere": "Für dich laufen gelassen · {elapsed}",
             "servedOn": "Für dich laufen gelassen auf {ports} · {elapsed}",

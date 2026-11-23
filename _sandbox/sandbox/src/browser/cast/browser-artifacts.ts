@@ -31,9 +31,23 @@ const FILENAME_READERS: ReadonlySet<string> = new Set(["browser_run_code_unsafe"
 
 export const writesFilename = (tool: string): boolean => tool.startsWith("browser_") && !FILENAME_READERS.has(tool);
 
+// A name that already spells the output dir, workspace-relative (`.intentic/records/artifacts/browser/x.png`) or by any
+// absolute path ending in it (the main tree's, a worktree's), named relative to the output dir itself. Resolved against
+// the output dir as given, it landed nested (`browser/.intentic/records/artifacts/browser/x.png`, arena-6hpr, 2026-11-23).
+const withoutOutputPrefix = (filename: string): string => {
+    const spelled = filename.split(sep).join("/");
+    const prefix = `${BROWSER_OUTPUT_REL}/`;
+    if (spelled.startsWith(prefix)) {
+        return spelled.slice(prefix.length);
+    }
+    const at = spelled.indexOf(`/${prefix}`);
+    return at === -1 ? filename : spelled.slice(at + prefix.length + 1);
+};
+
 // Keeps the agent's chosen name, deciding only location: a name resolving outside the output dir keeps just its
 // basename, anything already inside (including a subdirectory) is left as asked.
-const inOutputDir = (outputDir: string, filename: string): string => {
+const inOutputDir = (outputDir: string, asked: string): string => {
+    const filename = withoutOutputPrefix(asked);
     const resolved = resolve(outputDir, filename);
     const rel = insideRel(outputDir, resolved);
     return rel !== undefined && rel !== "" ? resolved : join(outputDir, basename(filename));

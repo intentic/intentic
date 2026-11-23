@@ -1,6 +1,8 @@
 import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
 import { portUrl } from "@intentic/sandbox-contract/ids/hostnames";
-import { identifyPort, isDevToolsPort } from "./port-identity.js";
+import { identifyPort } from "./port-identity.js";
+import { daemonListenerPorts, portRefusal } from "./port-vet.js";
+import { forwardRunnerPort, type RunnerPortDeps } from "../runners/live/runner-ports.js";
 import type { ListeningPort } from "./port-scan.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ExtensionHost } from "../capabilities/extension-inventory/installed-extensions.js";
@@ -24,7 +26,11 @@ export interface PortJob {
 
 // `jobOn` answers from the background-job registry (agent/tools/jobs/background-jobs.ts), handed in by the router rather than
 // imported, which would tie this subsystem to the agent's in a cycle.
-export type PortsRoutesDeps = Pick<Services, "auth" | "config" | "deviceTunnels" | "portForwards" | "previewGuards" | "scanPorts" | "serviceProcesses" | "workspace"> &
+export type PortsRoutesDeps = Pick<
+    Services,
+    "auth" | "config" | "deviceTunnels" | "portForwards" | "previewGuards" | "scanPorts" | "serviceProcesses" | "workspace"
+> &
+    RunnerPortDeps &
     ExtensionHost & {
         readonly jobOn: (port: number) => PortJob | undefined;
         // Names the port of a server left for the person before it listened, from this scan, so `jobOn` answers for it
@@ -44,7 +50,7 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
     const { zone, sandboxId } = publicAddressOf(services.config);
     // The daemon's own listeners (oRPC server, preview proxy, sshd); everything else is the user's to forward.
-    const reserved = new Set([services.config.sandbox.port, services.config.preview.port, 22]);
+    const reserved = daemonListenerPorts(services.config);
 
     return {
         list: i.list.handler(async () => {
@@ -74,31 +80,27 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
                     }),
             };
         }),
-        forward: i.forward.handler(async ({ input }) => {
-            if (reserved.has(input.port)) {
-                throw new ORPCError("BAD_REQUEST", { message: `port ${input.port} belongs to the sandbox itself and can't be forwarded` });
+        forward: i.forward.handler(async ({ input, context }) => {
+            if (input.runner !== undefined) {
+                return await forwardRunnerPort(services, context.identity, input.runner, input.port, (slot) => portUrl(slot, zone, sandboxId));
             }
-            const listener = (await services.scanPorts()).find(({ port }) => port === input.port);
-            if (listener === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: `nothing is listening on port ${input.port}` });
+            const listeners = await services.scanPorts();
+            const refused = portRefusal(input.port, listeners, reserved);
+            if (refused !== undefined) {
+                throw new ORPCError(listeners.some(({ port }) => port === input.port) || reserved.has(input.port) ? "BAD_REQUEST" : "NOT_FOUND", { message: refused });
             }
-            // Refused outright, not left to the person's judgement: the row reads "Agent browser", which says nothing
-            // about the forward handing every cookie of a signed-in account to whoever has the URL.
-            if (isDevToolsPort(listener)) {
-                throw new ORPCError("BAD_REQUEST", {
-                    message: `port ${input.port} is a browser's DevTools port: it drives that browser and its signed-in sessions, so it is never forwarded`,
-                });
-            }
-            if (!listener.forwardable) {
-                throw new ORPCError("BAD_REQUEST", { message: `port ${input.port} is bound to a loopback address the preview proxy can't reach` });
-            }
+            const listener = listeners.find(({ port }) => port === input.port)!;
             // The listener's dial host rides into the forward; a `localhost` bind can be ::1-only (Vite).
             const slot = await services.portForwards.forward(input.port, listener.host);
             const url = portUrl(slot, zone, sandboxId);
             return url === undefined ? {} : { previewUrl: url };
         }),
         unforward: i.unforward.handler(({ input }) => {
-            services.portForwards.unforward(input.port);
+            if (input.runner === undefined) {
+                services.portForwards.unforward(input.port);
+            } else {
+                services.portForwards.unforwardRunner(input.runner, input.port);
+            }
             return { ok: true } as const;
         }),
         ...createPreviewGuardRoutes(services),

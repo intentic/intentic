@@ -163,6 +163,11 @@ export interface ConversationState {
     // Its armed watches as the card lists them, as watchers.ts last published them: armed as one turn ends, fired hours
     // later, so no turn resets this either.
     readonly watches: readonly AgentWatch[];
+    // (2026-11-23) The jobs and watches a runner holds for a conversation that runs there, as its feed last said
+    // (runners/live/runner-feed.ts): kept apart from this daemon's own, which its pumps replace whole, and shown beside
+    // them on the card. Empty for every conversation that runs here, and once its runner's socket goes.
+    readonly runnerJobs: readonly AgentJob[];
+    readonly runnerWatches: readonly AgentWatch[];
     // What it still waits on people for, as needs.ts last published it: a need outlives the turn that raised it, so no
     // turn resets this either.
     readonly needs: readonly AgentNeed[];
@@ -224,6 +229,8 @@ export const idleConversation = (queue: TurnQueue = NO_QUEUE): ConversationState
     jobs: [],
     scriptRuns: [],
     watches: [],
+    runnerJobs: [],
+    runnerWatches: [],
     needs: [],
     loop: undefined,
     workflow: undefined,

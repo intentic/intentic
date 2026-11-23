@@ -12,6 +12,10 @@ pub enum Listener {
     Loopback { tls: bool },
     /// A stream arriving down the ingress tunnel, whichever carrier brought it.
     Tunnel,
+    /// On a runner: a stream its parent's netd opened down the runner's uplink (2026-11-23, `parent.rs`). Routed as the
+    /// loopback port is, never guarded (the parent's netd and daemon already gated it), and marked `parent` to Node and
+    /// castd, never `loopback`.
+    Parent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,7 +129,7 @@ pub fn device_view(path: &str) -> Option<DeviceView<'_>> {
     let named = rest.strip_prefix('/')?;
     Some(match named.split_once('/') {
         Some((device, session))
-            if crate::devices::is_name(device) && crate::devices::is_name(session) =>
+            if crate::uplinks::is_name(device) && crate::uplinks::is_name(session) =>
         {
             DeviceView::Session {
                 route,
@@ -142,11 +146,93 @@ pub fn is_device_uplink(path: &str) -> bool {
     path == browser_wire::DEVICE_UPLINK_PATH
 }
 
+/// A runner's netd dialling its uplink to this parent: the exact path, nothing under it.
+pub fn is_runner_uplink(path: &str) -> bool {
+    path == browser_wire::RUNNER_UPLINK_PATH
+}
+
+/// The desktop's view socket on a runner, which the daemon serves (`desktop/desktop-view.routes.ts`).
+pub const DESKTOP_VIEW_PATH: &str = "/system/desktop-view";
+
+/// What a person may open of a runner through `RUNNER_VIEW_PATH`: the whole allowlist. Each but the media socket opens
+/// only with a ticket the parent's daemon minted for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunnerRoute {
+    Terminal,
+    BrowserView,
+    DesktopView,
+    /// A window's (or the desktop's) media socket, which castd's own token admits.
+    Media(String),
+}
+
+impl RunnerRoute {
+    /// The path asked for on the runner.
+    pub fn path(&self) -> String {
+        match self {
+            Self::Terminal => browser_wire::TERMINAL_PATH.to_owned(),
+            Self::BrowserView => browser_wire::BROWSER_VIEW_PATH.to_owned(),
+            Self::DesktopView => DESKTOP_VIEW_PATH.to_owned(),
+            Self::Media(session) => format!("{}/{session}", browser_wire::BROWSER_MEDIA_PATH),
+        }
+    }
+
+    /// Whether the parent's daemon must admit it with a ticket before it opens.
+    pub fn ticketed(&self) -> bool {
+        !matches!(self, Self::Media(_))
+    }
+}
+
+/// What a request under the runner view path asks for: one runner's allowed route, a name netd cannot use, or a path on
+/// the runner that is not on the allowlist.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunnerView {
+    Route { runner: String, route: RunnerRoute },
+    BadName,
+    NotAllowed,
+}
+
+/// `/system/runner-view/<runner>/<rest>`, the runner `[A-Za-z0-9_-]{1,64}` and `<rest>` exactly one of
+/// `system/terminal`, `system/browser-view`, `system/desktop-view` or `system/browser-media/<session>` (the session a
+/// name too). Matched as written: no decoding, no dot segments, nothing after, so `system/terminal/../../orpc` or
+/// `system%2Fterminal` is simply not on the list.
+pub fn runner_view(path: &str) -> Option<RunnerView> {
+    let rest = path.strip_prefix(browser_wire::RUNNER_VIEW_PATH)?;
+    if rest.is_empty() {
+        return Some(RunnerView::BadName);
+    }
+    let named = rest.strip_prefix('/')?;
+    let Some((runner, asked)) = named.split_once('/') else {
+        return Some(RunnerView::BadName);
+    };
+    if !crate::uplinks::is_name(runner) {
+        return Some(RunnerView::BadName);
+    }
+    let route = match asked {
+        "system/terminal" => RunnerRoute::Terminal,
+        "system/browser-view" => RunnerRoute::BrowserView,
+        "system/desktop-view" => RunnerRoute::DesktopView,
+        other => match other.strip_prefix("system/browser-media/") {
+            Some(session) if crate::uplinks::is_name(session) => {
+                RunnerRoute::Media(session.to_owned())
+            }
+            _ => return Some(RunnerView::NotAllowed),
+        },
+    };
+    Some(RunnerView::Route {
+        runner: runner.to_owned(),
+        route,
+    })
+}
+
 pub fn target(listener: Listener, host: &str, sandbox_id: Option<&str>) -> Target {
     match listener {
         Listener::Daemon | Listener::Loopback { tls: true } => Target::Node,
-        Listener::Loopback { tls: false } if is_preview_host(host, sandbox_id) => Target::Preview,
-        Listener::Loopback { tls: false } => Target::Node,
+        Listener::Loopback { tls: false } | Listener::Parent
+            if is_preview_host(host, sandbox_id) =>
+        {
+            Target::Preview
+        }
+        Listener::Loopback { tls: false } | Listener::Parent => Target::Node,
         Listener::Preview | Listener::Tunnel if is_daemon_host(host, sandbox_id) => Target::Node,
         Listener::Preview | Listener::Tunnel => Target::Preview,
     }
@@ -287,6 +373,95 @@ mod tests {
         assert!(is_device_uplink("/system/device-uplink"));
         assert!(!is_device_uplink("/system/device-uplink/"));
         assert!(!is_device_uplink("/system/device-uplinks"));
+    }
+
+    #[test]
+    fn a_runner_view_is_only_what_the_allowlist_names() {
+        assert_eq!(
+            runner_view("/system/runner-view/r1/system/terminal"),
+            Some(RunnerView::Route {
+                runner: "r1".into(),
+                route: RunnerRoute::Terminal
+            })
+        );
+        assert_eq!(
+            runner_view("/system/runner-view/r-2/system/browser-view"),
+            Some(RunnerView::Route {
+                runner: "r-2".into(),
+                route: RunnerRoute::BrowserView
+            })
+        );
+        assert_eq!(
+            runner_view("/system/runner-view/r1/system/desktop-view"),
+            Some(RunnerView::Route {
+                runner: "r1".into(),
+                route: RunnerRoute::DesktopView
+            })
+        );
+        assert_eq!(
+            runner_view("/system/runner-view/r1/system/browser-media/desk_1"),
+            Some(RunnerView::Route {
+                runner: "r1".into(),
+                route: RunnerRoute::Media("desk_1".into())
+            })
+        );
+        for bad in [
+            "/system/runner-view",
+            "/system/runner-view/",
+            "/system/runner-view/r1",
+            "/system/runner-view/../system/terminal",
+            "/system/runner-view/r.1/system/terminal",
+        ] {
+            assert_eq!(runner_view(bad), Some(RunnerView::BadName), "{bad}");
+        }
+        for refused in [
+            "/system/runner-view/r1/",
+            "/system/runner-view/r1/workspace/raw",
+            "/system/runner-view/r1/orpc/agents/list",
+            "/system/runner-view/r1/system/terminal/",
+            "/system/runner-view/r1/system/terminal/../../orpc",
+            "/system/runner-view/r1/system%2Fterminal",
+            "/system/runner-view/r1/system/browser-media",
+            "/system/runner-view/r1/system/browser-media/",
+            "/system/runner-view/r1/system/browser-media/a/b",
+            "/system/runner-view/r1/system/browser-media/a.b",
+            "/system/runner-view/r1/system/device-uplink",
+            "/system/runner-view/r1/system/runner-uplink",
+            "/system/runner-view/r1/system/vitals",
+        ] {
+            assert_eq!(
+                runner_view(refused),
+                Some(RunnerView::NotAllowed),
+                "{refused}"
+            );
+        }
+        assert_eq!(runner_view("/system/runner-viewx/r1/system/terminal"), None);
+        assert_eq!(runner_view("/system/runners/connect"), None);
+        assert!(is_runner_uplink("/system/runner-uplink"));
+        assert!(!is_runner_uplink("/system/runner-uplink/x"));
+        assert_eq!(
+            RunnerRoute::Media("s".into()).path(),
+            "/system/browser-media/s"
+        );
+        assert!(!RunnerRoute::Media("s".into()).ticketed());
+        assert!(RunnerRoute::Terminal.ticketed());
+    }
+
+    #[test]
+    fn a_parent_stream_routes_as_the_loopback_port_does() {
+        assert_eq!(
+            target(Listener::Parent, "preview-web.localhost", None),
+            Target::Preview
+        );
+        assert_eq!(target(Listener::Parent, "localhost", None), Target::Node);
+        assert_eq!(
+            target(
+                Listener::Parent,
+                "sandbox-abcdef012345.sbx.example.test",
+                Some("abcdef012345")
+            ),
+            Target::Node
+        );
     }
 
     #[test]

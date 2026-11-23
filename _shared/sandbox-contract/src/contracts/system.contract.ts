@@ -51,8 +51,8 @@ import {
     OpenBrowserInputSchema,
     OpenBrowserResultSchema,
     ReopenBrowserPageInputSchema,
-    DesktopStateSchema,
     SubagentsListSchema,
+    SystemDesktopSchema,
     TerminalNameParamSchema,
     TerminalScrollbackQuerySchema,
     TerminalScrollbackSchema,
@@ -445,7 +445,7 @@ export const systemContract = {
             description:
                 "Whether the sandbox's desktop is up, which display it is, and which windows are open on it. The live picture of it, or of one window on it, comes over a separate socket; this says whether there is anything to see.",
         })
-        .output(DesktopStateSchema),
+        .output(SystemDesktopSchema),
     // In-process and spawned alike: the board draws each under the card of the conversation that started it, and a chat
     // draws it on the card of the call that started it. Pushed through the `subagents` runtime domain, never polled. A
     // subagent's work is read where it lives: an in-process one's on its delegation's card in its parent's record, a

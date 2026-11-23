@@ -5,7 +5,7 @@ import { pagesContract } from "@intentic/sandbox-contract/contracts/pages.contra
 import { pageMediaScript } from "@intentic/sandbox-contract/text/pages";
 import type { ProvenCaller } from "../../auth/auth.js";
 import { createMediaTickets } from "../../auth/tokens/media-tickets.js";
-import { pageMediaKeyPath, signPageMedia } from "./page-media.js";
+import { pageMediaKeyPath, signPageMedia } from "../../workspace/files/stored/stored-page-media.js";
 import { pageMediaBinding } from "./page-media.routes.js";
 import { unstubbed } from "@intentic/testing";
 import { errorCode, routesClient } from "../../harness/route-client.testing.js";

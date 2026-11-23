@@ -1,7 +1,7 @@
 import type { FromNode } from "@intentic/sandbox-contract/netd-wire";
 import type { DeviceUplinksReport } from "../../netd/netd-link.js";
 
-/* The daemon's half of the computers' uplinks netd holds (netd's devices.rs): what netd last reported of each, and the
+/* The daemon's half of the computers' uplinks netd holds (netd's uplinks.rs): what netd last reported of each, and the
    registrations sent to it. netd keeps a registration across a daemon restart, so this starts knowing nothing and learns
    the whole of it from netd's first report after the hello; and a netd older than device uplinks never reports, so a
    registration is sent only once one has arrived (an older netd closes the link on a frame kind it does not know). */

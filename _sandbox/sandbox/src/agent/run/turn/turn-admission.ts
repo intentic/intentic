@@ -10,7 +10,7 @@ import { type Booking, holdOf, type QueuedItem, together, waitingOf } from "../.
 import { AFTER_RUNNING_TURN, goesFirst, heldBehindLimit, releaseHeldBy } from "../../../conversations/queue-waits.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
 import { forgetConversations } from "../../../conversations/registry/archive.js";
-import { conversationProfile, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
+import { conversationProfile, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { Steer, TurnInput, TurnStarter, Unqueued, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
@@ -19,6 +19,7 @@ import { recordConversationPrompt, recordPrompt } from "../../../sessions/search
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
 import { keepReceipt, receiptOf } from "./message-receipts.js";
 import { steerComposed } from "./turn-interactions.js";
+import { runnerOfConversation, steerOnRunner } from "./runner-steer.js";
 import { bookingFor, bookingOfAsk, unbookable } from "./booking-ask.js";
 import { bookContinuation, continueQueued } from "./continuation.js";
 import { checkBookedPower } from "../../../hosts/power/host-power.js";
@@ -61,25 +62,11 @@ const rebooked = (daemon: Services, conversationId: string, booking: Booking, mo
 // Hands the words to the live turn wherever it runs: composed against this workspace for a local one, uncomposed to a
 // runner's, whose paths resolve only in its own workspace.
 const handOver = async (services: Services, conversationId: string, steer: PersonSteer): Promise<true | Unsteered> => {
-    const runnerId = worktreeOf(services.agents.entry(conversationId))?.runner;
+    const runnerId = runnerOfConversation(services, conversationId);
     if (runnerId === undefined) {
         return steeredOr(await steerComposed(services, conversationId, { ...steer, voice: "person" }));
     }
-    const client = services.runnerHub.client(runnerId);
-    if (client === undefined) {
-        return { why: `the runner "${runnerId}" is offline, so nothing is running to say this to.` };
-    }
-    const delivered = await client.steer({
-        conversationId,
-        text: steer.text,
-        attachments: steer.attachments?.slice(),
-        mentions: steer.mentions?.slice(),
-        editorContext: steer.editorContext,
-    });
-    if (delivered.invalid !== undefined) {
-        return { invalid: delivered.invalid };
-    }
-    return delivered.applied || NOT_STEERABLE;
+    return steerOnRunner(services, runnerId, conversationId, { ...steer, voice: "person" });
 };
 
 /** A person's words into the live turn: drawn as their row, its rewind slot reserved, and filed for search. */

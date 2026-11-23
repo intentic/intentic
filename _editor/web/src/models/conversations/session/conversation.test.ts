@@ -12,6 +12,8 @@ import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import type { SandboxCallContext } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
+import { applyTurnEntry } from "./turnFacts";
+import type { TurnContext,AttachHead } from "../../../client/sandbox/streams/turnStream";
 import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { mirrorKey, mirrorKeyOf, persistable } from "../transcript/transcriptCache";
 import { setRecordsSwitches } from "../../../client/sandbox/daemon/recordedSwitches";
@@ -37,7 +39,6 @@ import {
     recordedRows,
     turnsOf,
 } from "../transcript/transcript";
-import type { AttachHead } from "../../../client/sandbox/streams/turnStream";
 
 // How a call was aimed and paced, as the typed client hands it to a procedure.
 interface CallOptions {
@@ -4133,5 +4134,24 @@ describe(`a conversation's sandbox`, () => {
         expect(mirrorKeyOf(fresh)).not.toBe(mirrorKeyOf(old));
         expect(mirrorKeyOf(old)).toBe(mirrorKey(`sb-old`, `home-a1b2c3`));
         expect(mirrorKeyOf(fresh)).toBe(mirrorKey(`sb-new`, `home-a1b2c3`));
+    });
+});
+
+// A turn's `terminal` and `browser` facts relayed from a runner (`runner` set): the session is the runner's, so the
+// conversation holds the runner's terminal tab and the runner's window under the name this sandbox lists it by, and
+// nothing is surfaced in this sandbox's own lists, where no such session is.
+describe(`a turn relayed from a runner`, () => {
+    const TURN: TurnContext = { run: `run-1`, provider: `claude`, account: undefined, harness: `native` };
+
+    it(`holds the runner's terminal tab for a terminal relayed from a runner`, () => {
+        const chat = new Conversation(`conv-1`);
+        applyTurnEntry(chat, { kind: `fact`, seq: 1, fact: { kind: `terminal`, session: `agent-9`, runner: `rog` } }, TURN, false);
+        expect(chat.agentTerminal.value).toBe(`runner~rog~conv-1~agent-9`);
+    });
+
+    it(`holds the runner's window by its merged name for a browser relayed from a runner`, () => {
+        const chat = new Conversation(`conv-1`);
+        applyTurnEntry(chat, { kind: `fact`, seq: 2, fact: { kind: `browser`, session: `browser-9`, runner: `rog` } }, TURN, false);
+        expect(chat.agentBrowser.value).toBe(`rog~browser-9`);
     });
 });

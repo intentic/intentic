@@ -20,6 +20,7 @@ import type { TurnTools } from "../../providers/agent-request.js";
 import { subagentWaitServer } from "../../subagents/waiting/subagent-wait.js";
 import { childResultDoor } from "../../subagents/child-records.js";
 import { workflowTools } from "../../subagents/workflows/script-run-tools.js";
+import { parentSubagentsWrap } from "../../subagents/waiting/parent-forward.js";
 import type { SecretAccess, SecretLane } from "../../../secrets/secret-access.js";
 import { watchServer } from "../../verification/watch-server.js";
 import type { WatchPlacement } from "../../verification/watchers.js";
@@ -52,6 +53,8 @@ export type HarnessServersDeps = Pick<
     | "secretUses"
     | "usage"
     | "workspace"
+    // Filled only on a runner (runners/runners-slice.ts), whose children tools go to its parent.
+    | "runnerParent"
 >;
 
 // Secret names grouped by the credential they belong to, so a command naming two secrets of one credential is one
@@ -241,17 +244,25 @@ export const secretsServerFor = (deps: HarnessServersDeps, turn: TypistTurn): Mc
 // `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, `stop` ends one by either of its ids, and
 // `spawn` (same server) starts a full agent on any connected provider; `wait`, `keep` and `stop` are always offered, the rest
 // withheld without the delegate shelf and full agency.
-export const subagentsServerFor = (deps: HarnessServersDeps, { context, role }: DaemonServerTurn): McpSdkServerConfigWithInstance =>
-    subagentWaitServer({
-        conversationId: context.base.spec.conversationId,
-        logsDir: join(deps.config.historyRoot, "logs"),
-        conversations: deps.conversations,
-        signal: context.base.signal,
-        ...opt("children", context.children !== undefined && mayDelegate(role) ? context.children : undefined),
-        ...opt("extraTools", context.workflows !== undefined && mayDelegate(role) ? workflowTools(context.workflows, context.base.signal) : undefined),
-        // A spawned child its parent gave a result schema hands its value back here, whatever its role's shelves.
-        ...opt("result", childResultDoor(deps, context.base.spec.conversationId)),
-    });
+// On a runner, the tools that touch children are run by the parent for a conversation it placed here
+// (agent/subagents/waiting/parent-forward.ts); the same tools are offered either way.
+export const subagentsServerFor = (deps: HarnessServersDeps, { context, role }: DaemonServerTurn): McpSdkServerConfigWithInstance => {
+    const conversationId = context.base.spec.conversationId;
+    const logsDir = join(deps.config.historyRoot, "logs");
+    return subagentWaitServer(
+        {
+            conversationId,
+            logsDir,
+            conversations: deps.conversations,
+            signal: context.base.signal,
+            ...opt("children", context.children !== undefined && mayDelegate(role) ? context.children : undefined),
+            ...opt("extraTools", context.workflows !== undefined && mayDelegate(role) ? workflowTools(context.workflows, context.base.signal) : undefined),
+            // A spawned child its parent gave a result schema hands its value back here, whatever its role's shelves.
+            ...opt("result", childResultDoor(deps, conversationId)),
+        },
+        parentSubagentsWrap(deps, { conversationId, signal: context.base.signal, logsDir, cwd: context.localCwd }),
+    );
+};
 
 // Withheld without shell power or a conversation to wake.
 export const watchServerFor = (
