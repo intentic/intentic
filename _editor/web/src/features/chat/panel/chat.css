@@ -894,6 +894,15 @@
 .chat-bar .composer-ghost:hover {
     color: var(--color-content);
 }
+/* NEW CHAT IS THE BAR'S ONE PRIMARY PRESS, so it keeps a quiet primary wash at rest (tone.ts `primary`) while tuck and
+   pop-out stand back. A tint, not a fill: the composer's send is the panel's filled action and this must not outrank it. */
+.chat-bar .composer-ghost.chat-new {
+    background: var(--color-primary-tint);
+    color: var(--color-accent);
+}
+.chat-bar .composer-ghost.chat-new:hover {
+    background: color-mix(in srgb, var(--color-primary-tint), var(--color-accent) 14%);
+}
 /* Decision cards use shared surfaces and reserve their own row spacing. The inset, mark and gap are the column's own
    edge, mark box and gap (above), so a card's icon stands where a notice's glyph does and its words start on the hang. */
 .chat-card {

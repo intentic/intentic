@@ -360,7 +360,7 @@ onBeforeUnmount(() => {
             <button
                 v-if="!readOnly"
                 type="button"
-                class="composer-ghost h-7 w-7 shrink-0"
+                class="composer-ghost chat-new h-7 w-7 shrink-0"
                 @click="startAgent()"
                 v-tooltip.bottom="vocabulary.newAgent"
                 :aria-label="vocabulary.newAgent"
