@@ -1,75 +1,49 @@
 ---
-/* The big picture: one person signed in once, the sandboxes they are in, and what each of those reaches. The drawing is
-   HTML laid out by the grid; the script only draws the wires where the cards landed and switches the lighting. Every
-   word comes from site-content/big-picture.ts. */
-import { bigPictureScene, type BigPictureReach, type BigPictureStep } from "@intentic/site-content/big-picture";
+/* The big picture: one person signed in once, the sandboxes they are in, and what each reaches. Read at a glance:
+   you at the top, one line fanning out through intentic.dev into three sandboxes, each in its own colour. Selecting a
+   part opens a peek under the drawing with the detail. The script only draws the lines where the layout put things,
+   and lights what the pointer is on. Every word comes from site-content/big-picture.ts. */
+import { bigPictureScene, type BigPictureReach, type BigPictureSandbox } from "@intentic/site-content/big-picture";
 
 const scene = bigPictureScene;
 const ids = scene.sandboxes.map((sandbox) => sandbox.id);
-const each = (prefix: string): string[] => ids.map((id) => `${prefix}-${id}`);
+const lineOf = (id: string) => `line-${id}`;
+const worldOf = (id: string) => `world-${id}`;
 
-/** What one lighting does to the drawing: `on` glows, `near` stays as drawn, everything else falls back. */
-interface Light {
-    on: string[];
-    near: string[];
-    /** The caption shown while it is lit. */
-    cap: string;
-}
+/* What each part lights. Anything not listed falls back while that part is pointed at or open. */
+const lights = {
+    you: [`you`, `trunk`, `gate`, ...ids.map(lineOf), ...ids.map(worldOf)],
+    platform: [`platform`, `trunk`, `gate`, `ola-line`, `ola-gate`, ...ids.map(lineOf)],
+    ola: [`ola`, `ola-line`, `ola-gate`, `world-work`],
+    laptop: [`laptop`],
+    link: [`link`, `world-home`, `world-game`],
+    home: [`world-home`, `line-home`, `trunk`, `gate`, `you`],
+    game: [`world-game`, `line-game`, `trunk`, `gate`, `you`],
+    work: [`world-work`, `line-work`, `trunk`, `gate`, `you`, `ola`, `ola-line`, `ola-gate`],
+} satisfies Record<keyof typeof scene.peeks | BigPictureSandbox["id"], string[]>;
 
-const stepLights = {
-    signin: { on: [`kiosk`, `you`, `acct-you`, `w-you`, `w-you-sign`], near: [`platform`], cap: `signin` },
-    relay: {
-        on: [`platform`, `relay`, `acct-you`, `acct-ola`, `w-you`, `w-you-sign`, `w-ola`, `w-ola-sign`, `w-ola-work`, ...each(`w`)],
-        near: [`kiosk`, `you`, `ola`, ...each(`sbx`)],
-        cap: `relay`,
-    },
-    sandboxes: { on: [...each(`sbx`), ...each(`host`), `link`], near: [`agents`, ...each(`keeps`), ...each(`w`)], cap: `sandboxes` },
-    reach: { on: [...each(`reach`), ...each(`w-reach`), ...each(`keeps`)], near: [...each(`sbx`), `agents`, ...each(`host`)], cap: `reach` },
-    agents: { on: [`agents`], near: [...each(`sbx`), ...each(`keeps`), ...each(`host`)], cap: `agents` },
-    laptop: { on: [`laptop`], near: [`sbx-home`, `reach-home`], cap: `laptop` },
-    sharing: {
-        on: [`ola`, `acct-ola`, `w-ola`, `w-ola-sign`, `w-ola-work`, `sbx-work`, `agents-work`],
-        near: [`keeps-work`, `host-work`, `reach-work`, `w-reach-work`, `relay`, `platform`, `w-work`],
-        cap: `sharing`,
-    },
-    "acct-you": { on: [`acct-you`, `w-you-sign`, `w-you`, ...each(`w`), ...each(`sbx`)], near: [`kiosk`, `you`, `platform`, `relay`], cap: `signin` },
-} satisfies Record<BigPictureStep["id"] | "acct-you", Light>;
-/* Pointing at a sandbox, or at anything it reaches, lights that sandbox's whole column and the path into it. */
-const sandboxLights = Object.fromEntries(
-    ids.map((id): [string, Light] => [
-        `sbx:${id}`,
-        {
-            on: [`sbx-${id}`, `agents-${id}`, `keeps-${id}`, `host-${id}`, `reach-${id}`, `w-reach-${id}`, `w-${id}`],
-            near: [`kiosk`, `you`, `w-you`, `relay`, `platform`, ...(id === `work` ? [`ola`, `acct-ola`, `w-ola`, `w-ola-work`] : [`link`])],
-            cap: `sbx:${id}`,
-        },
-    ]),
-);
-const lights = { ...stepLights, ...sandboxLights };
-const tour = scene.steps.map((step) => step.id);
+/* Each sandbox's own colour: a hue on the oklch wheel, mixed into whichever skin is on. */
+const HUE = { home: 62, game: 162, work: 248 } satisfies Record<BigPictureSandbox["id"], number>;
 
 const ICON = {
-    browser: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 9.5h18"/>',
-    desktop: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M9 20h6"/><path d="M12 16v4"/>',
-    phone: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/>',
+    browser: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9.5h18"/>',
+    desktop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/>',
+    phone: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>',
     os: '<path d="M12 3.5v7"/><path d="M6.8 6.8a7.3 7.3 0 1 0 10.4 0"/>',
-    person: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
-    key: '<circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H21"/><path d="M17.5 12v3"/><path d="M20.5 12v2.5"/>',
-    laptop: '<rect x="5" y="5" width="14" height="10" rx="1.2"/><path d="M2.5 18.5h19"/>',
+    person: '<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+    laptop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/>',
     cloud: '<path d="M7 18.5h10a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7.1 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
-    server: '<rect x="3" y="5" width="18" height="5.5" rx="1.5"/><rect x="3" y="13.5" width="18" height="5.5" rx="1.5"/><path d="M6.5 7.75h.01"/><path d="M6.5 16.25h.01"/>',
-    agent: '<path d="m12 3 1.7 4.8 4.8 1.7-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7z"/><path d="M18 16.5v3"/><path d="M16.5 18h3"/>',
-    folder: '<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2l2 2.2h7.8A1.5 1.5 0 0 1 20 9.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/>',
-    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+    server: '<rect x="3.5" y="4.5" width="17" height="6" rx="2"/><rect x="3.5" y="13.5" width="17" height="6" rx="2"/><path d="M7 7.5h.01"/><path d="M7 16.5h.01"/>',
+    agent: '<path d="m12 3 1.8 5 5 1.8-5 1.8L12 16.6l-1.8-5-5-1.8 5-1.8z"/>',
     home: '<path d="M4 11 12 4l8 7"/><path d="M6.5 9.5V20h11V9.5"/>',
     branch: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="8.5" r="2"/><path d="M6 7.5v9"/><path d="M18 10.5c0 4-6 3-12 6"/>',
     wave: '<path d="M3 12h2"/><path d="M7.5 8v8"/><path d="M12 5v14"/><path d="M16.5 9v6"/><path d="M21 11v2"/>',
-    drive: '<path d="M12 4 21 19H3z"/>',
-    pause: '<path d="M9 5v14"/><path d="M15 5v14"/>',
-    play: '<path d="M7 4.5v15l12-7.5z"/>',
+    drive: '<path d="M9 4h6l6 10.5-3 5.5H6l-3-5.5z"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
+    close: '<path d="M6 6l12 12"/><path d="M18 6 6 18"/>',
 };
-const glyph = (paths: string, size = 14) =>
-    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const glyph = (paths: string, size = 14, width = 1.7) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 
 const REACH_ICON = {
     laptop: ICON.laptop,
@@ -81,245 +55,224 @@ const REACH_ICON = {
     drive: ICON.drive,
 } satisfies Record<BigPictureReach["id"], string>;
 const keys = (...parts: (string | false | undefined)[]): string => parts.filter(Boolean).join(` `);
+const runsIcon = (sandbox: BigPictureSandbox): string =>
+    sandbox.host.kind === `hosted` ? ICON.cloud : sandbox.host.laptop ? ICON.laptop : ICON.server;
+const plainPeeks = Object.entries(scene.peeks);
 ---
 
-<figure class="bp" data-bp data-lights={JSON.stringify(lights)} data-tour={JSON.stringify(tour)} data-paused="false" data-beat="a">
-    {/* The steps. Buttons, so a reader can stop on one; the tour walks them while the figure is on screen. */}
-    <div class="bp-tabs" role="group" aria-label="Show one part of the picture at a time">
-        {
-            scene.steps.map((step, index) => (
-                <button type="button" class="bp-tab" data-bp-go={step.id} aria-pressed="false">
-                    <span class="bp-tab-num">{String(index + 1).padStart(2, `0`)}</span>
-                    <span class="bp-tab-name">{step.tab}</span>
-                    <span class="bp-tab-bar" aria-hidden="true" />
-                </button>
-            ))
-        }
-        <button type="button" class="bp-play" data-bp-play aria-label="Pause the tour" data-label-pause="Pause the tour" data-label-play="Play the tour">
-            <span class="bp-play-pause" set:html={glyph(ICON.pause, 13)} />
-            <span class="bp-play-play" set:html={glyph(ICON.play, 13)} />
-        </button>
-    </div>
+<figure class="bp" data-bp data-lights={JSON.stringify(lights)} aria-label={scene.label}>
+    <div class="bp-board" data-bp-board>
+        <svg class="bp-lines" data-bp-lines aria-hidden="true"></svg>
 
-    <div class="bp-caption" data-bp-captions>
-        <div class="bp-cap" data-cap="" data-on="true">
-            <p class="bp-cap-title">{scene.heading}</p>
-            <p class="bp-cap-body">{scene.sub}</p>
-        </div>
-        {
-            scene.steps.map((step, index) => (
-                <div class="bp-cap" data-cap={step.id}>
-                    <p class="bp-cap-title">
-                        <span class="bp-cap-num">{String(index + 1).padStart(2, `0`)}</span>
-                        {step.title}
-                    </p>
-                    <p class="bp-cap-body">{step.body}</p>
-                </div>
-            ))
-        }
-        {
-            scene.sandboxes.map((sandbox) => (
-                <div class="bp-cap" data-cap={`sbx:${sandbox.id}`}>
-                    <p class="bp-cap-title">{sandbox.caption.title}</p>
-                    <p class="bp-cap-body">{sandbox.caption.body}</p>
-                </div>
-            ))
-        }
-    </div>
-
-    {/* The drawing. Screen readers get the same story from the label at the foot and the captions above. */}
-    <div class="bp-board" data-bp-board aria-hidden="true">
-        <svg class="bp-wires" data-bp-wires></svg>
-
-        {/* ── Where people sign in ── */}
-        <div class="bp-you">
-            <p class="bp-col" data-k="you" data-hover="signin">
-                <span class="bp-icon" set:html={glyph(ICON.person, 15)} />
-                You sign in from
-            </p>
-            <ul class="bp-kiosks">
+        {/* You, and the screens you sign in from. */}
+        <button type="button" class="bp-part bp-you" data-part="you" aria-expanded="false" aria-controls="bp-peek">
+            <span class="bp-avatar" data-k="you" set:html={glyph(ICON.person, 22, 1.6)} />
+            <span class="bp-you-name" data-k="you">{scene.you.name}</span>
+            <span class="bp-screens" data-bp-screens>
                 {
                     scene.kiosks.map((kiosk) => (
-                        <li class="bp-kiosk" data-bp-kiosk data-k={keys(`kiosk`, `kiosk-${kiosk.id}`, kiosk.laptop && `laptop`)} data-hover={kiosk.laptop ? `laptop` : `signin`}>
-                            <span class="bp-icon" set:html={glyph(ICON[kiosk.id], 16)} />
-                            <span class="bp-kiosk-name">{kiosk.name}</span>
-                            <span class="bp-kiosk-line">{kiosk.line}</span>
-                            {kiosk.laptop && <span class="bp-same">same laptop</span>}
-                        </li>
+                        <span class="bp-screen" data-k={keys(`you`, kiosk.laptop && `laptop`)} title={`${kiosk.name}, ${kiosk.line}`} set:html={glyph(ICON[kiosk.id], 15)} />
                     ))
                 }
-            </ul>
-        </div>
-        <div class="bp-ola" data-k="ola" data-hover="sharing">
-            <p class="bp-col">
-                <span class="bp-icon" set:html={glyph(ICON.person, 15)} />
-                {scene.colleague.name}, {scene.colleague.line}
-            </p>
-            <div class="bp-kiosk bp-kiosk-ola" data-bp-ola-kiosk>
-                <span class="bp-icon" set:html={glyph(ICON.browser, 16)} />
-                <span class="bp-kiosk-name">Browser</span>
-                <span class="bp-kiosk-line">{scene.colleague.kiosk}</span>
-            </div>
-        </div>
+                <span class="bp-screens-label" data-k="you">{scene.you.screens}</span>
+            </span>
+        </button>
 
-        {/* ── intentic.dev: the accounts and the address book beside the path, the relay across it ── */}
-        <div class="bp-band" data-bp-band data-k="platform" data-hover="relay">
-            <span class="bp-band-tag">{scene.platform.name}</span>
-            <div class="bp-band-row">
-                <div class="bp-account" data-bp-acct="you" data-k="acct-you" data-hover="acct-you">
-                    <span class="bp-icon" set:html={glyph(ICON.key, 15)} />
-                    <span class="bp-account-text">
-                        <span class="bp-account-name">Your account</span>
-                        <span class="bp-account-line">one sign-in</span>
-                    </span>
-                </div>
-                <div class="bp-knows" data-bp-knows data-k="platform">
-                    <p>{scene.platform.knows}</p>
-                    <p>{scene.platform.relay}</p>
-                </div>
-                <div class="bp-account" data-bp-acct="ola" data-k="acct-ola" data-hover="sharing">
-                    <span class="bp-icon" set:html={glyph(ICON.key, 15)} />
-                    <span class="bp-account-text">
-                        <span class="bp-account-name">Ola's account</span>
-                        <span class="bp-account-line">her own</span>
-                    </span>
-                </div>
-            </div>
-            <div class="bp-relay" data-bp-relay data-k="relay">
-                <span class="bp-relay-tag">{scene.platform.relayTag}</span>
-            </div>
-        </div>
+        {/* Ola, who signs in with her own account and is in one of these sandboxes. */}
+        <button type="button" class="bp-part bp-ola" data-part="ola" aria-expanded="false" aria-controls="bp-peek" style={`--h:${HUE.work}`}>
+            <span class="bp-ola-avatar" data-bp-ola data-k="ola">{scene.colleague.name.slice(0, 1)}</span>
+            <span class="bp-ola-text" data-k="ola">
+                <span class="bp-ola-name">{scene.colleague.name}</span>
+                <span class="bp-ola-line">{scene.colleague.line}</span>
+            </span>
+        </button>
 
-        {/* ── The sandboxes, each standing on the machine it runs on, with what it reaches below ── */}
-        <div class="bp-sites">
+        {/* intentic.dev: a strip the lines cross, not a box they enter. */}
+        <button type="button" class="bp-part bp-band" data-part="platform" data-bp-band data-k="platform" aria-expanded="false" aria-controls="bp-peek">
+            <span class="bp-band-name">{scene.platform.name}</span>
+            <span class="bp-band-tagline">
+                {scene.platform.tagline.map((line) => (
+                    <span>{line}</span>
+                ))}
+            </span>
+        </button>
+
+        {/* The sandboxes, each a world of its own colour. */}
+        <div class="bp-worlds" data-bp-worlds>
             {
                 scene.sandboxes.map((sandbox) => (
-                    <div class="bp-site" data-bp-site={sandbox.id}>
-                        <div class="bp-wall" data-bp-wall data-k={`sbx-${sandbox.id}`} data-hover={`sbx:${sandbox.id}`}>
-                            <span class="bp-plaque" data-k={`sbx-${sandbox.id}`}>{sandbox.name}</span>
-                            <div class="bp-court" data-bp-court>
-                                <p class="bp-purpose" data-k={`sbx-${sandbox.id}`}>
-                                    <span class="bp-purpose-name">{sandbox.purpose}</span>
-                                    <span class="bp-purpose-owner">{sandbox.owner}</span>
-                                </p>
-                                <ul class="bp-agents">
-                                    {sandbox.agents.map((agent) => (
-                                        <li class="bp-agent" data-k={`agents agents-${sandbox.id}`} data-state={agent.state}>
-                                            <span class="bp-icon bp-agent-icon" set:html={glyph(ICON.agent, 12)} />
-                                            <span class="bp-agent-text">
-                                                <span class="bp-agent-task">{agent.task}</span>
-                                                <span class="bp-agent-state">
-                                                    <span class="bp-dot" />
-                                                    {agent.stateLabel}
-                                                </span>
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <div class="bp-keeps" data-k={`keeps-${sandbox.id}`}>
-                                    {sandbox.files.map((file) => (
-                                        <span class="bp-keep">
-                                            <span set:html={glyph(ICON.folder, 11)} />
-                                            {file}
-                                        </span>
-                                    ))}
-                                    {sandbox.keys.map((key) => (
-                                        <span class="bp-keep bp-keep-key">
-                                            <span set:html={glyph(ICON.lock, 11)} />
-                                            {key}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                        <div
-                            class="bp-plinth"
-                            data-bp-plinth
-                            data-k={keys(`host-${sandbox.id}`, sandbox.host.laptop && `laptop`)}
-                            data-hover={sandbox.host.laptop ? `laptop` : `sbx:${sandbox.id}`}
-                        >
-                            <span class="bp-icon" set:html={glyph(sandbox.host.kind === `hosted` ? ICON.cloud : sandbox.host.laptop ? ICON.laptop : ICON.server, 13)} />
-                            <span class="bp-plinth-label">runs on</span>
-                            <span class="bp-plinth-name">{sandbox.host.name}</span>
-                            {sandbox.host.laptop && <span class="bp-same">same laptop</span>}
-                        </div>
-                        <ul class="bp-reach" data-bp-reach data-k={`reach-${sandbox.id}`}>
-                            <li class="bp-reach-head" data-k={`reach-${sandbox.id}`}>
-                                reaches
-                            </li>
-                            {sandbox.reaches.map((reach) => (
-                                <li
-                                    class="bp-reach-item"
-                                    data-bp-reach-item
-                                    data-k={keys(`reach-${sandbox.id}`, `reach-${sandbox.id}-${reach.id}`, reach.laptop && `laptop`)}
-                                    data-hover={reach.laptop ? `laptop` : `sbx:${sandbox.id}`}
-                                >
-                                    <span class="bp-icon" set:html={glyph(REACH_ICON[reach.id], 13)} />
-                                    <span class="bp-reach-name">{reach.name}</span>
-                                    <span class="bp-reach-line">{reach.line}</span>
-                                    {reach.laptop && <span class="bp-same">same laptop</span>}
-                                </li>
-                            ))}
+                    <div class="bp-world" data-world={sandbox.id} data-k={worldOf(sandbox.id)} style={`--h:${HUE[sandbox.id]}`}>
+                        <button
+                            type="button"
+                            class="bp-part bp-hit"
+                            data-part={sandbox.id}
+                            aria-expanded="false"
+                            aria-controls="bp-peek"
+                            aria-label={`Look inside ${sandbox.title}`}
+                        />
+                        <span class="bp-world-head" data-k={worldOf(sandbox.id)}>
+                            <span class="bp-world-title">{sandbox.title}</span>
+                            <span class="bp-world-owner">{sandbox.owner}</span>
+                        </span>
+                        <span class="bp-world-agents" data-k={worldOf(sandbox.id)}>
+                            <span class="bp-faces">
+                                {sandbox.agents.map((agent) => (
+                                    <span class="bp-face" data-state={agent.state} set:html={glyph(ICON.agent, 10, 2)} />
+                                ))}
+                            </span>
+                            <span class="bp-glance">
+                                <span>{sandbox.agents.length} agents</span>
+                                <span class="bp-glance-state" data-state={sandbox.agents.find((agent) => agent.state !== `working`)?.state}>
+                                    {sandbox.glance}
+                                </span>
+                            </span>
+                        </span>
+                        <ul class="bp-pills">
+                            {sandbox.reaches.map((reach) =>
+                                reach.laptop ? (
+                                    <li>
+                                        <button
+                                            type="button"
+                                            class="bp-part bp-pill bp-raised"
+                                            data-part="laptop"
+                                            data-k={keys(worldOf(sandbox.id), `laptop`)}
+                                            aria-expanded="false"
+                                            aria-controls="bp-peek"
+                                        >
+                                            <span class="bp-coin" set:html={glyph(REACH_ICON[reach.id], 12)} />
+                                            {reach.name}
+                                        </button>
+                                    </li>
+                                ) : (
+                                    <li class="bp-pill" data-k={worldOf(sandbox.id)}>
+                                        <span class="bp-coin" set:html={glyph(REACH_ICON[reach.id], 12)} />
+                                        {reach.name}
+                                    </li>
+                                ),
+                            )}
                         </ul>
+                        {sandbox.host.laptop ? (
+                            <button
+                                type="button"
+                                class="bp-part bp-runs bp-raised"
+                                data-part="laptop"
+                                data-k={keys(worldOf(sandbox.id), `laptop`)}
+                                aria-expanded="false"
+                                aria-controls="bp-peek"
+                            >
+                                <span set:html={glyph(runsIcon(sandbox), 14)} />
+                                Runs on {sandbox.host.name}
+                            </button>
+                        ) : (
+                            <span class="bp-runs" data-k={worldOf(sandbox.id)}>
+                                <span set:html={glyph(runsIcon(sandbox), 14)} />
+                                Runs on {sandbox.host.name}
+                            </span>
+                        )}
                     </div>
                 ))
             }
-            <span class="bp-link-tag" data-bp-link-tag data-k="link">{scene.link.label}</span>
+            <button type="button" class="bp-part bp-link" data-part="link" data-bp-link data-k="link" aria-expanded="false" aria-controls="bp-peek" aria-label="Linked sandboxes" set:html={glyph(ICON.link, 13)} />
         </div>
     </div>
 
-    <div class="bp-foot">
-        <div class="bp-legend">
-            <span class="bp-legend-item"><span class="bp-legend-line" />a screen's traffic, through the relay</span>
-            <span class="bp-legend-item"><span class="bp-legend-line bp-legend-dotted" />signs in as</span>
-            <span class="bp-legend-item"><span class="bp-legend-line bp-legend-dashed" />{scene.link.label}: {scene.link.line}</span>
+    {/* The peek: one part's detail, opened by selecting it. */}
+    <div class="bp-peek" id="bp-peek" data-bp-peek data-open="false">
+        <div class="bp-peek-clip">
+            {
+                plainPeeks.map(([id, peek]) => (
+                    <section class="bp-peek-card" data-peek={id} hidden style={id === `ola` ? `--h:${HUE.work}` : undefined}>
+                        <header class="bp-peek-head">
+                            <p class="bp-peek-title">{peek.title}</p>
+                            <button type="button" class="bp-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+                        </header>
+                        <p class="bp-peek-body">{peek.body}</p>
+                        {peek.facts && (
+                            <dl class="bp-facts">
+                                {peek.facts.map((fact) => (
+                                    <div>
+                                        <dt>{fact.label}</dt>
+                                        <dd>{fact.value}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        )}
+                    </section>
+                ))
+            }
+            {
+                scene.sandboxes.map((sandbox) => (
+                    <section class="bp-peek-card" data-peek={sandbox.id} hidden style={`--h:${HUE[sandbox.id]}`}>
+                        <header class="bp-peek-head">
+                            <p class="bp-peek-title">{sandbox.peek.title}</p>
+                            <button type="button" class="bp-close" data-bp-close aria-label="Close" set:html={glyph(ICON.close, 14)} />
+                        </header>
+                        <p class="bp-peek-body">{sandbox.peek.body}</p>
+                        <div class="bp-groups">
+                            <div class="bp-group">
+                                <p class="bp-group-name">Agents</p>
+                                <ul>
+                                    {sandbox.agents.map((agent) => (
+                                        <li class="bp-agent" data-state={agent.state}>
+                                            <span class="bp-agent-task">{agent.task}</span>
+                                            <span class="bp-agent-state">{agent.stateLabel}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            <div class="bp-group">
+                                <p class="bp-group-name">Reaches</p>
+                                <ul>
+                                    {sandbox.reaches.map((reach) => (
+                                        <li>
+                                            {reach.name}
+                                            <span class="bp-group-sub">{reach.line}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            <div class="bp-group">
+                                <p class="bp-group-name">Keeps</p>
+                                <ul>
+                                    {[...sandbox.files, ...sandbox.keys].map((item) => (
+                                        <li>{item}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                ))
+            }
         </div>
     </div>
-    <p class="sr-only">{scene.label}</p>
+    <p class="bp-hint" data-bp-hint>{scene.hint}</p>
 </figure>
 
 <script>
-    // Draws the wires from where the cards landed, and switches the lighting. The pointer over a part previews its
-    // lighting and holds the tour; a press on a tab keeps that step; the play button carries the tour on.
-    interface Light {
-        on: string[];
-        near: string[];
-        cap: string;
-    }
-
-    const BEAT_MS = 6500;
-    const LEAVE_GRACE_MS = 90;
+    // Draws the lines where the layout put things, lights what the pointer or focus is on, and opens a part's peek
+    // when it is selected. The lines draw themselves in once, the first time the figure comes into view.
     const SVG = "http://www.w3.org/2000/svg";
+    const LEAVE_GRACE_MS = 80;
 
     for (const figure of document.querySelectorAll<HTMLElement>("[data-bp]")) {
-        // SAFETY: both attributes are written by this component's frontmatter.
-        const lights = JSON.parse(figure.dataset.lights ?? "{}") as Record<string, Light | undefined>;
-        // SAFETY: as above, the tour is the list of step ids the frontmatter wrote.
-        const tour = JSON.parse(figure.dataset.tour ?? "[]") as string[];
+        // SAFETY: written by this component's frontmatter, from `lights`.
+        const lights = JSON.parse(figure.dataset.lights ?? "{}") as Record<string, string[] | undefined>;
         const board = figure.querySelector<HTMLElement>("[data-bp-board]");
-        const wires = figure.querySelector<SVGSVGElement>("[data-bp-wires]");
-        if (board === null || wires === null) {
+        const lines = figure.querySelector<SVGSVGElement>("[data-bp-lines]");
+        const peek = figure.querySelector<HTMLElement>("[data-bp-peek]");
+        if (board === null || lines === null || peek === null) {
             continue;
         }
-        const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-        const tabs = [...figure.querySelectorAll<HTMLButtonElement>("[data-bp-go]")];
-        const captions = [...figure.querySelectorAll<HTMLElement>("[data-cap]")];
-        const captionStack = figure.querySelector<HTMLElement>("[data-bp-captions]");
-        const play = figure.querySelector<HTMLButtonElement>("[data-bp-play]");
-        const parts = [...board.querySelectorAll<HTMLElement>("[data-k]")];
-
+        const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const parts = [...figure.querySelectorAll<HTMLButtonElement>("button[data-part]")];
+        const lit = [...board.querySelectorAll<HTMLElement>("[data-k]")];
+        const cards = [...peek.querySelectorAll<HTMLElement>("[data-peek]")];
         let hovered: string | undefined;
-        let pinned: string | undefined;
-        let touring: string | undefined;
-        let playing = !reduced.matches;
-        let visible = false;
-        let held = false;
-        let timer: ReturnType<typeof setTimeout> | undefined;
+        let open: string | undefined;
         let leaving: ReturnType<typeof setTimeout> | undefined;
-        let shown: string | undefined;
 
-        // ── The wires ─────────────────────────────────────────────────────────────────────────────────────────────
-        const add = (tag: string, attributes: Record<string, string | number>, parent: Element = wires): SVGElement => {
+        // ── The lines ─────────────────────────────────────────────────────────────────────────────────────────────
+        const add = (tag: string, attributes: Record<string, string | number>, parent: Element = lines): SVGElement => {
             const element = document.createElementNS(SVG, tag);
             for (const [name, value] of Object.entries(attributes)) {
                 element.setAttribute(name, String(value));
@@ -327,26 +280,27 @@ const keys = (...parts: (string | false | undefined)[]): string => parts.filter(
             parent.append(element);
             return element;
         };
-        const wire = (d: string, key: string, kind = ""): void => {
-            add("path", { d, class: `bp-wire ${kind}`.trim(), "data-k": key });
-        };
-        // A vertical S from one point down to another: leaves straight down, arrives straight down.
+        // Leaves straight down and arrives straight down, so every line enters its sandbox from above.
         const drop = (x1: number, y1: number, x2: number, y2: number): string => {
-            const bend = (y2 - y1) * 0.5;
-            return `M${x1} ${y1}C${x1} ${y1 + bend} ${x2} ${y2 - bend} ${x2} ${y2}`;
+            const bend = (y2 - y1) * 0.55;
+            return `C${x1} ${y1 + bend} ${x2} ${y2 - bend} ${x2} ${y2}`;
         };
-        // An opening cut through a wall or a strip, with its two jambs; the wire runs on through it.
-        const opening = (key: string, x: number, y1: number, y2: number): void => {
-            const group = add("g", { class: "bp-gate", "data-k": key });
-            add("rect", { x: x - 6, y: y1, width: 12, height: y2 - y1, class: "bp-gate-gap" }, group);
-            add("path", { d: `M${x - 6} ${y1}V${y2}M${x + 6} ${y1}V${y2}`, class: "bp-gate-jamb" }, group);
-            add("path", { d: `M${x} ${y1}V${y2}`, class: "bp-wire bp-gate-pass", "data-k": key }, group);
+        const gradient = (id: string, from: [number, number], to: [number, number], stops: [string, string]): string => {
+            const defs = lines.querySelector("defs") ?? add("defs", {});
+            const element = add("linearGradient", { id, gradientUnits: "userSpaceOnUse", x1: from[0], y1: from[1], x2: to[0], y2: to[1] }, defs);
+            add("stop", { offset: 0, "stop-color": stops[0] }, element);
+            add("stop", { offset: 1, "stop-color": stops[1] }, element);
+            return `url(#${id})`;
+        };
+        const gate = (x: number, y: number, key: string): void => {
+            add("circle", { cx: x, cy: y, r: 10, class: "bp-gate-glow", "data-k": key });
+            add("circle", { cx: x, cy: y, r: 4, class: "bp-gate", "data-k": key });
         };
 
         const draw = (): void => {
-            wires.replaceChildren();
-            if (getComputedStyle(wires).display === "none") {
-                paint(false);
+            lines.replaceChildren();
+            if (getComputedStyle(lines).display === "none") {
+                paint();
                 return;
             }
             const origin = board.getBoundingClientRect();
@@ -354,800 +308,762 @@ const keys = (...parts: (string | false | undefined)[]): string => parts.filter(
                 const rect = (element ?? board).getBoundingClientRect();
                 const l = rect.left - origin.left;
                 const t = rect.top - origin.top;
-                return { l, t, r: l + rect.width, b: t + rect.height, w: rect.width, h: rect.height, cx: l + rect.width / 2, cy: t + rect.height / 2 };
+                return { l, t, w: rect.width, h: rect.height, r: l + rect.width, b: t + rect.height, cx: l + rect.width / 2, cy: t + rect.height / 2 };
             };
-            wires.setAttribute("width", String(origin.width));
-            wires.setAttribute("height", String(origin.height));
+            lines.setAttribute("width", String(origin.width));
+            lines.setAttribute("height", String(origin.height));
+            const tint = (element: Element | null): string => (element === null ? "" : getComputedStyle(element).getPropertyValue("--bp-tint").trim());
+            const gold = getComputedStyle(figure).getPropertyValue("--bp-gold").trim();
 
+            const screens = box(board.querySelector("[data-bp-screens]"));
             const band = box(board.querySelector("[data-bp-band]"));
-            const relay = box(board.querySelector("[data-bp-relay]"));
-            const knows = box(board.querySelector("[data-bp-knows]"));
-            const you = box(board.querySelector('[data-bp-acct="you"]'));
-            const ola = box(board.querySelector('[data-bp-acct="ola"]'));
-            // Each person's line runs down a lane beside the address book, never through it.
-            const laneYou = (you.r + knows.l) / 2;
-            const laneOla = (knows.r + ola.l) / 2;
-            const meet = band.t - 18;
+            const x = screens.cx;
+            const gateY = band.cy;
+            add("path", { d: `M${x} ${screens.b + 8}V${gateY}`, class: "bp-line", stroke: gold, "data-k": "trunk", pathLength: 1, style: "--d:0s" });
 
-            // You: every screen down to one line, which signs in to the left and carries on through the relay.
-            for (const kiosk of board.querySelectorAll("[data-bp-kiosk]")) {
-                const at = box(kiosk);
-                wire(drop(at.cx, at.b + 3, laneYou, meet), "w-you");
+            // Through the relay, then out to every sandbox, each line turning that sandbox's colour as it arrives.
+            const worlds = [...board.querySelectorAll<HTMLElement>("[data-world]")];
+            for (const [index, world] of worlds.entries()) {
+                const id = world.dataset.world ?? "";
+                const at = box(world);
+                const door = id === "work" ? at.l + at.w * 0.38 : at.cx;
+                const stroke = gradient(`bp-g-${id}`, [x, gateY], [door, at.t], [gold, tint(world)]);
+                add("path", { d: `M${x} ${gateY}${drop(x, gateY, door, at.t)}`, class: "bp-line", stroke, "data-k": `line-${id}`, pathLength: 1, style: `--d:${0.45 + index * 0.08}s` });
+                add("circle", { cx: door, cy: at.t, r: 3, class: "bp-door", fill: tint(world), "data-k": `line-${id}` });
             }
-            wire(`M${laneYou} ${meet}V${relay.t}`, "w-you");
-            wire(`M${laneYou} ${you.cy}H${you.r + 4}`, "w-you-sign", "bp-wire-dotted");
-            add("circle", { cx: laneYou, cy: you.cy, r: 2.6, class: "bp-knot", "data-k": "w-you-sign" });
-            opening("w-you", laneYou, relay.t, relay.b);
+            gate(x, gateY, "gate");
 
-            // Ola: her one screen, her own account, her own lane.
-            const olaKiosk = box(board.querySelector("[data-bp-ola-kiosk]"));
-            wire(drop(olaKiosk.cx, olaKiosk.b + 3, laneOla, meet), "w-ola");
-            wire(`M${laneOla} ${meet}V${relay.t}`, "w-ola");
-            wire(`M${laneOla} ${ola.cy}H${ola.l - 4}`, "w-ola-sign", "bp-wire-dotted");
-            add("circle", { cx: laneOla, cy: ola.cy, r: 2.6, class: "bp-knot", "data-k": "w-ola-sign" });
-            opening("w-ola", laneOla, relay.t, relay.b);
-
-            for (const site of board.querySelectorAll<HTMLElement>("[data-bp-site]")) {
-                const id = site.dataset.bpSite ?? "";
-                const wall = box(site.querySelector("[data-bp-wall]"));
-                const court = box(site.querySelector("[data-bp-court]"));
-                // Out of the relay and in through the sandbox's roof; the shared one has a second door for Ola.
-                const door = id === "work" ? wall.l + wall.w * 0.34 : wall.l + wall.w * 0.66;
-                wire(drop(laneYou, relay.b, door, wall.t), `w-${id}`);
-                opening(`w-${id}`, door, wall.t, court.t);
-                if (id === "work") {
-                    const second = wall.l + wall.w * 0.8;
-                    wire(drop(laneOla, relay.b, second, wall.t), "w-ola-work");
-                    opening("w-ola-work", second, wall.t, court.t);
-                }
-
-                // Down through the floor and the machine under it, to everything it reaches.
-                const plinth = box(site.querySelector("[data-bp-plinth]"));
-                const items = [...site.querySelectorAll("[data-bp-reach-item]")].map(box);
-                const last = items.at(-1);
-                if (last === undefined) {
-                    continue;
-                }
-                const x = wall.l + 16;
-                const key = `w-reach-${id}`;
-                opening(key, x, court.b, wall.b);
-                opening(key, x, plinth.t, plinth.b);
-                wire(`M${x} ${wall.b}V${plinth.t}M${x} ${plinth.b}V${last.cy}`, key);
-                for (const item of items) {
-                    wire(`M${x} ${item.cy}H${item.l - 3}`, key);
-                }
+            // Ola: her own line, through the relay, into the one sandbox she shares with you.
+            const work = board.querySelector<HTMLElement>('[data-world="work"]');
+            const ola = box(board.querySelector("[data-bp-ola]"));
+            if (work !== null) {
+                const at = box(work);
+                const door = at.l + at.w * 0.8;
+                const stroke = gradient("bp-g-ola", [ola.cx, ola.b], [door, at.t], [tint(work), tint(work)]);
+                add("path", { d: `M${ola.cx} ${ola.b + 8}V${gateY}${drop(ola.cx, gateY, door, at.t)}`, class: "bp-line", stroke, "data-k": "ola-line", pathLength: 1, style: "--d:0.7s" });
+                add("circle", { cx: door, cy: at.t, r: 3, class: "bp-door", fill: tint(work), "data-k": "ola-line" });
+                gate(ola.cx, gateY, "ola-gate");
             }
 
-            // The link: a dashed bridge between the two sandboxes that are both yours.
-            const home = box(board.querySelector('[data-bp-site="home"] [data-bp-wall]'));
-            const game = box(board.querySelector('[data-bp-site="game"] [data-bp-wall]'));
-            const tag = board.querySelector<HTMLElement>("[data-bp-link-tag]");
-            const bridgeY = home.t + home.h * 0.62;
-            wire(`M${home.r} ${bridgeY}H${game.l}`, "link", "bp-wire-dashed");
-            if (tag !== null) {
-                tag.style.left = `${(home.r + game.l) / 2}px`;
-                tag.style.top = `${bridgeY - box(board.querySelector(".bp-sites")).t}px`;
+            // The link: a dotted bridge between the two sandboxes that are both yours, its button at the middle.
+            const home = box(board.querySelector('[data-world="home"]'));
+            const game = box(board.querySelector('[data-world="game"]'));
+            const holder = box(board.querySelector("[data-bp-worlds]"));
+            const linkY = home.t + home.h * 0.5;
+            add("path", { d: `M${home.r} ${linkY}H${game.l}`, class: "bp-link-line", "data-k": "link" });
+            const button = board.querySelector<HTMLElement>("[data-bp-link]");
+            if (button !== null) {
+                button.style.left = `${(home.r + game.l) / 2 - holder.l}px`;
+                button.style.top = `${linkY - holder.t}px`;
             }
-            paint(false);
+            paint();
         };
 
-        // ── The lighting ──────────────────────────────────────────────────────────────────────────────────────────
-        const spark = (path: SVGPathElement, delay: number): void => {
-            const dot = add("circle", { r: 2.6, class: "bp-spark" });
-            const motion = document.createElementNS(SVG, "animateMotion");
-            for (const [name, value] of Object.entries({ dur: "0.8s", begin: "indefinite", fill: "freeze", keyPoints: "0;1", keyTimes: "0;1", calcMode: "spline", keySplines: "0.4 0 0.2 1" })) {
-                motion.setAttribute(name, value);
+        // ── The lighting and the peek ─────────────────────────────────────────────────────────────────────────────
+        const paint = (): void => {
+            const key = hovered ?? open;
+            const on = key === undefined ? undefined : lights[key];
+            if (on === undefined) {
+                delete figure.dataset.active;
+            } else {
+                figure.dataset.active = key;
             }
-            motion.setAttribute("path", path.getAttribute("d") ?? "");
-            dot.append(motion);
-            setTimeout(() => {
-                motion.beginElement();
-                dot.classList.add("bp-spark-go");
-            }, delay);
-            setTimeout(() => dot.remove(), delay + 950);
-        };
-        const stateOf = (element: Element, light: Light): string => {
-            const own = (element.getAttribute("data-k") ?? "").split(" ");
-            if (own.some((key) => light.on.includes(key))) {
-                return "on";
-            }
-            return own.some((key) => light.near.includes(key)) ? "near" : "off";
-        };
-        const paint = (animate: boolean): void => {
-            const key = hovered ?? pinned ?? touring;
-            const light = key === undefined ? undefined : lights[key];
-            const changed = key !== shown;
-            shown = key;
-            figure.dataset.light = key ?? "";
-            for (const element of [...parts, ...wires.querySelectorAll<SVGElement>("[data-k]")]) {
-                if (light === undefined) {
+            for (const element of [...lit, ...lines.querySelectorAll<SVGElement>("[data-k]")]) {
+                if (on === undefined) {
                     element.removeAttribute("data-lit");
                 } else {
-                    element.setAttribute("data-lit", stateOf(element, light));
-                }
-            }
-            const cap = light?.cap ?? "";
-            for (const caption of captions) {
-                caption.dataset.on = String(caption.dataset.cap === cap);
-            }
-            const step = pinned ?? touring;
-            for (const tab of tabs) {
-                tab.setAttribute("aria-pressed", String(tab.dataset.bpGo === step));
-                tab.dataset.shown = String(tab.dataset.bpGo === cap);
-            }
-            if (animate && changed && light !== undefined && !reduced.matches) {
-                for (const path of wires.querySelectorAll<SVGPathElement>("path.bp-wire:not(.bp-gate-pass)")) {
-                    if (path.dataset.lit === "on") {
-                        spark(path, (path.dataset.k ?? "").startsWith("w-reach") ? 420 : 0);
-                    }
+                    const own = (element.getAttribute("data-k") ?? "").split(" ");
+                    element.setAttribute("data-lit", own.some((part) => on.includes(part)) ? "on" : "off");
                 }
             }
         };
-
-        // ── The tour ──────────────────────────────────────────────────────────────────────────────────────────────
-        const stop = (): void => {
-            clearTimeout(timer);
-            timer = undefined;
-        };
-        const advance = (): void => {
-            touring = tour[(tour.indexOf(touring ?? "") + 1) % tour.length];
-            // The beat restarts under the new tab: its animation is dropped and put back.
-            figure.dataset.beat = figure.dataset.beat === "a" ? "b" : "a";
-            paint(true);
-        };
-        const run = (): void => {
-            stop();
-            if (!playing || !visible || held || pinned !== undefined || tour.length === 0) {
-                return;
+        // On a phone the sandboxes stack, so a sandbox's peek opens right under it; everywhere else, under the drawing.
+        const hint = figure.querySelector("[data-bp-hint]");
+        const place = (): void => {
+            const world = open === undefined ? null : board.querySelector(`[data-world="${open}"]`);
+            if (world !== null && getComputedStyle(lines).display === "none") {
+                world.after(peek);
+            } else if (peek.parentElement !== figure) {
+                figure.insertBefore(peek, hint);
             }
-            if (touring === undefined) {
-                advance();
+        };
+        const show = (next: string | undefined): void => {
+            open = next;
+            place();
+            for (const part of parts) {
+                part.setAttribute("aria-expanded", String(part.dataset.part === next));
             }
-            timer = setTimeout(() => {
-                advance();
-                run();
-            }, BEAT_MS);
+            for (const card of cards) {
+                card.hidden = card.dataset.peek !== next;
+            }
+            peek.dataset.open = String(next !== undefined);
+            figure.dataset.peeking = String(next !== undefined);
+            paint();
+            if (next !== undefined) {
+                // Once the peek has opened, bring it on screen if it landed below the fold.
+                setTimeout(() => peek.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" }), reduced ? 0 : 380);
+            }
         };
-        const setPlaying = (on: boolean): void => {
-            playing = on;
-            figure.dataset.paused = String(!on);
-            play?.setAttribute("aria-label", (on ? play.dataset.labelPause : play.dataset.labelPlay) ?? "");
-            run();
-        };
-
-        // ── The reader ────────────────────────────────────────────────────────────────────────────────────────────
-        const hoverOf = (target: EventTarget | null): string | undefined =>
-            target instanceof Element ? target.closest<HTMLElement>("[data-hover]")?.dataset.hover : undefined;
         const point = (next: string | undefined): void => {
             clearTimeout(leaving);
             if (next !== undefined) {
                 hovered = next;
-                paint(true);
+                paint();
                 return;
             }
             leaving = setTimeout(() => {
                 hovered = undefined;
-                paint(true);
+                paint();
             }, LEAVE_GRACE_MS);
         };
+        const partOf = (target: EventTarget | null): string | undefined =>
+            target instanceof Element ? target.closest<HTMLElement>("[data-part]")?.dataset.part : undefined;
+
         board.addEventListener("pointerover", (event) => {
             if (event.pointerType === "mouse") {
-                point(hoverOf(event.target));
+                point(partOf(event.target));
             }
         });
-        board.addEventListener("pointerenter", (event) => {
-            if (event.pointerType === "mouse" && timer !== undefined) {
-                held = true;
-                figure.dataset.held = "true";
-                stop();
-            }
-        });
-        board.addEventListener("pointerleave", () => {
-            point(undefined);
-            if (held) {
-                held = false;
-                delete figure.dataset.held;
-                run();
-            }
-        });
-        // A finger has no hover: a tap on a part keeps its lighting, a second tap lets it go.
-        board.addEventListener("click", (event) => {
-            const id = hoverOf(event.target);
-            pinned = id === undefined || id === pinned ? undefined : id;
-            if (id !== undefined) {
-                setPlaying(false);
-            }
-            paint(true);
-        });
-        tabs.forEach((tab) =>
-            tab.addEventListener("click", () => {
-                pinned = tab.dataset.bpGo;
-                touring = pinned;
-                hovered = undefined;
-                // From the reader's own press on, a screen reader hears each caption; the tour alone stays quiet.
-                captionStack?.setAttribute("aria-live", "polite");
-                setPlaying(false);
-                paint(true);
-            }),
-        );
-        play?.addEventListener("click", () => {
-            if (!playing) {
-                pinned = undefined;
-                hovered = undefined;
-                advance();
-            }
-            setPlaying(!playing);
-        });
+        board.addEventListener("pointerleave", () => point(undefined));
+        board.addEventListener("focusin", (event) => point(partOf(event.target)));
+        board.addEventListener("focusout", () => point(undefined));
+        for (const part of parts) {
+            part.addEventListener("click", () => show(part.dataset.part === open ? undefined : part.dataset.part));
+        }
+        for (const close of figure.querySelectorAll<HTMLButtonElement>("[data-bp-close]")) {
+            close.addEventListener("click", () => {
+                const was = open;
+                show(undefined);
+                parts.find((part) => part.dataset.part === was)?.focus({ preventScroll: true });
+            });
+        }
         figure.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" && pinned !== undefined) {
-                pinned = undefined;
-                paint(true);
+            if (event.key === "Escape" && open !== undefined) {
+                show(undefined);
             }
         });
 
-        figure.dataset.paused = String(!playing);
-        new ResizeObserver(draw).observe(board);
+        // ── Coming into view ──────────────────────────────────────────────────────────────────────────────────────
+        if (!reduced) {
+            figure.dataset.intro = "waiting";
+            const watch = new IntersectionObserver(
+                ([entry]) => {
+                    if (entry?.isIntersecting === true) {
+                        figure.dataset.intro = "playing";
+                        setTimeout(() => {
+                            delete figure.dataset.intro;
+                        }, 2200);
+                        watch.disconnect();
+                    }
+                },
+                { threshold: 0.35 },
+            );
+            watch.observe(figure);
+        }
+        new ResizeObserver(() => {
+            place();
+            draw();
+        }).observe(board);
         void document.fonts.ready.then(draw);
-        new IntersectionObserver(
-            ([entry]) => {
-                visible = entry?.isIntersecting ?? false;
-                if (visible) {
-                    run();
-                } else {
-                    stop();
-                }
-            },
-            { threshold: 0.3 },
-        ).observe(figure);
     }
 </script>
 
 <style>
     .bp {
-        /* Ember is the light a lit part casts; gold stays the one signal colour, for the pressed tab. */
-        --bp-ember: var(--color-primary-400);
-        --bp-ember-soft: color-mix(in oklab, var(--bp-ember) 55%, transparent);
-        --bp-wash: color-mix(in oklab, var(--bp-ember) 9%, transparent);
-        --bp-rest: color-mix(in oklab, var(--color-line-strong) 85%, transparent);
-        --bp-dim: 0.28;
-        --bp-wall: 9px;
-        --bp-gap: 1.5rem;
+        --bp-gold: color-mix(in oklab, var(--color-gold) 85%, var(--color-content));
+        --bp-gap: 1.25rem;
         --bp-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-        --bp-beat: 6500ms;
+        --bp-wash: color-mix(in oklab, var(--color-content) 6%, transparent);
+        --bp-wash-strong: color-mix(in oklab, var(--color-content) 10%, transparent);
+        --bp-dim: 0.3;
 
         position: relative;
         container-type: inline-size;
         margin: 0;
-        border: 1px solid var(--color-line);
-        background: var(--wash-panel);
-        padding: clamp(0.85rem, 2.5vw, 1.25rem);
+        border-radius: 28px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: clamp(1.1rem, 3vw, 2rem);
         color: var(--color-content);
     }
 
-    /* ── The steps ────────────────────────────────────────────────────────────────────────────────────────────── */
-    .bp-tabs {
-        display: grid;
-        grid-template-columns: repeat(7, minmax(0, 1fr)) auto;
-        gap: 0.3rem;
-        margin-bottom: 1.1rem;
-    }
-    .bp-tab {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.05rem;
-        min-width: 0;
-        overflow: hidden;
-        border: 1px solid var(--color-line);
-        background: var(--role-figure-panel);
-        padding: 0.35rem 0.5rem 0.45rem;
-        text-align: left;
-        color: var(--color-muted);
+    /* A part is a press target with no box at rest; focus is the house's gold ring. */
+    .bp-part {
+        border: 0;
+        background: none;
+        padding: 0;
+        color: inherit;
+        font: inherit;
+        text-align: inherit;
         cursor: pointer;
-        transition:
-            border-color 0.3s,
-            color 0.3s,
-            background-color 0.3s;
     }
-    .bp-tab:hover {
-        border-color: var(--color-line-bright);
-        color: var(--color-content);
-    }
-    .bp-tab:focus-visible,
-    .bp-play:focus-visible {
+    .bp-part:focus-visible {
         outline: 2px solid var(--color-accent);
-        outline-offset: 2px;
-    }
-    .bp-tab-num {
-        font-family: var(--font-mono);
-        font-size: 0.62rem;
-        color: var(--color-gold);
-    }
-    .bp-tab-name {
-        max-width: 100%;
-        overflow: hidden;
-        font-size: 0.74rem;
-        font-weight: var(--font-weight-semibold);
-        white-space: nowrap;
-        text-overflow: ellipsis;
-    }
-    .bp-tab-bar {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        height: 2px;
-        background: var(--color-accent);
-        transform: scaleX(0);
-        transform-origin: left;
-    }
-    .bp-tab[aria-pressed="true"],
-    .bp-tab[data-shown="true"] {
-        border-color: color-mix(in oklab, var(--color-accent) 70%, transparent);
-        background: color-mix(in oklab, var(--color-accent) 10%, transparent);
-        color: var(--color-content);
-    }
-    .bp-tab[aria-pressed="true"] .bp-tab-num {
-        color: var(--color-gold-bright);
-    }
-    /* Two names for one keyframe, swapped every step, so the beat restarts under the next tab. */
-    .bp:not([data-paused="true"])[data-beat="a"] .bp-tab[aria-pressed="true"] .bp-tab-bar {
-        animation: bp-beat-a var(--bp-beat) linear forwards;
-    }
-    .bp:not([data-paused="true"])[data-beat="b"] .bp-tab[aria-pressed="true"] .bp-tab-bar {
-        animation: bp-beat-b var(--bp-beat) linear forwards;
-    }
-    .bp[data-held="true"] .bp-tab-bar {
-        animation-play-state: paused;
-    }
-    .bp[data-paused="true"] .bp-tab[aria-pressed="true"] .bp-tab-bar {
-        transform: scaleX(1);
-    }
-    @keyframes bp-beat-a {
-        to {
-            transform: scaleX(1);
-        }
-    }
-    @keyframes bp-beat-b {
-        to {
-            transform: scaleX(1);
-        }
-    }
-    .bp-play {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.2rem;
-        border: 1px solid var(--color-line);
-        background: var(--role-figure-panel);
-        color: var(--color-muted);
-        cursor: pointer;
-    }
-    .bp-play:hover {
-        border-color: var(--color-line-bright);
-        color: var(--color-content);
-    }
-    .bp-play-play,
-    .bp[data-paused="true"] .bp-play-pause {
-        display: none;
-    }
-    .bp[data-paused="true"] .bp-play-play {
-        display: inline-flex;
-    }
-
-    /* ── The caption ──────────────────────────────────────────────────────────────────────────────────────────── */
-    .bp-caption {
-        display: grid;
-        margin-bottom: 1.6rem;
-        border-left: 2px solid var(--color-line-strong);
-        padding: 0.1rem 0 0.1rem 1rem;
-    }
-    /* One caption gives way before the next arrives, so two sentences never sit on each other. */
-    .bp-cap {
-        grid-area: 1 / 1;
-        visibility: hidden;
-        opacity: 0;
-        transition:
-            opacity 0.12s ease-out,
-            visibility 0s linear 0.12s;
-    }
-    .bp-cap[data-on="true"] {
-        visibility: visible;
-        opacity: 1;
-        transition: opacity 0.24s var(--bp-ease) 0.12s;
-    }
-    .bp-cap-title {
-        margin: 0;
-        font-family: var(--font-display);
-        font-size: clamp(1.1rem, 2.6cqi, 1.35rem);
-        font-weight: var(--font-weight-normal);
-        line-height: 1.3;
-        color: var(--color-content);
-    }
-    .bp-cap-num {
-        margin-right: 0.45rem;
-        font-family: var(--font-mono);
-        font-size: 0.72rem;
-        color: var(--color-gold);
-        vertical-align: 0.15em;
-    }
-    .bp-cap-body {
-        margin: 0.4rem 0 0;
-        max-width: 68ch;
-        font-size: 0.875rem;
-        line-height: 1.6;
-        color: var(--color-muted);
+        outline-offset: 4px;
     }
 
     /* ── The board ────────────────────────────────────────────────────────────────────────────────────────────── */
     .bp-board {
         position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "you" "ola" "band" "sites";
-        gap: 1.25rem;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "you ola"
+            "band band"
+            "worlds worlds";
+        row-gap: 1.75rem;
+        column-gap: 1rem;
     }
-    .bp-wires {
+    .bp-lines {
         position: absolute;
         inset: 0 auto auto 0;
         display: none;
         overflow: visible;
         pointer-events: none;
     }
-    .bp-icon {
-        display: inline-flex;
-        flex: none;
-        color: var(--color-gold);
-    }
-    .bp-col {
-        display: flex;
-        align-items: center;
-        gap: 0.45rem;
-        margin: 0 0 0.55rem;
-        font-family: var(--font-display);
-        font-size: 1rem;
-        font-weight: var(--font-weight-normal);
-        line-height: 1.3;
-        color: var(--role-display-ink);
-    }
-    /* "Same laptop" appears only while the laptop's three places are lit together. */
-    .bp-same {
-        display: none;
-        border: 1px solid var(--bp-ember);
-        background: color-mix(in oklab, var(--bp-ember) 16%, var(--color-card));
-        padding: 0 0.3rem;
-        font-size: 0.58rem;
-        font-weight: var(--font-weight-semibold);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        white-space: nowrap;
-        color: var(--color-content);
-    }
-    .bp[data-light="laptop"] [data-lit="on"] .bp-same {
-        display: inline-block;
-    }
 
-    /* Leaves fade when the light is elsewhere; containers keep their contents legible and only lose their edge. */
-    .bp-col,
-    .bp-kiosk,
-    .bp-account,
-    .bp-knows,
-    .bp-relay-tag,
-    .bp-plaque,
-    .bp-purpose,
-    .bp-agent,
-    .bp-keeps,
-    .bp-plinth,
-    .bp-reach-head,
-    .bp-reach-item,
-    .bp-link-tag {
+    /* Everything that can fall back eases there; a sandbox keeps its contents legible and only loses its colour. */
+    [data-k] {
         transition:
-            opacity 0.4s var(--bp-ease),
-            border-color 0.4s var(--bp-ease),
-            background-color 0.4s var(--bp-ease),
-            box-shadow 0.4s var(--bp-ease),
-            color 0.4s var(--bp-ease);
+            opacity 0.35s var(--bp-ease),
+            background-color 0.35s var(--bp-ease),
+            box-shadow 0.35s var(--bp-ease),
+            color 0.35s var(--bp-ease);
     }
-    .bp [data-lit="off"]:is(.bp-col, .bp-kiosk, .bp-account, .bp-knows, .bp-plaque, .bp-purpose, .bp-agent, .bp-keeps, .bp-plinth, .bp-reach-head, .bp-reach-item, .bp-link-tag) {
+    .bp-board [data-lit="off"]:not(.bp-world, .bp-band) {
         opacity: var(--bp-dim);
-    }
-    .bp-ola[data-lit="off"] .bp-col,
-    .bp-ola[data-lit="off"] .bp-kiosk {
-        opacity: var(--bp-dim);
-    }
-    .bp-relay[data-lit="off"] .bp-relay-tag {
-        opacity: var(--bp-dim);
-    }
-    .bp [data-lit="on"]:is(.bp-kiosk, .bp-account, .bp-agent, .bp-plinth, .bp-reach-item) {
-        border-color: var(--bp-ember);
-        background: color-mix(in oklab, var(--bp-ember) 11%, var(--color-card));
-        box-shadow: 0 0 0 1px color-mix(in oklab, var(--bp-ember) 25%, transparent), 0 0 14px -4px var(--bp-ember-soft);
-    }
-    .bp-ola[data-lit="on"] .bp-kiosk {
-        border-color: var(--bp-ember);
-        background: color-mix(in oklab, var(--bp-ember) 11%, var(--color-card));
-        box-shadow: 0 0 14px -4px var(--bp-ember-soft);
-    }
-    .bp [data-lit="on"]:is(.bp-col, .bp-purpose) {
-        color: var(--color-content);
     }
 
-    /* ── Where people sign in ─────────────────────────────────────────────────────────────────────────────────── */
+    /* ── You ──────────────────────────────────────────────────────────────────────────────────────────────────── */
     .bp-you {
         grid-area: you;
-        min-width: 0;
-    }
-    .bp-ola {
-        grid-area: ola;
-        min-width: 0;
-    }
-    .bp-kiosks {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.5rem;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-    .bp-kiosk {
-        position: relative;
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        grid-template-rows: auto auto;
+        justify-self: start;
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        column-gap: 0.5rem;
-        border: 1px solid var(--color-line-strong);
-        background: var(--role-figure-panel);
-        padding: 0.45rem 0.55rem;
-        min-width: 0;
-        cursor: default;
+        gap: 0.35rem;
+        border-radius: 22px;
     }
-    .bp-kiosk > .bp-icon {
-        grid-row: 1 / 3;
+    .bp-avatar {
+        display: grid;
+        width: 2.75rem;
+        height: 2.75rem;
+        place-items: center;
+        border-radius: 999px;
+        background: radial-gradient(circle at 35% 30%, var(--color-gold-bright), var(--color-gold) 70%);
+        color: var(--color-card);
+        box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--color-gold) 80%, transparent);
     }
-    .bp-kiosk-name {
-        font-size: 0.8rem;
+    .bp-you-name {
+        font-family: var(--font-display);
+        font-size: 1.1rem;
+        line-height: 1.2;
+    }
+    .bp-screens {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 999px;
+        background: var(--bp-wash);
+        padding: 0.35rem 0.75rem 0.35rem 0.65rem;
+        color: var(--color-muted);
+        transition: background-color 0.3s var(--bp-ease);
+    }
+    .bp-you:hover .bp-screens {
+        background: var(--bp-wash-strong);
+    }
+    .bp-screen {
+        display: inline-flex;
+    }
+    .bp-screens-label {
+        margin-left: 0.15rem;
+        font-size: 0.78rem;
+        white-space: nowrap;
+        color: var(--color-muted);
+    }
+    .bp[data-active="laptop"] .bp-screen[data-lit="on"] {
+        color: var(--color-gold);
+        filter: drop-shadow(0 0 6px color-mix(in oklab, var(--color-gold) 70%, transparent));
+    }
+
+    /* ── Ola ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+    .bp-ola {
+        --bp-tint: oklch(70% 0.1 var(--h));
+        grid-area: ola;
+        justify-self: end;
+        align-self: start;
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        border-radius: 999px;
+        padding: 0.2rem 0.6rem 0.2rem 0.2rem;
+        transition: background-color 0.3s var(--bp-ease);
+    }
+    .bp-ola:hover {
+        background: var(--bp-wash);
+    }
+    .bp-ola-avatar {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--bp-tint) 28%, var(--color-card));
+        font-size: 0.85rem;
         font-weight: var(--font-weight-semibold);
-        line-height: 1.25;
+        color: color-mix(in oklab, var(--bp-tint) 70%, var(--color-content));
     }
-    .bp-kiosk-line {
-        font-size: 0.68rem;
-        line-height: 1.3;
+    .bp-ola-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+    }
+    .bp-ola-name {
+        font-size: 0.85rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .bp-ola-line {
+        font-size: 0.72rem;
         color: var(--color-subtle);
-    }
-    .bp-kiosk .bp-same {
-        position: absolute;
-        top: -0.55rem;
-        right: 0.4rem;
     }
 
     /* ── intentic.dev ─────────────────────────────────────────────────────────────────────────────────────────── */
-    /* Drawn as a band the paths cross rather than a box they enter: it is beside the work, and only its relay is on
-       the way. A dashed edge, because it is ours and not a place your work lives. */
+    /* A soft strip across the whole picture: every line crosses it, none ends in it. */
     .bp-band {
         grid-area: band;
-        position: relative;
-        border: 1px dashed var(--color-line-bright);
-        background: color-mix(in oklab, var(--role-figure-terminal) 70%, transparent);
-        padding: 1.15rem 0.85rem 0;
-        transition: border-color 0.4s var(--bp-ease);
-    }
-    .bp-band[data-lit="on"] {
-        border-color: var(--bp-ember);
-    }
-    .bp-band[data-lit="off"] {
-        border-color: var(--color-line);
-    }
-    .bp-band-tag {
-        position: absolute;
-        top: 0;
-        left: 0.75rem;
-        border: 1px solid var(--color-line-bright);
-        background: var(--color-card);
-        padding: 0.1rem 0.55rem 0.15rem;
-        font-family: var(--font-mono);
-        font-size: 0.72rem;
-        color: var(--color-gold);
-        transform: translateY(-50%);
-    }
-    .bp-band-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 0.6rem;
-        padding-bottom: 0.85rem;
-    }
-    .bp-account {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        border: 1px solid var(--color-line-strong);
-        background: var(--color-card);
-        padding: 0.4rem 0.6rem;
-        min-width: 0;
-    }
-    .bp-account-text {
         display: flex;
         flex-direction: column;
-        min-width: 0;
-        line-height: 1.25;
+        align-items: flex-start;
+        gap: 0.1rem;
+        border-radius: 999px;
+        background: linear-gradient(
+            90deg,
+            color-mix(in oklab, var(--color-gold) 13%, transparent),
+            color-mix(in oklab, var(--color-gold) 5%, transparent) 55%,
+            color-mix(in oklab, var(--color-gold) 9%, transparent)
+        );
+        padding: 0.65rem 1.25rem;
+        transition:
+            background-color 0.35s var(--bp-ease),
+            opacity 0.35s var(--bp-ease);
     }
-    .bp-account-name {
-        font-size: 0.8rem;
+    .bp-band:hover,
+    .bp-band[data-lit="on"] {
+        background-color: color-mix(in oklab, var(--color-gold) 8%, transparent);
+    }
+    .bp-band[data-lit="off"] > * {
+        opacity: 0.45;
+    }
+    .bp-band-name {
+        font-size: 0.85rem;
         font-weight: var(--font-weight-semibold);
-        white-space: nowrap;
+        color: var(--color-content);
     }
-    .bp-account-line {
-        font-size: 0.66rem;
-        color: var(--color-subtle);
-    }
-    .bp-knows p {
-        margin: 0 auto;
-        max-width: 44ch;
-        text-wrap: balance;
-        font-size: 0.74rem;
-        line-height: 1.45;
-        color: var(--color-muted);
-    }
-    .bp-knows p + p {
-        margin-top: 0.2rem;
-    }
-    /* The relay: a rail the paths pass through, hatched like a wall but open where a path crosses. */
-    .bp-relay {
-        position: relative;
+    .bp-band-tagline {
         display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 1.35rem;
-        margin: 0 -0.85rem;
-        border-top: 1px solid var(--color-line-bright);
-        background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--color-gold) 16%, transparent) 0 1px, transparent 1px 9px);
-        transition: background-color 0.4s var(--bp-ease);
-    }
-    .bp-relay[data-lit="on"] {
-        background-color: color-mix(in oklab, var(--bp-ember) 12%, transparent);
-    }
-    .bp-relay-tag {
-        border: 1px solid var(--color-line-strong);
-        background: var(--color-card);
-        padding: 0 0.5rem;
-        font-family: var(--font-mono);
-        font-size: 0.62rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--color-gold);
+        flex-direction: column;
+        font-size: 0.76rem;
+        line-height: 1.35;
+        color: var(--color-muted);
+        transition: opacity 0.35s var(--bp-ease);
     }
 
     /* ── The sandboxes ────────────────────────────────────────────────────────────────────────────────────────── */
-    .bp-sites {
-        grid-area: sites;
+    .bp-worlds {
+        grid-area: worlds;
         position: relative;
         display: grid;
         grid-template-columns: minmax(0, 1fr);
-        gap: 1.75rem;
-        padding-top: 0.5rem;
+        gap: 1rem;
     }
-    .bp-site {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-    }
-    /* The wall is a plan's poché, as on the home page's precinct: two rules with the hatching between. */
-    .bp-wall {
+    .bp-world {
+        /* The sandbox's colour, in both skins: mixed into the card for its ground, into the ink for its accents. */
+        --bp-tint: oklch(70% 0.11 var(--h));
+        --bp-ink: color-mix(in oklab, var(--bp-tint) 62%, var(--color-content));
+        --bp-ground: color-mix(in oklab, var(--bp-tint) 13%, var(--color-card));
         position: relative;
-        border: 1px solid var(--color-line-bright);
-        background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--color-gold) 32%, transparent) 0 1px, transparent 1px 6px);
-        padding: var(--bp-wall);
-        transition:
-            border-color 0.4s var(--bp-ease),
-            box-shadow 0.4s var(--bp-ease),
-            background 0.4s var(--bp-ease);
-    }
-    .bp-wall[data-lit="on"] {
-        border-color: var(--bp-ember);
-        background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--bp-ember) 55%, transparent) 0 1px, transparent 1px 6px);
-        box-shadow: 0 0 22px -8px var(--bp-ember-soft);
-    }
-    .bp-wall[data-lit="off"] {
-        border-color: var(--color-line-strong);
-        background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--color-gold) 12%, transparent) 0 1px, transparent 1px 6px);
-    }
-    .bp-plaque {
-        position: absolute;
-        top: 0;
-        left: 0.7rem;
-        z-index: 1;
-        border: 1px solid var(--color-line-bright);
-        background: var(--color-card);
-        padding: 0.15rem 0.6rem 0.2rem;
-        font-family: var(--font-display);
-        font-size: 0.95rem;
-        line-height: 1.2;
-        white-space: nowrap;
-        color: var(--color-content);
-        transform: translateY(-50%);
-    }
-    .bp-plaque[data-lit="on"] {
-        border-color: var(--bp-ember);
-    }
-    .bp-court {
         display: flex;
         flex-direction: column;
-        gap: 0.55rem;
-        border: 1px solid var(--color-line-bright);
-        background: var(--color-card);
-        padding: 1.05rem 0.6rem 0.6rem;
-        min-height: 100%;
+        gap: 0.85rem;
+        border-radius: 24px;
+        background:
+            radial-gradient(90% 60% at var(--bp-door, 50%) 0%, color-mix(in oklab, var(--bp-tint) 16%, transparent), transparent 70%),
+            var(--bp-ground);
+        padding: 1.15rem 1.15rem 1rem;
+        min-width: 0;
+        transition:
+            box-shadow 0.35s var(--bp-ease),
+            background-color 0.35s var(--bp-ease),
+            opacity 0.35s var(--bp-ease);
     }
-    .bp-purpose {
+    .bp-world[data-world="work"] {
+        --bp-door: 38%;
+    }
+    /* The whole sandbox is one press target, laid over it; the two laptop parts inside stand above it. */
+    .bp-hit {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        border-radius: inherit;
+    }
+    .bp-world:has(> .bp-hit:hover),
+    .bp-world[data-lit="on"] {
+        box-shadow: 0 18px 40px -26px color-mix(in oklab, var(--bp-tint) 80%, transparent);
+    }
+    .bp-world:has(> .bp-hit[aria-expanded="true"]) {
+        box-shadow:
+            0 0 0 1.5px color-mix(in oklab, var(--bp-tint) 45%, transparent),
+            0 18px 40px -26px color-mix(in oklab, var(--bp-tint) 80%, transparent);
+    }
+    .bp-world[data-lit="off"] {
+        --bp-ground: color-mix(in oklab, var(--bp-tint) 4%, var(--color-card));
+    }
+    .bp-world-head {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+    }
+    .bp-world-title {
+        font-family: var(--font-display);
+        font-size: 1.3rem;
+        line-height: 1.2;
+        color: var(--color-content);
+    }
+    .bp-world-owner {
+        font-size: 0.78rem;
+        color: var(--bp-ink);
+    }
+
+    /* The agents at a glance: one face each, ringed by where it stands, then the line that matters. */
+    .bp-world-agents {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-size: 0.8rem;
+        line-height: 1.3;
+        color: var(--color-content);
+    }
+    .bp-faces {
+        display: inline-flex;
+        flex: none;
+    }
+    .bp-glance {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.25;
+    }
+    .bp-glance-state {
+        font-size: 0.74rem;
+        color: var(--color-muted);
+    }
+    .bp-glance-state[data-state="waiting"] {
+        color: var(--color-primary-500);
+    }
+    .bp-glance-state[data-state="ready"] {
+        color: var(--color-success);
+    }
+    .bp-face {
+        display: grid;
+        width: 1.35rem;
+        height: 1.35rem;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--bp-tint) 26%, var(--color-card));
+        box-shadow:
+            0 0 0 2px var(--bp-ground),
+            inset 0 0 0 1.5px var(--bp-ring, transparent);
+        color: var(--bp-ink);
+    }
+    .bp-face + .bp-face {
+        margin-left: -0.35rem;
+    }
+    .bp-face[data-state="working"] {
+        --bp-ring: color-mix(in oklab, var(--bp-tint) 70%, transparent);
+        animation: bp-breathe 2.4s ease-in-out infinite;
+    }
+    .bp-face[data-state="waiting"] {
+        --bp-ring: var(--color-primary-500);
+        color: var(--color-primary-500);
+    }
+    .bp-face[data-state="ready"] {
+        --bp-ring: var(--color-success);
+        color: var(--color-success);
+    }
+    @keyframes bp-breathe {
+        50% {
+            box-shadow:
+                0 0 0 2px var(--bp-ground),
+                inset 0 0 0 1.5px transparent;
+        }
+    }
+
+    /* What it reaches: round pills, a coin of the sandbox's colour and a name. */
+    .bp-pills {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 0.1rem 0.5rem;
+        gap: 0.35rem;
         margin: 0;
+        padding: 0;
+        list-style: none;
     }
-    .bp-purpose-name {
-        font-size: 0.62rem;
-        font-weight: var(--font-weight-semibold);
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--color-gold);
+    .bp-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-content) 6%, transparent);
+        padding: 0.2rem 0.65rem 0.2rem 0.22rem;
+        font-size: 0.76rem;
+        line-height: 1.3;
+        white-space: nowrap;
+        color: var(--color-content);
     }
-    .bp-purpose-owner {
-        font-size: 0.66rem;
-        color: var(--color-subtle);
+    .bp-coin {
+        display: grid;
+        width: 1.3rem;
+        height: 1.3rem;
+        flex: none;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--bp-tint) 24%, var(--color-card));
+        color: var(--bp-ink);
     }
-    .bp-agents {
+    .bp-raised {
+        position: relative;
+        z-index: 2;
+    }
+    button.bp-pill:hover {
+        background: color-mix(in oklab, var(--color-content) 11%, transparent);
+    }
+    .bp-runs {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-top: auto;
+        align-self: flex-start;
+        border-radius: 999px;
+        padding-top: 0.15rem;
+        font-size: 0.78rem;
+        color: var(--color-muted);
+    }
+    .bp-runs > span {
+        display: inline-flex;
+        color: var(--bp-ink);
+    }
+    button.bp-runs {
+        margin-left: -0.5rem;
+        padding: 0.2rem 0.5rem;
+    }
+    button.bp-runs:hover {
+        background: color-mix(in oklab, var(--color-content) 7%, transparent);
+    }
+    /* The laptop's three places glow together. */
+    .bp[data-active="laptop"] :is(.bp-pill, .bp-runs)[data-lit="on"] {
+        background: color-mix(in oklab, var(--color-gold) 20%, transparent);
+        box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--color-gold) 60%, transparent);
+        color: var(--color-content);
+    }
+
+    .bp-link {
+        position: absolute;
+        z-index: 2;
+        display: none;
+        width: 1.7rem;
+        height: 1.7rem;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--color-card);
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-content) 10%, transparent);
+        color: var(--color-muted);
+        transform: translate(-50%, -50%);
+    }
+    .bp-link:hover,
+    .bp-link[data-lit="on"] {
+        color: var(--color-content);
+        box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--color-gold) 60%, transparent);
+    }
+
+    /* ── Lines: drawn by the script, so reached through :global ───────────────────────────────────────────────── */
+    .bp :global(.bp-line) {
+        fill: none;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        opacity: 0.75;
+        transition:
+            opacity 0.35s var(--bp-ease),
+            stroke-width 0.35s var(--bp-ease);
+    }
+    .bp :global(.bp-line[data-lit="on"]) {
+        opacity: 1;
+        stroke-width: 2.5;
+        filter: drop-shadow(0 0 4px color-mix(in oklab, var(--color-gold) 55%, transparent));
+    }
+    .bp :global([data-lit="off"]:is(.bp-line, .bp-door, .bp-gate, .bp-gate-glow, .bp-link-line)) {
+        opacity: 0.14;
+    }
+    .bp :global(.bp-gate) {
+        fill: var(--color-card);
+        stroke: var(--bp-gold);
+        stroke-width: 1.75;
+    }
+    .bp :global(.bp-gate-glow) {
+        fill: color-mix(in oklab, var(--color-gold) 22%, transparent);
+    }
+    .bp :global(.bp-link-line) {
+        fill: none;
+        stroke: color-mix(in oklab, var(--color-content) 30%, transparent);
+        stroke-width: 1.5;
+        stroke-dasharray: 0.5 5;
+        stroke-linecap: round;
+    }
+    .bp :global(:is(.bp-gate, .bp-gate-glow, .bp-door, .bp-link-line)) {
+        transition: opacity 0.35s var(--bp-ease);
+    }
+
+    /* The lines draw themselves in once, the first time the figure is on screen. */
+    .bp[data-intro="waiting"] :global(.bp-line) {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+    }
+    .bp[data-intro="waiting"] :global(:is(.bp-gate, .bp-gate-glow, .bp-door)) {
+        opacity: 0;
+    }
+    .bp[data-intro="playing"] :global(.bp-line) {
+        stroke-dasharray: 1;
+        animation: bp-draw 0.9s var(--bp-ease) var(--d, 0s) backwards;
+    }
+    .bp[data-intro="playing"] :global(:is(.bp-gate, .bp-gate-glow)) {
+        animation: bp-appear 0.4s var(--bp-ease) 0.35s backwards;
+    }
+    .bp[data-intro="playing"] :global(.bp-door) {
+        animation: bp-appear 0.4s var(--bp-ease) 1.2s backwards;
+    }
+    @keyframes bp-draw {
+        from {
+            stroke-dashoffset: 1;
+        }
+        to {
+            stroke-dashoffset: 0;
+        }
+    }
+    @keyframes bp-appear {
+        from {
+            opacity: 0;
+        }
+    }
+
+    /* ── The peek ─────────────────────────────────────────────────────────────────────────────────────────────── */
+    .bp-peek {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.35s var(--bp-ease);
+    }
+    .bp-peek[data-open="true"] {
+        grid-template-rows: 1fr;
+    }
+    .bp-peek-clip {
+        min-height: 0;
+        overflow: hidden;
+    }
+    .bp-peek-card {
+        --bp-tint: var(--color-gold);
+        margin-top: 1.25rem;
+        border-radius: 22px;
+        background: color-mix(in oklab, var(--bp-tint) 8%, var(--color-card));
+        padding: 1.2rem 1.35rem 1.35rem;
+    }
+    .bp-worlds .bp-peek-card {
+        margin-top: 0;
+    }
+    .bp-peek-card[style] {
+        --bp-tint: oklch(70% 0.11 var(--h));
+    }
+    .bp-peek-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .bp-peek-title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        line-height: 1.3;
+        color: var(--color-content);
+    }
+    .bp-close {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        flex: none;
+        place-items: center;
+        border: 0;
+        border-radius: 999px;
+        background: var(--bp-wash);
+        color: var(--color-muted);
+        cursor: pointer;
+    }
+    .bp-close:hover {
+        background: var(--bp-wash-strong);
+        color: var(--color-content);
+    }
+    .bp-close:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+    .bp-peek-body {
+        margin: 0.45rem 0 0;
+        max-width: 62ch;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+    .bp-facts {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 0.4rem 1.25rem;
+        margin: 1rem 0 0;
+    }
+    .bp-facts div {
+        display: contents;
+    }
+    .bp-facts dt {
+        font-size: 0.82rem;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-content);
+    }
+    .bp-facts dd {
+        margin: 0;
+        font-size: 0.82rem;
+        color: var(--color-muted);
+    }
+    .bp-groups {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+        gap: 1rem 1.5rem;
+        margin-top: 1.1rem;
+    }
+    .bp-group-name {
+        margin: 0 0 0.35rem;
+        font-size: 0.78rem;
+        font-weight: var(--font-weight-medium);
+        color: color-mix(in oklab, var(--bp-tint) 62%, var(--color-content));
+    }
+    .bp-group ul {
         display: flex;
         flex-direction: column;
         gap: 0.3rem;
         margin: 0;
         padding: 0;
         list-style: none;
-    }
-    .bp-agent {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.4rem;
-        border: 1px solid var(--color-line);
-        background: var(--role-figure-terminal);
-        padding: 0.32rem 0.45rem;
-        min-width: 0;
-    }
-    .bp-agent-icon {
-        margin-top: 0.1rem;
-        color: var(--color-primary-400);
-    }
-    .bp-agent-text {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        line-height: 1.25;
-    }
-    .bp-agent-task {
-        overflow: hidden;
-        font-size: 0.72rem;
-        white-space: nowrap;
-        text-overflow: ellipsis;
+        font-size: 0.82rem;
+        line-height: 1.35;
         color: var(--color-content);
     }
+    .bp-group-sub,
     .bp-agent-state {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        font-size: 0.64rem;
-        color: var(--color-muted);
-    }
-    .bp-dot {
-        width: 0.38rem;
-        height: 0.38rem;
-        flex: none;
-        border-radius: 999px;
-        background: currentColor;
-    }
-    .bp-agent[data-state="working"] .bp-dot {
-        animation: bp-breathe 2.2s ease-in-out infinite;
+        display: block;
+        font-size: 0.74rem;
+        color: var(--color-subtle);
     }
     .bp-agent[data-state="waiting"] .bp-agent-state {
         color: var(--color-primary-500);
@@ -1155,358 +1071,67 @@ const keys = (...parts: (string | false | undefined)[]): string => parts.filter(
     .bp-agent[data-state="ready"] .bp-agent-state {
         color: var(--color-success);
     }
-    @keyframes bp-breathe {
-        50% {
-            opacity: 0.25;
-        }
-    }
-    .bp-keeps {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-        margin-top: auto;
-    }
-    .bp-keep {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        border: 1px solid var(--color-line);
-        padding: 0.02rem 0.35rem;
-        font-family: var(--font-mono);
-        font-size: 0.6rem;
-        white-space: nowrap;
-        color: var(--color-muted);
-        transition:
-            border-color 0.4s var(--bp-ease),
-            color 0.4s var(--bp-ease);
-    }
-    .bp-keep :global(svg) {
-        color: var(--color-subtle);
-    }
-    .bp-keep-key :global(svg) {
-        color: var(--color-gold);
-    }
-    .bp-keeps[data-lit="on"] .bp-keep-key {
-        border-color: var(--bp-ember);
-        color: var(--color-content);
-    }
 
-    /* The machine a sandbox stands on: a plinth under its walls, a step wider, as a foundation is drawn. */
-    .bp-plinth {
-        position: relative;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: center;
-        gap: 0.1rem 0.4rem;
-        margin: 0 -0.35rem;
-        border: 1px solid var(--color-line-strong);
-        border-top: 0;
-        background: var(--role-figure-terminal);
-        padding: 0.35rem 0.5rem 0.35rem 1.6rem;
-        cursor: default;
-    }
-    .bp-plinth-label {
-        font-size: 0.58rem;
-        font-weight: var(--font-weight-semibold);
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+    .bp-hint {
+        margin: 1.1rem 0 0;
+        text-align: center;
+        font-size: 0.78rem;
         color: var(--color-subtle);
+        transition: opacity 0.25s var(--bp-ease);
     }
-    .bp-plinth-name {
-        font-size: 0.74rem;
-        color: var(--color-content);
-    }
-    /* On the seam between wall and plinth, clear of the badge on the reach list below. */
-    .bp-plinth .bp-same {
-        position: absolute;
-        top: -0.55rem;
-        right: 0.6rem;
-    }
-
-    /* What a sandbox reaches: fed by one line down its left side. */
-    .bp-reach {
-        display: flex;
-        flex-direction: column;
-        gap: 0.3rem;
-        margin: 0.85rem 0 0;
-        padding: 0 0 0 1.6rem;
-        list-style: none;
-    }
-    .bp-reach-head {
-        font-size: 0.58rem;
-        font-weight: var(--font-weight-semibold);
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--color-subtle);
-    }
-    .bp-reach-item {
-        position: relative;
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        align-items: center;
-        column-gap: 0.45rem;
-        border: 1px solid var(--color-line-strong);
-        background: var(--role-figure-panel);
-        padding: 0.28rem 0.5rem;
-        min-width: 0;
-        cursor: default;
-    }
-    .bp-reach-item > .bp-icon {
-        grid-row: 1 / 3;
-    }
-    .bp-reach-name {
-        font-size: 0.74rem;
-        font-weight: var(--font-weight-medium);
-        line-height: 1.25;
-    }
-    .bp-reach-line {
-        font-size: 0.64rem;
-        line-height: 1.25;
-        color: var(--color-subtle);
-    }
-    .bp-reach-item .bp-same {
-        position: absolute;
-        top: -0.55rem;
-        right: 0.4rem;
-    }
-
-    .bp-link-tag {
+    .bp[data-peeking="true"] .bp-hint {
         display: none;
-        position: absolute;
-        z-index: 1;
-        border: 1px dashed var(--color-line-bright);
-        background: var(--color-card);
-        padding: 0 0.3rem;
-        font-family: var(--font-mono);
-        font-size: 0.58rem;
-        color: var(--color-gold);
-        transform: translate(-50%, -50%) rotate(-90deg);
-    }
-    .bp-link-tag[data-lit="on"] {
-        border-color: var(--bp-ember);
-        color: var(--color-content);
     }
 
-    /* ── Wires: drawn by the script, so reached through :global ───────────────────────────────────────────────── */
-    .bp :global(.bp-wire) {
-        fill: none;
-        stroke: var(--bp-rest);
-        stroke-width: 1.1;
-        stroke-linecap: round;
-        transition:
-            stroke 0.35s var(--bp-ease),
-            stroke-width 0.35s var(--bp-ease),
-            opacity 0.35s var(--bp-ease);
-    }
-    .bp :global(.bp-wire-dotted) {
-        stroke-dasharray: 1 3.5;
-        stroke-width: 1.4;
-    }
-    .bp :global(.bp-wire-dashed) {
-        stroke-dasharray: 5 4;
-    }
-    .bp :global(.bp-wire[data-lit="off"]),
-    .bp :global(.bp-knot[data-lit="off"]) {
-        opacity: 0.2;
-    }
-    .bp :global(.bp-wire[data-lit="on"]) {
-        stroke: var(--bp-ember);
-        stroke-width: 1.6;
-        filter: drop-shadow(0 0 3px var(--bp-ember-soft));
-    }
-    .bp :global(.bp-wire-dotted[data-lit="on"]) {
-        stroke-width: 1.8;
-    }
-    .bp :global(.bp-knot) {
-        fill: var(--color-card);
-        stroke: var(--bp-rest);
-        stroke-width: 1.2;
-        transition: stroke 0.35s var(--bp-ease);
-    }
-    .bp :global(.bp-knot[data-lit="on"]) {
-        stroke: var(--bp-ember);
-    }
-    .bp :global(.bp-gate-gap) {
-        fill: var(--color-card);
-    }
-    .bp :global(.bp-gate-jamb) {
-        fill: none;
-        stroke: var(--color-line-bright);
-        stroke-width: 1;
-    }
-    .bp :global(.bp-gate[data-lit="on"] .bp-gate-gap) {
-        fill: color-mix(in oklab, var(--bp-ember) 22%, var(--color-card));
-    }
-    .bp :global(.bp-gate[data-lit="on"] .bp-gate-jamb) {
-        stroke: var(--bp-ember);
-    }
-    .bp :global(.bp-spark) {
-        fill: var(--color-primary-200);
-        opacity: 0;
-        filter: drop-shadow(0 0 4px var(--bp-ember));
-    }
-    .bp :global(.bp-spark-go) {
-        animation: bp-spark 0.8s var(--bp-ease) forwards;
-    }
-    @keyframes bp-spark {
-        0% {
-            opacity: 0;
-        }
-        15%,
-        80% {
-            opacity: 1;
-        }
-        100% {
-            opacity: 0;
-        }
-    }
-
-    /* ── Foot ─────────────────────────────────────────────────────────────────────────────────────────────────── */
-    .bp-foot {
-        margin-top: 1.4rem;
-        border-top: 1px solid var(--color-line);
-        padding-top: 0.8rem;
-    }
-    .bp-legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.4rem 1.4rem;
-        font-size: 0.75rem;
-        color: var(--color-muted);
-    }
-    .bp-legend-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .bp-legend-line {
-        width: 1.6rem;
-        height: 0;
-        border-top: 1.6px solid var(--bp-ember);
-    }
-    .bp-legend-dotted {
-        border-top-style: dotted;
-        border-top-width: 2px;
-    }
-    .bp-legend-dashed {
-        border-top-style: dashed;
-    }
-
-    /* ── Narrow: tabs scroll, and the drawing reads top to bottom with no wires ───────────────────────────────── */
-    @container (max-width: 33.99rem) {
-        .bp-tabs {
-            grid-template-columns: repeat(7, minmax(5.2rem, 1fr)) auto;
-            overflow-x: auto;
-            padding-bottom: 0.2rem;
-        }
-        .bp-relay {
-            margin-top: 0.15rem;
-        }
-    }
-
-    /* ── Wide: the three sandboxes side by side, people above them, the wires across the gaps ─────────────────── */
+    /* ── Wide: you over the middle, Ola over her sandbox, the three side by side, the lines across the gaps ───── */
     @container (min-width: 34rem) {
         .bp-board {
             grid-template-columns: repeat(3, minmax(0, 1fr));
             grid-template-areas:
-                "you you ola"
+                ". you ola"
                 "band band band"
-                "sites sites sites";
+                "worlds worlds worlds";
             column-gap: var(--bp-gap);
-            row-gap: 2.6rem;
+            row-gap: 2.5rem;
         }
-        .bp-wires {
+        .bp-you {
+            justify-self: center;
+        }
+        .bp-lines {
             display: block;
         }
-        .bp-kiosks {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
-        .bp-kiosk {
-            grid-template-columns: minmax(0, 1fr);
-            justify-items: start;
-            row-gap: 0.15rem;
-            padding: 0.5rem 0.55rem;
-        }
-        .bp-kiosk > .bp-icon {
-            grid-row: auto;
-            margin-bottom: 0.15rem;
-        }
-        /* Ola stands over the sandbox she owns. */
-        .bp-ola .bp-col {
-            justify-content: flex-end;
-        }
-        .bp-kiosk-ola {
-            margin-left: auto;
-            width: calc(50% - 0.25rem);
-        }
-        .bp-band-row {
-            /* Two empty lanes either side of the address book: the paths run down them. */
-            grid-template-columns: auto minmax(2.75rem, 1fr) minmax(0, 2.6fr) minmax(2.75rem, 1fr) auto;
-            align-items: center;
-            gap: 0;
-        }
-        .bp-knows {
-            grid-column: 3;
-            text-align: center;
-        }
-        .bp-account[data-bp-acct="ola"] {
-            grid-column: 5;
-        }
-        /* Each sandbox is three rows of one shared grid, so walls, machines and reach lists line up across the row
-           however much each one holds. */
-        .bp-sites {
+        .bp-worlds {
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            grid-template-rows: auto auto auto;
-            column-gap: var(--bp-gap);
-            row-gap: 0;
-            padding-top: 0;
+            gap: var(--bp-gap);
         }
-        .bp-site {
+        .bp-link {
             display: grid;
-            grid-row: span 3;
-            grid-template-rows: subgrid;
-        }
-        .bp-reach {
-            align-self: start;
-        }
-        .bp-link-tag {
-            display: block;
         }
     }
-
-    /* Just wide enough for three columns: tighter gutters and tiles so a tile's name keeps to one line. */
-    @container (min-width: 34rem) and (max-width: 41.99rem) {
-        .bp {
-            --bp-gap: 1rem;
+    /* Only just wide enough for three: a little tighter, so a pill's name keeps to one line. */
+    @container (min-width: 34rem) and (max-width: 43.99rem) {
+        .bp-world {
+            padding: 1rem 0.85rem 0.9rem;
         }
-        /* Seven names do not fit one row here: two rows of four, the play button closing the second. */
-        .bp-tabs {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+        .bp-world-title {
+            font-size: 1.15rem;
         }
-        .bp-play {
-            width: auto;
+        .bp-world-agents {
+            font-size: 0.76rem;
         }
-        .bp-kiosks {
-            gap: 0.35rem;
+        .bp-pill {
+            font-size: 0.72rem;
         }
-        .bp-kiosk {
-            padding: 0.45rem 0.4rem;
-        }
-        .bp-kiosk-name {
-            font-size: 0.74rem;
-        }
-        .bp-court {
-            padding-inline: 0.45rem;
+        .bp-runs {
+            font-size: 0.72rem;
         }
     }
-
     @container (min-width: 52rem) {
         .bp {
-            --bp-gap: 2rem;
+            --bp-gap: 1.75rem;
         }
-        .bp-agent-task {
-            font-size: 0.76rem;
+        .bp-board {
+            row-gap: 3rem;
         }
     }
 
