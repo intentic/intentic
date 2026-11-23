@@ -17,6 +17,9 @@ export const SURFACE = `[data-window-band]`;
 /** Whatever can hold the corner, bar or surface: what the document is watched for. */
 export const OCCUPANT = `${BAR}, ${SURFACE}`;
 
+/** The attribute the corner's holder wears while it holds it, valued `width` or `band` as it makes room. */
+export const CORNER_MARK = `data-window-corner`;
+
 /** As much of a bar's box as any question here needs. */
 export interface BarEdges {
     readonly top: number;

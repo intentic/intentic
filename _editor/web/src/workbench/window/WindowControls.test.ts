@@ -109,11 +109,14 @@ it(`hands the corner from one bar to the next as views come and go`, async () =>
     await settle();
 
     expect(barOf(first).style.getPropertyValue(RESERVE), `a bar that left keeps no reserve`).toBe(``);
+    expect(barOf(first).hasAttribute(`data-window-corner`), `nor the mark that said it held the corner`).toBe(false);
 
     const second = mountView();
     await settle();
 
     expect(barOf(second).style.getPropertyValue(RESERVE)).toBe(`var(--window-controls-width)`);
+    // What a bar reads to lay itself out for the room it gave up (ChatTabs.vue).
+    expect(barOf(second).getAttribute(`data-window-corner`)).toBe(`width`);
 });
 
 /* A SURFACE WITH NO BAR ALONG ITS TOP is handed the band to keep clear, and gives it back once a bar takes the corner. */

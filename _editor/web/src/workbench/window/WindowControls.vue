@@ -9,7 +9,7 @@ import {
     desktopFrameless,
     workDesktopWindow,
 } from "../../app/environments/desktop";
-import { BAR, type BarEdges, barsChanged, type Corner, cornerHolder, SURFACE } from "./controlsReserve";
+import { BAR, type BarEdges, barsChanged, type Corner, CORNER_MARK, cornerHolder, SURFACE } from "./controlsReserve";
 import { handBackOwnPanel } from "./floating";
 import { themeRowValue } from "../../skins/themeRow";
 import { useSkin } from "../../skins/useSkin";
@@ -103,7 +103,10 @@ const measure = (): void => {
         return;
     }
     reserved?.box.style.removeProperty(reserved.reserve.property);
+    reserved?.box.removeAttribute(CORNER_MARK);
     next?.box.style.setProperty(next.reserve.property, next.reserve.value);
+    // Said on the box too, so a bar can lay itself out for the room it lost (ChatTabs.vue lets its title off centre).
+    next?.box.setAttribute(CORNER_MARK, holder?.gives ?? ``);
     reserved = next;
     besideBar.value = next?.reserve === RESERVE.width;
 };

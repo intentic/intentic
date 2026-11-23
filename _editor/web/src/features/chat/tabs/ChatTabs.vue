@@ -311,9 +311,13 @@ onBeforeUnmount(() => {
          is the board's to say and the tucked strip's (ChatTucked.vue), not a count beside this one's name. -->
     <!-- `--chat-bar-side` is the corner's width, held by BOTH sides as their floor: a title too long for the middle then
          truncates between two equal sides instead of the empty one giving way and pushing it off centre. -->
+    <!-- EXCEPT UNDER THE DESKTOP WINDOW'S BUTTONS (`data-window-corner`, WindowControls.vue), where the bar has given up
+         their width too and six presses share the right end: there the empty left side has no floor. With room the two
+         sides still split it evenly and the title stays centred; short of room the left one gives way first, so the
+         title slides left to the bar's start before it truncates, instead of truncating beside a strip of nothing. -->
     <header
         ref="bar"
-        class="chat-bar view-header view-header-blend relative grid grid-cols-[minmax(var(--chat-bar-side),1fr)_minmax(0,auto)_minmax(var(--chat-bar-side),1fr)] items-center gap-2 px-1.5"
+        class="chat-bar view-header view-header-blend relative grid grid-cols-[minmax(var(--chat-bar-side),1fr)_minmax(0,auto)_minmax(var(--chat-bar-side),1fr)] items-center gap-2 px-1.5 [&[data-window-corner=width]]:grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(var(--chat-bar-side),1fr)]"
         :style="{ '--chat-bar-side': cornerWidth }"
         @contextmenu="onBarContextMenu"
     >
