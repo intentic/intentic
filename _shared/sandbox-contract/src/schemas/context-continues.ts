@@ -31,10 +31,13 @@ export const continueWhenNeedMetSetting = z
         "Whether a conversation carries on by itself once something it asked a person for arrives: a connection made, a secret given, access allowed, a tool built into the image. Off leaves the answer on the conversation's card until someone sends a message.",
     );
 
-// A switch rather than a policy: a restart is the one ending with nobody watching it.
+// A switch rather than a policy: a restart is the one ending with nobody watching it. On to begin with (2026-11-23): off,
+// a restart left every conversation it cut waiting for a press, and one whose turn was waiting on its own subagents (cut
+// by the same restart) had nothing left that would ever wake it. A restart storm still resumes nothing
+// (restart-resume-policy.ts), and a restart traced to memory goes by memoryKillPolicy.
 export const autoResumeOnRestartSetting = z
     .boolean()
-    .default(false)
+    .default(true)
     .describe(
-        "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. Off to begin with: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost. A restart the sandbox traces to memory running out goes by `memoryKillPolicy` instead, whatever this says.",
+        "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. On to begin with, so work a restart cut carries on rather than waiting for a press; turn it off if you would rather not have the allowance spent and files edited while you are not watching. A burst of restarts in a row resumes nothing. Either way the interruption is recorded rather than silently lost. A restart the sandbox traces to memory running out goes by `memoryKillPolicy` instead, whatever this says.",
     );

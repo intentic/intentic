@@ -112,7 +112,7 @@ What does need more than a new turn:
 - A newer daemon: the owner's update, see `/root/.claude/skills/intentic/references/sandbox-behind-app.md`.
 
 A restart stops running turns; they must be resumed afterwards unless **Resume turns after a restart** is on
-(Sandbox ▸ Agent ▸ Finishing).
+(Sandbox ▸ Agent ▸ Finishing; on by default).
 
 **Night hours** (Sandbox ▸ Agent ▸ Finishing, settings `nightHours`, off until the owner sets them): the hours the
 owner sleeps, on the sandbox's clock (the Clock row just above it). While they last and nobody is at the editor, an

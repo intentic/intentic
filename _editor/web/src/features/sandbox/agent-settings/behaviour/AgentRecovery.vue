@@ -317,7 +317,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
             <Row icon="refresh" :title="t(`sandbox.agentRecovery.resumeTurnsAfterRestart`)" :description="t(`sandbox.agentRecovery.pickUpInFlight`)">
                 <template #control>
                     <ToggleSwitch
-                        :model-value="settings?.autoResumeOnRestart ?? false"
+                        :model-value="settings?.autoResumeOnRestart ?? true"
                         :disabled="settings === undefined"
                         @update:model-value="(value: boolean) => patch({ autoResumeOnRestart: value })"
                     />
