@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash, ui } from "@intentic/ui";
+import { ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
-import { type ComponentPublicInstance, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useDriveRefusal } from "../session/driveRefusal";
 import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
@@ -14,9 +13,8 @@ import { useAgents } from "../../../models/fleet/useAgents";
 import { canArchive } from "../../../models/fleet/useAgents-fleet";
 import OriginMark from "../../../parts/fleet/OriginMark.vue";
 import RailLane from "../../../components/RailLane.vue";
-import RailColumn from "./RailColumn.vue";
 import { headerGlyph, statusLookOf } from "./statusLook";
-import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../../../models/conversations/panel/chatPanelLayout";
+import { toggleChatFloating, toggleChatTucked } from "../../../models/conversations/panel/chatPanelLayout";
 import { allTabs, isArchived, laneOfTab, needsYouQueue, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
@@ -27,21 +25,16 @@ import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "../panel/PastChatList.vue";
-import { chatBoardOffered, toggleChatBoard } from "../panel/board/chatBoard";
 import { useT } from "@intentic/ui/i18n";
 
-// The chat panel's own bar: names the active conversation and drops the full list (ChatTabList) on click.
-// Docked it's a header over a sheet; floating it's a rail with the list always open. Reads the conversation
-// list from useChat and emits select/close/open rather than writing it.
+// The chat panel's own bar: names the active conversation and drops the full list (ChatTabList) on click, a header over a
+// sheet wherever the chat stands (the Agents board is the standing list of chats). Reads the conversation list from
+// useChat and emits select/close/open rather than writing it.
 
 const t = useT();
 const vocabulary = useVocabulary();
 // A reader who cannot drive a chat (a viewer, a writer with agents off) is offered no new one: it would only be refused.
 const readOnly = useDriveRefusal();
-
-// `listless`: the board stands beside the chat and is the list (panel/board/chatBoard.ts), so the rail draws nothing and
-// the bar is only its commands, which still act on the open chats.
-const { listless = false } = defineProps<{ listless?: boolean }>();
 
 const emit = defineEmits<{
     select: [id: string];
@@ -65,18 +58,15 @@ const {
 } = useChat();
 const { agentById, rename, archive, fleet, open: openAgent } = useAgents();
 const { floats } = useChatFloating();
-const router = useRouter();
-// The hover card and the accessible name, each with the shortcut; hidden where the panel already floats.
+// The hover card and the accessible name, each with the shortcut. In its own window the same press brings it back.
 const shortcutTip = (title: string, command: string): Tip => ({ title, keys: commandShortcut(command) });
-const floatHint = computed(() => shortcutTip(t(`chat.chatTabs.newWindow`), `chat.toggleFloating`));
-const floatLabel = computed(() => withShortcut(t(`chat.words.moveChatIntoNewWindow`), `chat.toggleFloating`));
-// Moves the chat's home to the rail (a tile), taking the full window; return paths live on the tile itself and this bar's own menu.
-const railHint = computed((): Tip => ({ ...shortcutTip(t(`chat.chatTabs.dockToRail`), `chat.toggleHome`), note: t(`chat.chatTabs.fullWindow`) }));
-const railLabel = computed(() => withShortcut(t(`chat.words.dockChatToRail`), `chat.toggleHome`));
-
-// On a wide surface the bar stands up as a left rail with the list always open, trading width the chat has for
-// the height it's short of. Docked (~22rem) is too narrow for a permanent rail, so the list lives in a sheet.
-const vertical = computed(() => chatWide.value);
+const floatHint = computed(() => shortcutTip(floats.value ? t(`chat.words.dockChatBack`) : t(`chat.chatTabs.newWindow`), `chat.toggleFloating`));
+const floatLabel = computed(() =>
+    withShortcut(floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`), `chat.toggleFloating`),
+);
+// Folds the chat into the strip at the window's edge (shell/side/ChatTucked.vue), as dragging its edge past half a pane does.
+const tuckHint = computed((): Tip => ({ ...shortcutTip(t(`chat.chatTabs.tuckAway`), `chat.toggleTucked`), note: t(`chat.chatTabs.tuckAwayNote`) }));
+const tuckLabel = computed(() => withShortcut(t(`chat.chatTabs.tuckAway`), `chat.toggleTucked`));
 
 // The one thing the old strip did that /agents can't: say from elsewhere (a terminal, settings) that other
 // chats are alive. Counts are over chats open in this window, and each mark disappears at zero.
@@ -98,14 +88,8 @@ const attentionCount = computed(
 // (context menus and the list's own popovers excepted: the main-line strip's teleports out of the sheet, and closing the
 // sheet under a press on it would unmount the popover before the press landed).
 const listOpen = ref(false);
-// One ref answers both "is this click ours" and "which document"; null on the rail (no sheet there).
+// One ref answers both "is this click ours" and "which document".
 const bar = ref<HTMLElement | null>(null);
-const setBar = (element: Element | ComponentPublicInstance | null): void => {
-    bar.value = element instanceof HTMLElement ? element : null;
-};
-// The rail's list, reached only for the rename command below.
-const rail = ref<InstanceType<typeof ChatTabList> | null>(null);
-
 const onDocumentPointerDown = (event: Event): void => {
     const target = event.target;
     if (!(target instanceof Node)) {
@@ -140,8 +124,7 @@ watch(listOpen, (open) => {
 });
 onBeforeUnmount(disarmSheet);
 
-// Picking from the sheet ends the errand: switch, then hand the column back to the transcript. The rail isn't
-// a sheet and stays put.
+// Picking from the sheet ends the errand: switch, then hand the column back to the transcript.
 const pick = (id: string): void => {
     listOpen.value = false;
     emit(`select`, id);
@@ -216,12 +199,8 @@ const barVerbs = (): MenuItem[] => [
         command: () => reopenClosed(),
     },
     { separator: true },
-    // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
-    {
-        label: chatOnRail.value ? t(`shell.shellDesktop.dockChatBackTo`) : t(`chat.words.dockChatToRail`),
-        shortcut: commandShortcut(`chat.toggleHome`),
-        command: (): void => toggleChatHome(router),
-    },
+    // The two ways out of the way, in the header buttons' own order: fold it within this window, then leave it.
+    ...(floats.value ? [] : [{ label: t(`chat.words.tuckChatAway`), shortcut: commandShortcut(`chat.toggleTucked`), command: toggleChatTucked }]),
     {
         label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
         shortcut: commandShortcut(`chat.toggleFloating`),
@@ -270,9 +249,6 @@ const cycleTab = (delta: number): void => {
 // Chord half of Open Beside: the next chat after the focused one not already in a column, else the first free
 // one, so repeats fill the window instead of reopening one chat.
 const splitBeside = (): void => {
-    if (!chatWide.value) {
-        return;
-    }
     const list = conversations.value;
     const index = list.findIndex((conversation) => conversation.conversationId === activeId.value);
     const free = (conversation: (typeof list)[number]): boolean => !panes.value.includes(conversation.conversationId);
@@ -286,11 +262,6 @@ onMounted(() => {
         registerBuiltin(`chat.rename`, (): void => {
             if (edit.editing) {
                 return; // Already renaming; a second F2 would wipe the draft.
-            }
-            // Renamed where it's visible: the header docked, or the active card on the rail (no header there).
-            if (vertical.value) {
-                rail.value?.beginRename(activeId.value);
-                return;
             }
             beginRename();
         }),
@@ -328,9 +299,6 @@ onMounted(() => {
         // Takes back the column; the chat stays open.
         registerBuiltin(`chat.closePane`, () => closePane(activeId.value)),
         registerBuiltin(`chat.switchTab`, (): void => {
-            if (vertical.value) {
-                return; // The rail is already the list; there's nothing to open.
-            }
             listOpen.value = !listOpen.value;
         }),
     ];
@@ -345,121 +313,76 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <!-- Docked: one line across the column top, with the list on a sheet below it. -->
-    <!-- The rail form isn't drawn here: RailColumn is the column shell the rail stands in, at the one stored rail width. -->
-    <component
-        :is="vertical ? RailColumn : 'header'"
-        v-if="!(vertical && listless)"
-        :ref="setBar"
-        :class="vertical ? undefined : 'view-header relative flex items-center gap-1 border-b border-line px-1.5'"
-        @contextmenu="onBarContextMenu"
-    >
-        <!-- The switcher, docked only — the rail below already is the list. -->
-        <template v-if="!vertical">
-            <input
-                v-if="edit.editing && renaming"
-                v-model="edit.draft"
-                type="text"
-                maxlength="80"
-                :aria-label="t(`chat.words.chatTitle`)"
-                :placeholder="active.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`)"
-                class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
-                @keydown.enter.stop.prevent="edit.commit()"
-                @keydown.esc.stop.prevent="edit.cancel()"
-                @blur="edit.blurCommit()"
-                @vue:mounted="edit.focusInput"
-            />
-            <!-- Only as wide as its title: the rest of the bar stays bare background, which drags the window on desktop
-                 (windowGesture.ts) and opens the bar's own menu on right-click. -->
-            <button
-                v-else
-                type="button"
-                data-chat-switcher
-                class="chat-tab group mr-auto flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-2xs"
-                :class="{ 'chat-tab-on': listOpen }"
-                :aria-expanded="listOpen"
-                aria-haspopup="dialog"
-                :aria-label="t(`chat.chatTabs.switchChatOpen`, { count: conversations.length })"
-                @click="listOpen = !listOpen"
-                @dblclick.prevent.stop="beginRename()"
-            >
-                <!-- What this chat is doing; rendered (dim) even when idle so the row's left edge never shifts. -->
-                <Icon v-bind="headerGlyph(activeLook)" :aria-label="activeLook.label" class="shrink-0" />
-                <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
-                <OriginMark :origin="originOf(active)" compact />
-                <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
-                <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
-                    <Icon name="box" class="text-2xs text-subtle" />
-                </span>
-                <span
-                    class="min-w-0 truncate text-left font-medium"
-                    :class="activeLook.title"
-                    v-tooltip.bottom.overflow="tabLabel(active)"
-                    >{{ tabLabel(active) }}</span
-                >
-                <!-- Members with this same conversation active right now. -->
-                <PresenceAvatars
-                    v-if="active.session.value !== undefined"
-                    :members="viewersOfSession(active.session.value.id)"
-                    :label="t(`chat.words.inChat`)"
-                />
-                <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
-                <span
-                    v-if="runningCount > 0"
-                    class="flex shrink-0 items-center gap-1 text-subtle"
-                    :aria-label="t(`chat.chatTabs.running`, { runningCount })"
-                >
-                    <Icon name="spinner" spin class="text-2xs" />{{ runningCount }}
-                </span>
-                <span
-                    v-if="attentionCount > 0"
-                    class="ui-status-pill shrink-0 font-semibold"
-                    :class="toneWash(`warning`)"
-                    :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
-                >
-                    <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
-                </span>
-                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle transition-transform" :class="{ 'rotate-180': listOpen }" />
-            </button>
-        </template>
-
-        <!-- Head of the rail: New agent, and nothing else. The rail
-             is one form whether it stands in /chat or in a popped-out window, so neither grows an action the other lacks; past
-             chats are the docked sheet's. At the head rather than the foot: the new chat appears at the top of the list, under
-             the press, and the foot is the notification lane's corner (workbench/notifications/laneSeat.ts). -->
-        <div v-if="vertical && (!readOnly || chatBoardOffered)" class="relative flex min-h-7 shrink-0 justify-center">
-            <!-- In /chat, the board in this column's place (panel/board/chatBoard.ts): at the left edge, where the board's own
-                 header keeps the same glyph, pressed, for the way back. Out of the flow, so New agent stays centred. -->
-            <button
-                v-if="chatBoardOffered"
-                type="button"
-                :class="ui.iconButton({ size: `md` }, `absolute left-0 top-0`)"
-                aria-pressed="false"
-                :aria-label="t(`chat.chatBoard.showBoard`)"
-                v-tooltip.bottom="{ title: t(`chat.chatBoard.board`), note: t(`chat.chatBoard.boardNote`) }"
-                @click="toggleChatBoard()"
-            >
-                <Icon name="robot" class="text-sm" />
-            </button>
-            <!-- It starts as no one in particular: the new chat's posture is picked in its composer, or matched from its first message. -->
-            <Button v-if="!readOnly" size="small" tier="boring" :label="vocabulary.newAgent" @click="startAgent()">
-                <template #icon><Icon name="plus" /></template>
-            </Button>
-        </div>
-
-        <!-- The rail's list: always open, filling the height the window gives it. -->
-        <ChatTabList
-            v-if="vertical"
-            ref="rail"
-            class="min-h-0 flex-1"
-            @select="emit('select', $event)"
-            @close="emit('close', $event)"
-            @open="emit('open', $event)"
+    <!-- One line across the column top, with the list on a sheet below it. -->
+    <header ref="bar" class="view-header relative flex items-center gap-1 border-b border-line px-1.5" @contextmenu="onBarContextMenu">
+        <input
+            v-if="edit.editing && renaming"
+            v-model="edit.draft"
+            type="text"
+            maxlength="80"
+            :aria-label="t(`chat.words.chatTitle`)"
+            :placeholder="active.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`)"
+            class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
+            @keydown.enter.stop.prevent="edit.commit()"
+            @keydown.esc.stop.prevent="edit.cancel()"
+            @blur="edit.blurCommit()"
+            @vue:mounted="edit.focusInput"
         />
-
-        <!-- The docked toolbar: creation, then the chat's two other homes (the rail, its own window). Past chats live in the
-             switcher's sheet, not here. -->
-        <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
+        <!-- Only as wide as its title: the rest of the bar stays bare background, which drags the window on desktop
+             (windowGesture.ts) and opens the bar's own menu on right-click. -->
+        <button
+            v-else
+            type="button"
+            data-chat-switcher
+            class="chat-tab group mr-auto flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-2xs"
+            :class="{ 'chat-tab-on': listOpen }"
+            :aria-expanded="listOpen"
+            aria-haspopup="dialog"
+            :aria-label="t(`chat.chatTabs.switchChatOpen`, { count: conversations.length })"
+            @click="listOpen = !listOpen"
+            @dblclick.prevent.stop="beginRename()"
+        >
+            <!-- What this chat is doing; rendered (dim) even when idle so the row's left edge never shifts. -->
+            <Icon v-bind="headerGlyph(activeLook)" :aria-label="activeLook.label" class="shrink-0" />
+            <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
+            <OriginMark :origin="originOf(active)" compact />
+            <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
+            <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
+                <Icon name="box" class="text-2xs text-subtle" />
+            </span>
+            <span
+                class="min-w-0 truncate text-left font-medium"
+                :class="activeLook.title"
+                v-tooltip.bottom.overflow="tabLabel(active)"
+                >{{ tabLabel(active) }}</span
+            >
+            <!-- Members with this same conversation active right now. -->
+            <PresenceAvatars
+                v-if="active.session.value !== undefined"
+                :members="viewersOfSession(active.session.value.id)"
+                :label="t(`chat.words.inChat`)"
+            />
+            <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
+            <span
+                v-if="runningCount > 0"
+                class="flex shrink-0 items-center gap-1 text-subtle"
+                :aria-label="t(`chat.chatTabs.running`, { runningCount })"
+            >
+                <Icon name="spinner" spin class="text-2xs" />{{ runningCount }}
+            </span>
+            <span
+                v-if="attentionCount > 0"
+                class="ui-status-pill shrink-0 font-semibold"
+                :class="toneWash(`warning`)"
+                :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
+            >
+                <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
+            </span>
+            <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle transition-transform" :class="{ 'rotate-180': listOpen }" />
+        </button>
+        <!-- The toolbar: creation, then the two ways out of the way (folded into the strip, its own window). Past chats live in
+             the switcher's sheet, not here. -->
+        <div class="flex shrink-0 items-center gap-1">
             <button
                 v-if="!readOnly"
                 type="button"
@@ -470,15 +393,16 @@ onBeforeUnmount(() => {
             >
                 <Icon name="plus" class="text-sm" />
             </button>
+            <!-- Not in a window of its own, which has no edge to fold into. -->
             <button
+                v-if="!floats"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
-                @click="toggleChatHome(router)"
-                v-tooltip.bottom="railHint"
-                :aria-label="railLabel"
+                @click="toggleChatTucked()"
+                v-tooltip.bottom="tuckHint"
+                :aria-label="tuckLabel"
             >
-                <!-- A rail docked at the left edge, not `expand`, whose glyph would promise a maximise this press doesn't do. -->
-                <Icon name="layout-left" class="text-sm" />
+                <Icon name="chevrons-right" class="text-sm" />
             </button>
             <button
                 type="button"
@@ -487,7 +411,7 @@ onBeforeUnmount(() => {
                 v-tooltip.bottom="floatHint"
                 :aria-label="floatLabel"
             >
-                <Icon name="external-link" class="text-sm" />
+                <Icon :name="floats ? `sign-in` : `external-link`" class="text-sm" />
             </button>
         </div>
 
@@ -498,7 +422,7 @@ onBeforeUnmount(() => {
              width rather than stretched across a wide column, where a title and its status ended up a screen apart;
              capped in height so the transcript is never fully covered. -->
         <div
-            v-if="listOpen && !vertical"
+            v-if="listOpen"
             class="ui-anchored-surface ground-menu absolute left-1.5 top-full z-30 mt-1 max-h-[60vh] w-[min(40rem,calc(100%-0.75rem))] rounded-xl p-1.5"
         >
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
@@ -521,5 +445,5 @@ onBeforeUnmount(() => {
 
         <!-- Right-click menu for the bar's own chrome; cards have their own, inside the list. -->
         <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" @hide="barMenuUp = false" />
-    </component>
+    </header>
 </template>

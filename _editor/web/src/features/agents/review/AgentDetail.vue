@@ -23,7 +23,7 @@ import { agentDisplayTitle, agentStatusMeta } from "../../../models/agent-status
 import { unregistered, writingNow } from "../../../models/agent-status/agentStatus-standing";
 import { agentWork, assignAgent, startAgent } from "../../../models/fleet/agentActions";
 import { useLandRequest } from "./landing/useLandRequest";
-import { showParkedChat } from "../../../models/conversations/panel/chatPanelLayout";
+import { showChat } from "../../../models/conversations/panel/chatPanelLayout";
 import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
@@ -602,7 +602,7 @@ const confirmHandOver = async (): Promise<void> => {
             :can-chat="localOnly && !inApp"
             :busy="changes.actionBusy.value"
             @retry="changes.land('check')"
-            @chat="open(fleetAgent); showParkedChat(); view = 'chat'"
+            @chat="open(fleetAgent); showChat(); view = 'chat'"
         />
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and

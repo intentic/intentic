@@ -497,6 +497,14 @@ flowchart LR
   (rename, add a reaction, review) are rows in that menu. A touch screen too wide to count as a phone, such as a
   tablet, shows the ⋯ without hover. _2026-10-15: three columns from 48rem, with a hidden 30px seat per press, left a
   card's title some 60px on a small laptop._
+- **The board and the chat, one page.** The chat stands at the right of every page; on Agents that makes the board the
+  list of chats beside it, a card's press opening its chat there (out of its strip if it was tucked). A desktop's /chat
+  redirects here, its query kept (`?focus=`, the desktop app's `?shellChat=`); a phone's is the conversation's own screen.
+  Usage left stands once: in the chat's side rail, under its checklist, once the chat is wide enough for that rail,
+  otherwise under the board (`features/agents/fleet/Agents.vue`, `chatPanelLayout.ts` `chatRailOnScreen`). A popped-out
+  chat's window draws the same board on its left (`shell/window/FloatingBoard.vue`), and any navigation a press there
+  makes goes to the main window. _2026-11-23: until then the chat could also live behind a rail tile as a full-window
+  /chat, with a list of chats or the board in its left column and a quick bar elsewhere._
 - **The rail and its tools.** The rail's tiles are places a reader goes. What the sandbox is running sits at the folded
   rail's foot instead, over the account, as small tool tiles quieter and shorter than a section's
   (`shell/rail/tools/`): the terminal's toggle (always there for a developer) and Browsers (always there; behind it the
@@ -656,12 +664,12 @@ One word per idea on screen and in code. The retired spellings are refused by
 | board metrics | The geek metrics' three meters in the Agents board's header, whose press opens their readout as a popover (`features/agents/metrics/BoardMetrics.vue`). A phone draws none |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
 | tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`models/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`parts/fleet/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`models/fleet/board/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`models/conversations/panel/subagentView.ts`) |
-| quick bar | The parked chat's pill that opens into a scratch pad: the composer alone, open while the reader is in it (`ChatQuickBar.vue`). Open, a header names the chat and its last words and leads to /chat; it draws no transcript |
+| tucked chat | The chat folded into a strip at the window's right edge (`shell/side/ChatTucked.vue`, `chatPanelLayout.ts` `chatTucked`): by dragging its edge past half a pane or its header's ». It stays mounted behind the edge; the strip, a board card's press or anything asking for the caret brings it back. With a window of its own, the only way to put the chat out of sight: it has no other home than the right of every page since 2026-11-23, when /chat became a redirect to the Agents board beside it |
 | send later | When a message goes, when not now: a time, or once another agent's work lands (`models/conversations/drafts/sendLater.ts`). The send is a split button: its press (and Enter) sends now, its caret opens the menu, hours first (the next twelve whole hours), a day of one's own and another agent's land behind their rows (`ComposerSendLater.vue`); a pick there is the send, booked for then. A booking the words came back with (Edit) or typed at `@send:` shows on the press, which books it again. Booked messages wait in the conversation's queue, each on its own time, drawn as scheduled with its own Change and Send now (`models/conversations/drafts/bookings.ts`) |
 | land when done | A conversation's own answer to whether its finished work lands by itself, the board menu's "Land automatically" reached from the composer (`features/chat/composer/composerLanding.ts`); a chat not on record yet carries it on its opening message |
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
-| peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`, the side panel's `peek`), and nothing else |
-| side panel | The desktop shell's right-hand column: what the reader opened beside the section the rail put in the main area, one tab each, stacked over the chat when the chat's home is the side (`shell/side/`). Not the Workspace's second editor pane, which is its companion pane |
+| peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`, the side panel's `peek`), and nothing else. A board card's press opens its chat as one; the board offers no Keep open of its own, being the list of chats |
+| side panel | The desktop shell's right-hand column: what the reader opened beside the section the rail put in the main area, one tab each, beside the chat unless the chat is in a window of its own (`shell/side/`). Not the Workspace's second editor pane, which is its companion pane |
 | side view | What one side panel tab shows for one input: the core's file and Browsers, or an extension's (`workbench/side/sideViews.ts`) |
 | page | A self-contained HTML document the agent showed in a chat (`show_page`), or asked the reader to answer on (`ask_page`), drawn inline in a sealed frame in the chat's own theme (`features/chat/transcript/pages/`). Its scripts run, with no network and no reach into the app, apart from the video and audio files it named on disk, which its players stream from the sandbox under a ticket minted for that one page (`pageDocument.ts`); what it asks of the app (its height, a link, words for the composer, an answer) goes over the MCP Apps bridge (`pageBridge.ts`) and is acted on only after the reader's own press. A connected MCP server's app is drawn the same way. Not "artifact", not "widget" |
 | review card | A code review's findings, drawn inline where the agent reported them, the same card whichever harness reviewed (`features/chat/transcript/review/`): one row per finding with its place a press away, and Fix, which writes the ask into the composer, or, in a fresh session, into the composer of the conversation whose work it reviewed. Asked for from the composer (`/code-review`, `/review`) |
@@ -809,13 +817,12 @@ shared link keep the rail as it was. Three rules hold it together (`models/sandb
 - **A press on another sandbox's tile shows the same view of that one** (`sameViewPath`): the section the page belongs
   to (`lib/routes/homeSection.ts` `sectionOfPage`), on the screen that sandbox was last left on in it. Around Home's own
   chat or an account page it opens where Home opens: the view last picked in the bookmark, else the home conversation.
-- **Nothing beside the rail depends on the rail** (`sandboxBeside`): the quick bar, the side column and the chat's home
-  are the same folded and unrolled. Until this date the unrolled rail hid the status bar (gone since 2026-11-10) and
+- **Nothing beside the rail depends on the rail** (`sandboxBeside`): the side column and the chat in it are the same
+  folded and unrolled. Until this date the unrolled rail hid the status bar (gone since 2026-11-10) and
   docked the chat to the side whatever the reader kept. The rail's own tools are a sandbox's, so unrolled they are in
   the bookmark with its sections.
 
-The bookmark lists the home conversation, every section the folded rail offers on it or behind More, the Chat and
-Capabilities, each with the badge its tile wears, and marks the view on screen. A pick shows that view and is kept on
+The bookmark lists the home conversation, every section the folded rail offers on it or behind More, and Capabilities, each with the badge its tile wears, and marks the view on screen. A pick shows that view and is kept on
 this device as what Home's bare address opens on. The change of rail is played rather than swapped
 (`shell/rail/railMorph.ts`, the plan in `railFlights.ts`): each sandbox flies between the switcher or its circle in the
 cluster and its tile, and each section tile between its place and the bookmark. Parts name themselves with

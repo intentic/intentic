@@ -104,8 +104,8 @@ export const BUILTIN_COMMANDS = {
         keybinding: `F9`,
         when: `tabSurface != 'terminal'`,
     },
-    // `layout-left`, not `expand`: the rail is a left-edge dock, not something this command maximises. Unbound: F9 is spent.
-    "chat.toggleHome": { title: () => t(`shell.useShellCommands.dockToRail`), category: CHAT, icon: `layout-left` },
+    // The side panel's own fold (side.toggleTucked) for the chat column. Unbound: F9 is spent.
+    "chat.toggleTucked": { title: () => t(`shell.useShellCommands.tuckChat`), category: CHAT, icon: `chevrons-right` },
     "terminal.toggleFloating": {
         title: () => t(`shell.useShellCommands.moveIntoNewWindow`),
         category: TERMINAL,

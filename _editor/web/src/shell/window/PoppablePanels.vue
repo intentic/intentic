@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { sandboxBeside } from "../../models/home/masterRail";
-import { here, isPage, page } from "../../lib/routes/links";
+import { isPage } from "../../lib/routes/links";
 import { homeConversation } from "../../models/home/homeChat";
 import { computed, defineAsyncComponent, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useChatFloating } from "../../models/conversations/panel/chatFloating";
 import { globalTerminalSource, useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
-import { chatOnRail } from "../../models/conversations/panel/chatPanelLayout";
 import { BROWSERS_SIDE_VIEW, browsersFront, browsersOpened } from "../../workbench/browsers/browsersSurface";
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
@@ -16,7 +15,7 @@ import { loadChunk } from "@intentic/ui/chunk";
 import AccessGate from "../../components/access/AccessGate.vue";
 import { useHeldPlace } from "../../components/heldPlace";
 import { t } from "@intentic/ui/i18n";
-import { browsersSlot, chatBarSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
+import { browsersSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
 import { tabsOfView } from "../../workbench/side/sideTabs";
 
 // The terminal and the live browser arrive the first time each is opened, not with this chunk: every desktop window
@@ -44,11 +43,9 @@ park.style.cssText = `position:fixed;left:-20000px;top:0;width:900px;height:700p
 document.body.append(park);
 onUnmounted(() => park.remove());
 
-// Full-window slot first; on the rail the column is never a fallback, only the quick bar and then the parking stage.
-const chatTarget = computed(() => chatFullSlot.value ?? (chatOnRail.value ? (chatBarSlot.value ?? park) : (chatSlot.value ?? park)));
-// Read off where it actually went, like every other presentation question here: the strip takes the composer alone.
-// The side panel draws its own edge and seam around the chat, as it does around everything it holds.
-const inBar = computed(() => chatTarget.value === chatBarSlot.value);
+// Whole-surface slot first, then the side panel's column, then the parking stage. The side panel draws its own edge and
+// seam around the chat, as it does around everything it holds.
+const chatTarget = computed(() => chatFullSlot.value ?? chatSlot.value ?? park);
 // The master view lends its one chat its page (features/home/HomeChatSlot.vue): the home conversation, drawn here
 // whether or not the shell's own chat is popped out into a window of its own.
 const homeChat = computed(() => router.currentRoute.value.name === `home` && chatFullSlot.value !== null && homeConversation.value !== undefined);
@@ -60,11 +57,6 @@ const browsersParked = computed(() => browsersTarget.value === park);
 const browsersBeside = computed(() => sideBrowsersSlot.value !== null && browsersTarget.value === sideBrowsersSlot.value);
 
 // Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
-chat.onDocked(() => {
-    if (chatOnRail.value && !isPage(router.currentRoute.value, `chat`)) {
-        void router.push(here(page.chat()));
-    }
-});
 // The view with a tab in the side panel comes back to it, beside wherever the reader is.
 browsers.onDocked(() => {
     if (browsersOpened.value && !isPage(router.currentRoute.value, `browsers`) && tabsOfView(BROWSERS_SIDE_VIEW).length === 0) {
@@ -79,7 +71,7 @@ browsers.onDocked(() => {
         <!-- In the master view, its one chat: the same panel a popped-out window draws, without the tab row (HomeChatSlot.vue).
              Around a page of a sandbox (sandboxBeside), the sandbox's own chat, the rail folded or unrolled. -->
         <ChatPanel v-if="homeChat" :tabs="false" :only="homeConversation" style="grid-area: chat" />
-        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" :bar="inBar" style="grid-area: chat" />
+        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <div

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useHomeCommand } from "./commands/useHomeCommand";
-import { masterRail, sandboxBeside } from "../models/home/masterRail";
+import { masterRail } from "../models/home/masterRail";
 import { here, isPage, page, routeShows, sameScreen } from "../lib/routes/links";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import TourMark from "../features/tour/TourMark.vue";
@@ -22,12 +22,10 @@ import RailTools from "./rail/tools/RailTools.vue";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { useProjectCommands } from "./commands/useProjectCommands";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
-import { commandShortcut } from "../workbench/commands/useCommands";
 import { railBands, railRank, onRail, railPolicy, onRailOnlyByVisit } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
-import { chatInSidePanel, chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../models/conversations/panel/chatPanelLayout";
-import { useChatFloating } from "../models/conversations/panel/chatFloating";
+import { chatInSidePanel, chatTucked } from "../models/conversations/panel/chatPanelLayout";
 import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { useLayout } from "../workbench/window/useLayout";
@@ -44,7 +42,6 @@ import MasterRail from "./rail/MasterRail.vue";
 import OtherSandboxes from "./rail/OtherSandboxes.vue";
 import RailProcesses from "./rail/RailProcesses.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
-import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
@@ -53,9 +50,7 @@ import { besideChat, besideFills, sideColumnShown, sideShown, sideTucked, TUCKED
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { type SectionTile, tileLabel, tileParts, useSectionTiles } from "./rail/sectionTiles";
 import { useRailPins } from "./rail/railPins";
-import { useChatRailDrag } from "./rail/chatTileDrag";
 import { useRailMorph } from "./rail/railMorph";
-import ChatTileDragLayer from "./rail/ChatTileDragLayer.vue";
 import RailIcon from "./rail/RailIcon.vue";
 import RailMore from "./rail/RailMore.vue";
 import TileMark from "../components/TileMark.vue";
@@ -92,8 +87,6 @@ const { panels } = usePanels();
 // A guest has no More door and no + (see the rail's foot below).
 const { isGuest } = useTier();
 const layout = useLayout();
-// When chat floats, this column collapses everywhere else; the panel itself mounts above the router.
-const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
 const onHome = computed(() => route.name === `home`);
@@ -106,9 +99,6 @@ const connects = useHeldDoor(`capabilities.list`);
 
 // By page, not active-class: a splat param (workspace/:path) drops it once set, and a tile is its page in any frame.
 const isNavActive = (to: string): boolean => routeShows(route, to);
-
-// On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
-const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || isPage(route, `chat`)));
 
 // Opens the seeded starter site on a box's very first landing (browsersSurface.ts's once-only flag), waiting
 // for /panels to actually name it rather than a timer. Desktop only: a phone has one surface to give up.
@@ -123,13 +113,10 @@ watch(
     { immediate: true },
 );
 
-// Every nav tile, on the rail or not, in one run ranked by RAIL_GROUPS (sectionTiles.ts, shared with the phone's rail),
-// headed by the docked chat's tile while it has one; the on the rail and More lists both come from this run, so a
-// section is never in neither (only the one you are visiting is in both).
-const { tiles, settled: railSettled } = useSectionTiles(() =>
-    // Heads the Work band's permanent tiles, below Projects when that is tiled; unbadged, since the Agents tile carries the debt (see chatTileSeated).
-    chatTileSeated.value ? [{ id: `chat`, to: here(page.chat()), label: t(`shared.chat`), icon: `comments` }] : [],
-);
+// Every nav tile, on the rail or not, in one run ranked by RAIL_GROUPS (sectionTiles.ts, shared with the phone's rail);
+// the on the rail and More lists both come from this run, so a section is never in neither (only the one you are
+// visiting is in both). The chat has no tile: it stands at the right of every page (shell/side).
+const { tiles, settled: railSettled } = useSectionTiles();
 
 // onRail (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
 const pins = useRailPins();
@@ -149,24 +136,13 @@ const moreTiles = computed<readonly SectionTile[]>(() =>
 const visitingNote = (tile: SectionTile): string | undefined =>
     onRailOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) }) ? t(`shell.shellDesktop.rightClickKeep`) : undefined;
 const railTileLabel = (tile: SectionTile): string => [tileLabel(tile), visitingNote(tile)].filter((part) => part !== undefined).join(` · `);
-// The chat tile's hover also says it can be carried off (chatTileDrag.ts), the one thing a pointer can't otherwise find.
-// Hover only: the accessible name keeps to what a keyboard can do, which is the tile's menu and F9.
-const railTileTip = (tile: SectionTile): TooltipValue =>
-    tileTip(tile, chatCarriable(tile) ? t(`shell.shellDesktop.dragChatOut`) : visitingNote(tile));
+const railTileTip = (tile: SectionTile): TooltipValue => tileTip(tile, visitingNote(tile));
 
-// Carry the chat tile to a new window or the right side. Not while it floats, when the tile is only passing through.
 const railNav = ref<HTMLElement | null>(null);
 // ONE RAIL, FOLDED ONTO A SANDBOX OR UNROLLED ONTO ALL OF THEM (models/home/masterRail.ts). The `nav` stays and what it
 // holds changes; the change is played, each sandbox to its tile and each section into the bookmark, or back
 // (rail/railMorph.ts), so it reads as one rail rearranging rather than a second screen.
 useRailMorph(() => railNav.value, masterRail);
-const chatDrag = useChatRailDrag(() => railNav.value?.getBoundingClientRect(), router);
-const chatCarriable = (tile: RailTile): boolean => tile.id === `chat` && !chatFloats.value;
-const pressTile = (tile: RailTile, event: PointerEvent): void => {
-    if (chatCarriable(tile)) {
-        chatDrag.press(event);
-    }
-};
 
 // Only the permanent tiles and this reader's pins — the tiles that will still be there tomorrow.
 const stableTiles = computed<readonly SectionTile[]>(() =>
@@ -222,17 +198,6 @@ onUnmounted(() => {
     sectionCommands = [];
 });
 
-// Tracks the last non-chat path, not browser history, which may start on /chat itself (a reload, a link).
-watch(
-    () => route.path,
-    (path) => {
-        if (!isPage(route, `chat`)) {
-            lastSectionPath.value = path;
-        }
-    },
-    { immediate: true },
-);
-
 // Position the menu beside the rail tile using a synthetic event.
 const showBesideRail = (menu: { show: (event: Event) => void } | undefined, event: MouseEvent): void => {
     const tile = event.currentTarget as HTMLElement | null;
@@ -241,28 +206,13 @@ const showBesideRail = (menu: { show: (event: Event) => void } | undefined, even
     menu?.show(rail === undefined || top === undefined ? event : new MouseEvent(`click`, { clientX: rail.right, clientY: top }));
 };
 
-// Two menus: the chat tile offers where it goes next (dock/float, same toggles as elsewhere); every
-// other on the rail tile offers the pin — permanent tiles get no row, since they're already always on the rail.
+// A tile's menu offers the pin — permanent tiles get no row, since they're already always on the rail.
 const tileMenu = ref<{ show: (event: Event) => void }>();
 const menuTile = ref<RailTile>();
 const tileMenuItems = computed<MenuItem[]>(() => {
     const tile = menuTile.value;
     if (tile === undefined) {
         return [];
-    }
-    if (tile.id === `chat`) {
-        return [
-            {
-                label: t(`shell.shellDesktop.dockChatBackTo`),
-                shortcut: commandShortcut(`chat.toggleHome`),
-                command: (): void => toggleChatHome(router),
-            },
-            {
-                label: chatFloats.value ? t(`shell.shellDesktop.dockChatBack`) : t(`shell.shellDesktop.moveChatToWindow`),
-                shortcut: commandShortcut(`chat.toggleFloating`),
-                command: (): void => toggleChatFloating(),
-            },
-        ];
     }
     return [
         {
@@ -275,7 +225,7 @@ const tileMenuItems = computed<MenuItem[]>(() => {
     ];
 });
 const onTileContextMenu = (tile: RailTile, event: MouseEvent): void => {
-    if (tile.id !== `chat` && railPolicy(tile.id) === `always`) {
+    if (railPolicy(tile.id) === `always`) {
         return; // A permanent tile has nothing to offer here; keep the browser's own menu.
     }
     event.preventDefault();
@@ -292,7 +242,8 @@ const railStyle = railFrame();
 // `--side-width` is registered non-inherited (below): an inherited custom property changed on this root restyled every
 // element in the app on every move, most of what a drag cost.
 const shellEl = ref<HTMLElement>();
-const chatColumn = computed(() => layout.liveChatWidth.value ?? layout.chatWidth.value);
+// Folded into its strip, the chat is the strip's width (shell/side/ChatTucked.vue).
+const chatColumn = computed(() => (chatTucked.value ? TUCKED_STRIP_PX : (layout.liveChatWidth.value ?? layout.chatWidth.value)));
 // Tucked, what was opened is only its strip: beside the chat, or the whole column while the chat lives elsewhere.
 const sideWidth = computed(() => {
     if (sideTucked.value) {
@@ -398,18 +349,12 @@ useGettingStarted();
                             v-else
                             :to="tile.to"
                             class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg text-muted hover:text-content"
-                            :class="{
-                                'ui-row-select-on text-link': isNavActive(tile.to),
-                                'opacity-40 outline-1 -outline-offset-1 outline-dashed outline-primary-500':
-                                    tile.id === `chat` && chatDrag.dragging.value,
-                            }"
-                            :draggable="chatCarriable(tile) ? `false` : undefined"
+                            :class="{ 'ui-row-select-on text-link': isNavActive(tile.to) }"
                             :data-rail-key="`section:${tile.to}`"
                             data-rail-into="sections"
                             :aria-label="railTileLabel(tile)"
                             v-tooltip.right="railTileTip(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
-                            @pointerdown="pressTile(tile, $event)"
                             @click="tile.id === `agents` && isNavActive(tile.to) && askForAttention()"
                         >
                             <RailIcon
@@ -492,7 +437,7 @@ useGettingStarted();
           </template>
         </nav>
 
-        <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
+        <!-- The right-hand column: things opened beside the section, and the chat, unless it is in a window of its own. -->
         <SidePanel v-if="sideShown" v-show="sideColumnShown" />
 
         <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
@@ -515,24 +460,11 @@ useGettingStarted();
             </SandboxGate>
         </main>
 
-        <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
-             opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
-        <ChatQuickBar v-if="sandboxBeside" />
-
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />
         <ShortcutSheet />
 
-        <!-- The chat tile carried off the rail: where it can go, and what letting go there does. -->
-        <ChatTileDragLayer
-            v-if="chatDrag.dragging.value"
-            :phase="chatDrag.phase.value"
-            :pointer="chatDrag.pointer.value"
-            :rail-right="chatDrag.railBox.value?.right ?? 0"
-            :dock-left="chatDrag.dockBox.value?.left ?? 0"
-        />
-
-        <!-- A tile's right-click menu (tileMenuItems): the chat's homes, or the pin. -->
+        <!-- A tile's right-click menu (tileMenuItems): the pin. -->
         <ContextMenu ref="tileMenu" :model="tileMenuItems" :min-width="15" />
     </div>
 </template>

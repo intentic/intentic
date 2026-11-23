@@ -8,10 +8,6 @@ import { ICON_RAIL_SCREEN_PX } from "./iconRailWidth";
 import { toAppPx } from "./uiScale";
 import { readWindowState, writeWindowState } from "./windowStore";
 
-export type ChatPosition = "left" | "right";
-// Where the chat lives: beside every view, or behind a rail tile as /chat. A window of its own is a separate live fact
-// (floating.ts), not a third value; the two homes are mutually exclusive.
-export type ChatHome = "side" | "rail";
 // What the one workspace sidebar shows: file explorer, agent-changes review, or the snapshot timeline.
 export type SidebarPanel = "files" | "changes" | "history";
 // How a diff renders its two sides, one setting for every diff surface (see DIFF_LAYOUT_KEY).
@@ -24,9 +20,7 @@ export type DiffOpen = "top" | "imports" | "biggest";
 // text otherwise), the text reading on its own, or both versions whole.
 export type DiffDocument = "changes" | "text" | "sides";
 
-const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
-const CHAT_HOME_KEY = `ui-chat-home`;
 
 // Every width here is in app pixels (uiScale.ts owns the screen-pixel conversion), not screen pixels; nothing in this
 // file converts.
@@ -134,7 +128,7 @@ const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 // every folder rather than one per folder: a view that rearranges itself by which folder it is in reads as random.
 const HOME_ARRANGE_KEY = `ui-home-arrange`;
 
-// Shell-layout state: chat position/width, sidebar width/collapse, terminal open state; app-local since these are
+// Shell-layout state: chat width, sidebar width/collapse, terminal open state; app-local since these are
 // layout concepts, not @intentic/ui primitives. Everything below is a preference shared across every window except
 // `terminalOpen`, which is per-window, per-sandbox state held via windowStore.ts. Every one is the signed-in account's
 // (@intentic/ui/preference), so each account on one browser keeps its own. What the tree lists and how a diff or file
@@ -175,8 +169,6 @@ const clampSidePaneWidth = (px: number): number => Math.round(Math.max(MIN_SIDE_
 // sandbox was left and a toggle always belongs to the sandbox on screen.
 const terminalOpen = sandboxRef<boolean>(() => readWindowState(terminalOpenKey(activeSandboxId.value), parseTerminalOpen) ?? false);
 
-const position = enumPreference(STORAGE_KEY, [`left`, `right`] as const, `left`);
-const chatHome = enumPreference(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`);
 const chatWidth = numberPreference(WIDTH_KEY, clampWidth, defaultChatWidth);
 const floatingSideWidth = numberPreference(FLOATING_SIDE_WIDTH_KEY, clampFloatingSideWidth, defaultFloatingSideWidth);
 const sidebarWidth = numberPreference(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth);
@@ -215,19 +207,6 @@ const liveChatWidth = shallowRef<number | undefined>(undefined);
 
 const previewChatWidth = (px: number | undefined): void => {
     liveChatWidth.value = px === undefined ? undefined : clampWidth(px);
-};
-
-const set = (value: ChatPosition): void => {
-    position.value = value;
-};
-
-const toggle = (): void => {
-    set(position.value === `left` ? `right` : `left`);
-};
-
-// Side (left/right) is kept while docked to the rail, so undocking returns the column to its prior edge.
-const setChatHome = (value: ChatHome): void => {
-    chatHome.value = value;
 };
 
 // Clamped here too, since this arrives as a raw drag position rather than a stored string.
@@ -341,8 +320,6 @@ const toggleMarkdownOutline = (): void => {
 
 export function useLayout() {
     return {
-        position,
-        chatHome,
         chatWidth,
         liveChatWidth: readonly(liveChatWidth),
         floatingSideWidth,
@@ -365,9 +342,6 @@ export function useLayout() {
         diffOpen,
         markdownOutline,
         homeArrange,
-        set,
-        toggle,
-        setChatHome,
         setChatWidth,
         resetChatWidth,
         previewChatWidth,

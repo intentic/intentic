@@ -343,14 +343,11 @@ router.beforeEach((to) => noteFound(to));
 // `/?conversation=<id>`, and a shell that rewrites its entry path before the router runs (the demo does) must not
 // drop the tap on the way in. Global, not the home redirect's, for that reason; the target carries no such query,
 // so it cannot loop.
-// The chat's home is read only for such a link, and its module loaded only then: it opens floating-window machinery a
-// sign-in page has no business starting.
-router.beforeEach(async (to) => {
+router.beforeEach((to) => {
     if (linkedConversation(to.query) === undefined) {
         return true;
     }
-    const surface = useDevice().mobile.value ? `phone` : (await import(`../models/conversations/panel/chatPanelLayout`)).chatOnRailTile.value ? `chat` : `board`;
-    return conversationRedirect(to.query, surface, to) ?? true;
+    return conversationRedirect(to.query, useDevice().mobile.value ? `phone` : `board`, to) ?? true;
 });
 
 // INSIDE THE ANDROID APP'S WEBVIEW, after every guard above that names where a navigation goes: a screen the app draws

@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, watch, type WatchStopHandle } from "vue";
 import { useRouter } from "vue-router";
 import { here, page } from "../../lib/routes/links";
 import { registerBuiltin } from "../../workbench/commands/builtinCommands";
-import { chatOnRail, toggleChatFloating, toggleChatHome } from "../../models/conversations/panel/chatPanelLayout";
+import { chatTucked, toggleChatFloating, toggleChatTucked } from "../../models/conversations/panel/chatPanelLayout";
 import { useChatFloating } from "../../models/conversations/panel/chatFloating";
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
@@ -51,12 +51,10 @@ export function useShellCommands(): void {
             }),
             registerBuiltin(`view.settings`, (): void => void router.push(here(page.account()))),
             registerBuiltin(`chat.toggleFloating`, () => toggleChatFloating(), { title: () => dockWord(chat.floats.value) }),
-            // In-app counterpart to the pop-out: rail vs. side column.
-            registerBuiltin(
-                `chat.toggleHome`,
-                () => toggleChatHome(router),
-                { title: () => (chatOnRail.value ? t(`shell.useShellCommands.dockBackToSide`) : t(`shell.useShellCommands.dockToRail`)) },
-            ),
+            // In-app counterpart to the pop-out: the chat folded into the strip at the window's edge, or back.
+            registerBuiltin(`chat.toggleTucked`, () => toggleChatTucked(), {
+                title: () => (chatTucked.value ? t(`shell.useShellCommands.showChat`) : t(`shell.useShellCommands.tuckChat`)),
+            }),
             // The jump to its area is a destination (useNavigationCommands), like every other area's.
             registerBuiltin(`browsers.toggleFloating`, () => toggleBrowsersFloating(), { title: () => dockWord(browsersFloat.floats.value) }),
         ];

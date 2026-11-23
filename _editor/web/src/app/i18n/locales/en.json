@@ -165,7 +165,6 @@
             "sameTurn": "Same turn",
             "sendAtReset": "Send at reset",
             "steps": "Steps",
-            "temporary": ", temporary",
             "waitingMaintainer": "{landAsk}: waiting for a maintainer",
             "landAgainHint": "Maybe removed on purpose.",
             "skip": "Skip",
@@ -3367,19 +3366,6 @@
             "notShared": "{provider} isn't shared with you in this sandbox.",
             "whoConnects": "The owner, Full access, or someone given AI accounts of their own can connect one."
         },
-        "chatArea": {
-            "bringBackHere": "Bring it back here",
-            "bringBackToFill": "Bring it back to fill this one, or keep using the floating window.",
-            "chatInOwnWindow": "Your chat is in its own window"
-        },
-        "chatBoard": {
-            "board": "Board",
-            "boardNote": "Lanes beside the chat",
-            "showBoard": "Show the board beside the chat",
-            "list": "List",
-            "listNote": "Chats in one column",
-            "showList": "Show the list of chats"
-        },
         "chatAudioChip": {
             "cantPlay": "Can't play",
             "of": "{displayTime} of {duration}",
@@ -4172,14 +4158,6 @@
             "sendNow": "Send now",
             "continuation": "Continue from where the last turn stopped"
         },
-        "chatQuickBar": {
-            "agentWaitingForYou": "Your agent is waiting for you",
-            "openChatAgentWaiting": "Open the chat: your agent is waiting for an answer",
-            "openFullChat": "Open the full chat",
-            "titleWaitingForYou": "{title} · waiting for you",
-            "writeToAgentHere": "Write to your agent from here",
-            "you": "You"
-        },
         "chatRailChecklist": {
             "chatsChecklist": "This chat's checklist",
             "checklist": "Checklist",
@@ -4325,8 +4303,6 @@
         "chatTabs": {
             "archiveChat": "Archive Chat",
             "couldntRenameAgent": "Couldn't rename the agent.",
-            "dockToRail": "Dock to rail",
-            "fullWindow": "Full window",
             "need": "{attentionCount} need you",
             "newWindow": "New window",
             "nextNeedsYou": "Next Chat That Needs You",
@@ -4335,7 +4311,9 @@
             "previous": "Previous",
             "running": "{runningCount} running",
             "switch": "Switch…",
-            "switchChatOpen": "Switch chat: {count} open"
+            "switchChatOpen": "Switch chat: {count} open",
+            "tuckAway": "Tuck away",
+            "tuckAwayNote": "Into a strip at the edge"
         },
         "chatTodoList": {
             "added": "{count} added",
@@ -4830,7 +4808,6 @@
             "closeFinished": "Close Finished",
             "closeAll": "Close All",
             "reopenClosedChat": "Reopen closed chat",
-            "dockChatToRail": "Dock chat to rail",
             "dockChatBack": "Dock chat back",
             "closeOthers": "Close Others",
             "closePane": "Close Pane",
@@ -4849,7 +4826,8 @@
             "whatTheVendorAllows": "What the vendor allows",
             "agentNeedsHelp": "The agent needs your help:",
             "optionalNoteBackTo": "Optional note back to the agent",
-            "doneHandBack": "Done: hand back"
+            "doneHandBack": "Done: hand back",
+            "tuckChatAway": "Tuck chat away"
         },
         "chatChildAgentAsk": {
             "changeRun": "Change run",
@@ -13127,28 +13105,15 @@
         },
         "shellDesktop": {
             "agentNeedsHelp": "Needs your help",
-            "chatDropCancel": "Esc cancels",
-            "chatDropDockBack": "{keys} docks it back",
-            "chatDropDockRelease": "Release to keep chat beside your work",
-            "chatDropDockRight": "Dock on the right",
-            "chatDropNewWindow": "New window",
-            "chatDropRelease": "Release to open chat here, in its own window",
-            "chatWindowBlocked": "The browser held the chat window back",
-            "chatWindowBlockedDetail": "A browser opens a window only straight after a click, and this drag outlasted it.",
-            "dockChatBack": "Dock chat back",
-            "dockChatBackTo": "Dock chat back to the side",
-            "dragChatOut": "Drag to dock or float",
             "everySectionOnRail": "Every section is on the rail",
             "howToUnpin": "To take one off, right-click it on the rail and untick Keep on the rail.",
             "keepOnRail": "Keep {label} on the rail",
             "keepOnRail2": "Keep on the rail",
             "moreSections": "More sections",
             "moreSectionsOffRail": "More sections · {count} not on the rail",
-            "moveChatToWindow": "Move chat into new window",
             "nextRailSection": "Next section",
             "offRail": "Off the rail",
             "open": "{live} open",
-            "openChatWindow": "Open window",
             "pin": "Pin",
             "pinnedHint": "Always on the rail, badge or not",
             "ports": "Port | Ports",
@@ -13196,7 +13161,8 @@
             "tuckedTabs": "Tucked tabs",
             "unavailable": "Not available",
             "unavailableNote": "The extension that shows it is off or was removed.",
-            "closeTab": "Close {title}"
+            "closeTab": "Close {title}",
+            "showChat": "Show chat"
         },
         "useNavigationCommands": {
             "add": "Add…"
@@ -13205,12 +13171,12 @@
             "anything": "Anything…",
             "commandPalette": "Command Palette…",
             "dockBack": "Dock Back",
-            "dockBackToSide": "Dock Back to the Side",
-            "dockToRail": "Dock to Rail",
             "keyboardShortcuts": "Keyboard Shortcuts",
             "moveIntoNewWindow": "Move into New Window",
             "settings": "Settings",
-            "togglePanel": "Toggle Panel"
+            "togglePanel": "Toggle Panel",
+            "tuckChat": "Tuck Chat Away",
+            "showChat": "Show Chat"
         },
         "windowControls": {
             "maximise": "Maximise",

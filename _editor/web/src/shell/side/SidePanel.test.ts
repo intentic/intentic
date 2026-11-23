@@ -4,9 +4,16 @@ import "@intentic/testing/dom";
 import { installUi } from "@intentic/ui";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// Whether the chat's home is the side: the one fact the panel reads from the chat.
+// Whether the chat is in the side panel rather than a window of its own, and whether it is folded into its strip: the
+// facts the panel reads from the chat.
 const chatInSidePanel = ref(true);
-jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel }));
+const chatTucked = ref(false);
+const setChatTucked = (tucked: boolean): void => {
+    chatTucked.value = tucked;
+};
+jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel, chatTucked, setChatTucked, showChat: () => setChatTucked(false) }));
+// The strip's own marks read the open chats; with none open it draws none.
+jest.mock("../../models/conversations/run/useChat", () => ({ useChat: () => ({ conversations: ref([]) }) }));
 
 const { default: SidePanel } = await import("./SidePanel.vue");
 const { closeAllTabs, closeTab, openBeside, setTucked, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
@@ -75,6 +82,7 @@ const button = (host: HTMLElement, label: string): HTMLButtonElement | null => h
 
 beforeEach(() => {
     chatInSidePanel.value = true;
+    chatTucked.value = false;
     lent.value = false;
     openedHome.mockClear();
     closeAllTabs();
@@ -109,6 +117,29 @@ it(`stands what was opened beside the chat in its own column, and never moves th
     closeAllTabs();
     await settle();
     expect(host.querySelector(`.side-tabs`)).toBeNull();
+    expect(chatSlot.value).toBe(slot);
+});
+
+// The chat folds into a strip at the window's edge (ChatTucked.vue), staying mounted behind it, so its transcript keeps
+// its place; the strip's press brings it back.
+it(`folds the chat into its strip and back, never moving the chat to do it`, async () => {
+    const host = await mount();
+    const slot = chatSlot.value;
+    const strip = (): HTMLButtonElement | null => host.querySelector(`.side-chat-tucked`);
+    expect(strip()).toBeNull();
+
+    chatTucked.value = true;
+    await settle();
+    expect(strip()).not.toBeNull();
+    const chat = host.querySelector(`.side-chat`);
+    expect([chat?.classList.contains(`invisible`), chat?.hasAttribute(`inert`)]).toEqual([true, true]);
+    expect(chatSlot.value).toBe(slot);
+
+    strip()?.click();
+    await settle();
+    expect(chatTucked.value).toBe(false);
+    expect(strip()).toBeNull();
+    expect(host.querySelector(`.side-chat`)?.classList.contains(`invisible`)).toBe(false);
     expect(chatSlot.value).toBe(slot);
 });
 

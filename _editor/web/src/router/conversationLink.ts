@@ -6,11 +6,9 @@ import { here, page, type PageLink, pageOf, type RouteRead, routeSandbox, toHome
 // (sandbox push/notifications.ts, which promises to match this), and so does each of the desktop app's notifications
 // about one agent (shell/browser-tab/desktopSignal.ts). Each surface opens it where that reader's chat is drawn:
 // - `phone`: the agent's page, a conversation's own screen there;
-// - `board`: the board's `?focus=` handoff, its card in view and the chat open beside it (side home) or in its window;
-// - `chat`: the full-window chat, for a reader who homed the chat on the rail. The board would leave it parked behind
-//   the tile, one more press away from the conversation the link named.
+// - `board`: the board's `?focus=` handoff, its card in view and the chat open beside it, or in its window.
 // Each answer is an address with only its own query, so the id does not ride along into the address bar.
-export type ConversationSurface = `phone` | `board` | `chat`;
+export type ConversationSurface = `phone` | `board`;
 
 /** The conversation a link names, if it names one. */
 export const linkedConversation = (query: LocationQuery): string | undefined => {
@@ -36,8 +34,6 @@ export const conversationRedirect = (query: LocationQuery, surface: Conversation
     switch (surface) {
         case `phone`:
             return placed(page.agent(id), route);
-        case `chat`:
-            return placed(page.chat({ query: { focus: id } }), route);
         case `board`:
             return placed(page.agents({ query: { focus: id } }), route);
     }

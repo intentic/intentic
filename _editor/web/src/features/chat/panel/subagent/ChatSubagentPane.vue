@@ -103,7 +103,6 @@ const { pin, realizing } = usePaneScroll({
     scroller,
     content,
     conversationId: () => record.conversationId,
-    bare: () => false,
     messageCount: () => paneView.messages.value.length,
     streaming: live,
     grow: () => {},

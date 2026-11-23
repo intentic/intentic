@@ -533,7 +533,7 @@ if (channel !== undefined) {
     post({ kind: `roll` });
 }
 
-/** Where a window's outer top-left goes, in screen pixels: what a drop asks for (shell/rail/chatTileDrag.ts). */
+/** Where a window's outer top-left goes, in screen pixels: what a drop asks for (a surface carried off where it stood). */
 export interface ScreenPoint {
     readonly left: number;
     readonly top: number;

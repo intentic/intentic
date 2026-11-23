@@ -25,7 +25,7 @@ import { insideRun, runIdsInLedger, runsInLane, runningTitles, runsNeedingYou, u
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { useT } from "@intentic/ui/i18n";
 
-// Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
+// Switcher for every open conversation, hosted by the ChatTabs sheet. Card and
 // lane shell come from RailCard/RailLane; this file only decides which lanes exist, what goes in them, and what
 // each card shows, and emits verbs rather than writing state directly. Every open chat is listed, whatever role it
 // wears: a role is a posture a chat takes on, picked in its composer (or by routing), not someone the list is sorted
@@ -261,7 +261,7 @@ watch([() => edit.editing, actions.renamingDrawn], ([editing, drawn]) => {
         actions.renamingId.value = undefined;
     }
 });
-// F2 in a floating window has no header, so the host forwards it here; docked, the header renames itself.
+// A caller renaming a row in place (the switcher's rows answer F2 themselves; tests reach the same path).
 defineExpose({ beginRename: actions.beginRename });
 </script>
 

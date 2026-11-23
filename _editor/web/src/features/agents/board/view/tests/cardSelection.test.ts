@@ -4,12 +4,11 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { type EffectScope, effectScope, nextTick, reactive, ref, shallowRef } from "vue";
 import type { LocationQuery, RouteLocationRaw, Router } from "vue-router";
-import { quickBarShowAsk } from "../../../../../models/conversations/panel/chatPanelLayout";
+import { chatTucked, setChatTucked } from "../../../../../models/conversations/panel/chatPanelLayout";
 import { agentTabOf } from "../../../../../models/conversations/panel/useChat-reveal";
-import { useLayout } from "../../../../../workbench/window/useLayout";
 import type { Summons } from "../../../../../models/conversations/run/summon";
 import { composerFocus } from "../../../../../models/conversations/tabs/useChat-tabs";
-import { EMPTY_STRIP, type Strip, type TabFacts } from "../../../../../models/conversations/tabs/tabFacts";
+import { EMPTY_STRIP, type Strip } from "../../../../../models/conversations/tabs/tabFacts";
 import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import { isRemote } from "../../../../../models/fleet/fleetScope";
 import { agentSeed } from "../../../../../models/fleet/useAgents-actions";
@@ -40,15 +39,6 @@ const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
     unread: false,
     unsent: false,
     ...over,
-});
-const tab = (id: string, peek = false): TabFacts => ({
-    id,
-    registered: true,
-    standing: `resumed`,
-    serves: { agent: `claude`, harness: `native`, model: `sonnet` },
-    peek,
-    standIn: false,
-    unsent: false,
 });
 const keys = (over: Partial<Record<`shiftKey` | `altKey` | `ctrlKey` | `metaKey`, boolean>> = {}) => ({
     shiftKey: false,
@@ -132,13 +122,6 @@ describe(`the ring`, () => {
         expect(ring.highlightId.value).toBe(`a9`);
         await advanceTimersByTimeAsync(1);
         expect(ring.highlightId.value).toBe(`a1`);
-    });
-
-    it(`marks a chat open only as a look, on desktop`, () => {
-        const { host, ring } = ringOf({ ...EMPTY_STRIP, tabs: [tab(`a1`, true), tab(`a2`)] });
-        expect([ring.peeked(`a1`), ring.peeked(`a2`)]).toEqual([true, false]);
-        host.mobile.value = true;
-        expect(ring.peeked(`a1`)).toBe(false);
     });
 });
 
@@ -239,19 +222,12 @@ describe(`a press on a card`, () => {
         ]);
     });
 
-    // A plain click must put the chat's turns on screen: parked on the rail, it only swapped the pill's title (I1).
-    it(`asks the parked chat to show its turns on a plain click, and a docked chat nothing`, () => {
+    // A plain click must put the chat's turns on screen: folded into its strip, the chat comes back out of it.
+    it(`brings a chat folded into its strip back on a plain click`, () => {
         const board = boardOf([a1]);
-        const before = quickBarShowAsk.value;
-        useLayout().setChatHome(`rail`);
-        try {
-            board.focus.focusAgent(a1, new MouseEvent(`click`));
-            expect(quickBarShowAsk.value).toBe(before + 1);
-        } finally {
-            useLayout().setChatHome(`side`);
-        }
+        setChatTucked(true);
         board.focus.focusAgent(a1, new MouseEvent(`click`));
-        expect(quickBarShowAsk.value).toBe(before + 1);
+        expect(chatTucked.value).toBe(false);
     });
 
     // "Approve →" opened the review page, which draws no card to approve (B4): an ask's drill-in opens the chat, kept.

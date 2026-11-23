@@ -98,8 +98,6 @@ const props = defineProps<{
     // This agent's chat is on screen at one weight; `still` when another column has focus: the ring, no blade's sweep.
     selected?: boolean;
     still?: boolean;
-    // Chat is open only as a temporary look (Conversation.peek); the keep press makes it stick.
-    peek?: boolean;
     // Evidence for why the board's filter matched; absent when the hit was the title, marked there instead.
     match?: MatchSnippet;
     // The filter named this card by its id, or a piece of it (idMatch.ts); whole, the card wears the found halo.
@@ -139,8 +137,6 @@ const emit = defineEmits<{
     archive: [];
     restore: [];
     close: [];
-    // Keeps a chat open that this card's click only opened as a look (see `peek`).
-    keep: [];
     grab: [event: PointerEvent, card: HTMLElement];
     // Opens the board's menu on this card, handing over what only the card can do (rename, react).
     menu: [event: MouseEvent, presses: CardOwnPresses];
@@ -644,8 +640,6 @@ const grab = (event: PointerEvent): void => {
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-                    <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
-                    <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </button>
             </template>
             <span class="ml-auto flex min-h-5.5 shrink-0 items-center gap-2.5 self-start">

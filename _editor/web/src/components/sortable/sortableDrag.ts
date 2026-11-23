@@ -7,10 +7,10 @@ import { swallowClick } from "../../lib/swallowClick";
 // dashed slot in the list, the others slide aside to make that room, and on release the lifted item settles into the
 // slot before the list takes it back. Escape flies it home. Used by Home's rail of sandboxes (features/home/
 // HomeSandboxes.vue) and the switcher's rows (features/sandbox/gates/SandboxSwitcher.vue), which share one order.
-// Pointer Events, as the chat tile's drag (shell/rail/chatTileDrag.ts): a press that never travels stays the item's
+// Pointer Events, as the board card's drag (useAgentDrag): a press that never travels stays the item's
 // click and double-click. Mouse and pen only; a touch on the list scrolls it.
 
-// Far enough that a click with a shaky hand still selects, as every drag in the app (shell/rail/chatTileDrag.ts).
+// Far enough that a click with a shaky hand still selects, as every drag in the app.
 const DRAG_THRESHOLD_PX = 5;
 
 // How near the list's top or bottom edge a carried item scrolls a list too long for its frame, and how fast at the very

@@ -22,8 +22,8 @@ const t = useT();
 // Capabilities is no tile of its own on the folded rail (its + and its More row are the doors, ShellDesktop.vue), so it
 // is added here for whoever may open it.
 const connects = useHeldDoor(`capabilities.list`);
-// The Chat heads the sandbox's sections, as on its rail when it docks there.
-const { tiles: sections } = useSectionTiles(() => [{ id: `chat`, to: here(page.chat()), label: t(`shared.chat`), icon: `comments` }]);
+// The sandbox's sections, as its rail lists them. The chat is none of them: it stands beside every one.
+const { tiles: sections } = useSectionTiles();
 const tiles = computed<readonly SectionTile[]>(() =>
     connects.value ? [...sections.value, { id: `capabilities`, to: here(page.capabilities()), label: t(`shared.capabilities`) }] : sections.value,
 );

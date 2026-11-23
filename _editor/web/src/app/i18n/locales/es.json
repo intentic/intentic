@@ -165,7 +165,6 @@
             "sameTurn": "Mismo turno",
             "sendAtReset": "Enviar al reiniciar",
             "steps": "Pasos",
-            "temporary": ", temporal",
             "waitingMaintainer": "{landAsk}: esperando a un responsable",
             "landAgainHint": "Quizá se quitó a propósito.",
             "skip": "Omitir",
@@ -3367,19 +3366,6 @@
             "notShared": "{provider} no está compartido contigo en este sandbox.",
             "whoConnects": "Puede conectar uno el propietario, alguien con acceso total o alguien a quien se le dieron sus propias cuentas de IA."
         },
-        "chatArea": {
-            "bringBackHere": "Tráelo de vuelta aquí",
-            "bringBackToFill": "Tráelo de vuelta para llenar este hueco, o sigue usando la ventana flotante.",
-            "chatInOwnWindow": "Tu chat está en su propia ventana"
-        },
-        "chatBoard": {
-            "board": "Tablero",
-            "boardNote": "Carriles junto al chat",
-            "showBoard": "Mostrar el tablero junto al chat",
-            "list": "Lista",
-            "listNote": "Chats en una columna",
-            "showList": "Mostrar la lista de chats"
-        },
         "chatAudioChip": {
             "cantPlay": "No se reproduce",
             "of": "{displayTime} de {duration}",
@@ -4172,14 +4158,6 @@
             "sendNow": "Enviar ya",
             "continuation": "Continuar desde donde se detuvo el último turno"
         },
-        "chatQuickBar": {
-            "agentWaitingForYou": "Tu agente te está esperando",
-            "openChatAgentWaiting": "Abre el chat: tu agente espera una respuesta",
-            "openFullChat": "Abrir el chat completo",
-            "titleWaitingForYou": "{title} · te espera",
-            "writeToAgentHere": "Escribe a tu agente desde aquí",
-            "you": "Tú"
-        },
         "chatRailChecklist": {
             "chatsChecklist": "La lista de tareas de este chat",
             "checklist": "Lista de tareas",
@@ -4325,8 +4303,6 @@
         "chatTabs": {
             "archiveChat": "Archivar el chat",
             "couldntRenameAgent": "No se pudo cambiar el nombre del agente.",
-            "dockToRail": "Acoplar a la barra",
-            "fullWindow": "Ventana completa",
             "need": "{attentionCount} te necesitan",
             "newWindow": "Nueva ventana",
             "nextNeedsYou": "Siguiente chat que te necesita",
@@ -4335,7 +4311,9 @@
             "previous": "Anterior",
             "running": "{runningCount} en marcha",
             "switch": "Cambiar…",
-            "switchChatOpen": "Cambiar de chat: {count} abiertos"
+            "switchChatOpen": "Cambiar de chat: {count} abiertos",
+            "tuckAway": "Plegar",
+            "tuckAwayNote": "En una franja en el borde"
         },
         "chatTodoList": {
             "added": "{count} añadidos",
@@ -4830,7 +4808,6 @@
             "closeFinished": "Cerrar los terminados",
             "closeAll": "Cerrar todos",
             "reopenClosedChat": "Reabrir el chat cerrado",
-            "dockChatToRail": "Acoplar el chat a la barra",
             "dockChatBack": "Volver a acoplar el chat",
             "closeOthers": "Cerrar los demás",
             "closePane": "Cerrar el panel",
@@ -4849,7 +4826,8 @@
             "whatTheVendorAllows": "Lo que permite el proveedor",
             "agentNeedsHelp": "El agente necesita tu ayuda:",
             "optionalNoteBackTo": "Nota opcional de vuelta al agente",
-            "doneHandBack": "Listo: devolver"
+            "doneHandBack": "Listo: devolver",
+            "tuckChatAway": "Plegar el chat"
         },
         "chatChildAgentAsk": {
             "changeRun": "Cambiar ejecución",
@@ -13127,28 +13105,15 @@
         },
         "shellDesktop": {
             "agentNeedsHelp": "Necesita tu ayuda",
-            "chatDropCancel": "Esc cancela",
-            "chatDropDockBack": "{keys} lo vuelve a acoplar",
-            "chatDropDockRelease": "Suelta para mantener el chat junto a tu trabajo",
-            "chatDropDockRight": "Acoplar a la derecha",
-            "chatDropNewWindow": "Ventana nueva",
-            "chatDropRelease": "Suelta para abrir el chat aquí, en su propia ventana",
-            "chatWindowBlocked": "El navegador retuvo la ventana del chat",
-            "chatWindowBlockedDetail": "Un navegador solo abre una ventana justo después de un clic, y este arrastre duró más.",
-            "dockChatBack": "Volver a acoplar el chat",
-            "dockChatBackTo": "Devolver el chat al lateral",
-            "dragChatOut": "Arrastra para acoplar o separar",
             "everySectionOnRail": "Todas las áreas están en la barra",
             "howToUnpin": "Para quitar uno, haz clic derecho sobre él en la barra y desmarca Mantener en la barra.",
             "keepOnRail": "Mantener {label} en la barra",
             "keepOnRail2": "Mantener en la barra",
             "moreSections": "Más áreas",
             "moreSectionsOffRail": "Más áreas · {count} fuera de la barra",
-            "moveChatToWindow": "Pasar el chat a una ventana nueva",
             "nextRailSection": "Área siguiente de la barra",
             "offRail": "Fuera de la barra",
             "open": "{live} abiertos",
-            "openChatWindow": "Abrir ventana",
             "pin": "Fijar",
             "pinnedHint": "Siempre en la barra, tenga distintivo o no",
             "ports": "Puerto | Puertos",
@@ -13196,7 +13161,8 @@
             "tuckedTabs": "Pestañas plegadas",
             "unavailable": "No disponible",
             "unavailableNote": "La extensión que lo muestra está desactivada o se eliminó.",
-            "closeTab": "Cerrar {title}"
+            "closeTab": "Cerrar {title}",
+            "showChat": "Mostrar el chat"
         },
         "useNavigationCommands": {
             "add": "Añadir…"
@@ -13205,12 +13171,12 @@
             "anything": "Cualquier cosa…",
             "commandPalette": "Paleta de comandos…",
             "dockBack": "Volver a acoplar",
-            "dockBackToSide": "Volver a acoplar al lateral",
-            "dockToRail": "Acoplar a la barra",
             "keyboardShortcuts": "Atajos de teclado",
             "moveIntoNewWindow": "Pasar a una ventana nueva",
             "settings": "Ajustes",
-            "togglePanel": "Alternar el panel"
+            "togglePanel": "Alternar el panel",
+            "tuckChat": "Plegar el chat",
+            "showChat": "Mostrar el chat"
         },
         "windowControls": {
             "maximise": "Maximizar",

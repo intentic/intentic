@@ -37,7 +37,7 @@ import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { pendingOn } from "../../../models/fleet/useAgents-provisional";
 import { useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
 import { useSubagentRoster } from "../../../models/fleet/subagentRoster";
-import { chatWide, showParkedChat } from "../../../models/conversations/panel/chatPanelLayout";
+import { chatWide, showChat } from "../../../models/conversations/panel/chatPanelLayout";
 import { subagentOnScreen } from "../../../models/conversations/panel/subagentView";
 import { openRunInChat, pointAtChat } from "../../../models/fleet/openRun";
 import { summonChat } from "../../../models/conversations/run/summon";
@@ -120,7 +120,7 @@ const { sharedAccess } = useSandboxSharedAccess();
 const scope = useBoardScope({ agents, runs: workflows.runs, roles, me: computed(() => user.value?.email), sharedAccess });
 const { ownerOptions, ownerScope, projectHidden, attentionElsewhere, scopedHeld } = scope;
 const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
-const { highlightId, inPane, peeked } = ring;
+const { highlightId, inPane } = ring;
 // The subagent this window's chat is stepped into, while its parent's column is still what the chat shows. The view is
 // held per window and only the panel prunes it (keepSubagentWhileShown), so with the chat popped out this window's copy
 // outlives the column: read on its own it rings a row the reader has since moved away from.
@@ -167,7 +167,7 @@ const focus = useCardFocus({
     strip: chatStrip,
     summon: summonChat,
 });
-const { focusAgent, focusSubagent, drillIn, reviewAgent, enterAgent, keepAgent, closeAgent, openSession } = focus;
+const { focusAgent, focusSubagent, drillIn, reviewAgent, enterAgent, closeAgent, openSession } = focus;
 // The card the filter names by its id: the lanes lead with it, it is scrolled to, and Enter in the field opens it as a
 // click would; with nothing named, Enter does what it always did, which is nothing.
 const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
@@ -210,7 +210,6 @@ const swipeCard = (agent: FleetAgent): void => {
 };
 const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
     mobile,
-    peeked,
     focus,
     agents: {
         stopWatching: agents.stopWatching,
@@ -249,10 +248,10 @@ const { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, re
         // Where ChatPanel draws a run's diagram: a wide panel, on a desktop.
         diagram: computed(() => chatWide.value && !mobile.value),
         mobile,
-        // As an agent card's press does (cardSelection.focusAgent): a parked chat opens /chat to show what moved.
+        // As an agent card's press does (cardSelection.focusAgent): a chat folded into its strip comes back to show what moved.
         follow: (run) => {
             void openRunInChat(run);
-            showParkedChat();
+            showChat();
         },
         point: pointAtChat,
     },
@@ -326,7 +325,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             :class="narrow ? 'flex flex-wrap' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
         >
             <div class="col-start-1 flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
-                <slot name="lead" /><!-- What a host puts first: /chat's way back to its list (ChatBoardColumn.vue). -->
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
                 <SegmentedControl
                     v-if="user !== null && sharedAccess && !first"
@@ -585,7 +583,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                             :pending="pendingFor(agent)"
                                             :selected="ringed(agent.id)"
                                             :still="agent.id !== highlightId"
-                                            :peek="peeked(agent.id)"
                                             :match="snippetOf(agent)"
                                             :id-match="idMatchOf(agent)"
                                             :query="needle"
@@ -594,7 +591,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                             :placed="lane.key"
                                             :call="callOf(agent)"
                                             @open="(event) => focusAgent(agent, event)"
-                                            @keep="keepAgent(agent)"
                                             @review="drillIn(agent)"
                                             @changes="reviewAgent(agent)"
                                             @enter="enterAgent(agent)"

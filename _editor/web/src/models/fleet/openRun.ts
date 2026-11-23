@@ -4,7 +4,7 @@ import { useAgents } from "./useAgents";
 import { agentSeed } from "./useAgents-actions";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { raiseFloating } from "../../workbench/window/floating";
-import { chatParked, showParkedChat } from "../conversations/panel/chatPanelLayout";
+import { chatTucked, showChat } from "../conversations/panel/chatPanelLayout";
 import { drawsChat } from "../conversations/run/chatEcho";
 import type { RunSession } from "../conversations/run/chatRun";
 import { summonChat } from "../conversations/run/summon";
@@ -56,15 +56,15 @@ export const openRunInChat = async (run: WorkflowRun | string): Promise<void> =>
 };
 
 // Points at the chat for a press that found it already showing what was asked for (chatRun's `shown`), so the press
-// still answers: the window holding the chat comes forward, a parked chat opens /chat, and a chat on screen
-// is ringed for a moment. Never opens a window or moves the panes.
+// still answers: the window holding the chat comes forward, a chat folded into its strip comes out of it, and a chat on
+// screen is ringed for a moment. Never opens a window or moves the panes.
 export const pointAtChat = (): void => {
     if (!drawsChat.value) {
         raiseFloating(`chat`);
         return;
     }
-    if (chatParked.value) {
-        showParkedChat();
+    if (chatTucked.value) {
+        showChat();
         return;
     }
     flashElement(document.querySelector(`.chat-panel`));

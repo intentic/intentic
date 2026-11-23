@@ -165,7 +165,6 @@
             "sameTurn": "Gleicher Zug",
             "sendAtReset": "Beim Reset senden",
             "steps": "Schritte",
-            "temporary": ", vorübergehend",
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer",
             "landAgainHint": "Vielleicht absichtlich entfernt.",
             "skip": "Überspringen",
@@ -3367,19 +3366,6 @@
             "notShared": "{provider} ist in dieser Sandbox nicht mit dir geteilt.",
             "whoConnects": "Verbinden kann eines der Eigentümer, jemand mit vollem Zugriff oder jemand, dem eigene KI-Konten übertragen wurden."
         },
-        "chatArea": {
-            "bringBackHere": "Hierher zurückholen",
-            "bringBackToFill": "Holen Sie ihn zurück, um diese Fläche zu füllen, oder nutzen Sie weiter das schwebende Fenster.",
-            "chatInOwnWindow": "Ihr Chat ist in einem eigenen Fenster"
-        },
-        "chatBoard": {
-            "board": "Board",
-            "boardNote": "Spalten neben dem Chat",
-            "showBoard": "Board neben dem Chat zeigen",
-            "list": "Liste",
-            "listNote": "Chats in einer Spalte",
-            "showList": "Liste der Chats zeigen"
-        },
         "chatAudioChip": {
             "cantPlay": "Nicht abspielbar",
             "of": "{displayTime} von {duration}",
@@ -4172,14 +4158,6 @@
             "sendNow": "Jetzt senden",
             "continuation": "Dort fortsetzen, wo der letzte Zug angehalten hat"
         },
-        "chatQuickBar": {
-            "agentWaitingForYou": "Ihr Agent wartet auf Sie",
-            "openChatAgentWaiting": "Den Chat öffnen: Ihr Agent wartet auf eine Antwort",
-            "openFullChat": "Den ganzen Chat öffnen",
-            "titleWaitingForYou": "{title} · wartet auf Sie",
-            "writeToAgentHere": "Von hier aus an Ihren Agenten schreiben",
-            "you": "Sie"
-        },
         "chatRailChecklist": {
             "chatsChecklist": "Die Checkliste dieses Chats",
             "checklist": "Checkliste",
@@ -4325,8 +4303,6 @@
         "chatTabs": {
             "archiveChat": "Chat archivieren",
             "couldntRenameAgent": "Der Agent konnte nicht umbenannt werden.",
-            "dockToRail": "An Leiste andocken",
-            "fullWindow": "Ganzes Fenster",
             "need": "{attentionCount} brauchen Sie",
             "newWindow": "Neues Fenster",
             "nextNeedsYou": "Nächster Chat, der dich braucht",
@@ -4335,7 +4311,9 @@
             "previous": "Vorheriger",
             "running": "{runningCount} laufen",
             "switch": "Wechseln…",
-            "switchChatOpen": "Chat wechseln: {count} offen"
+            "switchChatOpen": "Chat wechseln: {count} offen",
+            "tuckAway": "Einklappen",
+            "tuckAwayNote": "In eine Leiste am Rand"
         },
         "chatTodoList": {
             "added": "{count} hinzugefügt",
@@ -4830,7 +4808,6 @@
             "closeFinished": "Fertige schließen",
             "closeAll": "Alle schließen",
             "reopenClosedChat": "Geschlossenen Chat wieder öffnen",
-            "dockChatToRail": "Chat an die Leiste andocken",
             "dockChatBack": "Chat wieder andocken",
             "closeOthers": "Andere schließen",
             "closePane": "Bereich schließen",
@@ -4849,7 +4826,8 @@
             "whatTheVendorAllows": "Was der Anbieter erlaubt",
             "agentNeedsHelp": "Der Agent braucht Ihre Hilfe:",
             "optionalNoteBackTo": "Optionale Notiz zurück an den Agenten",
-            "doneHandBack": "Fertig: zurückgeben"
+            "doneHandBack": "Fertig: zurückgeben",
+            "tuckChatAway": "Chat einklappen"
         },
         "chatChildAgentAsk": {
             "changeRun": "Lauf ändern",
@@ -13127,28 +13105,15 @@
         },
         "shellDesktop": {
             "agentNeedsHelp": "Braucht Ihre Hilfe",
-            "chatDropCancel": "Esc bricht ab",
-            "chatDropDockBack": "{keys} dockt ihn wieder an",
-            "chatDropDockRelease": "Loslassen, um den Chat neben deiner Arbeit zu behalten",
-            "chatDropDockRight": "Rechts andocken",
-            "chatDropNewWindow": "Neues Fenster",
-            "chatDropRelease": "Loslassen, um den Chat hier in einem eigenen Fenster zu öffnen",
-            "chatWindowBlocked": "Der Browser hat das Chat-Fenster zurückgehalten",
-            "chatWindowBlockedDetail": "Ein Browser öffnet ein Fenster nur direkt nach einem Klick, und dieses Ziehen hat zu lange gedauert.",
-            "dockChatBack": "Chat wieder andocken",
-            "dockChatBackTo": "Chat wieder an die Seite andocken",
-            "dragChatOut": "Ziehen zum Andocken oder Auslagern",
             "everySectionOnRail": "Jeder Bereich ist auf der Leiste",
             "howToUnpin": "Zum Entfernen in der Leiste rechtsklicken und „In der Leiste behalten“ abwählen.",
             "keepOnRail": "{label} auf der Leiste behalten",
             "keepOnRail2": "Auf der Leiste behalten",
             "moreSections": "Weitere Bereiche",
             "moreSectionsOffRail": "Weitere Bereiche · {count} nicht auf der Leiste",
-            "moveChatToWindow": "Chat in neues Fenster verschieben",
             "nextRailSection": "Nächster Leistenbereich",
             "offRail": "Nicht in der Leiste",
             "open": "{live} offen",
-            "openChatWindow": "Fenster öffnen",
             "pin": "Anheften",
             "pinnedHint": "Immer in der Leiste, mit oder ohne Badge",
             "ports": "Port | Ports",
@@ -13196,7 +13161,8 @@
             "tuckedTabs": "Eingeklappte Tabs",
             "unavailable": "Nicht verfügbar",
             "unavailableNote": "Die Erweiterung, die es zeigt, ist aus oder wurde entfernt.",
-            "closeTab": "{title} schließen"
+            "closeTab": "{title} schließen",
+            "showChat": "Chat anzeigen"
         },
         "useNavigationCommands": {
             "add": "Hinzufügen…"
@@ -13205,12 +13171,12 @@
             "anything": "Irgendetwas…",
             "commandPalette": "Befehlspalette…",
             "dockBack": "Wieder andocken",
-            "dockBackToSide": "Wieder seitlich andocken",
-            "dockToRail": "An Leiste andocken",
             "keyboardShortcuts": "Tastenkürzel",
             "moveIntoNewWindow": "In neues Fenster verschieben",
             "settings": "Einstellungen",
-            "togglePanel": "Panel umschalten"
+            "togglePanel": "Panel umschalten",
+            "tuckChat": "Chat einklappen",
+            "showChat": "Chat anzeigen"
         },
         "windowControls": {
             "maximise": "Maximieren",

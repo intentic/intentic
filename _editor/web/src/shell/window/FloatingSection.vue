@@ -4,13 +4,14 @@ import { useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, useTemplateRef, watch, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { parseFloatingPath } from "@intentic/sandbox-contract/app-routes";
 import { toFloating } from "../../lib/routes/links";
 import { closeOwnWindow } from "../../app/environments/desktop";
 import { useExtensionHost } from "../../extension-host/useExtensionHost";
 import { useKeybindings } from "../../workbench/commands/useKeybindings";
 import { useShellCommands } from "../commands/useShellCommands";
 import { claimFloating, type FloatingPanel } from "../../workbench/window/floating";
-import { sendLinkToMainWindow } from "../../workbench/window/mainWindow";
+import { handOffToMainWindow, sendLinkToMainWindow } from "../../workbench/window/mainWindow";
 import { markBrowsersOpened } from "../../workbench/browsers/browsersSurface";
 import { ACTIVE_KEY } from "../../app/storage/activeSandbox";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -21,6 +22,7 @@ import { registerCoreSideViews } from "../side/coreSideViews";
 import { sideDocked } from "../../workbench/side/sideTabs";
 import { shownSideTabs } from "../../workbench/side/sideViews";
 import SidePanel from "../side/SidePanel.vue";
+import FloatingBoard from "./FloatingBoard.vue";
 
 const route = useRoute();
 const layout = useLayout();
@@ -73,11 +75,22 @@ if (panel === `terminal`) {
 // capture, so it beats RouterLink's own click handler.
 onMounted(() => document.addEventListener(`click`, sendLinkToMainWindow, true));
 onUnmounted(() => document.removeEventListener(`click`, sendLinkToMainWindow, true));
+// So does a navigation a press makes in code (the board's way into an agent's review, a card's double-click): this window
+// keeps its panel, and the app's own window goes there.
+const router = useRouter();
+onUnmounted(
+    router.beforeEach((to) => {
+        if (parseFloatingPath(to.path) !== undefined) {
+            return true;
+        }
+        handOffToMainWindow({ kind: `route`, path: to.fullPath });
+        return false;
+    }),
+);
 
 // Following the workspace: which sandbox is active is one localStorage fact per origin, and `storage` is the
 // browser's cross-window notification. A floating panel must follow the main window's switch, or it would diverge, and
 // its address says which sandbox it shows, so it follows too.
-const router = useRouter();
 const followSandbox = (event: StorageEvent): void => {
     if (event.key === ACTIVE_KEY && event.newValue !== null && event.newValue !== useSandbox().activeSandboxId.value) {
         useSandbox().select(event.newValue);
@@ -93,9 +106,11 @@ onUnmounted(() => window.removeEventListener(`storage`, followSandbox));
 useShellCommands();
 useKeybindings();
 
-// A popped-out chat has a side panel of its own, right of the chat, where the checklist and usage strip stood: a file
-// or the running app the chat names is looked at here, beside the conversation that named it, rather than in the main
-// window behind this one. Under the phone breakpoint there is no room beside, and references go to the main window.
+// A popped-out chat stands where it stands in the main window: the Agents board on its left (FloatingBoard.vue), the
+// board being the list of chats there as it is here, and a side panel of its own on its right, where the checklist and
+// usage strip stood: a file or the running app the chat names is looked at here, beside the conversation that named it,
+// rather than in the main window behind this one. Under the phone breakpoint there is room for neither, and references go
+// to the main window.
 const { mobile } = useDevice();
 if (panel === `chat`) {
     // What that panel draws a file with is an extension's viewer (video, audio, pictures, PDF, Office), and a side view
@@ -112,9 +127,10 @@ if (panel === `chat`) {
     });
 }
 const sideShown = computed(() => panel === `chat` && !mobile.value && shownSideTabs.value.length > 0);
+const boardShown = computed(() => panel === `chat` && !mobile.value);
 const layoutStyle = computed(() => ({
-    gridTemplateAreas: `"chat side"`,
-    gridTemplateColumns: `minmax(0, 1fr) ${sideShown.value ? uiLength(layout.floatingSideWidth.value) : `0px`}`,
+    gridTemplateAreas: `"board chat side"`,
+    gridTemplateColumns: `auto minmax(0, 1fr) ${sideShown.value ? uiLength(layout.floatingSideWidth.value) : `0px`}`,
     gridTemplateRows: `1fr`,
 }));
 
@@ -129,9 +145,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-<!-- The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the side
-         panel takes `side` beside it. The other two fill a plain flex column. -->
+<!-- The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the board
+         takes `board` left of it and the side panel `side` right of it. The other two fill a plain flex column. -->
     <div v-if="panel === `chat`" class="grid h-screen w-screen overflow-hidden" :style="layoutStyle">
+        <FloatingBoard v-if="boardShown" style="grid-area: board" />
         <div ref="slot" class="contents"></div>
         <SidePanel v-if="sideShown" floating />
     </div>

@@ -85,7 +85,7 @@ it(`offers the areas whose rail tiles come and go with what is running`, () => {
     const app = mountShell();
 
     // Browsers leaves the rail when nothing is running; the palette is the way back to a finished one.
-    expect(ids()).toEqual(expect.arrayContaining([`view.browsers`, `view.chat`, `view.preview`, `view.capabilities`]));
+    expect(ids()).toEqual(expect.arrayContaining([`view.browsers`, `view.preview`, `view.capabilities`]));
     // The desktop has no evidence to tile it by, so its tile waits in More; the palette names it for a maintainer.
     expect(ids()).toContain(`view.desktop`);
     expect(ids()).not.toContain(`view.subagents`);
@@ -191,13 +191,13 @@ it(`goes to its page in the frame the reader is in when it runs, and is not regi
     readRoutesOf(router);
     await router.push(insidePath(`a1b2c3d4e5f6`, page.agents()));
     const app = mountShell(router);
-    const chat = commands.value.find((entry) => entry.command === `view.chat`);
+    const workspace = commands.value.find((entry) => entry.command === `view.workspace`);
 
     await router.push(homePath(`a1b2c3d4e5f6`, page.agents()));
     await nextTick();
-    expect(commands.value.find((entry) => entry.command === `view.chat`)).toBe(chat);
-    await chat?.handler();
+    expect(commands.value.find((entry) => entry.command === `view.workspace`)).toBe(workspace);
+    await workspace?.handler();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(router.currentRoute.value.fullPath).toBe(homePath(`a1b2c3d4e5f6`, page.chat()));
+    expect(router.currentRoute.value.fullPath).toBe(homePath(`a1b2c3d4e5f6`, page.workspace()));
     app.unmount();
 });

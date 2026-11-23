@@ -1,5 +1,5 @@
-<!-- The master view's chat area (desktop): lends the shell's chat panel this page, as the /chat section and a popped-out
-     window do (ChatSection.vue, FloatingSection.vue), so the home conversation is drawn by the very panel every other chat
+<!-- The master view's chat area (desktop): lends the shell's chat panel this page, as a popped-out
+     window does (FloatingSection.vue), so the home conversation is drawn by the very panel every other chat
      is, on its own surface, with its usage rail. PoppablePanels.vue mounts it here without its tab row, pinned to the home
      conversation (models/home/homeChat.ts), whether or not the shell's own chat is popped out into another window. -->
 <script setup lang="ts">

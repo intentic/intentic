@@ -8,8 +8,7 @@ import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToF
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { traceFocus } from "../../../models/conversations/run/focusTrace";
 import { openRunSessions } from "../../../models/fleet/openRun";
-import { DEFAULT_RAIL_WIDTH, railWidth } from "../../../models/fleet/board/columnWidth";
-import { chatOnRail, chatWide } from "../../../models/conversations/panel/chatPanelLayout";
+import { chatRailDrawn, chatWide } from "../../../models/conversations/panel/chatPanelLayout";
 import { shownSideTabs } from "../../../workbench/side/sideViews";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
@@ -26,23 +25,19 @@ import ChatSideRail from "./ChatSideRail.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
 import ChatTabs from "../tabs/ChatTabs.vue";
 import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
-import { chatBoardBeside } from "./board/chatBoard";
 import { useT } from "@intentic/ui/i18n";
 
 // The shared assistant: the frame around one or more chats (each conversation is a ChatPane). Owns what belongs
 // to the panel, not any one chat: the switcher bar and the pop-out-window button. Docked, it lives in the side panel,
 // which owns the column's width and its resize seam (shell/side). All state lives in the useChat singleton, so a
-// transcript persists across workspace areas; on a wide surface the bar becomes a left rail and panes stand side by side.
+// transcript persists across workspace areas; wide enough, its panes stand side by side.
 
 // `tabs: false` draws no header of its own, for the one caller (mobile agent route) whose surface already has
 // one — everything that bar offered is a tap away on the same form factor. A prop, not a `mobile` check, since
 // docked/floating panels need their own strip regardless of device.
-// `bar` is the quick strip's presentation (ChatQuickBar): the focused chat's composer and nothing else, in a row the
-// shell sizes to its content. It implies no header and no transcript: the strip is a scratch pad, and /chat is where
-// the turns are read.
 // `only` draws that one conversation and nothing else, whatever the shell's own chat holds or focuses: the master view's
 // one chat with a sandbox (models/home/homeChat.ts), which is not among the shell's tabs at all.
-const { tabs = true, bar = false, only } = defineProps<{ tabs?: boolean; bar?: boolean; only?: Conversation | undefined }>();
+const { tabs = true, only } = defineProps<{ tabs?: boolean; only?: Conversation | undefined }>();
 
 const t = useT();
 
@@ -54,24 +49,16 @@ const { mobile } = useDevice();
 // The panel's own element; its width decides whether the capacity rail fits.
 const root = ref<HTMLElement>();
 
-// What the panel lies on. The strip is one composer floating over someone else's page, so it paints nothing: the box
-// draws its own edge and a surface behind it reads as a tray.
-const ground = computed(() => (bar ? `` : `ground-card h-full overflow-hidden bg-card`));
-
 // How narrow a chat may shrink (useLayout's MIN_PANE_PX), imported rather than restated since the docked column
 // shares the same floor. Written as a custom property in app pixels, not rem, so it can't drift from the column's
 // own stored width.
 const minPaneLength = uiLength(MIN_PANE_PX);
-// The chat list's rail width beside the panes; its own default (rail.ts), not copied here.
-const RAIL_PX = DEFAULT_RAIL_WIDTH;
-
 // Which chats are on screen: the store holds the pane set, but a window only draws as many as fit at their floor.
 // A docked panel now shows a split too, once wide enough — the set survives docking, so popping back out restores
 // the split.
 const dockedRoom = (count: number): number => count * MIN_PANE_PX;
 const paneIds = computed(() => {
-    // A strip is one row of composer; a split there would be two boxes with no transcripts to tell them apart.
-    if (mobile.value || bar) {
+    if (mobile.value) {
         return [activeId.value];
     }
     return chatWide.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
@@ -95,9 +82,8 @@ const split = computed(() => shown.value.length > 1);
 // The column a subagent is shown in, by its parent (subagentView.ts): the strip has no room to step into one. The view
 // lasts only while that parent's column is drawn.
 const subagentIn = (conversation: Conversation): string | undefined =>
-    !bar && subagentOnScreen.value?.parentId === conversation.conversationId ? subagentOnScreen.value.id : undefined;
+    subagentOnScreen.value?.parentId === conversation.conversationId ? subagentOnScreen.value.id : undefined;
 // The board's card for a conversation sealed from this reader (schemas/seal.ts), whose gate is drawn instead of its chat.
-// The quick bar's scratch pad has no room for a gate, and a composer there would only be refused: it draws nothing.
 const { agentById } = useAgents();
 const sealedCard = (conversation: Conversation) => {
     const card = agentById(conversation.conversationId);
@@ -153,20 +139,33 @@ onBeforeUnmount(stopMeasuring);
 // Only reserved with something in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
 // non-empty only where the rail last had figures (capacityMemory.ts), so the transcript doesn't reflow when they land
 // and a sandbox with nothing connected never draws skeletons for figures that aren't coming. Keyed on capacity alone, never on the chat's checklist,
-// so picking up a first task can't reflow the panel mid-turn. A docked panel's tabs sit above the pane, so they
-// take no width; without tabs, the balancing space takes the place of the chat list's left rail.
+// so picking up a first task can't reflow the panel mid-turn. The tabs sit above the pane, so they take no width;
+// without tabs, the balancing space takes a rail's width on the left.
 const capacityRail = useCapacityRail();
 const showsRail = computed(
     () =>
-        !bar &&
         !mobile.value &&
-        // The board beside the chat holds the usage under it (board/ChatBoardColumn.vue).
-        !chatBoardBeside.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
-        (!chatWide.value || shownSideTabs.value.length === 0) &&
+        (!floating.value || shownSideTabs.value.length === 0) &&
         capacityRail.value &&
-        railFitsBeside(panelWidth.value, tabs ? (chatWide.value ? railWidth.value : 0) : CAPACITY_RAIL_PX, shown.value.length),
+        railFitsBeside(panelWidth.value, tabs ? 0 : CAPACITY_RAIL_PX, shown.value.length),
 );
+// Told to the page beside the chat: the Agents board holds Usage left under itself only while this rail is not drawn.
+// The home conversation's panel (`only`) stands on Home's own page, beside no board.
+watch(
+    showsRail,
+    (drawn) => {
+        if (only === undefined) {
+            chatRailDrawn.value = drawn;
+        }
+    },
+    { immediate: true },
+);
+onBeforeUnmount(() => {
+    if (only === undefined) {
+        chatRailDrawn.value = false;
+    }
+});
 // Beside one chat, the rail's marked row is that chat's allowance, so its composer chip gives the figure to the rail.
 provideRailCarries(() => showsRail.value && !split.value);
 
@@ -210,10 +209,9 @@ watch([activeId, tabReveal], () => {
 });
 
 // Room for the band that just opened: a docked column asks for the width its own floor needs (mirroring a
-// floating window's `fit`), clamped short of the viewport and left for the reader to drag. Only while the panel
-// is actually in that column — not parked on the rail out of view.
+// floating window's `fit`), clamped short of the viewport and left for the reader to drag.
 const makeRoomFor = (count: number): void => {
-    if (chatWide.value || chatOnRail.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
+    if (chatWide.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
         return;
     }
     layout.setChatWidth(dockedRoom(count));
@@ -254,12 +252,13 @@ const openRunColumn = (sessions: readonly RunSession[]): void => {
     }
 };
 
-// A pane with no room is invisible, so adding one widens the window; docked, there's no window to resize.
+// A pane with no room is invisible, so adding one widens the window, or docked, the chat's column.
 watch(
-    () => shown.value.length,
+    () => panes.value.length,
     (count, before) => {
         if (count > before) {
-            fit(count * MIN_PANE_PX + RAIL_PX);
+            fit(count * MIN_PANE_PX);
+            makeRoomFor(count);
         }
     },
 );
@@ -277,31 +276,27 @@ watch(
 </script>
 
 <template>
-    <!-- Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left. -->
-    <!-- Wide is one form wherever it stands (a popped-out window or the full-window /chat section): `chat-panel-wide` is what
-         chat.css keys the transcript's larger reading size on, so the two never drift apart. -->
+    <!-- A column: the bar on top, the panes below. -->
+    <!-- Wide is one form wherever it stands (a popped-out window or Home's page): `chat-panel-wide` is what chat.css keys
+         the transcript's larger reading size on, so the two never drift apart. -->
     <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
-    <!-- The strip paints no surface of its own: it is one composer floating over a page, and the box draws its own edge.
-         Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
-    <!-- Wide, the tab row is the roster on the left and nothing along the top gives way to the desktop window's buttons:
-         `--window-band` is how much of the top the panes and the side rail keep clear when this panel holds the corner
-         (workbench/window/controlsReserve.ts). -->
+    <!-- `--window-band` is how much of the top the panes and the side rail keep clear when this panel holds the corner
+         without a tab row (workbench/window/controlsReserve.ts). -->
     <div
         ref="root"
-        class="chat-panel relative flex min-h-0"
-        :class="[chatWide && !bar ? 'chat-panel-wide flex-row' : 'flex-col', ground]"
+        class="chat-panel ground-card relative flex h-full min-h-0 flex-col overflow-hidden bg-card"
+        :class="{ 'chat-panel-wide': chatWide }"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px`, '--capacity-balance': tabs ? `0px` : `var(--capacity-rail)` }"
         data-window-band
     >
-        <template v-if="tabs && !bar">
+        <template v-if="tabs">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
-            <!-- With the board beside the chat, the board is the list: the bar keeps only its commands (board/chatBoard.ts). -->
-            <ChatTabs v-else :listless="chatBoardBeside" @select="setActive" @close="closeTabs" @open="openConversation" />
+            <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
         </template>
 
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col pt-(--window-band)">
             <!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
-            <div v-if="barRun && !bar" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+            <div v-if="barRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button
                     v-if="shownRun && !showingGraph"
                     size="small"
@@ -333,8 +328,6 @@ watch(
             <ChatRunGraph v-if="showingGraph && shownRun" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
 
             <!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
-            <!-- The strip holds one pane and so needs no sideways scroll — which would clip the `@` and `/` lists standing above a
-                 composer whose box is the whole panel. -->
             <!-- One pane in the panel has nothing to scroll to either: it takes the row's width (the floor is a split's), and
                  the row clips rather than scrolls. A scroll box there turned the touch-target hit areas of the controls at its
                  edges (utilities.css, 44px overlays under a coarse pointer) into a few pixels of overflow, and a phone drew
@@ -343,13 +336,13 @@ watch(
                 v-else
                 ref="paneRow"
                 class="chat-panes flex min-h-0 min-w-0 flex-1"
-                :class="bar ? 'overflow-visible' : split ? 'overflow-x-auto overflow-y-hidden' : 'overflow-clip'"
+                :class="split ? 'overflow-x-auto overflow-y-hidden' : 'overflow-clip'"
                 :style="{ '--min-pane': split ? minPaneLength : `0px` }"
             >
                 <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <template v-for="conversation in shown" :key="conversation.conversationId">
                     <!-- A private conversation the reader cannot read: its gate stands in the chat's place, and no transcript is asked for. -->
-                    <SealGate v-if="sealedCard(conversation) !== undefined && !bar" :conversation-id="conversation.conversationId" />
+                    <SealGate v-if="sealedCard(conversation) !== undefined" :conversation-id="conversation.conversationId" />
                     <!-- Kept mounted while a subagent is shown over it, so stepping back finds the parent where it was left. -->
                     <ChatPane
                         v-else-if="sealedCard(conversation) === undefined"
@@ -357,7 +350,6 @@ watch(
                         :conversation="conversation"
                         :focused="only !== undefined || conversation.conversationId === activeId"
                         :closable="split"
-                        :strip="bar"
                         @focus="only === undefined && setActive(conversation.conversationId)"
                         @close="closePane(conversation.conversationId)"
                     />
@@ -375,7 +367,7 @@ watch(
                     />
                 </template>
             </div>
-            <!-- Below docked tabs, beside wide tabs: the focused chat's checklist and remaining usage. -->
+            <!-- Beside the panes, under the tabs: the focused chat's checklist and remaining usage. -->
             <ChatSideRail v-if="showsRail" :conversation="only" />
         </div>
     </div>

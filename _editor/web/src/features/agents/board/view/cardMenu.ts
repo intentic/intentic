@@ -40,8 +40,6 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 // What the menu is told about a card beyond the card itself.
 export interface MenuFacts extends AgentMenuFacts {
     readonly mobile: boolean;
-    // Its chat is open only as a look.
-    readonly peeked: boolean;
     // The agent's page, read only when the menu offers it.
     readonly href: () => string;
     // Another sandbox's name, for the row that crosses to it.
@@ -69,7 +67,6 @@ export interface CardOwnPresses {
 // What each row does.
 export interface MenuActions extends AgentMenuActions {
     readonly focusAgent: (agent: FleetAgent) => void;
-    readonly keepAgent: (agent: FleetAgent) => void;
     readonly reviewAgent: (agent: FleetAgent) => void;
     // The card's own drill-in (useCardFocus.drillIn): the chat for an ask, the review page otherwise.
     readonly drillIn: (agent: FleetAgent) => void;
@@ -128,8 +125,6 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
             facts.here
                 ? { label: t(`agents.agentStatus.openChat`), icon: `comments`, command: () => act.focusAgent(agent) }
                 : { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
-            // The press that stops a look going; the chat rail's menu carries the identical row for the identical state.
-            ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
             ...drillRows(agent, review, facts, act),
             ...landRows(agent, facts, act),
         ],
@@ -166,9 +161,8 @@ const menuEventAt = (event: MouseEvent): MouseEvent => {
 
 export interface MenuHost {
     readonly mobile: Readonly<Ref<boolean>>;
-    readonly peeked: (id: string) => boolean;
     // What a press on a card does (useCardFocus), and where its page is.
-    readonly focus: Pick<MenuActions, `focusAgent` | `keepAgent` | `reviewAgent` | `drillIn` | `closeAgent`> & {
+    readonly focus: Pick<MenuActions, `focusAgent` | `reviewAgent` | `drillIn` | `closeAgent`> & {
         readonly agentHref: (agent: FleetAgent) => string;
     };
     // The fleet store's writes.
@@ -229,7 +223,6 @@ export const useCardMenu = (host: MenuHost) => {
             mobile: host.mobile.value,
             here,
             canShip: canShip.value,
-            peeked: host.peeked(agent.id),
             href: () => host.focus.agentHref(agent),
             boxName: here || agent.sandboxId === undefined ? undefined : boxNameOf.value.get(agent.sandboxId),
             presses: ownPresses(),

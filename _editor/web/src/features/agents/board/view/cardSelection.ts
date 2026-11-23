@@ -5,7 +5,7 @@ import type { LocationQuery, Router } from "vue-router";
 import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
 import { afterPaint } from "../../../../lib/afterPaint";
 import { uuid } from "../../../../lib/uuid";
-import { showParkedChat } from "../../../../models/conversations/panel/chatPanelLayout";
+import { showChat } from "../../../../models/conversations/panel/chatPanelLayout";
 import { focusComposer } from "../../../../models/conversations/tabs/useChat-tabs";
 import { agentTabOf } from "../../../../models/conversations/panel/useChat-reveal";
 import { showingRunGraph } from "../../../../models/conversations/run/chatRun";
@@ -23,9 +23,8 @@ import { here, page } from "../../../../lib/routes/links";
 // Which card the board points at and what a press on one does: the ring follows the chat's own selection unless a link
 // just focused a card, a click opens the chat as a look rather than navigating, a modified click composes panes, and a
 // link uncovers its card. Every gesture is a summons, since the panel it composes may be another window's.
-// A click must put the chat's turns on screen: with the chat's home on the rail, the look used to land in the quick
-// bar's pill, which named the agent and showed nothing, so readers clicked three and four times. It opens /chat
-// there now (showParkedChat).
+// A click must put the chat's turns on screen: a chat folded into its strip at the window's edge comes back out of it
+// (showChat).
 // A double-click on a card opens its page where that page has something to read (AgentCard.openPage), on every lane alike,
 // and otherwise goes into its chat for real (enterAgent): it never does nothing.
 
@@ -96,9 +95,7 @@ export const useCardRing = (host: RingHost) => {
         const { panes: shown } = strip.value;
         return !mobile.value && !runGraphUp.value && shown.length > 1 && shown.includes(id);
     };
-    // Whether the chat is open only as a look (TabFacts.peek); desktop only, since a phone's tab set is one deep.
-    const peeked = (id: string): boolean => !mobile.value && strip.value.tabs.some((tab) => tab.id === id && tab.peek);
-    return { flashId, highlightId, inPane, peeked, flash };
+    return { flashId, highlightId, inPane, flash };
 };
 
 export interface FocusHost {
@@ -142,7 +139,7 @@ export interface FocusHost {
 const enterChat = (agent: FleetAgent, open: (agent: FleetAgent) => void, keep: (agent: FleetAgent) => void): void => {
     open(agent);
     keep(agent);
-    showParkedChat();
+    showChat();
     focusComposer();
 };
 
@@ -231,7 +228,7 @@ export const useCardFocus = (host: FocusHost) => {
         }
         // The reset the modifiers are defined against (`show` collapses any split), opened as a look (Conversation.peek).
         agents.open(agent, `peek`);
-        showParkedChat();
+        showChat();
     };
     // The chat itself, kept, for an ask answered on its card there (drillTarget): the card is drawn in the transcript
     // and above the composer, where a phone's agent page opens too. Never the review page, which draws no such card.
@@ -243,7 +240,7 @@ export const useCardFocus = (host: FocusHost) => {
             void router.push(agentPath(agent));
             return;
         }
-        showParkedChat();
+        showChat();
     };
     // The card's drill-in, where its label says it goes: the chat for an ask or a spent allowance, the review otherwise.
     // Another box's card has no chat this window can point at, so its page, where the crossing lives, as before.

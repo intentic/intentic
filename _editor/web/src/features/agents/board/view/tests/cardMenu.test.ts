@@ -29,14 +29,12 @@ const facts = (over: Partial<MenuFacts> = {}): MenuFacts => ({
     mobile: false,
     here: true,
     canShip: true,
-    peeked: false,
     href: () => `/agents/a1`,
     boxName: undefined,
     ...over,
 });
 const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & MenuActions[K] } => ({
     focusAgent: jest.fn(),
-    keepAgent: jest.fn(),
     reviewAgent: jest.fn(),
     drillIn: jest.fn(),
     closeAgent: jest.fn(),
@@ -145,10 +143,9 @@ describe(`what a card's menu offers`, () => {
         expect([act.drillIn.mock.calls, act.reviewAgent.mock.calls]).toEqual([[[asking]], []]);
     });
 
-    it(`keeps a look, and leaves the review to the card's own tap on a phone`, () => {
-        expect(rows(menuItemsFor(landed, facts({ peeked: true, mobile: true }), actions()))).toEqual([
+    it(`leaves the review to the card's own tap on a phone`, () => {
+        expect(rows(menuItemsFor(landed, facts({ mobile: true }), actions()))).toEqual([
             OPEN_CHAT,
-            t(`ui.action.keepOpen`),
             `—`,
             t(`agents.agentsView.copySessionName`),
             `—`,
@@ -257,10 +254,9 @@ describe(`what a card's menu offers`, () => {
 
     it(`runs each row's own press on the card it was opened for`, () => {
         const act = actions();
-        const items = menuItemsFor(wrote, facts({ peeked: true }), act);
+        const items = menuItemsFor(wrote, facts(), act);
         for (const label of [
             OPEN_CHAT,
-            t(`ui.action.keepOpen`),
             VIEW_CHANGES,
             t(`agents.agentsView.copySessionName`),
             t(`agents.agentsView.archive`),
@@ -270,12 +266,11 @@ describe(`what a card's menu offers`, () => {
         press(menuItemsFor(card(`far`, { sandboxId: `laptop` }), facts({ here: false }), act), `Open in its sandbox`);
         expect([
             act.focusAgent.mock.calls,
-            act.keepAgent.mock.calls,
             act.reviewAgent.mock.calls,
             act.copySessionName.mock.calls,
             act.archive.mock.calls,
             act.openInSandbox.mock.calls,
-        ]).toEqual([[[wrote]], [[wrote]], [[wrote]], [[`agent/sleek-arrow-uzgj`]], [[[`a1`]]], [[`laptop`, `far`]]]);
+        ]).toEqual([[[wrote]], [[wrote]], [[`agent/sleek-arrow-uzgj`]], [[[`a1`]]], [[`laptop`, `far`]]]);
     });
 });
 
@@ -290,7 +285,6 @@ describe(`the one menu`, () => {
     const menuOf = () => {
         const focus = {
             focusAgent: jest.fn(),
-            keepAgent: jest.fn(),
             reviewAgent: jest.fn(),
             drillIn: jest.fn(),
             closeAgent: jest.fn(),
@@ -303,7 +297,7 @@ describe(`the one menu`, () => {
         };
         const effects = effectScope();
         running.push(effects);
-        const menu = effects.run(() => useCardMenu({ mobile: ref(false), peeked: (id) => id === `a1`, focus, agents, selected: (agent) => [agent] }))!;
+        const menu = effects.run(() => useCardMenu({ mobile: ref(false), focus, agents, selected: (agent) => [agent] }))!;
         const show = jest.fn((_event: Event) => undefined);
         menu.cardMenu.value = { show };
         return { menu, show, focus };
@@ -317,7 +311,6 @@ describe(`the one menu`, () => {
         expect(show.mock.calls).toEqual([[event]]);
         expect(rows(menu.cardMenuItems.value)).toEqual([
             OPEN_CHAT,
-            t(`ui.action.keepOpen`),
             `—`,
             t(`agents.agentsView.copySessionName`),
             `—`,

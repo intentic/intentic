@@ -40,9 +40,11 @@ export const activeConversation = async (): Promise<string> => {
     return useChat().active.value.conversationId;
 };
 
-// The chat on a phone is the active conversation's own screen, in the same frame and sandbox.
-const chatEntry = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> =>
-    useDevice().mobile.value ? mobileChatPath(await activeConversation(), to) : true;
+// The chat on a phone is the active conversation's own screen, in the same frame and sandbox. On a desktop the chat stands
+// beside every page, and its page is the Agents board beside it: a link to /chat (a bookmark, the desktop app's
+// Super+Space `?shellChat=`, a notification's `?focus=`) lands there, its query kept.
+const chatEntry = async (to: RouteLocationNormalized): Promise<RouteLocationRaw> =>
+    useDevice().mobile.value ? mobileChatPath(await activeConversation(), to) : { path: here(page.agents(), to), query: to.query };
 
 // Menu and Terminal are full-screen pages only on the mobile shell, opened from its rail; the desktop shell docks the
 // terminal and puts the menu's contents on the rail, so a desktop hit lands on the workspace of the same frame instead.
@@ -53,18 +55,17 @@ const mobileOnly = (to: RouteLocationNormalized): boolean | RouteLocationRaw => 
 const formerSection = (to: RouteLocationNormalized): boolean | RouteLocationRaw =>
     to.params[`tab`] === `personas` ? { name: to.name ?? undefined, params: { ...to.params, tab: `roles` }, query: to.query, hash: to.hash } : true;
 
+// The Agents board: its own page, and where a desktop's /chat lands.
+const agentsView = asyncView(() => import(`../features/agents/fleet/Agents.vue`));
+
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
 // setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
 // next tap goes (an agent's page from the board, the menu), `skip` for the two surfaces a phone never draws.
 const SANDBOX_VIEWS = {
-    // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so the rail,
-    // back button and reload already know how to enter and leave it. On a phone, the conversation's own screen.
-    chat: {
-        title: () => t(`shared.chat`),
-        beforeEnter: [chatEntry],
-        component: asyncView(() => import(`../shell/chat/ChatWithBoard.vue`), undefined, { mobile: `skip` }),
-    },
-    agents: { title: () => useVocabulary().value.agents, component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)) },
+    // The chat's old page, never drawn: every visit is sent on by `chatEntry` (the conversation's own screen on a phone, the
+    // Agents board on a desktop), so it names the board's view rather than one of its own.
+    chat: { title: () => t(`shared.chat`), beforeEnter: [chatEntry], component: agentsView },
+    agents: { title: () => useVocabulary().value.agents, component: agentsView },
     // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat surface.
     agent: {
         title: () => t(`shared.agent`),

@@ -77,7 +77,6 @@ export function useNavigationCommands(): void {
     const capabilitiesDoor = useHeldDoor(`capabilities.list`);
     // Shell routes named as the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
-        { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: here(page.chat()) },
         { command: `view.agents`, title: useVocabulary().value.agents, category: GO_TO, icon: `robot`, to: here(page.agents()) },
         ...(isGuest.value ? [] : guestless.value),
     ]);

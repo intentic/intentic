@@ -165,7 +165,6 @@
             "sameTurn": "Ta sama tura",
             "sendAtReset": "Wyślij po resecie",
             "steps": "Kroki",
-            "temporary": ", tymczasowo",
             "waitingMaintainer": "{landAsk}: czeka na opiekuna",
             "landAgainHint": "Mogły zostać usunięte celowo.",
             "skip": "Pomiń",
@@ -3367,19 +3366,6 @@
             "notShared": "{provider} nie jest Ci udostępniony w tym sandboxie.",
             "whoConnects": "Może je podłączyć właściciel, ktoś z pełnym dostępem albo ktoś, komu przekazano własne konta AI."
         },
-        "chatArea": {
-            "bringBackHere": "Przywróć tutaj",
-            "bringBackToFill": "Przywróć go, żeby wypełnił to miejsce, albo korzystaj dalej z pływającego okna.",
-            "chatInOwnWindow": "Twój czat jest w osobnym oknie"
-        },
-        "chatBoard": {
-            "board": "Tablica",
-            "boardNote": "Kolumny obok czatu",
-            "showBoard": "Pokaż tablicę obok czatu",
-            "list": "Lista",
-            "listNote": "Czaty w jednej kolumnie",
-            "showList": "Pokaż listę czatów"
-        },
         "chatAudioChip": {
             "cantPlay": "Nie do odtworzenia",
             "of": "{displayTime} z {duration}",
@@ -4172,14 +4158,6 @@
             "sendNow": "Wyślij teraz",
             "continuation": "Kontynuuj od miejsca, w którym zatrzymała się ostatnia tura"
         },
-        "chatQuickBar": {
-            "agentWaitingForYou": "Twój agent na Ciebie czeka",
-            "openChatAgentWaiting": "Otwórz czat: Twój agent czeka na odpowiedź",
-            "openFullChat": "Otwórz cały czat",
-            "titleWaitingForYou": "{title} · czeka na Ciebie",
-            "writeToAgentHere": "Pisz do swojego agenta stąd",
-            "you": "Ty"
-        },
         "chatRailChecklist": {
             "chatsChecklist": "Lista zadań tego czatu",
             "checklist": "Lista zadań",
@@ -4325,8 +4303,6 @@
         "chatTabs": {
             "archiveChat": "Zarchiwizuj czat",
             "couldntRenameAgent": "Nie udało się zmienić nazwy agenta.",
-            "dockToRail": "Zadokuj na pasku",
-            "fullWindow": "Całe okno",
             "need": "Czeka na Ciebie: {attentionCount}",
             "newWindow": "Nowe okno",
             "nextNeedsYou": "Następny czat, który na ciebie czeka",
@@ -4335,7 +4311,9 @@
             "previous": "Poprzedni",
             "running": "W toku: {runningCount}",
             "switch": "Przełącz…",
-            "switchChatOpen": "Przełącz czat (otwarte: {count})"
+            "switchChatOpen": "Przełącz czat (otwarte: {count})",
+            "tuckAway": "Zwiń",
+            "tuckAwayNote": "Do paska przy krawędzi"
         },
         "chatTodoList": {
             "added": "dodano: {count}",
@@ -4775,7 +4753,6 @@
             "closeFinished": "Zamknij skończone",
             "closeAll": "Zamknij wszystkie",
             "reopenClosedChat": "Otwórz ponownie zamknięty czat",
-            "dockChatToRail": "Zadokuj czat na pasku",
             "dockChatBack": "Zadokuj czat z powrotem",
             "closeOthers": "Zamknij pozostałe",
             "closePane": "Zamknij panel",
@@ -4794,7 +4771,8 @@
             "whatTheVendorAllows": "Na co pozwala dostawca",
             "agentNeedsHelp": "Agent potrzebuje Twojej pomocy:",
             "optionalNoteBackTo": "Opcjonalna notatka z powrotem do agenta",
-            "doneHandBack": "Gotowe: oddaj"
+            "doneHandBack": "Gotowe: oddaj",
+            "tuckChatAway": "Zwiń czat"
         },
         "chatChildAgentAsk": {
             "changeRun": "Zmień przebieg",
@@ -12479,28 +12457,15 @@
         },
         "shellDesktop": {
             "agentNeedsHelp": "Potrzebuje pomocy",
-            "chatDropCancel": "Esc anuluje",
-            "chatDropDockBack": "{keys} zadokuje go z powrotem",
-            "chatDropDockRelease": "Puść, żeby zachować czat obok swojej pracy",
-            "chatDropDockRight": "Zadokuj po prawej",
-            "chatDropNewWindow": "Nowe okno",
-            "chatDropRelease": "Puść, żeby otworzyć czat tutaj, w osobnym oknie",
-            "chatWindowBlocked": "Przeglądarka wstrzymała okno czatu",
-            "chatWindowBlockedDetail": "Przeglądarka otwiera okno tylko zaraz po kliknięciu, a to przeciąganie trwało dłużej.",
-            "dockChatBack": "Zadokuj czat z powrotem",
-            "dockChatBackTo": "Zadokuj czat z powrotem z boku",
-            "dragChatOut": "Przeciągnij, by zadokować lub odłączyć",
             "everySectionOnRail": "Każdy obszar jest na pasku",
             "howToUnpin": "Żeby któryś zdjąć, kliknij go prawym przyciskiem na pasku i odznacz Zostaw na pasku.",
             "keepOnRail": "Zostaw {label} na pasku",
             "keepOnRail2": "Zostaw na pasku",
             "moreSections": "Więcej obszarów",
             "moreSectionsOffRail": "Więcej obszarów · {count} poza paskiem",
-            "moveChatToWindow": "Przenieś czat do nowego okna",
             "nextRailSection": "Następny obszar paska",
             "offRail": "Poza paskiem",
             "open": "Otwarte: {live}",
-            "openChatWindow": "Otwórz okno",
             "pin": "Przypnij",
             "pinnedHint": "Zawsze na pasku, z plakietką czy bez",
             "ports": "Port | Porty",
@@ -12545,7 +12510,8 @@
             "tuckedTabs": "Zwinięte karty",
             "unavailable": "Niedostępne",
             "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte.",
-            "closeTab": "Zamknij {title}"
+            "closeTab": "Zamknij {title}",
+            "showChat": "Pokaż czat"
         },
         "useNavigationCommands": {
             "add": "Dodaj…"
@@ -12554,12 +12520,12 @@
             "anything": "Cokolwiek…",
             "commandPalette": "Paleta poleceń…",
             "dockBack": "Zadokuj z powrotem",
-            "dockBackToSide": "Zadokuj z powrotem z boku",
-            "dockToRail": "Zadokuj na pasku",
             "keyboardShortcuts": "Skróty klawiszowe",
             "moveIntoNewWindow": "Przenieś do nowego okna",
             "settings": "Ustawienia",
-            "togglePanel": "Przełącz panel"
+            "togglePanel": "Przełącz panel",
+            "tuckChat": "Zwiń czat",
+            "showChat": "Pokaż czat"
         },
         "windowControls": {
             "maximise": "Maksymalizuj",

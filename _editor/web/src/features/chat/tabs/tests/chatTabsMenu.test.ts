@@ -118,7 +118,7 @@ const openBarMenu = async (): Promise<void> => {
     strip.querySelector<HTMLElement>(`header`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
-// The buttons beside the switcher (+, rail, new window); right-clicking one is the same bar gesture as elsewhere on the header.
+// The buttons beside the switcher (+, tuck away, new window); right-clicking one is the same bar gesture as elsewhere on the header.
 const openMenuOnNewChatButton = async (): Promise<boolean> => {
     const event = new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true });
     strip.querySelector<HTMLElement>(`[aria-label="New agent"]`)!.dispatchEvent(event);
@@ -228,7 +228,7 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
     // Right-click used to toggle the pop-out on the spot; it opens this menu instead, carrying the rows that need
     // no tab under the pointer.
     await openBarMenu();
-    expect(labels()).toEqual([`Close Finished`, `Close All`, `Reopen closed chat`, `Dock chat to rail`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Reopen closed chat`, `Tuck chat away`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
 
     // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
@@ -263,7 +263,7 @@ it(`opens the tab menu from the ✚ button beside the strip, not the browser's o
     await nextTick();
 
     expect(await openMenuOnNewChatButton()).toBe(true);
-    expect(labels()).toEqual([`Close Finished`, `Close All`, `Reopen closed chat`, `Dock chat to rail`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Reopen closed chat`, `Tuck chat away`, `Move chat into new window`]);
 });
 
 // "Clear the done ones" can't be said by Close Others or Close to the Right, since finished tabs are scattered

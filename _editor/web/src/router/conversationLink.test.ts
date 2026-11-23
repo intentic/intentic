@@ -18,11 +18,6 @@ describe(`conversationRedirect`, () => {
         expect(conversationRedirect({ conversation: `cnv_1` }, `board`)).toBe(insidePath(`box-1`, page.agents({ query: { focus: `cnv_1` } })));
     });
 
-    // The chat homed on the rail is parked behind its tile on the board: the link would land one press short of the chat.
-    it(`opens the full-window chat for a reader whose chat lives on the rail`, () => {
-        expect(conversationRedirect({ conversation: `cnv_1` }, `chat`)).toBe(insidePath(`box-1`, page.chat({ query: { focus: `cnv_1` } })));
-    });
-
     it(`escapes an id in the phone's path segment`, () => {
         expect(conversationRedirect({ conversation: `a/b` }, `phone`)).toBe(`/s/box-1/agents/a%2Fb`);
     });

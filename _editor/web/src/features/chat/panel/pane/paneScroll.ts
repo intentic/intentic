@@ -11,8 +11,6 @@ export interface PaneScrollHost {
     readonly scroller: Ref<HTMLElement | null>;
     readonly content: Ref<HTMLElement | null>;
     readonly conversationId: () => string;
-    // The turns are withheld (the quick bar's strip); a scroller that has just gained them sits at the oldest words.
-    readonly bare: () => boolean | undefined;
     readonly messageCount: () => number;
     readonly streaming: Readonly<Ref<boolean>>;
     // Sizes the box, since the chat now on screen may hold another draft.
@@ -40,16 +38,6 @@ export const usePaneScroll = (pane: PaneScrollHost) => {
         () => {
             pin();
             pane.grow();
-        },
-        { flush: `post` },
-    );
-    watch(
-        pane.bare,
-        (withheld) => {
-            if (withheld !== true) {
-                pin();
-                pane.grow();
-            }
         },
         { flush: `post` },
     );

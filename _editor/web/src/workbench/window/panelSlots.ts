@@ -7,13 +7,9 @@ import { onMounted, onUnmounted, type ShallowRef, shallowRef } from "vue";
 
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
 export const chatSlot = shallowRef<HTMLElement | null>(null);
-// Chat's full-window home, published by the /chat area; preferred over the column, but outranked by a pop-out.
+// Chat's whole-surface home, published by a popped-out chat's window and Home's page; preferred over the column.
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
 export const chatFullSlot = shallowRef<HTMLElement | null>(null);
-// The quick bar's slot (ChatQuickBar), published only while the chat is parked: it takes the parking stage's place
-// so the composer of a chat with nowhere to be is still on screen.
-// allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
-export const chatBarSlot = shallowRef<HTMLElement | null>(null);
 // The Browsers view's full-area home, published by the /browsers section; outranks the side panel's, so standing on
 // /browsers always shows it there.
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into

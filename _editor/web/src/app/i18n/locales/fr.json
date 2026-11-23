@@ -165,7 +165,6 @@
             "sameTurn": "Même tour",
             "sendAtReset": "Envoyer à la réinitialisation",
             "steps": "Étapes",
-            "temporary": ", temporaire",
             "waitingMaintainer": "{landAsk} : en attente d'un mainteneur",
             "landAgainHint": "Peut-être retiré exprès.",
             "skip": "Passer",
@@ -3367,19 +3366,6 @@
             "notShared": "{provider} n'est pas partagé avec vous dans ce sandbox.",
             "whoConnects": "Le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié ses propres comptes d’IA peut en connecter un."
         },
-        "chatArea": {
-            "bringBackHere": "Le ramener ici",
-            "bringBackToFill": "Ramenez-le pour remplir cet espace, ou continuez avec la fenêtre flottante.",
-            "chatInOwnWindow": "Votre chat est dans sa propre fenêtre"
-        },
-        "chatBoard": {
-            "board": "Tableau",
-            "boardNote": "Colonnes à côté du chat",
-            "showBoard": "Afficher le tableau à côté du chat",
-            "list": "Liste",
-            "listNote": "Chats sur une colonne",
-            "showList": "Afficher la liste des chats"
-        },
         "chatAudioChip": {
             "cantPlay": "Illisible",
             "of": "{displayTime} sur {duration}",
@@ -4172,14 +4158,6 @@
             "sendNow": "Envoyer maintenant",
             "continuation": "Continuer là où le dernier tour s'est arrêté"
         },
-        "chatQuickBar": {
-            "agentWaitingForYou": "Votre agent vous attend",
-            "openChatAgentWaiting": "Ouvrir le chat : votre agent attend une réponse",
-            "openFullChat": "Ouvrir le chat complet",
-            "titleWaitingForYou": "{title} · vous attend",
-            "writeToAgentHere": "Écrivez à votre agent d'ici",
-            "you": "Vous"
-        },
         "chatRailChecklist": {
             "chatsChecklist": "La liste de tâches de ce chat",
             "checklist": "Liste de tâches",
@@ -4325,8 +4303,6 @@
         "chatTabs": {
             "archiveChat": "Archiver le chat",
             "couldntRenameAgent": "Impossible de renommer l'agent.",
-            "dockToRail": "Ancrer au rail",
-            "fullWindow": "Fenêtre entière",
             "need": "{attentionCount} ont besoin de vous",
             "newWindow": "Nouvelle fenêtre",
             "nextNeedsYou": "Chat suivant qui a besoin de vous",
@@ -4335,7 +4311,9 @@
             "previous": "Précédent",
             "running": "{runningCount} en marche",
             "switch": "Changer…",
-            "switchChatOpen": "Changer de chat : {count} ouverts"
+            "switchChatOpen": "Changer de chat : {count} ouverts",
+            "tuckAway": "Replier",
+            "tuckAwayNote": "Dans une bande au bord"
         },
         "chatTodoList": {
             "added": "{count} ajoutée(s)",
@@ -4830,7 +4808,6 @@
             "closeFinished": "Fermer les terminés",
             "closeAll": "Tout fermer",
             "reopenClosedChat": "Rouvrir le chat fermé",
-            "dockChatToRail": "Ancrer le chat au rail",
             "dockChatBack": "Réancrer le chat",
             "closeOthers": "Fermer les autres",
             "closePane": "Fermer le panneau",
@@ -4849,7 +4826,8 @@
             "whatTheVendorAllows": "Ce que le fournisseur autorise",
             "agentNeedsHelp": "L'agent a besoin de votre aide :",
             "optionalNoteBackTo": "Note facultative à renvoyer à l'agent",
-            "doneHandBack": "Terminé : rendre la main"
+            "doneHandBack": "Terminé : rendre la main",
+            "tuckChatAway": "Replier le chat"
         },
         "chatChildAgentAsk": {
             "changeRun": "Changer l'exécution",
@@ -13127,28 +13105,15 @@
         },
         "shellDesktop": {
             "agentNeedsHelp": "A besoin de vous",
-            "chatDropCancel": "Échap pour annuler",
-            "chatDropDockBack": "{keys} pour le réancrer",
-            "chatDropDockRelease": "Relâchez pour garder le chat à côté de votre travail",
-            "chatDropDockRight": "Ancrer à droite",
-            "chatDropNewWindow": "Nouvelle fenêtre",
-            "chatDropRelease": "Relâchez pour ouvrir le chat ici, dans sa propre fenêtre",
-            "chatWindowBlocked": "Le navigateur a bloqué la fenêtre du chat",
-            "chatWindowBlockedDetail": "Un navigateur n'ouvre une fenêtre que juste après un clic, et ce glisser a duré trop longtemps.",
-            "dockChatBack": "Réancrer le chat",
-            "dockChatBackTo": "Réancrer le chat sur le côté",
-            "dragChatOut": "Glissez pour ancrer ou détacher",
             "everySectionOnRail": "Toutes les zones sont sur le rail",
             "howToUnpin": "Pour en retirer un, faites un clic droit dessus dans le rail et décochez Garder sur le rail.",
             "keepOnRail": "Garder {label} sur le rail",
             "keepOnRail2": "Garder sur le rail",
             "moreSections": "Autres zones",
             "moreSectionsOffRail": "Autres zones · {count} hors du rail",
-            "moveChatToWindow": "Déplacer le chat dans une nouvelle fenêtre",
             "nextRailSection": "Zone suivante du rail",
             "offRail": "Hors de la barre",
             "open": "{live} ouverts",
-            "openChatWindow": "Ouvrir la fenêtre",
             "pin": "Épingler",
             "pinnedHint": "Toujours sur le rail, avec ou sans badge",
             "ports": "Port | Ports",
@@ -13196,7 +13161,8 @@
             "tuckedTabs": "Onglets repliés",
             "unavailable": "Indisponible",
             "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée.",
-            "closeTab": "Fermer {title}"
+            "closeTab": "Fermer {title}",
+            "showChat": "Afficher le chat"
         },
         "useNavigationCommands": {
             "add": "Ajouter…"
@@ -13205,12 +13171,12 @@
             "anything": "N'importe quoi…",
             "commandPalette": "Palette de commandes…",
             "dockBack": "Réancrer",
-            "dockBackToSide": "Réancrer sur le côté",
-            "dockToRail": "Ancrer au rail",
             "keyboardShortcuts": "Raccourcis clavier",
             "moveIntoNewWindow": "Déplacer dans une nouvelle fenêtre",
             "settings": "Réglages",
-            "togglePanel": "Basculer le panneau"
+            "togglePanel": "Basculer le panneau",
+            "tuckChat": "Replier le chat",
+            "showChat": "Afficher le chat"
         },
         "windowControls": {
             "maximise": "Agrandir",
