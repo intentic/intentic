@@ -141,7 +141,9 @@ the shell's workspace/fullscreen handling together.
 ## Installing
 
 `disk.sh --type anaconda-iso` makes an unattended installer ([installer/bib-config.toml](installer/bib-config.toml)). It
-erases the first internal disk only, never the stick it booted from. Where the machine has a TPM2, the root is LUKS2
+erases the first internal disk only, never the stick it booted from. "First" is the order `lsblk` lists disks in, so
+on a machine with more than one internal disk it need not be the one meant: a data disk on the first SATA port is
+erased before the SSD on the second. Where the machine has a TPM2, the root is LUKS2
 with a random one-time passphrase, bound to the TPM's PCR 7 (the Secure Boot state) during the install, so the first
 boot unlocks by itself. `intentic-tpm-enroll` then adds a recovery key, shows it once on the console, and removes the
 one-time passphrase. Without a TPM nothing could unlock an unattended disk, so the root is left unencrypted.
@@ -155,6 +157,47 @@ Each release's ISO and qcow2 disk (server edition) are published by [publish-dow
 `intentic-os` R2 bucket, and downloaded from [intentic.dev/download](https://intentic.dev/download/#os) through
 `intentic.dev/os/iso` and `/os/qcow2`. `os.yml` runs it only after `install-test.sh` passed, with an R2 access key in
 the `R2_OS_ACCESS_KEY_ID` and `R2_OS_SECRET_ACCESS_KEY` secrets.
+
+## Testing on a physical machine
+
+[metal.sh](metal.sh) installs, updates and checks Intentic OS on a test machine, run from another machine on the same
+network (the hub). The test machine keeps a second OS on a disk of its own, the **controller**: any Linux with podman
+and efibootmgr. The controller stays first in the firmware's BootOrder and Intentic OS, on the **target** disk, is
+booted for one boot at a time through BootNext. So a hang, a panic or a power cut lands back on the controller, and
+the controller can always reinstall the target: nobody has to be at the machine.
+
+```mermaid
+flowchart LR
+    hub["hub: metal.sh,<br/>registry :5000"] -->|"ssh root"| box
+    subgraph box["test machine"]
+        controller["controller OS<br/>first in BootOrder"]
+        target["Intentic OS<br/>target disk, BootNext"]
+    end
+    controller -->|"bootc install to-disk"| target
+    target -->|"bootc switch · ic os update"| hub
+    target -.->|"watchdog · panic · power cut"| controller
+```
+
+- `metal.sh build` builds `ic` from the checkout, the edition with build.sh, and the dev layer
+  ([Containerfile.dev](Containerfile.dev)) over it, and pushes it to the hub's registry. The dev layer is never part
+  of a release: it signs root in with the hub's key, trusts the registry over plain HTTP, feeds the hardware
+  watchdog and reboots on a panic. Without rechunking, a docker build keeps its package layer from build to build (the
+  version arguments sit below it), so an update downloads `ic` and Intentic's own files, not the packages.
+- `metal.sh update` stages the new build on the running target (`bootc switch`, or `ic os update` once the machine
+  follows the tag), reboots into it and runs [checks.sh](checks.sh), the same checks smoke.sh runs in its VM, plus
+  the booted digest and a container in a Kata microVM.
+- `metal.sh reinstall` boots the controller, refuses a disk the controller runs from or has mounted, wipes the
+  target with `bootc install to-disk`, keeps the controller first in BootOrder, boots the target once and checks it.
+  `--loopback FILE` does the same install into a disk image on the controller instead, with no firmware change.
+  Its installs get `systemd.gpt_auto=0`: `to-disk` makes no /boot partition and no fstab, so systemd's GPT
+  auto-generator mounts the EFI partition over ostree's /boot, and the staged deployment fails to finalize at shutdown.
+  Every update was silently dropped (ostree 2026.4, bootc 1.17.1, 2026-11-23). The installer ISO makes a /boot
+  partition (`reqpart --add-boot`) and an fstab, so it should not be affected; that is not checked yet.
+- `metal.sh logs` reads the target's last boot from its disk, from the controller, after a boot that fell back.
+
+The machine's own settings (its address, the target disk by id, the registry, the key) live in an env file on the hub,
+outside the repository; `metal.sh --help` lists them. [metal-box.sh](metal-box.sh) is the half that runs on the
+machine, sent over SSH at each step.
 
 ## Hardware
 
@@ -177,4 +220,5 @@ console.
 - [rootfs/usr/share/polkit-1/rules.d/50-intentic.rules](rootfs/usr/share/polkit-1/rules.d/50-intentic.rules) — what the `intentic` user may change without an administrator: Wi-Fi, removable drives.
 - [build.sh](build.sh), [disk.sh](disk.sh), [smoke.sh](smoke.sh) — build an image, make a disk or installer, boot and check it.
 - [install-test.sh](install-test.sh) — the installer end to end, with a software TPM and Secure Boot.
+- [metal.sh](metal.sh), [metal-box.sh](metal-box.sh), [Containerfile.dev](Containerfile.dev), [checks.sh](checks.sh) — install, update and check a physical test machine, with the dev layer its images carry and the checks it shares with smoke.sh.
 - [publish-download.sh](publish-download.sh) — a release's ISO and VM disk, up to the R2 bucket intentic.dev/os serves.

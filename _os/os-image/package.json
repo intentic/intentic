@@ -11,6 +11,11 @@
         "build.sh",
         "disk.sh",
         "smoke.sh",
+        "checks.sh",
+        "metal.sh",
+        "metal-box.sh",
+        "Containerfile.dev",
+        "dev",
         "install-test.sh",
         "publish-download.sh"
     ]

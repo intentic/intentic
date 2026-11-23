@@ -168,7 +168,12 @@ pairing page, `ic os status` and a green `ic os health` under greenboot; `os.yml
 [`install-test.sh`](../../_os/os-image/install-test.sh) runs the installer ISO onto a blank disk with Secure Boot and a
 software TPM, then checks that the first boot opens the encrypted root by itself; `os.yml` runs it for every release.
 What neither can reach: a real pairing (it needs a setup code from an account), a sandbox under Kata (the VMs these run
-in are nested), and physical hardware. The [os-image README](../../_os/os-image/README.md) keeps the table of
+in are nested), and physical hardware. [`metal.sh`](../../_os/os-image/metal.sh) covers the last two on a test
+machine on the local network: it keeps a controller OS on a disk of its own, first in the firmware's boot order, and
+boots Intentic OS from a second disk for one boot at a time, so a bad image falls back to the controller, which
+reinstalls with nobody at the machine. Its images carry a dev layer that is never released (root's SSH key, the
+local registry, the hardware watchdog), and its checks are smoke.sh's own ([`checks.sh`](../../_os/os-image/checks.sh))
+plus the booted digest and a Kata container. The [os-image README](../../_os/os-image/README.md) keeps the table of
 machines tried.
 
 ## Not done yet

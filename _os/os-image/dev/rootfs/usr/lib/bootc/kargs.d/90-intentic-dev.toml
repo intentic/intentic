@@ -1,0 +1,2 @@
+# Dev images only (Containerfile.dev): a kernel panic reboots after 10 seconds rather than stopping on the screen.
+kargs = ["panic=10"]

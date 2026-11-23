@@ -7,10 +7,6 @@
 ARG BASE=ghcr.io/intentic/os:stable
 FROM ${BASE}
 
-ARG VERSION=0.0.0
-ARG CHANNEL=stable
-ARG REPOSITORY=ghcr.io/intentic/os-desktop
-
 # The app's own .rpm (build.sh stages it) pulls WebKitGTK and GTK; sway, greetd, Chromium and fonts come from Fedora.
 # The rpm is BIND-mounted, not COPY'd: a COPY committed it as a 62 MB layer of its own that the RUN then deleted, so
 # every pull of this image carried the app twice. No `dnf clean all` either: it emptied the cache mount keepcache=1
@@ -27,6 +23,11 @@ RUN --mount=type=bind,source=desktop/rpm,target=/tmp/intentic-rpm \
         /tmp/intentic-rpm/*.rpm \
     && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf /run/selinux-policy \
         /var/cache/ldconfig /usr/lib/sysimage/libdnf5/transaction_history.sqlite*
+
+# Below the package layer, as in the server edition (Containerfile says why).
+ARG VERSION=0.0.0
+ARG CHANNEL=stable
+ARG REPOSITORY=ghcr.io/intentic/os-desktop
 
 COPY desktop/rootfs/ /
 # The screen is the app's: pairing happens in it (This device) or on the LAN page, never on tty1. The desktop's own

@@ -1,0 +1,35 @@
+# INTENTIC OS, DEV LAYER: what a test machine needs on top of either edition, and never part of a released image.
+# metal.sh builds it over a fresh server or desktop build and pushes the result to a registry on the local network,
+# from which a test machine is installed (`bootc install to-disk`) and updated (`bootc switch`, `ic os update`).
+#
+#   DEV_SSH_AUTHORIZED  the public key metal.sh signs in as root with: every install path (to-disk, the installer, an
+#                 update of a box installed before) gets it from the image, so no install needs a flag of its own
+#   DEV_REGISTRY  host:port of that registry, which speaks plain HTTP on the local network
+#
+# Also: the machine resets itself when it hangs (the hardware watchdog) or panics (panic=10), so a bad build on a
+# machine nobody is at falls back to whatever boots next, which on a metal.sh box is its controller OS.
+ARG BASE=localhost/intentic-os-metal/os:dev
+FROM ${BASE}
+
+ARG DEV_SSH_AUTHORIZED
+ARG DEV_REGISTRY
+
+# efibootmgr: metal.sh sets the one-time BootNext from here before each reboot, so a reboot of the target comes back
+# to it rather than to the controller first in BootOrder.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
+    command -v efibootmgr >/dev/null || dnf -y --setopt=keepcache=1 install efibootmgr \
+    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf
+
+COPY dev/rootfs/ /
+RUN set -e; \
+    [ -n "$DEV_SSH_AUTHORIZED" ] || { echo "Containerfile.dev: DEV_SSH_AUTHORIZED is required" >&2; exit 1; }; \
+    [ -n "$DEV_REGISTRY" ] || { echo "Containerfile.dev: DEV_REGISTRY is required" >&2; exit 1; }; \
+    mkdir -p /usr/share/intentic-os-dev; \
+    printf '%s\n' "$DEV_SSH_AUTHORIZED" > /usr/share/intentic-os-dev/authorized_keys; \
+    chmod 0644 /usr/share/intentic-os-dev/authorized_keys; \
+    printf '[[registry]]\nlocation = "%s"\ninsecure = true\n' "$DEV_REGISTRY" \
+        > /etc/containers/registries.conf.d/50-intentic-os-dev.conf
+
+LABEL dev.intentic.os.dev="1"
+
+RUN bootc container lint

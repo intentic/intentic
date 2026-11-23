@@ -14,10 +14,6 @@
 ARG BASE=quay.io/fedora/fedora-bootc:44
 FROM ${BASE}
 
-ARG VERSION=0.0.0
-ARG CHANNEL=stable
-ARG REPOSITORY=ghcr.io/intentic/os
-
 # The machine's own settings (`ic os network|drives`, _os/README.md "Settings"): fedora-bootc:44 has NetworkManager but
 # not its Wi-Fi plugin or the wpa_supplicant behind it (2026-10-16: neither is in the 2026-10-13 build), and has udisks,
 # which opens, closes and powers off USB drives and memory cards, only as fwupd's weak dependency, so it is named here to
@@ -64,7 +60,12 @@ RUN --mount=type=bind,source=rootfs,target=/tmp/rootfs \
     && find /tmp/rootfs -type f -printf '/%P\0' | xargs -0 setfattr -n user.component -v intentic-os \
     && setfattr -n user.component -v intentic-os /usr/bin/ic
 
-# What this image is, read by `ic os` and everything that calls it.
+# What this image is, read by `ic os` and everything that calls it. Declared here, not at the top: every RUN after an ARG
+# counts its value in its cache key, so a version declared above the `dnf install` rebuilt that whole layer for each
+# new version string, and a docker build (which is not rechunked) then made every update download it again.
+ARG VERSION=0.0.0
+ARG CHANNEL=stable
+ARG REPOSITORY=ghcr.io/intentic/os
 RUN printf '{"name":"Intentic OS","edition":"server","version":"%s","channel":"%s","repository":"%s"}\n' \
         "$VERSION" "$CHANNEL" "$REPOSITORY" > /usr/lib/intentic-os/release.json \
     && setfattr -n user.component -v intentic-os /usr/lib/intentic-os/release.json
