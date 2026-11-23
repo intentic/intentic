@@ -23,6 +23,7 @@ import type { RunnerIdentity } from "./runner-identity.js";
 import { keepRunnerPresentation } from "./naming/runner-presentation.js";
 import { DISPATCHED_CHILD_NOTES } from "./held-turns/dispatched-child-notes.js";
 import { filePresentationStore } from "../system/presentation/presentation-store.js";
+import { readStoredPage } from "../workspace/files/stored-pages.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
 // adapter onto machinery this daemon already has: a turn, its answers and its steers go through the TurnStarter port,
@@ -170,6 +171,13 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         runTurn: os.runTurn.handler(({ input }) => runHeldTurn(services, input)),
         attachTurn: os.attachTurn.handler(({ input }) => followHeld(remoteTurns, input)),
         heldTurn: os.heldTurn.handler(({ input }) => remoteTurns.held(input.conversationId)),
+        readPage: os.readPage.handler(async ({ input }) => {
+            const html = await readStoredPage(services.workspace.root, input.path);
+            if (html === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: `this runner holds no page at ${input.path}` });
+            }
+            return { html };
+        }),
         ackTurn: os.ackTurn.handler(({ input }) => {
             remoteTurns.ack(input.conversationId, input.after);
             return { ok: true };

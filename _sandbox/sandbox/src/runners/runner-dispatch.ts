@@ -14,7 +14,8 @@ import type { Services } from "../composition.js";
 import type { RunnerHub } from "./runner-peer.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 import { openRunnerTurn } from "./ownership/account-holds.js";
-import { collectHeld, payOwedStop, type RelayContext, relayTurn, stopRemoteTurn } from "./held-turns/runner-relay.js";
+import { collectHeld, payOwedStop, type RelayContext, type RelayFrame, relayTurn, stopRemoteTurn } from "./held-turns/runner-relay.js";
+import { bringPageHome } from "./held-turns/runner-pages.js";
 
 // One turn executed on a runner, the parent's side of the dispatch: mirrors the
 // isolated arm's local shape, station for station.
@@ -23,7 +24,8 @@ import { collectHeld, payOwedStop, type RelayContext, relayTurn, stopRemoteTurn 
 // sync push: delivers to refs/runner-incoming/<id>; run in a finally, so an aborted turn still delivers what was
 // pushed. A dropped link mid-turn is read through (runner-relay.ts): the runner finishes the turn either way, and the
 // relay reads on from the frame it last had once the runner is back.
-// Attachments ride inline (base64): daemon state, not repo content, so the mirror's git sync can't carry them.
+// Attachments ride inline (base64): daemon state, not repo content, so the mirror's git sync can't carry them. For the
+// same reason a page the turn shows is fetched from the runner before its frame is relayed (held-turns/runner-pages.ts).
 
 // What a dispatch reads of the daemon: the runner's socket, the checkouts it mirrors, and the log.
 export interface DispatchServices {
@@ -187,6 +189,12 @@ export async function* dispatchRemoteTurn(
     const repos = await syncRepos(services, worktree);
     const sync = (op: "pull" | "push"): RunnerSync => ({ op, conversationId, branch: worktree.branch, repos });
     const context: RelayContext = { hub: services.runnerHub, logger: services.logger, runnerId, conversationId, signal };
+    const pagesHome = { hub: services.runnerHub, logger: services.logger, runnerId, workspaceRoot: services.workspace.root };
+    const cards = noteCards(runnerId, conversationId);
+    const relayed: RelayFrame = async (event) => {
+        await bringPageHome(pagesHome, event);
+        return cards(event);
+    };
 
     // Stop must reach the runner explicitly: closing the stream alone races the provider, still spending unseen. A
     // Stop during the sync round trip lands on an already-aborted signal a bare listener misses.
@@ -197,7 +205,7 @@ export async function* dispatchRemoteTurn(
     try {
         await payOwedStop(context, client);
         // A turn the runner still holds from before (one this sandbox lost) comes home first: a pull would reset it.
-        const earlier = yield* collectHeld(context, client, noteCards(runnerId, conversationId));
+        const earlier = yield* collectHeld(context, client, relayed);
         if (earlier.collected) {
             await deliverBranch(services, runnerId, sync("push"), worktree);
         }
@@ -222,7 +230,7 @@ export async function* dispatchRemoteTurn(
         const end = yield* relayTurn(
             context,
             { client: live, open: (current) => current.runTurn(turn, signal === undefined ? {} : { signal }) },
-            noteCards(runnerId, conversationId),
+            relayed,
         );
         if (end.outcome !== "done") {
             // The relay said why it stopped following; the turn still closes here.

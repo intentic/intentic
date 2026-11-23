@@ -38,6 +38,11 @@ export const runnerContract = {
     // How many of the held turn's frames the parent has, said every few seconds while it relays them: the count a parent
     // that restarted mid-turn reads on from (`heldTurn().acked`), since its own count died with it.
     ackTurn: oc.input(RunnerAttachSchema).output(OkSchema),
+    // A page a turn here showed (`show_page`), by the workspace path its `page` frame names: the page is filed in the
+    // runner's own workspace, and the parent files a copy at the same path before relaying the frame, so the chat, which
+    // reads pages from the parent, can draw it. NOT_FOUND for a path that is not a stored page; an older runner lacks the
+    // procedure, and its pages stay on the runner.
+    readPage: oc.input(z.object({ path: z.string().min(1) })).output(z.object({ html: z.string() })),
     // Returns `applied` rather than throwing: a missing id is an ordinary race, same as local NOT_FOUND.
     reply: oc.input(AgentReplySchema).output(z.object({ applied: z.boolean() })),
     // Attachments/editor context travel uncomposed: the note must build against the runner's own workspace root.

@@ -10,7 +10,7 @@ import type { Services } from "../../composition.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { parseByteRange } from "../../workspace/files/workspace-files-download.js";
 import { holdsStreamedMedia, pageMediaKeyPath, pageMediaRoots, streamedTypeOf, verifiedPageMedia } from "./page-media.js";
-import { readStoredPage } from "./page-store.js";
+import { readStoredPage } from "../../workspace/files/stored-pages.js";
 
 // GET /pages/media/{ticket}/{index}: a shown page's video or audio, streamed in byte ranges to the player inside the
 // page's sealed frame (page-media.ts says how a file comes to be named). The frame has an opaque origin and sends no

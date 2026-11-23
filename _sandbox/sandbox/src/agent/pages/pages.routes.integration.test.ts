@@ -9,7 +9,7 @@ import { pageMediaKeyPath, signPageMedia } from "./page-media.js";
 import { pageMediaBinding } from "./page-media.routes.js";
 import { unstubbed } from "@intentic/testing";
 import { errorCode, routesClient } from "../../harness/route-client.testing.js";
-import { PAGES_DIR } from "./pages-dir.js";
+import { PAGES_DIR } from "../../workspace/files/stored-pages.js";
 import { createPagesRoutes, type PagesRoutesDeps } from "./pages.routes.js";
 
 // The page an app call names is read off disk, so the route must keep it to the pages folder: the old test looked at the

@@ -6,7 +6,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { PAGE_MEDIA_MAX, PAGE_MEDIA_REF, type PageMediaFile, type PageMediaManifest, pageMediaSigned, readPageMedia } from "@intentic/sandbox-contract/text/pages";
 import { keptKey } from "../../auth/signed-payload.js";
 import { loadOrMintKey } from "../../store/plain-files/minted-key.js";
-import { PAGES_DIR } from "./pages-dir.js";
+import { PAGES_DIR } from "../../workspace/files/stored-pages.js";
 
 // Video and audio a shown page plays from disk. A take is tens of megabytes, far past what a page can carry inside itself
 // the way it carries pictures (page-assets.ts), so when the page is shown each file it names is recorded instead: its real

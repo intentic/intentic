@@ -13,8 +13,7 @@ import { callForApp } from "./mcp-apps.js";
 import { reportPageErrors } from "./page-errors.js";
 import { pageMediaKeyPath, verifiedPageMedia } from "./page-media.js";
 import { pageMediaBinding } from "./page-media.routes.js";
-import { PAGES_DIR } from "./pages-dir.js";
-import { readStoredPage } from "./page-store.js";
+import { PAGES_DIR,readStoredPage } from "../../workspace/files/stored-pages.js";
 
 // The /pages routes: what an MCP server's app, drawn in a chat, asks of its own server while a reader uses it. The page
 // names its server and tool (stored inside it when it was shown, mcp-apps.ts); the request names only the page and the

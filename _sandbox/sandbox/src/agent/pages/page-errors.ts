@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { readMcpAppData } from "@intentic/sandbox-contract/text/pages";
 import { SHOW_PAGE_TOOL } from "./page-names.js";
-import { PAGES_DIR } from "./pages-dir.js";
+import { PAGE_DRAWING, PAGES_DIR } from "../../workspace/files/stored-pages.js";
 
 // What a page's own scripts threw in a reader's chat, said to the agent that showed it: the chat's frame catches each
 // uncaught error over the bridge (sandbox-contract text/pages.ts) and the editor hands them here. The check the agent
@@ -11,8 +11,6 @@ import { PAGES_DIR } from "./pages-dir.js";
 // only into the turn that showed the page, while it runs, so the agent fixes its own page before it ends: a later turn
 // is about something else, and waking an idle conversation would spend a turn nobody asked for. The reader is offered
 // the ask on the page's own line instead.
-
-const DRAWING = /^([A-Za-z0-9_-]+)\/([a-f0-9]{10})\.r(\d+)\.html$/;
 
 // Drawings already told, so a page open in two windows, or mounted again, is said once. Bounded: oldest let go first.
 const TOLD_KEPT = 256;
@@ -40,7 +38,7 @@ export const reportPageErrors = async (
     deps: PageErrorsDeps,
     input: { readonly page: string; readonly errors: readonly string[] },
 ): Promise<boolean> => {
-    const drawing = input.page.startsWith(PAGES_DIR) ? DRAWING.exec(input.page.slice(PAGES_DIR.length)) : null;
+    const drawing = input.page.startsWith(PAGES_DIR) ? PAGE_DRAWING.exec(input.page.slice(PAGES_DIR.length)) : null;
     if (drawing === null || told.has(input.page)) {
         return false;
     }

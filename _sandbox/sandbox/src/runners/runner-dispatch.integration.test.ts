@@ -3,6 +3,10 @@ import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { RunnerTurn,RunnerSyncLine,RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { ConversationWorktree } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PAGES_DIR } from "../workspace/files/stored-pages.js";
 import { dispatchRemoteTurn } from "./runner-dispatch.js";
 
 /* The dispatch's OFFLINE answer, the one path that needs no runner to exist: a machine asleep is a normal state. */
@@ -67,7 +71,11 @@ const notHere = (): never => {
 // A runner at the end of a real oRPC socket, its procedures backed by `turns`. `dieAfter` frames into a stream, the socket
 // is dropped under it (the runner's turn carries on in `turns`) and `redial` runs. `old` is a build without the held-turn
 // procedures, which answers them NOT_FOUND as any unknown procedure is.
-const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], options: { dieAfter?: number; redial?: () => void; old?: boolean } = {}) => {
+const runnerAt = async (
+    turns: RemoteTurns,
+    script: readonly AgentEvent[],
+    options: { dieAfter?: number; redial?: () => void; old?: boolean; pages?: Readonly<Record<string, string>> } = {},
+) => {
     const calls: string[] = [];
     const received: RunnerTurn[] = [];
     const dying = async function* (frames: AsyncIterable<AgentEvent>): AsyncGenerator<AgentEvent> {
@@ -117,6 +125,14 @@ const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], optio
             turns.interrupt(input.conversationId);
             return { ok: true };
         }),
+        readPage: os.readPage.handler(({ input }) => {
+            calls.push(`readPage:${input.path}`);
+            const html = options.pages?.[input.path];
+            if (options.old === true || html === undefined) {
+                throw new ORPCError("NOT_FOUND");
+            }
+            return { html };
+        }),
         ping: os.ping.handler(() => ({ ok: true })),
         describe: os.describe.handler(notHere),
         reply: os.reply.handler(notHere),
@@ -133,7 +149,7 @@ const runnerAt = async (turns: RemoteTurns, script: readonly AgentEvent[], optio
 const announced: RunnerAnnounced = { version: "test", image: "dev" };
 
 // The parent's side as production builds it, its hub holding whichever socket the test says the runner dialled.
-const parent = () => {
+const parent = (workspaceRoot = "/nowhere") => {
     const hub = createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, { warn: () => undefined });
     let hangUp: (() => void) | undefined;
     const dial = (client: RunnerClient | undefined): void => {
@@ -145,7 +161,7 @@ const parent = () => {
         logger: pino({ level: "silent" }),
         // Git on a path that is not a repository fails, which the dispatch reads as nothing to move.
         agentWorktrees: { mainDir: () => "/nowhere", worktreeDir: () => "/nowhere" },
-        workspace: { root: "/nowhere" },
+        workspace: { root: workspaceRoot },
     };
     return { services, dial, leave: () => dial(undefined) };
 };
@@ -277,4 +293,28 @@ test("a turn the runner still holds from before is collected ahead of the new on
     expect(notice).toBeGreaterThanOrEqual(0);
     expect(notice).toBeLessThan(frames.findIndex((frame) => frame.kind === "delta"));
     expect(runner.calls()).toEqual(["heldTurn", "attachTurn:2", "sync:push", "sync:pull", "runTurn", "sync:push"]);
+});
+
+/* A PAGE THE RUNNER'S TURN SHOWED is filed in the runner's workspace; the chat reads pages from the parent's, so each page
+   frame waits for its file to come home (held-turns/runner-pages.ts). bird-mdu4 on omen, 2026-11-23: every page drew as "could not
+   be loaded". */
+
+test("a page shown on the runner is filed here before its frame is relayed, and one it cannot fetch still relays", async () => {
+    const root = await mkdtemp(join(tmpdir(), "runner-pages-"));
+    try {
+        const shown = `${PAGES_DIR}c1/0123456789.r0.html`;
+        const lost = `${PAGES_DIR}c1/abcdefabcd.r0.html`;
+        const pageFrame = (path: string): AgentEvent => ({ kind: "page", page: { id: "0123456789", title: "Mock-ups", path } });
+        const { services, dial, leave } = parent(root);
+        const runner = await runnerAt(createRemoteTurns(), [pageFrame(shown), pageFrame(lost), done], { pages: { [shown]: "<p>both layouts</p>" } });
+        dial(runner.client);
+        const frames = await dispatched(services);
+        leave();
+        expect(frames.filter((frame) => frame.kind === "page")).toHaveLength(2);
+        expect(await readFile(join(root, shown), "utf8")).toBe("<p>both layouts</p>");
+        await expect(readFile(join(root, lost), "utf8")).rejects.toThrow();
+        expect(runner.calls()).toContain(`readPage:${shown}`);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });

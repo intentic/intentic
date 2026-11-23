@@ -1,14 +1,11 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Page, PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_TITLE_MAX } from "@intentic/sandbox-contract/events/requests";
 import { intoHead, type PageMediaFile, pageMediaScript, standalonePage } from "@intentic/sandbox-contract/text/pages";
 import { signPageMedia } from "./page-media.js";
 import { stateRelPath } from "../../state-paths.js";
 import { folderOf } from "../../sessions/conversation-purge.js";
-import { undefinedIfMissing } from "@intentic/base/errors";
-import { resolveRealWithin } from "../../workspace/files/workspace-files-paths.js";
-import { PAGES_DIR } from "./pages-dir.js";
 
 // Where the pages a conversation showed are kept: one folder per conversation under the workspace's records, one file
 // per drawing. A page is never rewritten once shown, so a transcript reopened next month draws exactly what was seen;
@@ -94,12 +91,4 @@ export const publishPage = async (input: PublishPageInput): Promise<Page> => {
         ...(input.source === undefined ? {} : { source: input.source }),
         ...(revision === 0 ? {} : { revision }),
     };
-};
-
-// A stored page's text, by the workspace path a transcript names it with; undefined for a path that is not a stored page.
-// Resolved inside the pages folder itself, never the workspace: a page path that climbs out of it (`../`) or through a
-// link names a file no chat showed, whatever it holds.
-export const readStoredPage = async (workspaceRoot: string, page: string): Promise<string | undefined> => {
-    const file = page.startsWith(PAGES_DIR) ? (await resolveRealWithin(join(workspaceRoot, PAGES_DIR), page.slice(PAGES_DIR.length)))?.real : undefined;
-    return file === undefined ? undefined : readFile(file, "utf8").catch(undefinedIfMissing);
 };

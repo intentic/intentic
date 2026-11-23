@@ -170,17 +170,21 @@ const opened = async (context: RelayContext, open: () => Promise<AsyncIterable<A
     }
 };
 
+// What a relay does with each frame before it goes on: the frames relayed for it (none drops it), once whatever it waits
+// on is done (a page it shows brought home, runner-pages.ts).
+export type RelayFrame = (event: AgentEvent) => readonly AgentEvent[] | Promise<readonly AgentEvent[]>;
+
 // One stream's frames, relayed until it ends or dies; a death is logged, not thrown, since the caller reads on elsewhere.
 async function* drain(
     context: RelayContext,
     stream: AsyncIterable<AgentEvent> | undefined,
     seen: { readonly cursor: RelayCursor; readonly client: RunnerClient },
-    frame: (event: AgentEvent) => readonly AgentEvent[],
+    frame: RelayFrame,
 ): AsyncGenerator<AgentEvent> {
     try {
         for await (const event of stream ?? []) {
             seen.cursor.saw(event, seen.client);
-            yield* frame(event);
+            yield* await frame(event);
         }
     } catch (error) {
         context.logger.info({ reason: errorMessage(error), id: context.conversationId }, "runner dispatch: the turn's stream dropped");
@@ -205,7 +209,7 @@ const afterStream = (context: RelayContext, cursor: RelayCursor, client: RunnerC
 export async function* relayTurn(
     context: RelayContext,
     first: { readonly client: RunnerClient; readonly open: (client: RunnerClient) => Promise<AsyncIterable<AgentEvent>>; readonly received?: number },
-    frame: (event: AgentEvent) => readonly AgentEvent[] = (event) => [event],
+    frame: RelayFrame = (event) => [event],
 ): AsyncGenerator<AgentEvent, RelayEnd> {
     const cursor = new RelayCursor(context.conversationId, first.received ?? 0);
     let client = first.client;
@@ -260,9 +264,9 @@ const collectedFrames = (live: boolean): ((event: AgentEvent) => readonly AgentE
 };
 
 const withCollected =
-    (first: (event: AgentEvent) => readonly AgentEvent[], then: (event: AgentEvent) => readonly AgentEvent[]) =>
-    (event: AgentEvent): readonly AgentEvent[] =>
-        first(event).flatMap(then);
+    (first: RelayFrame, then: (event: AgentEvent) => readonly AgentEvent[]) =>
+    async (event: AgentEvent): Promise<readonly AgentEvent[]> =>
+        (await first(event)).flatMap(then);
 
 /**
  * Relays what the runner still holds of an earlier turn on this conversation. `collected` says whether there was one,
@@ -272,7 +276,7 @@ export async function* collectHeld(
     context: RelayContext,
     client: RunnerClient,
     // What every frame passes through first, as the dispatch's own relay does (the cards it notes).
-    relayed: (event: AgentEvent) => readonly AgentEvent[],
+    relayed: RelayFrame,
 ): AsyncGenerator<AgentEvent, { readonly collected: boolean; readonly end?: RelayEnd }> {
     const { conversationId, signal } = context;
     let held;
