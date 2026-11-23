@@ -96,7 +96,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it(`listens again once its connection is killed, and its holders look on coming back`, async () => {
         const browserSide = replica();
         const machineSide = replica();
-        await hears(machineSide);
+        // Every replica's listener connected, the browser's too: a listener still connecting is not in the count below.
+        for (const hub of hubs) {
+            await hears(hub);
+        }
         const admin = new Client({ connectionString: databaseUrl });
         await admin.connect();
         // Read first and killed second: in one statement the planner may call pg_terminate_backend before the filter.
