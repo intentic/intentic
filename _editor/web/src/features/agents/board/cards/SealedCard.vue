@@ -64,12 +64,12 @@ const grab = (event: PointerEvent): void => {
         @dragstart.prevent
         @click="emit(`open`, $event)"
     >
-        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <div class="flex items-center gap-x-2.5">
             <!-- Whose it is, by their face: what a reader recognises first, and who to ask. -->
             <Avatar :size="22" :name="fullName(author)" :hue="identityHue(author?.email ?? agent.id)" class="shrink-0" />
             <button
                 type="button"
-                class="inline-flex min-w-0 grow basis-28 items-center gap-1.5 rounded-sm text-left italic text-muted text-xs"
+                class="inline-flex min-w-0 flex-1 basis-0 items-center gap-1.5 rounded-sm text-left italic text-muted text-xs"
                 :aria-label="t(`agents.sealedCard.open`, { name: fullName(author) })"
                 @click.stop="emit(`open`, $event)"
             >

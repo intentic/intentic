@@ -601,10 +601,10 @@ const grab = (event: PointerEvent): void => {
             @pick="openPicker"
             @menu="openMenu"
         />
-        <!-- THE TITLE COMES FIRST: it keeps a readable width (basis-28) and what trails it (the presses, the chip, the marks)
-             wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
-             letter or two beside a long chip and the press seats. -->
-        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <!-- THE CORNER NEVER WRAPS: the time, the badges and the chip stay on the title's row, top-right, on every card, so a
+             column of cards scans down one edge. In a narrow column the title gives way (wraps to its two lines, then cuts)
+             rather than pushing the corner onto a line of its own. -->
+        <div class="flex items-center gap-x-2.5">
             <!-- How many agents it started, an empty disc for one that started none; tinted amber as its context fills (sessionKind.ts contextPressure). -->
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
             <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
@@ -619,7 +619,7 @@ const grab = (event: PointerEvent): void => {
                 type="text"
                 maxlength="80"
                 :aria-label="t(`agents.words.agentTitle`)"
-                class="ui-field-box ui-field-inline min-w-0 grow basis-28 select-text px-1 font-semibold text-xs"
+                class="ui-field-box ui-field-inline min-w-0 flex-1 basis-0 select-text px-1 font-semibold text-xs"
                 @click.stop
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -633,7 +633,7 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     v-tooltip.top.overflow="displayTitle"
                     :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-                    class="min-w-0 grow basis-28 rounded-sm text-left text-xs font-semibold text-content"
+                    class="min-w-0 flex-1 basis-0 rounded-sm text-left text-xs font-semibold text-content"
                     :class="live ? 'line-clamp-2 break-words leading-snug' : 'truncate'"
                     @click.stop="openCard"
                     @dblclick.stop="openPage"
