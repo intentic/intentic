@@ -521,7 +521,9 @@ flowchart LR
   Usage left stands once: in the chat's side rail, under its checklist, once the chat is wide enough for that rail,
   otherwise as the same one column at the foot of the board's Finished lane, which is then pinned to the board's visible
   height and shows only the cards that fit whole above it, the rest in its "N earlier" count, so Usage left never makes
-  the board scroll (`features/agents/fleet/Agents.vue`, `board/view/cornerFit.ts`, `chatPanelLayout.ts`
+  the board scroll. Once Finished scrolls past that window (its "N earlier" pressed, the archive, a filter's matches),
+  Usage left folds in place to one row, each provider's logo and the room its roomiest account has left, and a press
+  opens the whole column there (`features/agents/fleet/Agents.vue`, `board/view/cornerFit.ts`, `chatPanelLayout.ts`
   `chatRailOnScreen`). A popped-out
   chat's window draws the same board on its left (`shell/window/FloatingBoard.vue`), and any navigation a press there
   makes goes to the main window. Tucked into its strip, the chat's composer floats over the page as the quick bar, so

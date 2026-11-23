@@ -302,7 +302,7 @@ const slim = computed(() => fit.value !== `full` && !mobile.value);
 const sliver = computed(() => fit.value === `mini` || fit.value === `tile`);
 const searchOpen = ref(false);
 const searchRow = computed(() => slim.value && (searchOpen.value || query.value !== ``));
-const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished, tailRow: () => fit.value === `tile` });
+const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed, crowded: cornerCrowded } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished, tailRow: () => fit.value === `tile` });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -630,8 +630,9 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         {{ archiveHidden }} {{ t(`agents.agentsView.more`) }}
                     </button>
                     </div>
-                    <!-- Its top padding is a breath above the corner, wider than the gap between cards, so the corner does not read as one more of them. -->
-                    <div v-if="withCorner && lane.key === 'finished'" class="mt-auto flex min-h-0 flex-col pt-6"><slot name="corner" /></div>
+                    <!-- Its top padding is a breath above the corner, wider than the gap between cards, so the corner does not read as one more of them.
+                         `crowded`: Finished scrolls past its window above it, so the corner may give it the height (cornerFit.ts). -->
+                    <div v-if="withCorner && lane.key === 'finished'" class="mt-auto flex min-h-0 flex-col pt-6"><slot name="corner" :crowded="cornerCrowded" /></div>
                 </section>
             </div>
             <NoMatchesNote v-if="noMatches" v-model:query="query" v-model:match-case="matchCase" />

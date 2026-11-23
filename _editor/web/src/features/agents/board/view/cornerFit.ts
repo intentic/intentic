@@ -6,7 +6,8 @@ import { type ComponentPublicInstance, computed, type CSSProperties, onBeforeUnm
 // pinned there, so what stands at its foot is always whole on screen and never lengthens the board: the lanes beside it
 // may scroll, this column does not. What gives way is Finished's own cards: only those that fit whole above the corner
 // are drawn, the rest join the lane's "N earlier" count (its header's fold). Pressing that (or opening the archive, or a
-// filter listing every match) lets the lane scroll inside its own column instead, the corner still standing under it.
+// filter listing every match) lets the lane scroll inside its own column instead, the corner still standing under it,
+// told it is `crowded` so it can shrink and leave the scrolling cards the height.
 //
 // The fit is read off the drawn cards, never estimated: every card of Finished's window is rendered, all are shown and
 // measured, and the ones whose bottom falls past the lane's card box (less the tile board's "N earlier" row under them)
@@ -166,5 +167,8 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, t
     // always offers the fold back, since the corner's cut is not counted while the lane scrolls.
     const earlier = computed(() => hiddenFinished.value + cut.value);
     const tailed = computed(() => (view.value.all ? hiddenFinished.value > 0 || active.value : earlier.value > 0));
-    return { scroller, grid, active, attach, lane, cards, earlier, tailed };
+    // The corner shares the pinned lane with cards a reader is scrolling through: told to what stands there, so it can
+    // give them the height (Agents.vue folds Usage left to one row).
+    const crowded = computed(() => active.value && scrolls.value);
+    return { scroller, grid, active, attach, lane, cards, earlier, tailed, crowded };
 };

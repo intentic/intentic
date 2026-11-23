@@ -3418,7 +3418,9 @@
             "cantReReadYet": "Can't re-read {who} yet, retry {when}",
             "cantReRead": "Can't re-read {who}",
             "lastReadAge": "last read {age}",
-            "accountCount": "{count} account | {count} accounts"
+            "accountCount": "{count} account | {count} accounts",
+            "showAll": "Show all",
+            "showLess": "Show less"
         },
         "chatChooseModelButton": {
             "chooseModel": "Choose a model"

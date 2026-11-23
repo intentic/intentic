@@ -21,8 +21,11 @@ import AgentsView from "../board/AgentsView.vue";
    folded into its strip or in a window of its own, it stands in the board's bottom-right corner instead (AgentsView's
    `corner` slot), the same one column the chat draws, on a card's ground, and the Finished lane above it gives up the
    cards it has no room for, so it never makes the board scroll (cornerFit.ts). Until 2026-11-23 it was a strip under the
-   whole board with the providers laid side by side, which read as a table of bars no one could follow. A phone's board is
-   a screen of its own, with no room for it. */
+   whole board with the providers laid side by side, which read as a table of bars no one could follow. While Finished
+   scrolls past its window (expanded, the archive, a filter's matches) it folds to one row, a figure per provider, so the
+   cards have the height; a press opens it in place. It never moves to another lane, which would make a press in
+   Finished's header shift a column the reader was not looking at. A phone's board is a screen of its own, with no room
+   for it. */
 const { mobile } = useDevice();
 const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value);
 // The focused chat's account, marked in Usage left as the one the reader typing beside it is spending (ChatSideRail's rule).
@@ -53,10 +56,10 @@ useShellChatLink(() => {
 <template>
     <div class="flex h-full min-h-0 flex-col" :class="{ 'ground-card bg-card': plain }">
         <AgentsView class="min-h-0 flex-1" :with-corner="usageHere">
-            <template v-if="usageHere" #corner>
+            <template v-if="usageHere" #corner="{ crowded }">
                 <!-- A reveal column of its own, so the board's opening plays its rows from its top, as its own reveal does, rather than
                      as more of Finished's cards. -->
-                <ChatCapacityRail :mine="mine" data-reveal-column class="rounded-2xl border border-line bg-card" />
+                <ChatCapacityRail :mine="mine" :fold="crowded" data-reveal-column class="rounded-2xl border border-line bg-card" />
             </template>
         </AgentsView>
     </div>

@@ -3418,7 +3418,9 @@
             "cantReReadYet": "Impossible de relire {who} pour l'instant, réessayez {when}",
             "cantReRead": "Impossible de relire {who}",
             "lastReadAge": "dernière lecture {age}",
-            "accountCount": "{count} compte | {count} comptes"
+            "accountCount": "{count} compte | {count} comptes",
+            "showAll": "Tout afficher",
+            "showLess": "Afficher moins"
         },
         "chatChooseModelButton": {
             "chooseModel": "Choisir un modèle"

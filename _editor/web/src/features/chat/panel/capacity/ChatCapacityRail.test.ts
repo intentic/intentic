@@ -464,3 +464,49 @@ it(`marks the account the chat beside it runs on, and tells the panel it is sayi
     expect(spoken(el).some((line) => line.startsWith(`This chat · b@example.com`))).toBe(true);
     expect(el.querySelector(`[data-carried]`)?.getAttribute(`data-carried`)).toBe(`claude:b`);
 });
+
+// Under a Finished lane scrolling past its window (the board's corner, Agents.vue), the column gives the cards its height:
+// one row with each provider's room, opened in place by a press, folded again by its chevron or by the next fold.
+it(`folds to one row of figures while what it stands under needs the height, and opens in place`, async () => {
+    const { ref } = await import("vue");
+    const week = (utilization: number) => ({ measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization, gates: `all` as const }] });
+    providerAccounts.value = {
+        claude: [claude({ id: `a`, label: `a@example.com`, usage: week(38) }), claude({ id: `b`, label: `b@example.com`, usage: week(90) })],
+    };
+    translatorAccounts.value = NO_ROUTED;
+    accountsLoaded.value = true;
+    const fold = ref(true);
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ render: () => h(ChatCapacityRail, { fold: fold.value }) });
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.mount(el);
+    await nextTick();
+
+    // The roomiest account's figure, no bars, no account names; the press says the same in words.
+    const glance = el.querySelector<HTMLElement>(`[data-capacity-glance]`);
+    expect(glance?.textContent).toContain(`Usage left`);
+    expect(glance?.textContent).toContain(`62%`);
+    expect(barWidths(el)).toEqual([]);
+    expect(el.textContent).not.toContain(`a@example.com`);
+    const press = glance?.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`);
+    expect(press?.getAttribute(`aria-label`)).toBe(`Usage left: Claude Code 62% left`);
+
+    press?.click();
+    await nextTick();
+    expect(el.querySelector(`[data-capacity-glance]`)).toBeNull();
+    expect(barWidths(el).length).toBeGreaterThan(0);
+    el.querySelector<HTMLButtonElement>(`button[aria-expanded="true"]`)?.click();
+    await nextTick();
+    expect(el.querySelector(`[data-capacity-glance]`)).not.toBeNull();
+
+    // Opened, then the room comes back: it is the whole column with no fold control; the next crowding folds it again.
+    el.querySelector<HTMLButtonElement>(`[data-capacity-glance] button`)?.click();
+    fold.value = false;
+    await nextTick();
+    expect(el.querySelector(`button[aria-expanded]`)).toBeNull();
+    fold.value = true;
+    await nextTick();
+    expect(el.querySelector(`[data-capacity-glance]`)).not.toBeNull();
+});

@@ -3418,7 +3418,9 @@
             "cantReReadYet": "{who} kann noch nicht erneut gelesen werden, neuer Versuch {when}",
             "cantReRead": "{who} kann nicht erneut gelesen werden",
             "lastReadAge": "zuletzt gelesen {age}",
-            "accountCount": "{count} Konto | {count} Konten"
+            "accountCount": "{count} Konto | {count} Konten",
+            "showAll": "Alles anzeigen",
+            "showLess": "Weniger anzeigen"
         },
         "chatChooseModelButton": {
             "chooseModel": "Ein Modell wählen"
