@@ -11,7 +11,7 @@ import { stopCursorRuntimes } from "../runtimes/cursor/cursor-host.js";
 import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
-import { previousRun } from "../system/boot/restarts/boot-marker.js";
+import { previousRun, previousRunDied } from "../system/boot/restarts/boot-marker.js";
 import { endedUncleanly } from "../system/boot/restarts/restart-record.js";
 import { DAY_MS } from "../system/chore-clock.js";
 import { sweepStateAtBoot } from "../workspace/watch/state-janitor.js";
@@ -78,8 +78,9 @@ const startRootSweeps = (phase: BootPhase): void => {
         const ended = previousRun()?.ended;
         const scope = { workspaceRoot: services.workspace.root, historyRoot: phase.config.historyRoot, logger };
         // Every unclean ending, the named ones (netd-stuck, oom-victim) among them: those are the stops most likely to have
-        // cut a write in half.
-        void startGitIntegrity(scope, endedUncleanly(ended))?.catch((err) =>
+        // cut a write in half. A run that died on a fatal error (its heap spent) is `crashed`, yet never ran its exit hook
+        // either, so a marker left saying "running" counts whatever the ending is called.
+        void startGitIntegrity(scope, endedUncleanly(ended) || previousRunDied())?.catch((err) =>
             logger.warn({ err }, "git integrity: the check after an unclean stop failed"),
         );
     }

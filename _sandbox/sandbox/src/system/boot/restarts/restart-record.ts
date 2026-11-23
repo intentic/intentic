@@ -105,6 +105,8 @@ export interface PreviousRun {
     readonly commit?: string;
     readonly intent?: ReadIntent;
     readonly fatalReports?: readonly string[];
+    // What the newest of them says ended it, in Node's words ("Allocation failed - JavaScript heap out of memory").
+    readonly fatalError?: string;
     // Every process in the container ended with it (PID 1 is a different process now).
     readonly containerRestarted?: boolean;
     // /tmp no longer holds what the previous run left there: the container was recreated.
@@ -119,6 +121,7 @@ export interface EndFacts {
     readonly intent: ReadIntent | undefined;
     readonly now: number;
     readonly fatalReports?: readonly string[];
+    readonly fatalError?: string;
     readonly containerRestarted?: boolean;
     readonly tmpCleared?: boolean;
     readonly postMortem?: PostMortem;
@@ -164,6 +167,7 @@ export const previousRunOf = (facts: EndFacts): PreviousRun => {
         ...opt("commit", marker?.commit),
         ...opt("intent", intent),
         ...opt("fatalReports", fatalReports.length > 0 ? fatalReports : undefined),
+        ...opt("fatalError", fatalReports.length > 0 ? facts.fatalError : undefined),
         ...opt("containerRestarted", facts.containerRestarted),
         ...opt("tmpCleared", facts.tmpCleared),
         ...opt("postMortem", facts.postMortem),
@@ -193,7 +197,9 @@ const ENDINGS = {
     crashed: (run) =>
         run.fatalReports === undefined
             ? `crashed: exited with code ${String(run.exitCode)} without being asked to stop (an uncaught exception or a fatal error; the lines before it in daemon.log say which)`
-            : `died on a fatal error (read ${run.fatalReports.join(", ")} for the cause)`,
+            : run.fatalError === undefined
+              ? `died on a fatal error (read ${run.fatalReports.join(", ")} for the cause)`
+              : `died on a fatal error: ${run.fatalError} (${run.fatalReports.join(", ")} has the rest)`,
     killed: () => "was killed without warning (SIGKILL, a kernel OOM kill, a forced container stop, netd killing a stuck daemon, or the host going down)",
     "netd-stuck": () => "was killed by netd, which found it not answering (an event loop stopped for five minutes, or a start that never said hello)",
     "oom-victim": () => "was killed by the kernel's OOM killer, which chose the daemon itself",
@@ -223,7 +229,9 @@ const endingText = (run: PreviousRun, crashes: readonly HostCrashEvent[]): strin
         return named;
     }
     const own = crashes.length > 0 && (run.ended === "killed" || run.ended === "unknown") ? hostCrashText(crashes) : ENDINGS[run.ended](run);
-    return run.postMortem === undefined ? own : `${own}; ${run.postMortem.summary}`;
+    // A fatal error its own report names needs no "nothing on file names the hand" after it.
+    const told = run.postMortem === undefined || (run.fatalError !== undefined && run.postMortem.cause === "unknown");
+    return told ? own : `${own}; ${run.postMortem.summary}`;
 };
 
 // How long after a boot the host's own record of the crash before it may still be dated: Windows logs Kernel-Power 41 as

@@ -34,10 +34,14 @@ const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9
 // A record's lines as stored: an upload is named where it was attached, never only deep inside a long tool output.
 type Stored = FileTranscriptRecord["stored"];
 
+// Each name copied out of its line, which is a V8 slice of the whole decoded frame (record-log.ts readFrame): a name
+// kept as a slice would hold that frame alive as long as the name is held.
 const attachmentDirs = (lines: readonly string[]): Set<string> =>
     new Set(
         lines.flatMap((line) =>
-            line.includes("/attachments/") ? [...line.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])) : [],
+            line.includes("/attachments/")
+                ? [...line.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [Buffer.from(match[1], "utf8").toString("utf8")]))
+                : [],
         ),
     );
 
@@ -69,8 +73,9 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
 
 // Uploads the removed conversations' transcripts name and no other conversation's does. The removed ones are read first:
 // when they name no upload, every other record is left unread. 2026-11-23: taking back a scheduled message that opened a
-// conversation (an empty transcript, so nothing to orphan) read all 5,331 records, 1.9 GB of text, on every take-back;
-// two in two minutes took the daemon's heap past its 3 GB bound and the sandbox restarted mid-turn.
+// conversation (an empty transcript, so nothing to orphan) read all 5,331 records, 1.9 GB of text, on every take-back,
+// each name it kept holding its whole decoded frame alive (attachmentDirs); with the blob sweep after it doing the same,
+// two take-backs in two minutes took the daemon's heap past its 3 GB bound and the sandbox restarted mid-turn.
 const orphanedAttachments = async (historyRoot: string, stored: Stored, removed: readonly PurgeConversation[]): Promise<Set<string>> => {
     const named = new Set((await Promise.all(removed.map(async (entry) => [...attachmentDirs(await stored(entry.id))]))).flat());
     if (named.size === 0) {

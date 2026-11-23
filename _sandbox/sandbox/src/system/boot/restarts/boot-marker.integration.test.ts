@@ -132,18 +132,40 @@ test("a marker still saying running is reported as an unannounced death", async 
     expect(lines[0]).not.toHaveProperty("ownerPid");
 });
 
-test("a fatal-error report left by the dead pid is named in the death certificate", async () => {
+// A report as --report-on-fatalerror writes it, cut to the fields the boot reads.
+const fatalReport = (pid: number, at: number): string =>
+    JSON.stringify({
+        header: { processId: pid, dumpEventTimeStamp: String(at), trigger: "OOMError", event: "Allocation failed - JavaScript heap out of memory" },
+        javascriptHeap: { totalMemory: 3_234_471_936 },
+    });
+
+test("a fatal-error report left by the dead pid is named in the death certificate, with what it says ended it", async () => {
     const { dir, lines, logger } = await setup();
     const died = deadPid();
     const other = died + 1;
-    const report = `report.20260730.161314.${died}.0.json`;
+    // Node's own name for it: report.<date>.<time>.<pid>.<thread>.<sequence>.json.
+    const report = `report.20261123.225125.${died}.0.001.json`;
     await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: 1_000 }));
-    await writeFile(join(dir, report), "{}");
+    await writeFile(join(dir, report), fatalReport(died, 5_000));
     // Another pid's report must not be attributed to this death.
-    await writeFile(join(dir, `report.20260730.161314.${other}.0.json`), "{}");
+    await writeFile(join(dir, `report.20261123.225125.${other}.0.001.json`), fatalReport(other, 5_000));
     claimBootMarker(dir, logger);
-    expect(lines[0]).toMatchObject({ level: 50, diedPid: died, fatalReports: [report] });
-    expect(JSON.stringify(lines[0])).not.toContain(`${other}.0.json`);
+    expect(lines[0]).toMatchObject({ level: 50, diedPid: died, fatalReports: [report], previous: { ended: "crashed" } });
+    expect(messageOf(lines[0])).toContain("died on a fatal error: Allocation failed - JavaScript heap out of memory (its heap at 3.0 GB)");
+    expect(JSON.stringify(lines[0])).not.toContain(`.${String(other)}.0.001.json`);
+    // It never ran its exit hook: what checks for half-written state after a kill checks after this too.
+    expect(previousRunDied()).toBe(true);
+});
+
+test("a report the same pid left in an earlier run is not this death's", async () => {
+    const { dir, lines, logger } = await setup();
+    const died = deadPid();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: 10_000 }));
+    // The daemon is the same low pid in every container it boots in; this one died before the run started.
+    await writeFile(join(dir, `report.20261120.010101.${died}.0.001.json`), fatalReport(died, 9_000));
+    claimBootMarker(dir, logger);
+    expect(lines[0]).toMatchObject({ previous: { ended: "killed" } });
+    expect(lines[0]).not.toHaveProperty("fatalReports");
 });
 
 test("a marker whose owner is still running is a co-tenant, not a corpse, and its record is left alone", async () => {

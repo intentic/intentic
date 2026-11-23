@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { sizeLabel } from "@intentic/base/format";
 import { writeFileAtomicSync } from "@intentic/base/fs";
 import { type RestartIntent, RestartIntentSchema } from "@intentic/sandbox-contract/schemas/restart-intent";
 import { z } from "zod";
@@ -53,13 +54,58 @@ export interface ExitMarker extends ProcessIdentity {
     readonly stopReason?: string;
 }
 
-// Diagnostic reports --report-on-fatalerror writes next to the logs (report.<date>.<pid>.json) for a given pid.
-const fatalReports = (dir: string, pid: number): string[] => {
+// Diagnostic reports --report-on-fatalerror writes next to the logs, named report.<date>.<time>.<pid>.<thread>.<sequence>.json
+// (report.20261123.225125.111.0.001.json). 2026-11-23: the match here wanted `.<pid>.0.json`, a name Node never writes,
+// so a daemon that ran out of heap was filed as "killed without warning, nothing on file names the hand" with its
+// report lying beside the log. A pid comes round again (the daemon is pid 111 in every container it boots in), so a
+// report is the run's only when its own header names that pid and a dump at or after the run's start.
+const REPORT_NAME = /^report\.\d+\.\d+\.(\d+)\.\d+\.\d+\.json$/u;
+
+const ReportOnDisk = z.looseObject({
+    header: z.looseObject({
+        processId: z.number(),
+        dumpEventTimeStamp: z.coerce.number(),
+        event: z.string().optional(),
+    }),
+    javascriptHeap: z.looseObject({ totalMemory: z.number().optional() }).optional(),
+});
+
+interface FatalReports {
+    readonly names: string[];
+    // What the newest report says killed the process, in Node's words, with the heap it held then.
+    readonly event?: string;
+}
+
+const readReport = (path: string): z.infer<typeof ReportOnDisk> | undefined => {
     try {
-        return readdirSync(dir).filter((name) => name.startsWith("report.") && name.endsWith(`.${pid}.0.json`));
+        const parsed = ReportOnDisk.safeParse(JSON.parse(readFileSync(path, "utf8")));
+        return parsed.success ? parsed.data : undefined;
     } catch {
-        return [];
+        return undefined;
     }
+};
+
+const eventOf = (report: z.infer<typeof ReportOnDisk>): string | undefined => {
+    const { event } = report.header;
+    const heap = report.javascriptHeap?.totalMemory;
+    return event === undefined ? undefined : heap === undefined ? event : `${event} (its heap at ${sizeLabel(heap)})`;
+};
+
+const fatalReports = (dir: string, pid: number, startedAt: number): FatalReports => {
+    let named: string[];
+    try {
+        named = readdirSync(dir).filter((name) => REPORT_NAME.exec(name)?.[1] === String(pid));
+    } catch {
+        return { names: [] };
+    }
+    const ours = named
+        .map((name) => ({ name, report: readReport(join(dir, name)) }))
+        // A report that cannot be read still names this pid; one that can is held to its own pid and time.
+        .filter(({ report }) => report === undefined || (report.header.processId === pid && report.header.dumpEventTimeStamp >= startedAt))
+        .toSorted((a, b) => a.name.localeCompare(b.name));
+    const newest = ours.findLast(({ report }) => report !== undefined)?.report;
+    const event = newest === undefined ? undefined : eventOf(newest);
+    return { names: ours.map(({ name }) => name), ...opt("event", event) };
 };
 
 // Whether this process found the previous run dead without its exit hook having run: set by claimBootMarker, read by
@@ -151,12 +197,14 @@ const postMortemOf = (logsDir: string, logger: Logger, run: PreviousRun, marker:
 // Says how the previous run ended, in one line beside this run's build, and files it in restarts.jsonl; the intent
 // left for that stop is spent here. Never throws.
 const reportPreviousRun = (logsDir: string, logger: Logger, previous: ExitMarker | undefined, now: number, tmpMarker: string, sources?: PostMortemSources): void => {
-    const reports = previous?.state === "running" ? fatalReports(logsDir, previous.pid) : [];
+    const fatal: FatalReports = previous?.state === "running" ? fatalReports(logsDir, previous.pid, previous.startedAt) : { names: [] };
+    const reports = fatal.names;
     const facts: EndFacts = {
         marker: previous,
         intent: readRestartIntent(logsDir),
         now,
         fatalReports: reports,
+        ...opt("fatalError", fatal.event),
         ...opt("containerRestarted", containerRestarted(previous)),
         ...opt("tmpCleared", tmpCleared(previous, tmpMarker)),
     };

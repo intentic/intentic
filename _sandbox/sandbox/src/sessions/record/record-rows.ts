@@ -69,9 +69,15 @@ export const keptLine = async (row: TranscriptRow, put: (text: string) => Promis
 
 // Every blob name in a stored line, read without parsing it: JSON.stringify escapes each quote inside a string, so
 // `"blob":"` in a stored line is always a key, and a tool's own input with that key only keeps a blob longer.
+// Each name is copied out of the line: a capture is a V8 slice of the frame the line was split from (record-log.ts
+// readFrame), and the sweep keeps every name it finds until it has read every record. Kept as slices, 15,863 names
+// held ~2.3 GB of decoded frames alive for the sweep's minute (2026-11-23), and two sweeps close together took the
+// daemon past its heap bound.
 const BLOB_NAME = /"blob":"([0-9a-f]{64})"/gu;
 export const blobNamesIn = (line: string): string[] =>
-    line.includes(`"blob":"`) ? [...line.matchAll(BLOB_NAME)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])) : [];
+    line.includes(`"blob":"`)
+        ? [...line.matchAll(BLOB_NAME)].flatMap((match) => (match[1] === undefined ? [] : [Buffer.from(match[1], "utf8").toString("utf8")]))
+        : [];
 
 // Each out-of-line output as the start it kept.
 const textsInView = (row: { tools?: KeptTool[] }): void => {

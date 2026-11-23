@@ -27,7 +27,7 @@ import {
     type SessionSummary,
     workspaceSessionExists,
 } from "./sessions.js";
-import { BLOB_GRACE_MS, fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./transcript-record.js";
+import { BLOB_GRACE_MS, type FileTranscriptRecord, fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./transcript-record.js";
 import { readSessionLines, spokenLinesOf } from "./search/transcript-search.js";
 import { thawClaudeSession } from "./session-freeze.js";
 import { sharedClaudeStore } from "./session-store.js";
@@ -123,6 +123,19 @@ const thawedReads = (workspaceRoot: string): Pick<SessionsSlice["sessions"], "re
     readTail: (dir, id, since) => thawThen(workspaceRoot, id, () => readWorkspaceSessionTail(dir, id, since)),
     exists: (dir, id) => thawThen(workspaceRoot, id, () => workspaceSessionExists(dir, id)),
 });
+
+// The blob sweep after a purge, only when one of the removed conversations has a record: one with none named no blob (a
+// scheduled message taken back with the conversation it opened), and is no reason to read every record in the sandbox.
+const sweepIfRecorded = async (
+    record: Pick<FileTranscriptRecord, "size">,
+    removed: readonly { readonly id: string }[],
+    sweep: (gone: ReadonlySet<string>) => Promise<void>,
+): Promise<void> => {
+    const recorded = await Promise.all(removed.map(async (entry) => (await record.size(entry.id)) !== undefined));
+    if (recorded.includes(true)) {
+        await sweep(new Set(removed.map((entry) => entry.id)));
+    }
+};
 
 // Builds the sessions slice: the durable record, its blob sweeps, the phrase index and its backfill, and the purge.
 export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: SessionsSlice; readonly saidIndexMetrics: () => unknown } => {
@@ -292,7 +305,7 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
                     deps.forget(entry.id);
                 }
                 // Detached: what the removed records alone named goes with them, never what a purge waits on.
-                void sweepRecordBlobs(new Set(removed.map((entry) => entry.id)));
+                void sweepIfRecorded(transcriptRecord, removed, sweepRecordBlobs);
             },
         },
     };
