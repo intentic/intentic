@@ -1,4 +1,4 @@
-// Pins the form's submit: what a saved form does next (hand over a pending step, stay on an edit, leave an add), that a
+// Pins the form's submit: what a saved form does next (hand over a pending step, close the row it was in, walk on), that a
 // second press while a write is in flight does nothing, the install's own terminal, and the wallet's second write to
 // the platform, whose refusal is said rather than swallowed. The write is the tile's, in the operations ledger, so a page
 // opened again mid-install finds it still busy rather than offering a second write the daemon would refuse.
@@ -35,8 +35,8 @@ describe(`what a saved form does next`, () => {
     const pending = connection(`ops`, `ssh`, {}, { state: `pending` });
     const active = connection(`ops`, `ssh`, {}, { state: `active` });
     const cases: [CapabilitySummary | undefined, boolean, ReturnType<typeof submitOutcome>][] = [
-        [pending, false, { kind: `hand-off`, added: pending, startOver: true }],
-        [pending, true, { kind: `hand-off`, added: pending, startOver: false }],
+        [pending, false, { kind: `hand-off`, added: pending, closeRow: true }],
+        [pending, true, { kind: `hand-off`, added: pending, closeRow: false }],
         [active, true, { kind: `close-edit` }],
         [active, false, { kind: `leave` }],
         [undefined, false, { kind: `leave` }],
@@ -66,6 +66,7 @@ const submitOn = (
     editing?: CapabilitySummary,
     ownsSandbox = true,
     gpu: Pick<import("./capabilitySubmit").SubmitHost, "preflight" | "hosted" | "capture"> = {},
+    walking = true,
 ) => {
     const capabilities = ref<readonly CapabilitySummary[]>(editing === undefined ? [] : [editing]);
     const add = jest.fn(async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => {
@@ -86,7 +87,11 @@ const submitOn = (
         error: ref<NoticeModel | null>(null),
     };
     const hands = {
-        walk: { onwardFrom: jest.fn<(from: CapabilityCatalogEntry) => string | undefined>(() => `docker`), leaveTile: jest.fn() },
+        walk: {
+            onwardFrom: jest.fn<(from: CapabilityCatalogEntry) => string | undefined>(() => `docker`),
+            leaveTile: jest.fn(),
+            walking: ref(walking),
+        },
         handOff: jest.fn(),
         stopEditing: jest.fn(),
     };
@@ -163,14 +168,23 @@ describe(`an add`, () => {
         expect(pushWalletPolicy).toHaveBeenCalledTimes(0);
     });
 
-    it(`stays on the tile when the connection is still pending, hands the step over, and starts over on the next free name`, async () => {
-        const { form, submit, walk, handOff, state } = submitOn(SSH, { state: `pending`, detail: `waiting for the host key` });
+    it(`stays on the tile when the connection is still pending, hands the step over, and closes the new row into the one it became`, async () => {
+        const { form, submit, walk, handOff, state, stopEditing } = submitOn(SSH, { state: `pending`, detail: `waiting for the host key` });
         Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
 
         await submit();
 
         expect(handOff.mock.calls).toEqual([[SSH, state.capabilities.value[0]]]);
-        expect([form.name.value, { ...form.values }, walk.leaveTile.mock.calls]).toEqual([`ssh-2`, {}, []]);
+        expect([stopEditing.mock.calls.length, walk.leaveTile.mock.calls]).toEqual([1, []]);
+    });
+
+    it(`outside the walk, stays on the tile and closes the new row, so the connection shows where it will live`, async () => {
+        const { form, submit, walk, stopEditing } = submitOn(SSH, { state: `active` }, undefined, true, {}, false);
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
+
+        await submit();
+
+        expect([stopEditing.mock.calls.length, walk.leaveTile.mock.calls]).toEqual([1, []]);
     });
 
     it(`says the add failed, in the daemon's words, and stays where it was`, async () => {

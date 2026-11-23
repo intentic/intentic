@@ -67,6 +67,7 @@ const formOn = (entry: CapabilityCatalogEntry, opening: Opening = {}) => {
         instances: ref<readonly CapabilitySummary[]>(opening.instances ?? []),
         capabilities: ref<readonly CapabilitySummary[]>(opening.instances ?? []),
         device: ref(opening.device ?? ``),
+        adding: ref(false),
         recommendationFor: (tile: string): CapabilityRecommendation | undefined =>
             opening.prefill === undefined ? undefined : { entry: tile, evidence: `.gitlab-ci.yml`, reason: `asked for`, prefill: opening.prefill },
         contributionOf: () => undefined,
@@ -80,6 +81,13 @@ const formOn = (entry: CapabilityCatalogEntry, opening: Opening = {}) => {
 const listed = (state: ReturnType<typeof formOn>[`state`], instances: readonly CapabilitySummary[]): void => {
     state.instances.value = instances;
     state.capabilities.value = instances;
+};
+// Opens the new connection's row again, after it closed on an add, a cancel, or another row opening.
+const addAgain = async (state: ReturnType<typeof formOn>[`state`]): Promise<void> => {
+    state.adding.value = false;
+    await nextTick();
+    state.adding.value = true;
+    await nextTick();
 };
 
 describe(`a freshly opened form`, () => {
@@ -178,7 +186,7 @@ describe(`the name`, () => {
 
     // Ids are one namespace and the daemon's add is an upsert: a Windows PC typed in under a Linux PC's name was saved
     // over it, platform and all, since the check only looked at the open tile's own machines.
-    it(`refuses a name another tile's connection holds, and suggests clear of it`, () => {
+    it(`refuses a name another tile's connection holds, and suggests clear of it`, async () => {
         const WINDOWS = contributionEntry({
             id: `windows`,
             kind: `device`,
@@ -189,7 +197,7 @@ describe(`the name`, () => {
         const z440 = connection(`z440`, `device`, { platform: `linux` });
         const { state, form } = formOn(WINDOWS);
         state.capabilities.value = [z440, connection(`windows`, `ssh`, { host: `pc.lan` })];
-        form.startOver(WINDOWS);
+        await addAgain(state);
         expect(form.name.value).toBe(`windows-2`);
 
         form.name.value = `z440`;
@@ -200,12 +208,12 @@ describe(`the name`, () => {
         expect(takenNameWords(`z440`, form.nameHeld.value, [WINDOWS])).toBe(`"z440" is already the name of another connection: pick another name.`);
     });
 
-    it(`says to open a name this tile holds above, where it is listed`, () => {
+    it(`says to open a name this tile holds from its row in the list`, () => {
         const { form } = formOn(VPN, { instances: [office] });
         form.name.value = `office`;
 
         expect(form.nameHeld.value).toEqual({ taken: true, elsewhere: undefined });
-        expect(takenNameWords(`office`, form.nameHeld.value, [VPN])).toBe(`"office" already exists: open it above to change it, or pick another name.`);
+        expect(takenNameWords(`office`, form.nameHeld.value, [VPN])).toBe(`"office" already exists: open its row in the list to change it, or pick another name.`);
     });
 
     // 2026-11-21: the daemon lists a connection once it is stored, before its add's stream ends, so the list read mid-add
@@ -227,7 +235,7 @@ describe(`the name`, () => {
         form.name.value = `vpn`;
         expect(form.nameCollision.value).toBe(false);
 
-        form.startOver(VPN);
+        await addAgain(state);
         expect(form.name.value).toBe(`vpn-2`);
         form.name.value = `vpn`;
         expect(form.nameCollision.value).toBe(true);
@@ -488,13 +496,33 @@ describe(`a fresh form`, () => {
         expect(form.fieldQuiet(field(SSH, `host`))).toBe(false);
     });
 
-    it(`starts over on the next free name once a pending add left it up`, () => {
+    it(`starts clean on the next free name when the new row opens again, and is left alone while it closes`, async () => {
         const { state, form } = formOn(VPN);
+        state.adding.value = true;
+        await nextTick();
         form.values[`server`] = `typed`;
         listed(state, [connection(`vpn`, `vpn`, { provider: `wireguard` })]);
 
-        form.startOver(VPN);
-        expect([form.name.value, form.nameEdited.value, { ...form.values }]).toEqual([`vpn-2`, false, {}]);
+        // Closing under an add that just landed keeps the form it is still writing.
+        state.adding.value = false;
+        await nextTick();
+        expect(form.values[`server`]).toBe(`typed`);
+
+        state.adding.value = true;
+        await nextTick();
+        expect([form.name.value, form.nameEdited.value, form.values[`server`] ?? ``]).toEqual([`vpn-2`, false, ``]);
+    });
+
+    it(`says whether anything changed since it was seeded, an emptied box being no change`, () => {
+        const { form } = formOn(VPN, { editing: office, instances: [office] });
+        expect(form.changed.value).toBe(false);
+
+        const stored = form.values[`autoConnect`] ?? `off`;
+        form.values[`autoConnect`] = stored === `on` ? `off` : `on`;
+        expect(form.changed.value).toBe(true);
+        form.values[`autoConnect`] = stored;
+        form.values[`never-filled`] = ``;
+        expect(form.changed.value).toBe(false);
     });
 });
 

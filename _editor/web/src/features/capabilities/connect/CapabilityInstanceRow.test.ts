@@ -1,10 +1,12 @@
 // WhatsApp's link-a-device code: the one thing on this row read off screen and typed elsewhere, pinned here since
-// it previously had nowhere to render.
+// it previously had nowhere to render. And a computer's row: what the agent may do there, read closed, a press asked of
+// the reader only when something is broken, and its own verbs inside it once it opens.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h } from "vue";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
+import { type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
 import type { ConnectionState } from "../../../models/capabilities/connections";
 import type { HubRowView } from "../../../models/hub/connectionHub";
 import { IconStub } from "@intentic/ui/testing";
@@ -20,13 +22,20 @@ const STATE: ConnectionState = { label: `needs setup`, tone: `warning`, rank: 1 
 const render = (
     status: CapabilitySummary[`status`],
     state: ConnectionState = STATE,
-    { entry = ENTRY, config = {}, hub }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`]; hub?: HubRowView } = {},
+    {
+        entry = ENTRY,
+        config = {},
+        hub,
+        host,
+        open = false,
+    }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`]; hub?: HubRowView; host?: HostSummary; open?: boolean } = {},
 ): string => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    const instance = { id: entry.id, kind: `cli`, status, config } as unknown as CapabilitySummary;
+    const instance = { id: entry.id, kind: entry.kind, status, config } as unknown as CapabilitySummary;
     const app = createApp({
-        render: () => h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678`, hub }),
+        render: () =>
+            h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678`, hub, host, open }, { default: () => h(`p`, `the settings form`) }),
     });
     app.use(PrimeVue);
     // Globally registered in the real app; a bare span is enough for these assertions.
@@ -101,4 +110,43 @@ it("says where the hub keeps a connection, and says nothing of one it never held
     expect(render({ state: `active` }, connected, { hub: { saveTo: [`rog`], note: `Saved to rog`, busy: false } })).toContain(`Saved to rog`);
     expect(render({ state: `active` }, connected, { hub: { saveTo: [], note: `From your computer (rog)`, busy: false } })).toContain(`From your computer (rog)`);
     expect(render({ state: `active` }, connected, { hub: { saveTo: [`rog`], note: undefined, busy: false } })).not.toContain(`rog`);
+});
+
+// A computer as the devices extension contributes it, holding the switches the Operate posture sets.
+const LINUX = contributionEntry({
+    id: `linux`,
+    kind: `device`,
+    catalog: { name: `Linux PC`, category: `devices`, description: `Your Linux PC.` },
+    fields: [],
+    skill: `skills/linux/SKILL.md`,
+});
+const OPERATE = { platform: `linux`, shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off`, programs: `off` };
+const SEEN: HostSummary = { id: `linux`, platform: `linux`, environments: [{ key: `linux`, online: true, lastSeen: 1 }], online: true, lastSeen: 1 };
+
+it("a working computer says what the agent may do there, and asks nothing until it is opened", () => {
+    const online: ConnectionState = { label: `online`, tone: `success`, rank: 3 };
+    const closed = render({ state: `active` }, online, { entry: LINUX, config: OPERATE, host: SEEN });
+
+    expect(closed).toContain(`Operate`);
+    // Its state is the dot; the word would only repeat what green already says.
+    expect(closed).not.toContain(`>online<`);
+    expect(closed).not.toContain(`Reconnect`);
+    expect(closed).not.toContain(`the settings form`);
+
+    // Open, its settings come first and its verbs after them, Reconnect among them, Remove apart.
+    const opened = render({ state: `active` }, online, { entry: LINUX, config: OPERATE, host: SEEN, open: true });
+    expect(opened.indexOf(`the settings form`)).toBeLessThan(opened.indexOf(`Reconnect`));
+    for (const verb of [`Reconnect`, `Revoke access`, `Rename…`, `Remove`]) {
+        expect(opened).toContain(verb);
+    }
+});
+
+it("a broken computer says so beside its name and offers the fix on the row itself", () => {
+    const offline: ConnectionState = { label: `offline`, tone: `danger`, rank: 0 };
+    const html = render({ state: `active` }, offline, { entry: LINUX, config: { ...OPERATE, write: `on` }, host: { ...SEEN, online: false } });
+
+    expect(html).toContain(`offline`);
+    expect(html).toContain(`Reconnect`);
+    // Switches no posture spells read as what they are rather than the nearest name.
+    expect(html).toContain(`Custom access`);
 });

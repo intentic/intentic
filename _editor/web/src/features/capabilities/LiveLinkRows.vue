@@ -3,12 +3,11 @@ import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
     Button,
-    ContextMenu,
+    DisclosureRow,
     formatElapsed,
     type IconName,
     Notice,
     type NoticeModel,
-    Row,
     RowGroup,
     RowNote,
     StatusBadge,
@@ -17,7 +16,6 @@ import {
 } from "@intentic/ui";
 import { messageOr, noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useOperations } from "../../workbench/operations/operations";
 import { here, page } from "../../lib/routes/links";
@@ -31,11 +29,11 @@ const props = defineProps<{
     kind: K;
     /** This card's capabilities of that kind: what exists, and what each is called. */
     instances: readonly CapabilitySummary[];
-    /** The one the card's form is open over; wears the selected tint, as the generic row does. */
-    editingId?: string | undefined;
+    /** The one whose settings are open under it (the page's `edit`); the `settings` slot is what they are. */
+    openId?: string | undefined;
 }>();
 
-const emit = defineEmits<{ edit: [id: string]; rename: [id: string]; remove: [id: string] }>();
+const emit = defineEmits<{ toggle: [id: string, open: boolean]; rename: [id: string]; remove: [id: string] }>();
 
 interface KindSpec<L> {
     readonly group: () => string;
@@ -238,62 +236,43 @@ const onOpen = async (id: string): Promise<void> => {
 // A gateway that wants a token says so in the failure; the code field opens right where the user just failed.
 const wantsCode = (id: string): boolean => spec.value.otp && /one-time code|2FA|token/i.test(failureOf(id) ?? ``);
 
-// One shared ContextMenu for the list, opened over whichever row was pressed, with CapabilityInstanceRow's three verbs.
-const menu = ref<{ show: (event: Event) => void } | undefined>();
-const menuFor = ref<string>();
-const openMenu = (id: string, event: Event): void => {
-    menuFor.value = id;
-    menu.value?.show(event);
-};
-const items = computed<MenuItem[]>(() => {
-    const id = menuFor.value ?? ``;
-    return [
-        { label: t(`ui.action.settings`), icon: `cog`, command: () => emit(`edit`, id) },
-        { label: t(`ui.action.renameEllipsis`), icon: `pencil`, command: () => emit(`rename`, id) },
-        { label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`, id) },
-    ];
-});
 </script>
 
 <template>
     <RowGroup :label="spec.group()">
+        <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
         <!-- What the live links mean for the agent, said on the group's surface rather than beside its header. -->
         <RowNote v-if="spec.caption(links) !== undefined" :label="spec.caption(links)" />
         <!-- The links stay listed: this says the live half is missing, not the capabilities. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
-        <Row v-for="row in rows" :key="row.id" :icon="spec.icon(row.link)" :selected="editingId === row.id" indent>
-            <!-- Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to spare. -->
-            <template #title>
-                <span class="flex min-w-0 items-center gap-2">
-                    <span class="min-w-0 truncate">{{ row.id }}</span>
-                    <StatusBadge
-                        v-if="row.link"
-                        size="xs"
-                        dot
-                        class="shrink-0"
-                        :variant="spec.variant(row.link)"
-                        :label="row.link.state"
-                        v-tooltip.top="row.link.detail"
-                    />
-                </span>
-            </template>
-            <template v-if="row.facts" #description>
-                <!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
-                <span class="block truncate font-mono" v-tooltip.top.overflow="row.facts">{{ row.facts }}</span>
-            </template>
-            <template #control>
+        <!-- A link being added, as the open row it will become, above the ones that exist. -->
+        <slot name="draft" />
+        <div v-for="row in rows" :key="row.id">
+            <DisclosureRow body="drawer" :icon="spec.icon(row.link)" :open="openId === row.id" @update:open="emit(`toggle`, row.id, $event)">
+                <!-- Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to spare. -->
+                <template #title>
+                    <span class="flex min-w-0 items-center gap-2">
+                        <span class="min-w-0 truncate">{{ row.id }}</span>
+                        <StatusBadge
+                            v-if="row.link"
+                            size="xs"
+                            dot
+                            class="shrink-0"
+                            :variant="spec.variant(row.link)"
+                            :label="row.link.state"
+                            v-tooltip.top="row.link.detail"
+                        />
+                    </span>
+                </template>
+                <template v-if="row.facts" #description>
+                    <!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
+                    <span class="block truncate font-mono" v-tooltip.top.overflow="row.facts">{{ row.facts }}</span>
+                </template>
                 <!-- No button until the link arrives; guessing open vs close from stored config risks the wrong link. -->
-                <div class="flex shrink-0 items-center gap-1">
+                <template v-if="row.link" #control>
+                    <Button v-if="spec.up(row.link)" :label="spec.close()" size="small" tier="quiet" :loading="busy(row.id)" @click="onClose(row.id)" />
                     <Button
-                        v-if="row.link && spec.up(row.link)"
-                        :label="spec.close()"
-                        size="small"
-                        tier="quiet"
-                        :loading="busy(row.id)"
-                        @click="onClose(row.id)"
-                    />
-                    <Button
-                        v-else-if="row.link"
+                        v-else
                         :label="spec.open()"
                         size="small"
                         tier="quiet"
@@ -301,53 +280,64 @@ const items = computed<MenuItem[]>(() => {
                         :loading="busy(row.id)"
                         @click="onOpen(row.id)"
                     />
-                    <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.moreActions`)" @click="openMenu(row.id, $event)">
-                        <Icon name="ellipsis" />
-                    </button>
-                </div>
-            </template>
-            <template v-if="row.note !== undefined || progressOf(row.id) || failureOf(row.id) || otpFor === row.id" #below>
-                <div class="flex flex-col gap-2">
-                    <!-- A line of its own under the name, never clamped into the description: the tail here is the way out of the
-                         state, not text an ellipsis should hide. -->
-                    <p v-if="row.note === 'rebuild'" class="text-2xs text-warning">
-                        {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}
-                        <RouterLink :to="here(page.sandboxSettings(`environment`))" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
-                    </p>
-                    <p v-else-if="row.note === 'drifted'" class="text-2xs text-danger">{{ t(`common.netdiskMounts.mountedWritableThoughReadOnly`) }}</p>
-                    <p v-else-if="row.note === 'auto'" class="text-2xs text-muted">{{ spec.autoNote() }}</p>
-                    <p v-if="progressOf(row.id)" class="font-mono text-2xs text-subtle">{{ progressOf(row.id) }}</p>
-                    <!-- The client's own text (a --servercert digest, mount.cifs's advice); preserved verbatim and wrapped, not truncated. -->
-                    <Notice v-if="failureOf(row.id)" tone="danger">
-                        <pre class="max-h-32 overflow-auto whitespace-pre-wrap font-mono text-2xs">{{ failureOf(row.id) }}</pre>
-                    </Notice>
-                    <div v-if="otpFor === row.id" class="flex items-center gap-2">
-                        <!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->
-                        <input
-                            v-model="otp"
-                            :class="ui.input('w-32 font-mono')"
-                            placeholder="123456"
-                            inputmode="numeric"
-                            autocomplete="one-time-code"
-                            @keydown.enter.prevent="onOpen(row.id)"
-                        />
-                        <Button tier="accent" :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy(row.id)" @click="onOpen(row.id)" />
-                        <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="otpFor = undefined" />
+                </template>
+                <!-- Its settings, opened in place, then its own verbs: quiet, and Remove apart at the end. -->
+                <template #below>
+                    <slot name="settings" :id="row.id" />
+                    <div class="mt-4 flex flex-wrap items-center gap-1 border-t border-line-subtle pt-3">
+                        <Button :label="t(`ui.action.renameEllipsis`)" size="small" tier="quiet" @click="emit(`rename`, row.id)">
+                            <template #icon><Icon name="pencil" /></template>
+                        </Button>
+                        <Button class="ml-auto" :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="emit(`remove`, row.id)">
+                            <template #icon><Icon name="trash" /></template>
+                        </Button>
                     </div>
-                    <button
-                        v-else-if="wantsCode(row.id)"
-                        type="button"
-                        :class="ui.textButton({ size: `xs` })"
-                        @click="
-                            otpFor = row.id;
-                            otp = ``;
-                        "
-                    >
-                        <Icon name="key" /> {{ t(`common.vpnConnections.enterOneTimeCode`) }}
-                    </button>
+                </template>
+            </DisclosureRow>
+
+            <!-- What the link is doing or refused, under it whether or not it is open: recessed, a step on the row. -->
+            <div
+                v-if="row.note !== undefined || progressOf(row.id) || failureOf(row.id) || otpFor === row.id || wantsCode(row.id)"
+                class="flex flex-col gap-2 border-t border-line-subtle bg-canvas px-3 py-2.5"
+            >
+                <!-- A line of its own, never clamped into the description: the tail here is the way out of the state, not
+                     text an ellipsis should hide. -->
+                <p v-if="row.note === 'rebuild'" class="text-2xs text-warning">
+                    {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}
+                    <RouterLink :to="here(page.sandboxSettings(`environment`))" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
+                </p>
+                <p v-else-if="row.note === 'drifted'" class="text-2xs text-danger">{{ t(`common.netdiskMounts.mountedWritableThoughReadOnly`) }}</p>
+                <p v-else-if="row.note === 'auto'" class="text-2xs text-muted">{{ spec.autoNote() }}</p>
+                <p v-if="progressOf(row.id)" class="font-mono text-2xs text-subtle">{{ progressOf(row.id) }}</p>
+                <!-- The client's own text (a --servercert digest, mount.cifs's advice); preserved verbatim and wrapped, not truncated. -->
+                <Notice v-if="failureOf(row.id)" tone="danger">
+                    <pre class="max-h-32 overflow-auto whitespace-pre-wrap font-mono text-2xs">{{ failureOf(row.id) }}</pre>
+                </Notice>
+                <div v-if="otpFor === row.id" class="flex items-center gap-2">
+                    <!-- Prevents on keydown, not keyup: an open row's settings form is a press away, and a bare Enter must dial, not submit. -->
+                    <input
+                        v-model="otp"
+                        :class="ui.input('w-32 font-mono')"
+                        placeholder="123456"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        @keydown.enter.prevent="onOpen(row.id)"
+                    />
+                    <Button tier="accent" :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy(row.id)" @click="onOpen(row.id)" />
+                    <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="otpFor = undefined" />
                 </div>
-            </template>
-        </Row>
-        <ContextMenu ref="menu" :model="items" :min-width="11" />
+                <button
+                    v-else-if="wantsCode(row.id)"
+                    type="button"
+                    :class="ui.textButton({ size: `xs` }, `self-start`)"
+                    @click="
+                        otpFor = row.id;
+                        otp = ``;
+                    "
+                >
+                    <Icon name="key" /> {{ t(`common.vpnConnections.enterOneTimeCode`) }}
+                </button>
+            </div>
+        </div>
     </RowGroup>
 </template>

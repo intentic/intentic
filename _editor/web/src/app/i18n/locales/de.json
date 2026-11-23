@@ -1571,13 +1571,11 @@
             "startingBrowser": "Der Browser wird gestartet…"
         },
         "capabilities": {
-            "addAnother": "Weitere hinzufügen",
             "agentReadFirstWhat": "Lassen Sie es zuerst von einem Agenten lesen — was der Code tut, Route für Route",
             "agentReadWhatChanged": "Lassen Sie zuerst einen Agenten lesen, was sich geändert hat: das Manifest-Delta führt",
-            "alreadyExistsOpenAbove": "“ gibt es bereits: öffnen Sie es oben, um es zu ändern, oder wählen Sie einen anderen Namen.",
+            "alreadyExistsOpenRow": "“ gibt es bereits: öffnen Sie seine Zeile in der Liste, um es zu ändern, oder wählen Sie einen anderen Namen.",
             "backgroundProcess": "Hintergrundprozess",
             "browsePublishedExtensions": "Veröffentlichte Erweiterungen durchsuchen",
-            "cancelAddAnotherInstead": "Abbrechen: stattdessen eine andere hinzufügen",
             "capabilitiesSearchedByName": "Fähigkeiten werden nach Name, nach dem, was sie tun, und nach Art durchsucht: „mcp“, „ssh“, „sql“.",
             "connected": "{connected} verbunden",
             "connected2": "Verbunden",
@@ -1586,11 +1584,11 @@
             "couldntListCapabilities": "Ihre Fähigkeiten ließen sich nicht auflisten.",
             "disconnectHeader": "{machine} trennen?",
             "eachOneSomethingOwn": "Jede einzelne ist etwas, worauf Ihr eigener Code schon zeigt. Wir füllen aus, was wir lesen konnten; Sie ergänzen nur die Zugangsdaten.",
-            "editing": "Wird bearbeitet",
             "evidence": "Gefunden in",
             "filterByNameHost": "Nach Name, Host, Art filtern…",
             "filterByNameWhat": "Nach Name, Funktion, Art filtern…",
             "finishSetup": ": Einrichtung abschließen →",
+            "howItWorks": "So funktioniert es",
             "installInClickRegistry": "Mit einem Klick aus der Registry installieren, oder das Formular unten aus einem Repository ausfüllen, dem Sie schon vertrauen.",
             "left": "{count} übrig",
             "logs": "Protokolle",
@@ -1689,8 +1687,13 @@
             "fillFirst": "Füllen Sie zuerst {fields} aus: Die Anfrage enthält sie.",
             "generateFirst": "Erzeugen Sie zuerst Schlüssel und Anfrage."
         },
+        "capabilityDraftRow": {
+            "newConnection": "Neue Verbindung",
+            "notAddedYet": "noch nicht hinzugefügt"
+        },
         "capabilityInstanceRow": {
             "finishSetup": "{detail}: Einrichtung abschließen →",
+            "customAccess": "Eigener Zugriff",
             "logIn": "Anmelden",
             "openBrowser": "Browser öffnen",
             "reLogIn": "Erneut anmelden"

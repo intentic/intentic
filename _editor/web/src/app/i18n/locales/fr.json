@@ -1571,13 +1571,11 @@
             "startingBrowser": "Démarrage du navigateur…"
         },
         "capabilities": {
-            "addAnother": "En ajouter une autre",
             "agentReadFirstWhat": "Faites-la lire d'abord par un agent : ce que fait le code, route par route",
             "agentReadWhatChanged": "Faites lire d'abord à un agent ce qui a changé : le delta du manifeste prime",
-            "alreadyExistsOpenAbove": " » existe déjà : ouvrez-la ci-dessus pour la modifier, ou choisissez un autre nom.",
+            "alreadyExistsOpenRow": " » existe déjà : ouvrez sa ligne dans la liste pour la modifier, ou choisissez un autre nom.",
             "backgroundProcess": "Processus en arrière-plan",
             "browsePublishedExtensions": "Parcourir les extensions publiées",
-            "cancelAddAnotherInstead": "Annuler : en ajouter une autre à la place",
             "capabilitiesSearchedByName": "Les capacités se cherchent par nom, par ce qu'elles font et par type : « mcp », « ssh », « sql ».",
             "connected": "{connected} connectées",
             "connected2": "Connectée",
@@ -1586,11 +1584,11 @@
             "couldntListCapabilities": "Impossible de lister vos capacités.",
             "disconnectHeader": "Déconnecter {machine} ?",
             "eachOneSomethingOwn": "Chacune est quelque chose vers quoi votre propre code pointe déjà. Nous remplissons ce que nous avons pu lire ; vous n'ajoutez que l'identifiant.",
-            "editing": "Modification",
             "evidence": "Vu dans",
             "filterByNameHost": "Filtrer par nom, hôte, type…",
             "filterByNameWhat": "Filtrer par nom, fonction, type…",
             "finishSetup": " : Terminer l'installation →",
+            "howItWorks": "Comment ça marche",
             "installInClickRegistry": "Installez-la en un clic depuis le registre, ou remplissez le formulaire ci-dessous depuis un dépôt auquel vous faites déjà confiance.",
             "left": "{count} restantes",
             "logs": "Journaux",
@@ -1689,8 +1687,13 @@
             "fillFirst": "Renseignez d'abord {fields} : la demande les contient.",
             "generateFirst": "Générez d'abord la clé et la demande."
         },
+        "capabilityDraftRow": {
+            "newConnection": "Nouvelle connexion",
+            "notAddedYet": "pas encore ajoutée"
+        },
         "capabilityInstanceRow": {
             "finishSetup": "{detail} : Terminer l'installation →",
+            "customAccess": "Accès personnalisé",
             "logIn": "Se connecter",
             "openBrowser": "Ouvrir le navigateur",
             "reLogIn": "Se reconnecter"

@@ -1571,13 +1571,11 @@
             "startingBrowser": "Uruchamianie przeglądarki…"
         },
         "capabilities": {
-            "addAnother": "Dodaj kolejną",
             "agentReadFirstWhat": "Niech najpierw przeczyta to agent — co robi kod, trasa po trasie",
             "agentReadWhatChanged": "Niech najpierw agent przeczyta, co się zmieniło: prowadzi delta manifestu",
-            "alreadyExistsOpenAbove": "” już istnieje: otwórz ją powyżej, żeby ją zmienić, albo wybierz inną nazwę.",
+            "alreadyExistsOpenRow": "” już istnieje: otwórz jej wiersz na liście, żeby ją zmienić, albo wybierz inną nazwę.",
             "backgroundProcess": "Proces w tle",
             "browsePublishedExtensions": "Przeglądaj opublikowane rozszerzenia",
-            "cancelAddAnotherInstead": "Anuluj: dodaj zamiast tego inną",
             "capabilitiesSearchedByName": "Możliwości wyszukuje się po nazwie, po tym, co robią, i po rodzaju: „mcp”, „ssh”, „sql”.",
             "connected": "Podłączone: {connected}",
             "connected2": "Podłączona",
@@ -1586,11 +1584,11 @@
             "couldntListCapabilities": "Nie udało się wypisać Twoich możliwości.",
             "disconnectHeader": "Odłączyć {machine}?",
             "eachOneSomethingOwn": "Każda z nich to coś, na co Twój własny kod już wskazuje. Wypełniamy to, co udało nam się odczytać; Ty dodajesz tylko poświadczenie.",
-            "editing": "Edycja",
             "evidence": "Znalezione w",
             "filterByNameHost": "Filtruj po nazwie, hoście, rodzaju…",
             "filterByNameWhat": "Filtruj po nazwie, funkcji, rodzaju…",
             "finishSetup": ": Dokończ konfigurację →",
+            "howItWorks": "Jak to działa",
             "installInClickRegistry": "Zainstaluj jednym kliknięciem z rejestru albo wypełnij formularz poniżej z repozytorium, któremu już ufasz.",
             "left": "Zostało: {count}",
             "logs": "Dzienniki",
@@ -1689,8 +1687,13 @@
             "fillFirst": "Najpierw wypełnij: {fields}. Żądanie je zawiera.",
             "generateFirst": "Najpierw wygeneruj klucz i żądanie."
         },
+        "capabilityDraftRow": {
+            "newConnection": "Nowe połączenie",
+            "notAddedYet": "jeszcze niedodane"
+        },
         "capabilityInstanceRow": {
             "finishSetup": "{detail}: Dokończ konfigurację →",
+            "customAccess": "Własny dostęp",
             "logIn": "Zaloguj się",
             "openBrowser": "Otwórz przeglądarkę",
             "reLogIn": "Zaloguj się ponownie"

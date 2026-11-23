@@ -7,6 +7,7 @@ import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
+import type { PageRoute } from "./capabilityRoute";
 import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 
@@ -18,11 +19,13 @@ const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
 
 // Which entry the page is on, read once at setup since the page is URL-driven and nothing here navigates.
 let entry = `linux`;
+let query: PageRoute[`query`] = {};
 const push = jest.fn();
+const replace = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry }, query: {} }) as never,
-    useRouter: () => ({ push, replace: jest.fn() }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry }, query }) as never,
+    useRouter: () => ({ push, replace }) as never,
 }));
 
 // Both entrys are contributed, not static; a device's permission switches come from the catalog, not the manifest.
@@ -159,10 +162,12 @@ const submitForm = async (el: HTMLElement): Promise<void> => {
 const start = (onEntry: string, status: CapabilityStatus): HTMLElement => {
     activeSandboxId.value = BOX;
     entry = onEntry;
+    query = {};
     applied = status;
     capabilities.value = [];
     add.mockClear();
     push.mockClear();
+    replace.mockClear();
     return mount();
 };
 
@@ -208,14 +213,15 @@ it(`does not open the sign-in window when the browser is still waiting on a rebu
     expect(el.textContent).toContain(`rebuild the sandbox to install the browser`);
 });
 
-// An apply that finished has nothing left to hand over, so it returns to the catalog.
-it(`returns to the catalog when the capability came back active`, async () => {
+// An apply that finished has nothing left to hand over, so the new row closes into the row it became, on the tile.
+it(`stays on the tile, closing the new row, when the capability came back active`, async () => {
     const el = start(`reddit`, { state: `active` });
 
     await submitForm(el);
 
     expect(el.querySelector(`[data-browser]`)).toBeNull();
-    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+    expect(String(replace.mock.calls.at(-1)?.[0])).not.toContain(`new=`);
 });
 
 // A connected account isn't finished with: the same row also opens the signed-in browser itself, in browse mode
@@ -237,6 +243,8 @@ it(`offers the connected browser to be used, not only signed into again`, async 
 // is first.
 it(`opens the account a row belongs to when one site is connected twice`, async () => {
     entry = `reddit`;
+    // Add pressed: the tile already lists an account, so the form is the new row's.
+    query = { new: `1` };
     applied = { state: `active` };
     capabilities.value = [{ id: `reddit`, kind: `browser`, status: { state: `active` }, config: { platform: `reddit` }, secrets: [] }];
     add.mockClear();

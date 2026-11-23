@@ -10,8 +10,6 @@ import {
     RowGroup,
     RowNote,
     Section,
-    SectionHeader,
-    SegmentedControl,
     SplitView,
     StatusBadge,
     toneTint,
@@ -22,8 +20,6 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LiveLinkRows from "./LiveLinkRows.vue";
-import GpuHostedNote from "./GpuHostedNote.vue";
-import { startAgent } from "../../models/fleet/agentActions";
 import { useExtensions } from "../../models/extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../../models/sandbox/devices/useDevices";
@@ -32,7 +28,7 @@ import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 import { useTier } from "../../client/sandbox/useTier";
 import { useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
-import { addsByItself, swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
+import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
 import { useCapabilityPairing } from "./capabilityPairing";
 import { useCapabilityProbe } from "./capabilityProbe";
 import { useCapabilityRoute } from "./capabilityRoute";
@@ -41,40 +37,29 @@ import { useCapabilitySubmit } from "./capabilitySubmit";
 import BrowserProfileDialog from "./connect/BrowserProfileDialog.vue";
 import CapabilityConnections from "./connect/CapabilityConnections.vue";
 import CapabilityContext from "./connect/CapabilityContext.vue";
+import CapabilityDraftRow from "./connect/CapabilityDraftRow.vue";
 import CapabilityEffects from "./connect/CapabilityEffects.vue";
-import CapabilityFieldRow from "../../parts/capabilities/CapabilityFieldRow.vue";
+import CapabilitySetupForm from "./connect/CapabilitySetupForm.vue";
 import CatalogDetail from "../../components/CatalogDetail.vue";
 import CatalogTile from "../../components/CatalogTile.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
 import BrowseExtensionsLink from "./connect/BrowseExtensionsLink.vue";
-import HubTakeOffer from "../../parts/sandbox/HubTakeOffer.vue";
 import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
-import ForticlientImport from "./connect/ForticlientImport.vue";
-import LinkPairing from "../../components/LinkPairing.vue";
-import GitRefField from "./connect/GitRefField.vue";
-import FleetAllow from "./connect/FleetAllow.vue";
 import { useFieldStandIns } from "./model/fieldStandIns";
 import HostConnectDialog from "./connect/hosts/HostConnectDialog.vue";
-import PluginRegistryBrowse from "./connect/PluginRegistryBrowse.vue";
 import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
 import WebExtConnectDialog from "./connect/WebExtConnectDialog.vue";
 import PhoneConnectDialog from "./connect/PhoneConnectDialog.vue";
 import { registerWakeOnce } from "./connect/phoneWake";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useConnectionActions } from "./connectionActions";
-import { auditPrompt } from "./model/audit";
 import { entryDescription, entryName } from "../../models/capabilities/catalogCopy";
 import type { ConnectionSources } from "./model/connectionRows";
 import { deviceConnections } from "./model/deviceConnections";
-import { advancedLabel, inlineField } from "../../models/capabilities/form";
-import { hostGrantSummary, matchHostPreset } from "./model/previews";
-import { picksVersion } from "./model/refs";
 import { catalogEntries, entryIcon } from "../../models/capabilities/tiles";
 import { useSetupWalk } from "./setupWalk";
-import FieldStandIn from "./connect/FieldStandIn.vue";
 import { useTileHub, useTilePane } from "./tilePane";
-import CapabilityFormStatus from "./CapabilityFormStatus.vue";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core tiles are
 // static catalog data; cli tiles derive from enabled extensions' contributes.capabilities. What the page decides lives
@@ -120,7 +105,7 @@ const error = ref<NoticeModel | null>(null);
 
 // Only an answered list can say a tile slug is unknown: a failed read leaves the address where it is.
 const page = useCapabilityRoute({ route, router, entries, capabilities, settled: computed(() => extensionsRead.value.state === `ready`) });
-const { selected, selectedInstances, soleInstance, editing, search, walking, pick, back, openEdit, stopEditing, openConnection } = page;
+const { selected, selectedInstances, soleInstance, editing, adding, search, walking, pick, back, openEdit, stopEditing, startAdding, openConnection } = page;
 
 const catalog = useCapabilityCatalog({ entries, capabilities, recommendationFor, scope: page.scope, search, sources, syncOnly, contributionOf });
 const { tiles, pinnedScopes, categoryScopes, activeScope, railScope, inCategory, groupedCatalog, connectionGroups } = catalog;
@@ -152,6 +137,7 @@ const form = useCapabilityForm({
     hosted,
     selected,
     editing,
+    adding,
     instances: selectedInstances,
     capabilities,
     device: page.device,
@@ -160,28 +146,23 @@ const form = useCapabilityForm({
     manifestOf,
     error,
 });
-const { name, nameEdited, savedName, namePreview, nameHeld, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;
-const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
-const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
-const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, keptSecrets } = form;
-const { probing, canProbe, runProbe, failure: probeFailure, meter: probeMeter } = useCapabilityProbe({ selected, form });
-const standIns = useFieldStandIns({ selected, editing, values, kept: keptSecrets, alarm: fieldAlarm });
-// Has an agent read the pinned code, or what an update changes, before the install is approved.
-const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
+const { savedName, values, liveEffects } = form;
+const probe = useCapabilityProbe({ selected, form });
+const standIns = useFieldStandIns({ selected, editing, values, kept: form.keptSecrets, alarm: form.fieldAlarm });
 
 const pairing = useCapabilityPairing({ hosts, browsers, phones, contributionOf, refetch, error });
 const { profileVisible, profileCapability, profileLabel, profileMode, openBrowser, startAgentLogin, openPairing, removePairedAccess } = pairing;
-const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, onHostConnected, onHostRenamed } = pairing;
+const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, connectRenamed, onHostConnected, onHostRenamed } = pairing;
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
 const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, onPhoneConnected } = pairing;
-const { submit, submitting, failure: saveFailure, meter: submitMeter } = useCapabilitySubmit({
+const saving = useCapabilitySubmit({
     hosted,
     selected,
     editing,
     capabilities,
     form,
     add,
-    walk: { onwardFrom, leaveTile },
+    walk: { onwardFrom, leaveTile, walking },
     handOff,
     stopEditing,
     error,
@@ -195,7 +176,7 @@ const { confirmDisconnectDevice, removing, renaming } = actions;
 const topError = computed<NoticeModel | undefined>(() => {
     // What this page refused itself first, then the tile's save and test, then a connection's removal: each kept in the
     // operations ledger, so a reader who left while one ran comes back to how it went.
-    const refused = error.value ?? saveFailure.value ?? probeFailure.value ?? actions.failure.value ?? hubFailure.value;
+    const refused = error.value ?? saving.failure.value ?? probe.failure.value ?? actions.failure.value ?? hubFailure.value;
     if (refused !== null && refused !== undefined) {
         return refused;
     }
@@ -204,6 +185,59 @@ const topError = computed<NoticeModel | undefined>(() => {
     }
     return { tone: `danger`, title: t(`capabilities.capabilities.couldntListCapabilities`), detail: listError.value };
 });
+
+// THE FORM IS OPEN IN ONE PLACE AT A TIME: under the new connection's row, inside the open connection's row, or as a
+// one-per-sandbox tile's whole page. Each place draws it with the same props and answers its events the same way.
+const formProps = computed(() => ({
+    sole: soleInstance.value,
+    entries: entries.value,
+    form,
+    probe,
+    standIns,
+    saving,
+    save: add,
+    hosted: hosted.value,
+    recommendation: selectedRecommendation.value,
+    dismissing: dismissRecommendation.isPending.value,
+    hubWant: hubWant.value,
+}));
+const formEvents = {
+    notice: (notice: NoticeModel | null): void => {
+        error.value = notice;
+    },
+    dismiss: (): void => {
+        if (selected.value !== undefined) {
+            void dismiss(selected.value);
+        }
+    },
+    cancel: stopEditing,
+};
+// A row's chevron opens its settings in place, closing whichever row was open; closing it opens nothing.
+const toggleRow = (id: string, open: boolean): void => (open ? openEdit(id) : stopEditing());
+// The new row closes into its connection's row once the add lands, but not before: the first connection of a tile is
+// listed mid-write, which would otherwise take the form away while it is still writing.
+const draftOpen = computed(() => adding.value || (saving.submitting.value && editing.value === undefined && selected.value?.singleton !== true));
+// VPN tunnels and network disks list their live links too: their rows dial and mount from the list.
+const liveKind = computed(() => (selected.value?.kind === `vpn` || selected.value?.kind === `netdisk` ? selected.value.kind : undefined));
+// Which pairing is under way under a row: the device command, the browser code or the phone's code.
+const pairingUnder = (id: string): `host` | `browser` | `phone` | undefined => {
+    if (connectVisible.value && connectId.value === id) {
+        return `host`;
+    }
+    if (browserConnectVisible.value && browserConnectId.value === id) {
+        return `browser`;
+    }
+    return phoneConnectVisible.value && phoneConnectId.value === id ? `phone` : undefined;
+};
+// What the tile does and how to get its credential: beside an open form on a wide pane, else folded under the list.
+const contextOpen = ref(false);
+watch(
+    () => selected.value?.id,
+    () => {
+        contextOpen.value = false;
+    },
+);
+const formOpen = computed(() => draftOpen.value || editing.value !== undefined || selected.value?.singleton === true);
 
 // The three rosters are live cache entries while this page is open, so a device can say "online" with no dialog open.
 // A phone whose push token rotated, or that paired while no dialog was open, is made wakeable again from here: only a
@@ -273,32 +307,88 @@ onBeforeUnmount(() => {
                         </Button>
                     </template>
 
-                    <!-- A singleton tile with no finished setup has no row to carry its pending step, so it goes here instead. -->
-                    <RouterLink
-                        v-if="soleInstance && soleRebuildStep(soleInstance)"
-                        :to="here(pages.sandboxSettings(`environment`))"
-                        class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
-                    >
-                        <Icon name="exclamation-triangle" />
-                        {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`)
-                        }}{{ t(`capabilities.capabilities.finishSetup`) }}
-                    </RouterLink>
+                    <div class="flex flex-col gap-6">
+                        <!-- A singleton tile with no finished setup has no row to carry its pending step, so it goes here instead. -->
+                        <RouterLink
+                            v-if="soleInstance && soleRebuildStep(soleInstance)"
+                            :to="here(pages.sandboxSettings(`environment`))"
+                            class="inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
+                        >
+                            <Icon name="exclamation-triangle" />
+                            {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`)
+                            }}{{ t(`capabilities.capabilities.finishSetup`) }}
+                        </RouterLink>
 
-                    <form class="flex flex-col gap-3" @submit.prevent="submit">
-                        <!-- What you already have of this tile, suppressed on a singleton tile. -->
+                        <!-- Where extensions are found, on the tile people arrive at wanting one. -->
+                        <BrowseExtensionsLink v-if="selected.kind === 'extension'" :published-count="publishedCount" :verified-count="verifiedCount" />
+
+                        <!-- Nothing listed yet: what the tile does and how to get its credential lead, before the new row's form
+                             (on a wide pane the side column carries them), on the page rather than boxed inside the row. -->
+                        <CapabilityContext
+                            v-if="!selected.singleton && selectedInstances.length === 0"
+                            class="@3xl:hidden"
+                            :entry="selected"
+                            :values="values"
+                            :effects="liveEffects"
+                        />
+
+                        <!-- A singleton tile has no list: its one connection is the tile, and its settings are the page. -->
+                        <CapabilitySetupForm v-if="selected.singleton" v-bind="formProps" :entry="selected" :editing="editing" :guide="true" v-on="formEvents" />
+
+                        <!-- Tunnels and disks: the same rows, each also dialling or mounting its live link from the list. -->
                         <LiveLinkRows
-                            v-if="(selected.kind === 'vpn' || selected.kind === 'netdisk') && selectedInstances.length > 0"
-                            :kind="selected.kind"
+                            v-else-if="liveKind"
+                            :kind="liveKind"
                             :instances="selectedInstances"
-                            :editing-id="editing?.id"
-                            @edit="openEdit"
+                            :open-id="editing?.id"
+                            @toggle="toggleRow"
                             @rename="askRename"
                             @remove="confirmRemoveId = $event"
-                        />
-                        <RowGroup
-                            v-else-if="(selectedInstances.length > 0 || selectedDevices.length > 0) && !selected.singleton"
-                            :label="t(`shared.connections`)"
                         >
+                            <template v-if="!draftOpen" #actions>
+                                <Button :label="t(`ui.action.add`)" size="small" tier="boring" @click="startAdding">
+                                    <template #icon><Icon name="plus" /></template>
+                                </Button>
+                            </template>
+                            <template v-if="draftOpen" #draft>
+                                <CapabilityDraftRow :name="savedName">
+                                    <CapabilitySetupForm
+                                        v-bind="formProps"
+                                        :entry="selected"
+                                        :editing="undefined"
+                                        :cancellable="selectedInstances.length > 0"
+                                        v-on="formEvents"
+                                    />
+                                </CapabilityDraftRow>
+                            </template>
+                            <template #settings="{ id }">
+                                <CapabilitySetupForm
+                                    v-if="editing?.id === id"
+                                    v-bind="formProps"
+                                    :entry="selected"
+                                    :editing="editing"
+                                    :cancellable="true"
+                                    v-on="formEvents"
+                                />
+                            </template>
+                        </LiveLinkRows>
+
+                        <!-- Every other tile: its connections, the new one opening at the top where Add put it. -->
+                        <RowGroup v-else :label="t(`shared.connections`)">
+                            <template v-if="!draftOpen" #actions>
+                                <Button :label="t(`ui.action.add`)" size="small" tier="boring" @click="startAdding">
+                                    <template #icon><Icon name="plus" /></template>
+                                </Button>
+                            </template>
+                            <CapabilityDraftRow v-if="draftOpen" :name="savedName">
+                                <CapabilitySetupForm
+                                    v-bind="formProps"
+                                    :entry="selected"
+                                    :editing="undefined"
+                                    :cancellable="selectedInstances.length > 0"
+                                    v-on="formEvents"
+                                />
+                            </CapabilityDraftRow>
                             <CapabilityInstanceRow
                                 v-for="instance in selectedInstances"
                                 :key="instance.id"
@@ -309,18 +399,62 @@ onBeforeUnmount(() => {
                                 :phone="phoneFor(instance.id)"
                                 :state="rowState(selected, instance)"
                                 :facts="cardRowFacts(instance)"
-                                :editing="editing?.id === instance.id"
+                                :open="editing?.id === instance.id"
                                 :hub="hubRow(instance.id)"
+                                @update:open="toggleRow(instance.id, $event)"
                                 @connect="openPairing(selected, instance)"
                                 @revoke="removePairedAccess(selected, instance.id)"
                                 @browse="openBrowser(instance.id, instance.id, `browse`)"
                                 @login="openBrowser(instance.id, instance.id)"
                                 @agent-login="startAgentLogin(instance.id)"
-                                @edit="openEdit(instance.id)"
                                 @rename="askRename(instance.id)"
                                 @remove="confirmRemoveId = instance.id"
                                 @save="saveToHub(instance.id, $event)"
-                            />
+                            >
+                                <CapabilitySetupForm
+                                    v-if="editing?.id === instance.id"
+                                    v-bind="formProps"
+                                    :entry="selected"
+                                    :editing="editing"
+                                    :cancellable="true"
+                                    v-on="formEvents"
+                                />
+                                <!-- The pairing a Connect or a fresh add started, under the row it pairs rather than over the page. -->
+                                <template v-if="pairingUnder(instance.id) === `host`" #pairing>
+                                    <HostConnectDialog
+                                        v-model:visible="connectVisible"
+                                        :inline="true"
+                                        :id="connectId"
+                                        :platform="connectPlatform"
+                                        :permissions="connectPermissions"
+                                        :unnamed="connectUnnamed"
+                                        :renamed="connectRenamed"
+                                        @connected="onHostConnected"
+                                        @renamed="onHostRenamed"
+                                    />
+                                </template>
+                                <template v-else-if="pairingUnder(instance.id) === `browser`" #pairing>
+                                    <WebExtConnectDialog
+                                        v-model:visible="browserConnectVisible"
+                                        :inline="true"
+                                        :id="browserConnectId"
+                                        :install="browserInstall"
+                                        :permissions="browserPermissions"
+                                        @connected="onBrowserExtConnected"
+                                    />
+                                </template>
+                                <template v-else-if="pairingUnder(instance.id) === `phone`" #pairing>
+                                    <PhoneConnectDialog
+                                        v-model:visible="phoneConnectVisible"
+                                        :inline="true"
+                                        :id="phoneConnectId"
+                                        :install="phoneInstall"
+                                        :permissions="phonePermissions"
+                                        :platform="phonePlatform"
+                                        @connected="onPhoneConnected"
+                                    />
+                                </template>
+                            </CapabilityInstanceRow>
                             <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this tile would give commands, files and screen. -->
                             <SyncOnlyDeviceRow
                                 v-for="device in selectedDevices"
@@ -383,224 +517,24 @@ onBeforeUnmount(() => {
                             </Row>
                         </RowGroup>
 
-                        <!-- Fills this form from FortiClient's own file; keyed on the tile so switching tiles clears the zone. -->
-                        <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
-
-                        <!-- Pairs this sandbox with another of the reader's and adds the card; the fields under Advanced are the way by hand. -->
-                        <LinkPairing
-                            v-if="selected.kind === 'link' && editing === undefined"
-                            :key="selected.id"
-                            @pick="(paired) => (pickLinked(paired), void submit())"
-                            @notice="error = $event"
-                        />
-                        <FleetAllow v-if="selected.kind === 'fleet'" :instance="soleInstance" :save="add" @notice="error = $event" />
-
-                        <!-- Where extensions are found, on the tile people arrive at wanting one. -->
-                        <BrowseExtensionsLink v-if="selected.kind === 'extension'" :published-count="publishedCount" :verified-count="verifiedCount" />
-
-                        <!-- Registry browse for plugins only; extensions have their own Browse tab, linked above. -->
-                        <PluginRegistryBrowse
-                            v-if="selected.kind === 'plugin'"
-                            :key="selected.id"
-                            :kind="selected.kind"
-                            @pick="applyRegistryPick"
-                            @notice="error = $event"
-                        />
-
-                        <!-- States the form's intent up front, since the same fields mean "add" or "change this one". -->
-                        <SectionHeader v-if="editing || selected.singleton || selectedInstances.length > 0" class="mt-1">
-                            <template #label>
-                                <!-- A singleton tile always says "Settings": it never adds a second anything, and has no name to show. -->
-                                <template v-if="selected.singleton">{{ t(`shared.settings`) }}</template>
-                                <template v-else-if="editing">
-                                    {{ t(`capabilities.capabilities.editing`) }} <span class="font-mono normal-case">{{ editing.id }}</span>
-                                </template>
-                                <template v-else>{{ t(`capabilities.capabilities.addAnother`) }}</template>
-                            </template>
-                            <!-- Way out of an edit, beside what it's editing, not by the submit button, which stays reachable from anywhere already. -->
-                            <template v-if="editing && !selected.singleton" #actions>
-                                <button type="button" :class="ui.textButton({ size: `xs` })" @click="stopEditing">
-                                    {{ t(`capabilities.capabilities.cancelAddAnotherInstead`) }}
-                                </button>
-                            </template>
-                        </SectionHeader>
-
-                        <!-- Saved on the owner's computer from another of their sandboxes: taken from there instead of filled in here. -->
-                        <HubTakeOffer v-if="hubWant && !editing" :want="hubWant" />
-                        <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
-                        <label v-if="!selected.singleton && !editing" class="ui-field">
-                            <span class="ui-field-label">{{ t(`shared.name`) }}</span>
-                            <input
-                                v-model="name"
-                                placeholder="my-tool"
-                                :class="[ui.input(), nameHeld.taken || (attempted && nameProblem) ? 'ui-field-error-box' : '']"
-                                @input="nameEdited = true"
-                                @blur="finishName"
-                            />
-                            <!-- A taken name is refused, not saved over, whichever tile holds it: this form holds the tile's defaults, which would overwrite a live connection's settings (or its kind and platform). -->
-                            <span v-if="nameHeld.taken" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ takenNameWords(savedName, nameHeld, entries) }}
-                            </span>
-                            <span v-else-if="attempted && nameProblem" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ nameProblem }}
-                            </span>
-                            <!-- Shows the repair (spaces/punctuation to hyphens) rather than applying it silently; blur commits it, after which there's nothing to show. -->
-                            <span v-else-if="namePreview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
-                                <Icon name="check" class="text-2xs text-success" />
-                                {{ t(`capabilities.capabilities.saved`) }} <span class="font-mono text-content">{{ namePreview }}</span>
-                            </span>
-                            <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
-                                {{ t(`capabilities.capabilities.whatAgentCallConnection`) }}
-                            </span>
-                        </label>
-                        <!-- Narrow reference column shown inline below @3xl; the docked aside version takes over above it. -->
-                        <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
-                        <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
-                        <label v-if="selected.kind === 'device'" class="flex items-start justify-between gap-4">
-                            <span class="min-w-0">
-                                <span class="ui-field-label">{{ t(`capabilities.words.access`) }}</span>
-                                <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
-                            </span>
-                            <SegmentedControl
-                                class="shrink-0"
-                                :model-value="matchHostPreset(values) ?? ''"
-                                :options="hostPresetOptions"
-                                @update:model-value="applyHostPreset($event)"
-                            />
-                        </label>
-
-                        <GpuHostedNote v-if="selected.kind === 'docker' && hosted" v-model="values['gpu']" />
-                        <!-- Main fields first, rarely-changed ones folded behind Advanced. -->
-                        <template v-for="field in mainFields(selected)" :key="field.key">
-                            <!-- An extension pins a commit, so that box is answered from the repository rather than typed into. -->
-                            <GitRefField
-                                v-if="picksVersion(selected, field)"
-                                :field="field"
-                                :values="values"
-                                :url="values['url'] ?? ''"
-                                :token="versionToken"
-                                :keeping="editing?.id"
-                                :alarm="fieldAlarm(field)"
-                                @left="finishField(field)"
-                            />
-                            <!-- A box answered by doing rather than typing: a key, a sign-in, the card a repository is read with. -->
-                            <FieldStandIn
-                                v-else-if="standIns.of(field)"
-                                v-bind="standIns.of(field)!"
-                                @left="finishField(field)"
-                                @paste="standIns.paste()"
-                            />
-                            <CapabilityFieldRow
-                                v-else
-                                :field="field"
-                                :values="values"
-                                :inline="inlineField(field)"
-                                :placeholder="fieldPlaceholder(field)"
-                                :alarm="fieldAlarm(field)"
-                                :quiet="fieldQuiet(field)"
-                                :checked="fieldChecked(field)"
-                                :url-fix="fieldUrlFix(field)"
-                                :note="pasteNotes[field.key]"
-                                :summary="fieldConfSummary(field)"
-                                @edited="onFieldInput(field)"
-                                @pasted="onFieldPaste(field, $event)"
-                                @left="finishField(field)"
-                                @fix="applyUrlFix(field)"
-                            />
-                        </template>
-                        <template v-if="advancedFields(selected).length > 0">
-                            <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="advancedOpen = !advancedOpen">
-                                <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
-                                {{ advancedLabel(selected) }}
-                            </button>
-                            <template v-if="advancedOpen">
-                                <CapabilityFieldRow
-                                    v-for="field in advancedFields(selected)"
-                                    :key="field.key"
-                                    :field="field"
-                                    :values="values"
-                                    :inline="inlineField(field)"
-                                    :placeholder="fieldPlaceholder(field)"
-                                    :alarm="fieldAlarm(field)"
-                                    :quiet="fieldQuiet(field)"
-                                    :checked="fieldChecked(field)"
-                                    :url-fix="fieldUrlFix(field)"
-                                    :note="pasteNotes[field.key]"
-                                    :summary="fieldConfSummary(field)"
-                                    @edited="onFieldInput(field)"
-                                    @pasted="onFieldPaste(field, $event)"
-                                    @left="finishField(field)"
-                                    @fix="applyUrlFix(field)"
-                                />
-                            </template>
-                        </template>
-                        <!-- Why the grid badged this one: the claim plus the evidence that produced it, which "Not needed" dismisses. -->
-                        <!-- The sentence the answers add up to, computed live so it matches what submit actually agrees to. -->
-                        <p v-if="formSummary" class="flex items-start gap-2 rounded-lg bg-card shadow-sm px-3 py-2 text-xs text-content">
-                            <Icon name="info-circle" class="shrink-0 text-2xs text-subtle" />
-                            {{ formSummary }}
-                        </p>
-
-                        <Notice v-if="selectedRecommendation" tone="info">
-                            <div class="flex items-start gap-3">
-                                <div class="min-w-0 flex-1">
-                                    <div>{{ t(`capabilities.capabilities.recommended`, { reason: selectedRecommendation.reason }) }}</div>
-                                    <div class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ selectedRecommendation.evidence }}</div>
-                                </div>
-                                <Button
-                                    :label="t(`capabilities.capabilities.notNeeded`)"
-                                    size="small"
-                                    tier="quiet"
-                                    :loading="dismissRecommendation.isPending.value"
-                                    @click="dismiss(selected)"
-                                />
-                            </div>
-                        </Notice>
-
-                        <!-- Submit stays stuck to the pane's foot: some tiles (VPN, a device's permissions) are long. -->
-                        <!-- What the probe said, and the save or test still running, above the submit (CapabilityFormStatus). -->
-                        <CapabilityFormStatus :probe-result="probeResult" :submit-meter="submitMeter" :probe-meter="probeMeter" />
-
-                        <!-- A card whose own press adds it (a pairing, Allow) shows the by-hand Add only once that way is taken. -->
-                        <div
-                            v-if="!addsByItself(selected, editing, advancedOpen, values)"
-                            :class="[
-                                'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 px-1 py-3',
-                                auditable ? 'justify-between' : 'justify-end',
-                                shaking ? 'ui-shake' : '',
-                            ]"
-                            @animationend="shaking = false"
-                        >
-                            <!-- The read sits beside the approval, since that's when it matters. -->
-                            <button v-if="auditable" type="button" :class="ui.textButton({ size: `xs` })" @click="startAudit">
-                                {{
-                                    updateFrom !== undefined
-                                        ? t(`capabilities.capabilities.agentReadWhatChanged`)
-                                        : t(`capabilities.capabilities.agentReadFirstWhat`)
-                                }}
-                            </button>
-                            <!-- Testing is optional and stays secondary to Save; hidden once a tile has answered that no test exists (canProbe). -->
-                            <Button
-                                v-if="canProbe"
-                                class="ml-auto"
-                                :label="t(`capabilities.capabilities.test`)"
-                                size="small"
-                                tier="boring"
-                                :loading="probing"
-                                @click="runProbe"
+                        <!-- Once there is something listed, what the tile does folds into one line under the list; beside an open
+                             row's settings on a wide pane, the side column carries it instead. -->
+                        <div v-if="!selected.singleton && selectedInstances.length > 0" :class="formOpen ? `@3xl:hidden` : ``">
+                            <button
+                                type="button"
+                                :class="ui.textButton({ tone: `quiet` })"
+                                :aria-expanded="contextOpen"
+                                @click="contextOpen = !contextOpen"
                             >
-                                <template #icon><Icon name="wave-pulse" /></template>
-                            </Button>
-                            <Button tier="accent" type="submit" size="small" :label="submitLabel" :loading="submitting">
-                                <template #icon><Icon name="check" /></template>
-                            </Button>
+                                <Icon :name="contextOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
+                                {{ t(`capabilities.capabilities.howItWorks`) }}
+                            </button>
+                            <CapabilityContext v-if="contextOpen" class="mt-3" :entry="selected" :values="values" :effects="liveEffects" />
                         </div>
-                    </form>
+                    </div>
 
-                    <!-- Docked reference column, shown only above @3xl (below that width, the inline version renders in the form instead). -->
-                    <template #aside>
+                    <!-- Docked reference column while a form is open, shown only above @3xl (below it, the form or the fold carries it). -->
+                    <template v-if="formOpen" #aside>
                         <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" />
                     </template>
                 </CatalogDetail>
@@ -749,35 +683,6 @@ onBeforeUnmount(() => {
                 @done="refetch()"
             />
 
-            <!-- One-time command that connects a device of the user's own (host-kind capabilities). -->
-            <HostConnectDialog
-                v-model:visible="connectVisible"
-                :id="connectId"
-                :platform="connectPlatform"
-                :permissions="connectPermissions"
-                :unnamed="connectUnnamed"
-                @connected="onHostConnected"
-                @renamed="onHostRenamed"
-            />
-
-            <!-- QR code a phone of the user's own scans to pair (phone-kind capabilities). -->
-            <PhoneConnectDialog
-                v-model:visible="phoneConnectVisible"
-                :id="phoneConnectId"
-                :install="phoneInstall"
-                :permissions="phonePermissions"
-                :platform="phonePlatform"
-                @connected="onPhoneConnected"
-            />
-
-            <!-- One-time code that connects a browser of the user's own (webext-kind capabilities). -->
-            <WebExtConnectDialog
-                v-model:visible="browserConnectVisible"
-                :id="browserConnectId"
-                :install="browserInstall"
-                :permissions="browserPermissions"
-                @connected="onBrowserExtConnected"
-            />
         </template>
     </SplitView>
 </template>

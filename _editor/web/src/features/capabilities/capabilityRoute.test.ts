@@ -5,7 +5,7 @@ import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capab
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { homePath, insidePath, type LinkQuery, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { type EffectScope, effectScope, nextTick, reactive, ref } from "vue";
-import { type PageMove, type PageRoute, type PageStep, pageStep, SETUP, useCapabilityRoute } from "./capabilityRoute";
+import { ADDING, type PageMove, type PageRoute, type PageStep, pageStep, SETUP, useCapabilityRoute } from "./capabilityRoute";
 
 const BOX = `a1b2c3d4e5f6`;
 // The page's address inside the sandbox, a tile open or none.
@@ -33,6 +33,7 @@ describe(`a move from the URL as it stands`, () => {
             { kind: `edit`, id: `` },
             { how: `replace`, to: at(`github`, KEPT) },
         ],
+        [{ kind: `add` }, { how: `replace`, to: at(`github`, { ...KEPT, new: ADDING }) }],
         [
             { kind: `connection`, entry: `vpn`, connection: `office` },
             { how: `push`, to: at(`vpn`, { ...KEPT, edit: `office` }) },
@@ -122,8 +123,21 @@ describe(`what the page reads off its URL`, () => {
         expect(page.editing.value?.id).toBe(`home`);
     });
 
-    it(`adds rather than editing nothing when the edited connection is gone`, () => {
-        expect(pageAt(`vpn`, { edit: `gone` }).page.editing.value).toBeUndefined();
+    it(`opens no row when the edited connection is gone, rather than a blank edit or a new one`, () => {
+        const { page } = pageAt(`vpn`, { edit: `gone` });
+
+        expect([page.editing.value, page.adding.value]).toEqual([undefined, false]);
+    });
+
+    it(`opens the new row on Add, for an arriving machine, and on a tile with nothing yet to list`, () => {
+        expect(pageAt(`vpn`).page.adding.value).toBe(false);
+        expect(pageAt(`vpn`, { new: ADDING }).page.adding.value).toBe(true);
+        expect(pageAt(`vpn`, { device: `radarsu-rog` }).page.adding.value).toBe(true);
+        const { page, state } = pageAt(`vpn`);
+        state.capabilities.value = [];
+        expect(page.adding.value).toBe(true);
+        // A singleton tile's one connection is always the open one.
+        expect(pageAt(`docker`, { new: ADDING }).page.adding.value).toBe(false);
     });
 
     it(`edits a singleton tile's one connection with no query at all`, () => {
@@ -157,9 +171,11 @@ describe(`what the page reads off its URL`, () => {
         ]);
         page.openEdit(`home`);
         page.stopEditing();
+        page.startAdding();
         expect(router.replace.mock.calls).toEqual([
             [at(`vpn`, { edit: `home` })],
             [at(`vpn`, {})],
+            [at(`vpn`, { edit: undefined, new: ADDING })],
         ]);
     });
 });

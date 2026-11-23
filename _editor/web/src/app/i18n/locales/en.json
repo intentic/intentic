@@ -1571,13 +1571,11 @@
             "startingBrowser": "Starting the browser…"
         },
         "capabilities": {
-            "addAnother": "Add another",
             "agentReadFirstWhat": "Have an agent read it first, what the code does, route by route",
             "agentReadWhatChanged": "Have an agent read what changed first: the manifest delta leads",
-            "alreadyExistsOpenAbove": "\" already exists: open it above to change it, or pick another name.",
+            "alreadyExistsOpenRow": "\" already exists: open its row in the list to change it, or pick another name.",
             "backgroundProcess": "Background process",
             "browsePublishedExtensions": "Browse published extensions",
-            "cancelAddAnotherInstead": "Cancel: add another instead",
             "capabilitiesSearchedByName": "Capabilities are searched by name, by what they do, and by kind: \"mcp\", \"ssh\", \"sql\".",
             "connected": "{connected} connected",
             "connected2": "Connected",
@@ -1586,11 +1584,11 @@
             "couldntListCapabilities": "Couldn't list your capabilities.",
             "disconnectHeader": "Disconnect {machine}?",
             "eachOneSomethingOwn": "Each one is something your own code already points at. We fill in what we could read; you add only the credential.",
-            "editing": "Editing",
             "evidence": "Seen in",
             "filterByNameHost": "Filter by name, host, kind…",
             "filterByNameWhat": "Filter by name, what it does, kind…",
             "finishSetup": ": Finish setup →",
+            "howItWorks": "How it works",
             "installInClickRegistry": "Install in a click from the registry, or fill the form below from a repository you already trust.",
             "left": "{count} left",
             "logs": "Logs",
@@ -1689,8 +1687,13 @@
             "fillFirst": "Fill in {fields} first: the request carries them.",
             "generateFirst": "Generate the key and request first."
         },
+        "capabilityDraftRow": {
+            "newConnection": "New connection",
+            "notAddedYet": "not added yet"
+        },
         "capabilityInstanceRow": {
             "finishSetup": "{detail}: Finish setup →",
+            "customAccess": "Custom access",
             "logIn": "Log in",
             "openBrowser": "Open browser",
             "reLogIn": "Re-log in"

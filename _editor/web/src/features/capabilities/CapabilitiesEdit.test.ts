@@ -1,5 +1,5 @@
-// Mounts the vpn tile over a live tunnel: filled from the connection not the tile, states whose settings are on
-// screen, and a credential never shown survives a save untouched.
+// Mounts the vpn tile over a live tunnel: its settings open in its own row, filled from the connection not the tile, a
+// credential never shown survives a save untouched, and a second tunnel is added in a new row at the top.
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -8,6 +8,7 @@ import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
+import type { PageRoute } from "./capabilityRoute";
 
 // The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
 const BOX = `a1b2c3d4e5f6`;
@@ -15,8 +16,8 @@ const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
-// Which connection the form is over lives in the URL (`edit`), mirroring how the page reads the tile off the path.
-let query: Record<string, string> = {};
+// Which row is open lives in the URL (`edit`, or `new` for the new one), mirroring how the page reads the tile off the path.
+let query: PageRoute[`query`] = {};
 const replace = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
@@ -92,8 +93,11 @@ const mount = (): HTMLElement => {
     return el;
 };
 
-const start = (editing: string | undefined): HTMLElement => {
-    query = editing === undefined ? {} : { edit: editing };
+const start = (editing: string | undefined, more: PageRoute[`query`] = {}): HTMLElement => {
+    query = { ...more };
+    if (editing !== undefined) {
+        query[`edit`] = editing;
+    }
     capabilities.value = [office()];
     add.mockClear();
     replace.mockClear();
@@ -111,21 +115,27 @@ const nameBox = (el: HTMLElement): HTMLInputElement | null =>
     [...el.querySelectorAll(`label`)].find((label) => label.textContent?.startsWith(`Name`))?.querySelector(`input`) ?? null;
 const wireguardBox = (el: HTMLElement): HTMLTextAreaElement => el.querySelector(`textarea`)!;
 
-it(`opens a live connection's own settings, and says whose they are`, () => {
+it(`opens a live connection's own settings in its row, and offers to save them once one changes`, async () => {
     const el = start(`office`);
 
-    // Filled from the connection, not the tile: the switch is where the user left it.
-    expect(el.textContent).toContain(`Editing`);
-    expect(el.textContent).toContain(`office`);
+    // The open row is the connection's own: its head names it, and pressing it again closes it.
+    const open = [...el.querySelectorAll(`[aria-expanded="true"]`)];
+    expect(open.map((head) => head.textContent?.includes(`office`))).toEqual([true]);
     // No name box: renaming is its own migration (see askRename), not a text field here.
     expect(nameBox(el)).toBeNull();
-    // The button's word is the first thing to check before saving over a live connection.
-    expect(el.textContent).toContain(`Save changes`);
+    // Nothing changed, so nothing to save: a working connection's open row asks nothing of the reader.
+    expect(el.textContent).not.toContain(`Save changes`);
 
     // Blank because it was never sent; the placeholder says so where the eye already is.
     expect(wireguardBox(el).value).toBe(``);
     expect(wireguardBox(el).placeholder).toContain(`already set`);
     expect(wireguardBox(el).placeholder).toContain(`leave blank to keep`);
+
+    // The button's word is the first thing to check before saving over a live connection.
+    wireguardBox(el).value = `[Interface]`;
+    wireguardBox(el).dispatchEvent(new Event(`input`, { bubbles: true }));
+    await nextTick();
+    expect(el.textContent).toContain(`Save changes`);
 });
 
 it(`saves over the same connection and keeps the credential it was never shown`, async () => {
@@ -152,13 +162,16 @@ it(`replaces the credential when one is actually typed`, async () => {
     expect(add.mock.calls[0]?.[0].config[`config`]).toBe(`[Interface]\nPrivateKey = NEW`);
 });
 
-// Without `edit` the tile is adding, as it always did; the name is pre-filled free (the tile's id) so submit makes
-// a second tunnel.
-it(`still adds a second connection when no connection is being edited`, async () => {
-    const el = start(undefined);
+// With no row open the tile is its list, and Add opens a new row at its top; the name is pre-filled free (the tile's
+// id) so submit makes a second tunnel.
+it(`rests on its list with nothing open, and adds a second connection in a new row at the top`, () => {
+    const resting = start(undefined);
+    expect(resting.querySelector(`form`)).toBeNull();
+    [...resting.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Add`)?.click();
+    expect(String(replace.mock.calls.at(-1)?.[0])).toContain(`new=1`);
 
-    expect(el.textContent).toContain(`Add another`);
-    expect(el.textContent).not.toContain(`Editing`);
+    const el = start(undefined, { new: `1` });
+    expect(el.querySelector(`[data-capability-draft]`)?.textContent).toContain(`vpn`);
     expect(nameBox(el)?.value).toBe(`vpn`);
     // New name, nothing stored under it: the credential is a question again, not a promise.
     expect(wireguardBox(el).placeholder).not.toContain(`already set`);

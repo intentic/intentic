@@ -1571,13 +1571,11 @@
             "startingBrowser": "Iniciando el navegador…"
         },
         "capabilities": {
-            "addAnother": "Añadir otra",
             "agentReadFirstWhat": "Que un agente lo lea primero: qué hace el código, ruta por ruta",
             "agentReadWhatChanged": "Que un agente lea primero qué ha cambiado: el delta del manifiesto manda",
-            "alreadyExistsOpenAbove": "» ya existe: ábrelo arriba para cambiarlo, o elige otro nombre.",
+            "alreadyExistsOpenRow": "» ya existe: abre su fila en la lista para cambiarlo, o elige otro nombre.",
             "backgroundProcess": "Proceso en segundo plano",
             "browsePublishedExtensions": "Explorar extensiones publicadas",
-            "cancelAddAnotherInstead": "Cancelar: añadir otra en su lugar",
             "capabilitiesSearchedByName": "Las capacidades se buscan por nombre, por lo que hacen y por tipo: «mcp», «ssh», «sql».",
             "connected": "{connected} conectadas",
             "connected2": "Conectada",
@@ -1586,11 +1584,11 @@
             "couldntListCapabilities": "No se pudieron listar tus capacidades.",
             "disconnectHeader": "¿Desconectar {machine}?",
             "eachOneSomethingOwn": "Cada una es algo a lo que tu propio código ya apunta. Rellenamos lo que pudimos leer; tú solo añades la credencial.",
-            "editing": "Editando",
             "evidence": "Visto en",
             "filterByNameHost": "Filtrar por nombre, host, tipo…",
             "filterByNameWhat": "Filtrar por nombre, función, tipo…",
             "finishSetup": ": Terminar la configuración →",
+            "howItWorks": "Cómo funciona",
             "installInClickRegistry": "Instálala con un clic desde el registro, o rellena el formulario de abajo desde un repositorio en el que ya confías.",
             "left": "Quedan {count}",
             "logs": "Registros",
@@ -1689,8 +1687,13 @@
             "fillFirst": "Rellena primero {fields}: la solicitud los lleva.",
             "generateFirst": "Genera primero la clave y la solicitud."
         },
+        "capabilityDraftRow": {
+            "newConnection": "Nueva conexión",
+            "notAddedYet": "aún no añadida"
+        },
         "capabilityInstanceRow": {
             "finishSetup": "{detail}: Terminar la configuración →",
+            "customAccess": "Acceso personalizado",
             "logIn": "Iniciar sesión",
             "openBrowser": "Abrir el navegador",
             "reLogIn": "Volver a iniciar sesión"

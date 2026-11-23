@@ -170,7 +170,12 @@ describe(`the device dialog`, () => {
         expect(pair.connectPermissions.value).toBe(`run commands, read files, write and trash files, capture the screen`);
 
         pair.openPairing(DEVICE, connection(`build-box`, `device`, {}));
-        expect([pair.connectId.value, pair.connectPlatform.value, pair.connectUnnamed.value]).toEqual([`build-box`, `linux`, false]);
+        expect([pair.connectId.value, pair.connectPlatform.value, pair.connectUnnamed.value, pair.connectRenamed.value]).toEqual([
+            `build-box`,
+            `linux`,
+            false,
+            false,
+        ]);
     });
 
     it(`follows a machine renamed to its hostname, and re-reads the roster and the list`, () => {
@@ -178,7 +183,7 @@ describe(`the device dialog`, () => {
         pair.openPairing(DEVICE, connection(`linux`, `device`, { platform: `linux` }));
 
         pair.onHostRenamed(`radarsu-rog`);
-        expect([pair.connectId.value, pair.connectUnnamed.value]).toEqual([`radarsu-rog`, false]);
+        expect([pair.connectId.value, pair.connectUnnamed.value, pair.connectRenamed.value]).toEqual([`radarsu-rog`, false, true]);
         pair.onHostConnected();
         expect([state.hosts.refresh.mock.calls.length, state.refetch.mock.calls.length]).toEqual([2, 2]);
     });

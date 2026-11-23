@@ -1,18 +1,20 @@
-<!-- Connection rows show name, state, address, and the next primary action. -->
+<!-- One connection: its name, whether it works and what tells it apart, opening in place on its own settings. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
 import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
 import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
+import { Button, ContextMenu, CopyButton, DisclosureRow, type IconName, StatusBadge, toneDot } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { type ConnectionState, machineAway, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
 import { connectedLinks } from "../../../models/capabilities/credentialGuide";
+import { seedValues } from "../../../models/capabilities/form";
 import { type HubRowView, saveLabel } from "../../../models/hub/connectionHub";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
+import { hostPresets, matchHostPreset } from "../model/previews";
 
 const t = useT();
 
@@ -29,13 +31,23 @@ const props = defineProps<{
     state: ConnectionState;
     /** What this connection says about itself: a tunnel's address, a machine's OS, a database's host. */
     facts: string;
-    /** The tile's form is open over this row; it wears the selected tint so the fields below have a subject. */
-    editing?: boolean;
+    /** Its settings are open under it (the page's `edit`); the default slot is what they are. */
+    open?: boolean;
     /** Its place in the connections hub, for a kind that travels: the computers it can be saved to, and what it says. */
     hub?: HubRowView | undefined;
 }>();
 
-const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: []; save: [machine: string] }>();
+const emit = defineEmits<{
+    "update:open": [open: boolean];
+    connect: [];
+    revoke: [];
+    browse: [];
+    login: [];
+    agentLogin: [];
+    rename: [];
+    remove: [];
+    save: [machine: string];
+}>();
 
 // A device connects by running a command on it; a browser, by pasting a code into it; a phone, by scanning a code
 // with it. One that's never checked in is waiting on that step; one that has is merely asleep, which a fresh pairing
@@ -49,6 +61,8 @@ const pairs = computed(() => isHost.value || isBrowser.value || isPhone.value);
 const paired = computed(
     () => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen ?? props.phone?.lastSeen) || (isHost.value && machineAway(props.instance)),
 );
+// Working as it should: the row then says nothing about its state but its dot, and asks nothing of the reader.
+const healthy = computed(() => props.state.tone === `success`);
 
 // A browser capability connects via a live login window; once signed in, the same window is how the user acts in it.
 const signsIn = computed(() => signsInByHand(props.entry.kind));
@@ -72,10 +86,23 @@ const pendingStep = computed(
 );
 const pairingCode = computed(() => props.instance.status.code);
 
-// The row's one button, ordered by urgency: a connection that can't be used shows what to do, one that works shows
-// the way back in. Undefined is fine, e.g. an MCP server has nothing to press.
+// A computer's access in the words of the form that sets it, so the row answers "what may the agent do there" closed.
+const access = computed(() => {
+    if (!isHost.value) {
+        return undefined;
+    }
+    const preset = matchHostPreset(seedValues(props.entry, props.instance.config, {}));
+    return hostPresets().find((candidate) => candidate.key === preset)?.label ?? t(`capabilities.capabilityInstanceRow.customAccess`);
+});
+
+// The row's one button, only where the reader has something to do: a connection that can't be used shows the way to
+// fix it; one that works shows nothing, its Reconnect moving into its open settings. A signed-in browser keeps the way
+// into it, since using it is what the row is for.
 const primary = computed<{ label: string; icon: IconName; run: () => void } | undefined>(() => {
     if (pairs.value) {
+        if (paired.value && healthy.value) {
+            return undefined;
+        }
         return {
             label: paired.value ? t(`ui.action.reconnect`) : t(`ui.action.connect`),
             icon: isBrowser.value ? `globe` : isPhone.value ? `mobile` : `desktop`,
@@ -93,52 +120,58 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
     return undefined;
 });
 
-const menu = ref<{ show: (event: Event) => void } | undefined>();
-
-// After the primary action: the kind's own verbs, then Settings, Rename, Remove. Settings opens the same form that
-// could previously only add; Rename is separate since renaming is a daemon migration, not a form field.
-const items = computed<MenuItem[]>(() => {
-    const kindActions: MenuItem[] = [];
+// The open row's own verbs, after its settings, in place of the ⋯ menu: the kind's own first, then Rename and Remove.
+interface Verb {
+    readonly key: string;
+    readonly label: string;
+    readonly icon: IconName;
+    readonly run: (event: Event) => void;
+}
+// Saving to one of several computers is a pick, kept in a menu under its one press.
+const saveMenu = ref<{ show: (event: Event) => void } | undefined>();
+const saveTo = computed(() => (props.hub?.busy === true ? [] : (props.hub?.saveTo ?? [])));
+const saveItems = computed<MenuItem[]>(() => saveTo.value.map((machine) => ({ label: machine, command: () => emit(`save`, machine) })));
+const verbs = computed<Verb[]>(() => {
+    const kind: Verb[] = [];
+    if (pairs.value && paired.value && healthy.value) {
+        kind.push({ key: `reconnect`, label: t(`ui.action.reconnect`), icon: `refresh`, run: () => emit(`connect`) });
+    }
     // Also how to re-log-in once a session expires; an identity's window points at its email provider instead.
     if (signsIn.value && connected.value) {
-        kindActions.push({ label: t(`capabilities.capabilityInstanceRow.reLogIn`), icon: `sign-in`, command: () => emit(`login`) });
+        kind.push({ key: `login`, label: t(`capabilities.capabilityInstanceRow.reLogIn`), icon: `sign-in`, run: () => emit(`login`) });
+    }
+    // Kept on the owner's computer for their other sandboxes: the one computer by name, or a pick when there are several.
+    // A connection that cannot travel offers nothing, rather than a press the sandbox would refuse.
+    const [only] = saveTo.value;
+    if (only !== undefined) {
+        kind.push({
+            key: `save`,
+            label: saveLabel(saveTo.value),
+            icon: `desktop`,
+            run: (event) => (saveTo.value.length === 1 ? emit(`save`, only) : saveMenu.value?.show(event)),
+        });
     }
     // Revoke cuts the machine off without removing the capability (name and permissions stay, Connect re-pairs);
     // removing does both.
     if (pairs.value && paired.value) {
-        kindActions.push({ label: t(`sandbox.words.revokeAccess`), icon: `sign-out`, command: () => emit(`revoke`) });
+        kind.push({ key: `revoke`, label: t(`sandbox.words.revokeAccess`), icon: `sign-out`, run: () => emit(`revoke`) });
     }
-    // Kept on the owner's computer for their other sandboxes: the one computer by name, or a pick when there are several.
-    // A connection that cannot travel offers nothing, rather than a press the sandbox would refuse.
-    const saveTo = props.hub?.saveTo ?? [];
-    if (saveTo.length > 0 && props.hub?.busy !== true) {
-        const [only] = saveTo;
-        kindActions.push(
-            saveTo.length === 1 && only !== undefined
-                ? { label: saveLabel(saveTo), icon: `desktop`, command: () => emit(`save`, only) }
-                : { label: saveLabel(saveTo), icon: `desktop`, items: saveTo.map((machine) => ({ label: machine, command: () => emit(`save`, machine) })) },
-        );
-    }
-    return [
-        ...kindActions,
-        ...(kindActions.length > 0 ? [{ separator: true }] : []),
-        { label: t(`ui.action.settings`), icon: `cog`, command: () => emit(`edit`) },
-        { label: t(`ui.action.renameEllipsis`), icon: `pencil`, command: () => emit(`rename`) },
-        { label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`) },
-    ];
+    return [...kind, { key: `rename`, label: t(`ui.action.renameEllipsis`), icon: `pencil`, run: () => emit(`rename`) }];
 });
 </script>
 
 <template>
-    <!-- One divided cell: the row, and, while something's outstanding, the step it's waiting on beneath it. -->
     <div>
-        <!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the tile's defaults. -->
-        <Row :selected="editing">
+        <DisclosureRow body="drawer" :open="open" @update:open="emit(`update:open`, $event)">
+            <!-- The state as a dot, where every list in the app puts one; its word joins the name only when it is not fine. -->
+            <template #lead>
+                <span :class="toneDot(state.tone, `h-1.5 w-1.5 shrink-0 rounded-full`)" role="img" :aria-label="state.label" v-tooltip.top="state.label" />
+            </template>
             <template #title>
                 <span class="flex min-w-0 items-center gap-2">
                     <!-- Mono: an identifier the agent's skill/tools/env vars are named after, compared character by character. -->
                     <span class="min-w-0 truncate font-mono">{{ instance.id }}</span>
-                    <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" class="shrink-0" />
+                    <StatusBadge v-if="!healthy" size="xs" :variant="state.tone" :label="state.label" class="shrink-0" />
                     <!-- Where the hub keeps it, quietly: saved to a computer, waiting for a yes there, or taken from one. The
                          name keeps its room; this is the one cut short. -->
                     <span v-if="hub?.note" class="flex min-w-0 flex-1 items-center gap-1 text-2xs font-normal text-subtle">
@@ -146,23 +179,14 @@ const items = computed<MenuItem[]>(() => {
                     </span>
                 </span>
             </template>
-            <!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->
-            <template v-if="facts" #description>
+            <!-- What tells this connection apart, and for a computer what the agent may do there, on its own line. -->
+            <template v-if="facts || access" #description>
                 <!-- `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full value is one hover away. -->
-                <span class="block truncate font-mono" v-tooltip.top.overflow="facts">{{ facts }}</span>
+                <span class="block truncate" v-tooltip.top.overflow="facts"
+                    ><span class="font-mono">{{ facts }}</span><template v-if="facts && access"> · </template>{{ access }}</span
+                >
             </template>
-            <!-- A line of its own under the row, never clamped into the description: the tail is the way out of the state it
-                 describes, so it must stay visible. -->
-            <template v-if="needsRebuild" #below>
-                <RouterLink :to="here(page.sandboxSettings(`environment`))" class="text-2xs text-warning hover:underline">
-                    {{
-                        t(`capabilities.capabilityInstanceRow.finishSetup`, {
-                            detail: instance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`),
-                        })
-                    }}
-                </RouterLink>
-            </template>
-            <template #control>
+            <template v-if="links.length > 0 || primary" #control>
                 <div class="flex shrink-0 items-center gap-1">
                     <a
                         v-for="link in links"
@@ -177,23 +201,42 @@ const items = computed<MenuItem[]>(() => {
                     <Button v-if="primary" :label="primary.label" size="small" tier="quiet" @click="primary.run()">
                         <template #icon><Icon :name="primary.icon" /></template>
                     </Button>
-                    <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.moreActions`)" @click="menu?.show($event)">
-                        <Icon name="ellipsis" />
-                    </button>
-                    <ContextMenu ref="menu" :model="items" :min-width="11" />
                 </div>
             </template>
-        </Row>
 
-        <!-- Connection codes use selectable, fixed-width digits. -->
-        <!-- Recessed against the group's surface so this reads as a step on the row, not a second row. -->
-        <div v-if="pendingStep" class="flex flex-col gap-2 border-t border-line-subtle bg-canvas px-3 py-2.5">
+            <template #below>
+                <slot />
+                <!-- The row's own verbs, after the settings they would otherwise sit among: quiet, and Remove apart at the end. -->
+                <div class="mt-4 flex flex-wrap items-center gap-1 border-t border-line-subtle pt-3">
+                    <Button v-for="verb in verbs" :key="verb.key" :label="verb.label" size="small" tier="quiet" @click="verb.run($event)">
+                        <template #icon><Icon :name="verb.icon" /></template>
+                    </Button>
+                    <Button class="ml-auto" :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="emit(`remove`)">
+                        <template #icon><Icon name="trash" /></template>
+                    </Button>
+                    <ContextMenu ref="saveMenu" :model="saveItems" :min-width="11" />
+                </div>
+            </template>
+        </DisclosureRow>
+
+        <!-- The step this connection still waits on, under it whether or not it is open: the pairing itself while one is
+             under way, else what the daemon says is missing. Recessed against the group's surface so it reads as a step
+             on the row, not a second row. -->
+        <div v-if="$slots[`pairing`]" class="border-t border-line-subtle bg-canvas px-3 py-3">
+            <slot name="pairing" />
+        </div>
+        <div v-else-if="pendingStep || needsRebuild" class="flex flex-col gap-2 border-t border-line-subtle bg-canvas px-3 py-2.5">
+            <!-- Connection codes use selectable, fixed-width digits. -->
             <div v-if="pairingCode" class="flex flex-wrap items-center gap-3">
                 <span class="select-all font-mono text-xl font-semibold tracking-[0.3em] text-content tabular-nums">{{ pairingCode }}</span>
                 <CopyButton :text="pairingCode" :label="t(`ui.action.copy`)" />
             </div>
             <!-- Shows whatever the daemon actually said: the phone's menu path, a refusal, or "waiting…" in between. -->
-            <span class="text-xs text-warning">{{ pendingStep }}</span>
+            <span v-if="pendingStep" class="text-xs text-warning">{{ pendingStep }}</span>
+            <!-- The tail is the way out of the state it describes, so it stays visible rather than clamped into the row. -->
+            <RouterLink v-if="needsRebuild" :to="here(page.sandboxSettings(`environment`))" class="text-2xs text-warning hover:underline">
+                {{ t(`capabilities.capabilityInstanceRow.finishSetup`, { detail: instance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`) }) }}
+            </RouterLink>
         </div>
     </div>
 </template>

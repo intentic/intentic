@@ -19,16 +19,17 @@ import type { useSetupWalk } from "./setupWalk";
 // The form's submit: adding and editing are one streamed write, because the daemon's is one upsert; the wallet's caps
 // are a second write, to the platform; and a saved form either hands over the step it still waits on or moves on.
 
-// What a saved form does next. A pending add has not finished, so the tile stays up and hands over its missing step (an
-// add also resets to the next free name, an edit keeps its own); an edit stays so its row can be checked; an add leaves.
+// What a saved form does next. A pending connection has not finished, so it hands over its missing step under its own
+// row (an add's new row closes into the row it became, an edit's stays open); a saved edit closes its row; an add
+// closes the new row into the list, or walks on to the next tile.
 export type SubmitOutcome =
-    | { readonly kind: `hand-off`; readonly added: CapabilitySummary; readonly startOver: boolean }
+    | { readonly kind: `hand-off`; readonly added: CapabilitySummary; readonly closeRow: boolean }
     | { readonly kind: `close-edit` }
     | { readonly kind: `leave` };
 
 export const submitOutcome = (added: CapabilitySummary | undefined, wasEditing: boolean): SubmitOutcome => {
     if (added?.status.state === `pending`) {
-        return { kind: `hand-off`, added, startOver: !wasEditing };
+        return { kind: `hand-off`, added, closeRow: !wasEditing };
     }
     return wasEditing ? { kind: `close-edit` } : { kind: `leave` };
 };
@@ -42,11 +43,12 @@ export interface SubmitHost {
     readonly capabilities: Readonly<Ref<readonly CapabilitySummary[]>>;
     readonly form: Pick<
         CapabilityForm,
-        `values` | `keptSecrets` | `savedName` | `attempted` | `canSubmit` | `touchAll` | `refuse` | `startOver` | `pressed` | `unpressed`
+        `values` | `keptSecrets` | `savedName` | `attempted` | `canSubmit` | `touchAll` | `refuse` | `pressed` | `unpressed`
     >;
     // The streamed apply (useCapabilities.add): each frame as it arrives, throwing on an error frame.
     readonly add: (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => Promise<void>;
-    readonly walk: Pick<ReturnType<typeof useSetupWalk>, `onwardFrom` | `leaveTile`>;
+    // Inside the walk an add moves on to the next tile; outside it, the tile stays, showing the row the add became.
+    readonly walk: Pick<ReturnType<typeof useSetupWalk>, `onwardFrom` | `leaveTile`> & { readonly walking: Readonly<Ref<boolean>> };
     readonly handOff: (entry: CapabilityCatalogEntry, added: CapabilitySummary) => void;
     readonly stopEditing: () => void;
     readonly error: Ref<NoticeModel | null>;
@@ -103,6 +105,22 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
             showing = false;
         });
     }
+
+    // What the page that pressed does once the write landed, while it still shows that tile.
+    const landed = (entry: CapabilityCatalogEntry, outcome: SubmitOutcome, next: string | undefined): void => {
+        if (outcome.kind === `hand-off`) {
+            handOff(entry, outcome.added);
+            if (outcome.closeRow) {
+                stopEditing();
+            }
+            return;
+        }
+        if (outcome.kind === `close-edit` || !walk.walking.value) {
+            stopEditing();
+            return;
+        }
+        walk.leaveTile(next);
+    };
 
     const submit = async (): Promise<void> => {
         const entry = selected.value;
@@ -164,22 +182,7 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
             return;
         }
         form.attempted.value = false;
-        const outcome = submitOutcome(
-            capabilities.value.find((capability) => capability.id === input.id),
-            wasEditing,
-        );
-        if (outcome.kind === `hand-off`) {
-            handOff(entry, outcome.added);
-            if (outcome.startOver) {
-                form.startOver(entry);
-            }
-            return;
-        }
-        if (outcome.kind === `close-edit`) {
-            stopEditing();
-            return;
-        }
-        walk.leaveTile(next);
+        landed(entry, submitOutcome(capabilities.value.find((capability) => capability.id === input.id), wasEditing), next);
     };
 
     return {

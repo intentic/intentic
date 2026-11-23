@@ -199,7 +199,7 @@ it(`says nothing about a machine already connected as a device`, async () => {
     await nextTick();
 
     // It is a capability instance now, and this tile draws it the ordinary way — never twice. Asserted over the whole
-    // tile, since with no instance mocked in there is no connections group at all for it to hide in.
+    // tile, whose one group, with no instance mocked in, holds only the new connection's row.
     expect(el.textContent).not.toContain(`no command access`);
-    expect(connectionsGroup(el)).toBeUndefined();
+    expect(connectionsGroup(el)?.textContent).not.toContain(`radarsu-rog`);
 });

@@ -5,13 +5,16 @@ import type { RouteLocationNormalizedLoaded, Router } from "vue-router";
 import { here, type LinkQuery, page } from "../../lib/routes/links";
 import { isDeviceConnection, machineNamed } from "./model/deviceConnections";
 
-// The page's state is its URL: the open tile (`/capabilities/<entry>`), the connection its form is over (`edit`), the
-// slice and filter (`category`, `q`), a machine arriving to be connected (`device`) and the setup walk (`setup`).
+// The page's state is its URL: the open tile (`/capabilities/<entry>`), the connection whose row is open (`edit`), the
+// new connection's row (`new`), the slice and filter (`category`, `q`), a machine arriving to be connected (`device`)
+// and the setup walk (`setup`).
 // Every move is one pure step from the URL as it stands; the composable reads the page's selection off it. Each step
 // stays in the frame and the sandbox the URL names (lib/routes/links.ts `here`), so Home's frame keeps its rail.
 
 // The walk's mark in the URL.
 export const SETUP = `recommended`;
+// The new connection's row, open at the top of the list: Add was pressed.
+export const ADDING = `1`;
 
 export type PageRoute = Pick<RouteLocationNormalizedLoaded, `meta` | `params` | `query`>;
 
@@ -20,8 +23,10 @@ export type PageMove =
     | { readonly kind: `tile`; readonly entry: string }
     // Back to the slice the tile was picked from.
     | { readonly kind: `back` }
-    // The form over one of the open tile's connections, or (``) over a new one.
+    // One of the open tile's connections opened in its row, or (``) every row closed.
     | { readonly kind: `edit`; readonly id: string }
+    // The new connection's row opened at the top of the list.
+    | { readonly kind: `add` }
     // One connection, a click away from its tile: from the Connected slice, or a machine's own row.
     | { readonly kind: `connection`; readonly entry: string; readonly connection: string }
     // The rail's slice or the filter's text.
@@ -42,8 +47,8 @@ export interface PageStep {
 const carried = (route: PageRoute): LinkQuery =>
     Object.fromEntries(Object.entries(route.query).map(([key, value]) => [key, [value].flat()[0] ?? undefined]));
 
-// What survives leaving a tile: the slice and filter, not the connection being edited, which means nothing elsewhere.
-const elsewhere = (route: PageRoute): LinkQuery => ({ ...carried(route), edit: undefined });
+// What survives leaving a tile: the slice and filter, not the row that is open, which means nothing elsewhere.
+const elsewhere = (route: PageRoute): LinkQuery => ({ ...carried(route), edit: undefined, new: undefined });
 
 // The page in the route's own frame and sandbox, a tile open or none.
 const at = (route: PageRoute, entry: string | undefined, query: LinkQuery): string => here(page.capabilities(entry, { query }), route);
@@ -53,15 +58,17 @@ const openEntry = (route: PageRoute): string | undefined => [route.params[`entry
 
 type Moves = { readonly [K in PageMove["kind"]]: (route: PageRoute, move: Extract<PageMove, { kind: K }>) => PageStep };
 
-// One entry per move; the query carries over (minus `edit`) so Back lands on the same slice.
+// One entry per move; the query carries over (minus the open row) so Back lands on the same slice.
 const MOVES: Moves = {
     tile: (route, { entry }) => ({ how: `push`, to: at(route, entry, elsewhere(route)) }),
     back: (route) => ({ how: `push`, to: at(route, undefined, elsewhere(route)) }),
-    // Replaced, not pushed, so reload and Back land correctly: stepping between connections isn't a history stop.
+    // Replaced, not pushed, so reload and Back land correctly: opening one row after another isn't a history stop. One
+    // row is open at a time, so opening a connection closes the new one, and closing it lets an arriving machine go.
     edit: (route, { id }) => ({
         how: `replace`,
-        to: at(route, openEntry(route), { ...carried(route), edit: id === `` ? undefined : id }),
+        to: at(route, openEntry(route), { ...carried(route), edit: id === `` ? undefined : id, new: undefined, device: undefined }),
     }),
+    add: (route) => ({ how: `replace`, to: at(route, openEntry(route), { ...carried(route), edit: undefined, new: ADDING }) }),
     // A machine that only syncs has no connection to open: it lands on the tile's add form with its name carried over,
     // the step it is missing, and the switches stay a decision made there rather than something one click does.
     connection: (route, { entry, connection }) => ({
@@ -104,12 +111,20 @@ export const useCapabilityRoute = ({ route, router, entries, capabilities, settl
     const selectedInstances = computed(() => (selected.value === undefined ? [] : instancesOf(selected.value, capabilities.value)));
     // A singleton tile has no list: its one connection IS the tile, so it is always the one being edited.
     const soleInstance = computed(() => (selected.value?.singleton === true ? selectedInstances.value[0] : undefined));
-    // The connection the form is over; an unknown or stale `edit` id falls back to adding instead of a blank edit.
+    // The connection whose row is open; an unknown or stale `edit` id opens none rather than a blank edit.
     const editing = computed(() => soleInstance.value ?? selectedInstances.value.find((instance) => instance.id === queryText(`edit`)));
+    const device = computed(() => queryText(`device`));
+    // The new connection's row is open: Add was pressed, a machine arrived to be connected, or the tile has nothing yet
+    // to list, where the new row is the whole page rather than one press away.
+    const adding = computed(
+        () =>
+            selected.value !== undefined &&
+            editing.value === undefined &&
+            (queryText(`new`) === ADDING || device.value !== `` || selectedInstances.value.length === 0),
+    );
     // Derived from the query, not mirrored into refs.
     const scope = computed<string>({ get: () => queryText(`category`), set: (value) => move({ kind: `filter`, key: `category`, value }) });
     const search = computed<string>({ get: () => queryText(`q`), set: (value) => move({ kind: `filter`, key: `q`, value }) });
-    const device = computed(() => queryText(`device`));
     const walking = computed(() => route.query[`setup`] === SETUP);
 
     // An unknown tile slug resolves to no tile, so bounce to the grid, once extensions have settled.
@@ -128,6 +143,7 @@ export const useCapabilityRoute = ({ route, router, entries, capabilities, settl
         selectedInstances,
         soleInstance,
         editing,
+        adding,
         scope,
         search,
         device,
@@ -137,6 +153,7 @@ export const useCapabilityRoute = ({ route, router, entries, capabilities, settl
         back: (): void => move({ kind: `back` }),
         openEdit: (id: string): void => move({ kind: `edit`, id }),
         stopEditing: (): void => move({ kind: `edit`, id: `` }),
+        startAdding: (): void => move({ kind: `add` }),
         openConnection: (entry: string, connection: string): void => move({ kind: `connection`, entry, connection }),
     };
 };

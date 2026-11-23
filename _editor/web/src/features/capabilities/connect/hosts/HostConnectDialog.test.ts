@@ -14,9 +14,10 @@ import { installI18n } from "@intentic/ui/i18n";
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`), reachable: ref(true) }) }));
 // The roster a test connects a machine into; the pair route answers a token regardless.
 const roster = ref<unknown[]>([]);
-jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
-    sandboxJson: jest.fn(async (path: string) => (path.startsWith(`/system/hosts/pair`) ? { token: `pair-token`, expiresIn: 600 } : { hosts: roster.value })),
-}));
+const sandboxJson = jest.fn(async (path: string) =>
+    path.startsWith(`/system/hosts/pair`) ? { token: `pair-token`, expiresIn: 600 } : { hosts: roster.value },
+);
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
 const renamed = jest.fn(async (_: { id: string; to: string }) => ({}));
 jest.mock(`../../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
@@ -203,5 +204,40 @@ describe(`in the desktop app`, () => {
         mount(`my-desktop`).open();
         await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
         expect(pill(`Connect this computer`)).toBeUndefined();
+    });
+});
+
+// Under its machine's row, the panel exists only while the pairing does: it mints as it appears and forgets as it goes,
+// and opened again under the name it just gave the machine it mints nothing, since the machine reconnects by itself.
+describe(`under the machine's own row`, () => {
+    const pairs = (): number => sandboxJson.mock.calls.filter(([path]) => path.startsWith(`/system/hosts/pair`)).length;
+    const inline = (props: { id: string; renamed?: boolean }) => {
+        const el = document.createElement(`div`);
+        document.body.append(el);
+        const app = createApp({ render: () => h(HostConnectDialog, { visible: true, inline: true, platform: `linux`, permissions: `run commands`, ...props }) });
+        app.component(`Icon`, IconStub);
+        app.directive(`tooltip`, {});
+        app.use(PrimeVue);
+        installI18n(app);
+        app.mount(el);
+    };
+
+    it(`mints as it appears, drawn in place rather than as a dialog`, async () => {
+        document.body.innerHTML = ``;
+        const before = pairs();
+        inline({ id: `linux-3` });
+
+        await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
+        expect(pairs()).toBe(before + 1);
+        expect(document.body.querySelector(`[role="dialog"]`)).toBeNull();
+    });
+
+    it(`follows the machine to its new name without minting again`, async () => {
+        document.body.innerHTML = ``;
+        const before = pairs();
+        inline({ id: `rog`, renamed: true });
+
+        await waitFor(() => expect(document.body.textContent).toContain(`Named rog`));
+        expect(pairs()).toBe(before);
     });
 });

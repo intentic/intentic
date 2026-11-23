@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { userDistrosOf } from "@intentic/sandbox-contract/schemas/hosts";
-import { Button, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
-import { computed, ref, watch } from "vue";
+import { Button, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDevices } from "../../../../models/sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../../models/sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
@@ -11,6 +11,7 @@ import RunCommand from "../../../../components/RunCommand.vue";
 import { cleanName } from "../../../../models/capabilities/form";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { useT } from "@intentic/ui/i18n";
+import PairingFrame from "../PairingFrame.vue";
 
 // Connect-this-device dialog for a host-kind capability: a tab can't install anything on another machine, so this
 // hands over a command instead. States the command and the exact permissions the machine will enforce. Flips to a
@@ -23,7 +24,17 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const props = defineProps<{ visible: boolean; id: string; platform: string; permissions: string; unnamed?: boolean }>();
+const props = defineProps<{
+    visible: boolean;
+    id: string;
+    platform: string;
+    permissions: string;
+    unnamed?: boolean;
+    /** Drawn under the machine's own row rather than as a dialog (PairingFrame). */
+    inline?: boolean;
+    /** Opened again under the name this panel just gave the machine, which is reconnecting under it: nothing to mint. */
+    renamed?: boolean;
+}>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void; (event: "renamed", to: string): void }>();
 
 const { peerFor, pairToken, pairCode, pairExpiresAt, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(HOST_DOOR);
@@ -144,12 +155,19 @@ const pairHere = (): void => {
 };
 const shell = computed(() => (props.platform === `windows` || fromPowerShell.value ? `PowerShell` : t(`capabilities.hostConnectDialog.aTerminal`)));
 
-// Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching.
+// Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching. Drawn under
+// a row, the panel opens as it mounts and goes when it unmounts, so both ends are watched for.
 watch(
     () => props.visible,
-    async (visible) => {
+    async (visible, was) => {
         if (!visible) {
-            close();
+            if (was === true) {
+                close();
+            }
+            return;
+        }
+        if (props.renamed === true) {
+            renamedTo.value = props.id;
             return;
         }
         renamedTo.value = undefined;
@@ -158,7 +176,13 @@ watch(
         void refresh();
         await connect(props.id);
     },
+    { immediate: true },
 );
+onBeforeUnmount(() => {
+    if (props.visible) {
+        close();
+    }
+});
 
 // The moment the machine reports in, tell the page so the capability's status refreshes behind the dialog.
 watch(online, (isOnline) => {
@@ -169,7 +193,7 @@ watch(online, (isOnline) => {
 </script>
 
 <template>
-    <Modal :open="visible" size="lg" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
+    <PairingFrame :open="visible" :inline="inline" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
         <template #description>
             <i18n-t keypath="capabilities.hostConnectDialog.runThisOn" tag="span" scope="global">
                 <template #id><b>{{ id }}</b></template>
@@ -177,6 +201,9 @@ watch(online, (isOnline) => {
             </i18n-t>
         </template>
         <div class="flex flex-col gap-4">
+            <!-- Said beside whatever the pairing shows, not as a link in its chain: placed inside it, it cut the chain in two, and
+                 "preparing" showed under a refusal and the command under "connected". -->
+            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
             <!-- Renamed stays up through the reconnect it causes: the old id goes offline for a moment, which is not a failed pairing. -->
             <Notice v-if="renamedTo !== undefined" tone="success">
                 {{ t(`capabilities.hostConnectDialog.named`) }} <b>{{ renamedTo }}</b
@@ -208,7 +235,6 @@ watch(online, (isOnline) => {
             </template>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
-            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
 
             <div v-else-if="minting || pairToken === undefined" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}
@@ -262,8 +288,9 @@ watch(online, (isOnline) => {
             <Button
                 :label="online || renamedTo !== undefined ? t(`ui.action.done`) : t(`ui.action.close`)"
                 :tier="online || renamedTo !== undefined ? `accent` : `quiet`"
+                :size="inline ? `small` : undefined"
                 @click="emit(`update:visible`, false)"
             />
         </template>
-    </Modal>
+    </PairingFrame>
 </template>

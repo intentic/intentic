@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, webextPairingCode } from "@intentic/sandbox-contract/protocol/doors/webext-links";
-import { Button, Code, Modal, Notice } from "@intentic/ui";
+import { Button, Code, Notice } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { usePeerConnect, WEBEXT_DOOR } from "../../../models/sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
+import PairingFrame from "./PairingFrame.vue";
 
 // "Connect this browser" for a webext-kind capability: hands over a code to paste into a browser this tab may not
 // run in. Site access stays a separate, per-site decision made later in the extension. The code also posts on this
@@ -14,7 +15,8 @@ import { useT } from "@intentic/ui/i18n";
 // omitted.
 const t = useT();
 
-const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string }>();
+// `inline`: drawn under the browser's own row rather than as a dialog (PairingFrame).
+const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string; inline?: boolean }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
 const { peerFor, pairToken, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(WEBEXT_DOOR);
@@ -59,12 +61,15 @@ const offer = (): void => {
 };
 
 // Opening mints, then offers; closing forgets. A pairing left live in a closed tab is a credential nobody is watching.
+// Drawn under a row, the panel opens as it mounts and goes when it unmounts, so both ends are watched for.
 watch(
     () => props.visible,
-    async (visible) => {
+    async (visible, was) => {
         if (!visible) {
             forgetOffer();
-            close();
+            if (was === true) {
+                close();
+            }
             return;
         }
         // The roster the pairing is confirmed against is read afresh, not taken from what was cached.
@@ -72,6 +77,7 @@ watch(
         await connect(props.id);
         offer();
     },
+    { immediate: true },
 );
 
 // The moment the extension reports in, tell the page so the capability's status refreshes behind the dialog.
@@ -81,24 +87,31 @@ watch(online, (isOnline) => {
     }
 });
 
-onBeforeUnmount(forgetOffer);
+onBeforeUnmount(() => {
+    forgetOffer();
+    if (props.visible) {
+        close();
+    }
+});
 </script>
 
 <template>
-    <Modal
+    <PairingFrame
         :open="visible"
-        size="lg"
+        :inline="inline"
         :header="t(`capabilities.words.connect`, { id })"
         :description="t(`capabilities.webExtConnectDialog.installIntenticExtensionIn`)"
         @update:open="emit(`update:visible`, $event)"
     >
         <div class="flex flex-col gap-4">
+            <!-- Said beside whatever the pairing shows, not as a link in its chain: placed inside it, it cut the chain in two, and
+                 "preparing" showed under a refusal and the command under "connected". -->
+            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
             <Notice v-if="online" tone="success">
                 <b>{{ id }}</b> {{ t(`capabilities.webExtConnectDialog.connectedAllowOnSite`) }}
             </Notice>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
-            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
 
             <div v-else-if="minting || code === ``" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}
@@ -133,8 +146,9 @@ onBeforeUnmount(forgetOffer);
             <Button
                 :label="online ? t(`ui.action.done`) : t(`ui.action.close`)"
                 :tier="online ? `accent` : `quiet`"
+                :size="inline ? `small` : undefined"
                 @click="emit(`update:visible`, false)"
             />
         </template>
-    </Modal>
+    </PairingFrame>
 </template>

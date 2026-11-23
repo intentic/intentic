@@ -36,6 +36,14 @@ import type { PairedLink } from "../../components/linkPairing";
 // refused, what a paste unpacked, the Advanced fold, and what the answers add up to. Re-seeded whenever the URL opens
 // another tile or connection.
 
+// The answers as one comparable string: an emptied box reads as one never filled, and key order is not a change.
+const answersKey = (values: Readonly<FormValues>): string =>
+    JSON.stringify(
+        Object.entries(values)
+            .filter(([, value]) => value !== ``)
+            .sort(([a], [b]) => a.localeCompare(b)),
+    );
+
 // A box's value once a paste lands at its caret, over any selection; at the end when the caret is unknown.
 const splicedAtCaret = (current: string, event: ClipboardEvent, pasted: string): string => {
     const box = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement ? event.target : undefined;
@@ -71,7 +79,7 @@ const nameHolder = (
 export const takenNameWords = (name: string, held: NameHolder, tiles: readonly CapabilityCatalogEntry[]): string => {
     const holder = held.elsewhere;
     if (holder === undefined) {
-        return `"${name}${t(`capabilities.capabilities.alreadyExistsOpenAbove`)}`;
+        return `"${name}${t(`capabilities.capabilities.alreadyExistsOpenRow`)}`;
     }
     const tile = tiles.find((entry) => instancesOf(entry, [holder]).length > 0);
     return tile === undefined
@@ -84,6 +92,8 @@ export interface FormHost {
     readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
     // The connection the form is over; undefined while adding.
     readonly editing: Readonly<Ref<CapabilitySummary | undefined>>;
+    // Whether the new connection's row is open: opening it again starts from a clean form, not the one left behind.
+    readonly adding?: Readonly<Ref<boolean>>;
     // The open tile's connections, the ones a taken name can be opened from above.
     readonly instances: Readonly<Ref<readonly CapabilitySummary[]>>;
     // Every tile's connections, which a new name must not collide with (nameHolder).
@@ -220,28 +230,31 @@ export const useCapabilityForm = (host: FormHost) => {
         shaking.value = false;
     };
 
+    // The answers as they were seeded, which an open row's Save is offered against: nothing changed, nothing to save.
+    const seeded = ref(``);
+    const seed = (): void => {
+        const entry = selected.value;
+        const instance = editing.value;
+        if (entry === undefined) {
+            return;
+        }
+        clear();
+        const opening = openingName(entry, instance, capabilities.value, device.value);
+        name.value = opening.name;
+        nameEdited.value = opening.chosen;
+        // Seed is the live config plus dev autofill; credentials aren't included (see keptSecrets).
+        Object.assign(values, seedValues(entry, instance?.config, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
+        keptSecrets.value = new Set(instance?.secrets ?? []);
+        advancedOpen.value = foldHoldsChoice(entry, values);
+        seeded.value = answersKey(values);
+    };
     // Re-seeds the form whenever the URL's tile or connection changes, so a deep link to an edit works. Keyed on ids
     // rather than objects: both come from the live list, and watching objects would empty the form on every refetch.
-    watch(
-        // `device` rides along: arriving at a tile already open (Connect on one of its own machine rows) changes nothing else.
-        [() => selected.value?.id, () => editing.value?.id, device],
-        () => {
-            const entry = selected.value;
-            const instance = editing.value;
-            if (entry === undefined) {
-                return;
-            }
-            clear();
-            const opening = openingName(entry, instance, capabilities.value, device.value);
-            name.value = opening.name;
-            nameEdited.value = opening.chosen;
-            // Seed is the live config plus dev autofill; credentials aren't included (see keptSecrets).
-            Object.assign(values, seedValues(entry, instance?.config, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
-            keptSecrets.value = new Set(instance?.secrets ?? []);
-            advancedOpen.value = foldHoldsChoice(entry, values);
-        },
-        { immediate: true },
-    );
+    // `device` rides along: arriving at a tile already open (Connect on one of its own machine rows) changes nothing else.
+    watch([() => selected.value?.id, () => editing.value?.id, device], seed, { immediate: true });
+    // Only the opening: the row closing under an add that just landed (the tile's first connection, listed mid-write)
+    // must leave the form it is still writing alone.
+    watch(() => host.adding?.value === true, (open) => (open ? seed() : undefined));
 
     const finishName = (): void => {
         if (namePreview.value !== undefined) {
@@ -314,6 +327,7 @@ export const useCapabilityForm = (host: FormHost) => {
         advancedOpen,
         probeResult,
         canSubmit,
+        changed: computed(() => answersKey(values) !== seeded.value),
         finishName,
         finishField,
         onFieldInput,
@@ -394,11 +408,6 @@ export const useCapabilityForm = (host: FormHost) => {
             });
         },
         ...presser(pressedAs, nameEdited),
-        // A pending add is the one path that leaves the form up, so it resets down to the next free name.
-        startOver: (entry: CapabilityCatalogEntry): void => {
-            clear();
-            name.value = suggestName(entry, capabilities.value);
-        },
         // The service has named the account: a name nobody typed yet follows it (`github-ada`, not `github-2`).
         heardWho: (entry: CapabilityCatalogEntry, who: string): void => {
             probedWho.value = who;

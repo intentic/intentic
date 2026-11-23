@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { phonePairingCode, phonePairingLink, watchPairingLink } from "@intentic/sandbox-contract/protocol/doors/phone-links";
-import { Button, Code, Modal, Notice, useDevice } from "@intentic/ui";
+import { Button, Code, Notice, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { PHONE_DOOR, usePeerConnect } from "../../../models/sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import PairingFrame from "./PairingFrame.vue";
 import { registerWakeOnce, type WakeOutcome } from "./phoneWake";
 
 // "Connect this phone" for a phone-kind capability: a QR code the phone's camera scans, which opens the Intentic Device
@@ -16,7 +17,8 @@ import { registerWakeOnce, type WakeOutcome } from "./phoneWake";
 
 const t = useT();
 
-const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string; platform?: string }>();
+// `inline`: drawn under the phone's own row rather than as a dialog (PairingFrame).
+const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string; platform?: string; inline?: boolean }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
 const { peerFor, pairToken, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(PHONE_DOOR);
@@ -48,20 +50,29 @@ watch(
     },
 );
 
-// Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching.
+// Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching. Drawn under
+// a row, the panel opens as it mounts and goes when it unmounts, so both ends are watched for.
 watch(
     () => props.visible,
-    async (visible) => {
+    async (visible, was) => {
         if (!visible) {
             showCode.value = false;
-            close();
+            if (was === true) {
+                close();
+            }
             return;
         }
         // The roster the pairing is confirmed against is read afresh, not taken from what was cached.
         void refresh();
         await connect(props.id);
     },
+    { immediate: true },
 );
+onBeforeUnmount(() => {
+    if (props.visible) {
+        close();
+    }
+});
 
 watch(online, (isOnline) => {
     if (isOnline) {
@@ -71,14 +82,17 @@ watch(online, (isOnline) => {
 </script>
 
 <template>
-    <Modal
+    <PairingFrame
         :open="visible"
-        size="lg"
+        :inline="inline"
         :header="t(`capabilities.words.connect`, { id })"
         :description="forWatch ? t(`capabilities.phoneConnectDialog.watchIntro`) : t(`capabilities.phoneConnectDialog.intro`)"
         @update:open="emit(`update:visible`, $event)"
     >
         <div class="flex flex-col gap-4">
+            <!-- Said beside whatever the pairing shows, not as a link in its chain: placed inside it, it cut the chain in two, and
+                 "preparing" showed under a refusal and the command under "connected". -->
+            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
             <Notice v-if="online" tone="success">
                 <span class="flex flex-col gap-1">
                     <span>
@@ -95,7 +109,6 @@ watch(online, (isOnline) => {
             </Notice>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
-            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
 
             <div v-else-if="minting || link === ``" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}
@@ -146,8 +159,9 @@ watch(online, (isOnline) => {
             <Button
                 :label="online ? t(`ui.action.done`) : t(`ui.action.close`)"
                 :tier="online ? `accent` : `quiet`"
+                :size="inline ? `small` : undefined"
                 @click="emit(`update:visible`, false)"
             />
         </template>
-    </Modal>
+    </PairingFrame>
 </template>

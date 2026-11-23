@@ -98,8 +98,12 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
     const connectPermissions = ref(``);
     // Still wearing its tile's name (`linux`, `linux-2`): the dialog may then offer the machine's own hostname instead.
     const connectUnnamed = ref(false);
+    // The panel took the machine's hostname as its name, and follows it to the row under that name, where there is
+    // nothing more to mint: the machine reconnects under it by itself.
+    const connectRenamed = ref(false);
     const openConnect = (instance: CapabilitySummary): void => {
         connectId.value = instance.id;
+        connectRenamed.value = false;
         connectPlatform.value = String(instance.config[`platform`] ?? `linux`);
         connectUnnamed.value = isDefaultName(connectPlatform.value, instance.id);
         // In the machine's own words, shared with the Devices tab, which opens this dialog on a machine gone quiet.
@@ -134,6 +138,7 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
         connectPlatform,
         connectPermissions,
         connectUnnamed,
+        connectRenamed,
         browserConnectVisible,
         browserConnectId,
         browserInstall,
@@ -177,6 +182,7 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
         onHostRenamed: (to: string): void => {
             connectId.value = to;
             connectUnnamed.value = false;
+            connectRenamed.value = true;
             void hosts.refresh();
             void refetch();
         },
