@@ -31,10 +31,10 @@ const GIB = 2 ** 30;
 
 let app: App | undefined;
 
-const mount = (props: { compact?: boolean } = {}): HTMLElement => {
+const mount = (): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(BoardMetrics, { metrics: reading(), ...props }) });
+    app = createApp({ render: () => h(BoardMetrics, { metrics: reading() }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -62,6 +62,11 @@ const reading = (): SandboxMetrics => ({
 
 const press = (element: HTMLElement): HTMLButtonElement => element.querySelector<HTMLButtonElement>(`[data-board-metrics]`)!;
 const figures = (element: HTMLElement): string[] => [...press(element).querySelectorAll(`[data-figure]`)].map((figure) => figure.textContent ?? ``);
+// What a sighted reader sees of each figure: the screen reader's label and figure left out.
+const shown = (element: HTMLElement): string[] =>
+    [...press(element).querySelectorAll(`[data-figure]`)].map((figure) =>
+        [...figure.querySelectorAll(`span:not(.sr-only)`)].map((span) => span.textContent ?? ``).join(``),
+    );
 
 afterEach(() => {
     app?.unmount();
@@ -71,15 +76,15 @@ afterEach(() => {
 });
 
 describe(`the board's metrics`, () => {
-    it(`draw three small meters with their figures, and nothing more until pressed`, () => {
+    it(`draw three small meters, naming each figure to a screen reader, and nothing more until pressed`, () => {
         const element = mount();
         expect(figures(element)).toEqual([`CPU23%`, `Memory5.5 / 16 GiB`, `Disk950 / 1,000 GiB`]);
         expect(element.querySelector(`[data-overlay]`)).toBeNull();
         expect(press(element).getAttribute(`aria-expanded`)).toBe(`false`);
     });
 
-    it(`keep only the meters on a narrow board, and the number of a figure near its limit`, () => {
-        expect(figures(mount({ compact: true }))).toEqual([``, ``, `950 / 1,000 GiB`]);
+    it(`show only the number of a figure near its limit`, () => {
+        expect(shown(mount())).toEqual([``, ``, `950 / 1,000 GiB`]);
     });
 
     it(`open the full readout as a popover off them, and shut it on a second press`, async () => {

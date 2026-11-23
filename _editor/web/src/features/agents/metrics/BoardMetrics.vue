@@ -1,6 +1,6 @@
 <!-- THE GEEK METRICS ON THE AGENTS BOARD (AgentsView.vue), in its header beside New agent and nowhere else: three small
-     meters with their figures, no frame and no line of their own, so they take none of the board's height. A figure near
-     its limit turns amber and says so in place. Pressed, the full readout (load, processes, pressure, memory by kind,
+     meters behind their glyphs, no frame and no line of their own, so they take none of the board's height. A figure near
+     its limit turns amber and says so in place; the rest are in the hover. Pressed, the full readout (load, processes, pressure, memory by kind,
      each agent's share) hangs off them as a popover, over the board rather than pushing it up, and goes when the reader
      clicks away or presses Escape. Drawn only while the reader opted in (Settings ▸ Appearance ▸ Geek metrics). -->
 <script setup lang="ts">
@@ -15,12 +15,10 @@ import { useSandboxReadout } from "./sandboxFigures";
 
 const props = defineProps<{
     metrics: SandboxMetrics;
-    /** A narrow board keeps the meters and drops the words beside them; the hover and the readout still say them. */
-    compact?: boolean;
 }>();
 
 const t = useT();
-// The hover names what the bare meters are, with their figures, since a compact header draws the meters alone.
+// The hover names what the bare meters are, with their figures, since the header draws only glyphs and meters.
 const readout = useSandboxReadout(() => props.metrics);
 const tip = computed(() => ({
     title: t(`agents.liveMetrics.sandboxLabel`),
@@ -53,7 +51,7 @@ watch(metricsAsked, takeAsk);
         v-tooltip.bottom="open ? undefined : tip"
         @click="open = !open"
     >
-        <SandboxMetricsSummary :metrics="metrics" :compact="compact" class="text-2xs" />
+        <SandboxMetricsSummary :metrics="metrics" class="text-2xs" />
     </button>
     <ResponsiveOverlay
         v-model="open"

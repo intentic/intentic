@@ -107,6 +107,7 @@ export const ICONS = {
     "list-check": NAVIGATION_GLYPHS[`list-check`],
     lock: STATUS_GLYPHS[`lock`],
     maintenance: NAVIGATION_GLYPHS[`maintenance`],
+    memory: OBJECT_GLYPHS[`memory`],
     microphone: OBJECT_GLYPHS[`microphone`],
     mobile: OBJECT_GLYPHS[`mobile`],
     moon: STATUS_GLYPHS[`moon`],

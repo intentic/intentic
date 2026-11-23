@@ -358,14 +358,13 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :field-class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'col-start-2 mx-auto w-72 max-w-full shrink-0'"
                 @enter="onFieldEnter"
             />
-            <!-- One row, never two: what is here gives way inside it (the metrics step down with this container's width,
-                 SandboxMetricsSummary.vue) rather than pushing New agent under the rest. -->
+            <!-- One row, never two: what is here gives way inside it rather than pushing New agent under the rest. -->
             <div v-show="!searchRow" class="col-start-3 flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : narrow ? 'shrink-0' : '@container/tools'">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering && !sliver" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The geek metrics, while the reader opted in: three small meters beside New agent, the full readout a
                      popover off them (BoardMetrics.vue). In the header, so they take none of the board's height. -->
-                <BoardMetrics v-if="!mobile && !sliver && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow" />
+                <BoardMetrics v-if="!mobile && !sliver && liveMetrics !== undefined" :metrics="liveMetrics" />
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
                 <Button
                     v-if="chatStrip.panes.length >= 2"

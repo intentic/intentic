@@ -1,4 +1,4 @@
-<!-- The Finished lane's header acts (AgentsView): the lane's fold ("N earlier" / "Show fewer"), the archive's counter that opens it, the
+<!-- The Finished lane's header acts (AgentsView): the lane's fold ("N earlier" / "Show fewer"), the archive's door that opens it, the
      lane's Clear, and inside the archive its Delete all. A slim board (boardGrid.ts `CardFit`) keeps fewer of them: a mini
      one drops Clear, the one bulk act nobody needs from a sliver, and a tile one keeps none, its lane's glyph being all
      the header there is. -->
@@ -45,16 +45,19 @@ const words = useVocabulary();
         >
             <Icon :name="view.all ? `chevron-up` : `chevron-down`" class="text-2xs" />{{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier }) }}
         </button>
-        <!-- Archive feedback highlights the destination counter. sm (20px), not the md chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
+        <!-- The archive's door: a bare glyph, its count in the hover and the label. The count was a figure nobody acts on (4738
+             or 4739), and a pill round it read as a status tag rather than a way in. It lights while a card lands in it
+             (archiveDoor.ts), the one moment the door has news. xs (20px), the chip beside it's height, so the row stays one set. -->
         <button
             v-if="archiveSize > 0"
             type="button"
             :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
             v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: words.agents, value: archiveSize }], note: t(`agents.words.allKept`) }"
-            :class="ui.chip({ on: pulsing, size: `sm` }, `shrink-0`, pulsing && `ring-1 ring-primary-500/50`)"
+            :class="ui.iconButton({ size: `xs`, on: pulsing }, pulsing && `text-primary-500 ring-1 ring-primary-500/50`)"
+            data-archive-door
             @click="emit(`door`)"
         >
-            <Icon name="history" class="text-2xs" />{{ archiveSize }}
+            <Icon name="history" class="text-2xs" />
         </button>
         <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
         <Button
