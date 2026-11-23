@@ -28,7 +28,9 @@ const SANDBOX_NAME = `Released sandbox`;
 const PAGES: readonly { readonly path: string; readonly drawn: (page: Page) => Promise<void> }[] = [
     { path: insidePath(SANDBOX_ID, pages.agents()), drawn: (page) => expect(page.locator(`main`).getByRole(`button`).first()).toBeVisible() },
     { path: insidePath(SANDBOX_ID, pages.workspace()), drawn: (page) => expect(page.locator(`main`).getByRole(`tablist`).first()).toBeVisible() },
-    { path: insidePath(SANDBOX_ID, pages.chat()), drawn: (page) => expect(page.locator(`main`).getByRole(`textbox`).first()).toBeVisible() },
+    // A desktop's /chat lands on the board, with the chat docked in the side panel beside it rather than inside `main`:
+    // its composer is what counts as drawn.
+    { path: insidePath(SANDBOX_ID, pages.chat()), drawn: (page) => expect(page.locator(`textarea[name="draft"]`).first()).toBeVisible() },
     {
         path: insidePath(SANDBOX_ID, pages.sandboxSettings(`overview`)),
         drawn: (page) => expect(page.locator(`main`).getByRole(`heading`, { level: 2, name: SANDBOX_NAME })).toBeVisible(),

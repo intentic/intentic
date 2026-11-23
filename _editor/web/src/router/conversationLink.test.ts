@@ -39,6 +39,6 @@ describe(`conversationRedirect`, () => {
     it(`leaves the home redirect alone when no conversation is named`, () => {
         expect(conversationRedirect({}, `phone`)).toBeUndefined();
         expect(conversationRedirect({ conversation: `` }, `board`)).toBeUndefined();
-        expect(conversationRedirect({ conversation: [`a`] }, `chat`)).toBeUndefined();
+        expect(conversationRedirect({ conversation: [`a`] }, `phone`)).toBeUndefined();
     });
 });

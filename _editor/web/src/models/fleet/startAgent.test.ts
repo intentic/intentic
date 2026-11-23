@@ -10,6 +10,7 @@ import { queryClient } from "../../lib/queryPersistence";
 import { router } from "../../router/index";
 import AgentsView from "../../features/agents/board/AgentsView.vue";
 import { startAgent } from "./agentActions";
+import { setChatTucked } from "../conversations/panel/chatPanelLayout";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as other mounted-component tests; matches:false keeps the device desktop, where the docked
@@ -65,7 +66,10 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     const before = tabs(strip).length;
     const focusRequests = composerFocus.value;
 
-    // The board's header button: the surface that used to open a conversation the chat never showed.
+    // The board's header button: the surface that used to open a conversation the chat never showed. The board offers it
+    // only while the chat is not open beside it (chatOnScreen), so fold the chat into its strip first.
+    setChatTucked(true);
+    await nextTick();
     newAgentButton(board).click();
     await nextTick();
     expect(tabs(strip)).toHaveLength(before + 1);
