@@ -61,17 +61,25 @@ snapshot_lost() {
     printf '%s\n' "$SNAPSHOT" >&2
     return 1
 }
+# A cache record whose snapshot is gone fails every cached build; only --no-cache gets past it.
+snapshot_stuck() {
+    echo x >> "$count"
+    case " $* " in *" --no-cache "*) return 0 ;; esac
+    printf '%s\n' "$SNAPSHOT" >&2
+    return 1
+}
 disconnected() { echo x >> "$count"; printf '%s\n' "$DROPPED" >&2; return 1; }
 broken() { echo x >> "$count"; printf '%s\n' "$BROKEN" >&2; return 101; }
 timed_out() { echo x >> "$count"; return 124; }
 
 run flaky buildkit_retry flaky
 run snapshot buildkit_retry snapshot_lost
+run snapshot-stuck buildkit_retry snapshot_stuck docker buildx build .
 run disconnected buildkit_retry disconnected
 run broken buildkit_retry broken
 run timed-out buildkit_retry timed_out
 `,
-        expect: { flaky: [2, 0], snapshot: [2, 0], disconnected: [3, 1], broken: [1, 101], "timed-out": [1, 124] },
+        expect: { flaky: [2, 0], snapshot: [2, 0], "snapshot-stuck": [3, 0], disconnected: [3, 1], broken: [1, 101], "timed-out": [1, 124] },
     },
     {
         id: "registry-retry",
