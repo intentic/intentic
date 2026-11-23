@@ -24,6 +24,12 @@ export const setChatTucked = (tucked: boolean): void => {
 export const toggleChatTucked = (): void => setChatTucked(!chatTucked.value);
 /** A press that asks to see a chat's turns (a board card's, a run it follows): the chat comes back out of its strip. */
 export const showChat = (): void => setChatTucked(false);
+/**
+ * The chat stands open beside the page in this window: docked and not folded into its strip, or this window being the
+ * chat's own, where the board stands beside it (shell/window/FloatingBoard.vue). Its header's + is then a press away, so the
+ * board offers no New agent of its own (AgentsView.vue).
+ */
+export const chatOnScreen = computed(() => floating.here.value || (chatInSidePanel.value && !chatTucked.value));
 
 // WHETHER THE CHAT'S OWN SIDE RAIL (its checklist, then Usage left) IS DRAWN IN THIS WINDOW, written by the panel
 // (ChatPanel.vue `showsRail`). The Agents board puts Usage left under itself only while it is not (features/agents/fleet/Agents.vue),

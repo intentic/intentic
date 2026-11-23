@@ -37,7 +37,7 @@ import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { pendingOn } from "../../../models/fleet/useAgents-provisional";
 import { useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
 import { useSubagentRoster } from "../../../models/fleet/subagentRoster";
-import { chatWide, showChat } from "../../../models/conversations/panel/chatPanelLayout";
+import { chatOnScreen, chatWide, showChat } from "../../../models/conversations/panel/chatPanelLayout";
 import { subagentOnScreen } from "../../../models/conversations/panel/subagentView";
 import { openRunInChat, pointAtChat } from "../../../models/fleet/openRun";
 import { summonChat } from "../../../models/conversations/run/summon";
@@ -267,8 +267,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 };
 const boardEl = ref<HTMLElement | undefined>(undefined);
 const LANES = computed(laneHeads);
-// A wallpaper shows through the lanes (wallpapers.css), so their headers drop the canvas band they pin on; a pinned
-// header with nothing behind it would slide over the cards scrolling under it, so they scroll away with the lane.
+// A wallpaper shows through the lanes (wallpapers.css), so their headers drop the band of the board's ground they pin on
+// (the chat's own surface without one, Agents.vue); a pinned header with nothing behind it would slide over the cards
+// scrolling under it, so they scroll away with the lane.
 const { wallpaper } = useWallpaper();
 const papered = computed(() => wallpaper.value !== `none`);
 useAttentionAsk({
@@ -372,8 +373,10 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 <!-- The night begun by hand, for an evening someone goes to bed before their night hours: a bare moon at rest,
                      lit with the morning while it is night (BoardNight.vue). On a phone it holds this corner alone. -->
                 <BoardNight />
-                <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
-                <Button tier="boring" v-if="!mobile && starts" size="small" thumb class="shrink-0" @click="startAgent()">
+                <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. Beside an
+                     open chat it is the chat header's + instead, the same press a column away; folded into its strip or
+                     in a window of its own, the chat has no + on this page, and this one comes back. -->
+                <Button tier="boring" v-if="!mobile && starts && !chatOnScreen" size="small" thumb class="shrink-0" @click="startAgent()">
                     <Icon name="plus" />{{ words.newAgent }}
                 </Button>
             </div>
@@ -404,7 +407,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     :class="[!dragging && !narrow && !placed ? 'min-h-0' : '', placeOf(lane.key), laneDropClass(lane.key)]"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
-                    <LaneHeader :label="lane.label" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-canvas'">
+                    <LaneHeader :label="lane.label" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-card'">
                         <template v-if="lane.key === 'finished' && view.archive" #mark>
                             <button
                                 type="button"

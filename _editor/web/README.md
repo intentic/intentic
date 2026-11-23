@@ -500,6 +500,10 @@ flowchart LR
 - **The board and the chat, one page.** The chat stands at the right of every page; on Agents that makes the board the
   list of chats beside it, a card's press opening its chat there (out of its strip if it was tucked). A desktop's /chat
   redirects here, its query kept (`?focus=`, the desktop app's `?shellChat=`); a phone's is the conversation's own screen.
+  Without a wallpaper (Appearance: None) the board lies on the chat's own surface rather than the darker canvas, so the
+  two read as one page; its cards take the card ground's step (`styles.css` `.ground-card`), as the chat's rows do.
+  New agent stands once too: the chat header's + while the chat is open beside the board, the board header's button
+  while it is folded into its strip or in a window of its own (`chatPanelLayout.ts` `chatOnScreen`).
   Usage left stands once: in the chat's side rail, under its checklist, once the chat is wide enough for that rail,
   otherwise under the board (`features/agents/fleet/Agents.vue`, `chatPanelLayout.ts` `chatRailOnScreen`). A popped-out
   chat's window draws the same board on its left (`shell/window/FloatingBoard.vue`), and any navigation a press there

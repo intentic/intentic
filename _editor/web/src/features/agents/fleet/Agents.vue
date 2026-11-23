@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
 import { computed, nextTick } from "vue";
+import { useWallpaper } from "../../../skins/useWallpaper";
 import ChatCapacityRail from "../../chat/panel/capacity/ChatCapacityRail.vue";
 import type { CapacityMine } from "../../chat/panel/capacity/chatCapacity";
 import { useShellChatLink } from "../../chat/panel/shellChatLink";
@@ -28,6 +29,13 @@ const mine = computed((): CapacityMine => {
     return { provider: selection.provider.value, account: selection.account.value };
 });
 
+/* WITHOUT A WALLPAPER THE BOARD LIES ON THE CHAT'S OWN SURFACE, not the darker canvas: beside the docked chat the two read as
+   one page. On that card ground a card steps toward the overlay (by day toward the paper's cream) rather than resting at
+   the colour it lies on (styles.css `.ground-card`), the way the chat's own rows do, so it keeps its edge. A wallpaper
+   draws its picture on the board instead (skins/wallpapers.css). */
+const { wallpaper } = useWallpaper();
+const plain = computed(() => wallpaper.value === `none`);
+
 /* THE DESKTOP APP'S SUPER+SPACE (`?shellChat=`, through /chat) opens a blank draft in the chat beside the board. No message
    is sent and no agent starts until the person presses Send. */
 useShellChatLink(() => {
@@ -40,7 +48,7 @@ useShellChatLink(() => {
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col">
+    <div class="flex h-full min-h-0 flex-col" :class="{ 'ground-card bg-card': plain }">
         <!-- `flex-1` outranks the board's own `h-full` (a flex basis wins over a height), so the strip below keeps its rows. -->
         <AgentsView class="min-h-0 flex-1" />
         <!-- At most a part of the column, scrolling past that. -->
