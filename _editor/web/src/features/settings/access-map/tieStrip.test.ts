@@ -19,7 +19,7 @@ describe(`stripOf`, () => {
     it(`draws a computer's switches in fixed places, agents' then people's, lit where on`, () => {
         const strip = stripOf(edge({ kind: `device`, grants: [`shell`, `screen`, `remoteView`], others: 2 }));
         expect(strip?.groups.map((group) => group.key)).toEqual([`agents`, `people`]);
-        expect(strip?.groups[0]?.slots.map((slot) => slot.key)).toEqual([`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`, `programs`]);
+        expect(strip?.groups[0]?.slots.map((slot) => slot.key)).toEqual([`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`, `admin`, `programs`]);
         expect(strip?.groups[1]?.slots.map((slot) => slot.key)).toEqual([`remoteView`, `remoteControl`, `remoteTerminal`]);
         expect(lit(strip, `agents`)).toEqual([`shell`, `screen`]);
         expect(lit(strip, `people`)).toEqual([`remoteView`]);
