@@ -13,6 +13,8 @@ flowchart LR
     sandboxes -.->|"fleet card: acts as<br/>its owner's account"| account
 ```
 
+The public docs draw the same graph for a reader rather than a maintainer, at [/docs/big-picture/](https://intentic.dev/docs/big-picture/): its words are [`site-content/src/big-picture.ts`](../../_site/site-content/src/big-picture.ts) and its figure is [`BigPictureFigure.astro`](../../_site/site/src/components/figures/BigPictureFigure.astro). Change it when an edge here changes what a person can reach.
+
 ## Who knows which edge
 
 Nothing holds the whole graph, on purpose. Each edge is known, and enforced, where it is decided:

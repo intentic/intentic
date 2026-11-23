@@ -1,0 +1,197 @@
+---
+import { bigPictureScene } from "@intentic/site-content/big-picture";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+import BigPictureFigure from "../../components/figures/BigPictureFigure.astro";
+
+/* THE WIDEST VIEW: a person, their account, every sandbox they are in, and what each reaches. The figure carries the
+   model; the tables under it name each part once and say where it lives, and the last section says what the drawing
+   leaves out. */
+
+const scene = bigPictureScene;
+
+/* Every part of the drawing, where it actually lives, and the page that owns it. */
+const parts = [
+    {
+        part: "A screen",
+        is: "A browser on any computer, the desktop app, the phone app or a machine running Intentic OS. It shows the board and holds no work: close it and the agents carry on.",
+        lives: "Wherever you are",
+        href: "/docs/your-browser/",
+        page: "Your own browser",
+    },
+    {
+        part: "Your account",
+        is: "Who you are, signed in once with Google or a code mailed to you. Each sandbox decides for itself what your account may do inside it.",
+        lives: "intentic.dev",
+        href: "/docs/access/",
+        page: "Access & sharing",
+    },
+    {
+        part: "intentic.dev",
+        is: "The address book and the relay. It knows which sandboxes you are in and where each one is, and carries your screen's traffic down the tunnel each sandbox opened. It does not run agents or hold your code, prompts or keys.",
+        lives: "Run by intentic",
+        href: "/docs/architecture/",
+        page: "Architecture",
+    },
+    {
+        part: "A sandbox",
+        is: "One workspace for one part of your life or work: its files, its tools, its keys, its agents and its history, in a Docker container that keeps running after you close the screen.",
+        lives: "A machine you chose",
+        href: "/docs/sandboxing/",
+        page: "Sandboxing",
+    },
+    {
+        part: "An agent",
+        is: "A conversation working in a sandbox, on a branch of its own. A role decides which of the sandbox's connections it may use, and its changes wait for you to land them.",
+        lives: "Inside a sandbox",
+        href: "/docs/parallel-agents/",
+        page: "Parallel agents",
+    },
+    {
+        part: "What it reaches",
+        is: "The capabilities connected to that sandbox: services, accounts, servers, your computers and phone. Each is connected to one sandbox, and its sign-in stays there.",
+        lives: "Out in the world",
+        href: "/docs/capabilities/",
+        page: "Capabilities",
+    },
+    {
+        part: "The machine under it",
+        is: "Your laptop, a server you own or rent, or a machine we host. It supplies processors, memory and disk, and one machine can carry several sandboxes that share nothing.",
+        lives: "Your desk, a rack, or our cloud",
+        href: "/docs/move-sandbox/",
+        page: "Move to another computer",
+    },
+];
+
+/* The same computer, in each of the three places it can appear. */
+const jobs = [
+    {
+        job: "A screen",
+        takes: "Signing in, in a browser or the desktop app",
+        grants: "Nothing on the computer itself. It only shows what your account may already see.",
+    },
+    {
+        job: "The machine a sandbox runs on",
+        takes: "The desktop app or the setup command, which put the sandbox's container on it",
+        grants: "Room to run: processors, memory and disk. The sandbox's agents work inside its container, not on your files.",
+    },
+    {
+        job: "A tool the agents use",
+        takes: "Connecting it to one sandbox under Devices, with a small resident agent paired to that sandbox",
+        grants: "Exactly the switches you set on that computer: running commands, seeing the screen, changing files, the mouse and keyboard. Changing files and the mouse and keyboard start off.",
+    },
+];
+---
+
+<DocsLayout
+    pageId="big-picture"
+    heading="The big picture"
+    lead="You sign in once, from any screen, and reach every sandbox you are in: one for each part of your life or work, each with its own agents, files and keys, running where you chose and reaching only what you connected to it."
+>
+    <div class="docs-embed my-8">
+        <BigPictureFigure />
+    </div>
+
+    <h2>The parts</h2>
+    <p>
+        Point at anything in the drawing to light what it connects to, or step through it with the tabs. Here is each part once, with where it
+        actually lives.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Part</th><th>What it is</th><th>Where it lives</th></tr>
+        </thead>
+        <tbody>
+            {
+                parts.map((row) => (
+                    <tr>
+                        <td>
+                            <strong>{row.part}</strong>
+                            <br />
+                            <a href={row.href}>{row.page}</a>
+                        </td>
+                        <td>{row.is}</td>
+                        <td>{row.lives}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <h2>A sandbox for each part of your life</h2>
+    <p>
+        The sandbox is where a line gets drawn. Everything inside one shares a workspace: its agents can read its files and use its keys.
+        Nothing in one can reach another. So the question to ask is which things should never see each other's keys. Home and work should
+        not. A hobby that deploys to a public server probably should not share with either.
+    </p>
+    <p>
+        Two of your own sandboxes can be <strong>linked</strong>, so an agent in one can hand a task to the other. The task runs over there,
+        with that sandbox's files and keys, and only its report comes back. A link never moves a key from one sandbox to the other.
+    </p>
+    <p>
+        When the split you want is between people working on the same thing, it is not another sandbox:{" "}
+        <a href="/docs/sandboxing/#area">areas</a> divide one sandbox between them, and <a href="/docs/worksite/">roles</a> divide what each
+        conversation may use.
+    </p>
+
+    <h2>One laptop, three jobs</h2>
+    <p>
+        The drawing shows the same laptop three times, because one computer can do three different things for you. Each is granted on its own,
+        and having one never grants another.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Job</th><th>What puts it there</th><th>What it grants</th></tr>
+        </thead>
+        <tbody>
+            {
+                jobs.map((row) => (
+                    <tr>
+                        <td><strong>{row.job}</strong></td>
+                        <td>{row.takes}</td>
+                        <td>{row.grants}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The phone works the same way: it is a screen when you open the board on it, and a tool when the Android app connects it to a sandbox.
+        <a href="/docs/your-machine/">Your own machine</a> goes through each connection in full.
+    </p>
+
+    <h2>Sharing</h2>
+    <p>
+        You share a sandbox, never an account. {scene.colleague.name} in the drawing owns acme-portal and invited you to it as a writer. Each of
+        you signs in as yourself, and the sandbox checks on every request who may do what. Removing you from it ends your access there at
+        once, even in a screen you already have open, and takes nothing from your own sandboxes.
+    </p>
+
+    <h2>Where the drawing simplifies</h2>
+    <h3>The relay carries your traffic</h3>
+    <p>
+        Your screen's traffic to a sandbox passes through intentic's relay, and encryption ends there, so the relay could read what it carries.
+        It routes each request to its sandbox and stores none of it. The account service, the part that knows who you are, never carries
+        your work. <a href="/docs/architecture/#the-direct-command-path">Architecture</a> has the detail.
+    </p>
+    <h3>A sandbox reaches more than three things</h3>
+    <p>
+        Each sandbox is drawn with two or three connections. A real one can also hold browser accounts it signs in to, MCP servers, other
+        sandboxes it is linked to, and the model accounts its agents run on. <a href="/docs/capabilities/">Capabilities</a> lists them all.
+    </p>
+    <h3>An office adds a layer above the sandboxes</h3>
+    <p>
+        An organisation can bind its sandboxes to one policy that its admins write, which every person and agent in those sandboxes is then
+        held to, the owner included. A personal sandbox, like each one drawn here, has no such layer.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/worksite/", title: "The worksite", why: "one machine up close: the sandboxes on it, the roles that scope a turn, the projects agents work on." },
+            { href: "/docs/sandboxing/", title: "Sandboxing", why: "one sandbox up close: the boxes nested inside it, and which lines are walls." },
+            { href: "/docs/architecture/", title: "Architecture", why: "the same parts as a system map: where identity, code, state and compute actually live." },
+            { href: "/docs/access/", title: "Access & sharing", why: "who may do what inside a sandbox you share." },
+            { href: "/docs/your-machine/", title: "Your own machine", why: "every way a sandbox and a computer of yours can be connected." },
+        ]}
+    />
+</DocsLayout>

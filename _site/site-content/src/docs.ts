@@ -27,6 +27,19 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // The widest view, so it comes first: the account and every sandbox it is in. The worksite
+                            // zooms in to one machine, Sandboxing to one sandbox.
+                            id: "big-picture",
+                            title: "The big picture",
+                            blurb: "One account, a sandbox for each part of your life, and what each reaches",
+                            meta: {
+                                title: "The big picture: one account, many sandboxes · intentic docs",
+                                description:
+                                    "How intentic fits together for one person: the screens you sign in from, what intentic.dev holds and relays, a sandbox for each part of your life with its own agents and keys, and what each one reaches.",
+                                datePublished: "2026-11-23",
+                            },
+                        },
+                        {
                             // Before Architecture on purpose: that page is a system map, and this is the vocabulary it
                             // is drawn in. Owns "role" and "project", which no other page defined.
                             id: "worksite",
@@ -39,6 +52,12 @@ export const docsBook: Book = {
                                 datePublished: "2026-09-15",
                             },
                         },
+                    ],
+                },
+                {
+                    // Six rows would break the shelf rule above: the closer views take a sub-heading.
+                    label: "Closer in",
+                    items: [
                         {
                             id: "architecture",
                             title: "Architecture",
