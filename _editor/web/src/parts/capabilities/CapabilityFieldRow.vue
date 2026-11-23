@@ -1,4 +1,5 @@
-<!-- One field of a capability's form, laid out inline or stacked per inlineField(). -->
+<!-- One field of a capability's form, laid out inline or stacked per inlineField(). Its hint waits behind an (i) by the
+     label: the form shows only what to answer. -->
 <script setup lang="ts">
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { SegmentedControl, StatusBadge, ui } from "@intentic/ui";
@@ -6,6 +7,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import type { ConfSummary } from "../../models/capabilities/normalize";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import FieldHint from "./FieldHint.vue";
 import KeyValueField from "./KeyValueField.vue";
 
 const t = useT();
@@ -61,7 +63,7 @@ const pickConnection = (event: Event): void => {
         @left="emit('left')"
     />
     <!-- Keep answered fields beside their labels at the width of the answers. -->
-    <label v-else-if="inline" class="flex items-start justify-between gap-4">
+    <label v-else-if="inline" class="flex items-center justify-between gap-4">
         <span class="min-w-0">
             <span class="ui-field-label">{{ field.label }}</span>
             <StatusBadge
@@ -71,11 +73,11 @@ const pickConnection = (event: Event): void => {
                 :label="t(`capabilities.capabilityFieldRow.needsRebuild`)"
                 class="ml-1.5 align-middle"
             />
-            <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
+            <FieldHint v-if="field.hint" :label="field.label" :text="field.hint" />
         </span>
         <ToggleSwitch
             v-if="field.boolean"
-            class="ui-switch-sm mt-0.5 shrink-0"
+            class="ui-switch-sm shrink-0"
             :model-value="values[field.key] === 'on'"
             :aria-label="field.label"
             @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
@@ -100,6 +102,7 @@ const pickConnection = (event: Event): void => {
             />
             <!-- The check marks a value that passed the field's validation rule. -->
             <Icon v-if="checked" name="check-circle" class="ml-1 text-2xs text-success" />
+            <FieldHint v-if="field.hint" :label="field.label" :text="field.hint" />
         </span>
         <!-- Another connection, picked by name; with none to pick, the line below says so instead of an empty list. -->
         <template v-if="field.connection">
@@ -168,6 +171,5 @@ const pickConnection = (event: Event): void => {
             <Icon :name="summary.warning ? 'exclamation-triangle' : 'check-circle'" class="text-2xs" :class="summary.warning ? '' : 'text-success'" />
             {{ summary.text }}
         </span>
-        <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
     </label>
 </template>

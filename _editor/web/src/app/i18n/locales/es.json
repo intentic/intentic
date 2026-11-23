@@ -1907,21 +1907,10 @@
         "previews": {
             "everyPaymentAsks": "Cada pago te pregunta antes en el chat",
             "fullControl": "Control total",
-            "grantControl": "usar el ratón y el teclado",
-            "grantDestructive": "eliminar carpetas y borrar discos",
-            "grantPrograms": "ejecutar programas que envíe este sandbox",
-            "grantSandboxes": "gestionar y quitar sus sandboxes",
-            "grantScreen": "ver la pantalla",
-            "grantShell": "ejecutar comandos",
-            "grantWrite": "cambiar archivos",
-            "listAnd": "{rest} y {last}",
             "localModelMemory": "≈ {weights} GB de pesos + {window} GB de ventana: necesita {total} GB de RAM libre.",
-            "mayAll": "Puede {list}.",
-            "mayOnly": "Puede {list}, y nada más.",
             "observe": "Observar",
             "operate": "Operar",
             "paymentsUnder": "Los pagos de menos de {amount} se hacen solos; el resto te pregunta antes",
-            "readFilesOnly": "Solo leer archivos.",
             "walletSummary": "{asks} · como máximo {perPayment} cada uno · {daily} al día."
         },
         "refs": {
@@ -2823,58 +2812,30 @@
             "device": {
                 "admin": {
                     "hint": "Windows: un comando que un agente pide ejecutar como administrador se ejecuta en este equipo sin aviso de UAC. Cada uno te pregunta primero en una tarjeta en el chat, salvo que la conversación esté marcada para aprobación automática. Necesita aquí el servicio de pantalla de bloqueo y avisos de administrador del acceso remoto.",
-                    "label": "Ejecutar comandos como administrador",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Ejecutar comandos como administrador"
                 },
                 "control": {
-                    "label": "Usar el ratón y el teclado",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Usar el ratón y el teclado"
                 },
                 "destructive": {
                     "hint": "Eliminar carpetas de forma recursiva, formatear un disco, quitar un volumen de Docker. Todo lo demás que pueda ejecutar sigue permitido.",
-                    "label": "Ejecutar comandos destructivos",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Ejecutar comandos destructivos"
                 },
                 "programs": {
                     "hint": "Un programa compilado en el sandbox (un .exe de Windows, una carpeta de app) se copia a este ordenador, y el agente lo inicia, lo vigila y lo detiene. Se ejecuta como tú, con tus archivos y tu red.",
-                    "label": "Ejecutar programas que envíe este sandbox",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Ejecutar programas que envíe este sandbox"
                 },
                 "remoteControl": {
                     "hint": "Desde esa vista, una persona mueve el ratón y escribe en este ordenador. En Windows lo indica un aviso, y Ctrl+Alt+Mayús+P allí la pausa.",
-                    "label": "Permitir que otras personas usen el ratón y el teclado",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Permitir que otras personas usen el ratón y el teclado"
                 },
                 "remoteTerminal": {
                     "hint": "Una persona en el editor de este sandbox abre una shell en este ordenador, que se ejecuta como tú.",
-                    "label": "Permitir que otras personas abran terminales",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Permitir que otras personas abran terminales"
                 },
                 "remoteView": {
                     "hint": "Una persona en el editor de este sandbox, nunca un agente, ve la pantalla de este ordenador en directo.",
-                    "label": "Permitir que otras personas vean la pantalla",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Permitir que otras personas vean la pantalla"
                 },
                 "roots": {
                     "label": "Carpetas que puede tocar",
@@ -2882,41 +2843,21 @@
                 },
                 "sandboxes": {
                     "hint": "Iniciar, detener, actualizar y quitar los sandboxes de Intentic de esta máquina. Quitar uno elimina sus archivos y su historial: no se puede deshacer.",
-                    "label": "Gestionar sandboxes en este dispositivo",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Gestionar sandboxes en este dispositivo"
                 },
                 "screen": {
-                    "label": "Ver la pantalla",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Ver la pantalla"
                 },
                 "shell": {
-                    "label": "Ejecutar comandos",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Ejecutar comandos"
                 },
                 "write": {
-                    "label": "Crear y cambiar archivos",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Crear y cambiar archivos"
                 }
             },
             "phone": {
                 "apps": {
-                    "label": "Abrir apps y enlaces",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Abrir apps y enlaces"
                 },
                 "confirm": {
                     "label": "Preguntar antes en el teléfono",
@@ -2928,48 +2869,24 @@
                 },
                 "control": {
                     "hint": "Funciona en las apps que permitas en el teléfono, a través del servicio de accesibilidad de la app. Solo la versión de intentic.dev puede hacerlo.",
-                    "label": "Tocar, deslizar y escribir",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Tocar, deslizar y escribir"
                 },
                 "destructive": {
                     "hint": "Escribir un comando destructivo y actuar en una app que hayas marcado como sensible en el teléfono.",
-                    "label": "Acciones destructivas",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Acciones destructivas"
                 },
                 "files": {
-                    "label": "Leer las carpetas que elijas",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Leer las carpetas que elijas"
                 },
                 "notifications": {
                     "hint": "Las notificaciones de todas las apps, incluidos códigos de un solo uso y mensajes.",
-                    "label": "Leer notificaciones",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Leer notificaciones"
                 },
                 "screen": {
-                    "label": "Ver la pantalla",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Ver la pantalla"
                 },
                 "write": {
-                    "label": "Cambiar archivos en esas carpetas",
-                    "options": {
-                        "off": "Bloqueado",
-                        "on": "Permitido"
-                    }
+                    "label": "Cambiar archivos en esas carpetas"
                 }
             }
         },

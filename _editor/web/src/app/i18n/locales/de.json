@@ -1907,21 +1907,10 @@
         "previews": {
             "everyPaymentAsks": "Jede Zahlung fragt Sie zuerst im Chat",
             "fullControl": "Volle Kontrolle",
-            "grantControl": "Maus und Tastatur benutzen",
-            "grantDestructive": "Ordner löschen und Datenträger leeren",
-            "grantPrograms": "Programme ausführen, die diese Sandbox sendet",
-            "grantSandboxes": "seine Sandboxes verwalten und entfernen",
-            "grantScreen": "den Bildschirm sehen",
-            "grantShell": "Befehle ausführen",
-            "grantWrite": "Dateien ändern",
-            "listAnd": "{rest} und {last}",
             "localModelMemory": "≈ {weights} GB Gewichte + {window} GB Kontextfenster: braucht {total} GB freien RAM.",
-            "mayAll": "Darf {list}.",
-            "mayOnly": "Darf {list}, sonst nichts.",
             "observe": "Beobachten",
             "operate": "Bedienen",
             "paymentsUnder": "Zahlungen unter {amount} gehen von selbst durch, die übrigen fragen Sie zuerst",
-            "readFilesOnly": "Nur Dateien lesen.",
             "walletSummary": "{asks} · höchstens {perPayment} pro Zahlung · {daily} pro Tag."
         },
         "refs": {
@@ -2823,58 +2812,30 @@
             "device": {
                 "admin": {
                     "hint": "Windows: Ein Befehl, den ein Agent als Administrator ausführen möchte, läuft auf diesem Computer ohne UAC-Abfrage. Jeder fragt dich zuerst auf einer Karte im Chat, außer die Unterhaltung ist für automatische Freigabe markiert. Braucht hier den Dienst für Sperrbildschirm und Administratorabfragen aus dem Fernzugriff.",
-                    "label": "Befehle als Administrator ausführen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Befehle als Administrator ausführen"
                 },
                 "control": {
-                    "label": "Maus und Tastatur benutzen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Maus und Tastatur benutzen"
                 },
                 "destructive": {
                     "hint": "Ordner rekursiv löschen, einen Datenträger formatieren, ein Docker-Volume entfernen. Alles andere, was er ausführen darf, bleibt erlaubt.",
-                    "label": "Destruktive Befehle ausführen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Destruktive Befehle ausführen"
                 },
                 "programs": {
                     "hint": "Ein in der Sandbox gebautes Programm (eine Windows-.exe, ein App-Ordner) wird auf diesen Computer kopiert und vom Agenten gestartet, überwacht und gestoppt. Es läuft als Sie, mit Ihren Dateien und Ihrem Netzwerk.",
-                    "label": "Programme ausführen, die diese Sandbox sendet",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Programme ausführen, die diese Sandbox sendet"
                 },
                 "remoteControl": {
                     "hint": "Aus dieser Ansicht bewegt eine Person die Maus und tippt auf diesem Computer. Unter Windows weist ein Hinweis darauf hin, und Strg+Alt+Umschalt+P pausiert sie dort.",
-                    "label": "Personen Maus und Tastatur nutzen lassen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Personen Maus und Tastatur nutzen lassen"
                 },
                 "remoteTerminal": {
                     "hint": "Eine Person im Editor dieser Sandbox öffnet eine Shell auf diesem Computer, die als Sie läuft.",
-                    "label": "Personen Terminals öffnen lassen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Personen Terminals öffnen lassen"
                 },
                 "remoteView": {
                     "hint": "Eine Person im Editor dieser Sandbox, nie ein Agent, sieht den Bildschirm dieses Computers live.",
-                    "label": "Personen den Bildschirm sehen lassen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Personen den Bildschirm sehen lassen"
                 },
                 "roots": {
                     "label": "Ordner, auf die er zugreifen darf",
@@ -2882,41 +2843,21 @@
                 },
                 "sandboxes": {
                     "hint": "Die Intentic-Sandboxes dieses Rechners starten, stoppen, aktualisieren und entfernen. Das Entfernen löscht ihre Dateien und ihren Verlauf: Nichts macht es rückgängig.",
-                    "label": "Sandboxes auf diesem Gerät verwalten",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Sandboxes auf diesem Gerät verwalten"
                 },
                 "screen": {
-                    "label": "Den Bildschirm sehen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Den Bildschirm sehen"
                 },
                 "shell": {
-                    "label": "Befehle ausführen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Befehle ausführen"
                 },
                 "write": {
-                    "label": "Dateien erstellen und ändern",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Dateien erstellen und ändern"
                 }
             },
             "phone": {
                 "apps": {
-                    "label": "Apps und Links öffnen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Apps und Links öffnen"
                 },
                 "confirm": {
                     "label": "Zuerst auf dem Telefon fragen",
@@ -2928,48 +2869,24 @@
                 },
                 "control": {
                     "hint": "Funktioniert in den Apps, die Sie auf dem Telefon erlauben, über den Bedienungshilfendienst der App. Nur der Build von intentic.dev kann das.",
-                    "label": "Tippen, wischen und schreiben",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Tippen, wischen und schreiben"
                 },
                 "destructive": {
                     "hint": "Einen destruktiven Befehl eintippen und in einer App handeln, die Sie auf dem Telefon als sensibel markiert haben.",
-                    "label": "Destruktive Aktionen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Destruktive Aktionen"
                 },
                 "files": {
-                    "label": "Die gewählten Ordner lesen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Die gewählten Ordner lesen"
                 },
                 "notifications": {
                     "hint": "Die Benachrichtigungen jeder App, einschließlich Einmalcodes und Nachrichten.",
-                    "label": "Benachrichtigungen lesen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Benachrichtigungen lesen"
                 },
                 "screen": {
-                    "label": "Den Bildschirm sehen",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Den Bildschirm sehen"
                 },
                 "write": {
-                    "label": "Dateien in diesen Ordnern ändern",
-                    "options": {
-                        "off": "Blockiert",
-                        "on": "Erlaubt"
-                    }
+                    "label": "Dateien in diesen Ordnern ändern"
                 }
             }
         },

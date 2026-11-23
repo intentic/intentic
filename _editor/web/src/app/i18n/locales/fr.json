@@ -1907,21 +1907,10 @@
         "previews": {
             "everyPaymentAsks": "Chaque paiement vous est d'abord demandé dans le chat",
             "fullControl": "Contrôle total",
-            "grantControl": "utiliser la souris et le clavier",
-            "grantDestructive": "supprimer des dossiers et effacer des disques",
-            "grantPrograms": "exécuter les programmes envoyés par ce sandbox",
-            "grantSandboxes": "gérer et retirer ses sandboxes",
-            "grantScreen": "voir l'écran",
-            "grantShell": "exécuter des commandes",
-            "grantWrite": "modifier des fichiers",
-            "listAnd": "{rest} et {last}",
             "localModelMemory": "≈ {weights} Go de poids + {window} Go de fenêtre : nécessite {total} Go de RAM libre.",
-            "mayAll": "Peut {list}.",
-            "mayOnly": "Peut {list}, et rien d'autre.",
             "observe": "Observer",
             "operate": "Opérer",
             "paymentsUnder": "Les paiements de moins de {amount} passent seuls, les autres vous sont d'abord demandés",
-            "readFilesOnly": "Lecture des fichiers uniquement.",
             "walletSummary": "{asks} · au plus {perPayment} chacun · {daily} par jour."
         },
         "refs": {
@@ -2823,58 +2812,30 @@
             "device": {
                 "admin": {
                     "hint": "Windows : une commande qu'un agent demande à exécuter en administrateur s'exécute sur cet ordinateur sans invite UAC. Chacune te demande d'abord sur une carte dans le chat, sauf si la conversation est marquée en approbation automatique. Nécessite ici le service d'écran de verrouillage et d'invites administrateur de l'accès à distance.",
-                    "label": "Exécuter des commandes en administrateur",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Exécuter des commandes en administrateur"
                 },
                 "control": {
-                    "label": "Utiliser la souris et le clavier",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Utiliser la souris et le clavier"
                 },
                 "destructive": {
                     "hint": "Supprimer des dossiers récursivement, formater un disque, retirer un volume Docker. Tout le reste qu'il peut exécuter reste autorisé.",
-                    "label": "Exécuter des commandes destructrices",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Exécuter des commandes destructrices"
                 },
                 "programs": {
                     "hint": "Un programme construit dans le sandbox (un .exe Windows, un dossier d'application) est copié sur cet ordinateur, puis démarré, surveillé et arrêté par l'agent. Il s'exécute en votre nom, avec vos fichiers et votre réseau.",
-                    "label": "Exécuter les programmes envoyés par ce sandbox",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Exécuter les programmes envoyés par ce sandbox"
                 },
                 "remoteControl": {
                     "hint": "Depuis cette vue, une personne déplace la souris et tape sur cet ordinateur. Sous Windows, un avis l'indique, et Ctrl+Alt+Maj+P y met ses actions en pause.",
-                    "label": "Laisser des personnes utiliser la souris et le clavier",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Laisser des personnes utiliser la souris et le clavier"
                 },
                 "remoteTerminal": {
                     "hint": "Une personne dans l'éditeur de cette sandbox ouvre un shell sur cet ordinateur, exécuté en votre nom.",
-                    "label": "Laisser des personnes ouvrir des terminaux",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Laisser des personnes ouvrir des terminaux"
                 },
                 "remoteView": {
                     "hint": "Une personne dans l'éditeur de cette sandbox, jamais un agent, regarde l'écran de cet ordinateur en direct.",
-                    "label": "Laisser des personnes voir l'écran",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Laisser des personnes voir l'écran"
                 },
                 "roots": {
                     "label": "Dossiers auxquels il peut toucher",
@@ -2882,41 +2843,21 @@
                 },
                 "sandboxes": {
                     "hint": "Démarrer, arrêter, mettre à jour et retirer les sandboxes Intentic de cette machine. En retirer un supprime ses fichiers et son historique : rien ne peut l'annuler.",
-                    "label": "Gérer les sandboxes sur cet appareil",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Gérer les sandboxes sur cet appareil"
                 },
                 "screen": {
-                    "label": "Voir l'écran",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Voir l'écran"
                 },
                 "shell": {
-                    "label": "Exécuter des commandes",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Exécuter des commandes"
                 },
                 "write": {
-                    "label": "Créer et modifier des fichiers",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Créer et modifier des fichiers"
                 }
             },
             "phone": {
                 "apps": {
-                    "label": "Ouvrir des applications et des liens",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Ouvrir des applications et des liens"
                 },
                 "confirm": {
                     "label": "Demander d'abord sur le téléphone",
@@ -2928,48 +2869,24 @@
                 },
                 "control": {
                     "hint": "Fonctionne dans les applications que vous autorisez sur le téléphone, via le service d'accessibilité de l'application. Seul le build d'intentic.dev peut le faire.",
-                    "label": "Toucher, balayer et saisir",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Toucher, balayer et saisir"
                 },
                 "destructive": {
                     "hint": "Saisir une commande destructrice, et agir dans une application que vous avez marquée comme sensible sur le téléphone.",
-                    "label": "Actions destructrices",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Actions destructrices"
                 },
                 "files": {
-                    "label": "Lire les dossiers que vous choisissez",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Lire les dossiers que vous choisissez"
                 },
                 "notifications": {
                     "hint": "Les notifications de toutes les applications, y compris les codes à usage unique et les messages.",
-                    "label": "Lire les notifications",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Lire les notifications"
                 },
                 "screen": {
-                    "label": "Voir l'écran",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Voir l'écran"
                 },
                 "write": {
-                    "label": "Modifier les fichiers de ces dossiers",
-                    "options": {
-                        "off": "Bloqué",
-                        "on": "Autorisé"
-                    }
+                    "label": "Modifier les fichiers de ces dossiers"
                 }
             }
         },

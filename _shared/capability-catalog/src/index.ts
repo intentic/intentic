@@ -154,76 +154,52 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         key: "shell",
         label: "Run commands",
         default: "on",
-        options: [
-            { value: "on", label: "Allowed" },
-            { value: "off", label: "Blocked" },
-        ],
+        boolean: true,
     },
     {
         key: "write",
         label: "Create and change files",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
     },
     {
         key: "screen",
         label: "See the screen",
         default: "on",
-        options: [
-            { value: "on", label: "Allowed" },
-            { value: "off", label: "Blocked" },
-        ],
+        boolean: true,
     },
     {
         key: "control",
         label: "Use the mouse and keyboard",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
     },
     {
         key: "sandboxes",
         label: "Manage sandboxes on this device",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "Start, stop, update and remove this machine's Intentic sandboxes. Removing one deletes its files and its history: nothing undoes it.",
     },
     {
         key: "destructive",
         label: "Run destructive commands",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "Deleting folders recursively, formatting a disk, removing a Docker volume. Everything else it may run stays allowed.",
     },
     {
         key: "admin",
         label: "Run commands as administrator",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "Windows: a command an agent asks to run as administrator runs with no UAC prompt on this computer. Each one asks you on a card in chat first, unless the conversation is marked auto-approve. Needs Remote access's lock screen and admin prompts service here.",
     },
     {
         key: "programs",
         label: "Run programs this sandbox sends",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "A program built in the sandbox (a Windows .exe, an app folder) is copied to this computer and started, watched and stopped by the agent. It runs as you, with your files and network.",
     },
     // (2026-11-20) People's remote access, served by intentic-remoted on the computer: switches of their own, apart from
@@ -232,30 +208,21 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         key: "remoteView",
         label: "Let people see the screen",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "A person in this sandbox's editor, never an agent, watches this computer's screen live.",
     },
     {
         key: "remoteControl",
         label: "Let people use the mouse and keyboard",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "From that view, a person moves the mouse and types on this computer. On Windows a notice says so, and Ctrl+Alt+Shift+P there pauses them.",
     },
     {
         key: "remoteTerminal",
         label: "Let people open terminals",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "A person in this sandbox's editor opens a shell on this computer, running as you.",
     },
     {
@@ -275,66 +242,45 @@ const PHONE_SCOPE_FIELDS: readonly CapabilityField[] = [
         key: "screen",
         label: "See the screen",
         default: "on",
-        options: [
-            { value: "on", label: "Allowed" },
-            { value: "off", label: "Blocked" },
-        ],
+        boolean: true,
     },
     {
         key: "control",
         label: "Tap, swipe and type",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "Works in the apps you allow on the phone, through the app's accessibility service. Only the build from intentic.dev can do this.",
     },
     {
         key: "files",
         label: "Read the folders you pick",
         default: "on",
-        options: [
-            { value: "on", label: "Allowed" },
-            { value: "off", label: "Blocked" },
-        ],
+        boolean: true,
     },
     {
         key: "write",
         label: "Change files in those folders",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
     },
     {
         key: "notifications",
         label: "Read notifications",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "Every app's notifications, including one-time codes and messages.",
     },
     {
         key: "apps",
         label: "Open apps and links",
         default: "on",
-        options: [
-            { value: "on", label: "Allowed" },
-            { value: "off", label: "Blocked" },
-        ],
+        boolean: true,
     },
     {
         key: "destructive",
         label: "Destructive actions",
         default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
+        boolean: true,
         hint: "Typing a destructive command, and acting in an app you marked sensitive on the phone.",
     },
     {

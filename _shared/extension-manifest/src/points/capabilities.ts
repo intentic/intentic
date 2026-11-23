@@ -31,12 +31,12 @@ export const CapabilityFieldSchema = z.object({
         .describe(
             'Render it as a switch, carrying "on"/"off". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.',
         ),
-    // A line under the control for what the label alone can't say (a host requirement, when a value takes effect).
+    // What the label alone can't say (a host requirement, when a value takes effect), revealed on hover beside the label.
     hint: z
         .string()
         .optional()
         .describe(
-            "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+            "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
         ),
     // Value only takes effect after a sandbox rebuild (rides the image overlay); shown as a chip since two
     // otherwise-identical switches can cost very differently.

@@ -645,7 +645,7 @@
                                                     "type": "boolean"
                                                 },
                                                 "hint": {
-                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
                                                 "rebuild": {
@@ -1282,7 +1282,7 @@
                                                     "type": "boolean"
                                                 },
                                                 "hint": {
-                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
                                                 "rebuild": {
@@ -1561,7 +1561,7 @@
                                                     "type": "boolean"
                                                 },
                                                 "hint": {
-                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
                                                 "rebuild": {
@@ -1831,7 +1831,7 @@
                                                     "type": "boolean"
                                                 },
                                                 "hint": {
-                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
                                                 "rebuild": {
@@ -2106,7 +2106,7 @@
                                                     "type": "boolean"
                                                 },
                                                 "hint": {
-                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
                                                 "rebuild": {
@@ -2381,7 +2381,7 @@
                                                     "type": "boolean"
                                                 },
                                                 "hint": {
-                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
                                                 "rebuild": {

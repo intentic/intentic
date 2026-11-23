@@ -4,7 +4,7 @@ import { t } from "@intentic/ui/i18n";
 import { formatMoney } from "@intentic/ui/format";
 
 // Computes a live summary sentence for form values whose consequences aren't obvious: wallet numbers
-// into a spending policy, a computer's switches into a grant, local model choices into a RAM bill.
+// into a spending policy, local model choices into a RAM bill; and a computer's switches as presets.
 // Pure functions over the form's values.
 
 const usd = (value: string | undefined): number | undefined => {
@@ -25,23 +25,11 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
     return t(`capabilities.previews.walletSummary`, { asks, perPayment: formatMoney(perPayment), daily: formatMoney(daily) });
 };
 
-// A connected computer's grant: presets over the switches, and the sentence.
+// A connected computer's grant: presets over the switches. No sentence restates them: the switches sit right below.
 
-// Switch keys carried by a host tile (mirrors HOST_SCOPE_FIELDS); order matches how the sentence
-// names them.
+// Switch keys a preset sets (a subset of HOST_SCOPE_FIELDS).
 const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`, `programs`] as const;
 type HostSwitch = (typeof HOST_SWITCHES)[number];
-
-// Built when read, so the sentence follows the language picked after boot.
-const grantWords = (): Readonly<Record<HostSwitch, string>> => ({
-    shell: t(`capabilities.previews.grantShell`),
-    write: t(`capabilities.previews.grantWrite`),
-    screen: t(`capabilities.previews.grantScreen`),
-    control: t(`capabilities.previews.grantControl`),
-    sandboxes: t(`capabilities.previews.grantSandboxes`),
-    destructive: t(`capabilities.previews.grantDestructive`),
-    programs: t(`capabilities.previews.grantPrograms`),
-});
 
 export interface HostPreset {
     readonly key: string;
@@ -72,19 +60,6 @@ export const hostPresets = (): readonly HostPreset[] => [
 /** The preset the switches currently spell, or undefined when they are a hand-tuned mix. */
 export const matchHostPreset = (values: Readonly<Record<string, string>>): string | undefined =>
     hostPresets().find((preset) => HOST_SWITCHES.every((key) => (values[key] ?? `off`) === preset.grants[key]))?.key;
-
-// States only what is allowed, never what is blocked: listing every denied switch runs to several
-// lines and buries what's granted.
-export const hostGrantSummary = (values: Readonly<Record<string, string>>): string => {
-    const words = grantWords();
-    const allowed = HOST_SWITCHES.filter((key) => values[key] === `on`).map((key) => words[key]);
-    if (allowed.length === 0) {
-        return t(`capabilities.previews.readFilesOnly`);
-    }
-    const list = allowed.length === 1 ? (allowed[0] ?? ``) : t(`capabilities.previews.listAnd`, { rest: allowed.slice(0, -1).join(`, `), last: allowed.at(-1) ?? `` });
-    const everything = allowed.length === HOST_SWITCHES.length;
-    return everything ? t(`capabilities.previews.mayAll`, { list }) : t(`capabilities.previews.mayOnly`, { list });
-};
 
 /** The local model's RAM bill: weights plus context window. */
 export const localModelMemorySummary = (values: Readonly<Record<string, string>>): string | undefined => {

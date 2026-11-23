@@ -1903,21 +1903,10 @@
         "previews": {
             "everyPaymentAsks": "Każda płatność najpierw pyta Cię na czacie",
             "fullControl": "Pełna kontrola",
-            "grantControl": "używać myszy i klawiatury",
-            "grantDestructive": "usuwać foldery i czyścić dyski",
-            "grantPrograms": "uruchamiać programy wysłane z sandboxa",
-            "grantSandboxes": "zarządzać sandboxami na nim i je usuwać",
-            "grantScreen": "widzieć ekran",
-            "grantShell": "uruchamiać polecenia",
-            "grantWrite": "zmieniać pliki",
-            "listAnd": "{rest} i {last}",
             "localModelMemory": "≈ {weights} GB wag + {window} GB okna: potrzeba {total} GB wolnej pamięci RAM.",
-            "mayAll": "Może {list}.",
-            "mayOnly": "Może {list} i nic poza tym.",
             "observe": "Obserwuj",
             "operate": "Obsługuj",
             "paymentsUnder": "Płatności poniżej {amount} przechodzą same, pozostałe najpierw pytają Cię",
-            "readFilesOnly": "Tylko odczyt plików.",
             "walletSummary": "{asks} · najwyżej {perPayment} za każdą · {daily} dziennie."
         },
         "refs": {
@@ -2823,58 +2812,30 @@
             "device": {
                 "admin": {
                     "hint": "Windows: polecenie, które agent chce uruchomić jako administrator, uruchamia się na tym komputerze bez monitu UAC. Każde najpierw pyta cię na karcie w czacie, chyba że rozmowa jest oznaczona do automatycznego zatwierdzania. Wymaga tu usługi ekranu blokady i monitów administratora z Dostępu zdalnego.",
-                    "label": "Uruchamianie poleceń jako administrator",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Uruchamianie poleceń jako administrator"
                 },
                 "control": {
-                    "label": "Używanie myszy i klawiatury",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Używanie myszy i klawiatury"
                 },
                 "destructive": {
                     "hint": "Rekurencyjne usuwanie folderów, formatowanie dysku, usuwanie wolumenu Dockera. Wszystko inne, co może uruchamiać, pozostaje dozwolone.",
-                    "label": "Uruchamianie poleceń niszczących",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Uruchamianie poleceń niszczących"
                 },
                 "programs": {
                     "hint": "Program zbudowany w sandboxie (plik .exe dla Windows, folder aplikacji) jest kopiowany na ten komputer, a agent go uruchamia, obserwuje i zatrzymuje. Działa jako ty, z dostępem do twoich plików i sieci.",
-                    "label": "Uruchamianie programów wysyłanych przez ten sandbox",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Uruchamianie programów wysyłanych przez ten sandbox"
                 },
                 "remoteControl": {
                     "hint": "Z tego podglądu osoba porusza myszą i pisze na tym komputerze. W Windows pojawia się o tym komunikat, a Ctrl+Alt+Shift+P wstrzymuje jej działania.",
-                    "label": "Pozwól ludziom używać myszy i klawiatury",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Pozwól ludziom używać myszy i klawiatury"
                 },
                 "remoteTerminal": {
                     "hint": "Osoba w edytorze tego sandboxa otwiera powłokę na tym komputerze, działającą jako ty.",
-                    "label": "Pozwól ludziom otwierać terminale",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Pozwól ludziom otwierać terminale"
                 },
                 "remoteView": {
                     "hint": "Osoba w edytorze tego sandboxa, nigdy agent, ogląda ekran tego komputera na żywo.",
-                    "label": "Pozwól ludziom widzieć ekran",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Pozwól ludziom widzieć ekran"
                 },
                 "roots": {
                     "label": "Foldery, do których ma dostęp",
@@ -2882,41 +2843,21 @@
                 },
                 "sandboxes": {
                     "hint": "Uruchamianie, zatrzymywanie, aktualizowanie i usuwanie sandboxów Intentic na tej maszynie. Usunięcie sandboxa kasuje jego pliki i historię: nic tego nie cofnie.",
-                    "label": "Zarządzanie sandboxami na tym urządzeniu",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Zarządzanie sandboxami na tym urządzeniu"
                 },
                 "screen": {
-                    "label": "Podgląd ekranu",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Podgląd ekranu"
                 },
                 "shell": {
-                    "label": "Uruchamianie poleceń",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Uruchamianie poleceń"
                 },
                 "write": {
-                    "label": "Tworzenie i zmienianie plików",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Tworzenie i zmienianie plików"
                 }
             },
             "phone": {
                 "apps": {
-                    "label": "Otwieranie aplikacji i linków",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Otwieranie aplikacji i linków"
                 },
                 "confirm": {
                     "label": "Najpierw pytaj na telefonie",
@@ -2928,48 +2869,24 @@
                 },
                 "control": {
                     "hint": "Działa w aplikacjach, na które pozwolisz na telefonie, przez usługę ułatwień dostępu aplikacji. Potrafi to tylko wersja z intentic.dev.",
-                    "label": "Stukanie, przesuwanie i pisanie",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Stukanie, przesuwanie i pisanie"
                 },
                 "destructive": {
                     "hint": "Wpisanie niszczącego polecenia i działanie w aplikacji, którą oznaczyłeś na telefonie jako wrażliwą.",
-                    "label": "Działania niszczące",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Działania niszczące"
                 },
                 "files": {
-                    "label": "Czytanie wybranych folderów",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Czytanie wybranych folderów"
                 },
                 "notifications": {
                     "hint": "Powiadomienia ze wszystkich aplikacji, łącznie z kodami jednorazowymi i wiadomościami.",
-                    "label": "Czytanie powiadomień",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Czytanie powiadomień"
                 },
                 "screen": {
-                    "label": "Podgląd ekranu",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Podgląd ekranu"
                 },
                 "write": {
-                    "label": "Zmienianie plików w tych folderach",
-                    "options": {
-                        "off": "Zablokowane",
-                        "on": "Dozwolone"
-                    }
+                    "label": "Zmienianie plików w tych folderach"
                 }
             }
         },

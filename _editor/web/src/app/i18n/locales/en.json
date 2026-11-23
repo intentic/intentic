@@ -1907,21 +1907,10 @@
         "previews": {
             "everyPaymentAsks": "Every payment asks you in chat first",
             "fullControl": "Full control",
-            "grantControl": "use the mouse and keyboard",
-            "grantDestructive": "delete folders and wipe disks",
-            "grantPrograms": "run programs this sandbox sends",
-            "grantSandboxes": "manage and remove its sandboxes",
-            "grantScreen": "see the screen",
-            "grantShell": "run commands",
-            "grantWrite": "change files",
-            "listAnd": "{rest} and {last}",
             "localModelMemory": "≈ {weights} GB weights + {window} GB window: needs {total} GB of free RAM.",
-            "mayAll": "May {list}.",
-            "mayOnly": "May {list}, and nothing else.",
             "observe": "Observe",
             "operate": "Operate",
             "paymentsUnder": "Payments under {amount} go through on their own, the rest ask you first",
-            "readFilesOnly": "Read files only.",
             "walletSummary": "{asks} · at most {perPayment} each · {daily} a day."
         },
         "refs": {
@@ -2823,58 +2812,30 @@
             "device": {
                 "admin": {
                     "hint": "Windows: a command an agent asks to run as administrator runs with no UAC prompt on this computer. Each one asks you on a card in chat first, unless the conversation is marked auto-approve. Needs Remote access's lock screen and admin prompts service here.",
-                    "label": "Run commands as administrator",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Run commands as administrator"
                 },
                 "control": {
-                    "label": "Use the mouse and keyboard",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Use the mouse and keyboard"
                 },
                 "destructive": {
                     "hint": "Deleting folders recursively, formatting a disk, removing a Docker volume. Everything else it may run stays allowed.",
-                    "label": "Run destructive commands",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Run destructive commands"
                 },
                 "programs": {
                     "hint": "A program built in the sandbox (a Windows .exe, an app folder) is copied to this computer and started, watched and stopped by the agent. It runs as you, with your files and network.",
-                    "label": "Run programs this sandbox sends",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Run programs this sandbox sends"
                 },
                 "remoteControl": {
                     "hint": "From that view, a person moves the mouse and types on this computer. On Windows a notice says so, and Ctrl+Alt+Shift+P there pauses them.",
-                    "label": "Let people use the mouse and keyboard",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Let people use the mouse and keyboard"
                 },
                 "remoteTerminal": {
                     "hint": "A person in this sandbox's editor opens a shell on this computer, running as you.",
-                    "label": "Let people open terminals",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Let people open terminals"
                 },
                 "remoteView": {
                     "hint": "A person in this sandbox's editor, never an agent, watches this computer's screen live.",
-                    "label": "Let people see the screen",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Let people see the screen"
                 },
                 "roots": {
                     "label": "Folders it may touch",
@@ -2882,41 +2843,21 @@
                 },
                 "sandboxes": {
                     "hint": "Start, stop, update and remove this machine's Intentic sandboxes. Removing one deletes its files and its history: nothing undoes it.",
-                    "label": "Manage sandboxes on this device",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Manage sandboxes on this device"
                 },
                 "screen": {
-                    "label": "See the screen",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "See the screen"
                 },
                 "shell": {
-                    "label": "Run commands",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Run commands"
                 },
                 "write": {
-                    "label": "Create and change files",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Create and change files"
                 }
             },
             "phone": {
                 "apps": {
-                    "label": "Open apps and links",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Open apps and links"
                 },
                 "confirm": {
                     "label": "Ask on the phone first",
@@ -2928,48 +2869,24 @@
                 },
                 "control": {
                     "hint": "Works in the apps you allow on the phone, through the app's accessibility service. Only the build from intentic.dev can do this.",
-                    "label": "Tap, swipe and type",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Tap, swipe and type"
                 },
                 "destructive": {
                     "hint": "Typing a destructive command, and acting in an app you marked sensitive on the phone.",
-                    "label": "Destructive actions",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Destructive actions"
                 },
                 "files": {
-                    "label": "Read the folders you pick",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Read the folders you pick"
                 },
                 "notifications": {
                     "hint": "Every app's notifications, including one-time codes and messages.",
-                    "label": "Read notifications",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Read notifications"
                 },
                 "screen": {
-                    "label": "See the screen",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "See the screen"
                 },
                 "write": {
-                    "label": "Change files in those folders",
-                    "options": {
-                        "off": "Blocked",
-                        "on": "Allowed"
-                    }
+                    "label": "Change files in those folders"
                 }
             }
         },

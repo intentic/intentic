@@ -6,6 +6,7 @@ import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { ref, watch } from "vue";
 import { type KeyValueRow, keyNameValid, keyValueText, parseKeyValues, pastedRows } from "../../models/capabilities/keyValue";
+import FieldHint from "./FieldHint.vue";
 
 const t = useT();
 
@@ -66,7 +67,10 @@ const onNamePaste = (index: number, event: ClipboardEvent): void => {
 <template>
     <!-- A div, not a label: a label forwards a click anywhere inside it to its first control. -->
     <div class="ui-field">
-        <span class="ui-field-label">{{ field.label }}{{ field.optional ? t(`capabilities.capabilityFieldRow.optional`) : "" }}</span>
+        <span class="ui-field-label">
+            {{ field.label }}{{ field.optional ? t(`capabilities.capabilityFieldRow.optional`) : "" }}
+            <FieldHint v-if="field.hint" :label="field.label" :text="field.hint" />
+        </span>
         <div v-for="(row, index) in rows" :key="index" class="flex flex-col gap-1">
             <div class="flex items-center gap-2">
                 <input
@@ -117,6 +121,5 @@ const onNamePaste = (index: number, event: ClipboardEvent): void => {
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ alarm }}
         </span>
-        <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
     </div>
 </template>

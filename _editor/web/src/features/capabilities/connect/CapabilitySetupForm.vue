@@ -9,6 +9,7 @@ import { computed } from "vue";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { advancedLabel, inlineField } from "../../../models/capabilities/form";
 import CapabilityFieldRow from "../../../parts/capabilities/CapabilityFieldRow.vue";
+import FieldHint from "../../../parts/capabilities/FieldHint.vue";
 import HubTakeOffer from "../../../parts/sandbox/HubTakeOffer.vue";
 import LinkPairing from "../../../components/LinkPairing.vue";
 import type { HubWant } from "@intentic/sandbox-contract/schemas/connection-hub";
@@ -19,7 +20,7 @@ import type { useCapabilityProbe } from "../capabilityProbe";
 import type { useCapabilitySubmit } from "../capabilitySubmit";
 import { auditPrompt } from "../model/audit";
 import type { useFieldStandIns } from "../model/fieldStandIns";
-import { hostGrantSummary, matchHostPreset } from "../model/previews";
+import { matchHostPreset } from "../model/previews";
 import { picksVersion } from "../model/refs";
 import CapabilityContext from "./CapabilityContext.vue";
 import FieldStandIn from "./FieldStandIn.vue";
@@ -109,7 +110,10 @@ const offersCancel = computed(() => cancellable && (editing === undefined || cha
         <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (the row's Rename), so a
              second box here would be a lossy shortcut for it. -->
         <label v-if="!entry.singleton && editing === undefined" class="ui-field">
-            <span class="ui-field-label">{{ t(`shared.name`) }}</span>
+            <span class="ui-field-label">
+                {{ t(`shared.name`) }}
+                <FieldHint :label="t(`shared.name`)" :text="t(`capabilities.capabilities.whatAgentCallConnection`)" />
+            </span>
             <input
                 v-model="name"
                 placeholder="my-tool"
@@ -132,15 +136,12 @@ const offersCancel = computed(() => cancellable && (editing === undefined || cha
                 <Icon name="check" class="text-2xs text-success" />
                 {{ t(`capabilities.capabilities.saved`) }} <span class="font-mono text-content">{{ namePreview }}</span>
             </span>
-            <span v-else class="mt-1 text-2xs text-subtle">{{ t(`capabilities.capabilities.whatAgentCallConnection`) }}</span>
         </label>
 
-        <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
-        <label v-if="entry.kind === 'device'" class="flex items-start justify-between gap-4">
-            <span class="min-w-0">
-                <span class="ui-field-label">{{ t(`capabilities.words.access`) }}</span>
-                <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
-            </span>
+        <!-- A device's access as a posture: the preset sets all switches at once. The switches below say what it grants, so
+             no sentence repeats them here. -->
+        <label v-if="entry.kind === 'device'" class="flex items-center justify-between gap-4">
+            <span class="ui-field-label min-w-0">{{ t(`capabilities.words.access`) }}</span>
             <SegmentedControl class="shrink-0" :model-value="matchHostPreset(values) ?? ''" :options="hostPresetOptions" @update:model-value="applyHostPreset($event)" />
         </label>
 

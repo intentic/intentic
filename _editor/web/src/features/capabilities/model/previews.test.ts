@@ -1,4 +1,4 @@
-import { answersSummary, hostPresets, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
+import { answersSummary, hostPresets, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
 
 /* The sentences the forms say back. Each is the actual thing being agreed to, so what it claims is pinned. */
 
@@ -19,29 +19,6 @@ test(`matches the switches back to the preset they spell`, () => {
     }
     // A hand-tuned mix is nobody's preset, and must not claim to be one.
     expect(matchHostPreset({ shell: `on`, write: `on`, screen: `off`, control: `off`, sandboxes: `off` })).toBeUndefined();
-});
-
-/* The grant, in one line and from the allowed half only: listing the blocked half too ran to three lines of a form whose whole problem was length. */
-test(`states the grant in one line, from what is allowed`, () => {
-    expect(hostGrantSummary({ shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off` })).toBe(
-        `May run commands and see the screen, and nothing else.`,
-    );
-    expect(hostGrantSummary({ shell: `on` })).toBe(`May run commands, and nothing else.`);
-    expect(hostGrantSummary({})).toBe(`Read files only.`);
-    // Everything granted has no "nothing else" to add.
-    expect(
-        hostGrantSummary({
-            shell: `on`,
-            write: `on`,
-            screen: `on`,
-            control: `on`,
-            sandboxes: `on`,
-            destructive: `on`,
-            programs: `on`,
-        }),
-    ).toBe(
-        `May run commands, change files, see the screen, use the mouse and keyboard, manage and remove its sandboxes, delete folders and wipe disks and run programs this sandbox sends.`,
-    );
 });
 
 test(`does the local model's RAM sum so the reader doesn't`, () => {
