@@ -5,12 +5,12 @@ import { type ComponentPublicInstance, computed, type CSSProperties, onBeforeUnm
 // when the chat beside the board has no room for it), the Finished lane is held to exactly the board's visible height and
 // pinned there, so what stands at its foot is always whole on screen and never lengthens the board: the lanes beside it
 // may scroll, this column does not. What gives way is Finished's own cards: only those that fit whole above the corner
-// are drawn, the rest join the lane's "N earlier" count. Pressing that (or opening the archive, or a filter listing every
-// match) lets the lane scroll inside its own column instead, the corner still standing under it.
+// are drawn, the rest join the lane's "N earlier" count (its header's fold). Pressing that (or opening the archive, or a
+// filter listing every match) lets the lane scroll inside its own column instead, the corner still standing under it.
 //
 // The fit is read off the drawn cards, never estimated: every card of Finished's window is rendered, all are shown and
-// measured, and the ones whose bottom falls past the lane's card box (less the "N earlier" row under them) are taken out,
-// in one frame before it paints, so the row follows the last card drawn and nothing flickers.
+// measured, and the ones whose bottom falls past the lane's card box (less the tile board's "N earlier" row under them)
+// are taken out, in one frame before it paints, so nothing flickers.
 
 export interface CornerFitHost {
     // A corner is drawn, and whether the board is stacked: a stacked board has no corner to hold, so the corner follows
@@ -21,6 +21,8 @@ export interface CornerFitHost {
     readonly view: Readonly<Ref<BoardView>>;
     readonly filtering: Readonly<Ref<boolean>>;
     readonly hiddenFinished: Readonly<Ref<number>>;
+    // Whether the fold is a row under the cards (a tile board, whose header has no room for it) rather than a header chip.
+    readonly tailRow: () => boolean;
 }
 
 // A card's hover bar and drop shadow reach past its edge; the scrolling box gives them this much room inside its clip.
@@ -36,9 +38,9 @@ const LIST_PAD_PX = 10;
 const TAIL_PX = 34;
 
 // Takes out every card from the first whose bottom falls past the box (never skipping one to show a later one), and
-// answers how many it took out. Room for the "N earlier" row is kept whenever there will be one: the window already
-// leaves cards out (`folded`), or this cut does. Not cutting, it shows them all.
-const cutCards = (box: HTMLElement, cutting: boolean, folded: boolean): number => {
+// answers how many it took out. Room for the "N earlier" row is kept whenever there will be one (`tailRow`, and the window
+// already leaves cards out (`folded`), or this cut does). Not cutting, it shows them all.
+const cutCards = (box: HTMLElement, cutting: boolean, folded: boolean, tailRow: boolean): number => {
     const units = [...box.querySelectorAll<HTMLElement>(`[data-fold-unit], [data-fit-unit]`)];
     for (const unit of units) {
         unit.style.display = ``;
@@ -50,7 +52,7 @@ const cutCards = (box: HTMLElement, cutting: boolean, folded: boolean): number =
     const tail = box.querySelector<HTMLElement>(`[data-fit-tail]`);
     // Its own bottom margin may fall under the corner's top padding, so it is not room the cards give up.
     const tailRoom = (tail?.offsetHeight ?? TAIL_PX) + LIST_PAD_PX;
-    const floor = folded || units.some((unit) => unit.getBoundingClientRect().bottom > bottom) ? bottom - tailRoom : bottom;
+    const floor = tailRow && (folded || units.some((unit) => unit.getBoundingClientRect().bottom > bottom)) ? bottom - tailRoom : bottom;
     const from = units.findIndex((unit) => unit.getBoundingClientRect().bottom > floor);
     const cut = from === -1 ? [] : units.slice(from);
     for (const unit of cut) {
@@ -106,7 +108,7 @@ const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElem
     return schedule;
 };
 
-export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished }: CornerFitHost) => {
+export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, tailRow }: CornerFitHost) => {
     // The board's scroller and the lane grid inside it, and Finished's card box, all from template refs.
     const scroller = ref<HTMLElement>();
     const grid = ref<HTMLElement>();
@@ -132,9 +134,9 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished }:
         if (scroller.value !== undefined && grid.value !== undefined) {
             room.value = roomIn(scroller.value, grid.value);
         }
-        cut.value = box.value === undefined ? 0 : cutCards(box.value, active.value && !scrolls.value, hiddenFinished.value > 0);
+        cut.value = box.value === undefined ? 0 : cutCards(box.value, active.value && !scrolls.value, hiddenFinished.value > 0, tailRow());
     });
-    watch([active, scrolls, hiddenFinished], schedule);
+    watch([active, scrolls, hiddenFinished, tailRow], schedule);
 
     // Finished's card box, by a function ref, so a v-for does not make it a list.
     const attach = (el: Element | ComponentPublicInstance | null): void => {
@@ -152,7 +154,7 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished }:
         }
         return scrolls.value ? `flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain ${BLEED}${scrolled.value ? ` ${SCROLLED_MASK}` : ``}` : `flex min-h-0 flex-1 flex-col overflow-y-clip [overflow-clip-margin:0.75rem]`;
     });
-    // Finished's tail counts the cards its window leaves out and the ones the corner left no room for; expanded, it
+    // Finished's fold counts the cards its window leaves out and the ones the corner left no room for; expanded, it
     // always offers the fold back, since the corner's cut is not counted while the lane scrolls.
     const earlier = computed(() => hiddenFinished.value + cut.value);
     const tailed = computed(() => (view.value.all ? hiddenFinished.value > 0 || active.value : earlier.value > 0));

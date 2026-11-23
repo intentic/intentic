@@ -302,7 +302,7 @@ const slim = computed(() => fit.value !== `full` && !mobile.value);
 const sliver = computed(() => fit.value === `mini` || fit.value === `tile`);
 const searchOpen = ref(false);
 const searchRow = computed(() => slim.value && (searchOpen.value || query.value !== ``));
-const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished });
+const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished, tailRow: () => fit.value === `tile` });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -439,7 +439,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             <FinishedLaneActions
                                 :view="view"
                                 :filtering="filtering"
-                                :hidden="hiddenFinished"
+                                :tailed="!waiting && tailed"
+                                :earlier="earlier"
                                 :archive-size="archiveSize"
                                 :pulsing="pulsing"
                                 :clearable="clears ? clearable : 0"
@@ -605,18 +606,18 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             </Transition>
                         </template>
                     </div>
-                    <!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
+                    <!-- The lane's fold lives in its header (FinishedLaneActions); a tile board's header has no room for it, so
+                         there alone it stays a row under the cards: the count, one press away. Hidden while filtering. -->
                     <button
-                        v-if="lane.key === 'finished' && !view.archive && !filtering && !waiting && tailed"
+                        v-if="lane.key === 'finished' && fit === `tile` && !view.archive && !filtering && !waiting && tailed"
                         type="button"
                         :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
-                        :aria-label="fit === `tile` ? (view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier })) : undefined"
+                        :aria-label="view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier })"
                         data-fit-tail
                         @click="toggleFinished"
                     >
                         <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        <template v-if="fit === `tile`">{{ view.all ? `` : earlier }}</template>
-                        <template v-else>{{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier }) }}</template>
+                        {{ view.all ? `` : earlier }}
                     </button>
                     <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button

@@ -1,4 +1,4 @@
-<!-- The Finished lane's header acts (AgentsView): the expanded lane's fold, the archive's counter that opens it, the
+<!-- The Finished lane's header acts (AgentsView): the lane's fold ("N earlier" / "Show fewer"), the archive's counter that opens it, the
      lane's Clear, and inside the archive its Delete all. A slim board (boardGrid.ts `CardFit`) keeps fewer of them: a mini
      one drops Clear, the one bulk act nobody needs from a sliver, and a tile one keeps none, its lane's glyph being all
      the header there is. -->
@@ -12,8 +12,10 @@ import type { CardFit } from "./view/boardGrid";
 defineProps<{
     view: BoardView;
     filtering: boolean;
-    // Finished cards the lane's window leaves out, and how many sit in the archive.
-    hidden: number;
+    // Whether the lane offers its fold (cornerFit.ts `tailed`), and how many cards it leaves out while folded.
+    tailed: boolean;
+    earlier: number;
+    // How many cards sit in the archive.
     archiveSize: number;
     // The archive's counter flashes as a card lands in it (archiveDoor.ts).
     pulsing: boolean;
@@ -32,16 +34,16 @@ const words = useVocabulary();
 
 <template>
     <template v-if="fit !== `tile` && !view.archive">
-        <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. Sized as the
-             archive counter beside it (sm, 20px), so the header's chips read as one set. -->
+        <!-- The lane's fold, both ways, in one place: the cards it leaves out when folded, the way back once opened. Sized
+             as the archive counter beside it (sm, 20px), so the header's chips read as one set. -->
         <button
-            v-if="view.all && !filtering && hidden > 0"
+            v-if="tailed && !filtering"
             type="button"
             :class="ui.chip({ size: `sm` }, `shrink-0`)"
-            :aria-label="t(`ui.action.showFewer`)"
+            data-fold
             @click="emit(`fewer`)"
         >
-            <Icon name="chevron-up" class="text-2xs" />{{ t(`ui.action.showFewer`) }}
+            <Icon :name="view.all ? `chevron-up` : `chevron-down`" class="text-2xs" />{{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: earlier }) }}
         </button>
         <!-- Archive feedback highlights the destination counter. sm (20px), not the md chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
         <button
