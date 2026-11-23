@@ -78,6 +78,7 @@ services:
             # Comma-separated emails whose signed-in session may call the /admin surface (the operator's
             # platform-admin panel). Empty (the default) disables it outright — no route, no exposure.
             ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+            TELEMETRY_INTERNAL_ACCOUNTS: ${TELEMETRY_INTERNAL_ACCOUNTS:-}
             # The admin surface's writes (suspend/retry/stop/erase). Leave off until the panel is a pinned
             # install — see the platform-admin extension's README.
             ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-}

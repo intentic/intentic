@@ -3,7 +3,7 @@
      address the platform minted; and the wait for the machine that runs it, which says what it is doing and, when it
      fails, exactly what broke. The row opens by itself once that machine reports in (the registry watch). -->
 <script setup lang="ts">
-import { Code, CopyButton, InfoHint, SegmentedControl, toneRim, ui } from "@intentic/ui";
+import { Button, Code, CopyButton, InfoHint, Notice, SegmentedControl, toneRim, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
@@ -19,7 +19,8 @@ const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
 
 const t = useT();
 const { user } = useAuth();
-const { command, created } = add;
+const { command, created, renewal } = add;
+const { stale, renewing, renewError, renew } = renewal;
 const { mode, cfToken, step, wait } = command;
 const { runTab, runTabOptions, selectedCommand, selectedCommandLang, composeArgs } = step;
 const { handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed } = wait;
@@ -76,6 +77,17 @@ const hostname = computed(() => (mode.value === `own` && cf.selectedZone.value !
             <Icon name="lock" class="shrink-0" />
             <span>{{ locked }}</span>
         </div>
+        <!-- The code ran out with no run holding it: no command to copy until its replacement is in (useCodeRenewal.ts). -->
+        <div v-else-if="stale" class="flex flex-col gap-2 text-xs" data-setup-code-renewal>
+            <template v-if="renewError !== null && !renewing">
+                <Notice :of="renewError" class="rounded-none" />
+                <Button :label="t(`setup.addSandbox.codeRenewRetry`)" tier="boring" class="self-start" @click="renew" />
+            </template>
+            <p v-else class="flex items-center gap-2 text-muted">
+                <Icon name="spinner" spin class="shrink-0 text-subtle" />
+                <span class="min-w-0">{{ t(`setup.addSandbox.codeRenewing`) }}</span>
+            </p>
+        </div>
         <template v-else>
             <p class="flex items-center gap-2.5 text-xs text-muted">
                 <Icon name="terminal" class="shrink-0 text-link" />
@@ -124,7 +136,7 @@ const hostname = computed(() => (mode.value === `own` && cf.selectedZone.value !
             </ul>
             <p class="text-2xs">{{ t(`setup.setup.fixAboveRunSame`) }}</p>
         </div>
-        <SetupNudge v-if="nudging" :variant="nudgeVariant" :stalled="stalled" :command="selectedCommand" :copyable="nudgeCopyable" @copied="onCopied" />
+        <SetupNudge v-if="nudging && !stale" :variant="nudgeVariant" :stalled="stalled" :command="selectedCommand" :copyable="nudgeCopyable" @copied="onCopied" />
         <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
             <Icon name="exclamation-circle" class="shrink-0" />
             <span class="min-w-0">{{ t(`setup.setup.pickedUpNoSandbox`, { where: t(`setup.setup.thatTerminal`) }) }}</span>

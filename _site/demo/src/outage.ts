@@ -16,8 +16,11 @@ import { type DemoHandler, json } from "./transport";
 //   hosted      a machine we run, which failed to start; the platform kept the image before its last update
 //   asleep      its machine put it to sleep for want of use; the edge holds no tunnel until it wakes, WAKES_AFTER_MS
 //               into the visit (the keeper's poll, a start, a boot), and from then on it answers as ever
+//   hosted-asleep  a machine we run, stopped while nobody used it (Fly's `stopped`): the edge holds no tunnel until the page
+//               asks the platform to wake it (sandbox.wake), and answers HOSTED_BOOT_MS after that ask. A visitor coming
+//               back to their cloud sandbox days later meets exactly this.
 
-const OUTAGES = [`busy`, `restarting`, `down`, `fixing`, `needs-you`, `fixed`, `hosted`, `asleep`] as const;
+const OUTAGES = [`busy`, `restarting`, `down`, `fixing`, `needs-you`, `fixed`, `hosted`, `asleep`, `hosted-asleep`] as const;
 export type DemoOutage = (typeof OUTAGES)[number];
 
 const STORAGE_KEY = `intentic.demo.outage`;
@@ -130,8 +133,34 @@ export const outageReport = (): HostReport | null => {
     }
 };
 
-/** The hosted machine the row names, for the one outage on a machine we run. */
-export const outageHosted = (): SandboxHosted | null => (demoOutage === `hosted` ? { region: `arn`, warm: true, canRollBack: true } : null);
+// How long a stopped machine of ours takes to answer once the page asked for it: about what a warm machine's start and boot take.
+const HOSTED_BOOT_MS = 20_000;
+// When the page asked the platform to wake the stopped machine (`hosted-asleep`); undefined until it does.
+// allow(module-state): the one demo machine this page load acts out
+let hostedWokenAt: number | undefined;
+
+/** The platform was asked to start the demo sandbox's machine (sandbox.wake, hostedRestart). */
+export const wakeOutage = (): void => {
+    if (demoOutage === `hosted-asleep` && hostedWokenAt === undefined) {
+        hostedWokenAt = Date.now();
+    }
+};
+
+/** What the provider says the demo sandbox's machine is doing, for the outages on a machine we run. */
+export const outageMachine = (): `failed` | `stopped` | `started` =>
+    demoOutage === `hosted` ? `failed` : demoOutage === `hosted-asleep` && hostedWokenAt === undefined ? `stopped` : `started`;
+
+/** The hosted machine the row names, for the outages on a machine we run. */
+export const outageHosted = (): SandboxHosted | null => {
+    switch (demoOutage) {
+        case `hosted`:
+            return { region: `arn`, warm: true, canRollBack: true };
+        case `hosted-asleep`:
+            return { region: `arn`, warm: true, canRollBack: false, state: `asleep` };
+        default:
+            return null;
+    }
+};
 
 const BUSY_VITALS: SandboxVitals = { node: `up`, lagMs: 14_200, restarts: 0, uptimeS: 7_260, pressure: { cpu: 97.4, memory: 31, io: 6 } };
 const RESTARTING_VITALS: SandboxVitals = { node: `restarting`, lagMs: null, restarts: 1, uptimeS: 7_260, pressure: null };
@@ -166,5 +195,7 @@ export const withOutage =
                 return noTunnel();
             case `asleep`:
                 return Date.now() < WAKES_AT ? noTunnel() : daemon(request, url);
+            case `hosted-asleep`:
+                return hostedWokenAt === undefined || Date.now() < hostedWokenAt + HOSTED_BOOT_MS ? noTunnel() : daemon(request, url);
         }
     };

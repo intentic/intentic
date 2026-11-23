@@ -131,6 +131,8 @@ fresh_home() {
     printf '{\n  "appUrl": "%s",\n  "platformUrl": "%s"\n}\n' "$app_url" "$PLATFORM_URL" >"$config/settings.json"
     printf '"workspace"' >"$config/last-face.json"
     printf 'false' >"$config/hosts-sandboxes.json"
+    # A test launch sends no analytics (the Dockerfile's analytics-consent says why); exactly `deny`, no newline.
+    printf 'deny' >"$config/analytics-consent"
 }
 
 start_stub() {

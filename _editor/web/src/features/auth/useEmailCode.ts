@@ -27,6 +27,9 @@ interface EmailCodeOptions {
     // Google's sign-in is on the same screen: the first send counts whether the address was a Google one.
     readonly googleOffered?: Readonly<Ref<boolean>>;
     readonly surface: EmailCodeSurface;
+    // Where the sign-in carries on once it is in: the mail's link goes there too, so a followed link lands where a typed
+    // code does (an invite, a desktop app's sign-in with its state and challenge).
+    readonly returnTo?: Readonly<Ref<string | undefined>>;
     readonly onSignedIn: () => void | Promise<void>;
     readonly auth?: EmailCodeAuth;
     readonly track?: Track;
@@ -67,7 +70,7 @@ export const useEmailCode = (options: EmailCodeOptions) => {
         sending.value = true;
         notice.value = undefined;
         try {
-            await events.mail(stage, to, () => sendEmailCode(to));
+            await events.mail(stage, to, () => sendEmailCode(to, { returnTo: options.returnTo?.value }));
             sentTo.value = to;
             needsNewCode.value = false;
             code.value = ``;

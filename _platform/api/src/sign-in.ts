@@ -3,7 +3,7 @@ import type { SignInMethod, SignInOptions } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
-import { topPath } from "@intentic/sandbox-contract/app-routes";
+import { returnPath, topPath } from "@intentic/sandbox-contract/app-routes";
 import type { BetterAuthPlugin } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import type { Logger } from "pino";
@@ -34,10 +34,23 @@ export const signInOptionsOf = (config: Config): SignInOptions => ({
 });
 
 // The page the mail's link opens: it shows the address and asks for a Confirm press before it spends the code
-// (the editor's `loginConfirm` page), so a scanner that opens every link in a mail signs nobody in.
-export const signInCodeLink = (config: Config, email: string, code: string): string => {
-    return new URL(topPath(`loginConfirm`, {}, { email, code }), config.webOrigin).toString();
+// (the editor's `loginConfirm` page), so a scanner that opens every link in a mail signs nobody in. It carries on to
+// where the code was asked for (an invite, a desktop app's sign-in with its state and challenge), as a typed code
+// would: a path on the editor's own origin, by the editor's own rule (`returnPath`), or nothing.
+// (2026-11-23) Without it a followed link landed on `/`, so an invitee was sent to make a workspace of their own and a
+// desktop app's sign-in never reached its handoff.
+export const signInCodeLink = (config: Config, email: string, code: string, returnTo?: string): string => {
+    const destination = returnPath(returnTo);
+    return new URL(topPath(`loginConfirm`, {}, { email, code, returnTo: destination === `/` ? undefined : destination }), config.webOrigin).toString();
 };
+
+// The query parameter the editor names a code's destination by on the send request (useAuth's sendEmailCode). On the
+// query, not the body: Better Auth's send endpoint parses its body with a schema that keeps only `email` and `type`.
+const RETURN_TO_PARAM = `returnTo`;
+
+// The destination a send request named, or nothing; `returnPath` is still the one that decides whether it is one.
+export const returnToOf = (request: Request | undefined): string | undefined =>
+    request === undefined || !URL.canParse(request.url) ? undefined : (new URL(request.url).searchParams.get(RETURN_TO_PARAM) ?? undefined);
 
 // At most one code a minute and five an hour per address, whoever asks and from wherever: the per-IP limit Better Auth
 // keeps is per address of the asker, and this is the one that keeps a stranger's inbox from filling up.
@@ -143,7 +156,10 @@ export const signInCodeGate = (deps: CodeDeps) =>
 
 // Mails a code the gate above let through. The canary is checked again in case a send ever reaches here another way;
 // the allowance is not, since the gate already took it for this code.
-export const sendSignInCode = async (deps: Omit<CodeDeps, `allowances`>, request: { readonly email: string; readonly code: string }): Promise<void> => {
+export const sendSignInCode = async (
+    deps: Omit<CodeDeps, `allowances`>,
+    request: { readonly email: string; readonly code: string; readonly returnTo?: string | undefined },
+): Promise<void> => {
     const email = request.email.trim().toLowerCase();
     const address = sha256Hex(email).slice(0, 12);
     const canary = deps.config.hosted.canaryEmail.trim().toLowerCase();
@@ -151,7 +167,7 @@ export const sendSignInCode = async (deps: Omit<CodeDeps, `allowances`>, request
         deps.logger.warn({ address }, `sign-in code: refused for the canary's address, which nobody signs in as`);
         return;
     }
-    const link = signInCodeLink(deps.config, email, request.code);
+    const link = signInCodeLink(deps.config, email, request.code, request.returnTo);
     const delivery = await sendMail(deps.config, deps.logger, {
         to: email,
         subject: `Your intentic sign-in code`,

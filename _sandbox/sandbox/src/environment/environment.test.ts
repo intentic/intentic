@@ -41,6 +41,13 @@ it("says Compose runs the container when its file said so, and nothing otherwise
     expect(facts({}).manager).toBeUndefined();
 });
 
+// The rebuild card renders the file the way the folder keeps its credentials: intentic.env, or a `.env` from before.
+it("names the credentials file a Compose sandbox's file reads, and none for a container Compose does not run", () => {
+    expect(facts({ manager: "compose", composeCredentials: "intentic.env" }).composeCredentials).toBe("intentic.env");
+    expect(facts({ manager: "compose" }).composeCredentials).toBeUndefined();
+    expect(facts({ composeCredentials: "intentic.env" }).composeCredentials).toBeUndefined();
+});
+
 it("passes the overlay hash and container name through as the card's own anchors", () => {
     expect(facts({ environmentHash: "abc", name: "intentic-sandbox-demo" })).toEqual({ appliedHash: "abc", container: "intentic-sandbox-demo" });
 });

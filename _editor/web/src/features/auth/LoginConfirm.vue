@@ -14,7 +14,8 @@ import { returnPath } from "../../lib/routes/signIn";
 import { failureReason } from "./emailCodeEvents";
 import EmailCodeSignIn from "./EmailCodeSignIn.vue";
 
-// THE MAIL'S LINK, `/login/confirm?email=…&code=…[&returnTo=…]`. It never signs in on load: mail scanners fetch every
+// THE MAIL'S LINK, `/login/confirm?email=…&code=…[&returnTo=…]`, `returnTo` being where the code was asked for (the
+// platform writes it only when `returnPath` passes it, and it is read here by the same rule before anything goes there). It never signs in on load: mail scanners fetch every
 // link in a message to judge it, and a page that spent the code on a GET would sign the scanner in, or spend the code
 // before its reader got here. So it names the address and waits for a press. The values leave the address bar the moment
 // the page mounts (kept in memory only), so neither the history, a shared screenshot nor a pasted URL carries a live
@@ -103,7 +104,7 @@ const brokenNotice = noticeOf(t(`auth.loginConfirm.linkIncomplete`), { tone: `wa
                 <!-- The code is spent: one more mail to the same address, typed here this time. -->
                 <template v-else-if="state === `refused`">
                     <Notice v-if="notice" :of="notice" class="mb-4 rounded-none text-left" />
-                    <EmailCodeSignIn surface="confirm" :locked-email="email" @signed-in="land" />
+                    <EmailCodeSignIn surface="confirm" :locked-email="email" :return-to="destination" @signed-in="land" />
                 </template>
 
                 <template v-else>

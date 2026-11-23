@@ -27,10 +27,18 @@ it(`builds a recipe with steps inline, on the storage the sandbox already has`, 
     expect(edit.file).toContain(`        name: intentic-workspace-sandbox-0f00ba4dd12b\n        external: true`);
 });
 
-it(`keeps every credential in the .env the folder already has`, () => {
-    const { file } = composeRebuildOf(HASH, HEADER, CONTEXT);
+it(`keeps every credential in the .env a folder set up before intentic.env already has`, () => {
+    const { file } = composeRebuildOf(HASH, HEADER, { ...CONTEXT, dotEnv: true });
+    expect(file).not.toContain(`env_file`);
     expect(file).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
     expect(file).toContain(`SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`);
+    expect(file).toContain(`SANDBOX_PUBLIC_URL: "https://sandbox-0f00ba4dd12b.intentic.dev"`);
+});
+
+it(`keeps every credential in the intentic.env a folder set up since already has`, () => {
+    const { file } = composeRebuildOf(HASH, HEADER, CONTEXT);
+    expect(file).toContain(`env_file: ["intentic.env"]`);
+    expect(file).not.toContain(`CONNECT_TOKEN`);
     expect(file).toContain(`SANDBOX_PUBLIC_URL: "https://sandbox-0f00ba4dd12b.intentic.dev"`);
 });
 

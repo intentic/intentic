@@ -1,5 +1,5 @@
 import { GOOGLE_REQUIRED_REASON, type HostedOffer, type HostedStatus, type SandboxSummary } from "@intentic/api-contract";
-import type { HostedTierId, SandboxMode } from "@intentic/constants";
+import { FREE_TIER, type HostedTierId, type SandboxMode } from "@intentic/constants";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
@@ -93,6 +93,20 @@ interface HostedFailure {
 // left setup mid-wait and came back (the arrival resumes the row from the platform) is still in the same wait.
 // allow(module-state): one wait per setup row, keyed by the row's own sandbox id, for as long as the window lives
 const waitingSince = shallowReactive(new Map<string, number>());
+
+// THE ZERO-COMMAND MILESTONE, `sandbox_hosted_created`: once per machine the platform made for a cloud sandbox, whether
+// or not the page still waits on it (a reader who went elsewhere meanwhile still has it), and not for the wait's own
+// rebuild of one. `sandbox_connected` completes it once the machine checks in. Until 2026-11 it fired only for a page
+// still waiting, and the open sandbox's analytics switch, unread while it was being set up, held it back anyway: zero
+// events from 2026-10-13 while machines were made every week (models/sandbox/live/settingUp.ts).
+const countCreated = (
+    updated: SandboxSummary | null | undefined,
+    { tier, resumed, rebuild }: { readonly tier: HostedTierId | undefined; readonly resumed: boolean; readonly rebuild: boolean | undefined },
+): void => {
+    if (rebuild !== true && (updated?.hosted ?? null) !== null) {
+        track(`sandbox_hosted_created`, { machine: `hosted`, tier: tier ?? FREE_TIER.id, resumed });
+    }
+};
 
 /** Test seam: the waits are module state, and one left in them would follow one test into the next. */
 export const forgetHostedWaits = (): void => waitingSince.clear();
@@ -223,8 +237,8 @@ export const useHostedLane = (host: HostedLaneHost) => {
         action === lane.value.action && machine.value === `hosted` && created.value?.id === id;
 
     // Gives this row a platform-run machine, then the registry poll takes over; a refusal costs only the attempt and
-    // leaves the sandbox untouched. False when it did not happen.
-    const provisionHosted = async (): Promise<boolean> => {
+    // leaves the sandbox untouched. False when it did not happen. `rebuild`: the wait's recovery making it again.
+    const provisionHosted = async (rebuild?: boolean): Promise<boolean> => {
         const target = created.value;
         const token = target?.token ?? null;
         if (target === null || token === null || lane.value.kind !== `idle`) {
@@ -264,13 +278,12 @@ export const useHostedLane = (host: HostedLaneHost) => {
                 }
             }
             const updated = ran?.state === `done` ? ran.value : undefined;
+            countCreated(updated, { tier: host.tier, resumed: row.resuming.value, rebuild });
             if (updated === undefined || updated === null || !provisionLands(action, target.id)) {
                 return false;
             }
             created.value = updated;
             hostedSince.value = Date.now();
-            // Zero-command milestone: `sandbox_connected` completes it once this machine checks in.
-            track(`sandbox_hosted_created`, {});
             return true;
         } finally {
             if (action === lane.value.action) {
@@ -342,7 +355,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
         }
         // Outside the busy window on purpose, since provisioning shares it: a released machine must not leave the row empty.
         if (released && action === lane.value.action && machine.value === `hosted`) {
-            await provisionHosted();
+            await provisionHosted(true);
         }
     };
 

@@ -34,6 +34,8 @@ interface World {
     readonly setupCode?: Error;
     readonly provision?: Error;
     readonly probe?: AttachOutcome;
+    // How long each minted code lives, as the platform's SETUP_CODE_TTL_MS; codes that never run out otherwise.
+    readonly codeTtlMs?: number;
 }
 
 const scopes: EffectScope[] = [];
@@ -50,6 +52,7 @@ const stage = (world: World = {}) => {
         }
         return sandboxSummary({ id, token: `tok`, hosted: { region: `iad`, warm: true } });
     });
+    let minted = 0;
     const platform = {
         hostedOffer: jest.fn(async () => world.hosted ?? { enabled: true, remaining: 1 }),
         addressOffer: jest.fn(async () => world.address ?? { enabled: true }),
@@ -57,7 +60,13 @@ const stage = (world: World = {}) => {
             if (world.setupCode !== undefined) {
                 throw world.setupCode;
             }
-            return { code: `code-${sandboxId}`, hostname: `sandbox-abc.sbx.test`, expiresAt: `later` };
+            minted += 1;
+            const ttl = world.codeTtlMs;
+            return {
+                code: minted === 1 ? `code-${sandboxId}` : `code-${sandboxId}-${minted}`,
+                hostname: `sandbox-abc.sbx.test`,
+                expiresAt: ttl === undefined ? `later` : new Date(Date.now() + ttl).toISOString(),
+            };
         }),
         hostedStatus: jest.fn(async () => ({ machine: `started` as const })),
     };
@@ -141,6 +150,18 @@ describe(`what it offers`, () => {
         const { add } = stage({ machines: [rog], hosted: { enabled: true, remaining: 0 } });
         await add.read();
         expect({ offered: add.options.value.map((option) => option.value), why: add.hostedProblem.value }).toEqual({ offered: [`rog`], why: `occupied` });
+    });
+
+    // A returning visitor asking for a cloud sandbox has one already: the form names it, so the way on is a press into it.
+    it(`names the reader's own cloud sandbox that holds the free machine, and nobody else's`, async () => {
+        const mine = sandboxSummary({ id: `cloud`, name: `my-app`, tier: `owner`, lastSeenAt: `2026-11-20T08:00:00Z`, hosted: { region: `iad`, warm: true } });
+        const shared = sandboxSummary({ id: `theirs`, name: `team`, tier: `maintainer`, lastSeenAt: `2026-11-22T08:00:00Z`, hosted: { region: `iad`, warm: true } });
+        const held = stage({ rows: [shared, mine], hosted: { enabled: true, remaining: 0 } });
+        await held.add.read();
+        expect(held.add.hostedHeldBy.value?.id).toBe(`cloud`);
+        const free = stage({ rows: [mine], hosted: { enabled: true, remaining: 1 } });
+        await free.add.read();
+        expect(free.add.hostedHeldBy.value).toBeUndefined();
     });
 
     it(`says a machine of ours waits on a Google sign-in rather than offering one that would be refused`, async () => {
@@ -334,6 +355,76 @@ describe(`a command for a server`, () => {
             command: add.command.step.selectedCommand.value.includes(`code-new`),
             handed: openDesktopLink.mock.calls.length,
         }).toEqual({ made: [`rack`], started: `command`, ready: true, command: true, handed: 0 });
+    });
+});
+
+// A code lives 30 minutes; the command on the page kept the one it was minted with past that, so a reader back from a
+// long install copied a command the platform could only refuse (2026-10-23).
+describe(`a command whose code runs out`, () => {
+    const TTL = 30 * 60_000;
+    // The first code minted, and not a later one that begins with it.
+    const FIRST_CODE = /code-new(?![-\w])/u;
+    const commandOnPage = async (world: World = {}) => {
+        const staged = stage({ codeTtlMs: TTL, ...world });
+        await staged.add.read();
+        staged.add.pick.value = COMMAND;
+        await staged.add.create();
+        return staged;
+    };
+
+    it(`copies a fresh code once the one it was minted with has run out`, async () => {
+        jest.useFakeTimers();
+        try {
+            const { add, platform } = await commandOnPage();
+            expect(add.command.step.selectedCommand.value).toMatch(FIRST_CODE);
+
+            await advanceTimersByTimeAsync(TTL + 60_000);
+
+            expect(platform.setupCode).toHaveBeenCalledTimes(2);
+            expect(platform.setupCode.mock.calls[1]?.[0]).toMatchObject({ sandboxId: `new` });
+            // What the copy button copies now: the fresh code, and none of the one the platform would refuse.
+            expect(add.command.step.selectedCommand.value).toContain(`code-new-2`);
+            expect(add.command.step.selectedCommand.value).not.toMatch(FIRST_CODE);
+            expect(add.renewal.stale.value).toBe(false);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it(`leaves a run-out code a machine already claimed alone, since its run reports under it`, async () => {
+        jest.useFakeTimers();
+        try {
+            const { add, platform, sandboxes } = await commandOnPage();
+            sandboxes.value = [...sandboxes.value, sandboxSummary({ id: `new`, name: `workspace-2`, token: `tok`, setupCodeClaimedAt: new Date().toISOString() })];
+            await advanceTimersByTimeAsync(3_000);
+            expect(add.claimedAt.value).toEqual(expect.any(String));
+
+            await advanceTimersByTimeAsync(TTL + 60_000);
+
+            expect(platform.setupCode).toHaveBeenCalledTimes(1);
+            expect(add.minted.value?.code).toBe(`code-new`);
+            expect(add.command.step.selectedCommand.value).toMatch(FIRST_CODE);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it(`takes the command off the page and offers a new code when the fresh one cannot be minted`, async () => {
+        jest.useFakeTimers();
+        try {
+            const { add, platform } = await commandOnPage();
+            platform.setupCode.mockRejectedValueOnce(new Error(`platform down`));
+
+            await advanceTimersByTimeAsync(TTL + 60_000);
+
+            expect(add.command.step.selectedCommand.value).toBe(``);
+            expect(add.renewal.renewError.value).toMatchObject({ tone: `warning` });
+            await add.renewal.renew();
+            expect(add.command.step.selectedCommand.value).toContain(`code-new-2`);
+            expect(add.renewal.renewError.value).toBeNull();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });
 

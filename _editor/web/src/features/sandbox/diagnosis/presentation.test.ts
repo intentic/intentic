@@ -214,6 +214,13 @@ describe(`a wait said at once`, () => {
         expect(present({ kind: `waking`, machine: `started` }, { lane: `hosted` }).sayAtOnce).toBe(false);
     });
 
+    // A visitor back after days: the page woke the stopped machine itself, which reads `started` within seconds and boots
+    // for twenty more. The wait is established by the wake, so it is said rather than left to a stale screen.
+    it(`is a hosted machine this page just woke, whatever the provider reads by now`, () => {
+        expect(present({ kind: `waking`, machine: `started` }, { lane: `hosted`, woken: true }).sayAtOnce).toBe(true);
+        expect(present({ kind: `waking`, machine: undefined }, { lane: `hosted`, woken: true }).sayAtOnce).toBe(true);
+    });
+
     it(`is never silence, a busy sandbox, or a cause that waiting cannot repair`, () => {
         expect(present({ kind: `silent`, patient: true }).sayAtOnce).toBe(false);
         expect(present({ kind: `checking` }).sayAtOnce).toBe(false);

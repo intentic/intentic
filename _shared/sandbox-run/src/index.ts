@@ -19,6 +19,15 @@ export const ORIGIN_HOST = "intentic-sandbox-workspace";
 export const COMPOSE_MANAGER = "compose";
 export const COMPOSE_UPDATE_COMMAND = "docker compose pull && docker compose up -d";
 
+// Where a Compose sandbox set up from the setup page keeps the credentials its claim redeemed: a file of its own beside
+// the Compose file, which the service reads with `env_file:`. Never the folder's `.env`: that is the owner's project's
+// own settings, and the claim used to be redirected over it (`> .env`), which truncated it before curl even ran
+// (2026-10-23). COMPOSE_CREDENTIALS_ENV stamps the container with the file's name, so the rebuild card renders the same
+// layout again; a container without it reads its credentials from `.env` interpolation (a setup from before the change,
+// or `ic sandbox compose`'s own folder), and its file is rendered that way.
+export const COMPOSE_CREDENTIALS_FILE = "intentic.env";
+export const COMPOSE_CREDENTIALS_ENV = "SANDBOX_COMPOSE_CREDENTIALS";
+
 export interface SandboxNames {
     readonly container: string;
     readonly tunnelContainer: string;

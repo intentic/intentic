@@ -452,8 +452,11 @@ flowchart LR
   yet. The browser's hand-off coming back to a page already up is redeemed in that dialog, and the sign-in then enters
   its destination through the shell's own entry guards. A session that lapses keeps its view under the dialog and is
   entered again by a reload once signed back in. A sign-out lands on Home's first run. Browsers keep `/login`.
-- **Routes.** `/login` sits outside the shell; `/setup` and `/start/hosted` are only redirects to Home's ask for a new
-  sandbox (`router/setupRoutes.ts`, below), kept for old links. Everything else lives under `/` in
+- **Routes.** `/login` sits outside the shell; `/setup` is only a redirect to Home's ask for a new sandbox
+  (`router/setupRoutes.ts`, below), kept for old links. `/start/hosted` is the cloud entry every "Start in your browser"
+  on intentic.dev links to (`router/hostedEntry.ts`): it signs a visitor in and comes back to itself, opens the reader's
+  own cloud sandbox when they have one, finishes one left unfinished, and otherwise lands on Home's ask with a machine of
+  ours picked; a tier in its address (pricing, checkout coming back) always means a new machine. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup` (`router/shellGates.ts`). The bare address opens
   **Home** (`/home`, the master view below) on a desktop, for everyone but a guest of a box, whose way in is its chat.
   A phone and the Android app's WebView open on the board of the sandbox open last instead (`lib/routes/firstScreens.ts`
@@ -644,6 +647,11 @@ flowchart LR
   the desktop app a marked install says so itself (the desktop app's README, Product analytics). A query parameter
   rather than a switch under Settings, Data: only the team sets it, and a switch every reader sees would ask them about
   a flag that is not theirs.
+- **The team's own accounts.** The platform answers `internal` on the signed-in account (`me.get`, from
+  `ADMIN_EMAILS`, `HOSTED_CANARY_EMAIL` and `TELEMETRY_INTERNAL_ACCOUNTS`: the api's `internal-accounts.ts`), and
+  `analytics.ts` registers `internal: true` on every event while such an account is signed in, in a browser and in the
+  desktop app's windows alike, and sets `internal_account` on the person. Another account signing in on an unmarked
+  browser takes the mark off again. Only the account's own answer reaches the page, never the list.
 - **Funnel milestones.** Besides the setup events, `analytics.ts` sends `signed_up` (an account made within 30 minutes of being seen, from `User.createdAt`) and `first_turn_completed` (the first agent turn that settled on its own, from `turnClient.ts`), each once per account per browser, and registers the `utm_*` tags the visit arrived with on every event of the tab, reading them as the module loads so a redirect to `/login` cannot drop them. The marketing site hands those tags over in its links (`_site/site/src/lib/visit.ts`).
 - **Session replay and events.** `src/app/replayPrivacy.ts` decides what a PostHog recording may hold and
   `src/app/eventPrivacy.ts` does the same for every event, through `before_send`. `analytics.ts` hands both to
@@ -824,7 +832,9 @@ they like), or the address of a sandbox already running, probed before anything 
 unfinished is finished the same way, from the first run's "Finish setting up" or any other: `/home?add=sandbox&finish=<id>`
 puts up its tile and its run's page with no dialog, on the row it has: a machine of ours already on it waited on, the
 app's run on this computer, or its command shown again. `machine=hosted` (and `tier=`) picks a machine of ours; the old
-`/setup` and `/start/hosted` addresses land on these (`router/setupRoutes.ts`; `features/setup/README.md`). A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
+`/setup` address and the cloud entry `/start/hosted` land on these (`router/setupRoutes.ts`, `router/hostedEntry.ts`;
+`features/setup/README.md`). A sign-in asked for on the way keeps everything the ask named (`models/sandbox/addSandbox.ts`
+`homeAskPath`). A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
 **Home shows a sandbox's own view in place** (2026-10-25, `lib/routes/homeDetour.ts`): a navigation from Home to a view
 it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<view>`, drawn where the chat was
 (`HomeDetour.vue`) under a labelled "Back to chat"; Esc and the browser's Back return too. The chat stays mounted,

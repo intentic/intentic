@@ -2,7 +2,7 @@ import { FREE_TIER, HOSTED_TIERS, hostedShapeLine, PAID_TIERS } from "@intentic/
 import type { FaqItem } from "./faq";
 import { hosted, idleWeeks, rampSpan } from "./hosted";
 import { landingContent } from "./landing";
-import { APP_URL } from "./site";
+import { HOSTED_START_URL } from "./site";
 
 // /pricing: the product is free, a machine of ours is the only paid thing; every figure comes from the ladder in
 // `@intentic/constants` or from hosted.ts, none typed here. Columns split on whose machine the agents run on, because
@@ -63,7 +63,7 @@ const columns: PricingColumn[] = [
             `Sleeps after ${hosted.idleStopMinutes} minutes away; a sleeping machine spends no hours`,
             "Change size whenever you like: the workspace, the address and the disk stay as they are",
         ],
-        cta: { label: "Start a cloud sandbox", href: `${APP_URL}/start/hosted` },
+        cta: { label: "Start a cloud sandbox", href: HOSTED_START_URL },
         note: "Our machine, your AI accounts. Move the workspace to your own whenever you like; the plan is the only thing you cancel.",
     },
 ];

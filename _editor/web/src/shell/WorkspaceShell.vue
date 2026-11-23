@@ -20,12 +20,12 @@ import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
 import { markBoot } from "../app/perf/boot";
 import {
-    ADD_SANDBOX_HOME_PATH,
     ADD_SANDBOX_QUERY,
     ADD_SANDBOX_VALUE,
     addSandboxAsked,
     askAddSandbox,
     closeAddSandbox,
+    homeAskPath,
     setAddSandboxWarmer,
     useAddsOnHome,
 } from "../models/sandbox/addSandbox";
@@ -116,12 +116,13 @@ watch(
             return;
         }
         if (!signedIn) {
-            void router.replace(signInAt(ADD_SANDBOX_HOME_PATH));
+            // With everything it named: a machine of ours asked for is still asked for once signed in.
+            void router.replace(signInAt(homeAskPath(route.query)));
             return;
         }
         if (addsOnHome()) {
             if (name !== `home`) {
-                void router.replace(ADD_SANDBOX_HOME_PATH);
+                void router.replace(homeAskPath(route.query));
             }
             return;
         }

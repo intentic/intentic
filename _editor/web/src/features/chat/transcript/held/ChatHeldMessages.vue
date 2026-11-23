@@ -17,6 +17,8 @@ import { useLimitResend } from "../../panel/pane/scheduledSend";
 import { sendAnywayTip } from "../../../../models/agent-status/memoryTip";
 import { track } from "../../../../app/analytics";
 import { useAccessWall } from "../../../../models/conversations/endings/accessWall";
+import { RouterLink } from "vue-router";
+import { modelsHref } from "../../../../lib/routes/modelsPath";
 
 /* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
 
@@ -61,6 +63,13 @@ const sendAtReopen = (): void => reopen.bookWords(heldIds.value);
 // the press steps back to a quiet one and the card above the composer carries the fix (ChatContinueStrip). The same where
 // sending them again fails the same way (`wayOut`): the card over the composer lights the way out (ChatWayOutStrip).
 const accessWall = useAccessWall();
+// THE FREE TRIAL COULD NOT ANSWER (busy past the sandbox's own retries, no model for this pick, or today's allowance
+// spent): the words are kept, and the way to an answer that does not depend on the trial is connecting a model of the
+// reader's own, so that is the bright press and sending again on the trial the quiet one. On a new cloud sandbox this is
+// most first messages that fail (PostHog, 2026-11: about ten of eleven outside first turns), and the held line used to
+// offer only "Send again" and say "Refused before it ran".
+const TRIAL_REFUSALS: ReadonlySet<string> = new Set([`trial-unavailable`, `trial-model-unavailable`, `trial-exhausted`]);
+const trialRefused = computed(() => reason.value === `refused` && TRIAL_REFUSALS.has(lastFailure.value?.code ?? ``));
 // The bubbles are the words that wait; a continuation (a Continue booked for later, let go and then held) has none.
 const bubbles = computed(() => waiting.value.filter((message) => message.continues !== true));
 const press = computed((): HeldPress => {
@@ -89,13 +98,24 @@ const press = computed((): HeldPress => {
         <template v-if="held">
             <ChatHeldBubble v-for="message in bubbles" :key="message.id" :message="message" :compact="compact" />
             <!-- Marked so the bar over the composer (ChatWaitingBar) repeats a memory hold only while this line is out of view. -->
-            <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
+            <ChatHeldStatus :reason="reason" :detail="detail" :trial="trialRefused" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
                 <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                     <Button
+                        v-if="trialRefused"
+                        :as="RouterLink"
+                        :to="modelsHref()"
                         size="small"
                         thumb
-                        :tier="reopenAt === undefined && accessWall === undefined && wayOut === undefined ? `accent` : `quiet`"
+                        :tier="reopenAt === undefined ? `accent` : `boring`"
+                        data-held-connect-model
+                        >{{
+                        t(`chat.words.connectAModel`)
+                    }}</Button>
+                    <Button
+                        size="small"
+                        thumb
+                        :tier="reopenAt === undefined && accessWall === undefined && wayOut === undefined && !trialRefused ? `accent` : `quiet`"
                         :disabled="reopen.blockedLine.value !== undefined"
                         v-tooltip.top="reopen.blockedHint.value ?? press.hint"
                         @click="resumeQueue(heldIds)"

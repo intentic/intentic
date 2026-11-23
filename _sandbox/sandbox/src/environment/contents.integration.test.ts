@@ -52,6 +52,7 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
                 definitionSeed: "",
                 devRoot: undefined,
                 manager: undefined,
+                composeCredentials: undefined,
                 prewarm: false,
                 projectDir: "",
             },

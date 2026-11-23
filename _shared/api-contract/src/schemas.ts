@@ -30,6 +30,10 @@ export const UserSchema = z.object({
     // When the account was made. The app reads it to tell a sign-up from a return (analytics.ts `signed_up`); absent
     // from a platform from before 2026-10-15.
     createdAt: z.iso.datetime().optional(),
+    // The team's own account, by the deployment's lists (api internal-accounts.ts): the editor and the desktop app tag
+    // its analytics `internal: true`. Only this account's answer, never the list; absent from a platform from before
+    // 2026-11-23, which reads as not internal.
+    internal: z.boolean().optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 

@@ -16,8 +16,11 @@ flowchart LR
 - `page-meta.ts` maps every indexable path to its title, description and `datePublished`; `dateModified` comes from git at build.
 - `compare.ts` holds comparison copy, competitor strengths, official sources and visible FAQ answers. Each page's `verifiedOn` records when its retained sources were read; it is not a publication date. The same FAQ data drives the visible answers and structured data. Search targets and their answer locations are recorded in [the comparison research map](../../docs/marketing/comparison-search-research.md).
 - Prices, tiers, origins and legal specifics are imported from `@intentic/constants`, so the site cannot state a figure the product does not use.
-- The hosted pricing CTA opens the app's `/start/hosted` entry, preserving cloud intent through sign-in. Ordinary app
-  links keep their normal workspace destination. Free hosting upgrades only when the reader chooses a paid machine.
+- Every browser way in (`HOSTED_START_URL`: the landing page's "Start in your browser" and "Or start in your browser",
+  the guides, the download page, Where it runs, and pricing's "Start a cloud sandbox") opens the app's `/start/hosted`
+  entry, which keeps the cloud ask through sign-in, opens the visitor's own cloud sandbox when they have one, and
+  otherwise offers to make one. Ordinary app links keep their normal workspace destination. Free hosting upgrades only
+  when the reader chooses a paid machine.
 
 ## Key files
 

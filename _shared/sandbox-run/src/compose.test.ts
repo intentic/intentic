@@ -1,4 +1,5 @@
-import { AT_REST_KEY_ENV, AT_REST_KEY_MOUNT, sandboxRunArgv, STOP_TIMEOUT_SECONDS } from "./index.js";
+import { LOCAL_PORT } from "@intentic/constants";
+import { AT_REST_KEY_ENV, AT_REST_KEY_MOUNT, COMPOSE_CREDENTIALS_ENV, COMPOSE_CREDENTIALS_FILE, sandboxRunArgv, STOP_TIMEOUT_SECONDS } from "./index.js";
 import { composeEnvFile, recipeBuildLines, sandboxCompose } from "./compose.js";
 import { asJson, COMPOSE_CASES, golden, RECIPE, RUN_CASES } from "./run-cases.testing.js";
 
@@ -109,4 +110,26 @@ test("a variable only the .env knows is read from it, required or optional as as
     expect(compose).toContain("CONNECT_TOKEN: ${CONNECT_TOKEN:?run the .env bootstrap first}");
     expect(compose).toContain("OWNER_EMAIL: ${OWNER_EMAIL:-}");
     expect(env).toEqual({});
+});
+
+// The setup page's layout (COMPOSE_CREDENTIALS_FILE): the claim's file feeds the container, `.env` stays the owner's.
+test("a file with a credentials file reads it with env_file, names no claimed key, and stamps the container with it", () => {
+    const { compose, env } = sandboxCompose(
+        { ...COMPOSE_CASES.fresh.run, sandboxId: "0f00ba4dd12b" },
+        { ...COMPOSE_CASES.fresh.inputs, credentialsFile: COMPOSE_CREDENTIALS_FILE },
+    );
+    expect(compose).toContain(`env_file: ["intentic.env"]`);
+    expect(compose).toContain(`${COMPOSE_CREDENTIALS_ENV}: "intentic.env"`);
+    expect(compose).not.toContain("CONNECT_TOKEN");
+    expect(compose).not.toContain("OWNER_EMAIL");
+    expect(compose).toContain(`- "127.0.0.1:31226:${LOCAL_PORT}"`);
+    expect(compose).toContain(`LOCAL_PORT: "${LOCAL_PORT}"`);
+    expect(env).toEqual({});
+});
+
+// `ic sandbox compose` writes a `.env` folder from a container that may carry the stamp of another layout.
+test("a file written without a credentials file drops the stamp the container it is written from carried", () => {
+    const stamped: [string, string][] = [[COMPOSE_CREDENTIALS_ENV, "intentic.env"]];
+    const run = { ...COMPOSE_CASES.fresh.run, env: stamped };
+    expect(sandboxCompose(run, COMPOSE_CASES.fresh.inputs).compose).not.toContain(COMPOSE_CREDENTIALS_ENV);
 });

@@ -78,6 +78,7 @@ const world = (): World => {
         definitionSeed: "",
         devRoot: undefined,
         manager: undefined,
+        composeCredentials: undefined,
         prewarm: false,
         projectDir: "",
     };

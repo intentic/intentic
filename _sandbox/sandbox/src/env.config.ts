@@ -133,6 +133,13 @@ export const configSchema = z.object({
                 .string()
                 .default("")
                 .transform((value): typeof COMPOSE_MANAGER | undefined => (value.trim() === COMPOSE_MANAGER ? COMPOSE_MANAGER : undefined)),
+            // The file beside a Compose sandbox's file its credentials are in (COMPOSE_CREDENTIALS_ENV, `intentic.env`),
+            // which its file reads with `env_file:`; unset where they are interpolated from the folder's `.env`. Only the
+            // rebuild card reads it, to render the file the way the folder holds it.
+            composeCredentials: z
+                .string()
+                .default("")
+                .transform((value) => (value.trim() === "" ? undefined : value.trim())),
             // An unowned pool machine that warms caches then exits; no owner or token, so identity subsystems stay off.
             prewarm: z
                 .string()

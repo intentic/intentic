@@ -107,3 +107,29 @@ describe(`me.setPreferences`, () => {
         });
     });
 });
+
+describe(`me.get`, () => {
+    const signedIn = (email: string, lists: { admins?: string; internal?: string }): OrpcContext =>
+        stand<OrpcContext>({
+            prisma: stand<PrismaClient>({ account: { count: async () => 0 } }),
+            user: { id: `user-1`, email, name: `One`, image: null, emailVerified: true },
+            config: {
+                admin: { emails: lists.admins ?? `` },
+                hosted: { canaryEmail: `` },
+                telemetry: { internalAccounts: lists.internal ?? `` },
+                signIn: { email: false },
+                email: { apiKey: ``, from: `` },
+            },
+            logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+        });
+
+    it(`says whether the caller is one of the team's accounts, and nothing of the list it read that from`, async () => {
+        const lists = { admins: `owner@example.com`, internal: `@team.example,qa@tester.dev` };
+        const owner = await call(meRoutes.get, undefined, { context: signedIn(`owner@example.com`, lists) });
+        expect(owner?.internal).toBe(true);
+        expect(JSON.stringify(owner)).not.toContain(`team.example`);
+        expect(JSON.stringify(owner)).not.toContain(`tester.dev`);
+        expect((await call(meRoutes.get, undefined, { context: signedIn(`qa@team.example`, lists) }))?.internal).toBe(true);
+        expect((await call(meRoutes.get, undefined, { context: signedIn(`someone@else.example`, lists) }))?.internal).toBe(false);
+    });
+});

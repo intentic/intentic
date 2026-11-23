@@ -324,7 +324,12 @@ watch(
                 />
                 <p v-else-if="route === `owner-only`" class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
                 <!-- Compose owns the container: the edit to its file and Compose's redeploy, never the `ic` one-liner. -->
-                <ComposeRebuild v-else-if="route === `compose` && pending" :hash="pending.hash" :content="pending.content" />
+                <ComposeRebuild
+                    v-else-if="route === `compose` && pending"
+                    :hash="pending.hash"
+                    :content="pending.content"
+                    :credentials-file="state?.composeCredentials"
+                />
                 <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->
                 <p v-else-if="route === `checkout`" data-executor="checkout" class="text-2xs text-subtle">
                     {{ t(`sandbox.environmentCard.buildsWithCheckoutRebuild`) }}

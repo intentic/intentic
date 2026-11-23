@@ -91,6 +91,9 @@ export interface PresentationInput {
     readonly now: number;
     // Hosted only: whether its machine comes warm from the pool, which decides how long a wake usually takes.
     readonly warm?: boolean | undefined;
+    // This page asked the platform to start the sandbox's machine just now and the platform took it (client/sandbox/wake/
+    // wakeWindow.ts): its waking is established, whatever the provider's state read says by now.
+    readonly woken?: boolean | undefined;
 }
 
 type Links = readonly [device: LinkState, network: LinkState, machine: LinkState, sandbox: LinkState];
@@ -431,9 +434,11 @@ export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
                     title: t(`sandbox.diagnosis.wakingTitle`, { name }),
                     body: diagnosis.machine === `started` ? t(`sandbox.diagnosis.wakingBooting`) : t(`sandbox.diagnosis.wakingBody`),
                     waiting: true,
-                    // Only on the platform's word that its machine is not running: the edge's "detached" alone is also
-                    // what a container restarting for a few seconds looks like, which deserves no card.
-                    sayAtOnce: diagnosis.machine !== undefined && !HOSTED_RUNNING.has(diagnosis.machine),
+                    // Only on the platform's word that its machine is not running, or this page's own wake of it: the edge's
+                    // "detached" alone is also what a container restarting for a few seconds looks like, which deserves no
+                    // card. A stopped machine reads `started` a second or two after the wake and boots for twenty more,
+                    // and a visitor back after days saw a stale board for that long with nothing said (2026-11-23).
+                    sayAtOnce: input.woken === true || (diagnosis.machine !== undefined && !HOSTED_RUNNING.has(diagnosis.machine)),
                     wait: wakingWait(input),
                 },
                 chainOf([`ok`, `ok`, `working`, `unknown`], machine),

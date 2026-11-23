@@ -7,7 +7,8 @@
 // file. The splice was a third hand copy of the run contract, and it missed what the setup file had missed with it (the
 // stop grace, the key bind, the directive stamps). The file builds the approved recipe itself (`build:` when it has
 // steps, its runtime directives as service keys) and stamps SANDBOX_ENVIRONMENT_HASH, which is how the sandbox knows it
-// runs this recipe; its credentials stay in the `.env` the folder already has.
+// runs this recipe; its credentials stay where the folder already has them: `intentic.env` for a sandbox stamped
+// SANDBOX_COMPOSE_CREDENTIALS, the `.env` setup wrote before 2026-11-23 otherwise (`dotEnv`).
 
 import { recipeBuilds, type SetupComposeArgs, setupComposeFile } from "@intentic/sandbox-run/compose";
 

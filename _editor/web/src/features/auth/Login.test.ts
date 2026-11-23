@@ -28,7 +28,7 @@ jest.mock(`vue-router`, () => ({
 const signInWithGoogle = jest.fn().mockResolvedValue(undefined);
 const signInWithGoogleCredential = jest.fn().mockResolvedValue(undefined);
 // The emailed-code road's two platform calls (useAuth.ts), answered as each test says.
-const sendEmailCode = jest.fn<(email: string) => Promise<void>>().mockResolvedValue(undefined);
+const sendEmailCode = jest.fn<(email: string, options?: { returnTo?: string | undefined }) => Promise<void>>().mockResolvedValue(undefined);
 const signInWithEmailCode = jest.fn<(email: string, otp: string) => Promise<void>>().mockResolvedValue(undefined);
 jest.mock(`../../client/auth/useAuth`, () => ({
     useAuth: () => ({ user: ref(null), refresh: async () => null, listDeviceSessions: async () => [], signInWithGoogle, signInWithGoogleCredential, sendEmailCode, signInWithEmailCode }),
@@ -456,7 +456,7 @@ describe(`with email sign-in offered`, () => {
         button(`Continue with email`)?.click();
         await settle();
 
-        expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`);
+        expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`, { returnTo: `/sandbox/usage` });
         expect(el.textContent).toContain(`We sent a 6-digit code to ana@corp.example.`);
         expect(el.textContent).toContain(`Send it again in 60s`);
 
@@ -465,6 +465,23 @@ describe(`with email sign-in offered`, () => {
 
         expect(signInWithEmailCode).toHaveBeenCalledWith(`ana@corp.example`, `123456`);
         expect(replace).toHaveBeenCalledWith(`/sandbox/usage`);
+    });
+
+    // DesktopAuth sends its email road here with itself as returnTo. Typed, the code returns there with the state and
+    // challenge whole; the same destination rides the send, so the mail's link returns there too (LoginConfirm.test.ts).
+    it(`carries a desktop app's sign-in through the code, typed or followed from the mail`, async () => {
+        const desktop = `/desktop-auth?state=nonce&challenge=chal`;
+        query.value = { returnTo: desktop };
+        await mount();
+
+        await type(field(`input[type="email"]`), `ana@corp.example`);
+        button(`Continue with email`)?.click();
+        await settle();
+        expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`, { returnTo: desktop });
+
+        await type(field(`input[autocomplete="one-time-code"]`), `123456`);
+        await settle();
+        expect(replace).toHaveBeenCalledWith(desktop);
     });
 
     it(`points a Google address at Google without refusing it`, async () => {
@@ -488,7 +505,7 @@ describe(`with email sign-in offered`, () => {
         press?.click();
         await settle();
 
-        expect(sendEmailCode).toHaveBeenCalledWith([`ana`, `gmail.com`].join(`@`));
+        expect(sendEmailCode).toHaveBeenCalledWith([`ana`, `gmail.com`].join(`@`), { returnTo: `/` });
         expect(field(`input[autocomplete="one-time-code"]`)).toEqual(expect.any(HTMLInputElement));
         expect(track).toHaveBeenCalledWith(`signin_code_requested`, { surface: `login`, google_address: true });
     });

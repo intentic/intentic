@@ -1,8 +1,13 @@
+import { mocked } from "@intentic/testing/bun";
 import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { effectScope, nextTick, ref } from "vue";
+import { track } from "../../../app/analytics";
+import { settingUp } from "../../../models/sandbox/live/settingUp";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
+
+jest.mock(`../../../app/analytics`, () => ({ track: jest.fn() }));
 
 // Pins the row this visit sets up: created under the next free name once at a time, failing into a notice rather than a
 // throw, a check-in baseline that follows the row, a connection that selects before entering and enters only once the
@@ -79,6 +84,57 @@ describe(`the row this visit sets up`, () => {
         await row.connected(`s1`);
         expect(seen()).toEqual({ asked: 2, entered: 1, finished: true });
         expect(handOff.mock.calls).toEqual([[`s1`], [`s1`]]);
+    });
+});
+
+// The funnel's milestone, per lane: a machine of ours and the reader's own were one event that could not be told apart.
+// And the row is "being set up here" until its check-in is counted, which is what lets product analytics count it while
+// its own analytics switch cannot be read yet (models/sandbox/live/settingUp.ts).
+describe(`the check-in it counts`, () => {
+    beforeEach(() => mocked(track).mockClear());
+
+    it(`says a machine of ours connected as hosted, and the reader's own as own`, async () => {
+        const hosted = stage();
+        hosted.row.created.value = sandboxSummary({ id: `s1`, hosted: { region: `iad`, warm: true } });
+        await hosted.row.connected(`s1`);
+        const own = stage();
+        own.row.created.value = sandboxSummary({ id: `s2` });
+        await own.row.connected(`s2`, { attached: true });
+        expect(mocked(track).mock.calls).toEqual([
+            [`sandbox_connected`, { resuming: false, machine: `hosted` }],
+            [`sandbox_connected`, { resuming: false, machine: `own`, attached: true }],
+        ]);
+    });
+
+    it(`holds the row as being set up here from the moment it exists until its check-in is counted`, async () => {
+        const { row } = stage();
+        expect(settingUp(`s3`)).toBe(false);
+        row.created.value = sandboxSummary({ id: `s3`, hosted: { region: `iad`, warm: true } });
+        await nextTick();
+        expect(settingUp(`s3`)).toBe(true);
+        mocked(track).mockImplementationOnce(() => expect(settingUp(`s3`)).toBe(true));
+        await row.connected(`s3`);
+        await nextTick();
+        expect(mocked(track)).toHaveBeenCalledTimes(1);
+        expect(settingUp(`s3`)).toBe(false);
+    });
+
+    it(`lets go of a row it walked away from, and of every row once its page goes`, async () => {
+        const scope = effectScope();
+        const sandbox = {
+            sandboxes: ref<SandboxSummary[]>([]),
+            create: jest.fn(async (named: string) => sandboxSummary({ id: `new`, name: named })),
+            select: jest.fn((_id: string) => undefined),
+            remove: jest.fn(async (_id: string) => undefined),
+        } satisfies SetupRowHost[`sandbox`];
+        const row = scope.run(() => useSetupRow({ sandbox, enter: jest.fn(async () => undefined) }))!;
+        row.created.value = sandboxSummary({ id: `s4` });
+        await nextTick();
+        row.created.value = sandboxSummary({ id: `s5` });
+        await nextTick();
+        expect([settingUp(`s4`), settingUp(`s5`)]).toEqual([false, true]);
+        scope.stop();
+        expect(settingUp(`s5`)).toBe(false);
     });
 });
 

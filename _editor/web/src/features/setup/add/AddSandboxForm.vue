@@ -12,6 +12,7 @@ import { RouterLink } from "vue-router";
 import ModeChoice from "../../../parts/sandbox/ModeChoice.vue";
 import SetupNeedsGoogle from "../SetupNeedsGoogle.vue";
 import { here, page } from "../../../lib/routes/links";
+import { sandboxLanding } from "../../../lib/routes/firstScreens";
 import AddSandboxAttach from "./AddSandboxAttach.vue";
 import AddSandboxWays from "./AddSandboxWays.vue";
 import { HERE } from "../flow/useSetupOnMachine";
@@ -23,7 +24,7 @@ const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
 const emit = defineEmits<{ submit: [] }>();
 
 const t = useT();
-const { name, problem, pick, options, moreOptions, hostedProblem, loaded, busy, error, attach, mode } = add;
+const { name, problem, pick, options, moreOptions, hostedProblem, hostedHeldBy, loaded, busy, error, attach, mode } = add;
 const nothingOffered = computed(() => loaded.value && options.value.length === 0);
 const morePicked = computed(() => moreOptions.value.some((option) => option.value === pick.value));
 // Open by itself where nothing starts in one press, or where one of its ways is already the pick.
@@ -37,7 +38,7 @@ const chooseHere = async (): Promise<void> => {
 const hostedProblemLine = computed(() => {
     switch (hostedProblem.value) {
         case `occupied`:
-            return t(`setup.addSandbox.hostedOccupied`);
+            return hostedHeldBy.value === undefined ? t(`setup.addSandbox.hostedOccupied`) : t(`setup.addSandbox.hostedOccupiedBy`, { name: hostedHeldBy.value.name });
         case `full`:
             return t(`setup.setup.outMachinesRightNow`);
         case `restricted`:
@@ -116,6 +117,13 @@ const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : err
                 <SetupNeedsGoogle v-if="hostedProblem === `google`" :choose-mine="hereOffered ? chooseHere : undefined" />
                 <p v-else-if="hostedProblem !== undefined" class="text-xs text-muted" data-add-sandbox-hosted-problem>
                     {{ hostedProblemLine }}
+                    <RouterLink
+                        v-if="hostedHeldBy !== undefined"
+                        :to="sandboxLanding(hostedHeldBy.id, { isGuest: false, homeOnly: false })"
+                        :class="ui.textButton({ size: `xs` })"
+                        data-add-sandbox-open-cloud
+                        >{{ t(`setup.addSandbox.openCloud`, { name: hostedHeldBy.name }) }}</RouterLink
+                    >
                     <RouterLink v-if="hostedProblem === `occupied`" :to="here(page.account(`billing`))" :class="ui.textButton({ size: `xs` })">{{
                         t(`setup.setup.buyMachine`)
                     }}</RouterLink>

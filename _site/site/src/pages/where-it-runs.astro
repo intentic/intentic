@@ -1,6 +1,6 @@
 ---
 import { FREE_TIER, installScriptUrl, PAID_TIERS } from "@intentic/constants";
-import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH, HOSTED_START_URL } from "@intentic/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
@@ -88,7 +88,7 @@ const consequences = [
                             </div>
                             <p class="text-xs text-subtle">{rung.limits}</p>
                             {/* Setup opens on the selected machine. */}
-                            <a class="btn btn-primary btn-sm mt-auto" href={rung.machine === "hosted" ? `${APP_URL}/start/hosted` : `${APP_URL}/setup?machine=mine`}>
+                            <a class="btn btn-primary btn-sm mt-auto" href={rung.machine === "hosted" ? HOSTED_START_URL : `${APP_URL}/setup?machine=mine`}>
                                 {rung.cta}
                             </a>
                         </div>

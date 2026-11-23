@@ -62,7 +62,7 @@ export const adminRoutes = {
     }),
     funnel: os.admin.funnel.handler(async ({ context }) => {
         await audited(context, `admin.funnel`);
-        return adminFunnel(context.prisma);
+        return adminFunnel(context.prisma, context.config);
     }),
     attention: os.admin.attention.handler(async ({ context }) => {
         await audited(context, `admin.attention`);

@@ -55,6 +55,23 @@ describe(`email sign-in`, () => {
         expect(signInCodeLink(configWith(), `ada+test@example.org`, `012345`)).toBe(`https://app.test/login/confirm?email=ada%2Btest%40example.org&code=012345`);
     });
 
+    // A followed link lands where a typed code does: an invite, a desktop app's sign-in with its state and challenge.
+    it(`carries on, in the link, to the page on this editor the code was asked from`, () => {
+        expect(signInCodeLink(configWith(), `ada@example.org`, `012345`, `/invite/tok-1`)).toBe(
+            `https://app.test/login/confirm?email=ada%40example.org&code=012345&returnTo=%2Finvite%2Ftok-1`,
+        );
+        const link = new URL(signInCodeLink(configWith(), `ada@example.org`, `012345`, `/desktop-auth?state=nonce&challenge=chal`));
+        expect(link.searchParams.get(`returnTo`)).toBe(`/desktop-auth?state=nonce&challenge=chal`);
+        expect(link.origin).toBe(`https://app.test`);
+    });
+
+    // The editor drops one too; the mail is never the place a foreign destination is written.
+    it(`writes no destination off the editor's origin into the link, nor a protocol-relative one`, () => {
+        for (const returnTo of [`https://evil.example/invite/tok-1`, `//evil.example`, `/\\evil.example`, `/\t/evil.example`, `javascript:alert(1)`, `/`]) {
+            expect(signInCodeLink(configWith(), `ada@example.org`, `012345`, returnTo)).toBe(`https://app.test/login/confirm?email=ada%40example.org&code=012345`);
+        }
+    });
+
     it(`sends each address one code a minute and five an hour, whoever asks`, async () => {
         const allowances = memoryAllowances();
         expect(await takeCodeAllowance(allowances, `Ada@Example.org`, at(0))).toBe(true);
@@ -183,7 +200,8 @@ const testAuth = () => {
         const text = await response.text();
         return { status: response.status, body: text === `` ? null : JSON.parse(text) };
     };
-    const send = (email: string) => call(SEND_CODE_PATH, { email, type: `sign-in` });
+    const send = (email: string, returnTo?: string) =>
+        call(returnTo === undefined ? SEND_CODE_PATH : `${SEND_CODE_PATH}?${new URLSearchParams({ returnTo })}`, { email, type: `sign-in` });
     const signIn = (email: string, otp: string) => call(`/sign-in/email-otp`, { email, otp });
     return { send, signIn };
 };
@@ -271,6 +289,19 @@ describe(`the per-address gate, ahead of Better Auth`, () => {
         expect(mailed).toEqual([]);
         // Nothing was minted, so no six digits sign in as it.
         expect((await platform.signIn(`canary@intentic.test`, `000000`)).status).toBe(400);
+    });
+
+    // What the editor's send names on its query (useAuth's sendEmailCode) is the link's destination, by the same rule.
+    it(`mails a link that returns to the page the send named, and none to a foreign one`, async () => {
+        const platform = testAuth();
+        expect((await platform.send(`ada@example.org`, `/desktop-auth?state=nonce&challenge=chal`)).status).toBe(200);
+        later(61_000);
+        expect((await platform.send(`ada@example.org`, `//evil.example`)).status).toBe(200);
+
+        expect(mailed).toHaveLength(2);
+        expect(mailed[0]?.html).toContain(`&amp;returnTo=%2Fdesktop-auth%3Fstate%3Dnonce%26challenge%3Dchal`);
+        expect(mailed[1]?.html).not.toContain(`returnTo`);
+        expect(mailed[1]?.html).not.toContain(`evil.example`);
     });
 
     it(`takes no allowance for a send the endpoint refuses`, async () => {

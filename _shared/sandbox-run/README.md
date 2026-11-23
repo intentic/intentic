@@ -36,7 +36,12 @@ flowchart LR
   whole, `$` doubled), the at-rest key's host path, the HOST_* side stamps, and whether the storage already exists
   (`external: true`). A credential (`REPLAY_SECRET_ENV`) is only ever `${NAME:?…}` in the file; its value comes back
   in `env` for the `.env` beside it (`composeEnvFile`). `setupComposeFile` is a new sandbox's file, which the setup
-  page, the docs quickstart and the Environment card's Compose rebuild all render. The CLI prints it as
+  page, the docs quickstart and the Environment card's Compose rebuild all render. Its credentials are in
+  `COMPOSE_CREDENTIALS_FILE` (`intentic.env`), which the service reads with `env_file:` (`credentialsFile`), and the
+  container is stamped `COMPOSE_CREDENTIALS_ENV` so a rebuild renders it the same way; `dotEnv` renders a folder set up
+  before that, whose credentials `.env` interpolates. (2026-11-23) The setup claim was `curl … > .env` in the owner's
+  project folder, which truncated the project's own settings before curl ran. Appending to `.env` was rejected too: a
+  second claim would add a second set of keys, and the owner's file would still be rewritten by a command. The CLI prints it as
   `run-command --format compose`, which `ic sandbox compose` asks the image for. It imports no Node, so a browser
   takes it. `golden/compose-*.yaml` hold each case of `src/run-cases.testing.ts`.
   (2026-11-11) Three hand copies of the Compose file (the setup page's, the quickstart's, the rebuild card's snippet)

@@ -21,6 +21,8 @@ const props = defineProps<{
     // The approved recipe waiting to be built, as the daemon composed it.
     hash: string;
     content: string;
+    // The file the folder keeps its credentials in (the daemon's `composeCredentials`); absent, its `.env`.
+    credentialsFile?: string | undefined;
 }>();
 
 const t = useT();
@@ -42,6 +44,7 @@ const edit = computed(() =>
         googleClientId: environment.auth.googleClientId,
         webOrigin: globalThis.location.origin,
         platformUrl,
+        dotEnv: props.credentialsFile === undefined,
     }),
 );
 

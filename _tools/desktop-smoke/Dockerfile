@@ -49,6 +49,12 @@ RUN chmod +x /usr/local/bin/smoke.sh /usr/local/bin/update.sh /usr/local/bin/out
 # `internal: true` (the desktop app's launch.rs `telemetry_internal`), so a release candidate's smoke runs filter out of
 # product analytics. Set on the image rather than in each script, so smoke.sh, update.sh and outage.sh all carry it.
 ENV INTENTIC_TELEMETRY_INTERNAL=1
+# And sends nothing at all (2026-11-23): none of these scripts tests analytics, and a release build carries the key, so
+# each run used to report its launches (and a `desktop_launch_stalled` for every app the script killed) under a fresh
+# install id, a new "person" per artifact per release. The app's consent file says no for the launch reports and the
+# launcher's events (launch.rs `analytics_allowed`): exactly `deny`, no newline, in the config folder of the root user
+# these scripts run as. outage.sh writes the same into each scenario's own folder.
+RUN mkdir -p /root/.config/dev.intentic.desktop && printf 'deny' >/root/.config/dev.intentic.desktop/analytics-consent
 
 # The artifact under test is copied to /artifacts by the runner rather than baked in, so one image serves every
 # build. Created here so the copy lands in a directory that already exists whichever way the runner fills it.

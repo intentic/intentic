@@ -554,7 +554,7 @@ fn connect(
     // A container Docker Compose runs stays Compose's, as on a recreate (compose.rs).
     if let Some(replacing) = &replacing {
         let labels = crate::sandbox::compose::labels_of(&replacing.container);
-        stamped_run.extend(crate::sandbox::compose::carry_args(&labels));
+        stamped_run.extend(crate::sandbox::compose::carry_args(&labels, &replacing.env));
         if crate::sandbox::compose::owns(&labels) {
             if let Some(line) = crate::sandbox::compose::key_warning(&slug, &key) {
                 ui::warn(&line);

@@ -2,6 +2,7 @@ import { ACCOUNT_PREFERENCES_MAX, apiContract } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";
+import { isInternalAccount } from "./internal-accounts.js";
 import { hasGoogleAccount, signInMethodsOf, signInOptionsOf } from "../sign-in.js";
 import { patchedPreferences, storedPreferences } from "./preferences.js";
 
@@ -13,7 +14,12 @@ export const meRoutes = {
             return null;
         }
         const { emailVerified: _verified, ...user } = context.user;
-        return { ...user, signInMethods: signInMethodsOf(await hasGoogleAccount(context.prisma, user.id), context.config) };
+        // `internal` is the account's own answer only (internal-accounts.ts); the list it is read from stays here.
+        return {
+            ...user,
+            signInMethods: signInMethodsOf(await hasGoogleAccount(context.prisma, user.id), context.config),
+            internal: isInternalAccount(context.config, user.email),
+        };
     }),
     // Sessionless: the login page reads it before anyone has signed in.
     signInOptions: os.me.signInOptions.handler(({ context }) => signInOptionsOf(context.config)),

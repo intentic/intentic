@@ -3,7 +3,7 @@
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene } from "@intentic/site-content/temple";
-import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL } from "@intentic/site-content/site";
+import { DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL, HOSTED_START_URL } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { DESK_VARIANT } from "../lib/variant";
@@ -88,7 +88,7 @@ const { steps: appSteps, alternatives } = content.connect;
                         {/* Hero shows two start actions; the bar hides its duplicate while they are visible. */}
                         <div class="hero-actions" data-hero-cta>
                             <DownloadCta primary />
-                            <a class="btn btn-secondary" href={APP_URL}>{HOSTED_ALT_LABEL}</a>
+                            <a class="btn btn-secondary" href={HOSTED_START_URL}>{HOSTED_ALT_LABEL}</a>
                         </div>
 
                         {/* The other product, for the reader who is in the wrong place: /desk/ is its own page. */}
@@ -221,7 +221,7 @@ const { steps: appSteps, alternatives } = content.connect;
 
                         <Station step={alternatives.hosted} class="mt-8">
                             <p class="mt-3">
-                                <a class="btn btn-secondary btn-sm" href={APP_URL}>{HOSTED_START_LABEL}</a>
+                                <a class="btn btn-secondary btn-sm" href={HOSTED_START_URL}>{HOSTED_START_LABEL}</a>
                             </p>
                         </Station>
                     </div>

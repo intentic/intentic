@@ -1,6 +1,7 @@
 import { useDevice } from "@intentic/ui";
 import { readonly, ref } from "vue";
-import { useRouter, type RouteLocationRaw } from "vue-router";
+import { type LocationQuery, useRouter, type RouteLocationRaw } from "vue-router";
+import { z } from "zod";
 import { localFace } from "../../app/environments/local";
 import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
@@ -26,6 +27,27 @@ export const ADD_SANDBOX_QUERY = `add`;
 export const ADD_SANDBOX_VALUE = `sandbox`;
 export const ADD_SANDBOX_PATH = `/?${ADD_SANDBOX_QUERY}=${ADD_SANDBOX_VALUE}`;
 export const ADD_SANDBOX_HOME_PATH = `${toHome()}?${new URLSearchParams({ [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE }).toString()}`;
+// What Home's ask may carry besides itself: a row to finish, a machine of ours and its tier, the AI tools the desktop app
+// found signed in here (features/home/newSandbox/newSandbox.ts reads each back).
+const HOME_ASK_KEYS = [`finish`, `machine`, `tier`, `found`] as const;
+const AskValue = z.string().min(1);
+
+/**
+ * Home's ask as the address that asked it, for a sign-in to come back to: the bare ask plus whatever it named. A reader
+ * signed out who followed `/home?add=sandbox&machine=hosted` used to come back to `/home?add=sandbox` alone, in a dialog
+ * that no longer knew they had asked for a machine of ours (2026-11-23).
+ */
+export const homeAskPath = (query: LocationQuery): string => {
+    const kept = new URLSearchParams({ [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE });
+    for (const key of HOME_ASK_KEYS) {
+        const value = AskValue.safeParse(query[key]);
+        if (value.success) {
+            kept.set(key, value.data);
+        }
+    }
+    return `${toHome()}?${kept.toString()}`;
+};
+
 /**
  * The same ask in a desktop window on a folder of this computer (local/newSandbox/LocalNewSandbox.vue): made in that
  * window, as Home makes one in the workspace, rather than sending the reader to the workspace for it. `?on=hosted` picks

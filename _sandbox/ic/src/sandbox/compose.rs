@@ -31,6 +31,9 @@ const REPLACE_LABEL: &str = "com.docker.compose.replace";
 /// SANDBOX_MANAGER's value under Compose (@intentic/sandbox-run COMPOSE_MANAGER).
 pub const MANAGER_ENV: &str = "SANDBOX_MANAGER";
 pub const COMPOSE_MANAGER: &str = "compose";
+/// The file a Compose sandbox's file reads its credentials from (@intentic/sandbox-run COMPOSE_CREDENTIALS_ENV), which
+/// the rebuild card renders the file by. Not replayed by the run contract either, so carried here with the manager.
+pub const CREDENTIALS_ENV: &str = "SANDBOX_COMPOSE_CREDENTIALS";
 
 /// The Compose labels a container carries; empty when Compose did not make it (or it does not exist).
 pub fn labels_of(container: &str) -> BTreeMap<String, String> {
@@ -57,9 +60,9 @@ pub fn owns(labels: &BTreeMap<String, String>) -> bool {
         .is_some_and(|project| !project.is_empty())
 }
 
-/// The run options that keep a replacement Compose's: its labels and SANDBOX_MANAGER. Nothing for a container Compose
-/// does not own. Pure.
-pub fn carry_args(labels: &BTreeMap<String, String>) -> Vec<String> {
+/// The run options that keep a replacement Compose's: its labels, SANDBOX_MANAGER, and where its file keeps its
+/// credentials when the replaced container (`env`, NUL-framed) said so. Nothing for a container Compose does not own. Pure.
+pub fn carry_args(labels: &BTreeMap<String, String>, env: &[u8]) -> Vec<String> {
     if !owns(labels) {
         return Vec::new();
     }
@@ -73,6 +76,10 @@ pub fn carry_args(labels: &BTreeMap<String, String>) -> Vec<String> {
     }
     args.push("-e".to_string());
     args.push(format!("{MANAGER_ENV}={COMPOSE_MANAGER}"));
+    if let Some(file) = at_rest::env_value(env, CREDENTIALS_ENV) {
+        args.push("-e".to_string());
+        args.push(format!("{CREDENTIALS_ENV}={file}"));
+    }
     args
 }
 
@@ -161,13 +168,13 @@ mod tests {
         ] {
             let labels = compose_labels(json);
             assert!(!owns(&labels));
-            assert!(carry_args(&labels).is_empty());
+            assert!(carry_args(&labels, b"SANDBOX_COMPOSE_CREDENTIALS=intentic.env\0").is_empty());
         }
     }
 
     #[test]
     fn the_replacement_is_composes_as_compose_wrote_it_and_says_compose_manages_it() {
-        let args = carry_args(&compose_labels(INSPECTED));
+        let args = carry_args(&compose_labels(INSPECTED), b"PATH=/bin\0");
         let pairs = pairs(&args);
         assert!(pairs.contains(&(
             "--label".into(),
@@ -182,9 +189,23 @@ mod tests {
             "com.docker.compose.image=sha256:old".into()
         )));
         assert!(pairs.contains(&("-e".into(), "SANDBOX_MANAGER=compose".into())));
+        // A container whose file used `.env` says nothing of a credentials file.
+        assert!(!args.iter().any(|arg| arg.starts_with(CREDENTIALS_ENV)));
         // The run that replaced some earlier container is not this one, and ic's own labels are stamped elsewhere.
         assert!(!args
             .iter()
             .any(|arg| arg.contains("replace=") || arg.contains("dev.intentic")));
+    }
+
+    #[test]
+    fn a_replacement_keeps_saying_which_file_its_compose_file_reads_credentials_from() {
+        let args = carry_args(
+            &compose_labels(INSPECTED),
+            b"PATH=/bin\0SANDBOX_COMPOSE_CREDENTIALS=intentic.env\0",
+        );
+        assert!(pairs(&args).contains(&(
+            "-e".into(),
+            "SANDBOX_COMPOSE_CREDENTIALS=intentic.env".into()
+        )));
     }
 }

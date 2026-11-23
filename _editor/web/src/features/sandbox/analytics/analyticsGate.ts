@@ -7,6 +7,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { routeName as nameOfRoute } from "../../../lib/routes/links";
+import { settingUp } from "../../../models/sandbox/live/settingUp";
 
 // The open sandbox's say in product analytics (settings.productAnalytics, the switch SandboxAnalytics.vue beside this
 // edits), for app/analytics.ts. While a sandbox is open
@@ -41,7 +42,9 @@ export const sandboxAnalyticsGate = (routeName: Readonly<Ref<string>>): Analytic
     return {
         permitted: (asking) => {
             const sandboxId = activeSandboxId.value;
-            if (sandboxId === undefined || OUTSIDE_SANDBOX.has(routeName.value)) {
+            // A sandbox this window is setting up has never been opened, so its switch is the default, which allows; its
+            // settings cannot be read before its daemon is up (models/sandbox/live/settingUp.ts says what this cost).
+            if (sandboxId === undefined || OUTSIDE_SANDBOX.has(routeName.value) || settingUp(sandboxId)) {
                 return true;
             }
             const settings = queryClient.getQueryData<SandboxSettings>(rpcKey(`settings.get`));
@@ -60,7 +63,7 @@ export const sandboxAnalyticsGate = (routeName: Readonly<Ref<string>>): Analytic
         // A switch of sandbox or route, the daemon becoming reachable, and every cache event: the settings answering, or
         // an optimistic flip of the switch before its write lands.
         watch: (onChange) => {
-            watch([activeSandboxId, routeName, reachable], onChange, { flush: `sync` });
+            watch([activeSandboxId, routeName, reachable, () => settingUp(activeSandboxId.value ?? ``)], onChange, { flush: `sync` });
             queryClient.getQueryCache().subscribe(onChange);
         },
     };

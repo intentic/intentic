@@ -221,7 +221,8 @@ flowchart LR
   same way.) After that
   first check the old container stays parked for a 24-hour probation (`probation.rs`), except on a sandbox Docker Compose
   runs (Komodo's stacks included), which keeps no parked copy once the new one is up. There the replacement inherits the
-  old container's `com.docker.compose.*` labels and `SANDBOX_MANAGER=compose` (`compose.rs`), so Compose's next `up`
+  old container's `com.docker.compose.*` labels, `SANDBOX_MANAGER=compose` and `SANDBOX_COMPOSE_CREDENTIALS` when it
+  has one (`compose.rs`), so Compose's next `up`
   keeps it as the service's container. A parked copy with the same labels would be a second container of that service,
   and Compose 5.6.1 then removed the live one or failed on the name. A recreate without the labels is what used to
   break the stack: "The container name … is already in use". Elsewhere, `ic sandbox watch`, which the

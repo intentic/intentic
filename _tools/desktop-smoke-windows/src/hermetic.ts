@@ -62,6 +62,12 @@ export const launchState = (workspaceUrl: string, platformUrl: string): Readonly
         // `telemetry_internal`). The job's INTENTIC_TELEMETRY_INTERNAL says the same; the file also reaches a launch
         // the OS starts outside this process's environment.
         [`telemetry-internal`, `1\n`],
+        // And sends nothing at all (2026-11-23): this tier tests the install, not analytics, so the app's own launch
+        // reports and its setup's events (launch.rs `analytics_allowed`, the launcher's analytics.ts) stay home. The
+        // stub `ic` below exits 1 on purpose, which the hosted analytics counted as a failed install
+        // (`desktop_install_finished`, `ok: false`, `steps: 0`) on every release. The marker above still tags what the
+        // workspace page in the window sends, which reads its own consent.
+        [`analytics-consent`, `deny`],
     ]);
 
 // Writes each file as `files` says (or removes it), and answers what puts every one back exactly as it was. The

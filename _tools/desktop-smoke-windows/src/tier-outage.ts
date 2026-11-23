@@ -111,6 +111,8 @@ const runScenario = async (harness: Harness, machine: Machine, scenario: Scenari
             [`hosts-sandboxes.json`, JSON.stringify(false)],
             [`resume-setup.json`, undefined],
             [`roster.json`, undefined],
+            // A test launch sends no analytics (hermetic.ts `launchState` says why).
+            [`analytics-consent`, `deny`],
         ]),
     );
     const previous = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));

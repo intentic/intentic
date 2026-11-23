@@ -6,7 +6,7 @@ import { nextTick, ref } from "vue";
 // re-imported analytics modules (one evaluation per test) watch the same instance.
 const user = ref<User | null>(null);
 jest.mock("posthog-js", () => ({
-    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), opt_in_capturing: jest.fn(), opt_out_capturing: jest.fn(), startSessionRecording: jest.fn(), stopSessionRecording: jest.fn(), register: jest.fn(), alias: jest.fn(), get_property: jest.fn(), get_distinct_id: jest.fn(() => `anonymous`) },
+    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), opt_in_capturing: jest.fn(), opt_out_capturing: jest.fn(), startSessionRecording: jest.fn(), stopSessionRecording: jest.fn(), register: jest.fn(), unregister: jest.fn(), alias: jest.fn(), get_property: jest.fn(), get_distinct_id: jest.fn(() => `anonymous`) },
 }));
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
@@ -68,7 +68,7 @@ describe(`initAnalytics`, () => {
 
         user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
-        expect(posthog.identify).toHaveBeenCalledWith(`u1`, { email: `a@b.c`, name: `A` });
+        expect(posthog.identify).toHaveBeenCalledWith(`u1`, { email: `a@b.c`, name: `A`, internal_account: false });
 
         user.value = null;
         await nextTick();
@@ -260,6 +260,29 @@ describe(`initAnalytics`, () => {
             expect(cleared.register).not.toHaveBeenCalledWith({ internal: true });
             unstubAllGlobals();
         }
+    });
+
+    // The team's own ACCOUNT, as the platform answers it (User.internal, api internal-accounts.ts), on any browser: its
+    // events say so while it is signed in, and stop saying so once someone else signs in on an unmarked browser.
+    it(`marks the events of the team's own account as internal, and takes the mark off for the next account`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        expect(posthog.register).not.toHaveBeenCalledWith({ internal: true });
+
+        user.value = { id: `u-team`, email: `owner@intentic.test`, name: `O`, image: null, internal: true };
+        await nextTick();
+        expect(posthog.register).toHaveBeenCalledWith({ internal: true });
+        expect(posthog.identify).toHaveBeenLastCalledWith(`u-team`, { email: `owner@intentic.test`, name: `O`, internal_account: true });
+
+        jest.clearAllMocks();
+        user.value = null;
+        await nextTick();
+        user.value = { id: `u-person`, email: `person@example.com`, name: `P`, image: null, internal: false };
+        await nextTick();
+        expect(posthog.register).not.toHaveBeenCalledWith({ internal: true });
+        expect(posthog.unregister).toHaveBeenCalledWith(`internal`);
+        expect(posthog.identify).toHaveBeenLastCalledWith(`u-person`, { email: `person@example.com`, name: `P`, internal_account: false });
+        user.value = null;
+        await nextTick();
     });
 
     // EasyPrivacy blocks bare `/posthog-recorder.js` and `/dead-clicks-autocapture.js` on any host, so proxying alone

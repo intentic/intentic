@@ -4,6 +4,7 @@ import type { ConversationQueue, QueuedMessage } from "@intentic/sandbox-contrac
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, type Directive, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { modelsHref } from "../../../../lib/routes/modelsPath";
 import { NO_ATTENTION } from "../../../../models/agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../../../models/agent-status/agentStatus-standing";
 import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
@@ -369,6 +370,39 @@ describe(`the other holds, drawn the same way`, () => {
         expect(pressNamed(element, `Send again`)).toHaveLength(1);
         expect(buttons(element).some((button) => button.textContent?.includes(`Raise memory`) === true)).toBe(false);
     });
+
+    // The free trial could not answer (busy past the sandbox's own retries, no model for the pick, or spent for today):
+    // the words are kept, and connecting a model of the reader's own is the bright way to an answer.
+    it.each([`trial-unavailable`, `trial-model-unavailable`, `trial-exhausted`])(
+        `says the free trial could not answer (%s), keeps the words, and offers Connect a model first`,
+        async (failureCode) => {
+            const chat = chatHolding({ items: [held()], paused: `refused` }, SENT);
+            const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+            const element = document.createElement(`div`);
+            document.body.append(element);
+            app = createApp({ render: () => h(ChatHeldMessages) });
+            app.provide(
+                PANE_VIEW,
+                conversationView(
+                    computed(() => chat),
+                    () => ({ status: `error`, attention: NO_ATTENTION, failureCode, failure: `The free trial is busy.` }),
+                ),
+            );
+            app.component(`Icon`, IconStub);
+            app.directive(`tooltip`, tooltip);
+            app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] }));
+            app.mount(element);
+            await nextTick();
+
+            expect(statusLine(element)).toBe(`Not sent · The free trial couldn't answer. Your message is kept`);
+            expect(element.textContent).toContain(`always use the same icon`);
+            const connect = element.querySelector(`[data-held-connect-model]`);
+            expect(connect?.textContent?.trim()).toBe(`Connect a model`);
+            expect(connect?.getAttribute(`href`)).toBe(modelsHref());
+            pressNamed(element, `Send again`)[0]!.click();
+            expect(resume.mock.calls).toEqual([[[`m1`]]]);
+        },
+    );
 
     // The daemon says a short disk once per conversation, so the press goes past it rather than asking the same again.
     it(`offers to send past a short disk`, async () => {

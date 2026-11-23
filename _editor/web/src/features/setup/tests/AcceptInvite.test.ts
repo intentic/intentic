@@ -15,12 +15,12 @@ jest.mock(`vue-router`, () => ({
     // SAFETY: the page reads nothing of the router but push/replace, and nothing of the route but its token.
     useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
     // SAFETY: as above, the token alone.
-    useRoute: () => ({ params: { token: `tok-1` } }) as never,
+    useRoute: () => ({ params: { token: `tok-1` }, fullPath: `/invite/tok-1` }) as never,
 }));
 const preview = jest.fn(async () => ({ status: `pending`, invitedEmail: `ana@corp.example`, sandboxName: `notes`, tier: `collaborator` }));
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { invite: { preview: () => preview(), accept: jest.fn() } } }));
 const signInWithGoogle = jest.fn<(path?: string) => Promise<void>>().mockResolvedValue(undefined);
-const sendEmailCode = jest.fn<(email: string) => Promise<void>>().mockResolvedValue(undefined);
+const sendEmailCode = jest.fn<(email: string, options?: { returnTo?: string | undefined }) => Promise<void>>().mockResolvedValue(undefined);
 jest.mock(`../../../client/auth/useAuth`, () => ({
     useAuth: () => ({
         user: ref(null),
@@ -81,13 +81,15 @@ it(`offers both ways in as the invited address, with the terms on screen`, async
     expect(document.querySelector(`input[type="email"]`)).toBeNull();
 });
 
-it(`mails the code to the invited address`, async () => {
+// The code typed here signs in on this page, which then offers the accept; followed from the mail instead, its link must
+// come back here too, or the invitee lands on Home and makes a workspace of their own (2026-10-23).
+it(`mails the code to the invited address, with this invite as where its link returns`, async () => {
     await mount();
 
     button(`Email me a sign-in code`)?.click();
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`);
+    expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`, { returnTo: `/invite/tok-1` });
 });
 
 it(`keeps Google's own words where Google is the only way in`, async () => {

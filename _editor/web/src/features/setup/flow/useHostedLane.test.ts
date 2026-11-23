@@ -1,13 +1,17 @@
+import { mocked } from "@intentic/testing/bun";
 import "@intentic/testing/dom";
 import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-contract";
 import type { HostedTierId } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import { type EffectScope, effectScope, ref } from "vue";
+import { track } from "../../../app/analytics";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { MAX_WAKES } from "./machinePower";
 import { forgetOperations } from "../../../workbench/operations/operations";
 import { forgetHostedWaits, type HostedLaneHost, useHostedLane } from "./useHostedLane";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
+
+jest.mock(`../../../app/analytics`, () => ({ track: jest.fn() }));
 
 // Pins the hosted lane headlessly: a provision lands only on the lane, rung and row it was asked for; stepping off the
 // rung mid-provision waits only for the platform to take the machine back and ignores the provision's late answer; a
@@ -184,6 +188,57 @@ describe(`starting a machine`, () => {
         sandbox.hostedProvision.mockRejectedValueOnce(Object.assign(new Error(`not yours`), { code: `FORBIDDEN`, data: { reason: `suspended` } }));
         expect(await hosted.provisionHosted()).toBe(false);
         expect({ google: hosted.refusedForGoogle.value, error: hosted.hostedError.value?.detail }).toEqual({ google: false, error: `not yours` });
+    });
+});
+
+// `sandbox_hosted_created` fired zero times from 2026-10-13 while machines were made every week (PostHog, 2026-11-23).
+describe(`counting a machine made`, () => {
+    const created = () => mocked(track).mock.calls.filter(([event]) => event === `sandbox_hosted_created`);
+    beforeEach(() => mocked(track).mockClear());
+
+    it(`counts each machine the platform made once, with its tier`, async () => {
+        const free = stage();
+        free.row.created.value = draft;
+        free.hosted.machine.value = `hosted`;
+        await free.hosted.provisionHosted();
+        const paid = stage({ enabled: true, remaining: 1 }, undefined, true, `standard`);
+        paid.row.created.value = draft;
+        paid.row.resuming.value = true;
+        paid.hosted.machine.value = `hosted`;
+        await paid.hosted.provisionHosted();
+        expect(created()).toEqual([
+            [`sandbox_hosted_created`, { machine: `hosted`, tier: `free`, resumed: false }],
+            [`sandbox_hosted_created`, { machine: `hosted`, tier: `standard`, resumed: true }],
+        ]);
+    });
+
+    it(`counts a machine made after its page went, and none the platform refused`, async () => {
+        const left = stage();
+        const provisioning = Promise.withResolvers<SandboxSummary>();
+        left.sandbox.hostedProvision.mockReturnValueOnce(provisioning.promise);
+        left.row.created.value = draft;
+        left.hosted.machine.value = `hosted`;
+        const started = left.hosted.provisionHosted();
+        left.scope.stop();
+        provisioning.resolve(hostedRow());
+        await started;
+        const refused = stage();
+        refused.sandbox.hostedProvision.mockRejectedValueOnce(new Error(`no`));
+        refused.row.created.value = draft;
+        refused.hosted.machine.value = `hosted`;
+        await refused.hosted.provisionHosted();
+        expect(created()).toHaveLength(1);
+    });
+
+    it(`does not count the wait's own rebuild of a machine as another`, async () => {
+        const { sandbox, row, hosted } = stage();
+        row.created.value = hostedRow();
+        row.announceRefusal.value = { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` };
+        hosted.machine.value = `hosted`;
+        await hosted.restartHosted();
+        expect(sandbox.hostedRelease).toHaveBeenCalledTimes(1);
+        expect(sandbox.hostedProvision).toHaveBeenCalledTimes(1);
+        expect(created()).toEqual([]);
     });
 });
 

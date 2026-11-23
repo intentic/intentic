@@ -28,7 +28,11 @@ const route = useRoute();
 
 // Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (lib/routes/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
-const hosted = computed(() => destination.value.split(`?`)[0] === toTop(`startHosted`));
+// Signing in on the way to a cloud sandbox: the cloud entry (router/hostedEntry.ts), or Home's ask with a machine of ours.
+const hosted = computed(() => {
+    const [path = ``, search = ``] = destination.value.split(`?`, 2);
+    return path === toTop(`startHosted`) || new URLSearchParams(search).get(`machine`) === `hosted`;
+});
 // Adding an account beside the one signed in, or continuing as one still signed in here (loginAccounts.ts).
 const accounts = useLoginAccounts(destination);
 const { asked: addAsked, adding, remaining } = accounts;
@@ -281,7 +285,14 @@ watch(
                     <p v-if="options.google" class="or" aria-hidden="true">
                         <span>{{ t(`auth.login.or`) }}</span>
                     </p>
-                    <EmailCodeSignIn surface="login" :in-app="inApp" :google-offered="options.google" :adding="addAsked" @signed-in="arrive" />
+                    <EmailCodeSignIn
+                        surface="login"
+                        :in-app="inApp"
+                        :google-offered="options.google"
+                        :adding="addAsked"
+                        :return-to="destination"
+                        @signed-in="arrive"
+                    />
                 </template>
 
                 <p class="fine">

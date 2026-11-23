@@ -153,71 +153,121 @@ describe(`adminOverview`, () => {
 });
 
 describe(`adminFunnel`, () => {
-    const prismaWith = (
-        counts: { total: number; withSandbox: number; engaged: number; connected: number; active7: number },
-        signups: Date[],
-        activated: { ownerId: string; firstAnnouncedAt: Date; owner: { createdAt: Date } }[] = [],
-        veterans: { ownerId: string }[] = [],
-    ) =>
-        ({
-            user: {
-                count: async (args?: { where?: Record<string, unknown> }) => {
-                    const where = args?.where;
-                    if (!where) {
-                        return counts.total;
-                    }
-                    if (where[`createdAt`]) {
-                        // Window signup counts answer by how far back the window reaches.
-                        const gte = (where[`createdAt`] as { gte: Date }).gte;
-                        return signups.filter((at) => at >= gte).length;
-                    }
-                    const some = (where[`sandboxes`] as { some: Record<string, unknown> }).some;
-                    if (some[`OR`]) {
-                        return counts.engaged;
-                    }
-                    if (some[`lastSeenAt`]) {
-                        return (some[`lastSeenAt`] as { not?: null }).not === null ? counts.connected : counts.active7;
-                    }
-                    return counts.withSandbox;
-                },
-                findMany: async () => signups.map((createdAt) => ({ createdAt })),
-            },
-            sandbox: {
-                // First call asks for the window's activations, second probes for pre-window veterans.
-                findMany: async (args: { where: Record<string, unknown> }) =>
-                    (args.where[`firstAnnouncedAt`] as { gte?: Date }).gte ? activated : veterans,
-            },
-        }) as unknown as PrismaClient;
+    // The lists the funnel reads (internal-accounts.ts) and the hosted app prefix it names apps by.
+    const config = {
+        admin: { emails: `owner@intentic.test` },
+        hosted: { canaryEmail: `canary@intentic.test`, appPrefix: `sbx` },
+        telemetry: { internalAccounts: `@qa.test` },
+    };
+    const day = (iso: string) => new Date(iso);
+    const RECENT = day(`2026-08-24T12:00:00Z`);
+    const OLD = day(`2026-08-01T12:00:00Z`);
+    // Before the activation window's 30 days.
+    const LONG_AGO = day(`2026-06-01T12:00:00Z`);
+    interface SandboxStub {
+        id?: string;
+        tunnelId?: string;
+        setupCodeClaimedAt?: Date | null;
+        lastSeenAt?: Date | null;
+        firstAnnouncedAt?: Date | null;
+        hosted?: { id: string } | null;
+    }
+    let made = 0;
+    const account = (email: string, createdAt: Date, sandboxes: SandboxStub[] = [], hostedApps: string[] = []) => ({
+        id: email,
+        email,
+        createdAt,
+        sandboxes: sandboxes.map((sandbox) => {
+            made += 1;
+            return {
+                id: sandbox.id ?? `sb${made}`,
+                tunnelId: sandbox.tunnelId ?? `tn${made}`,
+                setupCodeClaimedAt: sandbox.setupCodeClaimedAt ?? null,
+                lastSeenAt: sandbox.lastSeenAt ?? null,
+                firstAnnouncedAt: sandbox.firstAnnouncedAt ?? null,
+                hosted: sandbox.hosted ?? null,
+            };
+        }),
+        hostedProvisions: hostedApps.map((appName) => ({ appName })),
+    });
+    const prismaWith = (accounts: ReturnType<typeof account>[]) => ({ user: { findMany: async () => accounts } }) as unknown as PrismaClient;
 
     it(`buckets signups per UTC day, zero-filled to exactly 30 entries oldest-first`, async () => {
-        const signups = [new Date(`2026-08-25T09:00:00Z`), new Date(`2026-08-25T01:00:00Z`), new Date(`2026-08-20T23:59:00Z`)];
-        const funnel = await adminFunnel(prismaWith({ total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 }, signups), () => NOW);
+        const accounts = [
+            account(`a@x.test`, day(`2026-08-25T09:00:00Z`)),
+            account(`b@x.test`, day(`2026-08-25T01:00:00Z`)),
+            account(`c@x.test`, day(`2026-08-20T23:59:00Z`)),
+            account(`d@x.test`, day(`2026-01-01T00:00:00Z`)),
+        ];
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
         expect(funnel.signupSeries).toHaveLength(30);
         expect(funnel.signupSeries[0]).toEqual({ day: `2026-07-27`, count: 0 });
         expect(funnel.signupSeries.at(-1)).toEqual({ day: `2026-08-25`, count: 2 });
         expect(funnel.signupSeries.find((entry) => entry.day === `2026-08-20`)).toEqual({ day: `2026-08-20`, count: 1 });
-        expect(funnel.signups).toEqual({ today: 2, last7: 3, last30: 3, total: 10 });
+        expect(funnel.signups).toEqual({ today: 2, last7: 3, last30: 3, total: 4 });
     });
 
-    it(`reports the five stages as distinct-account counts, accounts = the user total`, async () => {
-        const funnel = await adminFunnel(prismaWith({ total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 }, []), () => NOW);
-        expect(funnel.funnel).toEqual({ accounts: 10, withSandbox: 8, setupEngaged: 6, connected: 4, activeLast7: 2 });
+    it(`counts each stage as distinct accounts, each a superset of the next`, async () => {
+        const accounts = [
+            account(`none@x.test`, OLD),
+            account(`made@x.test`, OLD, [{}, {}]),
+            account(`claimed@x.test`, OLD, [{ setupCodeClaimedAt: OLD }]),
+            account(`hostedonly@x.test`, OLD, [{ hosted: { id: `m1` } }]),
+            account(`gone@x.test`, LONG_AGO, [{ lastSeenAt: OLD, firstAnnouncedAt: LONG_AGO }]),
+            account(`active@x.test`, LONG_AGO, [{ lastSeenAt: RECENT, firstAnnouncedAt: LONG_AGO }, { lastSeenAt: OLD }]),
+        ];
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
+        expect(funnel.funnel).toEqual({ accounts: 6, withSandbox: 5, setupEngaged: 4, connected: 2, activeLast7: 1 });
         // Nobody activated in the window: the honest answer is null, never zero hours.
         expect(funnel.activation).toBeNull();
     });
 
-    it(`medians sign-up → first announce per owner, excluding owners who had activated before the window`, async () => {
-        const counts = { total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 };
-        const activated = [
-            // Alice: signed up at 00:00, first announce 2h later; a second sandbox later must not count.
-            { ownerId: `alice`, firstAnnouncedAt: new Date(`2026-08-20T02:00:00Z`), owner: { createdAt: new Date(`2026-08-20T00:00:00Z`) } },
-            { ownerId: `alice`, firstAnnouncedAt: new Date(`2026-08-22T00:00:00Z`), owner: { createdAt: new Date(`2026-08-20T00:00:00Z`) } },
-            // Bob: 10h to activate.
-            { ownerId: `bob`, firstAnnouncedAt: new Date(`2026-08-21T10:00:00Z`), owner: { createdAt: new Date(`2026-08-21T00:00:00Z`) } },
-            // Carol activated a sandbox this window but was already active before it: not a first activation.
-            { ownerId: `carol`, firstAnnouncedAt: new Date(`2026-08-22T01:00:00Z`), owner: { createdAt: new Date(`2026-01-01T00:00:00Z`) } },
+    it(`leaves the team's own accounts out of every figure, and keeps them in the unfiltered stages`, async () => {
+        const accounts = [
+            account(`person@x.test`, RECENT, [{ lastSeenAt: RECENT, firstAnnouncedAt: RECENT }]),
+            account(`Owner@Intentic.test`, RECENT, [{ lastSeenAt: RECENT, firstAnnouncedAt: RECENT }]),
+            account(`canary@intentic.test`, RECENT, [{ hosted: { id: `m1` }, lastSeenAt: RECENT }]),
+            account(`bot@qa.test`, RECENT, [{ lastSeenAt: OLD }]),
         ];
-        const funnel = await adminFunnel(prismaWith(counts, [], activated, [{ ownerId: `carol` }]), () => NOW);
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
+        expect(funnel.funnel).toEqual({ accounts: 1, withSandbox: 1, setupEngaged: 1, connected: 1, activeLast7: 1 });
+        expect(funnel.signups.total).toBe(1);
+        expect(funnel.signups.last7).toBe(1);
+        expect(funnel.internalAccounts).toBe(3);
+        expect(funnel.unfiltered).toEqual({ accounts: 4, withSandbox: 4, setupEngaged: 4, connected: 4, activeLast7: 3 });
+        expect(funnel.lanes).toEqual({ hosted: { connected: 0, activeLast7: 0 }, ownMachine: { connected: 1, activeLast7: 1 } });
+        expect(funnel.activation).toEqual({ medianHours: 0, count: 1 });
+    });
+
+    it(`splits connected and active by lane, a collected hosted sandbox still hosted, and one of each counted in both`, async () => {
+        const accounts = [
+            // A hosted machine that is still there.
+            account(`h@x.test`, OLD, [{ hosted: { id: `m1` }, lastSeenAt: RECENT }]),
+            // Hosted once: the machine row is gone, its provision names the app by the sandbox's tunnel id.
+            account(`collected@x.test`, OLD, [{ tunnelId: `tn-c`, lastSeenAt: OLD }], [`sbx-tn-c`]),
+            // A sandbox on the owner's own machine.
+            account(`own@x.test`, OLD, [{ lastSeenAt: RECENT }]),
+            // One of each: counted in both lanes, once in `connected`.
+            account(`both@x.test`, OLD, [{ hosted: { id: `m2` }, lastSeenAt: OLD }, { lastSeenAt: RECENT }], [`sbx-other`]),
+        ];
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
+        expect(funnel.funnel.connected).toBe(4);
+        expect(funnel.lanes).toEqual({ hosted: { connected: 3, activeLast7: 1 }, ownMachine: { connected: 2, activeLast7: 2 } });
+    });
+
+    it(`medians sign-up → first announce per account, leaving out accounts that had activated before the window`, async () => {
+        const accounts = [
+            // Alice: signed up at 00:00, first announce 2h later; a second sandbox later must not count.
+            account(`alice@x.test`, day(`2026-08-20T00:00:00Z`), [
+                { firstAnnouncedAt: day(`2026-08-20T02:00:00Z`) },
+                { firstAnnouncedAt: day(`2026-08-22T00:00:00Z`) },
+            ]),
+            // Bob: 10h to activate.
+            account(`bob@x.test`, day(`2026-08-21T00:00:00Z`), [{ firstAnnouncedAt: day(`2026-08-21T10:00:00Z`) }]),
+            // Carol activated a sandbox this window but was already active before it: not a first activation.
+            account(`carol@x.test`, day(`2026-01-01T00:00:00Z`), [{ firstAnnouncedAt: day(`2026-08-22T01:00:00Z`) }, { firstAnnouncedAt: day(`2026-02-01T00:00:00Z`) }]),
+        ];
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
         // Alice 2h, Bob 10h: median 6h over 2 accounts.
         expect(funnel.activation).toEqual({ medianHours: 6, count: 2 });
     });

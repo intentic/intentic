@@ -20,7 +20,7 @@ const connectAdvanced = `# Unattended (no terminal to ask): pre-consent to the D
 curl -fsSL https://intentic.dev/connect | sudo env INSTALL_DOCKER=1 sh -s -- <SETUP_CODE>`;
 
 const composeBootstrap = `# In the folder holding your docker-compose.yml: run once.
-curl -fsS https://api.intentic.dev/setup/claim -d code=<SETUP_CODE> > .env
+(umask 077 && curl -fsS https://api.intentic.dev/setup/claim -d code=<SETUP_CODE> -o intentic.env.part) && mv -f intentic.env.part intentic.env
 docker compose up -d`;
 
 // Rendered at build time from the run contract (@intentic/sandbox-run/compose), the same function the setup page's
@@ -207,9 +207,11 @@ eval "$RUN"
     <p>Then, once, in the same folder: the same tab prints this with your <a href="#setup-code">setup code</a> already in the URL:</p>
     <DocsCodeBlock code={composeBootstrap} lang="bash" title="Bootstrap" />
     <p>
-        The first command redeems your setup code into the <code>.env</code> that Compose interpolates
-        (<code>CONNECT_TOKEN</code>, the <code>SANDBOX_GRANT</code> that makes the box reachable, <code>INGRESS_URL</code>,{" "}
-        <code>LOCAL_PORT</code>, <code>OWNER_EMAIL</code>). After
+        The first command redeems your setup code into <code>intentic.env</code>, a file of its own that the service reads
+        with <code>env_file:</code> (<code>CONNECT_TOKEN</code>, the <code>SANDBOX_GRANT</code> that makes the box reachable,{" "}
+        <code>INGRESS_URL</code>, <code>OWNER_EMAIL</code>). It is moved into place only once the claim succeeds, and your
+        project's own <code>.env</code> is never touched. A sandbox set up before this read its credentials from{" "}
+        <code>.env</code> instead; it keeps working as it is. After
         that the sandbox is yours to manage with <code>docker compose up -d</code>, <code>down</code>, and <code>logs</code>. Your workspace
         lives in the named volumes, so <code>down</code> then <code>up</code> keeps it.
     </p>

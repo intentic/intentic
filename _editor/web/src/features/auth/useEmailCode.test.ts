@@ -9,7 +9,7 @@ import { RESEND_AFTER_MS, useEmailCode } from "./useEmailCode";
 // What the emailed-code road tells analytics: every outcome as an event named by the screen it is on, a refusal by its
 // coded reason, a minute on the code step with nothing typed counted once, and never the address or the code.
 
-const sendEmailCode = jest.fn<(email: string) => Promise<void>>();
+const sendEmailCode = jest.fn<(email: string, options?: { readonly returnTo?: string | undefined }) => Promise<void>>();
 const signInWithEmailCode = jest.fn<(email: string, otp: string, options?: { readonly adding?: boolean }) => Promise<void>>();
 const track = jest.fn<Track>();
 const onSignedIn = jest.fn<() => void>();
@@ -57,7 +57,7 @@ it(`counts the request, says whether a Google address was the hint's case, and t
     block.typeCode(`123456`);
     await advanceTimersByTimeAsync(0);
 
-    expect(sendEmailCode).toHaveBeenCalledWith(`ana@gmail.com`);
+    expect(sendEmailCode).toHaveBeenCalledWith(`ana@gmail.com`, { returnTo: undefined });
     expect(onSignedIn).toHaveBeenCalledTimes(1);
     expect(track.mock.calls).toEqual([
         [`signin_code_requested`, { surface: `login`, google_address: true }],

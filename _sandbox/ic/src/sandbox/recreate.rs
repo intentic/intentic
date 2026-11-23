@@ -999,7 +999,7 @@ fn recreate(
     /* What the record's rollback targets become — `previous` first, older builds behind it — decided by identity above; the build being left is pinned under a protected local tag. */
     let new_base_id = docker::image_id(&base_image);
     // A container Docker Compose runs stays Compose's: the replacement inherits its labels (compose.rs).
-    stamped_run.extend(compose::carry_args(&compose_labels));
+    stamped_run.extend(compose::carry_args(&compose_labels, &env_nul));
     if reach == Reach::Applied && compose::owns(&compose_labels) {
         ui::note(&format!(
             "Docker Compose runs {slug}{}: the new container stays Compose's, and keeps no parked copy once it is up.",

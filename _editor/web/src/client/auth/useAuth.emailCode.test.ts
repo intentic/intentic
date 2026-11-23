@@ -6,14 +6,15 @@ import { ref } from "vue";
 // seam; the code's refusals and the account the window holds afterwards are the real ones.
 
 type ClientAnswer = { data?: unknown; error?: { status?: number; code?: string; message?: string } | null };
-const sendVerificationOtp = jest.fn<(input: { email: string; type: string }) => Promise<ClientAnswer>>();
+type SendInput = { email: string; type: string; fetchOptions?: { query?: Record<string, string> } };
+const sendVerificationOtp = jest.fn<(input: SendInput) => Promise<ClientAnswer>>();
 const signInEmailOtp = jest.fn<(input: { email: string; otp: string }) => Promise<ClientAnswer>>();
 const linkSocial = jest.fn<(input: { provider: string; callbackURL: string }) => Promise<ClientAnswer>>();
 const getSession = jest.fn<() => Promise<ClientAnswer>>();
 jest.mock(`better-auth/client`, () => ({
     createAuthClient: () => ({
         getSession: () => getSession(),
-        emailOtp: { sendVerificationOtp: (input: { email: string; type: string }) => sendVerificationOtp(input) },
+        emailOtp: { sendVerificationOtp: (input: SendInput) => sendVerificationOtp(input) },
         signIn: { emailOtp: (input: { email: string; otp: string }) => signInEmailOtp(input) },
         linkSocial: (input: { provider: string; callbackURL: string }) => linkSocial(input),
     }),
@@ -49,7 +50,26 @@ beforeEach(async () => {
 it(`asks for a sign-in code for the address as typed, trimmed`, async () => {
     await useAuth().sendEmailCode(`  ana@corp.example `);
 
-    expect(sendVerificationOtp).toHaveBeenCalledWith({ email: `ana@corp.example`, type: `sign-in` });
+    expect(sendVerificationOtp).toHaveBeenCalledWith({ email: `ana@corp.example`, type: `sign-in`, fetchOptions: {} });
+});
+
+// The mail's link goes where the code was asked for: an invite, a desktop app's sign-in with its state and challenge.
+it(`names where the sign-in carries on, so the mail's link can take it there`, async () => {
+    await useAuth().sendEmailCode(`ana@corp.example`, { returnTo: `/desktop-auth?state=nonce&challenge=chal` });
+
+    expect(sendVerificationOtp).toHaveBeenCalledWith({
+        email: `ana@corp.example`,
+        type: `sign-in`,
+        fetchOptions: { query: { returnTo: `/desktop-auth?state=nonce&challenge=chal` } },
+    });
+});
+
+it(`names no destination off this origin, nor the root`, async () => {
+    for (const returnTo of [`//evil.example`, `https://evil.example/invite/x`, `/\\evil.example`, `/`]) {
+        sendVerificationOtp.mockClear();
+        await useAuth().sendEmailCode(`ana@corp.example`, { returnTo });
+        expect(sendVerificationOtp).toHaveBeenCalledWith({ email: `ana@corp.example`, type: `sign-in`, fetchOptions: {} });
+    }
 });
 
 it(`says the platform's rate limit as a wait, by name`, async () => {

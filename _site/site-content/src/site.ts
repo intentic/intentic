@@ -11,6 +11,9 @@ export const DEMO_PATH = "/demo/";
 export const DESK_PATH = "/desk/";
 // The two ways in, worded once: the app is the primary path, the hosted workspace is its labelled alternative.
 export const HOSTED_START_LABEL = "Start in your browser";
+// Where both browser buttons go: the app's cloud entry, which signs a visitor in, then opens the cloud sandbox they have
+// or offers to make one (the editor's router/hostedEntry.ts). The bare app origin carries no ask, and lost it.
+export const HOSTED_START_URL = `${APP_URL}/start/hosted`;
 export const HOSTED_ALT_LABEL = "Or start in your browser";
 export const ORG_NAME = "intentic";
 // Fixed nouns: "agent" for the actor, "sandbox" for the machine; the host machine is "laptop, desktop or VPS".

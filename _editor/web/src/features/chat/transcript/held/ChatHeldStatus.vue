@@ -29,6 +29,8 @@ const props = defineProps<{
     // A booking the sandbox made itself, sending words the busy free trial turned away again: said as the retry it is,
     // with which try, never as a time the reader chose.
     retry?: QueuedTrialRetry | undefined;
+    // Refused because the free trial could not answer it: said as that, since "refused" alone reads as the reader's fault.
+    trial?: boolean | undefined;
 }>();
 
 const t = useT();
@@ -76,7 +78,7 @@ const why = computed(() => {
             // Past its instant, the sandbox is letting it go on its next pass (every few seconds).
             return props.until === undefined || props.until <= now.value ? shortly() : sendsWhen(props.until, now.value);
         default:
-            return t(`chat.chatHeld.refused`);
+            return props.trial === true ? t(`chat.chatHeld.trialRefused`) : t(`chat.chatHeld.refused`);
     }
 });
 </script>

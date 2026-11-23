@@ -20,6 +20,8 @@ const props = defineProps<{
     readonly googleOffered?: boolean;
     // The screen it is on, as its analytics events name it.
     readonly surface: EmailCodeSurface;
+    // Where the sign-in carries on, which the mail's link carries too (useEmailCode.ts).
+    readonly returnTo?: string | undefined;
 }>();
 
 const emit = defineEmits<{ signedIn: [] }>();
@@ -51,6 +53,7 @@ const {
     adding: computed(() => props.adding === true),
     googleOffered: computed(() => props.googleOffered === true),
     surface: props.surface,
+    returnTo: toRef(props, `returnTo`),
     onSignedIn: () => emit(`signedIn`),
 });
 

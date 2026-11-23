@@ -13,6 +13,7 @@ import {
     type CodeAllowances,
     emailSignInEnabled,
     prismaCodeAllowances,
+    returnToOf,
     SIGN_IN_CODE_ATTEMPTS,
     SIGN_IN_CODE_TTL_SECONDS,
     sendSignInCode,
@@ -46,11 +47,12 @@ export const emailCodes = (config: Config, allowances: CodeAllowances, logger: L
         storeOTP: `hashed`,
         rateLimit: { window: 60, max: 5 },
         // Only sign-in codes: there are no passwords here to reset, so that kind is never mailed.
-        sendVerificationOTP: async ({ email, otp, type }) => {
+        sendVerificationOTP: async ({ email, otp, type }, ctx) => {
             if (type === `forget-password`) {
                 return;
             }
-            await sendSignInCode({ config, logger }, { email, code: otp });
+            // Where the code was asked for, so the mail's link carries on there as a typed code does (sign-in.ts).
+            await sendSignInCode({ config, logger }, { email, code: otp, returnTo: returnToOf(ctx?.request) });
         },
     }),
 ];

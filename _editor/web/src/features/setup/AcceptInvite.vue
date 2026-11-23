@@ -189,7 +189,15 @@ const switchAccount = async (): Promise<void> => {
                     <span v-if="options.google" class="my-3 block text-center text-2xs text-subtle">{{
                         t(`auth.login.or`)
                     }}</span>
-                    <EmailCodeSignIn surface="invite" :class="options.google ? `` : `mt-6`" :locked-email="invitedEmail" :in-app="inApp" :google-offered="options.google" />
+                    <!-- The mail's link comes back to this invite: followed rather than typed, it would otherwise land on Home. -->
+                    <EmailCodeSignIn
+                        surface="invite"
+                        :class="options.google ? `` : `mt-6`"
+                        :locked-email="invitedEmail"
+                        :in-app="inApp"
+                        :google-offered="options.google"
+                        :return-to="route.fullPath"
+                    />
                 </template>
                 <!-- The clickwrap, before anything is sent: a first sign-in from here makes the account. -->
                 <p class="mt-4 text-2xs leading-relaxed text-subtle">

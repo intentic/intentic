@@ -83,6 +83,19 @@ describe(`sandboxAnalyticsGate`, () => {
         expect(queryClient.getQueryCache().find({ queryKey: [`settings.get`, `gate-test`] })?.gcTime).toBe(Number.POSITIVE_INFINITY);
     });
 
+    // A sandbox being set up is the open one as soon as it is listed, and its settings cannot be read before its daemon is
+    // up: the gate used to hold back every setup milestone after the press (models/sandbox/live/settingUp.ts).
+    it(`lets a sandbox this window is setting up be counted, and goes back to its settings once it is set up`, async () => {
+        const { markSettingUp, doneSettingUp } = await import(`../../../models/sandbox/live/settingUp`);
+        const { gate, changed } = await boot();
+        expect(gate.permitted(true)).toBe(false);
+        markSettingUp(`gate-test`);
+        expect(changed).toHaveBeenCalledTimes(1);
+        expect(gate.permitted(true)).toBe(true);
+        doneSettingUp(`gate-test`);
+        expect(gate.permitted(true)).toBe(false);
+    });
+
     it(`never asks for someone who has not agreed`, async () => {
         const { gate } = await boot();
         reachable.value = true;

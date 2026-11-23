@@ -3,15 +3,20 @@
 The flows that make a sandbox and get it running, and the pieces that draw them. The page they used to live on,
 `/setup`, is gone (2026-10-26): a new sandbox is made, and one left unfinished finished, on Home, in a dialog and then a
 tile of its own whose run shows in the chat's place (`features/home/newSandbox/`, which says why). Nobody is moved out of
-Home to do it. `/setup` and `/start/hosted` (the pricing page's way in) are redirects now (`router/setupRoutes.ts`), so a
-bookmark, an emailed link, an older desktop app or the site's pricing page lands on Home's ask for the same thing:
+Home to do it. `/setup` is a redirect now (`router/setupRoutes.ts`), and `/start/hosted`, the site's way in for every
+"Start in your browser", is the cloud entry (`router/hostedEntry.ts`): signed out it signs in and comes back to itself;
+signed in it opens the reader's own cloud sandbox when they have one (and finishes one left unfinished), and only
+otherwise lands on Home's ask. So a bookmark, an emailed link, an older desktop app or the site lands on Home's ask for
+the same thing:
 
 | Old address | Lands on |
 |---|---|
 | `/setup` | `/home?add=sandbox` |
 | `/setup?sandbox=<id>` | `/home?add=sandbox&finish=<id>` |
 | `/setup?machine=hosted` (`elsewhere=1`) | `/home?add=sandbox&machine=hosted` |
-| `/start/hosted?tier=<id>` | `/home?add=sandbox&machine=hosted&tier=<id>` |
+| `/start/hosted?tier=<id>` | `/home?add=sandbox&machine=hosted&tier=<id>` (a tier always means a new machine) |
+| `/start/hosted`, with a cloud sandbox of one's own | that sandbox, on the screen this window last left it on (woken if its machine stopped) |
+| `/start/hosted`, with one left unfinished | `/home?add=sandbox&finish=<id>&machine=hosted` |
 
 `found=` (what the desktop app found signed in on this computer) rides along every time. The shell's gate, which still
 answers `/setup` for an account with nothing to open, is settled to Home's first run (`app/environments/nothingToOpen.ts`),
@@ -24,12 +29,18 @@ and a guard test fails on any navigation to `/setup` written anywhere else (`rou
   - **A command for a server** (`add/useAddCommand.ts`, `add/AddSandboxCommand.vue`): the row is made, its code minted,
     and the command shown to copy (each shell, or the compose file), with the reader's own Cloudflare zone riding it if
     they choose one. The wait reads the machine's account of its run (`flow/useCommandWait.ts`): the code redeemed, the
-    step it is on, and verbatim what broke. A phone gets the link mailed to the computer that has a terminal.
+    step it is on, and verbatim what broke. A phone gets the link mailed to the computer that has a terminal. A code
+    lives 30 minutes: once it runs out with the command still on the page, the command is taken off and a fresh code
+    minted in its place, with a retry if that fails (`add/useCodeRenewal.ts`), unless a run holds the code (claimed, or
+    reporting without a failure), whose reports a fresh code would orphan. (2026-10-23: the page kept copying a code the
+    platform refused, under a nudge saying it was safe to run again.) The compose file's bootstrap saves the claim to
+    `intentic.env` beside the file, moved into place only once the claim succeeded, never to the folder's `.env`.
   - **One already running** (`add/useAddAttach.ts`, `add/AddSandboxAttach.vue`): the address is probed from this browser
     (`setupAttach.ts`), and the row made under the typed name only once the sandbox there let this account in, so a typo
     leaves nothing behind. An address this account already lists opens that sandbox instead.
   - A machine of ours it cannot have right now says why under the picks: a Google sign-in to link (`SetupNeedsGoogle.vue`),
-    the free one already in use (with the way to buy one, Settings ▸ Billing), none free, or switched off for the account.
+    the free one already in use (naming the reader's own cloud sandbox that holds it, with a press into it, and the way to
+    buy another, Settings ▸ Billing), none free, or switched off for the account.
 - **Finishing one left unfinished** (`resume`, Home's `?finish=<id>`): the row it has, never another. A machine of ours
   already on it is waited on, and one is started on it where the address asked for one (`machine=hosted`, the failure
   mail's second link); otherwise a fresh code is minted, run by the app on this computer where there is one, and shown as
@@ -50,6 +61,13 @@ and a guard test fails on any navigation to `/setup` written anywhere else (`rou
   has got is read once more where the run lives, for its tile and This computer (`features/home/newSandbox/newSandboxGauge.ts`).
 - **A machine of ours** (`flow/useHostedLane.ts`): provisioned on the row (on the tier the address named), waited on with
   its steps (`hostedWait.ts`, `HostedWaitSteps.vue`), started over where that can help.
+- **The funnel's milestones**: `sandbox_add_started` at the press, `sandbox_hosted_created` once per machine of ours the
+  platform made (with its `tier`; not the wait's own rebuild, and also for a reader who went elsewhere meanwhile), and
+  `sandbox_connected` at the row's first check-in, with `machine: hosted | own`. The row is marked as being set up here
+  until that check-in is counted (`models/sandbox/live/settingUp.ts`), which lets product analytics' sandbox gate count
+  them: the gate holds events while the open sandbox's own analytics switch is unread, and a sandbox still being set up,
+  already the open one, cannot be read. (2026-11-23) From the gate's arrival on 2026-10-13 until then,
+  `sandbox_hosted_created` fired zero times and `sandbox_connected` about once a week.
 - **The row and the watch** (`flow/useSetupRow.ts`, `flow/useRegistryWatch.ts`): the row is made only on the press and
   deleted if refused before any machine got its code; the registry is read every few seconds, and the row opens once it
   reports in (a machine of ours once it is ready to use). It is selected unless Home's reader went back to another

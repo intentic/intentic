@@ -3,6 +3,8 @@ import {
     AGENT_AUTH_ROOT,
     AT_REST_KEY_ENV,
     AT_REST_KEY_MOUNT,
+    COMPOSE_CREDENTIALS_ENV,
+    COMPOSE_CREDENTIALS_FILE,
     COMPOSE_MANAGER,
     RUNTIME_DIRECTIVE_PREFIX,
     RUNTIME_DIRECTIVES,
@@ -24,13 +26,18 @@ import { slugOfHostname } from "./slug.js";
  * What only Compose needs rides beside the run: the approved overlay recipe, which Compose builds itself on `up`
  * (`build.dockerfile_inline`) since nothing else on a Compose host would; the at-rest key's host path; the HOST_* stamps;
  * and whether the storage already exists. Credentials never appear in the file: each is `${NAME:?…}`, and its value comes
- * back in `env` for the `.env` beside it (`composeEnvFile`). Browser-safe: nothing here imports Node. */
+ * back in `env` for the `.env` beside it (`composeEnvFile`), or, for a file that names a credentials file
+ * (`credentialsFile`, the setup page's), the service reads them from that file with `env_file:` and the folder's `.env`
+ * is never involved. Browser-safe: nothing here imports Node. */
 
 // The Compose service every rendering names.
 const COMPOSE_SERVICE = "intentic-sandbox";
 
 // What an unfilled credential says when Compose reads the file without its `.env`.
 const MISSING_ENV = "run the .env bootstrap first";
+
+// What the loopback port says in a file with a credentials file whose sandbox id was not known (the docs' example).
+const MISSING_PORT = "the setup page fills in this port";
 
 // The credentials, which the file names only as variables of its `.env`.
 const SECRET_NAMES: ReadonlySet<string> = REPLAY_SECRET_ENV;
@@ -70,6 +77,11 @@ export interface ComposeInputs {
     // fallback for an unmeasured machine, which would hold a large server to 7g. The owner's SANDBOX_MEMORY still caps a
     // later recreate `ic` makes.
     readonly unmeasured?: boolean;
+    // The file beside the Compose file the service reads its claimed credentials from (`env_file:`), in place of `.env`
+    // interpolation: `envFile` names then stay out of `environment:`, since a key listed there, even without a value,
+    // would override the file's. The container is stamped with it (COMPOSE_CREDENTIALS_ENV). Needs `run.sandboxId` for
+    // the loopback port, which Compose can interpolate only from `.env`.
+    readonly credentialsFile?: string;
 }
 
 export interface SandboxCompose {
@@ -221,6 +233,15 @@ const environmentOf = (spec: SandboxRunSpec, inputs: ComposeInputs, image: strin
             env.set(name, value);
         }
     }
+    // Says where this file keeps its credentials, so it is rendered that way again; never carried over from the container
+    // a file is written from (`ic sandbox compose` writes a `.env`).
+    env.delete(COMPOSE_CREDENTIALS_ENV);
+    if (inputs.credentialsFile !== undefined) {
+        env.set(COMPOSE_CREDENTIALS_ENV, inputs.credentialsFile);
+        // The claim's LOCAL_PORT is the HOST port, and the credentials file hands every line it holds to the container,
+        // where LOCAL_PORT names the loopback listener's own port: pinned here, which wins over the file.
+        env.set("LOCAL_PORT", String(LOCAL_PORT));
+    }
     // Tells the daemon (and `ic`, compose.rs) Compose owns this container: its updates are Compose's.
     env.set("SANDBOX_MANAGER", COMPOSE_MANAGER);
     return env;
@@ -244,7 +265,7 @@ const environmentLines = (env: Map<string, string>, inputs: ComposeInputs): Comp
         }
     }
     for (const { name, missing } of inputs.envFile ?? []) {
-        if (!env.has(name)) {
+        if (!env.has(name) && inputs.credentialsFile === undefined) {
             lines.push(`${name}: \${${name}${missing === undefined ? ":-" : `:?${missing}`}}`);
         }
     }
@@ -289,11 +310,16 @@ const mountsOf = (spec: SandboxRunSpec, inputs: ComposeInputs): string[] => {
 
 // The published ports: the hosted ones as they are, then the loopback shortcut, whose port the `.env` holds as
 // LOCAL_PORT (filled in here when the run's id derives it, else by the setup page's claim).
-const portsOf = (run: SandboxRun, spec: SandboxRunSpec, envFile: Record<string, string>): string[] => {
+const portsOf = (run: SandboxRun, spec: SandboxRunSpec, envFile: Record<string, string>, inputs: ComposeInputs): string[] => {
     if (run.localPublish === false) {
         return [...(run.ports ?? [])];
     }
     const derived = run.sandboxId === undefined ? undefined : spec.publish.at(-1)?.split(":")[1];
+    // A credentials file is no source for interpolation, so the port the id derives is written into the file itself.
+    if (inputs.credentialsFile !== undefined) {
+        const port = derived ?? `\${LOCAL_PORT:?${MISSING_PORT}}`;
+        return [...(run.ports ?? []), `127.0.0.1:${port}:${LOCAL_PORT}`];
+    }
     if (derived !== undefined) {
         envFile["LOCAL_PORT"] = derived;
     }
@@ -306,7 +332,7 @@ const withRecipeRuntime = (run: SandboxRun, recipe: ComposeRecipe | undefined): 
 
 // The service's keys, in the order a reader looks for them.
 const serviceLines = (run: SandboxRun, spec: SandboxRunSpec, inputs: ComposeInputs, image: ComposeImage, environment: ComposeEnvironment): string[] => {
-    const ports = portsOf(run, spec, environment.envFile);
+    const ports = portsOf(run, spec, environment.envFile, inputs);
     return [
         ...image.lines,
         `container_name: ${spec.container}`,
@@ -330,6 +356,8 @@ const serviceLines = (run: SandboxRun, spec: SandboxRunSpec, inputs: ComposeInpu
         "volumes:",
         ...spec.volumes.map(({ volume, destination }) => `    - ${volume.composeKey}:${destination}`),
         ...mountsOf(spec, inputs).map((mount) => `    - ${quoted(literal(mount))}`),
+        // Required: Compose refuses to start without it, which says the claim has not been run yet.
+        ...(inputs.credentialsFile === undefined ? [] : [`env_file: [${quoted(literal(inputs.credentialsFile))}]`]),
         "environment:",
         ...environment.lines.map((line) => `    ${line}`),
     ];
@@ -368,8 +396,12 @@ export const composeEnvFile = (env: Readonly<Record<string, string>>): string =>
         .join("");
 
 /* A NEW SANDBOX'S FILE, as the setup page's Compose tab and the docs quickstart show it, and as the rebuild card renders
- * it again with the approved recipe. Its credentials come from the `.env` the platform's claim writes (CONNECT_TOKEN,
- * SANDBOX_GRANT, OWNER_EMAIL, INGRESS_URL, LOCAL_PORT); what is not secret is written into the file. */
+ * it again with the approved recipe. Its credentials come from the COMPOSE_CREDENTIALS_FILE the platform's claim is
+ * saved to (CONNECT_TOKEN, SANDBOX_GRANT, OWNER_EMAIL, INGRESS_URL and the rest), which the service reads with
+ * `env_file:`; what is not secret, the loopback port included, is written into the file.
+ * (2026-11-23) A file of its own rather than `.env`: the folder is the owner's project's, whose `.env` holds its own
+ * settings, and the claim's `> .env` truncated it, to nothing when the claim was refused. A file set up before then
+ * interpolates its credentials from `.env` (`dotEnv`), and the rebuild card renders it that way again. */
 
 // The platform's API origin (claim, announce): not the web app's, which answers a POST with 405.
 export const PLATFORM_API_DEFAULT = "https://api.intentic.dev";
@@ -387,9 +419,16 @@ export interface SetupComposeArgs {
     // The rebuild card's: the approved recipe Compose builds, on storage that already exists.
     readonly recipe?: ComposeRecipe | undefined;
     readonly existingStorage?: boolean;
+    // The folder's credentials are interpolated from its `.env`, as setup wrote them before COMPOSE_CREDENTIALS_FILE: the
+    // rebuild card's, for a sandbox not stamped with COMPOSE_CREDENTIALS_ENV.
+    readonly dotEnv?: boolean;
 }
 
-// What the claim's `.env` holds. The grant is required, the edge's URL optional (the daemon falls back to its default).
+// The 12-hex id in a platform hostname (`sandbox-<id>.<zone>`, reachability.ts), which the loopback port derives from.
+const sandboxIdOfHostname = (hostname: string): string | undefined => /^sandbox-([0-9a-f]{12})\./u.exec(hostname)?.[1];
+
+// What the claim's `.env` holds, in a folder set up before COMPOSE_CREDENTIALS_FILE (`dotEnv`). The grant is required,
+// the edge's URL optional (the daemon falls back to its default).
 const CLAIMED: readonly EnvFileVar[] = [
     { name: "CONNECT_TOKEN", missing: MISSING_ENV },
     { name: "OWNER_EMAIL" },
@@ -409,7 +448,10 @@ export const setupComposeFile = (args: SetupComposeArgs): string => {
         ["SANDBOX_PUBLIC_URL", `https://${args.hostname}`],
         ["PLATFORM_URL", platform],
     ];
-    const envFile: EnvFileVar[] = [...CLAIMED];
+    const dotEnv = args.dotEnv === true;
+    const sandboxId = sandboxIdOfHostname(args.hostname);
+    // With a credentials file, the claimed names come from it; only what the claim does not carry is left to interpolate.
+    const envFile: EnvFileVar[] = dotEnv ? [...CLAIMED] : [];
     if (args.googleClientId === "") {
         envFile.push({ name: "GOOGLE_CLIENT_ID", missing: "the web app did not supply a Google client id, reload the setup page" });
     } else {
@@ -422,16 +464,19 @@ export const setupComposeFile = (args: SetupComposeArgs): string => {
     if (dev) {
         env.push(["AGENT_AUTH_DIR", AGENT_AUTH_ROOT]);
     }
-    return sandboxCompose(
-        {
-            names: sandboxNames(slugOfHostname(args.hostname) ?? args.hostname),
-            image: args.image,
-            baseImage: args.image,
-            env,
-            // Fresh public resolvers: a just-minted tunnel hostname must not hit a stale NXDOMAIN cache.
-            dns: ["1.1.1.1", "1.0.0.1"],
-            mounts: dev ? [`${DEV_AGENT_AUTH_VOLUME}:${AGENT_AUTH_ROOT}`] : [],
-        },
-        { existingStorage: args.existingStorage === true, unmeasured: true, envFile, recipe: args.recipe },
-    ).compose;
+    const run: SandboxRun = {
+        names: sandboxNames(slugOfHostname(args.hostname) ?? args.hostname),
+        image: args.image,
+        baseImage: args.image,
+        env,
+        // Fresh public resolvers: a just-minted tunnel hostname must not hit a stale NXDOMAIN cache.
+        dns: ["1.1.1.1", "1.0.0.1"],
+        mounts: dev ? [`${DEV_AGENT_AUTH_VOLUME}:${AGENT_AUTH_ROOT}`] : [],
+    };
+    const inputs: ComposeInputs = { existingStorage: args.existingStorage === true, unmeasured: true, envFile, recipe: args.recipe };
+    if (dotEnv) {
+        return sandboxCompose(run, inputs).compose;
+    }
+    // The id writes the loopback port into the file, where `.env` interpolation used to supply it.
+    return sandboxCompose(sandboxId === undefined ? run : { ...run, sandboxId }, { ...inputs, credentialsFile: COMPOSE_CREDENTIALS_FILE }).compose;
 };

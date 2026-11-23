@@ -5,6 +5,7 @@ import {
     addSandboxAsked,
     addsOnHome,
     closeAddSandbox,
+    homeAskPath,
     newSandboxLink,
     requestAddSandbox,
     setAddSandboxWarmer,
@@ -21,6 +22,13 @@ it(`asks a signed-out reader to sign in and return to the same ask on home`, () 
     expect(ADD_SANDBOX_HOME_PATH).toBe(`/home?add=sandbox`);
     expect(navigate).toHaveBeenCalledWith({ path: `/login`, query: { returnTo: `/home?add=sandbox` } });
     expect(addSandboxAsked.value).toBe(false);
+});
+
+// Signed out on the way to a cloud sandbox, the sign-in used to come back to the bare ask, which had forgotten it.
+it(`keeps everything Home's ask named for the sign-in to come back to, and nothing else`, () => {
+    expect(homeAskPath({ add: `sandbox`, machine: `hosted`, tier: `standard`, utm_source: `site` })).toBe(`/home?add=sandbox&machine=hosted&tier=standard`);
+    expect(homeAskPath({ add: `sandbox`, finish: `sbx_7`, found: `claude,codex` })).toBe(`/home?add=sandbox&finish=sbx_7&found=claude%2Ccodex`);
+    expect(homeAskPath({ add: `sandbox`, machine: [`hosted`, `mine`] })).toBe(ADD_SANDBOX_HOME_PATH);
 });
 
 it(`makes a desktop reader's sandbox on Home, in its own tile, whatever the press was in`, () => {

@@ -83,6 +83,15 @@ export const configSchema = z.object({
             upstreamCookie: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
+    // Which accounts are the team's own (internal-accounts.ts): their product analytics say `internal: true` and the
+    // admin funnel leaves them out. Every ADMIN_EMAILS address and HOSTED_CANARY_EMAIL count already; this adds a
+    // comma-separated list of further addresses (`qa@example.com`) and whole domains (`@example.com`) for test accounts.
+    // Never sent to a browser: /me answers only whether the caller is on it.
+    telemetry: z
+        .object({
+            internalAccounts: z.string().default(``),
+        })
+        .prefault({}),
     // Organisations (org/, docs/architecture/organisations.md). `creation` says who may start one: `operators` (an
     // address on ADMIN_EMAILS, proven the way ADMIN_SIGN_IN asks) or `anyone` signed in. Operators by default, so a
     // hosted platform grows organisations only when somebody decided to offer them; a self-hosted office sets `anyone`

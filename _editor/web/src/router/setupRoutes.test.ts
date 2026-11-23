@@ -27,10 +27,7 @@ describe(`an old setup address`, () => {
         expect(homeForSetup(`/setup`, { found: `claude,codex`, machine: `mine` })).toEqual({ path: `/home`, query: { add: `sandbox`, found: `claude,codex` } });
     });
 
-    it(`keeps both pages' names, so a link naming one still lands`, () => {
-        expect(setupRoutes.map((route) => [route.path, route.name, `redirect` in route])).toEqual([
-            [`/start/hosted`, `hosted-start`, true],
-            [`/setup`, `setup`, true],
-        ]);
+    it(`keeps the setup page's name, so a link naming it still lands`, () => {
+        expect(setupRoutes.map((route) => [route.path, route.name, `redirect` in route])).toEqual([[`/setup`, `setup`, true]]);
     });
 });

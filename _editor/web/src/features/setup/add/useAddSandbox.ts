@@ -13,8 +13,10 @@ import { seedLookForHandsOff } from "./seedLook";
 import type { apiClient } from "../../../lib/useApi";
 import { autoSandboxName, SANDBOX_NAME_MAX } from "../../../client/sandbox/sandboxName";
 import { osLabel, osMark } from "../../../models/sandbox/devices/deviceFacts";
+import { ownCloudSandboxes } from "../../../models/sandbox/live/cloudSandboxes";
 import type { MachineDoor } from "../../sandbox/live/sandboxDoors";
 import { touched } from "../setupArrival";
+import { setupReportView } from "../setupReport";
 import type { probeDaemon } from "../setupAttach";
 import { readOffer } from "../setupLanes";
 import { type HostedLaneApi, type HostedLaneHost, useHostedLane } from "../flow/useHostedLane";
@@ -24,6 +26,7 @@ import { HERE, type SetupOnMachineApi, useSetupOnMachine } from "../flow/useSetu
 import { type SetupRow, type SetupRowHost, useSetupRow } from "../flow/useSetupRow";
 import { useAddAttach } from "./useAddAttach";
 import { useAddCommand } from "./useAddCommand";
+import { useCodeRenewal } from "./useCodeRenewal";
 
 // THE NEW SANDBOX, MADE IN PLACE (Home's dialog and page; a phone's dialog). One press for what starts in one press: this
 // computer in the app, a connected machine, a machine of ours. "More ways" in the same form, never another page: a command
@@ -188,7 +191,12 @@ const useAddOffers = ({ host, row, hosted, setup }: Flows) => {
         hosted.recordOffer(offer);
         loaded.value = true;
     };
-    return { loaded, codeOffered, onMachine, options, moreOptions, hostedProblem, read };
+    // The cloud sandbox of the reader's own that holds the free machine, named where the form says it is in use, so the
+    // way on is a press into it rather than a dead end (a returning visitor asking for a cloud sandbox has one already).
+    const hostedHeldBy = computed(() =>
+        hostedProblem.value === `occupied` ? ownCloudSandboxes(host.sandbox.sandboxes.value).find((box) => box.lastSeenAt !== null) : undefined,
+    );
+    return { loaded, codeOffered, onMachine, options, moreOptions, hostedProblem, hostedHeldBy, read };
 };
 
 // The form: the next free name, kept current with the account's list until the reader types one of their own, and the
@@ -420,8 +428,21 @@ export const useAddSandbox = (host: AddSandboxHost) => {
         offers.loaded,
     );
     const starts = useAddStarts(flows, offers.onMachine);
+    // The command's code, minted again once it runs out while the command is on the page, unless a run holds it.
+    const renewal = useCodeRenewal({
+        setup: flows.setup,
+        shown: () => starts.started.value?.kind === `command`,
+        inUse: () => (row.claimedAt.value !== null || row.report.value !== null) && setupReportView(row.report.value).failures === null,
+        mint: async () => {
+            const target = row.created.value;
+            if (target === null) {
+                throw new Error(t(`setup.addSandbox.codeRenewFailed`));
+            }
+            return await platform.setupCode({ sandboxId: target.id, mode: mode.value });
+        },
+    });
     // The command a code was minted for, and how its run is waited on (useAddCommand.ts).
-    const command = useAddCommand({ setup: flows.setup, started: starts.started, row, mobile: host.mobile });
+    const command = useAddCommand({ setup: renewal.live, started: starts.started, row, mobile: host.mobile });
     // An address already answering: probed first, the row made only once it let this account in (useAddAttach.ts).
     const attach = useAddAttach({ host, row, error: starts.error, name: form.name, started: starts.started, minted: () => flows.setup.value?.hostname });
     const presses = useAddPresses(flows, offers, form, starts, attach);
@@ -433,6 +454,7 @@ export const useAddSandbox = (host: AddSandboxHost) => {
         options: offers.options,
         moreOptions: offers.moreOptions,
         hostedProblem: offers.hostedProblem,
+        hostedHeldBy: offers.hostedHeldBy,
         loaded: offers.loaded,
         onMachine: offers.onMachine,
         read: offers.read,
@@ -448,6 +470,7 @@ export const useAddSandbox = (host: AddSandboxHost) => {
         hostedBusy: hosted.hostedBusy,
         restartHosted: hosted.restartHosted,
         command,
+        renewal,
         attach,
         // The same press on the same machine, with the same code: a run that failed never claimed it.
         retry: () => offers.onMachine.setUpOn(),

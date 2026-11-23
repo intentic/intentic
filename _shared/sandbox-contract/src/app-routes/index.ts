@@ -5,4 +5,5 @@ export * from "./app-pages.js";
 export * from "./paths.js";
 export * from "./legacy.js";
 export * from "./sandbox-segment.js";
+export { returnPath } from "./return-path.js";
 export { fillPattern, matchPattern, paramNames } from "./patterns.js";

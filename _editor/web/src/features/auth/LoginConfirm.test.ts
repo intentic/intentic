@@ -26,7 +26,7 @@ jest.mock(`vue-router`, () => ({
 }));
 
 const signInWithEmailCode = jest.fn<(email: string, otp: string) => Promise<void>>();
-const sendEmailCode = jest.fn<(email: string) => Promise<void>>();
+const sendEmailCode = jest.fn<(email: string, options?: { returnTo?: string | undefined }) => Promise<void>>();
 jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref(null), signInWithEmailCode, sendEmailCode }) }));
 
 const track = jest.fn();
@@ -103,6 +103,33 @@ it(`refuses a destination that leaves this origin`, async () => {
     expect(replace).toHaveBeenCalledWith(`/`);
 });
 
+// The two journeys a followed link used to abandon (2026-10-23): the platform writes the destination the code was asked
+// from into the link, and the press carries on there as a typed code does.
+it.each([
+    [`an invite`, `/invite/tok-1`],
+    [`a desktop app's sign-in, its state and challenge whole`, `/desktop-auth?state=nonce&challenge=chal`],
+])(`lands on %s the link names, only after the press`, async (_case, returnTo) => {
+    query.value = { ...query.value, returnTo };
+    await mount();
+    expect(replace).not.toHaveBeenCalled();
+
+    button(`Confirm and sign in`)?.click();
+    await settle();
+
+    expect(signInWithEmailCode).toHaveBeenCalledWith(`ana@corp.example`, `123456`);
+    expect(replace).toHaveBeenCalledWith(returnTo);
+});
+
+it.each([`https://evil.example/invite/tok-1`, `//evil.example/desktop-auth`, `/\\evil.example`])(`drops the foreign destination %s`, async (returnTo) => {
+    query.value = { ...query.value, returnTo };
+    await mount();
+
+    button(`Confirm and sign in`)?.click();
+    await settle();
+
+    expect(replace).toHaveBeenCalledWith(`/`);
+});
+
 it(`offers a fresh code to the same address when this one no longer signs in`, async () => {
     signInWithEmailCode.mockRejectedValueOnce(new EmailCodeError(`expired`, `That code has run out. Send a new one.`));
     const el = await mount();
@@ -115,7 +142,8 @@ it(`offers a fresh code to the same address when this one no longer signs in`, a
     button(`Email me a sign-in code`)?.click();
     await settle();
 
-    expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`);
+    // The fresh code's link goes where this one's was going.
+    expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`, { returnTo: `/sandbox/usage` });
     expect(track.mock.calls).toEqual([
         [`signin_code_failed`, { surface: `confirm`, stage: `link`, reason: `expired` }],
         [`signin_code_requested`, { surface: `confirm` }],

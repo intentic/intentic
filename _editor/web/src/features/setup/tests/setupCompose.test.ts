@@ -11,21 +11,38 @@ const base: ComposeArgs = {
 };
 
 test("intentic path: the bootstrap is claim → up, against the production platform, no -k", () => {
-    expect(composeBootstrap(base)).toBe(`curl -fsS https://api.intentic.dev/setup/claim -d code=abc123 > .env\ndocker compose up -d`);
+    expect(composeBootstrap(base)).toBe(
+        `(umask 077 && curl -fsS https://api.intentic.dev/setup/claim -d code=abc123 -o intentic.env.part) && mv -f intentic.env.part intentic.env\ndocker compose up -d`,
+    );
+});
+
+// The folder is the owner's project: a redirect into `.env` truncated its settings before curl ran (2026-10-23).
+test("the claim never writes the folder's .env, and lands its file only once it succeeded", () => {
+    const bootstrap = composeBootstrap(base);
+    expect(bootstrap).not.toMatch(/>\s*\.env|\s\.env\b/u);
+    expect(bootstrap).not.toContain(`>`);
 });
 
 test("local dev claims against the localhost platform with -k (repo CA)", () => {
     expect(composeBootstrap({ ...base, platformUrl: `https://localhost:6480` })).toContain(
-        `curl -fsSk https://localhost:6480/setup/claim -d code=abc123 > .env`,
+        `curl -fsSk https://localhost:6480/setup/claim -d code=abc123 -o intentic.env.part`,
     );
 });
 
-test("the compose file mirrors connect.sh: slugged names, origin alias, .env guards, inlined public url", () => {
+test("the compose file mirrors connect.sh: slugged names, origin alias, credentials file, inlined public url", () => {
     const yaml = composeFile(base);
     expect(yaml).toContain(`container_name: intentic-sandbox-sandbox-0f00ba4dd12b`);
     expect(yaml).not.toContain(`intentic-sandbox-tunnel`);
-    expect(yaml).toContain(`INGRESS_URL: \${INGRESS_URL:-}`);
-    expect(yaml).toContain(`SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`);
+    // The claimed credentials come from intentic.env; a key named in `environment:` would override the file's.
+    expect(yaml).toContain(`env_file: ["intentic.env"]`);
+    expect(yaml).toContain(`SANDBOX_COMPOSE_CREDENTIALS: "intentic.env"`);
+    for (const claimed of [`CONNECT_TOKEN`, `SANDBOX_GRANT`, `INGRESS_URL`, `OWNER_EMAIL`]) {
+        expect(yaml).not.toContain(`${claimed}:`);
+    }
+    // Interpolation reads only `.env`, so the loopback port the id derives is written in, and the listener's own pinned.
+    expect(yaml).toContain(`- "127.0.0.1:31226:8788"`);
+    expect(yaml).toContain(`LOCAL_PORT: "8788"`);
+    expect(yaml).not.toContain(`\${`);
     for (const retired of [`ZROK_TOKEN`, `ZROK_API`, `ZROK_NAMESPACE`]) {
         expect(yaml, `${retired} belongs to the retired hub lane`).not.toContain(retired);
     }
@@ -34,7 +51,6 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).toContain(`name: intentic-docker-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`aliases: [intentic-sandbox-workspace]`);
     expect(yaml).toContain(`cap_add: [SYS_ADMIN, SYS_PTRACE]`);
-    expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`SANDBOX_PUBLIC_URL: "https://sandbox-0f00ba4dd12b.intentic.dev"`);
     expect(yaml).toContain(`PLATFORM_URL: "https://api.intentic.dev"`);
     expect(yaml).not.toContain(`CLOUDFLARE_API_TOKEN`);
@@ -84,4 +100,15 @@ test("the file carries the run line's stop grace and no cgroup cap sized for a m
     // A new sandbox's storage is Compose's to create; a rebuild's already exists.
     expect(yaml).not.toContain(`external: true`);
     expect(composeFile({ ...base, existingStorage: true })).toContain(`external: true`);
+});
+
+// A sandbox set up before intentic.env reads its credentials from `.env`: the rebuild card renders its file that way.
+test("a .env-era folder's file still interpolates its credentials from .env, with no credentials file", () => {
+    const yaml = composeFile({ ...base, dotEnv: true });
+    expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
+    expect(yaml).toContain(`SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`);
+    expect(yaml).toContain(`INGRESS_URL: \${INGRESS_URL:-}`);
+    expect(yaml).toContain(`- "127.0.0.1:\${LOCAL_PORT:?run the .env bootstrap first}:8788"`);
+    expect(yaml).not.toContain(`env_file`);
+    expect(yaml).not.toContain(`SANDBOX_COMPOSE_CREDENTIALS`);
 });

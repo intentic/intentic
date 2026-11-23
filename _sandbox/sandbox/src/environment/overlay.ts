@@ -157,13 +157,14 @@ export const rebuildNeeded = async (services: Services): Promise<boolean> =>
 // rebuild targets, and whether its base was compiled from a checkout rather than published. That last one is the
 // dogfood shape, and it changes what the Environment card can offer: such a sandbox is rebuilt from its checkout, and
 // an update would move it onto the published image rather than refresh it.
-export const containerFacts = (sandbox: Config["sandbox"]): Pick<Environment, "appliedHash" | "container" | "localImage" | "manager"> => {
+export const containerFacts = (sandbox: Config["sandbox"]): Pick<Environment, "appliedHash" | "composeCredentials" | "container" | "localImage" | "manager"> => {
     const build = runningBuild(sandbox);
     return {
         ...opt("appliedHash", build.overlay),
         ...opt("container", sandbox.name === "" ? undefined : sandbox.name),
         ...opt("localImage", builtFromCheckout(build) ? { base: build.base, ...opt("root", sandbox.devRoot) } : undefined),
         ...opt("manager", sandbox.manager),
+        ...opt("composeCredentials", sandbox.manager === undefined ? undefined : sandbox.composeCredentials),
     };
 };
 

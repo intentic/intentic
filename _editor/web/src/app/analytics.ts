@@ -66,7 +66,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
         if (next) {
             client.opt_in_capturing();
             client.startSessionRecording();
-            registerClient(client);
+            registerClient(client, user.value);
             if (user.value) {
                 identify(client, user.value);
             }
@@ -119,7 +119,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
     if (allowed) {
         posthog.opt_in_capturing();
         posthog.startSessionRecording();
-        registerClient(posthog);
+        registerClient(posthog, user.value);
         for (const [event, properties] of early.splice(0)) {
             posthog.capture(event, properties);
         }
@@ -173,15 +173,19 @@ const stampLoadReason = (event: CaptureResult | null): CaptureResult | null => {
 
 // Which client sent this event, as a super property (not a per-call field) so it also tags autocapture and
 // pageviews. The install id joins this to what the app's own screens report (desktop.ts).
-const registerClient = (posthog: PostHog): void => {
+const registerClient = (posthog: PostHog, current?: User | null): void => {
     const app = desktopApp();
     const launchId = desktopLaunchId();
     posthog.register(
         app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId, ...landingCampaign },
     );
-    // The team's own install or browser (analyticsConsent.ts), on every event so its test machines filter out.
-    if (internalHere()) {
+    // The team's own install or browser (analyticsConsent.ts), or the team's own account (the platform's `User.internal`,
+    // api internal-accounts.ts), on every event so its machines and its people filter out. Taken back off when another
+    // account signs in on an unmarked browser, so one session never tags a real person's events as the team's.
+    if (internalHere() || current?.internal === true) {
         posthog.register({ internal: true });
+    } else {
+        posthog.unregister(`internal`);
     }
     // The same id the app's own launch events carry (launch.rs), so a run's window joins what the app said about it.
     if (launchId !== undefined) {
@@ -255,12 +259,14 @@ const identify = (posthog: PostHog, current: User): void => {
     // deviceAccounts.ts): a new person starts, rather than one person's events carrying on as the other's.
     if (posthog.get_property(`$user_state`) === `identified` && posthog.get_distinct_id() !== current.id) {
         posthog.reset();
-        registerClient(posthog);
     }
+    registerClient(posthog, current);
+    // The person carries the account's own answer too, so a person-level filter needs no event to read it from.
+    const person = { email: current.email, name: current.name, internal_account: current.internal === true };
     if (Object.keys(landingCampaign).length === 0) {
-        posthog.identify(current.id, { email: current.email, name: current.name });
+        posthog.identify(current.id, person);
     } else {
-        posthog.identify(current.id, { email: current.email, name: current.name }, firstTouch());
+        posthog.identify(current.id, person, firstTouch());
     }
     linkInstall(posthog, current.id);
     noteSignUp(current);

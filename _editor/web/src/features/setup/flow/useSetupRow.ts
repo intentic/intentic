@@ -6,6 +6,7 @@ import { ref, watch } from "vue";
 import { track } from "../../../app/analytics";
 import type { useSandbox } from "../../../client/sandbox/useSandbox";
 import { autoSandboxName } from "../../../client/sandbox/sandboxName";
+import { followSettingUp } from "../../../models/sandbox/live/settingUp";
 
 // The sandbox row this visit sets up, and what the registry has said about it since: its code redeemed, the machine's
 // account of its run, the daemon's own check-ins. Created unasked on arrival, a row minted here is a draft the page
@@ -47,13 +48,12 @@ export const useSetupRow = ({ sandbox, enter, handOff, name }: SetupRowHost) => 
     // Whether the daemon has ever checked in, read off the poll rather than off `created` for the same reason.
     const announced = ref(false);
 
-    watch(
-        () => created.value?.id,
-        () => {
-            baseline.value = created.value?.lastSeenAt ?? null;
-        },
-        { immediate: true },
-    );
+    const rebase = (): void => {
+        baseline.value = created.value?.lastSeenAt ?? null;
+    };
+    watch(() => created.value?.id, rebase, { immediate: true });
+    // Being set up here until its check-in is counted: product analytics may count its milestones meanwhile.
+    followSettingUp(() => (finished.value ? undefined : created.value?.id));
 
     // Creates the sandbox (minting its token) under the next free name.
     const autoCreate = async (): Promise<void> => {
@@ -81,7 +81,7 @@ export const useSetupRow = ({ sandbox, enter, handOff, name }: SetupRowHost) => 
         if (handOff !== undefined && !(await handOff(id))) {
             return;
         }
-        track(`sandbox_connected`, { resuming: resuming.value, ...detail });
+        track(`sandbox_connected`, { resuming: resuming.value, machine: (created.value?.hosted ?? null) === null ? `own` : `hosted`, ...detail });
         finished.value = true;
         await enter();
     };

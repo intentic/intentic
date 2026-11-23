@@ -51,6 +51,7 @@ export const testConfig: Config = {
         definitionSeed: "",
         devRoot: undefined,
         manager: undefined,
+        composeCredentials: undefined,
         prewarm: false,
         projectDir: "",
     },

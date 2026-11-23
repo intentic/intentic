@@ -42,16 +42,26 @@ export type AdminOverview = z.infer<typeof AdminOverviewSchema>;
 //   connected a daemon has ever announced
 //   activeLast7 announced within the last seven days
 // `signupSeries` is per-UTC-day counts, oldest first, zero-filled.
+// Every figure leaves out the team's own accounts (operators, the hosted canary, TELEMETRY_INTERNAL_ACCOUNTS: api
+// internal-accounts.ts); `unfiltered` is the same stages with them in, and `internalAccounts` how many were left out.
+// `lanes` splits connected and active by where the sandbox runs; an account with one of each counts in both lanes.
+// The three are absent from a platform from before 2026-11-23, whose figures include everyone.
+export const AdminFunnelStagesSchema = z.object({
+    accounts: z.number(),
+    withSandbox: z.number(),
+    setupEngaged: z.number(),
+    connected: z.number(),
+    activeLast7: z.number(),
+});
+export type AdminFunnelStages = z.infer<typeof AdminFunnelStagesSchema>;
+const AdminFunnelLaneSchema = z.object({ connected: z.number(), activeLast7: z.number() });
 export const AdminFunnelSchema = z.object({
     signups: z.object({ today: z.number(), last7: z.number(), last30: z.number(), total: z.number() }),
     signupSeries: z.array(z.object({ day: z.string(), count: z.number() })),
-    funnel: z.object({
-        accounts: z.number(),
-        withSandbox: z.number(),
-        setupEngaged: z.number(),
-        connected: z.number(),
-        activeLast7: z.number(),
-    }),
+    funnel: AdminFunnelStagesSchema,
+    lanes: z.object({ hosted: AdminFunnelLaneSchema, ownMachine: AdminFunnelLaneSchema }).optional(),
+    internalAccounts: z.number().optional(),
+    unfiltered: AdminFunnelStagesSchema.optional(),
     // Sign-up to first announce, over accounts that activated in the last 30 days; null if none did.
     activation: z.object({ medianHours: z.number(), count: z.number() }).nullable(),
 });

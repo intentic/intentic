@@ -1,6 +1,6 @@
 ---
 import { latestRelease } from "@intentic/astro-integrations";
-import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH, HOSTED_START_URL } from "@intentic/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
@@ -44,7 +44,7 @@ const keeps: { glyph: GlyphName; title: string; body: string; link?: { href: str
 ];
 
 const exits: { glyph: GlyphName; title: string; body: string; href: string }[] = [
-    { glyph: "cloud", title: "Use it in your browser", body: "A hosted workspace. Nothing to install.", href: APP_URL },
+    { glyph: "cloud", title: "Use it in your browser", body: "A hosted workspace. Nothing to install.", href: HOSTED_START_URL },
     { glyph: "eye", title: "Look around first", body: "The real app on a sample workspace.", href: DEMO_PATH },
     { glyph: "compare", title: "Compare where it runs", body: "This computer, or a machine we host.", href: "/where-it-runs/" },
 ];

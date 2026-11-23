@@ -28,6 +28,8 @@ test(`a launch is pinned to the workspace, on a PC hosting nothing, with no setu
     expect(JSON.parse(state.get(`settings.json`) ?? `{}`)).toEqual({ appUrl: `http://127.0.0.1:4000`, platformUrl: `http://127.0.0.1:4000` });
     // The marker the app reads its analytics' `internal: true` from (desktop-app launch.rs INTERNAL_FILE).
     expect(state.get(`telemetry-internal`)).toBe(`1\n`);
+    // Exactly `deny`, unpadded: the app compares the whole file (launch.rs `analytics_allowed`).
+    expect(state.get(`analytics-consent`)).toBe(`deny`);
 });
 
 test(`pinned files are written or removed, and put back exactly as they were`, async () => {

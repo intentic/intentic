@@ -28,7 +28,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
         <Code :code="yaml" lang="yaml" :label="t(`setup.setupCompose.n1AddServicesTo`)" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
         <Code :code="bootstrap" lang="bash" :label="t(`setup.setupCompose.n2InSameFolder`)" :wrap="true" />
         <p class="text-xs text-muted">
-            {{ t(`setup.setupCompose.firstCommandRedeemsSetup`) }} <code>.env</code> {{ t(`setup.setupCompose.composeReadsRunOnce`) }}
+            {{ t(`setup.setupCompose.firstCommandRedeemsSetup`) }} <code>intentic.env</code> {{ t(`setup.setupCompose.composeReadsRunOnce`) }}
             <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>{{ t(`setup.setupCompose.workspaceLivesInNamed`) }}
             <code>down</code>/<code>up</code> {{ t(`setup.setupCompose.keeps`) }}
         </p>

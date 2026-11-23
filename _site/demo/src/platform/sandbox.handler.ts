@@ -5,7 +5,7 @@ import { FREE_TIER } from "@intentic/constants";
 import { buildStatus, building, hashOf, rollBack, startBuild } from "../world/builds";
 import { dropMachine, placeMachine, slotsLeft, slotsLeftAt } from "../world/plan";
 import { zonesFor } from "../world/zones";
-import { demoOutage } from "../outage";
+import { outageMachine, wakeOutage } from "../outage";
 import { type PlatformRouter, refusePlatform } from "./serve";
 
 // THE ACCOUNT'S SANDBOXES ON THE PLATFORM: the registry's procedures over the live rows of world/sandboxRegistry.ts, and the
@@ -60,12 +60,18 @@ export const sandboxAnswers = {
         dropMachine(sandboxId);
         return owned(sandboxId);
     },
-    hostedStatus: ({ sandboxId }) => ({ machine: sandboxId === DEMO_SANDBOX.id ? (demoOutage === `hosted` ? `failed` : `started`) : hostedPower(sandboxId) }),
+    hostedStatus: ({ sandboxId }) => ({ machine: sandboxId === DEMO_SANDBOX.id ? outageMachine() : hostedPower(sandboxId) }),
     hostedRestart: ({ sandboxId }) => {
+        if (sandboxId === DEMO_SANDBOX.id) {
+            wakeOutage();
+        }
         wakeHosted(sandboxId);
         return { ok: true };
     },
     wake: ({ sandboxId }) => {
+        if (sandboxId === DEMO_SANDBOX.id) {
+            wakeOutage();
+        }
         wakeHosted(sandboxId);
         return { ok: true };
     },

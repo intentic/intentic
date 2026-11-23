@@ -14,6 +14,7 @@ import { asyncView } from "../components/asyncView";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
 import { setupRoutes } from "./setupRoutes";
+import { hostedStartRoute } from "./hostedEntry";
 import { localRoutes } from "./localRoutes";
 import { installNativeApp } from "./nativeHandoff";
 import { installSignInPlace } from "./signInPlace";
@@ -120,6 +121,7 @@ const sandboxRootRedirect = (to: Pick<RouteLocationNormalized, `params`>): strin
 };
 
 const routes: RouteRecordRaw[] = [
+    hostedStartRoute,
     ...setupRoutes,
     {
         path: topPath(`login`),

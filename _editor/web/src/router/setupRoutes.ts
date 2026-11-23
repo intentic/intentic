@@ -11,7 +11,8 @@ import { z } from "zod";
 //   /setup                              → /home?add=sandbox
 //   /setup?sandbox=<id>                 → /home?add=sandbox&finish=<id> (and `machine=hosted`: on a machine of ours)
 //   /setup?machine=hosted (elsewhere=1) → /home?add=sandbox&machine=hosted
-//   /start/hosted?tier=<id>             → /home?add=sandbox&machine=hosted&tier=<id>
+//   /start/hosted?tier=<id>             → /home?add=sandbox&machine=hosted&tier=<id>, once the cloud entry
+//                                         (router/hostedEntry.ts) found no cloud sandbox of the reader's own to open
 // `found=` (what the desktop app found signed in on this computer) rides along every time.
 
 const Single = z.string().min(1);
@@ -64,7 +65,6 @@ export const homeForSetup = (path: string, query: LocationQuery): HomeForSetup =
 const toHome = (to: RouteLocationGeneric) => homeForSetup(to.path, to.query);
 
 // Named still, so a link that names the old page (`{ name: "setup" }`) lands where its address would.
-export const setupRoutes: RouteRecordRaw[] = [
-    { path: HOSTED_START, name: `hosted-start`, redirect: toHome },
-    { path: SETUP, name: `setup`, redirect: toHome },
-];
+// `/start/hosted` is the cloud entry now, which reads the account before it lands anywhere (router/hostedEntry.ts); it
+// lands here, on Home's ask, when there is a new cloud sandbox to make.
+export const setupRoutes: RouteRecordRaw[] = [{ path: SETUP, name: `setup`, redirect: toHome }];

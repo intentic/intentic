@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitForAnnounce } from "../announce.js";
@@ -21,6 +21,9 @@ const copiedText = async (context: ProvisionContext, label: string): Promise<str
     return text;
 };
 
+// A project's own settings, already in the folder the tab says to run the bootstrap in.
+const OWNER_ENV = `APP_SETTING=kept\nDB_PASSWORD=owner-secret\n`;
+
 export const composeProvisioner = (): Provisioner => {
     let projectDir: string | undefined;
 
@@ -36,7 +39,7 @@ export const composeProvisioner = (): Provisioner => {
             await openRunTab(page, /Docker Compose|^Compose$/u, `Docker Compose`);
 
             const yaml = await copiedText(context, `Add these services to your docker-compose.yml`);
-            const bootstrap = await copiedText(context, `claim your .env, then start`);
+            const bootstrap = await copiedText(context, `claim intentic.env, then start`);
 
             // Guards the one silent failure: the wizard only targets a local platform when the api is on localhost.
             if (!bootstrap.includes(world.apiUrl ?? `\u0000`)) {
@@ -51,9 +54,14 @@ export const composeProvisioner = (): Provisioner => {
             const startedAt = new Date();
             projectDir = await mkdtemp(join(tmpdir(), `intentic-onboarding-compose-`));
             await writeFile(join(projectDir, `docker-compose.yml`), yaml, `utf8`);
+            // The folder is the owner's project, whose `.env` is theirs: the bootstrap once truncated it (2026-10-23).
+            await writeFile(join(projectDir, `.env`), OWNER_ENV, `utf8`);
 
             // Exactly the two commands the tab tells the user to run, in the folder holding the file.
             await sh(bootstrap, projectDir, `the compose bootstrap the wizard rendered`, 600_000);
+            if ((await readFile(join(projectDir, `.env`), `utf8`)) !== OWNER_ENV) {
+                throw new Error(`the compose bootstrap rewrote the project's own .env: its claim must go to intentic.env alone`);
+            }
 
             // Waits on the platform's registry (daemonUrl), not wizard screen text, which falsely passed in 7s once.
             await waitForAnnounce(world.databaseUrl ?? ``, startedAt, 300_000);
@@ -63,7 +71,7 @@ export const composeProvisioner = (): Provisioner => {
             if (projectDir === undefined) {
                 return;
             }
-            // ONBOARDING_KEEP=1 leaves the stack and folder up, so the .env and daemon log survive for debugging.
+            // ONBOARDING_KEEP=1 leaves the stack and folder up, so intentic.env and the daemon log survive for debugging.
             if (process.env[`ONBOARDING_KEEP`] === `1`) {
                 return;
             }

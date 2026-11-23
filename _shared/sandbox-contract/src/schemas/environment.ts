@@ -169,6 +169,10 @@ export const EnvironmentSchema = z.object({
     // folder holding its file, so the update card offers that rather than an `ic` swap. Absent from an older daemon too,
     // which is why the card still names the compose way beside the `ic` one when it cannot tell.
     manager: z.literal("compose").optional(),
+    // Beside `manager`: the file a Compose sandbox's file reads its credentials from (`env_file:`, COMPOSE_CREDENTIALS_FILE
+    // in @intentic/sandbox-run). Absent where they are interpolated from the folder's `.env`, as setup wrote them before
+    // 2026-11-23, so the rebuild card renders the file that way again.
+    composeCredentials: z.string().optional(),
     // A rebuild waiting for the agents to be idle, or started or refused once they were; absent when none is asked.
     rebuildWhenIdle: EnvironmentRebuildWaitSchema.optional(),
     // A checkout rebuild's restart held until no agent is mid-turn; absent when none is asked.

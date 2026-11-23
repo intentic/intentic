@@ -4,6 +4,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { onScreen } from "../../../workbench/window/onScreen";
 import { restartExpected } from "../../../models/sandbox/live/sandboxRestart";
 import { useDiagnosis } from "../diagnosis/useDiagnosis";
+import { wakePendingFor } from "../../../client/sandbox/wake/wakeWindow";
 import { type DiagnosisNotice, presentDiagnosis } from "../diagnosis/presentation";
 import { recoveryDue } from "./recovery";
 
@@ -86,6 +87,7 @@ export const useDiagnosisNotice = (clock: { readonly elapsed: ComputedRef<number
             outageMs: clock.elapsed.value,
             now: now.value,
             warm: box.hosted?.warm,
+            woken: box.hosted !== null && wakePendingFor(box.id, now.value),
         });
     });
 };

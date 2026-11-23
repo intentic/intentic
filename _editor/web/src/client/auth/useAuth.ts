@@ -4,6 +4,7 @@ import { createAuthClient } from "better-auth/client";
 import { emailOTPClient, multiSessionClient } from "better-auth/client/plugins";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
+import { returnPath } from "../../lib/routes/signIn";
 import { accountPartition } from "../../app/storage/browserStorage";
 import { environment } from "../../app/environments/environment";
 import { localFace } from "../../app/environments/local";
@@ -248,8 +249,16 @@ const signInWithGoogleCredential = async (idToken: string, options: { readonly a
 
 // The second way in: a six-digit code mailed to the address. The platform answers alike whether or not an account holds
 // it, and creates one at the first sign-in, so the screens that call this show the terms before anything is sent.
-const sendEmailCode = async (email: string): Promise<void> => {
-    const { error } = await client.emailOtp.sendVerificationOtp({ email: email.trim(), type: `sign-in` });
+// `returnTo` is where the sign-in carries on (an invite, a desktop app's sign-in): the mail's link takes it to
+// /login/confirm, so the code followed from the mail lands where a typed one does. On the query, since Better Auth keeps
+// only `email` and `type` of the body (the platform's sign-in.ts).
+const sendEmailCode = async (email: string, options: { readonly returnTo?: string | undefined } = {}): Promise<void> => {
+    const destination = returnPath(options.returnTo);
+    const { error } = await client.emailOtp.sendVerificationOtp({
+        email: email.trim(),
+        type: `sign-in`,
+        fetchOptions: destination === `/` ? {} : { query: { returnTo: destination } },
+    });
     if (error) {
         throw emailCodeError(error, t(`auth.emailCode.sendFailed`));
     }

@@ -34,7 +34,9 @@ flowchart LR
 - Sign-in is Better Auth (`src/auth.ts`, `src/sign-in.ts`): Google, or a six-digit code mailed to the address (its
   emailOTP plugin, sent through Resend like every other mail here). One email carries one code, offered two ways:
   typed in, or a link to `app.intentic.dev/login/confirm?…` whose page needs a Confirm press, so a mail scanner that
-  only opens links cannot spend it. Codes are stored hashed, expire after 10 minutes and allow 5 attempts. An address
+  only opens links cannot spend it. The link carries on to where the code was asked for (`returnTo`, an invite or a
+  desktop app's sign-in), which the editor names on the send request's query and which is written only when it is a
+  path on the editor's own origin (`returnPath`, sandbox-contract's app-routes, the editor's rule too). Codes are stored hashed, expire after 10 minutes and allow 5 attempts. An address
   is sent at most one code a minute and five an hour, counted in `SignInCodeAllowance` under a hash of the address,
   beside Better Auth's limit per IP address (kept in each replica's memory). The per-address limit is decided in a gate
   ahead of Better Auth's send endpoint (`signInCodeGate`), before a code is minted: (2026-11-21) that endpoint stores the
@@ -83,6 +85,15 @@ flowchart LR
   machine built straight onto that slot's rung, never the free one, and none of the free lane's limits apply to it.
 - `ADMIN_EMAILS` opens the operator panel only to a verified address with a Google account linked, unless
   `ADMIN_SIGN_IN=any` (the default is `google`), so a mailed code alone never reaches `/admin`.
+- The team's own accounts (`src/me/internal-accounts.ts`): every `ADMIN_EMAILS` address, `HOSTED_CANARY_EMAIL`, and
+  `TELEMETRY_INTERNAL_ACCOUNTS`, a comma-separated list of further addresses (`qa@example.com`) and whole domains
+  (`@example.com`, matched exactly, never a subdomain) for test accounts. `me.get` answers the caller's own
+  `internal: true|false`, never the list, and the editor tags that account's analytics `internal: true`.
+  `admin.funnel` leaves these accounts out of every figure, says how many it left out (`internalAccounts`), keeps the
+  stages with them in (`unfiltered`), and splits connected and active by lane (`lanes.hosted`, `lanes.ownMachine`: a
+  sandbox is hosted while its machine row stands, or after collection by its provision's app name). (2026-11-23) It
+  answers no "came back on a later day": the platform keeps no visit history (a session's `updatedAt` moves while a tab
+  is merely open, and an expired session is deleted), so returns are read from product analytics instead.
 - Reachability is a signed grant. The api holds the Ed25519 private key (`INGRESS_SIGNING_KEY`), the edge holds only
   the public half, and a deletion record revokes it (`src/sandbox/reachability.ts`). A trigger on `sandbox` records
   the tunnel id of every deleted row and every rotated token (`SandboxTombstone`), and `GET /api/reachability/:id`
