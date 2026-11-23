@@ -63,7 +63,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>, beside: ()
         land: (agent, chosen) => void landFromMenu(agent, chosen),
         startFresh: (agent, kind) => void draftFreshSession(agent, kind),
         copySessionName: (branch) => copySessionName(branch, anchor.value),
-        stopWatching,
+        stopWatching: async (id) => void (await stopWatching(id)),
         restore,
         archive: (ids) => archive(ids),
         setAutoApprove: (ids, on) => pressAutoApprove(setAutoApprove, ids, on),

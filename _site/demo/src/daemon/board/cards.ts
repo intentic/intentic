@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentStopAnswer, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { type AgentSearchResult, indexOfTerm, searchTermOf } from "@intentic/sandbox-contract/schemas/agent-search";
 import { isTurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
@@ -189,14 +189,14 @@ export const requestLand = (id: string): AgentSummary => {
 };
 
 // Every watch, or the one named; nothing else about the conversation changes.
-export const stopWatching = ({ id, watchId }: SandboxHandlerInput<`agents`, `stopWatching`>): AgentSummary => {
+export const stopWatching = ({ id, watchId }: SandboxHandlerInput<`agents`, `stopWatching`>): AgentStopAnswer => {
     const watches = (roster.agents.find((agent) => agent.id === id)?.watches ?? []).filter((watch) => watchId !== undefined && watch.id !== watchId);
-    return agentAnswer(patchAgent(id, { watches: watches.length === 0 ? undefined : watches }));
+    return { ...agentAnswer(patchAgent(id, { watches: watches.length === 0 ? undefined : watches })), stopped: true };
 };
 
 // Ends a job the way the daemon's answer reads once it has: stopped by the person, its wait and hand-over over.
-export const stopJob = ({ id, jobId }: SandboxHandlerInput<`agents`, `stopJob`>): AgentSummary =>
-    agentAnswer(
+export const stopJob = ({ id, jobId }: SandboxHandlerInput<`agents`, `stopJob`>): AgentStopAnswer => ({
+    ...agentAnswer(
         patchAgent(id, {
             jobs: roster.agents
                 .find((agent) => agent.id === id)
@@ -208,7 +208,9 @@ export const stopJob = ({ id, jobId }: SandboxHandlerInput<`agents`, `stopJob`>)
                     return { ...ended, endedAt: Date.now(), exitCode: 143, stoppedBy: `person` as const };
                 }),
         }),
-    );
+    ),
+    stopped: true,
+});
 
 // As the daemon does for a person's Stop all (agents.stopFamily): the card's workflow runs end, its own turn and every
 // agent below it at work stop. Naming a run ends only that run and the workers it had at work.

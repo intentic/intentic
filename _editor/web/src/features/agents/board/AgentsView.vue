@@ -214,7 +214,8 @@ const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
     mobile,
     focus,
     agents: {
-        stopWatching: agents.stopWatching,
+        // The menu does not read what a stop answered (StopOutcome): the card it moves is the answer there.
+        stopWatching: async (id) => void (await agents.stopWatching(id)),
         // No ids is the lane's Clear, which already names every finished card there is.
         archive: familyArchive.requestIds,
         restore: (ids) => restore(withFamilies(ids)),
