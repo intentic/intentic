@@ -7,7 +7,7 @@ import { autostart, claimPidFile, holdPidFile, type Log, type PidRecord, release
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { beginTrial, type Trial } from "../agent-trial.js";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
-import { baseDir, runLogPath, runPidPath } from "../config.js";
+import { baseDir, memoryLogPath, runLogPath, runPidPath } from "../config.js";
 import { startAutoBackup } from "../device/sandbox-rounds/auto-backup.js";
 import { startAutoPrepare } from "../device/sandbox-rounds/auto-prepare.js";
 import { startEngineDiskWatch } from "../device/sandbox-rounds/engine-disk.js";
@@ -35,6 +35,7 @@ import { MACHINE_VERSION } from "../version.js";
 import { beginExitRecord, lastExitPath, reasonForCode, recordExit, recordStopFor, recordUnexpectedExits, stampAlive, thisRun } from "./last-exit.js";
 import { askHandover, handoverAsked } from "./handover.js";
 import { startLogRoll } from "./log-roll.js";
+import { startMemoryLog } from "./memory-log.js";
 import { startWatchdog, type Watchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
 import { type CacheDrop, startCacheDrop } from "../environments/wsl-cache-drop.js";
@@ -352,7 +353,8 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     // With nobody signed in, the links and the distros are all this agent serves: every round below either starts a
     // program with a window (the keeper starts Docker Desktop), needs the engine that program runs, or changes this
     // agent itself, and the agent of the signed-in session runs them all from the sign-in on.
-    const rounds = beforeSignIn ? [startLogRoll(runLogPath, log)] : sessionRounds(supervised, connections, lease, log);
+    // The memory reading runs before sign-in too: an agent's memory is its own whoever is signed in (memory-log.ts).
+    const rounds = [...(beforeSignIn ? [startLogRoll(runLogPath, log)] : sessionRounds(supervised, connections, lease, log)), startMemoryLog(memoryLogPath, log)];
     const autoUpgrade = supervised || beforeSignIn ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
     const finish = async (code: number): Promise<never> => {

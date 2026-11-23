@@ -12,6 +12,9 @@ export const binDir = join(baseDir, "bin");
 export const runPidPath = join(baseDir, "machine.pid");
 export const runLogPath = join(baseDir, "machine.log");
 
+// The resident agent's own memory, one JSON reading every ten minutes (resident/memory-log.ts); `status` shows the newest.
+export const memoryLogPath = join(baseDir, "memory.jsonl");
+
 // Where a sandbox-triggered or automatic update/restart writes; kept separate so its own run is easy to find later.
 export const agentLogPath = join(baseDir, "machine-update.log");
 

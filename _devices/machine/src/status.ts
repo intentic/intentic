@@ -17,9 +17,10 @@ import { buildCommand, machineUi } from "./cli-ui.js";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract/schemas/devices";
 import { auditPath, readLinks, readLinkStates } from "./device/config.js";
 import { PAUSE_HOTKEY, readPausedAt } from "./device/indicator.js";
-import { runLogPath } from "./config.js";
+import { memoryLogPath, runLogPath } from "./config.js";
 import { heldDistros } from "./environments/machine.js";
 import { readResidentPid } from "./resident/resident.js";
+import { type AgentMemory, latestMemoryReading, memoryLine } from "./resident/memory-log.js";
 import { readResident } from "./resident/supervision.js";
 import { registeredDistro } from "./environments/wsl.js";
 import { pairingKey, readState } from "./sync/config.js";
@@ -47,6 +48,8 @@ export interface DeviceStatus {
     readonly sync: DeviceReport;
     // intentic-keyring beside this agent (keyring/keyring-status.ts): installed, running, set up, locked. Never its keys.
     readonly keyring: KeyringStatusLine;
+    // The running agent's newest memory reading (resident/memory-log.ts), absent while none of this run's is written.
+    readonly memory?: AgentMemory;
 }
 
 // One link, as every surface reads it. `state` is what the resident agent last stamped (device/config.ts) and is
@@ -120,18 +123,19 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 };
 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
-    const [pid, links, sync, stamped, pausedAt, keyring] = await Promise.all([
+    const [pid, links, sync, stamped, pausedAt, keyring, memory] = await Promise.all([
         readResidentPid(),
         readLinks(),
         deviceReport(mutagen),
         readLinkStates(),
         readPausedAt(),
         readKeyringSummary(),
+        latestMemoryReading(memoryLogPath),
     ]);
     /* A agent that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
     const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]?.state));
     const connected = states.every((state) => state !== undefined) ? states.filter((state) => state === "open").length : undefined;
-    return {
+    const answer: DeviceStatus = {
         version: MACHINE_VERSION,
         ...(pid === undefined ? {} : { running: pid }),
         // On the tray's one line too: it is the only place a person at this machine reads without asking.
@@ -146,6 +150,8 @@ export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceS
         sync,
         keyring: keyringStatusLine(keyring),
     };
+    // Only this run's: a reading the agent before it left is about a process that is gone.
+    return memory !== undefined && memory.pid === pid ? { ...answer, memory } : answer;
 };
 
 // One port row, in the form the two skip reasons are actually asked about: not "why is 6480 missing" but "who
@@ -489,6 +495,7 @@ export const status = buildCommand<StatusFlags>({
         const place = placeLine(distro, held?.supervisor, children);
         ui.fields([
             ...(place === undefined ? [] : [["device", place] as const]),
+            ...(report.memory === undefined ? [] : [["memory", memoryLine(report.memory, Date.now())] as const]),
             ["logs", runLogPath],
             ["audit", auditPath],
             ...(report.device.pausedAt === undefined

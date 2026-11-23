@@ -1155,6 +1155,31 @@ lists `machine.log`(`.1`), `machine-update.log`, `audit.jsonl`(`.1`) and ic's pe
 the audit `tool` and `failedOnly`. It is gated like `sandbox_logs`. `describe` names the `ic` that answers (path,
 version, file time) and the `IC_*`/`INTENTIC_*` variables in the agent's environment, secrets by length only.
 
+### The agent's own memory
+
+(2026-11-22) On rog, the Windows agent showed 520 MB of commit charge but held under 100 MB in RAM. Commit charge is
+memory Windows has promised a process and counts against RAM plus the page file. Most of the gap was threads: the
+compiled agent's runtime (Bun) runs file and DNS work on Windows in libuv's thread pool, sized by the CPU count, and
+each thread commits about 2.5 MB of stack and several MB of allocator heap that it barely touches. Concurrent file work
+grew the pool to about 45 threads, and they never left.
+
+- **The pool is capped at 4 on Windows** ([`io-pool.ts`](src/resident/io-pool.ts)), the size libuv and Node use.
+  libuv reads `UV_THREADPOOL_SIZE` once, when the pool first starts, so `cli.ts` imports this module first. It sets
+  the variable only where nobody chose a size, starts the pool with one stat, and removes the variable again, so no
+  program the agent starts inherits it. Measured with a probe doing the agent's kinds of work: 44 threads and 374 MB
+  of commit uncapped, 26 threads and 206 MB capped, RAM no higher. Linux and macOS are left alone: there the runtime
+  does not use libuv, and the probe saw no difference.
+- **The JavaScriptCore GC-marker threads** (`BUN_JSC_numberOfGCMarkers`) would save about 7 threads and 20 MB more, but
+  the runtime reads that variable only at process start, before any of the agent's code runs. Setting it means a
+  change in every supervisor that starts the agent, so it is not set.
+- **A memory reading every ten minutes** ([`memory-log.ts`](src/resident/memory-log.ts)) goes into
+  `~/.intentic/machine/memory.jsonl`, one JSON line each, the newest week kept. The first comes a minute after the
+  start, before sign-in too. Each reading has the process's own figures (`process.memoryUsage`: `rss` is the working
+  set on Windows), the JavaScript heap as JavaScriptCore counts it with its twelve most numerous kinds of object
+  (`bun:jsc` `heapStats`; absent under Node), and on Linux the thread count. Commit charge has no cheap reading from
+  inside the process, so it is still read from outside. `status` shows the running agent's newest reading as its
+  `memory` row, and `status --json` as `memory`. A reading from the agent before is left out.
+
 ### The keyring
 
 [intentic-keyring](../keyring), the vault behind Passwords, is a process of its own beside this agent (2026-10-16):
@@ -1410,6 +1435,8 @@ person who runs it alone, and either way it never downloads anything.
 - [src/environments/wsl-cache-drop.ts](src/environments/wsl-cache-drop.ts) — the WSL VM's file cache given back to Windows when Windows runs low; the decisions in `windows-memory.ts`.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
 - [src/resident/watchdog.ts](src/resident/watchdog.ts) — the agent's own hang watchdog.
+- [src/resident/memory-log.ts](src/resident/memory-log.ts) — the agent's own memory, read every ten minutes into `memory.jsonl`; `status` shows the newest.
+- [src/resident/io-pool.ts](src/resident/io-pool.ts) — the I/O thread pool capped at 4 on Windows, before anything starts it.
 - [src/resident/pause-cause.ts](src/resident/pause-cause.ts) — what a pause the watchdog saw was: a sleep, a freeze or the clock.
 - [src/power/host-power.ts](src/power/host-power.ts) — what this computer's own power settings would do to work left running (the facts' `power`): Windows in `windows-reading.ts` and `windows-findings.ts`, Linux and macOS in `linux.ts` and `macos.ts`; `power stay-on` and `restore` decided in `writes.ts`, done in `apply.ts`, drawn in `power-command.ts`.
 - [src/release/release-verify.ts](src/release/release-verify.ts) — a downloaded release binary checked against the release's signed `SHA256SUMS`.
