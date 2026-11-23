@@ -240,11 +240,8 @@ watch(
                 <HubSearchResults v-if="search && searching" :search="search" :list-id="searchList" look="page" />
                 <HubIndex v-else :groups="drawn" :link-to="rowLink" />
             </div>
-            <!-- While a search is typed the rail's groups give way to its answers, drawn where the rail draws an empty index; the field stays pinned, so typing never loses it. -->
+            <!-- While a search is typed the rail's groups give way to its answers, drawn where the rail draws an empty index; the field stays in the bar above it (#railHead), so typing never loses it. -->
             <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="searching ? [] : drawn">
-                <template v-if="search" #pinned>
-                    <HubSearchField :search="search" :list-id="searchList" />
-                </template>
                 <template v-if="search && searching" #empty>
                     <HubSearchResults :search="search" :list-id="searchList" look="rail" />
                 </template>
@@ -268,6 +265,12 @@ watch(
                     </RouterLink>
                 </template>
             </NavRail>
+        </template>
+
+        <!-- Docked, the search tops the index in its segment of the window's top bar rather than under an empty one. A phone
+             (`drill`) has no such bar and keeps it over its list, above; a narrow desktop pane, in the strip (#compact). -->
+        <template v-if="search && !drill" #railHead>
+            <HubSearchField :search="search" :list-id="searchList" dense />
         </template>
 
         <!-- Nothing mounts under the index: a section is a page a phone goes to, not one it keeps under the list. -->

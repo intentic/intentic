@@ -98,12 +98,16 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
                     :class="scroll === `page` ? `sticky top-0 max-h-dvh` : `flex-1`"
                     :style="viewport === undefined ? undefined : { maxHeight: viewport }"
                 >
-                    <!-- The index's segment of the window's top bar, empty and blended (`.view-header-blend`, utilities.css): the
-                         index's own ground runs up under it, with no line. What the screen is ("Settings", "Capabilities") is
-                         said over the body, where every view's name stands (ViewBar.vue); it headed this index until
-                         2026-11-23. Never whose it is: the shell's rail already wears the sandbox's face and the overview its
-                         name, and a third copy of either was noise (2026-11-09). -->
-                    <div class="view-header view-header-blend" aria-hidden="true"></div>
+                    <!-- The index's segment of the window's top bar, blended (`.view-header-blend`, utilities.css): the index's
+                         own ground runs up under it, with no line. It holds what tops the index, its search (`#railHead`, a
+                         field at the bar's h-7), as a Mac sidebar's search sits in its top band, rather than leaving the band
+                         empty over a field below it; an index with nothing to put there leaves it empty. What the screen is
+                         ("Settings", "Capabilities") is said over the body, where every view's name stands (ViewBar.vue); it
+                         headed this index until 2026-11-23. Never whose it is: the shell's rail already wears the sandbox's
+                         face and the overview its name, and a third copy of either was noise (2026-11-09). -->
+                    <div class="view-header view-header-blend flex items-center pl-4 pr-4" :aria-hidden="$slots[`railHead`] ? undefined : `true`">
+                        <slot name="railHead" />
+                    </div>
                     <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pb-(--ui-page-padding) pl-4 pr-2 pt-3">
                         <slot name="rail" />
                     </div>
