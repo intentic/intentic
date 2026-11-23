@@ -1,7 +1,7 @@
 <!-- Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/panelSlots.ts). -->
 <script setup lang="ts">
 import { Button, EmptyState } from "@intentic/ui";
-import { nextTick, useTemplateRef } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, useTemplateRef } from "vue";
 import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { chatFullSlot, publishSlot } from "../../../workbench/window/panelSlots";
@@ -11,6 +11,7 @@ import { useShellChatLink } from "./shellChatLink";
 import { draftConversation } from "../../../models/conversations/panel/useChat-reveal";
 import { summonChat } from "../../../models/conversations/run/summon";
 import { focusComposer } from "../../../models/conversations/tabs/useChat-tabs";
+import { chatSectionHere } from "./board/chatBoard";
 
 const t = useT();
 
@@ -33,6 +34,11 @@ useShellChatLink(() => {
 
 const slot = useTemplateRef(`slot`);
 publishSlot(chatFullSlot, () => slot.value);
+
+/* THE BOARD MAY STAND BESIDE THE CHAT HERE (board/chatBoard.ts), and only here: the panel reads that this section is on
+   screen to offer it, and leaves its list and usage to the board while it stands (the route draws it, shell/chat/ChatWithBoard.vue). */
+onMounted(() => (chatSectionHere.value = true));
+onBeforeUnmount(() => (chatSectionHere.value = false));
 </script>
 
 <template>

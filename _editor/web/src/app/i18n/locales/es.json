@@ -3364,6 +3364,14 @@
             "bringBackToFill": "Tráelo de vuelta para llenar este hueco, o sigue usando la ventana flotante.",
             "chatInOwnWindow": "Tu chat está en su propia ventana"
         },
+        "chatBoard": {
+            "board": "Tablero",
+            "boardNote": "Carriles junto al chat",
+            "showBoard": "Mostrar el tablero junto al chat",
+            "list": "Lista",
+            "listNote": "Chats en una columna",
+            "showList": "Mostrar la lista de chats"
+        },
         "chatAudioChip": {
             "cantPlay": "No se reproduce",
             "of": "{displayTime} de {duration}",

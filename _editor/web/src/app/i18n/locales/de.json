@@ -3364,6 +3364,14 @@
             "bringBackToFill": "Holen Sie ihn zurück, um diese Fläche zu füllen, oder nutzen Sie weiter das schwebende Fenster.",
             "chatInOwnWindow": "Ihr Chat ist in einem eigenen Fenster"
         },
+        "chatBoard": {
+            "board": "Board",
+            "boardNote": "Spalten neben dem Chat",
+            "showBoard": "Board neben dem Chat zeigen",
+            "list": "Liste",
+            "listNote": "Chats in einer Spalte",
+            "showList": "Liste der Chats zeigen"
+        },
         "chatAudioChip": {
             "cantPlay": "Nicht abspielbar",
             "of": "{displayTime} von {duration}",

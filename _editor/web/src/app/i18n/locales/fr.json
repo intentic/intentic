@@ -3364,6 +3364,14 @@
             "bringBackToFill": "Ramenez-le pour remplir cet espace, ou continuez avec la fenêtre flottante.",
             "chatInOwnWindow": "Votre chat est dans sa propre fenêtre"
         },
+        "chatBoard": {
+            "board": "Tableau",
+            "boardNote": "Colonnes à côté du chat",
+            "showBoard": "Afficher le tableau à côté du chat",
+            "list": "Liste",
+            "listNote": "Chats sur une colonne",
+            "showList": "Afficher la liste des chats"
+        },
         "chatAudioChip": {
             "cantPlay": "Illisible",
             "of": "{displayTime} sur {duration}",

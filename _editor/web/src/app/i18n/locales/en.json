@@ -3364,6 +3364,14 @@
             "bringBackToFill": "Bring it back to fill this one, or keep using the floating window.",
             "chatInOwnWindow": "Your chat is in its own window"
         },
+        "chatBoard": {
+            "board": "Board",
+            "boardNote": "Lanes beside the chat",
+            "showBoard": "Show the board beside the chat",
+            "list": "List",
+            "listNote": "Chats in one column",
+            "showList": "Show the list of chats"
+        },
         "chatAudioChip": {
             "cantPlay": "Can't play",
             "of": "{displayTime} of {duration}",

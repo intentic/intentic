@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
+import { Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash, ui } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
@@ -27,6 +27,7 @@ import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "../panel/PastChatList.vue";
+import { chatBoardOffered, toggleChatBoard } from "../panel/board/chatBoard";
 import { useT } from "@intentic/ui/i18n";
 
 // The chat panel's own bar: names the active conversation and drops the full list (ChatTabList) on click.
@@ -37,6 +38,10 @@ const t = useT();
 const vocabulary = useVocabulary();
 // A reader who cannot drive a chat (a viewer, a writer with agents off) is offered no new one: it would only be refused.
 const readOnly = useDriveRefusal();
+
+// `listless`: the board stands beside the chat and is the list (panel/board/chatBoard.ts), so the rail draws nothing and
+// the bar is only its commands, which still act on the open chats.
+const { listless = false } = defineProps<{ listless?: boolean }>();
 
 const emit = defineEmits<{
     select: [id: string];
@@ -344,6 +349,7 @@ onBeforeUnmount(() => {
     <!-- The rail form isn't drawn here: RailColumn is the column shell the rail stands in, at the one stored rail width. -->
     <component
         :is="vertical ? RailColumn : 'header'"
+        v-if="!(vertical && listless)"
         :ref="setBar"
         :class="vertical ? undefined : 'view-header relative flex items-center gap-1 border-b border-line px-1.5'"
         @contextmenu="onBarContextMenu"
@@ -421,9 +427,22 @@ onBeforeUnmount(() => {
              is one form whether it stands in /chat or in a popped-out window, so neither grows an action the other lacks; past
              chats are the docked sheet's. At the head rather than the foot: the new chat appears at the top of the list, under
              the press, and the foot is the notification lane's corner (workbench/notifications/laneSeat.ts). -->
-        <div v-if="vertical && !readOnly" class="flex shrink-0 justify-center">
+        <div v-if="vertical && (!readOnly || chatBoardOffered)" class="relative flex min-h-7 shrink-0 justify-center">
+            <!-- In /chat, the board in this column's place (panel/board/chatBoard.ts): at the left edge, where the board's own
+                 header keeps the same glyph, pressed, for the way back. Out of the flow, so New agent stays centred. -->
+            <button
+                v-if="chatBoardOffered"
+                type="button"
+                :class="ui.iconButton({ size: `md` }, `absolute left-0 top-0`)"
+                aria-pressed="false"
+                :aria-label="t(`chat.chatBoard.showBoard`)"
+                v-tooltip.bottom="{ title: t(`chat.chatBoard.board`), note: t(`chat.chatBoard.boardNote`) }"
+                @click="toggleChatBoard()"
+            >
+                <Icon name="robot" class="text-sm" />
+            </button>
             <!-- It starts as no one in particular: the new chat's posture is picked in its composer, or matched from its first message. -->
-            <Button size="small" tier="boring" :label="vocabulary.newAgent" @click="startAgent()">
+            <Button v-if="!readOnly" size="small" tier="boring" :label="vocabulary.newAgent" @click="startAgent()">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </div>

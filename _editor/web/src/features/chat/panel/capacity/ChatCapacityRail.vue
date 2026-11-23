@@ -27,8 +27,9 @@ import { useRailMark } from "./railCarries";
 // Refreshes on mount: pools are account-wide, shared across apps, so a stale window shows stale numbers.
 const t = useT();
 
-// The chat this rail stands beside (ChatSideRail): its account's row is marked as the reader's own.
-const { mine } = defineProps<{ mine?: CapacityMine | undefined }>();
+// The chat this rail stands beside (ChatSideRail): its account's row is marked as the reader's own. `across` lays the
+// providers side by side, for a strip under the board beside the chat (ChatBoardColumn.vue), which is wide and short.
+const { mine, across = false } = defineProps<{ mine?: CapacityMine | undefined; across?: boolean }>();
 
 onMounted(() => void refreshConnections());
 
@@ -259,13 +260,17 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                 </div>
             </template>
             <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
-            <div ref="column" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
+            <div
+                ref="column"
+                class="min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+                :class="across ? 'grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] content-start items-start gap-x-8 gap-y-5' : 'flex flex-col gap-5'"
+            >
                 <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
 
                 <!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
                 <!-- A re-read that reorders providers slides them to their new places rather than jumping, so the one that moved is seen moving. -->
-                <TransitionGroup tag="div" class="flex flex-col gap-5" v-bind="motion">
+                <TransitionGroup tag="div" :class="across ? 'contents' : 'flex flex-col gap-5'" v-bind="motion">
                     <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
                         <div class="flex items-center gap-1.5" data-reveal>
                             <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
@@ -340,7 +345,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                     v-if="capacity.out.length > 0 || capacity.blocked.length > 0"
                     :label="t(`chat.chatCapacityRail.unavailable`)"
                     density="dense"
-                    class="border-t border-line pt-3"
+                    :class="across ? undefined : 'border-t border-line pt-3'"
                     data-reveal
                 >
                     <div class="flex flex-col gap-1">

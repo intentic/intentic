@@ -62,7 +62,7 @@ const SANDBOX_VIEWS = {
     chat: {
         title: () => t(`shared.chat`),
         beforeEnter: [chatEntry],
-        component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`), undefined, { mobile: `skip` }),
+        component: asyncView(() => import(`../shell/chat/ChatWithBoard.vue`), undefined, { mobile: `skip` }),
     },
     agents: { title: () => useVocabulary().value.agents, component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)) },
     // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat surface.

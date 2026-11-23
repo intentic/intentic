@@ -326,6 +326,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             :class="narrow ? 'flex flex-wrap' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
         >
             <div class="col-start-1 flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
+                <slot name="lead" /><!-- What a host puts first: /chat's way back to its list (ChatBoardColumn.vue). -->
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
                 <SegmentedControl
                     v-if="user !== null && sharedAccess && !first"

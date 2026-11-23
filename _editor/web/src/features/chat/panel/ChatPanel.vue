@@ -26,6 +26,7 @@ import ChatSideRail from "./ChatSideRail.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
 import ChatTabs from "../tabs/ChatTabs.vue";
 import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
+import { chatBoardBeside } from "./board/chatBoard";
 import { useT } from "@intentic/ui/i18n";
 
 // The shared assistant: the frame around one or more chats (each conversation is a ChatPane). Owns what belongs
@@ -159,6 +160,8 @@ const showsRail = computed(
     () =>
         !bar &&
         !mobile.value &&
+        // The board beside the chat holds the usage under it (board/ChatBoardColumn.vue).
+        !chatBoardBeside.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         (!chatWide.value || shownSideTabs.value.length === 0) &&
         capacityRail.value &&
@@ -292,7 +295,8 @@ watch(
     >
         <template v-if="tabs && !bar">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
-            <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
+            <!-- With the board beside the chat, the board is the list: the bar keeps only its commands (board/chatBoard.ts). -->
+            <ChatTabs v-else :listless="chatBoardBeside" @select="setActive" @close="closeTabs" @open="openConversation" />
         </template>
 
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col pt-(--window-band)">

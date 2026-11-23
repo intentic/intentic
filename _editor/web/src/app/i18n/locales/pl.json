@@ -3364,6 +3364,14 @@
             "bringBackToFill": "Przywróć go, żeby wypełnił to miejsce, albo korzystaj dalej z pływającego okna.",
             "chatInOwnWindow": "Twój czat jest w osobnym oknie"
         },
+        "chatBoard": {
+            "board": "Tablica",
+            "boardNote": "Kolumny obok czatu",
+            "showBoard": "Pokaż tablicę obok czatu",
+            "list": "Lista",
+            "listNote": "Czaty w jednej kolumnie",
+            "showList": "Pokaż listę czatów"
+        },
         "chatAudioChip": {
             "cantPlay": "Nie do odtworzenia",
             "of": "{displayTime} z {duration}",
