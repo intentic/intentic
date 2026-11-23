@@ -220,8 +220,9 @@
         background-image: var(--sanctum-tooth);
     }
 
-    /* The seam aligns column headers across the desktop shell. */
-    [data-skin="sanctum"] .view-header:not(.view-header-wrap) {
+    /* A column's bar draws no rule: its fill, or the type in it, is its edge. Only a bar over content that is not ours (a
+       live web page, LiveBrowser.vue) keeps one, since that page may be the bar's own colour; this is its ink. */
+    [data-skin="sanctum"] .view-header.border-b:not(.view-header-wrap) {
         border-bottom-color: var(--sanctum-rule-strong);
         box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
     }

@@ -77,18 +77,4 @@ export const statusLabel = (status: ConversationStatus): string => {
     return t(`chat.catalog.idle`);
 };
 
-// Desktop tab title colour by status, layered under statusIcon's glyph, not replacing it (colour alone fails
-// colourblind/truncated text). Colour only, no pulse: the spinner already animates.
-export const statusTabClass = (status: ConversationStatus): string => {
-    if (status === `streaming`) {
-        return `text-link`;
-    }
-    if (status === `awaiting`) {
-        return `text-info`;
-    }
-    if (status === `error`) {
-        return `text-danger`;
-    }
-    return ``;
-};
 

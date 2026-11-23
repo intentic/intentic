@@ -538,6 +538,22 @@
 .chat-notes-row .chat-mark-material:not([hidden]) {
     margin-bottom: var(--chat-gap);
 }
+/* WHAT SCROLLS UP DISSOLVES UNDER THE BAR rather than being cut at its edge: the chat's bar draws no rule (ChatTabs.vue),
+   so the transcript's top edge is this fade, as its foot is the composer's (`.chat-footer::after`). Always there and
+   never in the way: at rest it lies over the transcript's own top padding, and it is exactly the band a pinned prompt
+   keeps above its bubble (`.chat-prompt-pinned`, `--chat-gap` + 1px), so it never dims the prompt it passes over. Clear
+   of the scroller's reserved gutters, so the scrollbar is not faded with the text. A layer faded by a mask, like the
+   pinned prompt's band, so Silver can paint it with the pane's own glass (silver.css). */
+.chat-pane::before {
+    content: "";
+    position: absolute;
+    inset: 0 var(--chat-scrollbar, 0px) auto;
+    height: 0.5rem;
+    z-index: 6;
+    background-color: var(--color-card);
+    mask-image: linear-gradient(to bottom, #000, transparent);
+    pointer-events: none;
+}
 /* THE SCROLLER RESERVES ITS SCROLLBAR ON BOTH EDGES, so the column re-centres in the width the reader actually sees. */
 .chat-scroller {
     scrollbar-gutter: stable both-edges;
@@ -843,20 +859,40 @@
 .chat-tab {
     color: var(--color-muted);
     cursor: pointer;
-    border: 1px solid transparent;
     transition:
         background-color var(--motion-hover),
-        color var(--motion-hover),
-        border-color var(--motion-hover);
+        color var(--motion-hover);
 }
 .chat-tab:hover {
     background: color-mix(in srgb, var(--color-content) 6%, transparent);
     color: var(--color-content);
 }
+/* Open, the switcher is a fill and no outline: the bar it sits in draws no lines either. */
 .chat-tab-on {
-    background: color-mix(in srgb, var(--color-overlay) 70%, transparent);
+    background: var(--color-overlay);
     color: var(--color-content);
-    border-color: var(--color-line);
+}
+/* The switcher's chevron says "this opens a list" to a pointer that is asking, not to every glance at the title. Kept in
+   the layout, so nothing beside it moves when it shows. */
+.chat-tab-chevron {
+    opacity: 0;
+    transition:
+        opacity var(--motion-hover),
+        rotate var(--motion-hover);
+}
+.chat-tab:is(:hover, :focus-visible, .chat-tab-on) .chat-tab-chevron {
+    opacity: 1;
+}
+/* THE BAR'S PRESSES STAND BACK UNTIL THE BAR IS IN USE. With no rule under it, full-ink glyphs out-shouted the title; a
+   pointer anywhere on the bar, or focus in it, brings them to their usual ink, and the one under the pointer to full. */
+.chat-bar .composer-ghost {
+    color: var(--color-subtle);
+}
+.chat-bar:is(:hover, :focus-within) .composer-ghost {
+    color: var(--color-muted);
+}
+.chat-bar .composer-ghost:hover {
+    color: var(--color-content);
 }
 /* Decision cards use shared surfaces and reserve their own row spacing. The inset, mark and gap are the column's own
    edge, mark box and gap (above), so a card's icon stands where a notice's glyph does and its words start on the hang. */

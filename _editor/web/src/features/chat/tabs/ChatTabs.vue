@@ -313,8 +313,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <!-- One line across the column top, with the list on a sheet below it. -->
-    <header ref="bar" class="view-header relative flex items-center gap-1 border-b border-line px-1.5" @contextmenu="onBarContextMenu">
+    <!-- One line across the column top, with the list on a sheet below it. NO RULE UNDER IT: the bar and the transcript are
+         one surface, the title's size says which line is the header, and what scrolls up dissolves under the bar
+         (`.chat-pane::before`, chat.css) instead of being cut at a line. -->
+    <!-- Two groups, by what a press is about: which chat (the switcher and a new one) on the left, where this panel lives
+         (fold it, its own window) in the corner, where window controls are. -->
+    <header ref="bar" class="chat-bar view-header relative flex items-center gap-1 px-1.5" @contextmenu="onBarContextMenu">
         <input
             v-if="edit.editing && renaming"
             v-model="edit.draft"
@@ -322,7 +326,7 @@ onBeforeUnmount(() => {
             maxlength="80"
             :aria-label="t(`chat.words.chatTitle`)"
             :placeholder="active.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`)"
-            class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
+            class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-[0.8125rem]"
             @keydown.enter.stop.prevent="edit.commit()"
             @keydown.esc.stop.prevent="edit.cancel()"
             @blur="edit.blurCommit()"
@@ -334,7 +338,7 @@ onBeforeUnmount(() => {
             v-else
             type="button"
             data-chat-switcher
-            class="chat-tab group mr-auto flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-2xs"
+            class="chat-tab group flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-2xs"
             :class="{ 'chat-tab-on': listOpen }"
             :aria-expanded="listOpen"
             aria-haspopup="dialog"
@@ -350,12 +354,10 @@ onBeforeUnmount(() => {
             <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                 <Icon name="box" class="text-2xs text-subtle" />
             </span>
-            <span
-                class="min-w-0 truncate text-left font-medium"
-                :class="activeLook.title"
-                v-tooltip.bottom.overflow="tabLabel(active)"
-                >{{ tabLabel(active) }}</span
-            >
+            <!-- The column's name, in the text's own ink: the glyph before it already says what the chat is doing. -->
+            <span class="min-w-0 truncate text-left text-[0.8125rem] font-medium text-content" v-tooltip.bottom.overflow="tabLabel(active)">{{
+                tabLabel(active)
+            }}</span>
             <!-- Members with this same conversation active right now. -->
             <PresenceAvatars
                 v-if="active.session.value !== undefined"
@@ -378,21 +380,25 @@ onBeforeUnmount(() => {
             >
                 <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
             </span>
-            <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle transition-transform" :class="{ 'rotate-180': listOpen }" />
+            <!-- Shown on hover, focus and while open; held in place at rest so the counts never shift. -->
+            <Icon name="chevron-down" class="chat-tab-chevron shrink-0 text-2xs text-subtle" :class="{ 'rotate-180': listOpen }" />
         </button>
-        <!-- The toolbar: creation, then the two ways out of the way (folded into the strip, its own window). Past chats live in
-             the switcher's sheet, not here. -->
-        <div class="flex shrink-0 items-center gap-1">
-            <button
-                v-if="!readOnly"
-                type="button"
-                class="composer-ghost h-7 w-7 shrink-0"
-                @click="startAgent()"
-                v-tooltip.bottom="vocabulary.newAgent"
-                :aria-label="vocabulary.newAgent"
-            >
-                <Icon name="plus" class="text-sm" />
-            </button>
+        <!-- Beside the switcher it answers the same question (which chat), and `mr-auto` keeps the rest of the bar bare
+             background (above). -->
+        <button
+            v-if="!readOnly"
+            type="button"
+            class="composer-ghost h-7 w-7 shrink-0"
+            @click="startAgent()"
+            v-tooltip.bottom="vocabulary.newAgent"
+            :aria-label="vocabulary.newAgent"
+        >
+            <Icon name="plus" class="text-sm" />
+        </button>
+        <span class="mr-auto" aria-hidden="true"></span>
+        <!-- The two ways out of the way: folded into the strip, its own window. Past chats live in the switcher's sheet, not here.
+             `ml-2`: a long title in a narrow column leaves the spacer no room, and the two groups still read as two. -->
+        <div class="ml-2 flex shrink-0 items-center gap-1">
             <!-- Not in a window of its own, which has no edge to fold into. -->
             <button
                 v-if="!floats"

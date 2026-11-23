@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
             :aria-label="t(`shell.sidePanel.tabs`)"
         >
             <!-- `.view-header`, so the desktop app's window buttons take their corner from this bar when it reaches it. -->
-            <div class="view-header flex items-stretch border-b border-line bg-card">
+            <div class="view-header flex items-stretch bg-card">
                 <SideStrip
                     :tabs="items"
                     :active="shownSideActive"

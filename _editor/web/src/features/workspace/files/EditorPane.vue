@@ -91,7 +91,7 @@ const diff = useLoaded(() => ({
     >
         <!-- The pane's one bar: left slot, open tabs, the file's own context, right slot. `tabbar`: the viewer controls
              hoisted into it size their words against the pane, since the context they sit in is capped to a share of it. -->
-        <div class="view-header @container/tabbar flex items-stretch border-b border-line bg-card">
+        <div class="view-header @container/tabbar flex items-stretch bg-card">
             <slot name="lead" />
             <FileTabs
                 :tabs="state.tabs"

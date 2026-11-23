@@ -456,7 +456,7 @@ const confirmHandOver = async (): Promise<void> => {
     <div class="flex h-full min-h-0 flex-col">
         <!-- A @container: the header thins against its own width (the workspace pane's), not the window's. On a phone it is
              the screen's whole chrome, sized for a thumb: 56px tall, every press in it a 40-44px target you can see. -->
-        <div class="view-header @container flex items-center border-b border-line" :class="mobile ? `h-14 gap-1 pl-1 pr-2` : `gap-2.5 px-3.5 py-1`">
+        <div class="view-header @container flex items-center" :class="mobile ? `h-14 gap-1 pl-1 pr-2` : `gap-2.5 px-3.5 py-1`">
             <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. The Android
                  app draws its own way back, in its toolbar. -->
             <RouterLink

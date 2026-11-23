@@ -34,7 +34,8 @@ const sheetOpen = ref(false);
 </script>
 
 <template>
-    <header class="flex items-center gap-1 border-b border-line px-2 py-1.5">
+    <!-- No rule under it, as the desktop bar has none (ChatTabs.vue): the transcript dissolves under it instead. -->
+    <header class="flex items-center gap-1 px-2 py-1.5">
         <!-- The whole title area opens the conversation sheet: the biggest possible touch target. -->
         <button
             type="button"

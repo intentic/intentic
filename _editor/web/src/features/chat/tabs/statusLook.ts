@@ -2,7 +2,7 @@ import type { IconName } from "@intentic/ui";
 import { agentStatusMeta, cornerInk, cornerStandingShown } from "../../../models/agent-status/agentStatus-meta";
 import type { AgentStanding } from "../../../models/agent-status/agentStatus-standing";
 import type { Conversation } from "../../../models/conversations/session/conversation";
-import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
+import { statusIcon, statusLabel } from "../models/catalog";
 
 // WHAT A CHAT IS DOING, AS ITS GLYPH SAYS IT: read off the board's card for it whenever there is one, and off the
 // conversation's own status (a window's reading of its own refs) only where there is none: another box's chat, or a
@@ -19,15 +19,9 @@ export interface StatusLook {
     readonly header: string;
     // The same glyph in a rail card's corner, in the corner's quiet ink (cornerInk).
     readonly corner: string;
-    // The title's ink beside the header's glyph: working, waiting on you, failed; none for a standing asking nothing.
-    readonly title: string;
     // Whether a card's corner draws it at all: not for a card that never started (cornerStandingShown).
     readonly cornered: boolean;
 }
-
-// The card's standing in the header's title ink, in the words the conversation's own status has for it.
-const titleOf = (status: AgentStanding[`status`], spin: boolean): string =>
-    statusTabClass(spin ? `streaming` : status === `awaiting` || status === `error` ? status : `idle`);
 
 const cardLook = ({ status }: Pick<AgentStanding, "status">): StatusLook => {
     const meta = agentStatusMeta(status);
@@ -37,7 +31,6 @@ const cardLook = ({ status }: Pick<AgentStanding, "status">): StatusLook => {
         label: meta.label,
         header: `${meta.icon === `circle-fill` ? `text-[0.5rem]` : `text-2xs`} ${meta.class}`,
         corner: `text-xs ${cornerInk(meta.class)}`,
-        title: titleOf(status, meta.spin === true),
         cornered: cornerStandingShown(status),
     };
 };
@@ -51,7 +44,6 @@ const ownLook = (conversation: Pick<Conversation, "status">): StatusLook => {
         label: statusLabel(status),
         header: icon.class,
         corner: `text-xs ${cornerInk(icon.class)}`,
-        title: statusTabClass(status),
         cornered: true,
     };
 };

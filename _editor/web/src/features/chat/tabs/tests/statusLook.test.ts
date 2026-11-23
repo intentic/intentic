@@ -11,7 +11,7 @@ import type { ClientAgentStatus } from "../../../../models/agent-status/agentSta
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { Conversation } from "../../../../models/conversations/session/conversation";
 import { runningTurn } from "../../../../testing/runningTurn";
-import { statusIcon, statusLabel, statusTabClass } from "../../models/catalog";
+import { statusIcon, statusLabel } from "../../models/catalog";
 import { createCardViews } from "../cardView";
 import { headerGlyph, statusLookOf } from "../statusLook";
 
@@ -40,7 +40,7 @@ describe(`whose word the glyph is`, () => {
         // Idle here, running on the board: another window's turn this window is not attached to.
         expect(statusLookOf(chat, cardOf(`running`))).toMatchObject({ name: `spinner`, spin: true, label: agentStatusMeta(`running`).label });
         // A reload reset the window's crash flag; the board still says error.
-        expect(statusLookOf(chat, cardOf(`error`))).toMatchObject({ name: `exclamation-triangle`, title: `text-danger` });
+        expect(statusLookOf(chat, cardOf(`error`))).toMatchObject({ name: `exclamation-triangle`, label: agentStatusMeta(`error`).label });
         // A failure line here, and the card already running the next turn.
         chat.error.value = `The sandbox did not answer.`;
         expect(chat.status.value).toBe(`error`);
@@ -63,13 +63,11 @@ describe(`whose word the glyph is`, () => {
             label: statusLabel(`idle`),
             header: statusIcon(`idle`).class,
             corner: `text-xs ${cornerInk(statusIcon(`idle`).class)}`,
-            title: statusTabClass(`idle`),
             cornered: true,
         });
 
         runningTurn(chat.turn);
         expect(headerGlyph(own())).toEqual({ spin: undefined, ...statusIcon(`streaming`) });
-        expect(own().title).toBe(`text-link`);
         chat.error.value = `The sandbox did not answer.`;
         expect(headerGlyph(own())).toEqual({ ...statusIcon(`error`), spin: undefined });
         expect(own().label).toBe(statusLabel(`error`));
@@ -104,18 +102,6 @@ describe(`the header and the rail`, () => {
 
         expect(railStatus(chat, undefined)).toEqual({ name: look.name, spin: look.spin, class: look.corner, "aria-label": look.label });
         expect(headerGlyph(look)).toEqual({ spin: undefined, ...statusIcon(`streaming`) });
-    });
-
-    it(`colour the header's title as the tab did: working, waiting on you, failed`, () => {
-        const chat = new Conversation(`c1`);
-        const title = (status: AgentStatus) => statusLookOf(chat, cardOf(status)).title;
-
-        const working: readonly AgentStatus[] = [`running`, `resuming`, `landing`];
-        const quiet: readonly AgentStatus[] = [`idle`, `stopped`, `landed`, `stopping`];
-        expect(working.map(title)).toEqual([`text-link`, `text-link`, `text-link`]);
-        expect(title(`awaiting`)).toBe(`text-info`);
-        expect(title(`error`)).toBe(`text-danger`);
-        expect(quiet.map(title)).toEqual([``, ``, ``, ``]);
     });
 
     it(`draw an idle card's dot as small as the tab's own idle dot`, () => {

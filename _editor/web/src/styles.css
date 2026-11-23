@@ -94,7 +94,8 @@
     --window-band: 0px;
 }
 
-/* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's title row, the preview's toolbar, an agent's detail row. */
+/* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's title row, the preview's toolbar, an agent's detail row.
+   No rule under it: a bar is told from what it heads by its fill or its type, and what scrolls under one fades (the chat's `.chat-pane::before`). */
 @layer components {
     .view-header {
         height: var(--bar-height);
