@@ -40,7 +40,14 @@ const main = async (paths: readonly string[]): Promise<number> => {
         return 2;
     }
     let failed = false;
+    // Whoever asked (fileq, a shell) may be stopped while pages are left: its pipe is gone, and the reader holds four
+    // cores and over a gigabyte for pages nobody will read, so it stops at the next page once it has been orphaned.
+    const asker = process.ppid;
     for (const [index, path] of paths.entries()) {
+        if (process.ppid !== asker) {
+            process.stderr.write("ocr: the process that asked is gone; stopping\n");
+            return 1;
+        }
         const image = await decodeImage(await readFile(path).catch(() => Buffer.alloc(0)));
         if (index > 0) {
             process.stdout.write("\f\n");

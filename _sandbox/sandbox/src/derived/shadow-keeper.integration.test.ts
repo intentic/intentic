@@ -286,6 +286,71 @@ describe("the fileq slots: interactive renders first", () => {
     });
 });
 
+describe("a run in hand", () => {
+    // A fileq whose first derive renders nothing until its signal aborts, as a long OCR batch would; later ones render.
+    // `started` settles once that first one runs.
+    let started: Promise<void>;
+    let aborts: number;
+    const startSlow = (): ShadowKeeper => {
+        let begin: () => void = () => undefined;
+        started = new Promise((resolve) => {
+            begin = resolve;
+        });
+        aborts = 0;
+        let hung = false;
+        keeper = createShadowKeeper({
+            root,
+            enabled: async () => enabled,
+            logger: quiet,
+            exec: (command, args, options) => {
+                if (hung || !args.includes("derive")) {
+                    return fakeFileq(command, args, options);
+                }
+                hung = true;
+                begin();
+                return new Promise((_resolve, reject) => {
+                    options.signal?.addEventListener("abort", () => {
+                        aborts += 1;
+                        reject(Object.assign(new Error("The operation was aborted"), { code: "ABORT_ERR", stdout: "" }));
+                    });
+                });
+            },
+            limits: { debounceMs: 5 },
+        });
+        return keeper;
+    };
+
+    test("stopping the keeper stops the fileq it is waiting on", async () => {
+        await put("docs/scan.pdf");
+        const live = startSlow();
+        const sweep = live.sweep();
+        await started;
+        live.stop();
+        expect(await sweep).toMatchObject({ state: "stopped", queued: 1 });
+        expect(aborts).toBe(1);
+        expect(fileqSlots()).toEqual({ running: 0, background: 0, waiting: 0 });
+    });
+
+    test("switched off, the run in hand stops; switched back on, the document is asked for again", async () => {
+        await put("docs/scan.pdf");
+        const live = startSlow();
+        const sweep = live.sweep();
+        await started;
+        enabled = false;
+        await live.reconsider();
+        await sweep;
+        expect(aborts).toBe(1);
+        expect(derived).toEqual([]);
+        expect(shadowExists("docs/scan.pdf")).toBe(false);
+
+        enabled = true;
+        await live.reconsider();
+        await live.idle();
+        expect(derived).toEqual(["docs/scan.pdf"]);
+        expect(shadowExists("docs/scan.pdf")).toBe(true);
+    });
+});
+
 test("switched back on, it sweeps; already on, reconsidering does nothing", async () => {
     await put("docs/terms.pdf");
     enabled = false;

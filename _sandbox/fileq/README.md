@@ -45,6 +45,12 @@ flowchart LR
   500; a rendering that stopped at a lower cap says so in a note, and a run asking for more re-derives it rather than
   taking it from the cache. `fileq stamps` prints each document format's current deriver stamp, so the keeper can
   tell a shadow an upgraded reader, or one newly able to OCR, would write differently.
+- A scan's pages are drawn (pdftoppm, lossless PackBits TIFF, about twelve times faster to write than PNG) and read
+  eight at a time, each chunk's drawings removed once read, so a 500-page scan never holds more than eight pages on
+  disk. Each `ocr` run takes one of the machine's OCR slots ([src/lib/ocr-slots.ts](src/lib/ocr-slots.ts): flock
+  locks in `/tmp`, one per eight cores and per 8 GiB, at most two), since a reader holds about 1.5 GiB and four
+  threads and fileq is started by many callers at once: `rg` over six unread scans used to start six readers (7 GiB),
+  all of which then ran past their time limit. A text layer is read one page at a time, each page let go once read.
 - `fileq read` on a path the shadow tree refuses (the reference shelf, an agent's worktree) reads it through the
   content cache alone, as it does a file outside the workspace.
 - `fileq check <file>` lints a docx, pptx, xlsx or pdf an agent produced and names each problem where a reader meets
@@ -86,6 +92,7 @@ way, since only document globs reach the preprocessor.
 - [src/app.ts](src/app.ts) — the command routes and the `--help` text an agent reads.
 - [src/lib/derive.ts](src/lib/derive.ts) — `ensureSidecar` and `renderByContent`: the pipeline `read` and `derive` both run.
 - [src/lib/content-cache.ts](src/lib/content-cache.ts) — renderings keyed by content hash and deriver stamp.
+- [src/lib/ocr-slots.ts](src/lib/ocr-slots.ts) — how many OCR readers run at once across the machine.
 - [src/lib/formats.ts](src/lib/formats.ts) — `detectFormat`: magic bytes first, extension as fallback.
 - [src/lib/sidecar.ts](src/lib/sidecar.ts) — sidecar paths, front matter, the freshness rule and the source stat.
 - [bin/fileq-rg-pre](bin/fileq-rg-pre) — ripgrep's preprocessor for documents; `fileq ripgrep-config` wires it.

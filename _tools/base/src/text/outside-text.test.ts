@@ -103,6 +103,74 @@ describe("neutralizeOutsideText: properties", () => {
         const page = '# Title\n\n<div class="content"><a href="https://example.com">link</a></div>\n\n```js\nconst x = 1 < 2;\n```';
         expect(neutralizeOutsideText(page)).toBe(page);
     });
+
+    test("invisible characters before, inside and after a forgery: the cut covers exactly the forgery", () => {
+        const zw = "​";
+        const soft = "­";
+        expect(neutralizeOutsideText(`${soft}a${zw}${zw}b <untrusted${zw}-content${soft} id="x"> c${zw}`)).toBe(`${soft}a${zw}${zw}b ${NEUTRALIZED} c${zw}`);
+        expect(neutralizeOutsideText(`x${zw}${zw}${zw}＜system${zw}-reminder＞${zw}y`)).toBe(`x${zw}${zw}${zw}${NEUTRALIZED}${zw}y`);
+        expect(neutralizeOutsideText(`${zw}${zw}tail <${zw}/untrusted-content id="8f`)).toBe(`${zw}${zw}tail ${NEUTRALIZED}`);
+    });
+
+    // The fold as it was first written, a string and two index arrays built a character at a time: the stretch-wise fold
+    // must cut exactly where it did.
+    const referenceNeutralize = (body: string): string => {
+        const ignorable = new Set([0x200b, 0x200c, 0x200d, 0x2060, 0xfeff, 0x00ad]);
+        const foldOne = (char: string): string => {
+            const code = char.charCodeAt(0);
+            if ((code >= 0xff21 && code <= 0xff3a) || (code >= 0xff41 && code <= 0xff5a)) {
+                return String.fromCharCode(code - 0xfee0);
+            }
+            return code === 0xff1c || code === 0x2039 || code === 0x00ab ? "<" : code === 0xff1e || code === 0x203a || code === 0x00bb ? ">" : char;
+        };
+        const fold = (input: string) => {
+            let text = "";
+            const starts: number[] = [];
+            for (let i = 0; i < input.length; i++) {
+                if (!ignorable.has(input.charCodeAt(i))) {
+                    text += foldOne(input[i] ?? "");
+                    starts.push(i);
+                }
+            }
+            return { text, starts };
+        };
+        let text = body;
+        for (const pattern of [/<\s*(?:\/\s*)?untrusted[\s_-]+content\b[^>]*>/gi, /<\s*(?:\/\s*)?(?:system-reminder|task-notification)\b[^>]*>/gi]) {
+            const folded = fold(text);
+            let out = "";
+            let cursor = 0;
+            for (const match of folded.text.matchAll(pattern)) {
+                const start = folded.starts[match.index] ?? 0;
+                const end = (folded.starts[match.index + match[0].length - 1] ?? 0) + 1;
+                if (start >= cursor) {
+                    out += text.slice(cursor, start) + NEUTRALIZED;
+                    cursor = end;
+                }
+            }
+            text = out + text.slice(cursor);
+        }
+        const folded = fold(text);
+        const tail = /<\s*(?:\/\s*)?untrusted[\s_-]+content\b[^>]*$/i.exec(folded.text);
+        return tail === null ? text : text.slice(0, folded.starts[tail.index]) + NEUTRALIZED;
+    };
+
+    test("the stretch-wise fold cuts where a character-at-a-time fold does, over thousands of mixed bodies", () => {
+        const pieces = ["<", ">", "/", " ", "untrusted", "-content", "content", "system-reminder", "task-notification", 'id="7"', "plain words ", "\n"];
+        const odd = ["​", "‌", "‍", "⁠", "﻿", "­", "＜", "＞", "‹", "›", "«", "»", "Ｕ", "ｎ"];
+        let seed = 7;
+        const next = (below: number): number => {
+            seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+            return seed % below;
+        };
+        for (let round = 0; round < 3000; round++) {
+            let body = "";
+            const length = 1 + next(24);
+            for (let i = 0; i < length; i++) {
+                body += next(3) === 0 ? (odd[next(odd.length)] ?? "") : (pieces[next(pieces.length)] ?? "");
+            }
+            expect(neutralizeOutsideText(body), JSON.stringify(body)).toBe(referenceNeutralize(body));
+        }
+    });
 });
 
 describe("neutralizeOutsideText on a hostile body", () => {

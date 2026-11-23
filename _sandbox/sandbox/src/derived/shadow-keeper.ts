@@ -112,6 +112,62 @@ const readHead = async (path: string): Promise<string | undefined> => {
 
 const listDir = (dir: string): Promise<Dirent[]> => readdir(dir, { withFileTypes: true }).catch((): Dirent[] => []);
 
+interface FileqRun {
+    readonly exec: ExecFn;
+    readonly root: string;
+    readonly env: NodeJS.ProcessEnv;
+    readonly logger: ShadowKeeperDeps["logger"];
+    readonly signal: AbortSignal;
+}
+
+// One `fileq derive` of a batch, nice'd where `nice` exists, in a background slot; answers what it printed. Throws only
+// when there is no fileq to run.
+const deriveBatch = async (run: FileqRun, batch: readonly string[]): Promise<string> => {
+    const args = ["derive", "--json", "--ocr-pages", String(KEEPER_OCR_PAGES), ...batch];
+    const nice = await onPath("nice");
+    const options = { timeout: BATCH_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER, cwd: run.root, env: run.env, signal: run.signal };
+    try {
+        const child = (): Promise<{ stdout: string }> => (nice ? run.exec("nice", ["-n", "19", "fileq", ...args], options) : run.exec("fileq", args, options));
+        return (await withFileqSlot(child, "background")).stdout;
+    } catch (error) {
+        // Stopped on purpose: the files it had not finished are asked for again when they change or on the next sweep.
+        if (run.signal.aborted) {
+            return stdoutOf(error);
+        }
+        if (isMissingBinary(error)) {
+            throw error;
+        }
+        // Exit 1 is "nothing here was derivable", and its lines still say which; anything else ends this batch.
+        const failure = runFailure(error);
+        if (failure !== undefined) {
+            run.logger.warn({ files: batch.length, failure }, "shadow keeper: a fileq run failed; its files are tried again when they change");
+        }
+        return stdoutOf(error);
+    }
+};
+
+// Shadows whose file is gone, removed: any shadow, a picture's someone opened as much as a document's. Answers how many.
+const pruneOrphans = async (root: string, derivedRoot: string, isStopped: () => boolean): Promise<number> => {
+    let removed = 0;
+    const walk = async (dir: string, rel: string): Promise<void> => {
+        for (const entry of await listDir(dir)) {
+            // `.by-hash` (the content cache) and `.gitignore` are fileq's own, not shadows.
+            if (isStopped() || (rel === "" && entry.name.startsWith("."))) {
+                continue;
+            }
+            const relPath = rel === "" ? entry.name : `${rel}/${entry.name}`;
+            if (entry.isDirectory()) {
+                await walk(join(dir, entry.name), relPath);
+            } else if (entry.name.endsWith(".md") && (await presenceOf(join(root, relPath.slice(0, -3)))).gone) {
+                await rm(join(dir, entry.name), { force: true });
+                removed += 1;
+            }
+        }
+    };
+    await walk(derivedRoot, "");
+    return removed;
+};
+
 export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
     const exec = deps.exec ?? defaultExec;
     const maxDocuments = deps.limits?.maxDocuments ?? MAX_DOCUMENTS;
@@ -130,6 +186,8 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
     const overflow = new Delayer<SweepReport>(OVERFLOW_SWEEP_MS, { unref: true });
     // What the last sweep found the setting to be; `reconsider` sweeps on its way from off to on.
     let lastState: SweepReport["state"] | undefined;
+    // The fileq run in hand, stopped when the keeper stops or the setting goes off: a batch can be hours of OCR.
+    let current: AbortController | undefined;
 
     // Whether a document's shadow must be rendered (again): the whole hash-free freshness test.
     const needsRender = async (relPath: string): Promise<boolean> => {
@@ -160,30 +218,17 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
         return !shadow.gone || folderPresent;
     };
 
-    // One fileq run, nice'd where `nice` exists, in a background slot; answers what it printed.
-    const runFileq = async (batch: readonly string[]): Promise<string> => {
-        const args = ["derive", "--json", "--ocr-pages", String(KEEPER_OCR_PAGES), ...batch];
-        const nice = await onPath("nice");
-        const options = { timeout: BATCH_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER, cwd: deps.root, env: childEnv };
-        try {
-            const run = (): Promise<{ stdout: string }> => (nice ? exec("nice", ["-n", "19", "fileq", ...args], options) : exec("fileq", args, options));
-            return (await withFileqSlot(run, "background")).stdout;
-        } catch (error) {
-            if (isMissingBinary(error)) {
-                throw error;
-            }
-            // Exit 1 is "nothing here was derivable", and its lines still say which; anything else ends this batch.
-            const failure = runFailure(error);
-            if (failure !== undefined) {
-                deps.logger.warn({ files: batch.length, failure }, "shadow keeper: a fileq run failed; its files are tried again when they change");
-            }
-            return stdoutOf(error);
-        }
-    };
-
     // One batch through fileq; a file it refused is remembered so it is not asked again until it changes.
     const renderBatch = async (batch: readonly string[]): Promise<void> => {
-        for (const outcome of outcomesOf(await runFileq(batch))) {
+        const controller = new AbortController();
+        current = controller;
+        let printed: string;
+        try {
+            printed = await deriveBatch({ exec, root: deps.root, env: childEnv, logger: deps.logger, signal: controller.signal }, batch);
+        } finally {
+            current = undefined;
+        }
+        for (const outcome of outcomesOf(printed)) {
             if (outcome.kind !== "skipped" || outcome.relPath === undefined || outcome.reason === "missing") {
                 continue;
             }
@@ -218,28 +263,6 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
             draining = undefined;
         });
         return draining;
-    };
-
-    // Shadows whose file is gone, removed: any shadow, a picture's someone opened as much as a document's.
-    const pruneOrphans = async (): Promise<number> => {
-        let removed = 0;
-        const walk = async (dir: string, rel: string): Promise<void> => {
-            for (const entry of await listDir(dir)) {
-                // `.by-hash` (the content cache) and `.gitignore` are fileq's own, not shadows.
-                if (stopped || (rel === "" && entry.name.startsWith("."))) {
-                    continue;
-                }
-                const relPath = rel === "" ? entry.name : `${rel}/${entry.name}`;
-                if (entry.isDirectory()) {
-                    await walk(join(dir, entry.name), relPath);
-                } else if (entry.name.endsWith(".md") && (await presenceOf(join(deps.root, relPath.slice(0, -3)))).gone) {
-                    await rm(join(dir, entry.name), { force: true });
-                    removed += 1;
-                }
-            }
-        };
-        await walk(derivedRoot, "");
-        return removed;
     };
 
     // Every document the keeper looks after, up to one past the cap; stops descending once over it.
@@ -288,7 +311,7 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
             return { state: "no-fileq", documents: 0, queued: 0, removed: 0 };
         }
         stamps = read;
-        const removed = await pruneOrphans();
+        const removed = await pruneOrphans(deps.root, derivedRoot, () => stopped);
         const documents = await findDocuments();
         if (documents.length > maxDocuments) {
             deps.logger.warn(
@@ -305,7 +328,9 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
         }
         deps.logger.info({ documents: documents.length, stale: stale.length, removed }, "shadow keeper: swept the workspace's documents");
         await enqueue(stale);
-        return { state: stopped ? "stopped" : "done", documents: documents.length, queued: stale.length, removed };
+        // Switched off while it rendered, it left work undone, which switching back on sweeps for again.
+        const state = stopped ? "stopped" : (await deps.enabled()) ? "done" : "off";
+        return { state, documents: documents.length, queued: stale.length, removed };
     };
 
     const settleChanges = async (): Promise<void> => {
@@ -356,7 +381,14 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
     return {
         sweep: guardedSweep,
         reconsider: async () => {
-            if (lastState === "off" && !stopped && (await deps.enabled())) {
+            if (!(await deps.enabled())) {
+                // Off now: the run in hand stops rather than finishing its batch, and switching back on sweeps again
+                // for whatever it and the queue behind it left undone.
+                current?.abort();
+                lastState = "off";
+                return;
+            }
+            if (lastState === "off" && !stopped) {
                 await guardedSweep();
             }
         },
@@ -367,6 +399,7 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
         },
         stop: () => {
             stopped = true;
+            current?.abort();
             queue.clear();
             debounce.dispose();
             overflow.dispose();

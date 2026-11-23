@@ -1,6 +1,6 @@
 /* Every deriver against a real file its real parser accepts, in a temp tree. */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
@@ -142,6 +142,7 @@ describe("pdf", () => {
     // A stand-in `ocr` on PATH, speaking the real one's protocol (_sandbox/ocr/src/cli.ts): `--check` answers
     // whether it can read, and a run prints each image's text with a form feed line between images, leaving an image
     // it could not read empty and exiting 1.
+    // Each run also logs how many images it was handed and how many drawings sat beside them, to `runs.log` in its bin.
     const standIn = (check: number): string => {
         const bin = mkdtempSync(join(tmpdir(), "fileq-ocr-bin-"));
         writeFileSync(
@@ -149,14 +150,15 @@ describe("pdf", () => {
             [
                 "#!/bin/sh",
                 `if [ "$1" = "--check" ]; then exit ${check}; fi`,
+                `echo "$# $(ls "$(dirname "$1")" | wc -l)" >> ${bin}/runs.log`,
                 "status=0",
                 "first=1",
                 'for image in "$@"; do',
                 "  [ $first = 1 ] || printf '\\f\\n'",
                 "  first=0",
                 '  case "$image" in',
-                "    *page-1.png) status=1 ;;",
-                '    *) printf \'TOTAL DUE ON %s\\n\' "$(basename "$image" .png)" ;;',
+                "    *page-1.tif) status=1 ;;",
+                '    *) printf \'TOTAL DUE ON %s\\n\' "$(basename "$image" .tif)" ;;',
                 "  esac",
                 "done",
                 "exit $status",
@@ -166,43 +168,57 @@ describe("pdf", () => {
         );
         return bin;
     };
-    const withPath = async <T>(bin: string, body: () => Promise<T>): Promise<T> => {
+    const runsOf = (bin: string): string[] => readFileSync(join(bin, "runs.log"), "utf8").trim().split("\n");
+    const withPath = async <T>(bin: string, body: (bin: string) => Promise<T>): Promise<T> => {
         const previousPath = process.env["PATH"];
         process.env["PATH"] = `${bin}:${previousPath ?? ""}`;
         try {
-            return await body();
+            return await body(bin);
         } finally {
             process.env["PATH"] = previousPath;
             rmSync(bin, { recursive: true, force: true });
         }
     };
-    // A two-page scan, drawn by Pillow: pages of pixels, no text layer.
-    const scan = (name: string): string => {
+    // A scan, two pages unless asked for more, drawn by Pillow: pages of pixels, no text layer.
+    const scan = (name: string, pages = 2): string => {
         const path = join(root, name);
         execFileSync("python3", [
             "-c",
             [
                 "import sys",
                 "from PIL import Image, ImageDraw",
-                "pages = [Image.new('RGB', (850, 1100), 'white') for _ in range(2)]",
+                "pages = [Image.new('RGB', (850, 1100), 'white') for _ in range(int(sys.argv[2]))]",
                 "for page in pages: ImageDraw.Draw(page).rectangle((100, 100, 700, 160), fill='black')",
                 "pages[0].save(sys.argv[1], save_all=True, append_images=pages[1:], resolution=100.0)",
             ].join("\n"),
             path,
+            String(pages),
         ]);
         return path;
     };
 
     /* fileq's half of the OCR tier, wherever poppler and Pillow are (ci-base carries both): the pages drawn and handed
-       to `ocr` in one run, each page keeping its own text, an unreadable page left empty in its place. */
+       to `ocr` a chunk at a time, each page keeping its own text, an unreadable page left empty in its place. */
     const poppler = requires(onPath("pdftoppm") && pillow(), "pdftoppm on PATH and python3 with Pillow");
-    test.skipIf(!poppler.runs)(poppler.title("a scan's pages go to ocr in one run, and each keeps its own text"), async () => {
+    test.skipIf(!poppler.runs)(poppler.title("a scan's pages go to ocr together, and each keeps its own text"), async () => {
         const path = scan("two-pages.pdf");
-        await withPath(standIn(0), async () => {
+        await withPath(standIn(0), async (bin) => {
             expect(pdfDeriver.name).toBe("pdf+ppocr");
             const doc = await pdfDeriver.derive(path);
             expect(doc.markdown).toBe("## Page 1\n\n(no text on this page)\n\n## Page 2\n\nTOTAL DUE ON page-2");
             expect(doc.notes.join(" ")).toContain("recognised by OCR (PaddleOCR) on 2 of 2 pages");
+            expect(runsOf(bin)).toEqual(["2 2"]);
+        });
+    });
+
+    test.skipIf(!poppler.runs)(poppler.title("a long scan is read eight pages a run, in order, with one chunk's drawings on disk at a time"), async () => {
+        const path = scan("eleven-pages.pdf", 11);
+        await withPath(standIn(0), async (bin) => {
+            const doc = await pdfDeriver.derive(path);
+            const pageTexts = [...doc.markdown.matchAll(/^TOTAL DUE ON (page-\d+)$/gm)].map((match) => match[1]);
+            expect(pageTexts).toEqual(Array.from({ length: 11 }, (_, index) => `page-${String(index + 1).padStart(2, "0")}`));
+            expect(doc.markdown).toContain("## Page 11\n\nTOTAL DUE ON page-11");
+            expect(runsOf(bin)).toEqual(["8 8", "3 3"]);
         });
     });
 

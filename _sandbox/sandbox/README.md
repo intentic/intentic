@@ -1325,7 +1325,9 @@ flowchart LR
   hashing: the shadow's recorded source size and mtime, fileq's current deriver stamp (`fileq stamps`), and whether
   its OCR stopped short of 500 pages. It runs one fileq at a time under `nice`, in the same two slots interactive
   renders use (`derived/fileq.ts`): the keeper holds at most one and never takes one an interactive render is waiting
-  for. A file fileq refuses is not asked again until it changes; more than 20 000 documents is logged and not swept.
+  for. Stopping the daemon, or switching the setting off, stops the fileq run in hand rather than letting its batch
+  (hours of OCR, for long scans) finish; switching back on sweeps again. A file fileq refuses is not asked again until
+  it changes; more than 20 000 documents is logged and not swept.
   The `documentSearch` setting (Sandbox ▸ Agent ▸ Tools, on by default) switches it off, and with it the
   `RIPGREP_CONFIG_PATH=/etc/fileq/ripgreprc` every turn's shell gets (`derived/search-env.ts`), which makes plain `rg`
   read documents through fileq's preprocessor. Claude Code's Grep tool runs its bundled ripgrep with `--no-config`

@@ -11,6 +11,8 @@ export interface ExecOptions {
     /** The child's whole environment; the daemon's own when absent. */
     readonly env?: NodeJS.ProcessEnv;
     readonly cwd?: string;
+    /** Stops the child (SIGTERM) when it aborts. */
+    readonly signal?: AbortSignal;
 }
 
 export type ExecFn = (command: string, args: string[], options: ExecOptions) => Promise<{ stdout: string }>;

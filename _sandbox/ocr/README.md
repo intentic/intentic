@@ -49,7 +49,8 @@ and the command it ships ran out of the daemon's `dist/`.)
 - [src/models.ts](src/models.ts) — where the models live and whether they are installed.
 - [src/raster.ts](src/raster.ts) — decoding an image and the OpenCV-matching resamplings.
 - [src/text-detection.ts](src/text-detection.ts) — the detector's input size and the boxes its probability map becomes.
-- [src/cli.ts](src/cli.ts) — the `ocr` command: one row per line, a form feed between images.
+- [src/cli.ts](src/cli.ts) — the `ocr` command: one row per line, a form feed between images; it stops at the next image once
+  whoever started it is gone.
 
 ## Commands
 

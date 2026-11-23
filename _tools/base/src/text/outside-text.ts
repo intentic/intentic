@@ -59,27 +59,60 @@ const foldChar = (code: number): string | undefined => {
     return ANGLE[code];
 };
 
+// Every character fold touches, so the text between them is copied a stretch at a time and plain text costs one scan.
+const hex = (code: number): string => `\\u${code.toString(16).padStart(4, "0")}`;
+const FOLDABLE = new RegExp(`[${[...IGNORABLE, ...Object.keys(ANGLE).map(Number)].map(hex).join("")}\\uff21-\\uff3a\\uff41-\\uff5a]`, "g");
+
 interface Folded {
     readonly text: string;
-    // For folded index i, the original-string span it came from, so a folded-text match maps back to the original.
-    readonly starts: readonly number[];
-    readonly ends: readonly number[];
+    // Where removed characters shifted the rest: from folded index `at[k]` on, the original index is `shift[k]` further
+    // along, so a folded-text match maps back to the original. Empty when nothing was removed.
+    readonly at: readonly number[];
+    readonly shift: readonly number[];
 }
 
-const fold = (input: string): Folded => {
-    let text = "";
-    const starts: number[] = [];
-    const ends: number[] = [];
-    for (let i = 0; i < input.length; i++) {
-        const code = input.charCodeAt(i);
-        if (IGNORABLE.has(code)) {
-            continue;
+// The original index of folded index `index`: every character folds to exactly one, so only removals move it.
+const originalIndex = (folded: Folded, index: number): number => {
+    let low = 0;
+    let high = folded.at.length;
+    while (low < high) {
+        const middle = (low + high) >>> 1;
+        if ((folded.at[middle] ?? 0) <= index) {
+            low = middle + 1;
+        } else {
+            high = middle;
         }
-        text += foldChar(code) ?? input[i];
-        starts.push(i);
-        ends.push(i + 1);
     }
-    return { text, starts, ends };
+    return index + (low === 0 ? 0 : (folded.shift[low - 1] ?? 0));
+};
+
+// One stretch per foldable character rather than one string per character: a shadow of a 500-page document is
+// megabytes, and building it (and two index arrays) a character at a time cost hundreds of megabytes per pass.
+const fold = (input: string): Folded => {
+    const parts: string[] = [];
+    const at: number[] = [];
+    const shift: number[] = [];
+    let cursor = 0;
+    let removed = 0;
+    for (const match of input.matchAll(FOLDABLE)) {
+        const index = match.index;
+        parts.push(input.slice(cursor, index));
+        const code = input.charCodeAt(index);
+        if (IGNORABLE.has(code)) {
+            removed += 1;
+            // The next kept character lands where this one would have.
+            at.push(index - removed + 1);
+            shift.push(removed);
+        } else {
+            parts.push(foldChar(code) ?? match[0]);
+        }
+        cursor = index + 1;
+    }
+    if (cursor === 0) {
+        return { text: input, at, shift };
+    }
+    parts.push(input.slice(cursor));
+    return { text: parts.join(""), at, shift };
 };
 
 /* ---- what gets neutralized ---- */
@@ -129,9 +162,8 @@ const replaceFolded = (original: string, folded: Folded, pattern: RegExp): strin
     let out = "";
     let cursor = 0;
     for (const match of folded.text.matchAll(pattern)) {
-        const start = folded.starts[match.index] ?? match.index;
-        const last = match.index + match[0].length - 1;
-        const end = folded.ends[last] ?? last + 1;
+        const start = originalIndex(folded, match.index);
+        const end = originalIndex(folded, match.index + match[0].length - 1) + 1;
         if (start < cursor) {
             continue;
         }
@@ -158,7 +190,7 @@ export const neutralizeOutsideText = (body: string): string => {
         const folded = fold(text);
         const tail = MARKER_TAIL.exec(folded.text);
         if (tail !== null) {
-            text = text.slice(0, folded.starts[tail.index] ?? tail.index) + NEUTRALIZED;
+            text = text.slice(0, originalIndex(folded, tail.index)) + NEUTRALIZED;
         }
     }
     // Exact literals, no folding needed; split/join avoids the regex metacharacters these tokens carry.
