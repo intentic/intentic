@@ -506,8 +506,10 @@ flowchart LR
   New agent stands once too: the chat header's + while the chat is open beside the board, the board header's button
   while it is folded into its strip or in a window of its own (`chatPanelLayout.ts` `chatOnScreen`).
   Usage left stands once: in the chat's side rail, under its checklist, once the chat is wide enough for that rail,
-  otherwise as the same one column at the foot of the board's bottom-right lane (`features/agents/fleet/Agents.vue`,
-  `chatPanelLayout.ts` `chatRailOnScreen`). A popped-out
+  otherwise as the same one column at the foot of the board's Finished lane, which is then pinned to the board's visible
+  height and shows only the cards that fit whole above it, the rest in its "N earlier" count, so Usage left never makes
+  the board scroll (`features/agents/fleet/Agents.vue`, `board/view/cornerFit.ts`, `chatPanelLayout.ts`
+  `chatRailOnScreen`). A popped-out
   chat's window draws the same board on its left (`shell/window/FloatingBoard.vue`), and any navigation a press there
   makes goes to the main window. _2026-11-23: until then the chat could also live behind a rail tile as a full-window
   /chat, with a list of chats or the board in its left column and a quick bar elsewhere._

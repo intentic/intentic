@@ -87,8 +87,8 @@ const finishedCards = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)[2]!.querySelectorAll(`[aria-label^="Focus agent:"]:not(.lane-leave-active)`)].map((card) =>
         card.getAttribute(`aria-label`)!.replace(`Focus agent: `, ``),
     );
-// The lane's tail row: a direct child of the section, unlike the header's own buttons.
-const tailRow = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > button`)!.textContent!.trim();
+// The lane's tail row: a direct child of its card box (cornerFit.ts), unlike the header's own buttons.
+const tailRow = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > div > button`)!.textContent!.trim();
 
 it(`keeps the card the docked chat is reading, however far down the lane it is`, async () => {
     seed();

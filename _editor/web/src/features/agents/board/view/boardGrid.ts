@@ -60,8 +60,6 @@ export const boardLayout = (narrow: boolean, underThree: boolean, quiet: QuietLa
     return { kind: underThree ? `paired` : `three` };
 };
 
-const cornerLane = ({ kind, wide }: LaneLayout): FleetLane => (kind === `ledger` && wide !== undefined ? wide : `finished`);
-
 // Where each lane sits in the paired shape: Finished spans both rows of the second column, so the first column's rows
 // size to Attention and Active alone (`grid-rows-[auto_1fr]`: the second row takes whatever Finished needs past them).
 // That needs the rows sized by what they hold: held to the board's height (`h-full`) with the lanes allowed to shrink
@@ -102,10 +100,13 @@ export interface BoardGridHost {
     readonly first: Readonly<Ref<boolean>>;
     readonly waiting: Readonly<Ref<boolean>>;
     readonly dragging: Readonly<Ref<boolean>>;
+    // Something stands in the board's bottom-right corner, at Finished's foot (cornerFit.ts): the board keeps its width's
+    // layout whatever the lanes hold, so Finished keeps the right-hand column that corner needs.
+    readonly anchored: Readonly<Ref<boolean>>;
 }
 
 // One mounted board's lane grid at its measured width, and the Finished fold that keeps the reader where the lane starts.
-export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering, first, waiting, dragging }: BoardGridHost) => {
+export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering, first, waiting, dragging, anchored }: BoardGridHost) => {
     const narrow = useNarrow(board, NARROW_BOARD_REM);
     const underThree = useNarrow(board, PAIRED_BOARD_REM);
     const underRoomy = useNarrow(board, ROOMY_BOARD_REM);
@@ -127,7 +128,7 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
         },
         { immediate: true },
     );
-    const layout = computed(() => boardLayout(narrow.value, underThree.value, judged.value, !underRoomy.value));
+    const layout = computed(() => boardLayout(narrow.value, underThree.value, anchored.value ? LOUD : judged.value, !underRoomy.value));
     const kind = computed(() => layout.value.kind);
     // The paired grid starts at the board's height rather than being held to it (PLACE), and so do the layouts built on it.
     const placed = computed(() => kind.value !== `stacked` && kind.value !== `three`);
@@ -142,9 +143,6 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
     };
     // The ledger's wide lane spans the board, so its cards take two columns of it rather than one line each.
     const spans = (lane: FleetLane): boolean => layout.value.kind === `ledger` && layout.value.wide === lane;
-    // The lane holding the board's bottom-right corner, at whose foot the host's corner slot stands (AgentsView.vue): the
-    // ledger's spanning lane, else Finished, which closes the reading order in every other shape.
-    const corner = computed((): FleetLane => cornerLane(layout.value));
     // An empty lane in a layout that gave its column away says so on its header's line, not on a line of its own; while a
     // card is in hand it keeps the full line, so the lane stays a target worth aiming at.
     const sayInHeader = (lane: FleetLane): boolean => placed.value && !dragging.value && !first.value && saysEmpty(lane);
@@ -163,5 +161,5 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
             lane.scrollIntoView({ block: `start` });
         }
     };
-    return { narrow, placed, laneGrid, placeOf, spans, corner, sayInHeader, toggleFinished };
+    return { narrow, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished };
 };

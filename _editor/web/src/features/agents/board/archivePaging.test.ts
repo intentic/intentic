@@ -90,8 +90,8 @@ const archiveCards = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)[2]!.querySelectorAll(`[aria-label^="Focus agent:"]:not(.lane-leave-active)`)].map((card) =>
         card.getAttribute(`aria-label`)!.replace(`Focus agent: `, ``),
     );
-// The lane's tail: a direct child of the section, unlike the header's own buttons. Absent once the whole pile is drawn.
-const tailRow = (el: HTMLElement): HTMLElement | null => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > button`);
+// The lane's tail: a direct child of its card box (cornerFit.ts), unlike the header's own buttons. Absent once the whole pile is drawn.
+const tailRow = (el: HTMLElement): HTMLElement | null => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > div > button`);
 const openArchive = async (el: HTMLElement): Promise<void> => {
     el.querySelector<HTMLElement>(`[aria-label^="Open the archive"]`)!.click();
     await settle();

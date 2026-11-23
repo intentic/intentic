@@ -19,7 +19,8 @@ import AgentsView from "../board/AgentsView.vue";
 /* USAGE LEFT STANDS ONCE, WHERE THERE IS ROOM FOR IT. The chat beside the board draws it in its own side rail, under its
    checklist, once the chat is wide enough for that rail (ChatPanel.vue `showsRail`). Until then, and while the chat is
    folded into its strip or in a window of its own, it stands in the board's bottom-right corner instead (AgentsView's
-   `corner` slot), the same one column the chat draws, on a card's ground. Until 2026-11-23 it was a strip under the
+   `corner` slot), the same one column the chat draws, on a card's ground, and the Finished lane above it gives up the
+   cards it has no room for, so it never makes the board scroll (cornerFit.ts). Until 2026-11-23 it was a strip under the
    whole board with the providers laid side by side, which read as a table of bars no one could follow. A phone's board is
    a screen of its own, with no room for it. */
 const { mobile } = useDevice();
@@ -51,7 +52,7 @@ useShellChatLink(() => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col" :class="{ 'ground-card bg-card': plain }">
-        <AgentsView class="min-h-0 flex-1">
+        <AgentsView class="min-h-0 flex-1" :with-corner="usageHere">
             <template v-if="usageHere" #corner>
                 <ChatCapacityRail :mine="mine" class="rounded-2xl border border-line bg-card" />
             </template>
