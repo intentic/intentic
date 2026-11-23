@@ -4,14 +4,15 @@ import "@intentic/testing/dom";
 import { installUi } from "@intentic/ui";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// Whether the chat is in the side panel rather than a window of its own, and whether it is folded into its strip: the
-// facts the panel reads from the chat.
+// Whether the chat is in the side panel rather than a window of its own, whether it is folded into its strip, and whether
+// the quick bar holds its composer meanwhile: the facts the panel reads from the chat.
 const chatInSidePanel = ref(true);
 const chatTucked = ref(false);
+const chatParked = ref(false);
 const setChatTucked = (tucked: boolean): void => {
     chatTucked.value = tucked;
 };
-jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel, chatTucked, setChatTucked, showChat: () => setChatTucked(false) }));
+jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel, chatParked, chatTucked, setChatTucked, showChat: () => setChatTucked(false) }));
 // The strip's own marks read the open chats; with none open it draws none.
 jest.mock("../../models/conversations/run/useChat", () => ({ useChat: () => ({ conversations: ref([]) }) }));
 
@@ -19,6 +20,7 @@ const { default: SidePanel } = await import("./SidePanel.vue");
 const { closeAllTabs, closeTab, openBeside, setTucked, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
 const { registerSideView } = await import("../../workbench/side/sideViews");
 const { chatSlot } = await import("../../workbench/window/panelSlots");
+const { focusComposer } = await import("../../models/conversations/tabs/useChat-tabs");
 
 const panel = useSidePanel();
 
@@ -83,6 +85,7 @@ const button = (host: HTMLElement, label: string): HTMLButtonElement | null => h
 beforeEach(() => {
     chatInSidePanel.value = true;
     chatTucked.value = false;
+    chatParked.value = false;
     lent.value = false;
     openedHome.mockClear();
     closeAllTabs();
@@ -141,6 +144,24 @@ it(`folds the chat into its strip and back, never moving the chat to do it`, asy
     expect(strip()).toBeNull();
     expect(host.querySelector(`.side-chat`)?.classList.contains(`invisible`)).toBe(false);
     expect(chatSlot.value).toBe(slot);
+});
+
+// Asking for the caret (New agent, a shortcut) wants a composer on screen: the quick bar's while it holds one, which
+// keeps the page its width, and otherwise the chat's own, out of its strip.
+it(`brings the tucked chat back for the caret, unless the quick bar holds its composer`, async () => {
+    await mount();
+    chatTucked.value = true;
+    chatParked.value = true;
+    await settle();
+
+    focusComposer();
+    await settle();
+    expect(chatTucked.value).toBe(true);
+
+    chatParked.value = false;
+    focusComposer();
+    await settle();
+    expect(chatTucked.value).toBe(false);
 });
 
 it(`gives the tabs the whole column while the chat lives elsewhere`, async () => {

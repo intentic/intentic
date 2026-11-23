@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { type Component, computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import { useSandboxLiveness } from "../../client/sandbox/freshness/queryFreshness";
-import { chatInSidePanel, chatTucked, setChatTucked, showChat } from "../../models/conversations/panel/chatPanelLayout";
+import { chatInSidePanel, chatParked, chatTucked, setChatTucked, showChat } from "../../models/conversations/panel/chatPanelLayout";
 import { composerFocus, focusComposer } from "../../models/conversations/tabs/useChat-tabs";
 import { registerBuiltin } from "../../workbench/commands/builtinCommands";
 import { fileTabMenu, type TabStripActions, tabStripMenu } from "../../workbench/commands/tabMenu";
@@ -77,9 +77,10 @@ const tabsAlone = computed(() => !floating && !beside.value && tabsOnScreen.valu
 const chatFolded = computed(() => !floating && chatInSidePanel.value && chatTucked.value);
 // The chat with the panel to itself: the panel's edge is the chat's, and folds it the way the tabs' edge folds them.
 const chatAlone = computed(() => !floating && !beside.value && !tabsAlone.value && chatInSidePanel.value);
-// Anything asking for the caret (New agent, a shortcut) wants the chat on screen.
+// Anything asking for the caret (New agent, a shortcut) wants the chat's composer on screen: tucked, the quick bar opens
+// with it (ChatQuickBar.vue) and the page keeps its width; otherwise the chat comes out of its strip.
 watch(composerFocus, () => {
-    if (chatInSidePanel.value) {
+    if (chatInSidePanel.value && !chatParked.value) {
         showChat();
     }
 });

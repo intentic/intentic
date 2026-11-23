@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useHomeCommand } from "./commands/useHomeCommand";
-import { masterRail } from "../models/home/masterRail";
+import { masterRail, sandboxBeside } from "../models/home/masterRail";
 import { here, isPage, page, routeShows, sameScreen } from "../lib/routes/links";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import TourMark from "../features/tour/TourMark.vue";
@@ -44,6 +44,7 @@ import RailProcesses from "./rail/RailProcesses.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
 import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
+import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
 import { setSplit, sideDocked } from "../workbench/side/sideTabs";
 import { besideChat, besideFills, sideColumnShown, sideShown, sideTucked, TUCKED_STRIP_PX } from "./side/sideLayout";
@@ -450,6 +451,10 @@ useGettingStarted();
                 <div ref="terminalSlot" class="contents"></div>
             </SandboxGate>
         </main>
+
+        <!-- The tucked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
+             opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
+        <ChatQuickBar v-if="sandboxBeside" />
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />

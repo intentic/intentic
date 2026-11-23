@@ -25,6 +25,16 @@ export const toggleChatTucked = (): void => setChatTucked(!chatTucked.value);
 /** A press that asks to see a chat's turns (a board card's, a run it follows): the chat comes back out of its strip. */
 export const showChat = (): void => setChatTucked(false);
 /**
+ * This window draws the chat but no surface on it shows the panel: tucked into its strip, and not on Home's page, which
+ * lends the chat its own. Only around a page of a sandbox (ShellDesktop.vue mounts the bar under `sandboxBeside`, as
+ * PoppablePanels.vue draws the panel). The quick bar (ChatQuickBar.vue) then holds the chat's composer over the
+ * page, so writing to the agent never costs the page its width. A chat in a window of its own is not parked: that window
+ * is the chat, and a second composer here would only compete with it.
+ */
+export const chatParked = computed(
+    () => floating.shows.value && chatInSidePanel.value && chatTucked.value && chatFullSlot.value === null,
+);
+/**
  * The chat stands open beside the page in this window: docked and not folded into its strip, or this window being the
  * chat's own, where the board stands beside it (shell/window/FloatingBoard.vue). Its header's + is then a press away, so the
  * board offers no New agent of its own (AgentsView.vue).

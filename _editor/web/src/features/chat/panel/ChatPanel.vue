@@ -35,9 +35,12 @@ import { useT } from "@intentic/ui/i18n";
 // `tabs: false` draws no header of its own, for the one caller (mobile agent route) whose surface already has
 // one — everything that bar offered is a tap away on the same form factor. A prop, not a `mobile` check, since
 // docked/floating panels need their own strip regardless of device.
+// `bar` is the quick bar's presentation (ChatQuickBar): the focused chat's composer and nothing else, floating over the
+// page while the chat is tucked away. It implies no header and no transcript: the bar is a scratch pad, and the chat
+// out of its strip is where the turns are read.
 // `only` draws that one conversation and nothing else, whatever the shell's own chat holds or focuses: the master view's
 // one chat with a sandbox (models/home/homeChat.ts), which is not among the shell's tabs at all.
-const { tabs = true, only } = defineProps<{ tabs?: boolean; only?: Conversation | undefined }>();
+const { tabs = true, bar = false, only } = defineProps<{ tabs?: boolean; bar?: boolean; only?: Conversation | undefined }>();
 
 const t = useT();
 
@@ -53,12 +56,16 @@ const root = ref<HTMLElement>();
 // shares the same floor. Written as a custom property in app pixels, not rem, so it can't drift from the column's
 // own stored width.
 const minPaneLength = uiLength(MIN_PANE_PX);
+// What the panel lies on. The bar is one composer floating over someone else's page, so it paints nothing: the box
+// draws its own edge, and it does not clip, so the `@` and `/` lists can stand above a composer with no room over it.
+const ground = computed(() => (bar ? `` : `ground-card h-full overflow-hidden bg-card`));
 // Which chats are on screen: the store holds the pane set, but a window only draws as many as fit at their floor.
 // A docked panel now shows a split too, once wide enough — the set survives docking, so popping back out restores
 // the split.
 const dockedRoom = (count: number): number => count * MIN_PANE_PX;
 const paneIds = computed(() => {
-    if (mobile.value) {
+    // The bar is one composer; a split there would be two boxes with no transcripts to tell them apart.
+    if (mobile.value || bar) {
         return [activeId.value];
     }
     return chatWide.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
@@ -82,8 +89,9 @@ const split = computed(() => shown.value.length > 1);
 // The column a subagent is shown in, by its parent (subagentView.ts): the strip has no room to step into one. The view
 // lasts only while that parent's column is drawn.
 const subagentIn = (conversation: Conversation): string | undefined =>
-    subagentOnScreen.value?.parentId === conversation.conversationId ? subagentOnScreen.value.id : undefined;
+    !bar && subagentOnScreen.value?.parentId === conversation.conversationId ? subagentOnScreen.value.id : undefined;
 // The board's card for a conversation sealed from this reader (schemas/seal.ts), whose gate is drawn instead of its chat.
+// The quick bar has no room for a gate, and a composer there would only be refused: it draws nothing.
 const { agentById } = useAgents();
 const sealedCard = (conversation: Conversation) => {
     const card = agentById(conversation.conversationId);
@@ -144,6 +152,7 @@ onBeforeUnmount(stopMeasuring);
 const capacityRail = useCapacityRail();
 const showsRail = computed(
     () =>
+        !bar &&
         !mobile.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         (!floating.value || shownSideTabs.value.length === 0) &&
@@ -284,19 +293,19 @@ watch(
          without a tab row (workbench/window/controlsReserve.ts). -->
     <div
         ref="root"
-        class="chat-panel ground-card relative flex h-full min-h-0 flex-col overflow-hidden bg-card"
-        :class="{ 'chat-panel-wide': chatWide }"
+        class="chat-panel relative flex min-h-0 flex-col"
+        :class="[ground, { 'chat-panel-wide': chatWide && !bar }]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px`, '--capacity-balance': tabs ? `0px` : `var(--capacity-rail)` }"
         data-window-band
     >
-        <template v-if="tabs">
+        <template v-if="tabs && !bar">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
             <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
         </template>
 
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col pt-(--window-band)">
             <!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
-            <div v-if="barRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+            <div v-if="barRun && !bar" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button
                     v-if="shownRun && !showingGraph"
                     size="small"
@@ -325,7 +334,7 @@ watch(
             </div>
 
             <!-- The diagram takes the whole pane area — it's the map of those columns, so showing both answers one question twice. -->
-            <ChatRunGraph v-if="showingGraph && shownRun" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
+            <ChatRunGraph v-if="showingGraph && shownRun && !bar" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
 
             <!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
             <!-- One pane in the panel has nothing to scroll to either: it takes the row's width (the floor is a split's), and
@@ -336,13 +345,13 @@ watch(
                 v-else
                 ref="paneRow"
                 class="chat-panes flex min-h-0 min-w-0 flex-1"
-                :class="split ? 'overflow-x-auto overflow-y-hidden' : 'overflow-clip'"
+                :class="bar ? 'overflow-visible' : split ? 'overflow-x-auto overflow-y-hidden' : 'overflow-clip'"
                 :style="{ '--min-pane': split ? minPaneLength : `0px` }"
             >
                 <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <template v-for="conversation in shown" :key="conversation.conversationId">
                     <!-- A private conversation the reader cannot read: its gate stands in the chat's place, and no transcript is asked for. -->
-                    <SealGate v-if="sealedCard(conversation) !== undefined" :conversation-id="conversation.conversationId" />
+                    <SealGate v-if="sealedCard(conversation) !== undefined && !bar" :conversation-id="conversation.conversationId" />
                     <!-- Kept mounted while a subagent is shown over it, so stepping back finds the parent where it was left. -->
                     <ChatPane
                         v-else-if="sealedCard(conversation) === undefined"
@@ -350,6 +359,7 @@ watch(
                         :conversation="conversation"
                         :focused="only !== undefined || conversation.conversationId === activeId"
                         :closable="split"
+                        :strip="bar"
                         @focus="only === undefined && setActive(conversation.conversationId)"
                         @close="closePane(conversation.conversationId)"
                     />

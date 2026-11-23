@@ -4158,6 +4158,14 @@
             "sendNow": "Wyślij teraz",
             "continuation": "Kontynuuj od miejsca, w którym zatrzymała się ostatnia tura"
         },
+        "chatQuickBar": {
+            "agentWaitingForYou": "Twój agent na Ciebie czeka",
+            "openChatAgentWaiting": "Otwórz czat: Twój agent czeka na odpowiedź",
+            "openFullChat": "Otwórz cały czat",
+            "titleWaitingForYou": "{title} · czeka na Ciebie",
+            "writeToAgentHere": "Pisz do swojego agenta stąd",
+            "you": "Ty"
+        },
         "chatRailChecklist": {
             "chatsChecklist": "Lista zadań tego czatu",
             "checklist": "Lista zadań",

@@ -4158,6 +4158,14 @@
             "sendNow": "Send now",
             "continuation": "Continue from where the last turn stopped"
         },
+        "chatQuickBar": {
+            "agentWaitingForYou": "Your agent is waiting for you",
+            "openChatAgentWaiting": "Open the chat: your agent is waiting for an answer",
+            "openFullChat": "Open the full chat",
+            "titleWaitingForYou": "{title} · waiting for you",
+            "writeToAgentHere": "Write to your agent from here",
+            "you": "You"
+        },
         "chatRailChecklist": {
             "chatsChecklist": "This chat's checklist",
             "checklist": "Checklist",

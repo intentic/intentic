@@ -5,6 +5,7 @@ import { homeConversation } from "../../models/home/homeChat";
 import { computed, defineAsyncComponent, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useChatFloating } from "../../models/conversations/panel/chatFloating";
+import { chatParked } from "../../models/conversations/panel/chatPanelLayout";
 import { globalTerminalSource, useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
 import { BROWSERS_SIDE_VIEW, browsersFront, browsersOpened } from "../../workbench/browsers/browsersSurface";
@@ -15,7 +16,7 @@ import { loadChunk } from "@intentic/ui/chunk";
 import AccessGate from "../../components/access/AccessGate.vue";
 import { useHeldPlace } from "../../components/heldPlace";
 import { t } from "@intentic/ui/i18n";
-import { browsersSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
+import { browsersSlot, chatBarSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
 import { tabsOfView } from "../../workbench/side/sideTabs";
 
 // The terminal and the live browser arrive the first time each is opened, not with this chunk: every desktop window
@@ -43,9 +44,12 @@ park.style.cssText = `position:fixed;left:-20000px;top:0;width:900px;height:700p
 document.body.append(park);
 onUnmounted(() => park.remove());
 
-// Whole-surface slot first, then the side panel's column, then the parking stage. The side panel draws its own edge and
-// seam around the chat, as it does around everything it holds.
-const chatTarget = computed(() => chatFullSlot.value ?? chatSlot.value ?? park);
+// Whole-surface slot first; tucked into its strip, the quick bar (ChatQuickBar.vue), which holds the composer alone over
+// the page; then the side panel's column, then the parking stage. The side panel draws its own edge and seam around the
+// chat, as it does around everything it holds.
+const chatTarget = computed(() => chatFullSlot.value ?? (chatParked.value ? chatBarSlot.value : null) ?? chatSlot.value ?? park);
+// Read off where it actually went, like every other presentation question here: the bar takes the composer alone.
+const inBar = computed(() => chatBarSlot.value !== null && chatTarget.value === chatBarSlot.value);
 // The master view lends its one chat its page (features/home/HomeChatSlot.vue): the home conversation, drawn here
 // whether or not the shell's own chat is popped out into a window of its own.
 const homeChat = computed(() => router.currentRoute.value.name === `home` && chatFullSlot.value !== null && homeConversation.value !== undefined);
@@ -71,7 +75,7 @@ browsers.onDocked(() => {
         <!-- In the master view, its one chat: the same panel a popped-out window draws, without the tab row (HomeChatSlot.vue).
              Around a page of a sandbox (sandboxBeside), the sandbox's own chat, the rail folded or unrolled. -->
         <ChatPanel v-if="homeChat" :tabs="false" :only="homeConversation" style="grid-area: chat" />
-        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" style="grid-area: chat" />
+        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <div

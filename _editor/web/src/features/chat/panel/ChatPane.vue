@@ -94,6 +94,13 @@ const props = defineProps<{
     focused: boolean;
     // Whether this pane's column can be closed back into a single view; decided by the panel, not this chat.
     closable: boolean;
+    // This pane is the quick bar's scratch pad (ChatQuickBar): the composer alone, so writing from another area is this
+    // chat's own composer rather than a second one. The turns are withheld, never the chat: the stream, the draft and
+    // every pick are the same conversation the full surface shows. So is everything the pad has no reader for, over a
+    // page they are looking at: the status row, the cards waiting on them, what the turn left running, and the
+    // overflow and hands-free voice. The model and its effort stay, since they decide how the agent answers, and a
+    // control set away from its default still rides the row, since it changes what Send does.
+    strip?: boolean;
 }>();
 // Working in a pane focuses it (a click, or the caret arriving via Tab or a closed picker); the × ends the column.
 const emit = defineEmits<{ focus: []; close: [] }>();
@@ -165,6 +172,7 @@ const { pin, realizing } = usePaneScroll({
     scroller,
     content,
     conversationId: () => props.conversation.conversationId,
+    bare: () => props.strip,
     messageCount: () => messages.value.length,
     streaming,
     grow,
@@ -375,7 +383,7 @@ const wideActions = computed(
 const pillNamed = computed(() => modelReading.value.unset || onTrial.value);
 // A narrow composer gives the mic and Send one slot (`composer-yields` hides the other there): Send steps aside while there is
 // nothing to send and the mic is there to take it, since a greyed Send is the row's one press that does nothing.
-const micShares = computed(() => !staged.value);
+const micShares = computed(() => !props.strip && !staged.value);
 // An empty box is as tall as its placeholder, and the placeholder changes under it (a plan waiting, a turn going live), so
 // it is measured again then: sized for the old one, a phone's two-line ask is cut off after its first line.
 watch(composerPlaceholder, () => grow(), { flush: `post` });
@@ -512,11 +520,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <div
             ref="scroller"
             class="chat-scroller flex flex-1 flex-col"
-            :class="['overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing }]"
+            :class="[strip ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <!-- The scratch pad withholds the turns, so no message component mounts and the scroller shrinks to the composer. -->
-                <ChatPaneTurns>
+                <ChatPaneTurns v-if="!strip">
                     <template #empty>
                         <ChatPaneEmpty :unset="modelReading.unset" :on-trial="onTrial" :provider-name="providerName" :plain="plainWords" />
                     </template>
@@ -528,7 +536,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     ref="footer"
                     data-lane-floor
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] flex-col gap-2"
-                    :class="['px-2 pt-3', mobile ? 'pb-2' : connected ? 'pb-5' : 'pb-3']"
+                    :class="strip ? 'chat-footer-strip' : ['px-2 pt-3', mobile ? 'pb-2' : connected ? 'pb-5' : 'pb-3']"
                 >
                     <!-- The composer stands whatever this chat can send with (no model: ChatPaneNotices), unless the reader cannot drive. -->
                     <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>
@@ -537,9 +545,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
                         <!-- The turn stopped before finishing, and the way on (ChatContinueStrip), or the ways out of a wall a press would only hit again (ChatWayOutStrip); a subagent's bar carries its own Continue instead. -->
-                        <ChatWayOutStrip v-if="wayOut !== undefined && !subagentOf && !readOnly" :way-out="wayOut" />
+                        <ChatWayOutStrip v-if="wayOut !== undefined && !subagentOf && !strip && !readOnly" :way-out="wayOut" />
                         <ChatContinueStrip
-                            v-if="!subagentOf && !readOnly"
+                            v-if="!subagentOf && !strip && !readOnly"
                             :visible="continueStrip && wayOut === undefined"
                             :ready="pickUpPressable"
                             :enter-continues="continueOffer"
@@ -549,9 +557,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             @continue-at-reopen="continueAtReopen"
                         />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
-                        <ChatLeftRunning />
+                        <ChatLeftRunning v-if="!strip" />
                         <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
-                        <ChatWaitingBar :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()" />
+                        <ChatWaitingBar v-if="!strip" :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()" />
                         <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's, a stop, or the continue that undoes one. -->
                         <ChatSubagentBar
                             v-if="subagentOf"
@@ -566,10 +574,12 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             @write="writeTo(conversation)"
                         />
                         <template v-else-if="readOnly">
-                            <ChatAgentStatus />
+                            <ChatAgentStatus v-if="!strip" />
                             <AccessNote :reason="readOnly" :place="t(`shared.chat`)" class="px-1 py-1.5" />
                         </template>
                         <template v-else>
+                            <!-- What the queue holds is drawn at the transcript's foot (ChatPaneTurns); with no transcript, here, a line each. -->
+                            <ChatHeldMessages v-if="strip" compact />
                             <!-- What waits for the next turn: the conversation's queue, the same in every window. -->
                             <ChatQueue />
                             <!-- An armed edit, and the two ways out of it. -->
@@ -577,11 +587,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             <!-- What a `/` command the composer answered itself says back (ChatCommandResult). -->
                             <ChatCommandResult />
                             <!-- A fresh session not sent yet: whose work it opens on, what it is for, and the way back to a plain chat. -->
-                            <ChatFreshDraft />
+                            <ChatFreshDraft v-if="!strip" />
                             <!-- What the runtime's extensions show while the turn runs: a status line each, gone when it ends (ChatAgentStatus). -->
-                            <ChatAgentStatus />
+                            <ChatAgentStatus v-if="!strip" />
                             <!-- A new chat while this machine is busy and another of the owner's has room: the offer, or the move already made (ChatFleetSuggestion). -->
-                            <ChatFleetSuggestion :conversation="conversation" @placed="flash(`placement`)" />
+                            <ChatFleetSuggestion v-if="!strip" :conversation="conversation" @placed="flash(`placement`)" />
                             <!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                             <form
                                 ref="composerForm"
@@ -590,7 +600,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 @submit.prevent="submit()"
                             >
                                 <!-- The getting-started mark for the first agent, on the composer that sends it; the board's slot outranks it when both are on screen. -->
-                                <TourMark step="agent" place="composer" :priority="2" side="top" class="absolute -top-2 right-3 z-10" />
+                                <TourMark v-if="!strip" step="agent" place="composer" :priority="2" side="top" class="absolute -top-2 right-3 z-10" />
                                 <ChatMentionPopover
                                     v-if="mentionOpen"
                                     ref="mentionPopover"
@@ -840,7 +850,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
 
                                         <!-- The overflow lists shaping controls that remain at their defaults. -->
                                         <button
-                                            v-if="moreRows.length > 0"
+                                            v-if="moreRows.length > 0 && !strip"
                                             ref="morePill"
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
@@ -858,7 +868,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                              and Send one slot between them, the way a phone's messengers do: the mic while there is nothing to send,
                                              Send from the first keystroke, and the mic again for as long as it is listening. -->
                                         <button
-                                           
+                                            v-if="!strip"
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                             :class="{ 'composer-active': voiceOn, 'composer-yields': staged && !voiceOn }"
@@ -1008,11 +1018,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         </div>
 
         <!-- "Should have been masked" beside a value selected in one message: the press floats over the transcript, mounted once per pane. -->
-        <LeakSelectionReport :root="scroller" :conversation-id="conversation.conversationId" />
+        <LeakSelectionReport v-if="!strip" :root="scroller" :conversation-id="conversation.conversationId" />
 
         <!-- The pane's status bar, outside the scroller: about the pane (context, subscription, daemon liveness), not the message. Withheld
              from the strip; its hints and refusals say nothing where the subagent bar or the read-only line stands in the composer's place. -->
-        <ChatPaneStatus v-if="connected" :block="subagentOf || readOnly ? undefined : statusBlock" :hint="subagentOf || readOnly ? `` : composerHint" />
+        <ChatPaneStatus v-if="connected && !strip" :block="subagentOf || readOnly ? undefined : statusBlock" :hint="subagentOf || readOnly ? `` : composerHint" />
 
         <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay
