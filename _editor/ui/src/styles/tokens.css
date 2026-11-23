@@ -93,6 +93,9 @@
 :root {
     --ui-radius: var(--radius-lg);
 
+    /* The top of every full-height column (`.view-header`, utilities.css): room for an h-7 (1.75rem) control with air above and below. */
+    --bar-height: 2.25rem;
+
     --ui-page-padding: calc(var(--spacing) * 6);
     --ui-page-max-width: 56rem;
 

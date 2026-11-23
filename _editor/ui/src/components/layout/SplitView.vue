@@ -92,52 +92,57 @@ const hasDetailHead = computed(() => (description !== undefined && description !
                  the top of the scroll in `page` mode and scroll among themselves in either. -->
             <div class="flex shrink-0 flex-col border-r border-line bg-card" :class="[RAIL, scroll === `panes` ? `min-h-0` : ``]">
                 <div
-                    class="flex min-h-0 flex-col py-(--ui-page-padding) pl-4 pr-2"
+                    class="flex min-h-0 flex-col"
                     :class="scroll === `page` ? `sticky top-0 max-h-dvh` : `flex-1`"
                     :style="viewport === undefined ? undefined : { maxHeight: viewport }"
                 >
-                    <!-- WHAT THIS INDEX IS ("Sandbox settings", "Capabilities"), at a column heading's size rather than a page's:
-                         the body beside it carries its own headings, and a 2xl name in a 16rem column outweighed all of them. Never
-                         whose it is: the shell's rail already wears the sandbox's face and the overview its name, and a third copy
-                         of either here was noise (2026-11-09). -->
-                    <header class="ui-page-header mb-4 flex min-h-9 shrink-0 items-center gap-3 pl-1 pr-2">
+                    <!-- WHAT THIS INDEX IS ("Sandbox settings", "Capabilities"), as the index's segment of the window's top bar
+                         (`.view-header`, utilities.css), at a column heading's size: the body beside it carries its own headings.
+                         Never whose it is: the shell's rail already wears the sandbox's face and the overview its name, and a
+                         third copy of either here was noise (2026-11-09). -->
+                    <header class="view-header flex items-center gap-2 pl-5 pr-2">
                         <button
                             v-if="back"
                             type="button"
-                            :class="ui.iconButton({ size: `md` }, `-mr-1 shrink-0`)"
+                            :class="ui.iconButton({ size: `md` }, `-ml-2 -mr-1 shrink-0`)"
                             :aria-label="back.label"
                             @click="back.go()"
                         >
                             <Icon name="arrow-left" />
                         </button>
-                        <h1 class="min-w-0 flex-1 truncate text-base leading-tight font-semibold">{{ title }}</h1>
+                        <h1 class="min-w-0 flex-1 truncate text-sm font-semibold">{{ title }}</h1>
                         <slot name="info" />
                     </header>
-                    <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+                    <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pb-(--ui-page-padding) pl-4 pr-2 pt-3">
                         <slot name="rail" />
                     </div>
                 </div>
             </div>
-            <div class="flex min-w-0 flex-1 flex-col p-(--ui-page-padding)" :class="scroll === `panes` ? `min-h-0` : ``">
-                <!-- 60rem, the body's width when it sat beside the rail in the 80rem page, so no screen's rows reflow; centred in
-                     what the index leaves, so a wide pane keeps the body in its middle rather than against the index. -->
-                <div
-                    class="mx-auto flex w-full min-w-0 flex-col"
-                    :class="[width === `full` ? `` : `max-w-240`, scroll === `panes` ? `min-h-0 flex-1` : ``]"
-                >
-                    <!-- What the title row carried besides the title: a sentence about what is shown, and its actions, over
-                         the body they act on. `ui-page-header` so the desktop window's buttons find it when it meets their corner. -->
-                    <header
-                        v-if="hasDetailHead"
-                        class="ui-page-header mb-4 flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2"
+            <div class="flex min-w-0 flex-1 flex-col" :class="scroll === `panes` ? `min-h-0` : ``">
+                <!-- The body's segment of the top bar, empty: the line runs on from the index to the window's edge, and the body's
+                     own head (its sentence and actions) stays over what it acts on. Pinned while the page scrolls under it. -->
+                <div class="view-header" :class="scroll === `page` ? `sticky top-0 z-10` : ``"></div>
+                <div class="flex min-w-0 flex-1 flex-col p-(--ui-page-padding)" :class="scroll === `panes` ? `min-h-0` : ``">
+                    <!-- 60rem, the body's width when it sat beside the rail in the 80rem page, so no screen's rows reflow; centred in
+                         what the index leaves, so a wide pane keeps the body in its middle rather than against the index. -->
+                    <div
+                        class="mx-auto flex w-full min-w-0 flex-col"
+                        :class="[width === `full` ? `` : `max-w-240`, scroll === `panes` ? `min-h-0 flex-1` : ``]"
                     >
-                        <p v-if="description" class="min-w-0 flex-auto text-sm text-muted">{{ description }}</p>
-                        <div v-if="$slots[`actions`]" class="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                            <slot name="actions" />
-                        </div>
-                    </header>
-                    <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
-                    <slot name="detail" :compact="false" />
+                        <!-- What the title row carried besides the title: a sentence about what is shown, and its actions, over
+                             the body they act on. -->
+                        <header
+                            v-if="hasDetailHead"
+                            class="ui-page-header mb-4 flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2"
+                        >
+                            <p v-if="description" class="min-w-0 flex-auto text-sm text-muted">{{ description }}</p>
+                            <div v-if="$slots[`actions`]" class="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                                <slot name="actions" />
+                            </div>
+                        </header>
+                        <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
+                        <slot name="detail" :compact="false" />
+                    </div>
                 </div>
             </div>
         </div>

@@ -1245,8 +1245,8 @@ const { floats } = useBrowsersFloating();
         </div>
 
         <!-- The toolbar: history, the address bar that is also the search box, what the tab in front owns, and the menu. -->
-        <!-- The one column bar that keeps its rule (styles.css `.view-header`): the page under it is not ours and may be the bar's own colour. -->
-        <div class="view-header flex h-10 shrink-0 items-center gap-0.5 border-b border-line bg-card px-2">
+        <!-- A bar's ground and line (`.view-header`, the kit's utilities.css), which matter most here: the page under it is not ours and may be the bar's own colour. -->
+        <div class="view-header flex h-10 shrink-0 items-center gap-0.5 px-2">
             <button
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"

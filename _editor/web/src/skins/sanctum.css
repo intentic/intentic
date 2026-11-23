@@ -41,7 +41,6 @@
 /* THE THREE RULE WEIGHTS, as the site draws them: gold at an ALPHA rather than a lighter grey. */
     --sanctum-rule: rgba(201, 160, 92, 0.14);
     --sanctum-rule-strong: rgba(201, 160, 92, 0.26);
-    --sanctum-whisper: rgba(201, 160, 92, 0.07);
 
     /* Calm multi-scale weathered stone tooth with non-uniform organic variation. */
     --sanctum-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cdefs%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006' numOctaves='3' seed='37' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' seed='19' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.35' k2='0.65' k3='0' k4='-0.06' result='grain'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.55 0 0 0 0 0.52 0 0 0 0 0.48 0.12 0 0 0 -0.035'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='480' height='480' filter='url(%23f)'/%3E%3C/svg%3E");
@@ -220,11 +219,10 @@
         background-image: var(--sanctum-tooth);
     }
 
-    /* A column's bar draws no rule: its fill, or the type in it, is its edge. Only a bar over content that is not ours (a
-       live web page, LiveBrowser.vue) keeps one, since that page may be the bar's own colour; this is its ink. */
-    [data-skin="sanctum"] .view-header.border-b:not(.view-header-wrap) {
-        border-bottom-color: var(--sanctum-rule-strong);
-        box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
+    /* The line under the window's top bar, which runs on from column to column (`.view-header`, the kit's utilities.css), in
+       the stone's own rule. */
+    [data-skin="sanctum"] .view-header {
+        --view-header-rule: var(--sanctum-rule-strong);
     }
 
     /* OVERLAYS Opaque, deliberately and without exception. */

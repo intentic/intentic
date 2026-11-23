@@ -91,7 +91,7 @@ const diff = useLoaded(() => ({
     >
         <!-- The pane's one bar: left slot, open tabs, the file's own context, right slot. `tabbar`: the viewer controls
              hoisted into it size their words against the pane, since the context they sit in is capped to a share of it. -->
-        <div class="view-header @container/tabbar flex items-stretch bg-card">
+        <div class="view-header @container/tabbar flex items-stretch">
             <slot name="lead" />
             <FileTabs
                 :tabs="state.tabs"
@@ -179,8 +179,9 @@ const diff = useLoaded(() => ({
 </template>
 
 <style scoped>
-/* The inactive pane's bar is dimmed; the active pane receives keyboard input. */
-.ws-pane-off .view-header {
+/* The inactive pane's tabs are dimmed, not its segment of the top bar, whose ground and line run on unbroken; the active
+   pane receives keyboard input. */
+.ws-pane-off .view-header > * {
     opacity: 0.75;
 }
 </style>

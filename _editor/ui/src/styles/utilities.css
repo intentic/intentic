@@ -839,3 +839,33 @@
             0 0 0 4px color-mix(in srgb, var(--color-primary-500) 60%, transparent);
     }
 }
+
+/* THE TOP OF A FULL-HEIGHT COLUMN, AND SO ONE SEGMENT OF THE WINDOW'S TOP BAR. Every column that runs the window's height
+   (a board, a sidebar, a pane of tabs, a settings index, the chat) starts with one, so side by side they read as ONE bar
+   across the window, each column filling its own segment with what belongs to it (the Workspace's Files/Changes switch
+   over its tree, a pane's tabs over the pane, the board's filter over the board) and leaving it empty when it has
+   nothing. No bar spans the columns: a segment is its column's own, so it follows that column's width through every
+   resize, split and fold, and goes when the column does. What makes the segments one bar is drawn here, once: the
+   height, the ground and the one line under them, which runs on unbroken from column to column. The line is an inset
+   shadow, as `ui.tabStrip`'s is, so a selected tab's rule (and a file tab joined to its page) is drawn over it rather than
+   a pixel above. Controls in a segment are h-7 or lower, so every segment's controls share one centre line. The desktop
+   app's window buttons take their corner from whichever segment reaches it (web's controlsReserve.ts). A skin tunes the
+   two custom properties, never the shape. (2026-11-23: until then each column drew its own top, transparent on one, filled
+   on the next, with no line, and the seams between them read as separate bars.) */
+@layer components {
+    .view-header {
+        --view-header-fill: var(--color-card);
+        --view-header-rule: var(--color-line);
+        height: var(--bar-height);
+        /* Never stretched or squeezed by the column it sits in: a shrunk segment is a broken bar. */
+        flex: none;
+        background-color: var(--view-header-fill);
+        box-shadow: inset 0 -1px 0 var(--view-header-rule);
+    }
+
+    /* A segment whose controls may take a second line where its column is too narrow for one (a device's screen). */
+    .view-header-wrap {
+        height: auto;
+        min-height: var(--bar-height);
+    }
+}

@@ -75,9 +75,6 @@
 :root {
     --color-selection-edge: var(--color-primary-500);
 
-/* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. */
-    --bar-height: 2.25rem;
-
 /* WHAT THE BAR IN THE TOP-RIGHT CORNER GIVES UP TO THE WINDOW'S OWN BUTTONS (shell/window/controlsReserve.ts), and zero everywhere the window has a frame of its own — which is every browser. */
     --window-controls-buttons: 7.5rem;
     --window-controls-width: 0px;
@@ -94,20 +91,8 @@
     --window-band: 0px;
 }
 
-/* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's title row, the preview's toolbar, an agent's detail row.
-   No rule under it: a bar is told from what it heads by its fill or its type, and what scrolls under one fades (the chat's `.chat-pane::before`). */
+/* The top of a shell column (`.view-header`, one segment of the window's top bar) is the kit's: _editor/ui/src/styles/utilities.css. */
 @layer components {
-    .view-header {
-        height: var(--bar-height);
-        /* Never stretched or squeezed by the column it sits in — a shrunk bar is a broken line. */
-        flex: none;
-    }
-/* The fleet filter row wraps when its controls cannot fit. */
-    .view-header-wrap {
-        height: auto;
-        min-height: var(--bar-height);
-    }
-
 /* WHICH SURFACE A REGION'S CARDS LIE ON, declared by whoever paints it rather than guessed at by the card. Nothing in a rail paints anything else: a lane is a header over cards, and a skin's own texture belongs to the panel, so any fill of ours would sit on it as a flat patch. */
     .ground-card {
 /* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with no slab under it, this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */
@@ -265,7 +250,7 @@
     box-shadow: inset 0 2px 0 var(--color-primary-500);
 }
 .ws-scoped .view-header {
-    background-color: color-mix(in srgb, var(--color-primary-500) 8%, var(--color-card));
+    --view-header-fill: color-mix(in srgb, var(--color-primary-500) 8%, var(--color-card));
 }
 
 /* SESSION CARDS — one corner radius everywhere; the diagonal fill is declared per ground, since a card on canvas and a card on a card slab need different stops to read. */

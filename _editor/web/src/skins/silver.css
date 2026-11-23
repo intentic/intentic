@@ -219,10 +219,9 @@
         --card-drop: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 22px -14px rgb(0 0 0 / 0.55);
     }
 
-    /* The one bar that keeps a rule (sanctum.css says which), in Silver's hairline. */
-    [data-skin="silver"] .view-header.border-b:not(.view-header-wrap) {
-        border-bottom-color: var(--silver-hairline);
-        box-shadow: none;
+    /* The line under the window's top bar (`.view-header`), in Silver's hairline. */
+    [data-skin="silver"] .view-header {
+        --view-header-rule: var(--silver-hairline);
     }
 
     [data-skin="silver"] :is(.p-popover, .p-menu, .p-select-overlay, .p-multiselect-overlay, .p-autocomplete-overlay, .ui-anchored-surface) {

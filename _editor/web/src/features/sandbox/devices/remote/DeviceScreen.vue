@@ -208,10 +208,10 @@ const toolbarShown = ref(false);
     <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-terminal">
         <!-- In full screen the toolbar waits behind the top edge; a pointer reaching it brings it down. -->
         <div v-if="lock.fullscreen.value" class="absolute inset-x-0 top-0 z-20 h-1.5" @pointerenter="toolbarShown = true" />
-        <!-- `.view-header`, so the desktop app's window buttons take their corner from this bar when it reaches it. It keeps
-             its rule, as the browser's toolbar does (LiveBrowser.vue): the screen under it is another machine's. -->
+        <!-- `.view-header`, so the desktop app's window buttons take their corner from this bar when it reaches it, and its
+             ground and line are every column top's, which matters here: the screen under it is another machine's. -->
         <header
-            class="view-header view-header-wrap z-20 flex min-h-10 shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1"
+            class="view-header view-header-wrap z-20 flex min-h-10 shrink-0 items-center gap-2 px-2 py-1"
             :class="lock.fullscreen.value ? ['absolute inset-x-0 top-0 shadow-lg transition-transform', toolbarShown ? '' : '-translate-y-full'] : ''"
             @pointerleave="toolbarShown = false"
         >

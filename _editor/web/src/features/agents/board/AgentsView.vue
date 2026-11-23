@@ -320,21 +320,23 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
-        <!-- Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
+        <!-- The board's segment of the window's top bar (`.view-header`): one row, never two, so its line meets the chat's.
+             Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
              either side of it (the owner filters on the left, the geek metrics and New agent on the right). Narrow, the
-             groups are sized by their controls and the search takes a row of its own, so nothing overlaps it. -->
+             groups keep their controls' width and the search takes what is left. A phone has no such bar: there the search
+             takes a row of its own, at a finger's height. -->
         <div
-            class="view-header view-header-wrap items-center gap-x-2 gap-y-1 px-3 py-1"
-            :class="narrow ? 'flex flex-wrap' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
+            class="view-header items-center gap-2 px-3"
+            :class="mobile ? 'view-header-wrap flex flex-wrap gap-y-1 py-1' : narrow ? 'flex' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
         >
-            <div class="col-start-1 flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
+            <div class="col-start-1 flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : narrow ? `shrink-0` : ``">
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
                 <SegmentedControl
                     v-if="user !== null && sharedAccess && !first"
                     v-model="ownerScope"
                     :options="ownerOptions"
                     size="xs"
-                    wrap
+                    :wrap="mobile"
                     class="max-w-full"
                 />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
@@ -348,20 +350,17 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 v-model="query"
                 v-model:match-case="matchCase"
                 variant="field"
+                :dense="!mobile"
                 clearable
                 :busy="searching"
                 :aria-label="t(`agents.agentsView.filterAgentsByMessages`)"
                 :placeholder="t(`agents.words.filterByMessages`)"
-                class="col-start-2 mx-auto max-w-full shrink-0"
-                :class="narrow ? 'order-last basis-full' : 'w-72'"
+                :class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'col-start-2 mx-auto w-72 max-w-full shrink-0'"
                 @keydown.enter="onFieldEnter"
             />
             <!-- One row, never two: what is here gives way inside it (the metrics step down with this container's width,
                  SandboxMetricsSummary.vue) rather than pushing New agent under the rest. -->
-            <div
-                class="col-start-3 flex min-w-0 max-w-full flex-auto items-center justify-end gap-2"
-                :class="narrow ? 'flex-wrap' : '@container/tools flex-nowrap'"
-            >
+            <div class="col-start-3 flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : narrow ? 'shrink-0' : '@container/tools'">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The geek metrics, while the reader opted in: three small meters beside New agent, the full readout a

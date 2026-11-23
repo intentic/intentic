@@ -41,6 +41,11 @@ flowchart LR
   never an override; the `recipes` check refuses one passed as a class. The old one-argument shape (`ui.x("classes")`)
   and the retired names (`linkButton`, `textAction`, `inputSm`, `inputInline`, `sectionLabelSm`) still work, because
   installed extensions call them through the host.
+- **The window's top bar.** No component draws it. Every column that runs the window's height (a board, a sidebar, a pane
+  of tabs, `SplitView`'s index and body, the chat) starts with a `.view-header`, and side by side those read as one bar:
+  each column fills its own segment (or leaves it empty), and `utilities.css` draws, once, what makes them one: the
+  height (`--bar-height`), the ground and the line under them, an inset shadow a selected tab's rule covers. A segment's
+  controls are h-7 or lower so they share a centre line. A skin tunes `--view-header-fill` and `--view-header-rule`.
 - **Chips and pills.** Their sizes are decided once, in `utilities.css`. A chip presses: `ui.chip({ size })` is `sm`
   20px (a list header's fold, a viewer toolbar's toggle, a token in a field), `md` 26px by default (the dense control's
   height, as `<Button size="small">` and the `sm` field are, so the three share a toolbar's line) or `lg` 32px (a phone

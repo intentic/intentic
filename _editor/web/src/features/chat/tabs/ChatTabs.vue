@@ -302,9 +302,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <!-- One line across the column top, with the list on a sheet below it. NO RULE UNDER IT: the bar and the transcript are
-         one surface, and what scrolls up dissolves under the bar (`.chat-pane::before`, chat.css) instead of being cut at a
-         line. -->
+    <!-- One line across the column top, with the list on a sheet below it: the chat's segment of the window's top bar
+         (`.view-header`), on the same ground and over the same line as the board's or the Workspace's beside it, so the
+         columns' tops read as one bar. What scrolls up still softens just under it (`.chat-pane::before`, chat.css). -->
     <!-- THE TITLE AND NOTHING ELSE, CENTRED, with the presses in the corner. Three columns: two equal sides keep the title on
          the bar's middle (a long one takes what the sides leave, and truncates), the left one bare background that drags
          the window on desktop (windowGesture.ts) and opens the bar's own menu on right-click. What other chats are doing
