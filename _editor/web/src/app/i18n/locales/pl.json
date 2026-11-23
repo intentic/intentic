@@ -2816,6 +2816,14 @@
                 }
             },
             "device": {
+                "admin": {
+                    "hint": "Windows: polecenie, które agent chce uruchomić jako administrator, uruchamia się na tym komputerze bez monitu UAC. Każde najpierw pyta cię na karcie w czacie, chyba że rozmowa jest oznaczona do automatycznego zatwierdzania. Wymaga tu usługi ekranu blokady i monitów administratora z Dostępu zdalnego.",
+                    "label": "Uruchamianie poleceń jako administrator",
+                    "options": {
+                        "off": "Zablokowane",
+                        "on": "Dozwolone"
+                    }
+                },
                 "control": {
                     "label": "Używanie myszy i klawiatury",
                     "options": {
@@ -11374,7 +11382,7 @@
             "closeBody": "Wszystko, co w nim działa na {name}, zostanie zatrzymane.",
             "closeConfirm": "Zamknij terminal",
             "serviceTitle": "Ekran blokady i monity administratora",
-            "serviceNote": "Pozwala widzieć i obsługiwać ekran logowania i blokady, Ctrl+Alt+Del oraz monity administratora (UAC). Wymaga jednorazowej zgody administratora na tym komputerze.",
+            "serviceNote": "Pozwala widzieć i obsługiwać ekran logowania i blokady, Ctrl+Alt+Del oraz monity administratora (UAC). Wymaga jednorazowej zgody administratora na tym komputerze. Pozwala też agentom uruchamiać polecenia jako administrator bez monitu, gdy włączone jest „Uruchamianie poleceń jako administrator”.",
             "serviceNotSetUp": "Nieskonfigurowane",
             "serviceSetUp": "Skonfigurowane",
             "serviceOlder": "Skonfigurowane, starsza wersja",
@@ -11956,6 +11964,7 @@
                 "control": "używać myszy i klawiatury",
                 "sandboxes": "zarządzać jego sandboksami",
                 "destructive": "usuwać rzeczy",
+                "admin": "uruchamiać polecenia jako administrator",
                 "programs": "uruchamiać przesłane programy",
                 "remoteView": "ludzie mogą go oglądać",
                 "remoteControl": "ludzie mogą przejąć sterowanie",

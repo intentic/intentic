@@ -2816,6 +2816,14 @@
                 }
             },
             "device": {
+                "admin": {
+                    "hint": "Windows: a command an agent asks to run as administrator runs with no UAC prompt on this computer. Each one asks you on a card in chat first, unless the conversation is marked auto-approve. Needs Remote access's lock screen and admin prompts service here.",
+                    "label": "Run commands as administrator",
+                    "options": {
+                        "off": "Blocked",
+                        "on": "Allowed"
+                    }
+                },
                 "control": {
                     "label": "Use the mouse and keyboard",
                     "options": {
@@ -11985,7 +11993,7 @@
             "closeBody": "Whatever runs in it on {name} stops.",
             "closeConfirm": "Close terminal",
             "serviceTitle": "Lock screen and admin prompts",
-            "serviceNote": "Lets people see and use the sign-in and lock screen, Ctrl+Alt+Del and administrator (UAC) prompts. Needs an administrator’s yes on this computer, once.",
+            "serviceNote": "Lets people see and use the sign-in and lock screen, Ctrl+Alt+Del and administrator (UAC) prompts. Needs an administrator’s yes on this computer, once. It also lets agents run commands as administrator with no prompt, where “Run commands as administrator” is on.",
             "serviceNotSetUp": "Not set up",
             "serviceSetUp": "Set up",
             "serviceOlder": "Set up, older version",
@@ -12567,6 +12575,7 @@
                 "control": "use the mouse and keyboard",
                 "sandboxes": "manage its sandboxes",
                 "destructive": "delete things",
+                "admin": "run commands as administrator",
                 "programs": "run programs it is sent",
                 "remoteView": "people can watch it",
                 "remoteControl": "people can take control",

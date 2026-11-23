@@ -59,6 +59,8 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 log = "0.4"
 # ConPTY on Windows, openpty on Unix (wezterm's, MIT).
 portable-pty = "0.9"
+# Ed25519, to verify the sandbox's grant on each administrator run (src/service/admin.rs); rustls's own already.
+ring = "0.17"
 # ring, not the default aws-lc-rs: aws-lc needs cmake and NASM under cargo-xwin, ring builds with the C compiler alone.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
@@ -94,13 +96,16 @@ cast-win = { path = "../../_sandbox/castd/crates/cast-win" }
 cast-core = { path = "../../_sandbox/castd/crates/cast-core", default-features = false, features = ["openh264", "opus1"] }
 parking_lot = "0.12"
 # The lock screen and admin prompts service (src/service/windows): the service manager, the SYSTEM token moved into
-# the console session, access lists, the Ctrl+Alt+Del policy.
+# the console session, access lists, the Ctrl+Alt+Del policy; for administrator runs the signed-in person's elevated
+# token, their environment block and a cancellable read of the command's output.
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
+    "Win32_System_Environment",
+    "Win32_System_IO",
     "Win32_System_JobObjects",
     "Win32_System_Pipes",
     "Win32_System_Registry",

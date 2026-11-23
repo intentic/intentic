@@ -356,8 +356,55 @@ desktop: the credential screen of a sign-in or a lock, a UAC prompt, Ctrl+Alt+De
   and a `cmd` it leaves behind deletes its folder once it ended). Taking a privilege away needs nobody's yes, and the
   person may not be at the computer. Elevated, `service uninstall` removes it directly. `--result <file>` writes the
   one-line answer to a file too, since an elevated run's output does not come back to the agent.
+- **Administrator runs** (`service admin-run --status <file> [--cwd <dir>] [--grant <envelope>] -- <program>
+  [<arg>…]`, [`windows/admin.rs`](src/service/windows/admin.rs)). The machine agent spawns this like any process when
+  a `run_command` asks for `admin` and the owner said yes. The helper starts the program with the signed-in person's
+  own elevated token in their session: `WTSQueryUserToken` for the session, then the linked token of the UAC split
+  token (an account that is a full administrator already, with UAC off or the built-in Administrator, uses its own
+  token; a standard user's is refused). That is what clicking Yes on a UAC prompt gives: their profile, HKCU and
+  `%APPDATA%`, their environment (`CreateEnvironmentBlock`), any window on their desktop. A program named bare is
+  looked up along the person's own PATH (the helper's is SYSTEM's), `.exe` first, and a relative path is the run's
+  folder's.
+  - It has its own pipe, `\\.\pipe\intentic-remoted-admin-<session>`, with the desktop pipe's access list, client
+    check and secret, and the caller checks the pipe's server as remoted does. Any program of the installing user can
+    pass those checks (by running the agent's remoted, which is the user's to start), so they are not what stands
+    between a program of the user and an administrator's rights. The grant is.
+  - **The grant.** Each run carries one (`--grant`): a payload `{kind: "admin-run", commandSha256, nonce, issuedAt,
+    expiresAt}` and its Ed25519 signature over `intentic-admin-run/grant/v1`, a NUL and the payload, each base64url in
+    a JSON envelope. The sandbox signs it with its keyring's signing key, the pair Passwords grants are signed with
+    (under another domain string, so neither kind of grant stands for the other), once the owner said yes to that
+    command. `service install --trust <key>` pins a sandbox's public key in `service.json` (`adminKeys`); a later
+    install adds its key to those pinned before, so a second sandbox setting the service up keeps the first's runs. The
+    helper starts nothing, and asks Windows for no token, until the grant verifies under a pinned key (`untrusted`
+    when none is pinned), is an `admin-run` grant within its times (at most 5 minutes long, issued at most 30 s ahead
+    of this clock, not expired), names a nonce no earlier run used (kept in memory until the grant's expiry), and
+    covers exactly this command: `pwsh.exe` or `powershell.exe`, the machine agent's `-NoProfile -NonInteractive
+    -ExecutionPolicy Bypass -Command` and the script whose SHA-256 it signed. PowerShell must also come from Windows
+    PowerShell's folder or PowerShell's under Program Files, which only an administrator can change. Every refusal is
+    in the log with its reason. A program of the user can reach the pipe, but it cannot sign a grant, and a grant it
+    copies from the agent's command line runs the approved script and nothing else, once. The grant does not cover
+    the run's folder.
+  - The secure desktop's input path (cast-win's helper protocol on the desktop pipe) still rests on the older, weaker
+    boundary: a program of the user that replaces or injects into the client remoted can drive it, and so can click
+    Yes on a UAC prompt that is showing. Administrator runs no longer share that boundary.
+  - stdout and stderr come back in chunks as the command writes them and go to the caller's own stdout and stderr; the
+    caller exits with the command's exit code. The command runs in a job of its own (stdin is `NUL`). When the caller
+    goes before the command ends (the agent's deadline killed it), the helper ends the job: the command and everything
+    it started. After a normal end nothing is killed: what it started in the background keeps running, as with an
+    unelevated `run_command`, and its output is collected for 2 s more at most. The command breaks away from the
+    helper's job, so a helper started again (another session, an update) leaves it running.
+  - Each run is in the service's log: the caller's process, the program, the first 200 characters of its arguments,
+    the process started and its exit code.
+  - `--status` gets one JSON line before the caller exits: `{"ran":true,"exitCode":<n>}`, or
+    `{"ran":false,"reason":…,"error":…}` with exit code 125. `reason` is `not-windows`, `not-installed`, `outdated` (a
+    service installed before administrator runs, whose `service.json` lacks `"features":["admin-run"]`),
+    `not-running`, `unreachable`, `refused` (the helper refused this remoted, or the run's grant), `untrusted` (the
+    service pins no sandbox key), `nobody-signed-in`, `not-administrator`, `start-failed` or `lost` (the pipe broke
+    before the exit code came); `error` is a sentence a person can act on.
+  - It uses its own pipe and protocol rather than cast-win's: a change to cast-win's helper protocol makes every
+    installed service refuse remoted until someone sets it up again through a UAC prompt.
 - `service status` needs no administrator: `{supported, installed, state, version, binary, clients, helper: {session,
-  pid, desktop}}`.
+  pid, desktop}, adminRuns, adminKeys}`, `adminKeys` the number of sandbox keys pinned.
 
 (2026-11-20) The helper is a capture and input backend behind remoted rather than the screen backend itself (remoted
 forwarding whole media sockets to a SYSTEM process). Measured on rog, a frame through the helper costs what one on
@@ -366,6 +413,15 @@ status line, peer connections and the clipboard and sound (which are the person'
 rejected shape would have put all of them, and the WAN transport being reworked beside it, behind the pipe too.
 Rejected as well: the service running from the agent's folder under the user's profile, which any program of the user
 could have replaced with code that then ran as SYSTEM.
+
+(2026-11-23) Administrator runs start the command with the signed-in person's elevated token through the helper.
+Rejected: an agent clicking Yes on the UAC prompt through the screen, which is consent nobody gives, depends on a
+picture of a dimmed secure desktop, and cannot tell whose prompt it is answering. Running the command as SYSTEM, where
+a per-user install lands in the system profile instead of the person's, and a window opens in session 0, where nobody
+sees it. Adding the run to cast-win's helper protocol, whose new version would have made every PC's service refuse
+remoted until it was set up again through a UAC prompt. Trusting the caller's process for the run (its image, its
+session, the secret), which any program of the installing user can satisfy by starting the agent's remoted: each run
+carries the sandbox's grant for its exact command instead.
 
 ## Testing on Windows
 
@@ -406,6 +462,9 @@ into `REMOTED_SHOTS`), which with the real service installed is how the secure d
 - [tests/terminal.rs](tests/terminal.rs) — the binary end to end against a fake sandbox's uplink.
 - [src/service/mod.rs](src/service/mod.rs) — the lock screen and admin prompts service: install, the SYSTEM helper, who
   may talk to it.
+- [src/service/windows/admin.rs](src/service/windows/admin.rs) — administrator runs: the elevated token, the process
+  and its job, the output relay, and `service admin-run`; [src/service/admin.rs](src/service/admin.rs) holds their
+  protocol, the command line's quoting and the status line.
 - [tests/screen.rs](tests/screen.rs) — a screen end to end on an Xvfb of the suite's own, a virtual desktop, a peer
   connection through the uplink's STUN servers, and `measure`.
 

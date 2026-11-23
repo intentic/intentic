@@ -7,6 +7,7 @@ import { parseJsonWith } from "@intentic/base/json";
 import { runBounded } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
 import type { RemoteServiceAction, RemoteServiceResult } from "@intentic/sandbox-contract/schemas/device-remote";
+import { KeyringSandboxKeysSchema } from "@intentic/sandbox-contract/schemas/keyring";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { ELEVATED_TIMEOUT_MS, type ElevatedOutcome, elevatedRun, runAsAdministrator } from "../../admin/elevated.js";
@@ -45,10 +46,28 @@ const NOBODY_SIGNED_IN =
 const VERSION = /^\d+\.\d+\.\d+$/u;
 
 /** What remoted is run with for each action; `client` is the remoted the installed service serves, `result` the file an
- * elevated run writes its answer to. Pure. */
-export const serviceArgs = (action: RemoteServiceAction, client: string, result?: string): string[] => {
-    const args = action === "install" ? ["service", "install", "--client", client] : ["service", action];
+ * elevated run writes its answer to, `trust` the sandbox signing keys an install pins for administrator runs. Pure. */
+export const serviceArgs = (action: RemoteServiceAction, client: string, result?: string, trust: readonly string[] = []): string[] => {
+    const args = action === "install" ? ["service", "install", "--client", client, ...trust.flatMap((key) => ["--trust", key])] : ["service", action];
     return result === undefined || action === "status" ? args : [...args, "--result", result];
+};
+
+// (2026-11-23) A sandbox's signing key, fetched from its own address over TLS (GET /keyring/keys, as the keyring fetches
+// it): what an install pins, so the service runs a command as administrator only on that sandbox's signed grant
+// (tools/admin/admin-run.ts). Never taken from whoever relays the request. No redirects: a key served from anywhere but the
+// sandbox's own address is not the sandbox's.
+export const sandboxKeysUrl = (sandboxUrl: string): URL => {
+    const url = new URL(sandboxUrl);
+    url.protocol = url.protocol === "wss:" ? "https:" : url.protocol === "ws:" ? "http:" : url.protocol;
+    return new URL("/keyring/keys", url.origin);
+};
+
+const fetchSignKey = async (sandboxUrl: string): Promise<string> => {
+    const response = await fetch(sandboxKeysUrl(sandboxUrl), { signal: AbortSignal.timeout(10_000), redirect: "error", headers: { accept: "application/json" } });
+    if (!response.ok) {
+        throw new Error(`it answered HTTP ${String(response.status)}`);
+    }
+    return KeyringSandboxKeysSchema.parse(await response.json()).sign;
 };
 
 // remoted's exit code for "needs an administrator": an unelevated uninstall that could not reach the service's helper.
@@ -138,6 +157,8 @@ export interface RemotedServiceSeams {
     readonly resultFile: () => string;
     readonly readResult: (path: string) => Promise<string | undefined>;
     readonly audit: (entry: { tool: string; ok: boolean; detail: string }) => Promise<void>;
+    // The asking sandbox's signing key, which an install pins for administrator runs; throws saying why it could not.
+    readonly signKey: (sandboxUrl: string) => Promise<string>;
 }
 
 // The link a call came in on: its sandbox, for the audit, and the log its lines go to.
@@ -186,6 +207,17 @@ const withReason = (outcome: ElevatedOutcome, answer: string | undefined): Eleva
     return outcome.kind === "failed" && line !== undefined && "error" in line ? { ...outcome, said: line.error.replace(/\.$/u, "") } : outcome;
 };
 
+// The keys an install pins: the asking sandbox's, or none when it cannot be fetched, which still sets up the lock screen
+// and leaves administrator runs refused as "untrusted" until the service is set up again.
+const trustOf = async (seams: RemotedServiceSeams, link: ServiceLink): Promise<string[]> => {
+    try {
+        return [await seams.signKey(link.sandboxUrl)];
+    } catch (error) {
+        link.log(`${link.sandboxUrl}: its signing key could not be fetched (${errorMessage(error)}), so administrator runs will not be trusted from it`);
+        return [];
+    }
+};
+
 export const createRemotedService = (seams: RemotedServiceSeams): RemotedService => {
     // The change whose UAC prompt is up now: one at a time, so a second press never stacks a second prompt.
     let asking: RemoteServiceAction | undefined;
@@ -216,7 +248,8 @@ export const createRemotedService = (seams: RemotedServiceSeams): RemotedService
             }
             link.log(`${link.sandboxUrl}: asking for an administrator's yes to ${action} remoted's Windows service (client ${binary})`);
             const resultFile = seams.resultFile();
-            const outcome = withReason(await seams.elevated(binary, serviceArgs(action, binary, resultFile)), await seams.readResult(resultFile));
+            const trust = action === "install" ? await trustOf(seams, link) : [];
+            const outcome = withReason(await seams.elevated(binary, serviceArgs(action, binary, resultFile, trust)), await seams.readResult(resultFile));
             const after = await statusOf(seams, binary);
             return finish(action, link, { ...after, ...outcomeFields(action, outcome, after) });
         } finally {
@@ -254,6 +287,7 @@ const realSeams = (): RemotedServiceSeams => ({
         }
     },
     audit,
+    signKey: fetchSignKey,
 });
 
 let machine: RemotedService | undefined;

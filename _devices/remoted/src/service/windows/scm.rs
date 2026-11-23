@@ -114,8 +114,9 @@ fn copy_binary(from: &std::path::Path, to: &std::path::Path) -> Result<(), Strin
     ))
 }
 
-/// Installs (or updates) the service and starts it. Needs an administrator.
-pub fn install(clients: &[PathBuf]) -> Result<(), String> {
+/// Installs (or updates) the service and starts it, pinning `trust` (sandbox keys, already checked) beside the keys an
+/// earlier install pinned. Needs an administrator.
+pub fn install(clients: &[PathBuf], trust: &[String]) -> Result<(), String> {
     for c in clients {
         if !c.is_file() {
             return Err(format!("no remoted at {}", c.display()));
@@ -152,12 +153,25 @@ pub fn install(clients: &[PathBuf]) -> Result<(), String> {
             (before, set)
         }
     };
+    // The keys pinned before stay: a second sandbox setting the service up must not take the first's runs away.
+    let mut admin_keys = previous
+        .as_ref()
+        .map(|p| p.admin_keys.clone())
+        .unwrap_or_default();
+    for key in trust {
+        if !admin_keys.contains(key) {
+            admin_keys.push(key.clone());
+        }
+    }
     let installed = Installed {
         version: crate::VERSION.to_string(),
         clients: clients.to_vec(),
         user_sid,
         sas_policy_before: before,
         sas_policy_set: set,
+        // This helper serves administrator runs: a caller reading this knows the running service is new enough.
+        features: vec![crate::service::admin::FEATURE.into()],
+        admin_keys,
     };
     std::fs::write(
         home.join("service.json"),
@@ -165,8 +179,10 @@ pub fn install(clients: &[PathBuf]) -> Result<(), String> {
     )
     .map_err(|e| format!("service.json: {e}"))?;
     let command = wide(&format!("\"{}\" service run", binary().display()));
+    let display = wide(DISPLAY_NAME);
     let s = match existing {
         Some(s) => {
+            // An update takes this version's display name too (it says what the service does).
             // SAFETY: an open service and zero-terminated strings; null leaves a setting as it is.
             unsafe {
                 ChangeServiceConfigW(
@@ -180,14 +196,14 @@ pub fn install(clients: &[PathBuf]) -> Result<(), String> {
                     PCWSTR::null(),
                     PCWSTR::null(),
                     PCWSTR::null(),
-                    PCWSTR::null(),
+                    PCWSTR(display.as_ptr()),
                 )
             }
             .map_err(|e| format!("updating the service: {e}"))?;
             s
         }
         None => {
-            let (name, display) = (wide(SERVICE), wide(DISPLAY_NAME));
+            let name = wide(SERVICE);
             // SAFETY: an open manager and zero-terminated strings; no account names LocalSystem.
             unsafe {
                 CreateServiceW(

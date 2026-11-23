@@ -13,6 +13,7 @@ import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { crossEnv, crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
 import { thisSide } from "../../environments/wsl.js";
 import { forgetCommand, recordCommand } from "./command-ledger.js";
+import { ADMIN_NOT_CROSSING, ADMIN_NOT_WINDOWS, type AdminRunSeams, adminInvocation, adminRunVerdict, realAdminRunSeams } from "./admin/admin-run.js";
 
 // Running a command on somebody's device. The shell isn't negotiable per call: Windows gets PowerShell,
 // everything else gets the login shell (so PATH, nvm/asdf/mise shims and aliases work), and `describe` reports
@@ -188,9 +189,42 @@ const nativeInterpreter = async (script: string, cwd: string | undefined, scopes
     };
 };
 
+// Run as administrator through remoted's Windows service (admin/admin-run.ts): the same PowerShell invocation, started by the
+// service's SYSTEM helper with the signed-in person's administrator token. Its own environment is that person's, fresh,
+// as Windows' "Run as administrator" gives it, so the agent-command mark does not cross.
+const executeAsAdministrator = async (
+    native: Interpreter,
+    run: { readonly script: string; readonly grant: string | undefined },
+    timeout: number,
+    seams: AdminRunSeams,
+): Promise<CommandResult> => {
+    const shell = shellFor("win32");
+    const invocation = await adminInvocation(seams, { command: shell.command, args: shell.args(run.script) }, native.cwd ?? homeDir(), run.grant);
+    const result = await execute({ command: invocation.command, args: invocation.args, cwd: native.cwd, env: native.env }, timeout);
+    const status = await seams.readStatus(invocation.status);
+    const failed = adminRunVerdict(status, { timedOut: result.timedOut, exitCode: result.exitCode, stderr: result.stderr.text });
+    if (failed !== undefined) {
+        throw new Error(failed);
+    }
+    return status?.ran === true ? { ...result, exitCode: status.exitCode } : result;
+};
+
 export const runCommand = async (
-    input: { readonly command: string; readonly cwd?: string; readonly timeoutMs?: number; readonly in?: string },
+    input: {
+        readonly command: string;
+        readonly cwd?: string;
+        readonly timeoutMs?: number;
+        readonly in?: string;
+        readonly admin?: boolean;
+        // The sandbox's signed yes to an admin run, which the service checks (admin/admin-run.ts).
+        readonly grant?: string | undefined;
+    },
     scopes: DeviceScopes,
+    admin: { readonly platform: NodeJS.Platform; readonly seams: () => AdminRunSeams } = {
+        platform: process.platform,
+        // allow(terminal-output): a line of the resident agent's own log (a remoted being fetched), which its supervisor captures from stderr
+        seams: () => realAdminRunSeams((message) => process.stderr.write(`admin-run: ${message}\n`)),
+    },
 ): Promise<CommandResult> => {
     assertScope(scopes, "shell");
     // Read before the cwd is resolved, so a destructive command aimed outside the roots is refused for what it does
@@ -202,6 +236,18 @@ export const runCommand = async (
     // `ic sandbox restart …` and `docker stop <a sandbox>` are the sandbox tools by another door, and answer to their switch.
     assertNoSandboxPower(input.command, scopes);
     const target = targetOf(input.in);
+    if (input.admin === true) {
+        if (admin.platform !== "win32") {
+            throw new ScopeError(ADMIN_NOT_WINDOWS);
+        }
+        if (target.kind !== "native") {
+            throw new ScopeError(ADMIN_NOT_CROSSING);
+        }
+        assertScope(scopes, "admin");
+        const native = await nativeInterpreter(input.command, input.cwd, scopes);
+        const run = { script: input.command, grant: input.grant };
+        return await executeAsAdministrator(native, run, Math.min(input.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS), admin.seams());
+    }
     const interpreter =
         target.kind === "native"
             ? await nativeInterpreter(input.command, input.cwd, scopes)

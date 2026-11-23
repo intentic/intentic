@@ -143,7 +143,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
                 programs: "off",
                 remoteView: "off",
                 remoteControl: "off",
-                remoteTerminal: "off",
+                remoteTerminal: "off", admin: "off",
                 roots: "/home/me/code",
             },
         },

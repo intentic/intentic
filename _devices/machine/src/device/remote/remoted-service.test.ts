@@ -1,6 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import type { ElevatedOutcome } from "../../admin/elevated.js";
-import { answerOf, createRemotedService, outcomeFields, readServiceLine, type RemotedServiceSeams, serviceArgs } from "./remoted-service.js";
+import { answerOf, createRemotedService, outcomeFields, readServiceLine, type RemotedServiceSeams, sandboxKeysUrl, serviceArgs } from "./remoted-service.js";
 
 /* remoted's Windows service for the lock screen and administrator prompts, as the agent reads and changes it: what remoted
    is run with, how its one JSON line is read, when an installed service is older than the agent's remoted, and what one
@@ -18,6 +18,8 @@ const INSTALLED = JSON.stringify({
 });
 const NOT_INSTALLED = JSON.stringify({ supported: true, installed: false });
 const LINK = { sandboxUrl: "https://sandbox-abc.example.dev", log: () => undefined };
+// The asking sandbox's signing key, as GET /keyring/keys answers it.
+const SIGN_KEY = "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw";
 
 describe("what remoted is run with", () => {
     test("install names the agent's remoted as the client the service serves; status and uninstall take nothing", () => {
@@ -28,6 +30,8 @@ describe("what remoted is run with", () => {
         expect(serviceArgs("install", CLIENT, "R")).toEqual(["service", "install", "--client", CLIENT, "--result", "R"]);
         expect(serviceArgs("uninstall", CLIENT, "R")).toEqual(["service", "uninstall", "--result", "R"]);
         expect(serviceArgs("status", CLIENT, "R")).toEqual(["service", "status"]);
+        expect(serviceArgs("install", CLIENT, "R", ["K1", "K2"])).toEqual(["service", "install", "--client", CLIENT, "--trust", "K1", "--trust", "K2", "--result", "R"]);
+        expect(sandboxKeysUrl("wss://sandbox-abc.example.dev/system/device").href).toBe("https://sandbox-abc.example.dev/keyring/keys");
     });
 });
 
@@ -115,7 +119,7 @@ interface Recorded {
 const windows = (
     statuses: string[],
     prompt: () => Promise<ElevatedOutcome> = async () => ({ kind: "done" }),
-    { quietExit = 3, answer }: { quietExit?: number; answer?: string } = {},
+    { quietExit = 3, answer, signKey = async () => SIGN_KEY }: { quietExit?: number; answer?: string; signKey?: (url: string) => Promise<string> } = {},
 ) => {
     const recorded: Recorded = { ran: [], elevated: [], audited: [] };
     const seams: RemotedServiceSeams = {
@@ -136,6 +140,7 @@ const windows = (
         resultFile: () => "RESULT",
         readResult: async () => answer,
         audit: async (entry) => void recorded.audited.push(entry),
+        signKey,
     };
     return { recorded, seams };
 };
@@ -179,12 +184,25 @@ describe("the agent's remoteService", () => {
     test("installs through one prompt with the agent's remoted as client, then reads the status again, and audits it", async () => {
         const { recorded, seams } = windows([JSON.stringify({ ...JSON.parse(INSTALLED), version: "1.431.0" })]);
         const answer = await createRemotedService(seams).run("install", LINK);
-        expect(recorded.elevated).toEqual([["service", "install", "--client", CLIENT, "--result", "RESULT"]]);
+        expect(recorded.elevated).toEqual([["service", "install", "--client", CLIENT, "--trust", SIGN_KEY, "--result", "RESULT"]]);
         expect(answer).toMatchObject({ installed: true, version: "1.431.0", outOfDate: false });
         expect(Object.keys(answer)).not.toContain("error");
         expect(recorded.audited).toEqual([
             { tool: "remoteService", ok: true, detail: "sandbox-abc.example.dev asked to install remoted's Windows service: done, now installed (1.431.0, running)" },
         ]);
+    });
+
+    test("pins the asking sandbox's signing key, and still sets the service up when that key cannot be fetched", async () => {
+        const asked: string[] = [];
+        const { recorded, seams } = windows([INSTALLED], undefined, {
+            signKey: async (url) => {
+                asked.push(url);
+                throw new Error("it answered HTTP 503");
+            },
+        });
+        await createRemotedService(seams).run("install", LINK);
+        expect(asked).toEqual([LINK.sandboxUrl]);
+        expect(recorded.elevated).toEqual([["service", "install", "--client", CLIENT, "--result", "RESULT"]]);
     });
 
     test("a no comes back declined with the status as it stands, and audited as not done", async () => {

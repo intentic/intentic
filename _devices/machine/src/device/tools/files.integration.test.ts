@@ -15,7 +15,7 @@ const outside = join(base, "outside");
 mkdirSync(root);
 mkdirSync(outside);
 
-const grant: DeviceScopes = { shell: "off", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", roots: root };
+const grant: DeviceScopes = { shell: "off", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off", roots: root };
 
 afterAll(() => {
     rmSync(base, { recursive: true, force: true });

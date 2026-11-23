@@ -16,7 +16,7 @@ intentic-remoted: people's terminals on this computer, served to the sandboxes t
 usage:
   intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]
   intentic-remoted version
-  intentic-remoted service status|install|uninstall   (Windows: the lock screen and admin prompts service)
+  intentic-remoted service status|install|uninstall|admin-run   (Windows: the lock screen and admin prompts service)
 
   --config <file>       the uplinks, their secrets and switches (JSON, written 0600 by intentic-machine); read again
                         whenever it changes

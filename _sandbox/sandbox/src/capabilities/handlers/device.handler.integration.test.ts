@@ -63,7 +63,7 @@ const laptop: Capability = {
         programs: "off",
         remoteView: "off",
         remoteControl: "off",
-        remoteTerminal: "off",
+        remoteTerminal: "off", admin: "off",
     },
 };
 const skillPath = (root: string): string => join(root, ".agents", "skills", "my-laptop", "SKILL.md");
@@ -178,7 +178,7 @@ test("echoConfig renders the grant back and host holds no manifest secret", () =
         programs: "off",
         remoteView: "off",
         remoteControl: "off",
-        remoteTerminal: "off",
+        remoteTerminal: "off", admin: "off",
     });
     expect(secretField(laptop, new Map())).toBeUndefined();
 });

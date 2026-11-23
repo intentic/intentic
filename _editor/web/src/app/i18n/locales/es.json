@@ -2816,6 +2816,14 @@
                 }
             },
             "device": {
+                "admin": {
+                    "hint": "Windows: un comando que un agente pide ejecutar como administrador se ejecuta en este equipo sin aviso de UAC. Cada uno te pregunta primero en una tarjeta en el chat, salvo que la conversación esté marcada para aprobación automática. Necesita aquí el servicio de pantalla de bloqueo y avisos de administrador del acceso remoto.",
+                    "label": "Ejecutar comandos como administrador",
+                    "options": {
+                        "off": "Bloqueado",
+                        "on": "Permitido"
+                    }
+                },
                 "control": {
                     "label": "Usar el ratón y el teclado",
                     "options": {
@@ -11985,7 +11993,7 @@
             "closeBody": "Lo que se ejecute en él en {name} se detiene.",
             "closeConfirm": "Cerrar terminal",
             "serviceTitle": "Pantalla de bloqueo y avisos de administrador",
-            "serviceNote": "Permite ver y usar la pantalla de inicio de sesión y de bloqueo, Ctrl+Alt+Supr y los avisos de administrador (UAC). Necesita una vez el sí de un administrador en este ordenador.",
+            "serviceNote": "Permite ver y usar la pantalla de inicio de sesión y de bloqueo, Ctrl+Alt+Supr y los avisos de administrador (UAC). Necesita una vez el sí de un administrador en este ordenador. También permite a los agentes ejecutar comandos como administrador sin aviso, donde «Ejecutar comandos como administrador» está activado.",
             "serviceNotSetUp": "Sin configurar",
             "serviceSetUp": "Configurado",
             "serviceOlder": "Configurado, versión anterior",
@@ -12567,6 +12575,7 @@
                 "control": "usar el ratón y el teclado",
                 "sandboxes": "gestionar sus sandboxes",
                 "destructive": "borrar cosas",
+                "admin": "ejecutar comandos como administrador",
                 "programs": "ejecutar programas que se le envían",
                 "remoteView": "otras personas pueden verlo",
                 "remoteControl": "otras personas pueden tomar el control",

@@ -31,6 +31,7 @@ export const REACH_DEVICE_GRANTS = [
     "control",
     "sandboxes",
     "destructive",
+    "admin",
     "programs",
     "remoteView",
     "remoteControl",
@@ -39,7 +40,7 @@ export const REACH_DEVICE_GRANTS = [
 export type ReachDeviceGrant = (typeof REACH_DEVICE_GRANTS)[number];
 
 /** The grants that let whoever holds them act on the machine as themselves (run, change or drive it), not only look. */
-export const REACH_DEVICE_ACTING_GRANTS: readonly ReachDeviceGrant[] = ["shell", "write", "control", "destructive", "programs", "remoteControl", "remoteTerminal"];
+export const REACH_DEVICE_ACTING_GRANTS: readonly ReachDeviceGrant[] = ["shell", "write", "control", "destructive", "programs", "remoteControl", "remoteTerminal", "admin"];
 
 /** A link's terms as the taking sandbox sets them, in the words both ends of a tie read. */
 export const ReachLinkTermsSchema = z.object({

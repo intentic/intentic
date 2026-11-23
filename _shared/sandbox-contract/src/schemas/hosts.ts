@@ -220,6 +220,11 @@ export const DeviceFeatureSchema = z.enum([
     // (`DeviceFacts.power`), changed on mains power by `intentic-machine power stay-on`. Advertised where the agent can
     // change them itself, which is Windows' native side.
     "power",
+    // (2026-11-23) run_command's `admin`: the command run as the signed-in person's administrator, with no UAC prompt,
+    // through intentic-remoted's Windows service, under the card's "Run commands as administrator" switch. Advertised by
+    // a Windows agent that advertises `remote-service`; an agent without it would drop the field and run the command
+    // unelevated, so the daemon refuses `admin` to it rather than forward it.
+    "admin-run",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -241,6 +246,7 @@ export const DEVICE_FEATURE_REMOTE: DeviceFeature = "remote";
 export const DEVICE_FEATURE_REMOTE_ICE: DeviceFeature = "remote-ice";
 export const DEVICE_FEATURE_REMOTE_SERVICE: DeviceFeature = "remote-service";
 export const DEVICE_FEATURE_POWER: DeviceFeature = "power";
+export const DEVICE_FEATURE_ADMIN_RUN: DeviceFeature = "admin-run";
 // What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

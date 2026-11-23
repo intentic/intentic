@@ -1,7 +1,9 @@
 //! The Windows service: where it lives, what `status` says, and the command line. `scm` installs and runs it, `launch`
 //! starts the helper in the console session, `helper` is the helper, `finder` is how the person's remoted reaches it,
-//! `secure` holds the access lists, the secret and the Ctrl+Alt+Del policy.
+//! `admin` runs commands as the signed-in administrator (both the helper's side and `service admin-run`), `secure`
+//! holds the access lists, the secret and the Ctrl+Alt+Del policy.
 
+mod admin;
 pub mod finder;
 pub mod helper;
 mod launch;
@@ -13,8 +15,9 @@ use std::path::PathBuf;
 
 /// The service's name in the service manager.
 pub const SERVICE: &str = "IntenticRemoted";
-const DISPLAY_NAME: &str = "Intentic remote access: lock screen and admin prompts";
-const DESCRIPTION: &str = "Lets people the owner allowed see and use this computer's sign-in and lock screen, Ctrl+Alt+Del and administrator (UAC) prompts through Intentic. Does nothing while the computer's remote access switches are off. Remove it from Intentic's Remote access section.";
+const DISPLAY_NAME: &str =
+    "Intentic remote access: lock screen, admin prompts and administrator commands";
+const DESCRIPTION: &str = "Lets people the owner allowed see and use this computer's sign-in and lock screen, Ctrl+Alt+Del and administrator (UAC) prompts through Intentic, and lets agents the owner allowed run commands as administrator with no prompt while this computer's \"Run commands as administrator\" switch is on. Does nothing while those switches are off. Remove it from Intentic's Remote access section.";
 
 /// `%ProgramData%\Intentic\Remoted`: the service's binary, its configuration, the secret and its log.
 /// `INTENTIC_REMOTED_SERVICE_HOME` stands another folder in, for a test that runs the helper by hand without an
@@ -38,6 +41,11 @@ pub fn pipe_name(session: u32) -> String {
     format!(r"\\.\pipe\intentic-remoted-desktop-{session}")
 }
 
+/// The helper's pipe for administrator runs in a session: its own, with its own protocol ([`crate::service::admin`]).
+pub fn admin_pipe_name(session: u32) -> String {
+    format!(r"\\.\pipe\intentic-remoted-admin-{session}")
+}
+
 /// What `service install` recorded.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +59,13 @@ pub struct Installed {
     pub sas_policy_before: Option<u32>,
     /// Whether install changed it at all.
     pub sas_policy_set: bool,
+    /// What this install's helper serves beyond the screen (`admin-run`); empty for one installed before there was more.
+    #[serde(default)]
+    pub features: Vec<String>,
+    /// The sandboxes' keys (base64url of raw Ed25519 public keys) one of which must sign each administrator run's grant:
+    /// every key any install pinned (`--trust`), so a second sandbox setting the service up keeps the first's.
+    #[serde(default)]
+    pub admin_keys: Vec<String>,
 }
 
 impl Installed {
@@ -89,20 +104,32 @@ pub fn status() -> serde_json::Value {
         "binary": binary(),
         "clients": installed.clients,
         "helper": helper,
+        "adminRuns": installed.features.iter().any(|f| f == crate::service::admin::FEATURE),
+        "adminKeys": installed.admin_keys.len(),
     })
 }
 
 const USAGE: &str = "\
 usage:
   intentic-remoted service status
-  intentic-remoted service install --client <path of the person's intentic-remoted.exe> [--client <path>…] [--result <file>]
+  intentic-remoted service install --client <path of the person's intentic-remoted.exe> [--client <path>…]
+                                   [--trust <sandbox key>…] [--result <file>]
   intentic-remoted service uninstall [--result <file>]
+  intentic-remoted service admin-run --status <file> [--cwd <dir>] [--grant <envelope>] -- <program> [<arg>…]
   intentic-remoted service run          (the service manager's)
 
 install needs an administrator; uninstall too, except that the installing user's own remoted may ask the running
 service to remove itself (through its helper, so in a session it serves). Each prints one JSON line: the service's
 status, or {\"error\": …};
 --result writes the same line to a file too, for a caller whose elevated run's output does not come back (UAC).
+--trust pins a sandbox's key (base64url of its raw Ed25519 public key), added to those pinned before: an administrator
+run must carry a grant one of them signed for exactly its command.
+
+admin-run needs no administrator, only the installing user's own remoted: the service's helper starts <program> with
+the signed-in person's administrator token in their session (what Yes on a UAC prompt gives), in <dir> (default: this
+process's folder), and this process passes its output on as it comes and exits with its exit code. --status gets one
+JSON line before it exits: {\"ran\":true,\"exitCode\":<n>}, or {\"ran\":false,\"reason\":…,\"error\":…} with exit code 125.
+--grant is the sandbox's grant for the command (its envelope's JSON), without which the helper refuses it.
 ";
 
 /// Asks the running service, through the helper of this session, to remove itself, and waits up to 15 s for it to go.
@@ -128,12 +155,17 @@ fn uninstall_through_helper() -> Result<(), String> {
 }
 
 pub fn cli(args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("admin-run") {
+        return admin::cli(&args[1..]);
+    }
     let mut clients = Vec::new();
+    let mut trust: Vec<String> = Vec::new();
     let mut result: Option<PathBuf> = None;
     let mut rest = args.iter().skip(1);
     while let Some(arg) = rest.next() {
         match (arg.as_str(), rest.next()) {
             ("--client", Some(path)) => clients.push(PathBuf::from(path)),
+            ("--trust", Some(key)) => trust.push(key.clone()),
             ("--result", Some(path)) => result = Some(PathBuf::from(path)),
             _ => {
                 eprint!("unknown argument {arg:?}\n{USAGE}");
@@ -155,10 +187,18 @@ pub fn cli(args: &[String]) -> i32 {
             if clients.is_empty() {
                 return fail(2, "install takes --client".into());
             }
+            if let Some(bad) = trust.iter().find(|k| !crate::service::admin::valid_key(k)) {
+                return fail(
+                    2,
+                    format!(
+                        "--trust {bad:?} is not a sandbox key: base64url without padding (43 characters) of a 32-byte Ed25519 public key"
+                    ),
+                );
+            }
             if !secure::elevated() {
                 return fail(3, "needs an administrator".into());
             }
-            match scm::install(&clients) {
+            match scm::install(&clients, &trust) {
                 Ok(()) => say(0, status()),
                 Err(e) => fail(1, e),
             }

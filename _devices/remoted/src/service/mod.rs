@@ -15,7 +15,12 @@
 //!   process in its own session running from one of the paths installed (`--client`, the agent's own remoted), and only
 //!   after it says the per-boot secret the service writes where only that user can read it. remoted in turn checks the
 //!   pipe's server runs from the service's own path in its session. Nothing listens on a network.
+//! - **Administrator runs** (`service admin-run`, [`admin`]). The helper also starts a command for the person's remoted
+//!   with the signed-in person's own elevated token in their session, which is what clicking Yes on a UAC prompt
+//!   gives, and relays its output and exit code back: on a pipe and a protocol of their own, with the same checks, and
+//!   only with a grant that a sandbox key pinned at install (`--trust`) signed for exactly that PowerShell command.
 
+pub mod admin;
 #[cfg(windows)]
 mod windows;
 
@@ -34,7 +39,9 @@ pub fn main(args: &[String]) -> i32 {
     return windows::cli(args);
     #[cfg(not(windows))]
     {
-        let _ = args;
+        if args.first().map(String::as_str) == Some("admin-run") {
+            return admin::not_windows(&args[1..]);
+        }
         println!(
             "{}",
             serde_json::json!({

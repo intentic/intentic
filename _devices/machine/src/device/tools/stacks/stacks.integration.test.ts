@@ -15,7 +15,7 @@ import { deployStack, stackAction, stacksRoot } from "./stacks.js";
 
 const SANDBOX = "https://sandbox-0a1b2c3d4e5f.example.dev";
 const COMMIT = "3f2a9c1e".repeat(5);
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" };
+const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
 const granted: DeviceScopes = { ...off, shell: "on", programs: "on" };
 
 const write = (path: string, text: string): void => {

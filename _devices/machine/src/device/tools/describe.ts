@@ -12,6 +12,7 @@ import {
     DEVICE_FEATURE_REMOTE,
     DEVICE_FEATURE_REMOTE_ICE,
     DEVICE_FEATURE_REMOTE_SERVICE,
+    DEVICE_FEATURE_ADMIN_RUN,
     DEVICE_FEATURE_STACKS,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
@@ -136,7 +137,7 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
             DEVICE_FEATURE_STACKS,
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
             ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
-            ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE] : []),
+            ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE, DEVICE_FEATURE_ADMIN_RUN] : []),
             ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER] : []),
         ],
     };
@@ -242,7 +243,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
             ...intenticOsLine(facts),
-            `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}`,
+            `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}${platform() === "win32" ? `, run commands as administrator ${scopes.admin}` : ""}`,
             ...agentLines(ic, icOverrides(process.env), { version: MACHINE_VERSION, startedAt: thisRun()?.startedAt, previous: previousExit() }),
             ...(runningBeforeSignIn() ? [`Session: none yet. ${NO_DESKTOP_YET}`] : []),
             ...powerLines(facts),

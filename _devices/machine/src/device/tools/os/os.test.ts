@@ -18,7 +18,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     programs: "off",
     remoteView: "off",
     remoteControl: "off",
-    remoteTerminal: "off",
+    remoteTerminal: "off", admin: "off",
     ...overrides,
 });
 

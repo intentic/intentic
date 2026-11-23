@@ -1,6 +1,7 @@
 //! `intentic-remoted desktop-helper`: the process the service starts as SYSTEM in the console session. It reads its
 //! configuration from stdin (and ends when stdin does), listens on `\\.\pipe\intentic-remoted-desktop-<session>` for
-//! the person's remoted, and serves each connection with cast-win's helper.
+//! the person's remoted, and serves each connection with cast-win's helper; on
+//! `\\.\pipe\intentic-remoted-admin-<session>` it serves administrator runs (`admin`), with the same checks.
 
 use super::launch::HelperConfig;
 use super::pipe_name;
@@ -63,6 +64,24 @@ pub fn main() -> i32 {
             }
         });
     }
+    // Administrator runs: their own pipe and thread, the same access list, client check and secret, and each run checked
+    // against the sandbox's grant.
+    {
+        let admin = super::admin::Serving {
+            session,
+            user_sid: config.user_sid.clone(),
+            clients: config.clients.clone(),
+            secret: config.secret.clone(),
+            version: config.version.clone(),
+            grants: crate::service::admin::Grants::new(config.admin_keys.clone()),
+        };
+        if let Err(e) = std::thread::Builder::new()
+            .name("admin-runs".into())
+            .spawn(move || super::admin::serve(admin))
+        {
+            log::error!("administrator runs are not served: {e}");
+        }
+    }
     let watched = Arc::new(AtomicUsize::new(0));
     cast_win::helper::notice::spawn(watched.clone());
     let options = Arc::new(Options {
@@ -119,7 +138,7 @@ pub fn main() -> i32 {
 }
 
 /// A client is the person's remoted: in this session, running from a path the service was installed for.
-fn check(peer: u32, session: u32, clients: &[std::path::PathBuf]) -> Result<(), String> {
+pub(super) fn check(peer: u32, session: u32, clients: &[std::path::PathBuf]) -> Result<(), String> {
     let theirs = pipe::process_session(peer).ok_or("its session is unknown")?;
     if theirs != session {
         return Err(format!("it is in session {theirs}, not {session}"));

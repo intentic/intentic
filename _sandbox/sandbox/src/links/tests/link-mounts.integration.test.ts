@@ -16,7 +16,7 @@ const ops: Capability = { id: "ops", kind: "link", config: { url: "https://sandb
 const laptop: Capability = {
     id: "laptop",
     kind: "device",
-    config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" },
+    config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" },
 };
 
 const AnswerSchema = z.object({

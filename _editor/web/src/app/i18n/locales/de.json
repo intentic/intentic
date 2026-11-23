@@ -2816,6 +2816,14 @@
                 }
             },
             "device": {
+                "admin": {
+                    "hint": "Windows: Ein Befehl, den ein Agent als Administrator ausführen möchte, läuft auf diesem Computer ohne UAC-Abfrage. Jeder fragt dich zuerst auf einer Karte im Chat, außer die Unterhaltung ist für automatische Freigabe markiert. Braucht hier den Dienst für Sperrbildschirm und Administratorabfragen aus dem Fernzugriff.",
+                    "label": "Befehle als Administrator ausführen",
+                    "options": {
+                        "off": "Blockiert",
+                        "on": "Erlaubt"
+                    }
+                },
                 "control": {
                     "label": "Maus und Tastatur benutzen",
                     "options": {
@@ -11985,7 +11993,7 @@
             "closeBody": "Was darin auf {name} läuft, wird beendet.",
             "closeConfirm": "Terminal schließen",
             "serviceTitle": "Sperrbildschirm und Administrator-Abfragen",
-            "serviceNote": "Lässt Personen den Anmelde- und Sperrbildschirm, Strg+Alt+Entf und Administrator-Abfragen (UAC) sehen und bedienen. Braucht einmal die Zustimmung eines Administrators auf diesem Computer.",
+            "serviceNote": "Lässt Personen den Anmelde- und Sperrbildschirm, Strg+Alt+Entf und Administrator-Abfragen (UAC) sehen und bedienen. Braucht einmal die Zustimmung eines Administrators auf diesem Computer. Damit können Agenten auch Befehle ohne Abfrage als Administrator ausführen, wo „Befehle als Administrator ausführen“ an ist.",
             "serviceNotSetUp": "Nicht eingerichtet",
             "serviceSetUp": "Eingerichtet",
             "serviceOlder": "Eingerichtet, ältere Version",
@@ -12567,6 +12575,7 @@
                 "control": "Maus und Tastatur benutzen",
                 "sandboxes": "seine Sandboxes verwalten",
                 "destructive": "Dinge löschen",
+                "admin": "Befehle als Administrator ausführen",
                 "programs": "gesendete Programme ausführen",
                 "remoteView": "Personen können zusehen",
                 "remoteControl": "Personen können die Steuerung übernehmen",

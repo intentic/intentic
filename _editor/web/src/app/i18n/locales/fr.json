@@ -2816,6 +2816,14 @@
                 }
             },
             "device": {
+                "admin": {
+                    "hint": "Windows : une commande qu'un agent demande à exécuter en administrateur s'exécute sur cet ordinateur sans invite UAC. Chacune te demande d'abord sur une carte dans le chat, sauf si la conversation est marquée en approbation automatique. Nécessite ici le service d'écran de verrouillage et d'invites administrateur de l'accès à distance.",
+                    "label": "Exécuter des commandes en administrateur",
+                    "options": {
+                        "off": "Bloqué",
+                        "on": "Autorisé"
+                    }
+                },
                 "control": {
                     "label": "Utiliser la souris et le clavier",
                     "options": {
@@ -11985,7 +11993,7 @@
             "closeBody": "Ce qui s’y exécute sur {name} s’arrête.",
             "closeConfirm": "Fermer le terminal",
             "serviceTitle": "Écran de verrouillage et invites administrateur",
-            "serviceNote": "Permet de voir et d’utiliser l’écran de connexion et de verrouillage, Ctrl+Alt+Suppr et les invites administrateur (UAC). Nécessite une fois l’accord d’un administrateur sur cet ordinateur.",
+            "serviceNote": "Permet de voir et d’utiliser l’écran de connexion et de verrouillage, Ctrl+Alt+Suppr et les invites administrateur (UAC). Nécessite une fois l’accord d’un administrateur sur cet ordinateur. Permet aussi aux agents d’exécuter des commandes en administrateur sans invite, là où « Exécuter des commandes en administrateur » est activé.",
             "serviceNotSetUp": "Non configuré",
             "serviceSetUp": "Configuré",
             "serviceOlder": "Configuré, version plus ancienne",
@@ -12567,6 +12575,7 @@
                 "control": "utiliser la souris et le clavier",
                 "sandboxes": "gérer ses sandboxes",
                 "destructive": "supprimer des choses",
+                "admin": "exécuter des commandes en administrateur",
                 "programs": "exécuter les programmes qu'on lui envoie",
                 "remoteView": "des personnes peuvent le regarder",
                 "remoteControl": "des personnes peuvent en prendre le contrôle",

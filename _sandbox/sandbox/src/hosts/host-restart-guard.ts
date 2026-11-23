@@ -43,6 +43,10 @@ export const DeviceToolCallSchema = z.object({
             when: z.string().optional(),
             // os_rollback's: whether it reboots into the previous deployment now.
             apply: z.boolean().optional(),
+            // run_command's: run it as administrator (host-command-guard.ts asks the owner every time), and why. Read
+            // loosely: a non-boolean `admin` is the machine's to refuse, never a reason to forward the call unjudged.
+            admin: z.unknown().optional(),
+            why: z.string().optional().catch(undefined),
         }).optional(),
     }),
 });

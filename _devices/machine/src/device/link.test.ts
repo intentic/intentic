@@ -46,7 +46,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off",
+    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
     ...overrides,
 });
 
@@ -102,7 +102,7 @@ test("a pushed grant takes effect on the machine", async () => {
         screen: "on",
         control: "off",
         sandboxes: "off",
-        destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off",
+        destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
     });
 });
 
@@ -119,7 +119,7 @@ test("a grant carrying a switch this agent does not know is taken, with that swi
     const { client, logged, scopesNow } = connectedPair();
     const pushed = { shell: "off", write: "off", screen: "on", control: "off", network: "on" } as const;
     expect(await client.setScopes(pushed)).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off" });
+    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" });
     await client.setScopes(pushed);
     expect(logged.filter((line) => line.includes("does not know"))).toEqual([
         "https://sandbox.example.dev: the permissions it pushed include network, which this agent does not know; they stay off here until the agent is updated.",

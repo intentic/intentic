@@ -168,7 +168,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "run_command",
         description:
-            'Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user\'s login shell elsewhere (see describe). On a Windows PC with WSL, `in: "wsl:<distro>"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: "windows"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. At the deadline the command is stopped together with everything it started. The call returns once the command itself exits: a process it leaves running in the background keeps running, but nothing it prints after that is collected, so start one with its output redirected to a file (`> out.log 2>&1`). Work that may outlast the deadline (a build, a large copy, a backup) goes to app_start instead, with a shell as its program (`pwsh -NoProfile -Command …`, `sh -c …`), and app_status with `untilExit` waits for it to end: never a loop of `sleep` and checks inside run_command, which holds the call and still ends at the deadline. A file or a folder to or from the sandbox moves with the sandbox\'s `devices copy`, not `docker cp` or base64 through here. Very long output comes back as its start and its end, with the middle cut and counted. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device\'s "Run destructive commands" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody\'s laptop.',
+            'Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user\'s login shell elsewhere (see describe). On a Windows PC with WSL, `in: "wsl:<distro>"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: "windows"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. At the deadline the command is stopped together with everything it started. The call returns once the command itself exits: a process it leaves running in the background keeps running, but nothing it prints after that is collected, so start one with its output redirected to a file (`> out.log 2>&1`). Work that may outlast the deadline (a build, a large copy, a backup) goes to app_start instead, with a shell as its program (`pwsh -NoProfile -Command …`, `sh -c …`), and app_status with `untilExit` waits for it to end: never a loop of `sleep` and checks inside run_command, which holds the call and still ends at the deadline. A file or a folder to or from the sandbox moves with the sandbox\'s `devices copy`, not `docker cp` or base64 through here. Very long output comes back as its start and its end, with the middle cut and counted. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device\'s "Run destructive commands" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. On Windows, `admin: true` runs the command as this computer\'s administrator with no UAC prompt, its output coming back as usual: it needs the "Run commands as administrator" switch, and each run waits for the owner\'s yes on a card in chat, so say in `why` what it is for. Use it for what needs an administrator instead of Start-Process -Verb RunAs, whose prompt waits for someone at the computer and whose output never comes back. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody\'s laptop.',
         effect: "destructive",
         input: z.object({
             command: required.describe("The command line to run, in the shell of the environment it runs in."),
@@ -190,11 +190,30 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .describe(`How long to wait before killing it, in ms. Default ${DEFAULT_TIMEOUT_MS}, maximum ${MAX_TIMEOUT_MS}.`),
             // Agents reach for Bash's `timeout` here (2026-11-16): the same milliseconds, timeoutMs winning when both are given.
             timeout: z.int().positive().max(MAX_TIMEOUT_MS).optional().describe("Same as timeoutMs, in milliseconds."),
+            // (2026-11-23) Run as administrator through remoted's Windows service (tools/admin/admin-run.ts). `why` is read by
+            // the daemon for the owner's card, never here.
+            admin: z
+                .boolean()
+                .optional()
+                .describe(
+                    'Windows: run it as this computer\'s administrator, with no UAC prompt. Needs the "Run commands as administrator" switch; the owner approves each run on a card in chat.',
+                ),
+            why: z.string().optional().describe("With admin: one line saying what the command is for, shown on the owner's card."),
+            // The sandbox's signed yes to this admin run (policy/admin/admin-grant.ts), added by the daemon once the owner's card
+            // is answered; the service runs nothing without it.
+            grant: z.string().optional().describe("Added by the sandbox to an approved admin run. Never set it yourself."),
         }),
-        run: async ({ command, cwd, timeoutMs: asked, timeout, in: target }, scopes) => {
+        run: async ({ command, cwd, timeoutMs: asked, timeout, in: target, admin, grant }, scopes) => {
             const timeoutMs = asked ?? timeout ?? DEFAULT_TIMEOUT_MS;
             const result = await runCommand(
-                { command, ...(cwd === undefined ? {} : { cwd }), ...(target === undefined ? {} : { in: target }), timeoutMs },
+                {
+                    command,
+                    ...(cwd === undefined ? {} : { cwd }),
+                    ...(target === undefined ? {} : { in: target }),
+                    timeoutMs,
+                    admin: admin === true,
+                    grant,
+                },
                 scopes,
             );
             // A non-zero exit is a real answer, not a tool failure; the model reads the code and the streams and

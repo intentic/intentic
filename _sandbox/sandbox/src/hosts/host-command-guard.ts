@@ -16,6 +16,7 @@ import { excerptProgram } from "../safety/safety-log.js";
 import { conversationTaintSource, conversationUnattended } from "../guard/turn-taint.js";
 import type { HostGuardDeps } from "./host-guard-deps.js";
 import type { DeviceToolCall } from "./host-restart-guard.js";
+import { ADMIN_SENTENCE, type AdminAsk, adminBarred, adminDescription, adminStillWaiting } from "./admin/host-admin-ask.js";
 
 // Applies the owner's safety policy to a command headed for their own device, before it crosses the tunnel. The daemon
 // triages, judges and cards here since the machine itself can only allow or refuse, with no card to raise; this can
@@ -59,8 +60,10 @@ const LATER =
     `You may also carry on with other work or end your turn: the card stays up until they answer, and if they allow it ` +
     `you are told to make this call again. Nothing is broken on the device and nothing refused this, so do not report it ` +
     `as refused or blocked.`;
-const stillWaiting = (machine: string, typed: boolean): string =>
-    typed
+const stillWaiting = (machine: string, typed: boolean, admin = false): string =>
+    admin
+        ? adminStillWaiting(machine, LATER)
+        : typed
         ? `Still waiting for the owner: a card asks them to approve typing this on "${machine}", and nothing has been typed yet. ` +
           `Their answer is kept for this exact text: make the same call again with exactly the same text to wait for it. ${LATER} ` +
           `Do not type a different command to do the same thing.`
@@ -90,7 +93,7 @@ export const deviceScopesOf = async (services: Pick<Services, "capabilities" | "
 // Cards still open (or answered and not yet collected) by the exact call that raised them, each held for its turn's
 // close until a call collects it (guard/held-asks.ts).
 const heldAsks = createHeldAsks<HostGateRefusal | undefined>();
-const askKey = (machine: string, command: string): string => `${machine}\u0000${command}`;
+const askKey = (machine: string, command: string, admin: boolean): string => `${machine}\u0000${admin ? "admin\u0000" : ""}${command}`;
 
 /**
  * The program a device tool call carries, or undefined for a tool that carries none; a hostile or notification-shaped
@@ -174,6 +177,10 @@ interface DeviceAsk {
     // How the call carries it: typed into the device rather than run on it (the card says so, since nothing runs until
     // something reads it), run as a command, or started as an application.
     readonly kind: ProgramKind;
+    // Run as administrator: the card says so, and carries the agent's reason.
+    readonly admin: AdminAsk | undefined;
+    // Whether the judge had something to say about it (a class matched): its sentence then leads the card.
+    readonly judged: boolean;
 }
 
 // How a card ended: `answer` is what the call answers (undefined forwards the command, a refusal is what the agent
@@ -198,13 +205,14 @@ const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun,
                 kind: "permission",
                 requestId,
                 toolName: `${ask.machine}__${toolOfKind(ask.kind)}`,
-                title: cardTitle(ask.kind, ask.machine),
-                displayName: cardDisplayName(ask.kind, ask.machine),
+                title: ask.admin === undefined ? cardTitle(ask.kind, ask.machine) : `Run this as administrator on ${ask.machine}?`,
+                displayName: ask.admin === undefined ? cardDisplayName(ask.kind, ask.machine) : `Run as administrator on ${ask.machine}`,
                 // No marked spans: the title already says what matters here, that it runs on the machine, not the
                 // container.
                 program: { text: excerptProgram(ask.command), language: "bash", truncated: false, spans: [] },
-                // `explain` and not `reason`: they would be the same sentence, printed twice on one card.
-                explain: ask.sentence,
+                // `explain` and not `reason`: they would be the same sentence, printed twice on one card. An admin run
+                // the judge had nothing to say about carries the agent's own reason instead, said as the agent's.
+                ...(ask.admin === undefined || ask.judged ? { explain: ask.sentence } : { description: adminDescription(ask.admin) }),
             }),
             approves: (answer) => answer.decision !== "deny",
             alwaysAsks: ask.hard,
@@ -231,29 +239,83 @@ const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun,
     return { answer: undefined, outcome: { decision: "approved" } };
 };
 
+// The judge's verdict on a command and the setting it was read under. An admin run in which nothing matched has nothing
+// for the judge to read: no model is spent, and the card asks anyway.
+const commandVerdict = async (
+    services: Services,
+    guards: HostGuardDeps,
+    input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined; readonly kind: ProgramKind },
+    classes: readonly CommandClass[],
+): Promise<{ readonly verdict: SafetyVerdict; readonly judging: CommandJudgeMode }> => {
+    if (classes.length === 0) {
+        return { verdict: { decision: "ask", sentence: ADMIN_SENTENCE }, judging: "on" };
+    }
+    const conversationId = input.conversationId;
+    return await hostVerdict(services, guards, {
+        machine: input.machine,
+        command: input.command,
+        consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
+        // Told to the judge, never a refusal: whether anybody is watching the live turn right now.
+        unattended: conversationId === undefined || conversationUnattended(conversationId),
+        outsideSource: conversationId === undefined ? undefined : conversationTaintSource(conversationId),
+        language: languageOf(input.kind),
+    });
+};
+
+// Whether a card for this command asks every time, whatever stands in the conversation: the owner's hard rule matched
+// (same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one), or it runs as
+// administrator. Only the auto-approve mark answers such a card by itself.
+const asksEveryTime = (matches: ReturnType<typeof matchCommand>, admin: AdminAsk | undefined): boolean =>
+    admin !== undefined || matches.some((match) => guard(commandRun, { commandClass: match.commandClass, locus: DEVICE, live: match.live }).effect !== "allow");
+
+// Why an admin run cannot happen on `machine` whatever the owner says (admin/host-admin-ask.ts); undefined for any other call.
+const barredAsAdmin = async (services: Services, machine: string, admin: AdminAsk | undefined): Promise<string | undefined> =>
+    admin === undefined ? undefined : await adminBarred(machine, services.hostHub.state(machine).facts, async () => await deviceScopesOf(services, machine));
+
+// Writes one judged device command to the safety log, with how it came out.
+const recorder =
+    (services: Services, at: number, entry: { readonly program: string; readonly classes: readonly CommandClass[]; readonly decision: SafetyVerdict["decision"]; readonly sentence: string; readonly machine: string }) =>
+    (outcome: "allowed" | "asked" | "refused", answer?: "allowed" | "declined"): void => {
+        void services.safetyLog
+            .record({ at, ...entry, classes: [...entry.classes], outcome, ...(answer === undefined ? {} : { answer }) })
+            .catch((error: unknown) => services.logger.warn({ err: error, machine: entry.machine }, "safety log: a judged device command was not recorded"));
+    };
+
 // Judges one command headed for `machine`; undefined forwards it, a refusal answers the agent and never touches the
 // tunnel. No live turn means no judgment (forwarded): there's no card, taint bit or policy snapshot to use, and the
 // machine's own scopes still hold.
 export const judgeHostCommand = async (
     services: Services,
     guards: HostGuardDeps,
-    input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined; readonly kind: ProgramKind },
+    input: {
+        readonly machine: string;
+        readonly command: string;
+        readonly conversationId: string | undefined;
+        readonly kind: ProgramKind;
+        // Present on run_command's `admin: true`: asked every time, whatever the judge makes of the command.
+        readonly admin?: AdminAsk;
+    },
     budgetMs: number = CALL_BUDGET_MS,
 ): Promise<HostGateRefusal | undefined> => {
     const at = Date.now();
-    const { kind } = input;
+    const { kind, admin } = input;
+    const barred = await barredAsAdmin(services, input.machine, admin);
+    if (barred !== undefined) {
+        return refusal(barred);
+    }
     // At `device` locus, paths mean the owner's machine, not an image: /usr, /etc, a Docker volume are real here.
     const matches = matchCommand(input.command, { locus: DEVICE });
     const classes = matches.map((match) => match.commandClass);
-    // Tier 1: nothing matched, so nothing to judge and no model spent; most commands land here.
-    if (matches.length === 0) {
+    // Tier 1: nothing matched, so nothing to judge and no model spent; most commands land here. An admin run is asked
+    // about all the same.
+    if (matches.length === 0 && admin === undefined) {
         return undefined;
     }
     const conversationId = input.conversationId;
     const call = (id: string) => ({
         conversationId: id,
-        key: askKey(input.machine, input.command),
-        waiting: () => refusal(stillWaiting(input.machine, kind === "typed")),
+        key: askKey(input.machine, input.command, admin !== undefined),
+        waiting: () => refusal(stillWaiting(input.machine, kind === "typed", admin !== undefined)),
         budgetMs,
         arrivedAt: at,
     });
@@ -269,39 +331,13 @@ export const judgeHostCommand = async (
         return refusal(switchedOff(input.machine, gated, kind === "typed"));
     }
     const run = conversationId === undefined ? undefined : guards.turnRun(conversationId);
-    // Same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one.
-    const hard = matches.find(
-        (match) => guard(commandRun, { commandClass: match.commandClass, locus: DEVICE, live: match.live }).effect !== "allow",
-    )?.commandClass;
-    // Told to the judge, never a refusal: whether anybody is watching the live turn right now.
-    const unattended = conversationId === undefined || conversationUnattended(conversationId);
-    const outsideSource = conversationId === undefined ? undefined : conversationTaintSource(conversationId);
-    const { verdict, judging } = await hostVerdict(services, guards, {
-        machine: input.machine,
-        command: input.command,
-        consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
-        unattended,
-        outsideSource,
-        language: languageOf(kind),
-    });
+    const { verdict, judging } = await commandVerdict(services, guards, input, classes);
     // Only "on" lets the verdict decide; "off"/"watch" just log it, and the hard rule can only tighten the result.
     const enforced = judging === "on" ? verdict.decision : "allow";
-    const decision = hard !== undefined && enforced === "allow" ? "ask" : enforced;
+    const asksAlways = asksEveryTime(matches, admin);
+    const decision = asksAlways && enforced === "allow" ? "ask" : enforced;
     // Logs the judge's own decision, not the enforced one: an "ask" beside "allowed" means watch mode would refuse.
-    const entry = {
-        program: excerptProgram(input.command),
-        classes,
-        decision: verdict.decision,
-        sentence: verdict.sentence,
-        machine: input.machine,
-    };
-    const record = (outcome: "allowed" | "asked" | "refused", answer?: "allowed" | "declined"): void => {
-        void services.safetyLog
-            .record({ at, ...entry, outcome, ...(answer === undefined ? {} : { answer }) })
-            .catch((error: unknown) =>
-                services.logger.warn({ err: error, machine: input.machine }, "safety log: a judged device command was not recorded"),
-            );
-    };
+    const record = recorder(services, at, { program: excerptProgram(input.command), classes, decision: verdict.decision, sentence: verdict.sentence, machine: input.machine });
     if (decision === "allow") {
         // Nothing was judged at "off", so no row is written: it would only repeat the setting back to the log.
         if (judging !== "off") {
@@ -323,24 +359,24 @@ export const judgeHostCommand = async (
     }
     // Asked whoever started the turn: a card nobody has answered yet waits for the owner, it is not a refusal.
     record("asked");
-    const ask = { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at, hard: hard !== undefined };
+    const ask = { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at, kind, admin };
     return heldAsks.ask(call(conversationId), {
-        raise: (ended) => askOwner(services, guards, run, ended, { ...ask, kind }),
-        told: deviceWake(input.machine, input.command, kind === "typed"),
+        raise: (ended) => askOwner(services, guards, run, ended, { ...ask, hard: asksAlways, judged: classes.length > 0 }),
+        told: deviceWake(input.machine, input.command, kind === "typed", admin !== undefined),
         held: guards.held,
         finished: run.waitUntilFinished(),
     });
 };
 
 // What a turn woken by the card's late answer reads: what to repeat, exactly, or the owner's note on a decline.
-const deviceWake = (machine: string, command: string, typed: boolean) =>
+const deviceWake = (machine: string, command: string, typed: boolean, admin: boolean) =>
     wakeWords({
-        doing: `${typed ? "typing this" : "running this"} on "${machine}"`,
+        doing: `${typed ? "typing this" : admin ? "running this as administrator" : "running this"} on "${machine}"`,
         call: command,
         notYet: `It has not ${typed ? "been typed" : "run"} yet`,
         again: typed
             ? "Type it now with exactly the same call: the same tool and exactly the same text."
-            : "Run it now with exactly the same call: the same tool, the same command and the same arguments.",
+            : `Run it now with exactly the same call: the same tool, the same command and the same arguments${admin ? ", admin: true included" : ""}.`,
         declinedSo: `it did not ${typed ? "get typed" : "run"}`,
         refrain: "Do not run it or anything that does the same thing.",
     });

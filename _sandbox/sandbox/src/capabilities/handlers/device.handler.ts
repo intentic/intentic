@@ -50,6 +50,7 @@ const DEVICE: PeerHandlerSpec<DeviceConfig> = {
         remoteView: host.remoteView,
         remoteControl: host.remoteControl,
         remoteTerminal: host.remoteTerminal,
+        admin: host.admin,
         ...(host.roots !== undefined ? { roots: host.roots } : {}),
     }),
 };

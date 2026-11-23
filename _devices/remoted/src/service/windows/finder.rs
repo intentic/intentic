@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 /// Who may own the helper's pipe: what SYSTEM's objects are owned by (its token's default owner is the Administrators
 /// group), or SYSTEM itself. A process of the user cannot make an object either owns: its token's Administrators is
 /// deny-only until elevated, and an elevated process is an administrator already.
-const SERVICE_OWNERS: &[&str] = &["S-1-5-32-544", "S-1-5-18"];
+pub(super) const SERVICE_OWNERS: &[&str] = &["S-1-5-32-544", "S-1-5-18"];
 
 pub struct ServiceFinder {
     name: String,

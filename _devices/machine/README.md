@@ -67,6 +67,27 @@ flowchart LR
   pasted or set into a field that the command classifier reads as destructive needs "Run destructive commands",
   as running it would. The sandbox also judges that text with the owner's safety policy before it crosses
   (`hosts/host-command-guard.ts`, `typedInCall`).
+- (2026-11-23) **Run as administrator, with no UAC prompt** ([`tools/admin/admin-run.ts`](src/device/tools/admin/admin-run.ts)).
+  `run_command` with `admin: true` on Windows runs the same PowerShell invocation through
+  `intentic-remoted service admin-run`: the SYSTEM helper of remoted's Windows service (below, "The lock screen and
+  administrator prompts") starts it with the signed-in person's own administrator token in their session, which is
+  what clicking Yes on UAC gives (their profile and HKCU, windows on their desktop), and stdout, stderr and the exit
+  code come back as an ordinary run's do. It needs `shell`, then the card's own "Run commands as administrator"
+  switch (`admin`, default off), on top of the destructive and sandbox checks every command answers to. Refused here
+  off Windows, with `in` (root in a WSL distro needs no administrator: `wsl -d <distro> -u root`), and with the
+  switch off. remoted answers in a `--status` file: a command that did not run fails the call with its reason in
+  words (the service not set up or too old, its helper not running, nobody signed in, a standard account). The
+  command's environment is the person's own, fresh, so the `INTENTIC_AGENT_COMMAND` mark does not cross. The owner's
+  yes for each run is the daemon's card (`hosts/admin/host-admin-ask.ts`), which only a conversation's auto-approve mark
+  answers by itself; `why` is read there for the card and never here. Once it is answered the daemon adds `grant` to
+  the call: the sandbox's signature over the command's digest, five minutes, one use
+  ([`policy/admin/admin-grant.ts`](../../_shared/sandbox-contract/src/policy/admin/admin-grant.ts)), passed on as `--grant`. The
+  service runs nothing without one that verifies under a key it pinned at install (`remoteService` install fetches
+  the asking sandbox's signing key from its own address, `GET /keyring/keys`, and passes it as `--trust`), so a
+  program of the person's that reaches the service's pipe still cannot run anything as administrator. The agent advertises `admin-run` where it
+  advertises `remote-service`. Rejected: clicking Yes on the UAC prompt through the screen (consent nobody gives,
+  and no telling whose prompt it is), and `Start-Process -Verb RunAs`, which waits for somebody at the computer and
+  hands no output back.
 - (2026-11-03) **A web page on this machine's own GPU** ([`tools/browser/`](src/device/tools/browser), schemas in
   `tools.ts`). A sandbox renders WebGL and WebGPU in software: the shinobi sandbox's agents waited 176 s for a
   game to load, timed 6-11 s a frame, hand-built raw CDP clients in `/tmp`, and could not see a bug that showed only on
@@ -1378,6 +1399,8 @@ some link wants it, and enforces the switches ([`device/remote/`](src/device/rem
   (`remoteService`). Off Windows it answers `supported: false` without running anything. Who may ask: the daemon only,
   for a person with Full access to its sandbox, as for the switches; never a tool, so no agent can put a UAC prompt in
   front of the person, and no switch gates it, since the switches already bound what people may do through it.
+  (2026-11-23) The same service runs an agent's command as administrator (`run_command`'s `admin`, above), so setting
+  it up once is also what lets an agent do administrator work later with no prompt at this computer.
   `uninstall` of this agent does not remove the service yet.
 
 ### Uninstall

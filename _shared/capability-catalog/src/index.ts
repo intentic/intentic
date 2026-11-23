@@ -207,6 +207,16 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         hint: "Deleting folders recursively, formatting a disk, removing a Docker volume. Everything else it may run stays allowed.",
     },
     {
+        key: "admin",
+        label: "Run commands as administrator",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Windows: a command an agent asks to run as administrator runs with no UAC prompt on this computer. Each one asks you on a card in chat first, unless the conversation is marked auto-approve. Needs Remote access's lock screen and admin prompts service here.",
+    },
+    {
         key: "programs",
         label: "Run programs this sandbox sends",
         default: "off",

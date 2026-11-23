@@ -19,9 +19,9 @@ use windows::Win32::Security::{
     TOKEN_ALL_ACCESS, TOKEN_DUPLICATE, TOKEN_QUERY, TokenPrimary, TokenSessionId,
 };
 use windows::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-    SetInformationJobObject,
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JobObjectExtendedLimitInformation, SetInformationJobObject,
 };
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
@@ -40,6 +40,9 @@ pub struct HelperConfig {
     pub clients: Vec<std::path::PathBuf>,
     pub user_sid: String,
     pub version: String,
+    /// The sandbox keys whose grant an administrator run must carry (`Installed::admin_keys`).
+    #[serde(default)]
+    pub admin_keys: Vec<String>,
 }
 
 pub struct Prepared {
@@ -87,6 +90,7 @@ pub fn prepare() -> Result<Prepared, String> {
             clients: installed.clients,
             user_sid: installed.user_sid,
             version: crate::VERSION.to_string(),
+            admin_keys: installed.admin_keys,
         },
     })
 }
@@ -310,12 +314,15 @@ fn launch(session: u32, config: &HelperConfig) -> Result<Helper, String> {
         }
         return Err(format!("CreateProcessAsUser: {e}"));
     }
-    // A job that ends the helper when the service's handle on it closes (the service ending, however it ends).
+    // A job that ends the helper when the service's handle on it closes (the service ending, however it ends). An
+    // administrator run the helper starts asks to break away from it (admin.rs): that is the person's own process,
+    // which outlives a helper started again in another session, as a program they started themselves would.
     // SAFETY: a job, its limit, the helper put in it and then let run; handles kept in `Helper`.
     let job = unsafe {
         let job = CreateJobObjectW(None, PCWSTR::null()).unwrap_or_default();
         let mut limit = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-        limit.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        limit.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
         let _ = SetInformationJobObject(
             job,
             JobObjectExtendedLimitInformation,

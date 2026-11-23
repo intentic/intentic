@@ -75,6 +75,7 @@ const GRANT_WORDS = {
     remoteView: () => t(`settings.accessMap.grant.remoteView`),
     remoteControl: () => t(`settings.accessMap.grant.remoteControl`),
     remoteTerminal: () => t(`settings.accessMap.grant.remoteTerminal`),
+    admin: () => t(`settings.accessMap.grant.admin`),
 } as const;
 
 const isGrant = (grant: string): grant is keyof typeof GRANT_WORDS => Object.hasOwn(GRANT_WORDS, grant);

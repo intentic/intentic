@@ -86,6 +86,7 @@ export const SWITCH_LABELS = {
     sandboxes: "Manage sandboxes on this device",
     destructive: "Run destructive commands",
     programs: "Run programs this sandbox sends",
+    admin: "Run commands as administrator",
     // People's, never an agent's (remote/remote.ts): no tool asks for these, and remoteStart reads all three at once.
     remoteView: "Let people see the screen",
     remoteControl: "Let people use the mouse and keyboard",

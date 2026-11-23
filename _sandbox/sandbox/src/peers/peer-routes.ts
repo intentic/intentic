@@ -43,10 +43,26 @@ const PEER_GONE_QUIET = 1001;
 const terminable = (socket: WebSocketLike | undefined): socket is WebSocketLike & { terminate: () => void } => socket !== undefined && "terminate" in socket;
 
 // A gate on a tool call before it crosses to the peer: a refusal returns as a tool result the model reads.
+// A gate answers with a refusal the model reads, the message to send instead (the same call with what only the daemon may
+// add to it, as the hosts gate adds an administrator run's signed grant), or undefined to send it as it came.
 export type PeerCallGate = (
     payload: unknown,
     call: { readonly id: string; readonly conversationId: string | undefined },
-) => Promise<{ readonly refusal: string } | undefined>;
+) => Promise<{ readonly refusal: string } | { readonly forward: RpcMessage } | undefined>;
+
+// What the door's gate makes of a message: the refusal to answer with, or the message to send (its own, or the one the
+// gate rewrote).
+const throughGate = async (
+    gate: PeerCallGate | undefined,
+    message: RpcMessage,
+    call: { readonly id: string; readonly conversationId: string | undefined },
+): Promise<{ readonly refusal: string } | { readonly message: RpcMessage }> => {
+    const gated = gate === undefined ? undefined : await gate(message, call);
+    if (gated === undefined) {
+        return { message };
+    }
+    return "refusal" in gated ? gated : { message: gated.forward };
+};
 
 // Where a call goes instead of the id its turn mounted, and the message as that connection reads it; or a refusal the
 // model reads, naming where it could go. Answered before the gate, so a call is judged against where it actually runs
@@ -434,16 +450,17 @@ export const createPeerRoutes = <
         if ("refusal" in destination) {
             return refusedCall(asked, destination.refusal);
         }
-        const { id, message } = destination;
+        const { id, message: routed } = destination;
         if (!(await store.enrolled(id))) {
-            return message.id === undefined
+            return routed.id === undefined
                 ? undefined
-                : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: `no connected ${door.noun} named "${id}"` } };
+                : { jsonrpc: "2.0", id: routed.id, error: { code: -32000, message: `no connected ${door.noun} named "${id}"` } };
         }
-        const stopped = deps.beforeCall === undefined ? undefined : await deps.beforeCall(message, { id, conversationId: call.conversationId });
-        if (stopped !== undefined) {
-            return { jsonrpc: "2.0", id: message.id ?? null, result: { content: [{ type: "text", text: stopped.refusal }], isError: true } };
+        const gated = await throughGate(deps.beforeCall, routed, { id, conversationId: call.conversationId });
+        if ("refusal" in gated) {
+            return { jsonrpc: "2.0", id: routed.id ?? null, result: { content: [{ type: "text", text: gated.refusal }], isError: true } };
         }
+        const { message } = gated;
         if (message.id === undefined) {
             // Forwarded and forgotten: a notification expects no answer; skipped when the peer is offline.
             void hub.mcp(id, message).catch(() => undefined);

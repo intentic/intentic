@@ -192,6 +192,11 @@ export const DeviceScopesSchema = z.object({
     remoteControl: hostScope.default("off"),
     // Let people open terminals: a shell on this computer, in any of its environments.
     remoteTerminal: hostScope.default("off"),
+    // (2026-11-23) Run commands as administrator: run_command's `admin`, on Windows, through intentic-remoted's service,
+    // with no UAC prompt at the computer. Its own switch, default off, beside `shell` and never implied by it: what a
+    // command may do as the person and what it may do as the computer's administrator are different grants. Each run
+    // still asks on a card in chat, which only a conversation's auto-approve mark answers by itself.
+    admin: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });

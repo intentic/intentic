@@ -89,6 +89,7 @@ describe("contributionEntry", () => {
             "control",
             "sandboxes",
             "destructive",
+            "admin",
             "programs",
             "remoteView",
             "remoteControl",

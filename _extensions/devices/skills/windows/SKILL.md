@@ -27,7 +27,7 @@ start scripts with `$ErrorActionPreference = 'Stop'` so cmdlet failures surface 
 | Search text | `Select-String -Path *.txt -Pattern 'needle'` |
 | Read/write text | `Get-Content f.txt -Raw` / `Set-Content f.txt -Value $x -Encoding utf8` |
 | Processes | `Get-Process node`, `Stop-Process -Name node -Force` |
-| Services | `Get-Service Spooler`, `Restart-Service Spooler` (elevation needed) |
+| Services | `Get-Service Spooler`, `Restart-Service Spooler` (needs `admin: true`) |
 | Installed apps | `winget list`, install with `winget install --id Git.Git -e --silent` |
 | Scheduled tasks | `Get-ScheduledTask`, `Register-ScheduledTask` |
 | Open something | `Start-Process notepad.exe`, `Start-Process https://example.com` |
@@ -76,9 +76,15 @@ A UAC prompt appears on a SECURE DESKTOP that no injected input can reach: if on
 and the user has to click it themselves. Say so rather than retrying.
 
 ### Elevation
-You are running as the logged-in user, NOT as administrator, and `Start-Process -Verb RunAs` pops a UAC prompt
-on the user's screen that they must click. Say so before you try it; do not fire UAC prompts at somebody
-unannounced.
+You are running as the logged-in user, NOT as administrator. For anything that needs an administrator (diskpart,
+`Optimize-VHD`, a service, a machine-wide install, a registry key under HKLM, a firewall rule), call
+`run_command` with `admin: true` and a one-line `why`: it runs as this computer's administrator with no UAC
+prompt, and its output comes back as usual. Each run waits for the owner's yes on a card in chat (or none, in a
+conversation they marked auto-approve), so one script that does the whole job beats several admin calls. It needs
+the device's "Run commands as administrator" switch and the lock screen and admin prompts service from Remote
+access; when either is missing, the refusal says so and how to ask for it. Only where it cannot work does
+`Start-Process -Verb RunAs` remain, which pops a UAC prompt somebody at the computer must click and hands no output
+back: say so before you try it, and never fire one at somebody unannounced.
 
 ### Two filesystems, and which tool for which job
 - **Their device is not this sandbox.** A file you create here does not exist there; a path they name
