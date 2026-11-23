@@ -476,10 +476,15 @@ flowchart LR
   board of the sandbox open last (Home's list of sandboxes only with none open yet; `rootLanding`), with the desktop's
   rail down its left
   (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`): the sandbox's
-  logo on top, which opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
-  section, the terminal, the Sandbox hub and the + that adds a capability, at a finger's size (`phoneRailFrame` in
-  `shell/rail/railFrame.ts`), and at the foot the desktop's own avatar control (`shell/AccountPanel.vue`: Settings,
-  Discord, sign out). The board there draws only the lanes with something in them
+  logo on top, which opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then the sections
+  the desktop rail would keep (`shell/rail/railSplit.ts`: the permanent ones, the ones pinned on this phone, any while
+  it badges), at a finger's size (`phoneRailFrame` in `shell/rail/railFrame.ts`), a More tile whose sheet holds every
+  other section with its pin, the terminal, the Sandbox hub and adding a capability (`shell/rail/phone/PhoneRailMore.vue`),
+  and at the foot the desktop's own avatar control (`shell/AccountPanel.vue`: Settings, Discord, sign out). The rail never
+  scrolls: drawn whole it was thirteen unlabelled tiles that did (2026-11-23). With more than one sandbox to go to, the
+  sandboxes run along the board's foot instead (`shell/rail/phone/PhoneSandboxBar.vue`), the open one plated among them
+  and opening the Menu page, each other one switching on a press and carrying what waits for its reader there, and the
+  rail starts with the sections. The board there draws only the lanes with something in them
   (`features/agents/board/view/phoneLanes.ts`), and none of the geek metrics. Under the chat's composer only the
   refusal and running jobs stand; the cache, context and allowance readouts are the desktop's. A
   conversation opens over the whole screen from its card and goes back by its own arrow; every other page gets the

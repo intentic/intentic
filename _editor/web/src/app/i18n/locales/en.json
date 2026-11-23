@@ -13007,6 +13007,10 @@
             "away": " · away",
             "phone": "This phone"
         },
+        "mobileRail": {
+            "unpin": "Take {label} off the rail",
+            "pinNote": "A pinned section stays on the rail. The others come onto it while they need you."
+        },
         "notificationSources": {
             "allow": "Allow",
             "alreadyUpToDate": "Already up to date",

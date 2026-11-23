@@ -22,7 +22,7 @@ import RailTools from "./rail/tools/RailTools.vue";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { useProjectCommands } from "./commands/useProjectCommands";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
-import { railBands, railRank, onRail, railPolicy, onRailOnlyByVisit } from "../workbench/views/registry";
+import { railBands, railRank, railPolicy, onRailOnlyByVisit } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
 import { chatInSidePanel, chatTucked } from "../models/conversations/panel/chatPanelLayout";
@@ -49,7 +49,7 @@ import { setSplit, sideDocked } from "../workbench/side/sideTabs";
 import { besideChat, besideFills, sideColumnShown, sideShown, sideTucked, TUCKED_STRIP_PX } from "./side/sideLayout";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { type SectionTile, tileLabel, tileParts, useSectionTiles } from "./rail/sectionTiles";
-import { useRailPins } from "./rail/railPins";
+import { useRailSplit } from "./rail/railSplit";
 import { useRailMorph } from "./rail/railMorph";
 import RailIcon from "./rail/RailIcon.vue";
 import RailMore from "./rail/RailMore.vue";
@@ -118,18 +118,8 @@ watch(
 // visiting is in both). The chat has no tile: it stands at the right of every page (shell/side).
 const { tiles, settled: railSettled } = useSectionTiles();
 
-// onRail (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
-const pins = useRailPins();
-const onRailTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => onRail(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) })),
-);
-// More lists what is off the rail AT REST: a section visited from here stays in the menu (marked as where you are)
-// while its tile also sits on the rail, so the menu keeps the same rows in the same places between openings.
-const moreTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value
-        .filter((tile) => !onRail(tile, { pinned: pins.isPinned(tile.to), active: false }))
-        .toSorted((left, right) => left.label.localeCompare(right.label)),
-);
+// onRail (registry.ts) holds the rule; railSplit.ts supplies its live facts, pinned and active, as it does the phone's.
+const { pins, onRailTiles, moreTiles } = useRailSplit(tiles, isNavActive);
 
 // tileTip, plus one clause when a tile is on the rail only by the visit: says so once, while it can still
 // be pinned.
@@ -145,9 +135,7 @@ const railNav = ref<HTMLElement | null>(null);
 useRailMorph(() => railNav.value, masterRail);
 
 // Only the permanent tiles and this reader's pins — the tiles that will still be there tomorrow.
-const stableTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => railPolicy(tile.id) === `always` || pins.isPinned(tile.to)),
-);
+const stableTiles = computed<readonly SectionTile[]>(() => tiles.value.filter((tile) => railPolicy(tile.id) === `always` || pins.isPinned(tile.to)));
 // Tiles the rail had last time and hasn't refilled yet; empty once complete or on a first visit.
 const heldTiles = useRailMemory(stableTiles, railSettled);
 // On-rail tiles plus held tiles, sorted by the same table, so each lands where it will take its place.
@@ -310,131 +298,134 @@ useGettingStarted();
             :data-rail="masterRail ? `unrolled` : `folded`"
             style="grid-area: rail"
         >
-          <MasterRail v-if="masterRail" />
-          <template v-else>
-            <!-- Top of the rail: switch between sandboxes, add one, or manage access. No Home tile above it, by the owner's
+            <MasterRail v-if="masterRail" />
+            <template v-else>
+                <!-- Top of the rail: switch between sandboxes, add one, or manage access. No Home tile above it, by the owner's
                  decision (it came back once already): the way to every sandbox is the others' cluster under it, which
                  unrolls them along this rail and which a guest, fenced out of Home, never sees; then the switcher's own
                  header mark and Mod+Alt+H. -->
-            <SandboxSwitcher />
-            <OtherSandboxes v-if="!isGuest" />
-            <!-- Other members connected right now, live from the daemon's /events roster. -->
-            <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
-            <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
-            <span class="my-1 icon-rail-divider h-px bg-line"></span>
+                <SandboxSwitcher />
+                <OtherSandboxes v-if="!isGuest" />
+                <!-- Other members connected right now, live from the daemon's /events roster. -->
+                <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
+                <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
+                <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
-            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: the one hairline marks the real boundary, identity above the sections. What the sandbox is running is the tools' at the foot, not a band's. -->
-            <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
-                <template v-for="(band, at) in tileBands" :key="band.group.id">
-                    <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
-                    <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
-                    <template v-for="tile in band.items" :key="tile.to">
-                        <!-- A held tile, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
-                        <span
-                            v-if="tile.ghost"
-                            class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
-                            aria-hidden="true"
-                            :data-rail-key="`section:${tile.to}`"
-                            data-rail-into="sections"
-                        >
-                            <RailIcon
-                                :section="tile.id"
-                                :fallback="tile.icon"
-                                :label="tile.label"
-                                :monogram="tile.monogram"
-                                class="icon-rail-glyph"
-                            />
-                        </span>
-                        <RouterLink
-                            v-else
-                            :to="tile.to"
-                            class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg text-muted hover:text-content"
-                            :class="{ 'ui-row-select-on text-link': isNavActive(tile.to) }"
-                            :data-rail-key="`section:${tile.to}`"
-                            data-rail-into="sections"
-                            :aria-label="railTileLabel(tile)"
-                            v-tooltip.right="railTileTip(tile)"
-                            @contextmenu="onTileContextMenu(tile, $event)"
-                            @click="tile.id === `agents` && isNavActive(tile.to) && askForAttention()"
-                        >
-                            <RailIcon
-                                :section="tile.id"
-                                :fallback="tile.icon"
-                                :label="tile.label"
-                                :monogram="tile.monogram"
-                                class="icon-rail-glyph"
-                            />
-                            <!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
+                <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: the one hairline marks the real boundary, identity above the sections. What the sandbox is running is the tools' at the foot, not a band's. -->
+                <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
+                    <template v-for="(band, at) in tileBands" :key="band.group.id">
+                        <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
+                        <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
+                        <template v-for="tile in band.items" :key="tile.to">
+                            <!-- A held tile, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
+                            <span
+                                v-if="tile.ghost"
+                                class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
+                                aria-hidden="true"
+                                :data-rail-key="`section:${tile.to}`"
+                                data-rail-into="sections"
+                            >
+                                <RailIcon
+                                    :section="tile.id"
+                                    :fallback="tile.icon"
+                                    :label="tile.label"
+                                    :monogram="tile.monogram"
+                                    class="icon-rail-glyph"
+                                />
+                            </span>
+                            <RouterLink
+                                v-else
+                                :to="tile.to"
+                                class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg text-muted hover:text-content"
+                                :class="{ 'ui-row-select-on text-link': isNavActive(tile.to) }"
+                                :data-rail-key="`section:${tile.to}`"
+                                data-rail-into="sections"
+                                :aria-label="railTileLabel(tile)"
+                                v-tooltip.right="railTileTip(tile)"
+                                @contextmenu="onTileContextMenu(tile, $event)"
+                                @click="tile.id === `agents` && isNavActive(tile.to) && askForAttention()"
+                            >
+                                <RailIcon
+                                    :section="tile.id"
+                                    :fallback="tile.icon"
+                                    :label="tile.label"
+                                    :monogram="tile.monogram"
+                                    class="icon-rail-glyph"
+                                />
+                                <!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
      that separates them is the plate — which is the distinction worth seeing, and used to be three sizes. -->
-                            <!-- One badge for every tile, core or extension: see SectionTile.badge. -->
-                            <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
-                            <!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
-                            <TileMark
-                                v-if="tile.badge?.running !== undefined"
-                                name="spinner"
-                                spin
-                                :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]"
-                            />
-                            <!-- Opposite corner from the badge so the two never overlap; muted ink, no tone — it isn't an errand. -->
-                            <TileMark v-if="tile.note" :name="tile.note.icon" class="icon-rail-mark absolute bottom-0.5 left-0.5 text-subtle" />
-                            <!-- The way to a getting-started step from anywhere: the rail's tile for the page it is done on. The
+                                <!-- One badge for every tile, core or extension: see SectionTile.badge. -->
+                                <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
+                                <!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
+                                <TileMark
+                                    v-if="tile.badge?.running !== undefined"
+                                    name="spinner"
+                                    spin
+                                    :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]"
+                                />
+                                <!-- Opposite corner from the badge so the two never overlap; muted ink, no tone — it isn't an errand. -->
+                                <TileMark v-if="tile.note" :name="tile.note.icon" class="icon-rail-mark absolute bottom-0.5 left-0.5 text-subtle" />
+                                <!-- The way to a getting-started step from anywhere: the rail's tile for the page it is done on. The
                                  lowest of a step's places, so the page's own mark takes over once the reader is there. -->
-                            <template v-for="mark in railMarks(tile.id)" :key="mark">
-                                <TourMark :step="mark" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
-                            </template>
-                        </RouterLink>
+                                <template v-for="mark in railMarks(tile.id)" :key="mark">
+                                    <TourMark :step="mark" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
+                                </template>
+                            </RouterLink>
+                        </template>
                     </template>
-                </template>
-            </div>
+                </div>
 
-            <!-- Every offRail section; kept outside the scrolling run so it's never scrolled out of sight. -->
-            <!-- A door to sections, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
+                <!-- Every offRail section; kept outside the scrolling run so it's never scrolled out of sight. -->
+                <!-- A door to sections, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
                  one control on this rail that really does add something. -->
-            <!-- Empty for an owner means "everything is on the rail", which is worth a tile and a sentence. Empty for a guest
+                <!-- Empty for an owner means "everything is on the rail", which is worth a tile and a sentence. Empty for a guest
                  means there is nothing to put there and never will be, so the door itself goes. -->
-            <!-- A first run's checklist, until it is done or put away, and what the sandbox needs or is worth knowing for as
+                <!-- A first run's checklist, until it is done or put away, and what the sandbox needs or is worth knowing for as
                  long as any of that is left (gettingStarted/). -->
-            <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's): Home holds their pages. -->
-            <RailProcesses v-if="!isGuest" sandbox-rail />
-            <GettingStartedRing v-if="!isGuest" />
-            <RailMore v-if="!isGuest" :tiles="moreTiles" />
+                <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's): Home holds their pages. -->
+                <RailProcesses v-if="!isGuest" sandbox-rail />
+                <GettingStartedRing v-if="!isGuest" />
+                <RailMore v-if="!isGuest" :tiles="moreTiles" />
 
-            <!-- Every "add" here writes to the sandbox's own configuration or clones into /work, never platform storage. A
+                <!-- Every "add" here writes to the sandbox's own configuration or clones into /work, never platform storage. A
                  guest or anyone below a maintainer connects nothing: what this box can reach is the operator's decision. -->
-            <button
-                v-if="!isGuest && maker"
-                type="button"
-                :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
-                data-rail-key="rail:new-agent"
-                :aria-label="words.newAgent"
-                v-tooltip.right="words.newAgent"
-                @click="startAgent()"
-            >
-                <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
-            </button>
-            <RouterLink
-                v-else-if="connects"
-                :to="here(page.capabilities())"
-                :class="[ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isPage(route, `capabilities`) }]"
-                data-rail-key="section:capabilities"
-                data-rail-into="sections"
-                :aria-label="t(`shell.words.addCapability`)"
-                v-tooltip.right="t(`shell.words.addCapability`)"
-            >
-                <RailIcon section="capabilities" class="icon-rail-glyph" />
-            </RouterLink>
+                <button
+                    v-if="!isGuest && maker"
+                    type="button"
+                    :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
+                    data-rail-key="rail:new-agent"
+                    :aria-label="words.newAgent"
+                    v-tooltip.right="words.newAgent"
+                    @click="startAgent()"
+                >
+                    <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
+                </button>
+                <RouterLink
+                    v-else-if="connects"
+                    :to="here(page.capabilities())"
+                    :class="[
+                        ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`),
+                        { 'ui-row-select-on text-link': isPage(route, `capabilities`) },
+                    ]"
+                    data-rail-key="section:capabilities"
+                    data-rail-into="sections"
+                    :aria-label="t(`shell.words.addCapability`)"
+                    v-tooltip.right="t(`shell.words.addCapability`)"
+                >
+                    <RailIcon section="capabilities" class="icon-rail-glyph" />
+                </RouterLink>
 
-            <!-- The foot, held together at the bottom and growing upward: what this device and Intentic are doing, the
+                <!-- The foot, held together at the bottom and growing upward: what this device and Intentic are doing, the
                  sandbox's tools (the terminal and Browsers fixed, a standing state over them only while it holds), then the
                  account, an avatar opening its identity and actions. A tile arriving here moves nothing else on the rail. -->
-            <div class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
-                <div class="flex flex-col items-center" style="gap: var(--icon-rail-gap)">
-                    <RailSignals />
-                    <RailTools />
+                <div class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+                    <div class="flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+                        <RailSignals />
+                        <RailTools />
+                    </div>
+                    <AccountPanel />
                 </div>
-                <AccountPanel />
-            </div>
-          </template>
+            </template>
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat, unless it is in a window of its own. -->

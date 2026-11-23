@@ -1,26 +1,14 @@
 <script setup lang="ts">
-import { SandboxLogo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { here, page, routeShows } from "../lib/routes/links";
-import { useAudience } from "../app/useAudience";
+import { routeShows } from "../lib/routes/links";
 import { useTier } from "../client/sandbox/useTier";
-import { useHeldDoor } from "../components/heldPlace";
-import { useSandbox } from "../client/sandbox/useSandbox";
 import TileMark from "../components/TileMark.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
-import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
-import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
-import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
-import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
-import type { ViewBadge } from "@intentic/extension-api";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
-import { restartRunning, restartWaiting } from "../models/sandbox/live/sandboxRestart";
-import { sandboxHubPath } from "../models/sandbox/sandboxNav";
-import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
 import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
 import { presenceOthers } from "../workbench/presence/usePresence";
 import { railBands } from "../workbench/views/registry";
@@ -29,67 +17,48 @@ import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import AccountPanel from "./AccountPanel.vue";
 import { useAuth } from "../client/auth/useAuth";
 import RailIcon from "./rail/RailIcon.vue";
+import PhoneRailMore from "./rail/phone/PhoneRailMore.vue";
+import PhoneSandboxTile from "./rail/phone/PhoneSandboxTile.vue";
 import { phoneRailFrame } from "./rail/railFrame";
-import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTiles";
+import { useRailSplit } from "./rail/railSplit";
+import { tileLabel, useSectionTiles } from "./rail/sectionTiles";
 
-// THE PHONE'S RAIL, down the left of its board the way a chat app keeps its servers beside its channels: every place the
-// sandbox has, one press from the screen a phone opens on. It is the desktop rail's column of tiles (iconRail.css,
-// sectionTiles.ts), drawn whole, since a phone has no More door to hide the rest behind and nothing to pin; and drawn
-// only on the board, so a chat or a section keeps the full width of the screen and leaves by its back arrow.
+// THE PHONE'S RAIL, down the left of its board the way a chat app keeps its servers beside its channels, and drawn only
+// on the board, so a chat or a section keeps the full width of the screen and leaves by its back arrow.
 //
-// Top to foot, as on the desktop: the sandbox (its logo opens the Menu page, where sandboxes are switched and what the
-// sandbox needs is listed), who else is here, the sections in their bands, the box's own pages, the +, and at the very
-// foot the account's avatar (AccountPanel.vue, the desktop's own control). No tooltips:
-// a finger raises none, so each tile's accessible name carries what its corner marks say (tileLabel).
+// It keeps what the desktop rail keeps (railSplit.ts): the permanent sections, the ones pinned on this phone, and any
+// section while it has something to say; the rest is one press behind its More tile (PhoneRailMore.vue), with the box's
+// own pages (the terminal, the Sandbox hub, adding a capability). Drawn whole it was thirteen unlabelled tiles in a
+// column that scrolled (2026-11-23).
+//
+// Top to foot: the sandbox (its logo opens the Menu page; once there is more than one sandbox it moves to the sandbox
+// bar along the foot, PhoneSandboxBar.vue, and is not drawn twice), who else is here, the sections in their bands, More,
+// and at the very foot the account's avatar (AccountPanel.vue, the desktop's own control). No tooltips: a finger raises
+// none, so each tile's accessible name carries what its corner marks say (tileLabel).
+
+// Whether the sandbox bar below draws the open sandbox (ShellMobile.vue decides, by how many there are to go to).
+const { sandboxInBar = false } = defineProps<{ sandboxInBar?: boolean }>();
 
 const t = useT();
 const { user } = useAuth();
 const route = useRoute();
-const { canShip, isGuest } = useTier();
-const { maker } = useAudience();
-// Capabilities is a maintainer's page: below that the + is no door (components/heldPlace.ts).
-const connects = useHeldDoor(`capabilities.list`);
+const { isGuest } = useTier();
 
-// Agents, the Workspace, Devices and every rail extension, banded as the desktop rail bands them.
+// The Hub's path carries its tab, so the page is what lights it, below it included, in whichever frame.
+const isNavActive = (to: string): boolean => routeShows(route, to);
+
+// Agents, the Workspace, Devices and every rail extension, less what the desktop's rail would keep behind More too.
 const { tiles } = useSectionTiles();
-const sectionBands = computed(() => railBands(tiles.value, (tile) => tile.id));
+const { onRailTiles } = useRailSplit(tiles, isNavActive);
+const sectionBands = computed(() => railBands(onRailTiles.value, (tile) => tile.id));
 
-// The box rather than the work, as the desktop keeps it under its sandbox switcher: the terminal (ship tier, since a PTY
-// is the whole sandbox, and not in plain words) and the sandbox's own pages. Settings is the avatar's, as on the desktop.
-const boxTiles = computed<readonly SectionTile[]>(() => [
-    ...(canShip.value && !maker.value ? [{ id: `terminal`, to: here(page.terminal()), label: t(`shared.terminal`), icon: `code` } as const] : []),
-    { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shared.sandboxHub`), icon: `box` },
-]);
-
-// Which getting-started marks a tile carries, as on the desktop rail: the page each step is done on.
+// Which getting-started marks a tile carries, as on the desktop rail: the page each step is done on. The Sandbox hub's
+// (models) rides the More tile, behind which its page now is (PhoneRailMore.vue).
 const RAIL_MARKS = new Map<string, readonly MarkStep[]>([
     [`workspace`, [`work`]],
     [`agents`, [`agent`, `board`, `land`]],
-    [`sandbox`, [`models`]],
 ]);
 const railMarks = (id: string): readonly MarkStep[] => RAIL_MARKS.get(id) ?? [];
-
-// The Sandbox hub's path carries its tab, so the page is what lights it, below it included, in whichever frame.
-const isNavActive = (to: string): boolean => routeShows(route, to);
-
-// THE SANDBOX'S TILE. The same three corners as the desktop's switcher: what it needs from its owner (the badge), where
-// it runs and whether it answers (the placement mark, inked by the connection), and work under way that ends by
-// replacing it (the turning mark).
-const sandbox = useSandbox();
-const { badge: attentionBadge } = useSandboxAttention();
-const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
-// The same work once it waits on its owner to restart: the turning mark stops and is plated (SandboxSwitcher.vue).
-const waiting = computed(() => restartWaiting(sandbox.activeSandboxId.value));
-const WAITING_BADGE: ViewBadge = { mark: `refresh`, tone: `info` };
-const placement = useSandboxPlacement();
-const { hasSnapshot } = useWorkspaceTree();
-const availability = useSandboxAvailability(hasSnapshot);
-const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
-const sandboxLabel = computed(() =>
-    [sandbox.active.value?.name, t(`shared.menu`), attentionBadge.value?.tooltip, availabilityVisual.value.label, waiting.value, restarting.value]
-        .filter((part) => part !== undefined && part !== ``)
-        .join(` · `),
-);
 
 // The rail's measures at a finger's size, whatever the desktop rail is set to (railFrame.ts).
 const frame = phoneRailFrame();
@@ -102,41 +71,12 @@ const frame = phoneRailFrame();
         :aria-label="t(`shared.menu`)"
     >
         <!-- The sandbox: its logo, the way to every sandbox and to what this one needs. -->
-        <RouterLink
-            :to="here(page.menu())"
-            class="icon-rail-tile relative flex items-center justify-center overflow-visible rounded-xl"
-            :aria-label="sandboxLabel"
-        >
-            <span class="flex size-full items-center justify-center overflow-hidden rounded-xl">
-                <SandboxLogo :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
-            </span>
-            <span
-                v-if="placement"
-                class="icon-rail-mark pointer-events-none absolute bottom-0.5 left-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none"
-                :class="availabilityVisual.inkClass"
-                aria-hidden="true"
-            >
-                <Icon :name="placement.icon" class="text-[0.9em]" />
-            </span>
-            <ViewBadgeChip :badge="attentionBadge" class="icon-rail-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
-            <ViewBadgeChip
-                v-if="waiting !== undefined"
-                :badge="WAITING_BADGE"
-                class="icon-rail-mark pointer-events-none absolute bottom-0.5 right-0.5"
-                aria-hidden="true"
-            />
-            <TileMark
-                v-else-if="restarting !== undefined"
-                name="spinner"
-                spin
-                :class="[RUNNING_MARK_CLASS, `icon-rail-mark pointer-events-none absolute bottom-0.5 right-0.5`]"
-            />
-        </RouterLink>
+        <PhoneSandboxTile v-if="!sandboxInBar" />
         <!-- Who else is connected right now; their names and what they are doing are on the Menu page. -->
         <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
-        <span class="my-1 icon-rail-divider h-px bg-line" aria-hidden="true"></span>
+        <span v-if="!sandboxInBar || presenceOthers.length > 0" class="my-1 icon-rail-divider h-px bg-line" aria-hidden="true"></span>
 
-        <!-- The one run that grows (a tile per extension), so the one that scrolls; the sandbox above and the + below stay put. -->
+        <!-- The one run that can grow (a badging extension each), so the one that scrolls if it ever has to. -->
         <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
             <template v-for="(band, at) in sectionBands" :key="band.group.id">
                 <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
@@ -166,32 +106,12 @@ const frame = phoneRailFrame();
                 </RouterLink>
             </template>
             <span class="icon-rail-band" aria-hidden="true"></span>
-            <RouterLink
-                v-for="tile in boxTiles"
-                :key="tile.id"
-                :to="tile.to"
-                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay active:text-content"
-                :aria-label="tile.label"
-            >
-                <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" class="icon-rail-glyph" />
-                <template v-for="mark in railMarks(tile.id)" :key="mark">
-                    <TourMark :step="mark" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
-                </template>
-            </RouterLink>
+            <!-- Every other section, the terminal, the Sandbox hub and adding a capability. -->
+            <PhoneRailMore :tiles="tiles" />
         </div>
 
         <!-- A first run's checklist, until it is done or put away. -->
         <GettingStartedRing v-if="!isGuest" />
-        <!-- What this sandbox can reach, added here as on the desktop's +; a guest connects nothing. A new agent is the
-             board's own floating press, beside this rail. -->
-        <RouterLink
-            v-if="connects"
-            :to="here(page.capabilities())"
-            :class="ui.addTile(`icon-rail-tile rounded-lg`)"
-            :aria-label="t(`shell.words.addCapability`)"
-        >
-            <RailIcon section="capabilities" class="icon-rail-glyph" />
-        </RouterLink>
         <!-- The account, at the foot as on the desktop (its own `mt-auto`): who is signed in, Settings, sign out. -->
         <AccountPanel v-if="user !== null" />
     </nav>

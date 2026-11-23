@@ -6,6 +6,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import MobileRail from "./MobileRail.vue";
+import PhoneSandboxBar from "./rail/phone/PhoneSandboxBar.vue";
+import { useSandbox } from "../client/sandbox/useSandbox";
+import { switchableSandboxes } from "../models/sandbox/live/roster";
 import { ownsWayBack } from "../lib/routes/phoneScreens";
 import { HOME_PATH } from "../lib/routes/firstScreens";
 import { here, isPage, page as pages, routeSandbox } from "../lib/routes/links";
@@ -35,6 +38,10 @@ const onHome = computed(() => route.name === `home`);
 const inApp = embedded();
 // The board itself, where the rail is drawn. Not its drill-downs: a conversation keeps the whole width of the screen.
 const onBoard = computed(() => isPage(route, `agents`));
+// Once there is another sandbox to go to, the sandboxes run along the board's foot (PhoneSandboxBar.vue), the open one
+// among them, and the rail above starts with the sections.
+const sandbox = useSandbox();
+const sandboxBar = computed(() => switchableSandboxes(sandbox.sandboxes.value).length > 1);
 
 // Undefined on the board and a conversation under it: the board is home, and a conversation's screen carries its own
 // arrow. Otherwise steps back when history.state.back shows one exists, else falls back to the board.
@@ -104,20 +111,24 @@ useKeybindings();
                     <Icon name="arrow-left" class="text-base" />
                 </span>
             </div>
-            <div ref="page" class="relative flex min-h-0 min-w-0 flex-1 bg-canvas">
-                <!-- Outside the gate, as the desktop's rail is: a sandbox that stopped answering still has a way to another. -->
-                <MobileRail v-if="onBoard && !inApp" />
-                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-                    <RouterView v-if="onHome" />
-                    <SandboxGate v-else>
-                        <!-- Up and down only. A phone's page never moves sideways as a whole, and it did by a few pixels under any
+            <div ref="page" class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
+                <div class="relative flex min-h-0 min-w-0 flex-1">
+                    <!-- Outside the gate, as the desktop's rail is: a sandbox that stopped answering still has a way to another. -->
+                    <MobileRail v-if="onBoard && !inApp" :sandbox-in-bar="sandboxBar" />
+                    <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                        <RouterView v-if="onHome" />
+                        <SandboxGate v-else>
+                            <!-- Up and down only. A phone's page never moves sideways as a whole, and it did by a few pixels under any
                              diagonal swipe wherever a control's 44px touch target (`touch-target`) reached past the screen's edge,
                              as a top bar's last button does. What is wide (a diff, a table, a key row) scrolls in a box of its own. -->
-                        <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden" style="overscroll-behavior: contain">
-                            <RouterView />
-                        </div>
-                    </SandboxGate>
+                            <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden" style="overscroll-behavior: contain">
+                                <RouterView />
+                            </div>
+                        </SandboxGate>
+                    </div>
                 </div>
+                <!-- Under the board, not over it: the board's floating New agent stays above the bar. -->
+                <PhoneSandboxBar v-if="onBoard && !inApp && sandboxBar" />
             </div>
         </main>
     </div>

@@ -13007,6 +13007,10 @@
             "away": " · ausente",
             "phone": "Este teléfono"
         },
+        "mobileRail": {
+            "unpin": "Quitar {label} de la barra",
+            "pinNote": "Una sección fijada se queda en la barra. Las demás aparecen en ella mientras te necesitan."
+        },
         "notificationSources": {
             "allow": "Permitir",
             "alreadyUpToDate": "Ya está al día",

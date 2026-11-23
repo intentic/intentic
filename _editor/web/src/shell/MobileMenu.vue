@@ -26,9 +26,10 @@ import { useT } from "@intentic/ui/i18n";
 import { finishOnHome } from "../models/sandbox/finishOnHome";
 
 // The phone's Menu: what the desktop rail's sandbox switcher holds, as one page — what the sandbox needs, sandbox
-// switching, the presence roster. Opened from the sandbox's logo atop the phone's rail (MobileRail.vue), which holds
-// every section itself and the account at its foot (AccountPanel.vue, as on the desktop), so neither is listed here
-// twice. Same state singletons, different presentation.
+// switching, the presence roster. Opened from the sandbox's logo (shell/rail/phone/PhoneSandboxTile.vue), atop the phone's
+// rail or plated in the sandbox bar along the board's foot; the rail and its More sheet hold the sections and the account
+// is at the rail's foot (AccountPanel.vue, as on the desktop), so neither is listed here twice. Same state singletons,
+// different presentation.
 
 const t = useT();
 const tour = useGettingStarted();
@@ -114,13 +115,21 @@ const resumeSetup = (id: string) => finishOnHome(id);
             <!-- Quieter ink; none of these carry the rail's badge, so none should read as the reason it's flagged. -->
             <RowGroup v-if="sandboxNotes.length > 0" :label="t(`shared.worthKnowing`)">
                 <MenuRow v-for="item in sandboxNotes" :key="item.message" :to="item.to" :icon="item.icon">
-                    <template #title><span class="font-normal text-muted">{{ item.message }}</span></template>
+                    <template #title
+                        ><span class="font-normal text-muted">{{ item.message }}</span></template
+                    >
                 </MenuRow>
             </RowGroup>
 
             <!-- This device, not the sandbox: push is registered per phone, so the ask belongs on the phone's own page. -->
             <RowGroup v-if="pushRow !== undefined" :label="t(`shell.mobileMenu.phone`)">
-                <MenuRow :to="here(page.account(`notifications`))" icon="bolt" :tone="pushRow.tone" :title="pushRow.message" :description="pushRow.detail" />
+                <MenuRow
+                    :to="here(page.account(`notifications`))"
+                    icon="bolt"
+                    :tone="pushRow.tone"
+                    :title="pushRow.message"
+                    :description="pushRow.detail"
+                />
             </RowGroup>
 
             <!-- Sandboxes: tap to switch; the active one's placement mark carries its live status. -->
@@ -146,7 +155,9 @@ const resumeSetup = (id: string) => finishOnHome(id);
                             :name="placementFor(option).icon"
                             class="shrink-0 text-xs"
                             :class="isActive(option) ? availabilityVisual.inkClass : 'text-subtle'"
-                            :aria-label="isActive(option) ? `${placementFor(option).detail} · ${availabilityVisual.label}` : placementFor(option).detail"
+                            :aria-label="
+                                isActive(option) ? `${placementFor(option).detail} · ${availabilityVisual.label}` : placementFor(option).detail
+                            "
                         />
                         <span v-if="option.tier !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 font-medium text-subtle">{{
                             t(`shared.shared`)
@@ -178,7 +189,13 @@ const resumeSetup = (id: string) => finishOnHome(id);
                     :description="`${presenceActivity(member)}${member.idle ? t(`shell.mobileMenu.away`) : ``}`"
                 >
                     <template #lead="{ mark }">
-                        <Avatar :size="mark" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" :idle="member.idle" />
+                        <Avatar
+                            :size="mark"
+                            :name="member.name ?? member.email"
+                            :src="member.picture"
+                            :hue="identityHue(member.email)"
+                            :idle="member.idle"
+                        />
                     </template>
                 </Row>
             </RowGroup>

@@ -12376,6 +12376,10 @@
             "away": " · nieobecny",
             "phone": "Ten telefon"
         },
+        "mobileRail": {
+            "unpin": "Zdejmij {label} z paska",
+            "pinNote": "Przypięta sekcja zostaje na pasku. Pozostałe pojawiają się na nim, gdy czegoś od ciebie potrzebują."
+        },
         "notificationSources": {
             "allow": "Zezwól",
             "alreadyUpToDate": "Już aktualne",

@@ -13007,6 +13007,10 @@
             "away": " · weg",
             "phone": "Dieses Telefon"
         },
+        "mobileRail": {
+            "unpin": "{label} von der Leiste nehmen",
+            "pinNote": "Ein angehefteter Bereich bleibt auf der Leiste. Die anderen erscheinen dort, solange sie dich brauchen."
+        },
         "notificationSources": {
             "allow": "Erlauben",
             "alreadyUpToDate": "Schon aktuell",

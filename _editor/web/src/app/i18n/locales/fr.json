@@ -13007,6 +13007,10 @@
             "away": " · absent",
             "phone": "Ce téléphone"
         },
+        "mobileRail": {
+            "unpin": "Retirer {label} de la barre",
+            "pinNote": "Une section épinglée reste sur la barre. Les autres y apparaissent tant qu’elles ont besoin de vous."
+        },
         "notificationSources": {
             "allow": "Autoriser",
             "alreadyUpToDate": "Déjà à jour",

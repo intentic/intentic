@@ -131,7 +131,7 @@ function useRunBadge(shown: Ref<boolean>): ComputedRef<ViewBadge | undefined> {
 // EVERY SECTION TILE, ranked by RAIL_GROUPS: the core sections (Agents, the Workspace, Devices for a shipping tier), then
 // one tile per rail-surface extension activation, less whatever this reader cannot open. `leading` is a shell's own
 // extra (the desktop's docked Chat tile), ranked with the rest. Which of these a rail draws is the rail's business: the
-// desktop's keeps only what is pinned, permanent or badging (onRail), a phone's draws them all.
+// desktop's and the phone's both keep only what is pinned, permanent or badging (railSplit.ts), the rest behind More.
 export function useSectionTiles(leading: () => readonly SectionTile[] = () => []) {
     const { panels, loaded: panelsRead } = usePanels();
     const { capabilities, loaded: capabilitiesRead } = useCapabilities();
