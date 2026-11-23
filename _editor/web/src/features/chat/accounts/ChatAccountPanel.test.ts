@@ -325,7 +325,7 @@ it(`points back at a sign-in already under way instead of offering another`, asy
 
     nativeConnectFlow.value = { provider: `claude`, url: `https://claude.ai/oauth`, code: `` };
     await nextTick();
-    expect(element.textContent).toContain(`Your Claude Code sign-in isn't finished yet.`);
+    expect(element.textContent).toContain(`Your Claude sign-in isn't finished yet.`);
     expect(element.textContent).not.toContain(`isn't connected`);
     expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models`);
 

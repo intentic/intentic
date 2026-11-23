@@ -5719,7 +5719,11 @@
             "didntConnect": "{provider} ne s'est pas connecté",
             "opening": "Préparation de la page de connexion",
             "openingNext": "Vous vous connecterez ensuite sur la page de {provider}, dans un nouvel onglet.",
-            "openingSlow": "Plus long que d’habitude : le sandbox est peut-être occupé ou encore en train de démarrer."
+            "openingSlow": "Plus long que d’habitude : le sandbox est peut-être occupé ou encore en train de démarrer.",
+            "expiredTitle": "La connexion a expiré",
+            "expiredDetail": "Personne ne l'a terminée à temps. Réessayez pour en obtenir une nouvelle.",
+            "unstartedTitle": "La connexion n'a pas démarré",
+            "refusedTitle": "{destination} a refusé la connexion"
         },
         "localModelLane": {
             "bestHere": "Meilleur choix",
@@ -5791,7 +5795,6 @@
         },
         "providerPanel": {
             "connectWay": "Connecter {way}",
-            "empty": "Pas encore connecté. La connexion prend une minute et le compte reste dans ce sandbox.",
             "otherLive": "Votre connexion à {other} est toujours en attente. Connecter {provider} la remplace.",
             "showOther": "Afficher {other}",
             "emptyFullAccess": "Pas encore connecté. Celui-ci est connecté par le propriétaire ou une personne ayant l’accès complet."
@@ -5827,6 +5830,31 @@
             "titleHint": "Clé API ··{hint}",
             "billed": "Facturée au token par {vendor}",
             "couldntRemove": "Impossible de déconnecter cette clé API."
+        },
+        "connectSteps": {
+            "open": "Ouvrir",
+            "signIn": "Connexion",
+            "connect": "Connecter",
+            "label": "Étapes de connexion",
+            "done": "fait"
+        },
+        "landed": {
+            "title": "{provider} connecté",
+            "refreshedTitle": "{provider} reconnecté",
+            "readyIn": "Les chats de « {sandbox} » peuvent l'utiliser",
+            "readyHere": "Les chats de ce sandbox peuvent l'utiliser",
+            "closeTab": "Vous pouvez fermer l'onglet {destination}."
+        },
+        "preflight": {
+            "runs": "Exécute {runs}",
+            "label": "Comment se passe la connexion",
+            "freeWith": "Gratuit avec {requirement}",
+            "needs": "Nécessite {requirement}",
+            "opens": "Ouvre {destination} dans un nouvel onglet",
+            "aMinute": "environ une minute",
+            "found": "Déjà connecté sur cet ordinateur",
+            "oneClick": "un clic",
+            "staysHere": "Reste dans ce sandbox, jamais sur la plateforme"
         }
     },
     "desktop": {
@@ -7582,7 +7610,18 @@
             "tripDevinTokenMeans": "celui à coller",
             "tabOpening": "Ouverture de {destination}…",
             "tabEnterCode": "La page suivante vous demandera ce code.",
-            "tabCopyContinue": "Copier et continuer vers {destination}"
+            "tabCopyContinue": "Copier et continuer vers {destination}",
+            "yourDevices": "vos {count} appareils",
+            "checkingAccount": "Vérification que le compte peut exécuter un tour",
+            "codeExpiresIn": "le code expire dans {time}",
+            "signInOnTab": "Connectez-vous dans l'onglet {destination}",
+            "signInAt": "Connectez-vous sur {destination}",
+            "signInExpiresIn": "Cette connexion expire dans {time}.",
+            "tabBlocked": "Votre navigateur a bloqué le nouvel onglet. Ouvrez {destination} d'ici.",
+            "alsoWatching": "Toujours détecté sur {where}",
+            "copyAddressBar": "Copiez son adresse depuis la barre d'adresse et collez-la ci-dessus.",
+            "deadEndNote": "Cette page {wontLoad} : c'est normal.",
+            "tabSignInThere": "Vous vous connecterez sur la page de {destination}."
         },
         "connectionNotice": {
             "cantStartedRightNow": "« {name} » ne peut pas être démarré pour l'instant",

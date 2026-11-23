@@ -10,8 +10,7 @@ import { loopDoors, providerLabel } from "@intentic/sandbox-contract/models/agen
 import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { SignInCatcher } from "@intentic/sandbox-contract/schemas/loopback-catch";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { hasSignIn, providerReady } from "../../providers/access";
-import { keysBeside } from "../../providers/providerCatalog";
+import { hasSignIn } from "../../providers/access";
 import { active } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../accounts/useChat-catalog";
 import {
@@ -29,12 +28,36 @@ import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttp
 import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { SignInTab } from "./signInTab";
 import { keepWatchers } from "./signInWatchers";
+import {
+    accountArrival,
+    failSignIn,
+    landSignIn,
+    markTrip,
+    resetTrip,
+    type SignInArrival,
+    signInFailure,
+    translatorArrival,
+} from "./signInOutcome";
+
+// The outcome records live beside this store (signInOutcome.ts); every surface reads them through useChat as before.
+export { dismissSignInFailure, signInFailure, signInLanded } from "./signInOutcome";
 
 // In-flight subscription login, identified by the translator's own attempt state.
 // `catchers` are the owner's devices and browsers watching where a redirect lands, so it finishes without the paste;
 // empty for a sandbox (or an older daemon) with nobody watching.
+// `expiresAt` is when the poll behind it gives up (the translator names no deadline of its own), so the card can count down
+// to it rather than a timeout arriving out of nowhere.
 export const translatorConnectFlow = sandboxRef<
-    { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect"; catchers: readonly SignInCatcher[] } | undefined
+    | {
+          provider: KeyedProvider;
+          url: string;
+          code: string;
+          state: string;
+          flow: "device" | "redirect";
+          catchers: readonly SignInCatcher[];
+          expiresAt: number;
+      }
+    | undefined
 >(() => undefined);
 
 // Whether the reader has actually been handed to the provider's page this handshake. A paste sign-in is two
@@ -44,6 +67,12 @@ export const connectSent = sandboxRef(() => false);
 // Whether a device sign-in's code went to the clipboard with the trip that the press made (signInTab.ts), so the panel
 // says it is there instead of asking for a copy that already happened.
 export const connectCodeCopied = sandboxRef(() => false);
+// A trip to the provider's page, remembered past the attempt for the landing's "close the tab" (signInOutcome.ts).
+watch(connectSent, (sent) => {
+    if (sent) {
+        markTrip();
+    }
+});
 
 // The press that started this sign-in held a tab for it (signInTab.ts): the reader goes to the provider's page now, and
 // the panel opens on its second step. `still` says the attempt is the one on screen, since the copy can outlast it.
@@ -62,52 +91,6 @@ const handOff = (tab: SignInTab | undefined, url: string, code: string, still: (
     });
 };
 
-// The last sign-in that ended without connecting anything, and the sentence saying why: what the chat's strip and the
-// connect view show until the reader tries again or dismisses it. Without it a sign-in that expired, was refused or
-// never started simply vanished, and the reader was left with a tile that looked picked and nothing else.
-// `connectedBefore` is whether the provider could already run when it failed (a second account that did not land).
-export const signInFailure = sandboxRef<{ readonly provider: AgentProvider; readonly message: string; readonly connectedBefore?: boolean } | undefined>(
-    () => undefined,
-);
-
-// Whether a provider can run by any credential filed under it: its own accounts, or a vendor's API key on its card.
-const connectedAtAll = (provider: AgentProvider): boolean => providerReady(provider) || keysBeside(provider).some((key) => providerReady(key.id));
-
-// Ends an attempt as failed: `error` for the surfaces that read the store's one error line, the record for the ones that
-// say which provider it was.
-const failSignIn = (provider: AgentProvider, message: string): void => {
-    error.value = message;
-    signInFailure.value = { provider, message, connectedBefore: connectedAtAll(provider) };
-};
-
-// A failure says a provider did not connect. Once it has connected another way (the API key on the same card, a sign-in
-// finished in another window), the failure no longer says anything true and goes by itself. Kept, it stood over a chat
-// and a card that could both run, and its Try again sent a reader back through the sign-in that had failed, for half an
-// hour (session replay, 2026-11-16). A provider that could already run when it failed keeps its failure until dismissed.
-watch(
-    () => {
-        const failure = signInFailure.value;
-        return failure !== undefined && failure.connectedBefore !== true && connectedAtAll(failure.provider);
-    },
-    (connected) => {
-        if (connected) {
-            signInFailure.value = undefined;
-        }
-    },
-);
-
-export const dismissSignInFailure = (): void => {
-    signInFailure.value = undefined;
-};
-
-// The last sign-in that connected an account, stamped so a second landing of the same provider still reads as news. Said
-// by the paths that saw an account arrive, never inferred from a panel going away: a Cancel pressed in the chat's strip
-// takes the panel down too, and a view that read that as success announced a connection nobody made.
-export const signInLanded = sandboxRef<{ readonly provider: AgentProvider; readonly at: number } | undefined>(() => undefined);
-const landSignIn = (provider: AgentProvider): void => {
-    signInLanded.value = { provider, at: Date.now() };
-};
-
 // Routed row key, namespaced away from the provider id: native and translator accounts of the same provider
 // are separate connections. `name` picks one subscription; omitted, the provider's sign-in.
 export const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
@@ -120,6 +103,10 @@ const translatorPoll = sandboxValue(
     () => new Latest(),
     (poll) => poll.abort(),
 );
+
+// The subscriptions the translator held when the running sign-in started, so a pasted landing can tell a new one from the
+// same one signed in again (translatorArrival).
+let translatorBefore: ReadonlySet<string> = new Set();
 
 // Takes down a subscription sign-in and the poll behind it.
 const settleTranslator = (): void => {
@@ -134,7 +121,7 @@ const translatorProviderLabel = (target: KeyedProvider): string => providerSpec(
 
 // Polls this exact attempt until it lands, fails or expires: reconnecting an existing identity replaces its credential
 // without increasing the account count.
-const pollTranslator = async (target: KeyedProvider, state: string, until: number): Promise<void> => {
+const pollTranslator = async (target: KeyedProvider, state: string, until: number, before: ReadonlySet<string>): Promise<void> => {
     const signal = translatorPoll.value.next();
     const outcome = await pollFor(
         async () => {
@@ -152,20 +139,20 @@ const pollTranslator = async (target: KeyedProvider, state: string, until: numbe
         return;
     }
     if (outcome.kind === `expired`) {
-        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: translatorProviderLabel(target) }));
+        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: translatorProviderLabel(target) }), `expired`);
         settleTranslator();
         return;
     }
     if (outcome.value.status === `error`) {
         settleTranslator();
-        failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: outcome.value.error }));
+        failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: outcome.value.error }), `refused`);
         return;
     }
     await refreshTranslatorAccounts();
     if (!signal.aborted) {
         settleTranslator();
         error.value = null;
-        landSignIn(target);
+        landSignIn(target, translatorArrival(target, before));
     }
 };
 
@@ -182,6 +169,7 @@ export const connectTranslator = async (target: KeyedProvider, tab?: SignInTab):
     accountBusy.value = translatorKey(target);
     error.value = null;
     signInFailure.value = undefined;
+    resetTrip();
     // A sign-in started in the sandbox the scope has since left belongs to that sandbox's card, not this one's.
     const current = sandboxScopeGuard();
     try {
@@ -189,12 +177,15 @@ export const connectTranslator = async (target: KeyedProvider, tab?: SignInTab):
         if (!current()) {
             return;
         }
-        translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
+        const expiresAt = Date.now() + CODEX_POLL_DEADLINE_MS;
+        const before = new Set((translatorAccounts.value[target] ?? []).map((account) => account.name));
+        translatorBefore = before;
+        translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [], expiresAt };
         // By the attempt's own state, as the poll reads it: the ref hands back a proxy, never the object put in.
         handOff(tab, started.url, started.code, () => translatorConnectFlow.value?.state === started.state);
-        void pollTranslator(target, started.state, Date.now() + CODEX_POLL_DEADLINE_MS);
+        void pollTranslator(target, started.state, expiresAt, before);
     } catch (caught) {
-        failSignIn(target, messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`)));
+        failSignIn(target, messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`)), `unstarted`);
     } finally {
         accountBusy.value = undefined;
     }
@@ -221,7 +212,7 @@ export const completeTranslator = async (redirectUrl: string): Promise<boolean> 
         // Only if this is still the same attempt: a restarted sign-in owns the panel now.
         if (translatorConnectFlow.value === flow) {
             settleTranslator();
-            landSignIn(flow.provider);
+            landSignIn(flow.provider, translatorArrival(flow.provider, translatorBefore));
         }
         // Catalog is only discoverable with a credential, so load it now rather than at the next reselect.
         void loadProviderModels(flow.provider);
@@ -269,6 +260,8 @@ interface NativeConnectFlow {
     // The grant came back and was accepted, but the credential behind it is still being minted: there is nothing
     // left to ask the user for, and nothing to show yet either.
     readonly redeemed: boolean;
+    // When the daemon stops answering this attempt, so the card can count down to it.
+    readonly expiresAt: number;
 }
 export const nativeConnectFlow = sandboxRef<NativeConnectFlow | undefined>(() => undefined);
 // Display label typed for the account being connected; blank lets the daemon derive one.
@@ -325,18 +318,25 @@ export const accountsBefore = (provider: AgentProvider, accounts: readonly Oauth
     stale: new Set(accounts.filter((account) => unservable(provider, account)).map((account) => account.id)),
 });
 // Landed: an account that was not there, one connected again since, or one that needed a new sign-in and now serves.
-export const landedSince = (before: AccountsBefore, now: readonly OauthAccount[]): boolean =>
-    now.some(
+// The account itself, so the landing can say who signed in.
+const landedAccount = (before: AccountsBefore, now: readonly OauthAccount[]): OauthAccount | undefined =>
+    now.find(
         (account) =>
             !before.connectedAt.has(account.id) ||
             before.connectedAt.get(account.id) !== account.connectedAt ||
             (before.stale.has(account.id) && !unservable(before.provider, account)),
     );
 
+// The account list as the running native sign-in found it, for the paths that land it without a poll of their own (a
+// pasted code's answer), so they too can tell a new account from one signing in again.
+let nativeBefore: AccountsBefore | undefined;
+const arrivalOf = (account: OauthAccount | undefined): SignInArrival =>
+    account === undefined || nativeBefore === undefined ? {} : accountArrival(account, nativeBefore.connectedAt);
+
 // Ends a native sign-in's poll that ran out of time, as the daemon's own `expiresAt` says the attempt has.
 const expireNative = (target: AgentProvider): void => {
     cancelConnect();
-    failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }));
+    failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }), `expired`);
 };
 
 // Polls a sign-in that finishes out of band by the account list: done once an account landed since the sign-in started
@@ -344,7 +344,7 @@ const expireNative = (target: AgentProvider): void => {
 // which the credential still has to land through; only a settle, a cancel or a new start ends it.
 const pollNativeList = async (target: AgentProvider, until: number, before: AccountsBefore): Promise<void> => {
     const signal = nativePoll.value.next();
-    const outcome = await pollFor(async () => (landedSince(before, await refreshAccounts(target)) ? true : undefined), {
+    const outcome = await pollFor(async () => landedAccount(before, await refreshAccounts(target)), {
         intervalMs: SIGN_IN_POLL_MS,
         until,
         signal,
@@ -359,7 +359,7 @@ const pollNativeList = async (target: AgentProvider, until: number, before: Acco
     if (outcome.kind === `found`) {
         settleConnect();
         error.value = null;
-        landSignIn(target);
+        landSignIn(target, accountArrival(outcome.value, before.connectedAt));
         // Load the catalog now so the picker is populated immediately, not after the next reselect.
         void loadProviderModels(target);
     }
@@ -391,17 +391,19 @@ const pollNativeStatus = async (target: AgentProvider, handshake: string, until:
     }
     if (outcome.value.status === `error`) {
         settleConnect();
-        failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: outcome.value.error }));
+        failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: outcome.value.error }), `refused`);
         return;
     }
-    if (outcome.value.account !== undefined) {
-        addAccount(target, outcome.value.account);
+    const { account } = outcome.value;
+    if (account !== undefined) {
+        addAccount(target, account);
     }
+    const arrival = arrivalOf(account);
     await refreshAccounts(target);
     if (!signal.aborted) {
         settleConnect();
         error.value = null;
-        landSignIn(target);
+        landSignIn(target, arrival);
     }
     void loadProviderModels(target);
 };
@@ -424,6 +426,8 @@ export const startConnect = async (variant?: string, tab?: SignInTab): Promise<v
     settleTranslator();
     error.value = null;
     signInFailure.value = undefined;
+    nativeBefore = before;
+    resetTrip();
     // Held busy for the whole start so the button doesn't flash back to "Connect" before the flow lands.
     accountBusy.value = target;
     // As for a subscription: a start that lands after a switch is the outgoing sandbox's handshake.
@@ -434,14 +438,14 @@ export const startConnect = async (variant?: string, tab?: SignInTab): Promise<v
             // Which estate to sign in to (Z.ai sells several); absent takes the provider's default.
             body = await orRefusal(sandboxRpc.accounts.start({ provider: target as NativeProvider, variant }));
         } catch (err) {
-            failSignIn(target, messageOr(err, t(`chat.chatConnect.connectionNotStarted`, { provider: providerLabel(target) })));
+            failSignIn(target, messageOr(err, t(`chat.chatConnect.connectionNotStarted`, { provider: providerLabel(target) })), `unstarted`);
             return;
         }
         if (!current()) {
             return;
         }
         if (body instanceof SandboxHttpError) {
-            failSignIn(target, body.message);
+            failSignIn(target, body.message, `unstarted`);
             return;
         }
         nativeConnectFlow.value = {
@@ -454,6 +458,7 @@ export const startConnect = async (variant?: string, tab?: SignInTab): Promise<v
             handshake: body.handshake,
             catchers: body.catchers ?? [],
             redeemed: false,
+            expiresAt: body.expiresAt,
         };
         // Read by attempt, not by object: a redeemed grant re-stamps the same attempt as a new object.
         handOff(tab, body.url, body.code, () => nativeConnectFlow.value?.handshake === body.handshake);
@@ -537,9 +542,10 @@ export const completeConnect = async (pasted: string): Promise<boolean> => {
             nativeConnectFlow.value = { ...flow, redeemed: true };
             return true;
         }
+        const arrival = arrivalOf(account);
         addAccount(flow.provider, account);
         settleConnect();
-        landSignIn(flow.provider);
+        landSignIn(flow.provider, arrival);
         // Catalog may only now be discoverable, since some providers need a credential to list models.
         void loadProviderModels(flow.provider);
         return true;

@@ -3,6 +3,9 @@ import { Button, ui } from "@intentic/ui";
 import { computed, inject, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { PROVIDER_VENDOR } from "@intentic/sandbox-contract/models/agent-catalog";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { modelsOnScreen } from "../../../models/conversations/run/signInOutcome";
 import { accessKnown, anyProviderReady, hasSignIn, trialExhausted } from "../../../models/providers/access";
 import { providerWithheld } from "../../../models/providers/aiReach";
 import AccessAsk from "../../../components/access/AccessAsk.vue";
@@ -45,6 +48,13 @@ const { liveSignIn: live, cancelSignIn, signInFailure: failure, dismissSignInFai
 // The way back to a sign-in that ended badly starts it again: Sandbox ▸ Models starts a provider's sign-in when a link
 // names one that is not connected yet (linkArrival).
 const retryTo = computed(() => modelsHref({ provider: failure.value?.provider }));
+
+// A sign-in is named as its card in Sandbox ▸ Models names it ("Claude"), not by the loop it runs ("Claude Code"): the
+// strip and the card beside it called one sign-in by two names.
+const signInName = (target: AgentProvider): string => providerSpec(target)?.accountLabel ?? providerDisplayLabel(target);
+// Sandbox ▸ Models on screen beside this chat already shows the sign-in in flight, or how it failed, with its own Cancel and
+// Try again: the strip stands down rather than saying it twice (signInOutcome.ts).
+const shownBeside = computed(() => modelsOnScreen.value && (live.value !== undefined || failure.value !== undefined));
 
 // Connecting is Full access's, and that of someone given AI accounts of their own: the daemon refuses anyone else's
 // sign-in, and the hub withholds the section that holds it. Anyone else is told who can, rather than offered a door that
@@ -92,14 +102,14 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
 <template>
     <!-- A sign-in already under way, wherever it was started: back to where it can be finished, or put down from here. -->
     <div
-        v-if="accessKnown && live"
+        v-if="accessKnown && live && !shownBeside"
         role="status"
         class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
     >
         <!-- Not a spinner: nothing is loading, the next move is the reader's. -->
         <Icon name="clock" class="shrink-0 text-link" />
         <span class="min-w-0 flex-1 text-left">{{
-            t(`chat.chatAccountPanel.signInWaiting`, { provider: providerDisplayLabel(live.provider) })
+            t(`chat.chatAccountPanel.signInWaiting`, { provider: signInName(live.provider) })
         }}</span>
         <span class="flex shrink-0 items-center gap-3">
             <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelSignIn">
@@ -113,7 +123,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
 
     <!-- A sign-in that ended without connecting anything says so once, here as in Sandbox ▸ Models, until tried again or put away. -->
     <div
-        v-else-if="accessKnown && failure"
+        v-else-if="accessKnown && failure && !shownBeside"
         role="alert"
         class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
     >
@@ -121,7 +131,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
         <!-- Named first: the daemon's own sentence after it does not always say which provider it was about. -->
         <span class="min-w-0 flex-1 text-left"
             ><span class="font-medium text-content">{{
-                t(`chat.chatAccountPanel.didntConnect`, { provider: providerDisplayLabel(failure.provider) })
+                t(`chat.chatAccountPanel.didntConnect`, { provider: signInName(failure.provider) })
             }}</span>
             {{ failure.message }}</span
         >
@@ -163,7 +173,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
 
     <!-- Nothing to send with: the one press that changes that. Another model where something else runs; else connecting one. -->
     <div
-        v-else-if="accessKnown && !connected && !trialSpent"
+        v-else-if="accessKnown && !connected && !trialSpent && !shownBeside"
         class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
         data-account-gate
     >

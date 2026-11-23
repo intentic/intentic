@@ -801,7 +801,7 @@ describe(`one sign-in at a time`, () => {
         });
 
         await chat.startConnect();
-        expect(chat.signInFailure.value).toEqual({ provider: `cursor`, message: daemonMessage, connectedBefore: false });
+        expect(chat.signInFailure.value).toEqual({ provider: `cursor`, message: daemonMessage, kind: `unstarted`, connectedBefore: false });
         expect(chat.liveSignIn.value).toBeUndefined();
 
         await chat.connectTranslator(`kimi`);

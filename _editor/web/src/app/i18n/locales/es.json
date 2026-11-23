@@ -5719,7 +5719,11 @@
             "didntConnect": "{provider} no se conectó",
             "opening": "Preparando la página de inicio de sesión",
             "openingNext": "Después iniciarás sesión en la página de {provider}, en una pestaña nueva.",
-            "openingSlow": "Está tardando más de lo habitual: puede que el sandbox esté ocupado o aún arrancando."
+            "openingSlow": "Está tardando más de lo habitual: puede que el sandbox esté ocupado o aún arrancando.",
+            "expiredTitle": "El inicio de sesión caducó",
+            "expiredDetail": "Nadie lo terminó a tiempo. Vuelve a intentarlo para obtener uno nuevo.",
+            "unstartedTitle": "El inicio de sesión no empezó",
+            "refusedTitle": "{destination} rechazó el inicio de sesión"
         },
         "localModelLane": {
             "bestHere": "Mejor opción",
@@ -5791,7 +5795,6 @@
         },
         "providerPanel": {
             "connectWay": "Conectar {way}",
-            "empty": "Aún sin conectar. Iniciar sesión lleva un minuto y la cuenta permanece en este sandbox.",
             "otherLive": "Tu inicio de sesión en {other} sigue pendiente. Conectar {provider} lo sustituye.",
             "showOther": "Mostrar {other}",
             "emptyFullAccess": "Aún no está conectada. La conecta el propietario o alguien con acceso total."
@@ -5827,6 +5830,31 @@
             "titleHint": "Clave de API ··{hint}",
             "billed": "{vendor} la factura por token",
             "couldntRemove": "No se pudo desconectar esta clave de API."
+        },
+        "connectSteps": {
+            "open": "Abrir",
+            "signIn": "Iniciar sesión",
+            "connect": "Conectar",
+            "label": "Pasos del inicio de sesión",
+            "done": "hecho"
+        },
+        "landed": {
+            "title": "{provider} conectado",
+            "refreshedTitle": "{provider} volvió a iniciar sesión",
+            "readyIn": "Los chats de «{sandbox}» ya pueden usarlo",
+            "readyHere": "Los chats de este sandbox ya pueden usarlo",
+            "closeTab": "Puedes cerrar la pestaña de {destination}."
+        },
+        "preflight": {
+            "runs": "Ejecuta {runs}",
+            "label": "Cómo es conectar",
+            "freeWith": "Gratis con {requirement}",
+            "needs": "Requiere {requirement}",
+            "opens": "Abre {destination} en una pestaña nueva",
+            "aMinute": "un minuto aprox.",
+            "found": "Ya has iniciado sesión en este ordenador",
+            "oneClick": "un clic",
+            "staysHere": "Se queda en este sandbox, nunca en la plataforma"
         }
     },
     "desktop": {
@@ -7582,7 +7610,18 @@
             "tripDevinTokenMeans": "pega este",
             "tabOpening": "Abriendo {destination}…",
             "tabEnterCode": "La página siguiente te pedirá este código.",
-            "tabCopyContinue": "Cópialo y continúa a {destination}"
+            "tabCopyContinue": "Cópialo y continúa a {destination}",
+            "yourDevices": "tus {count} dispositivos",
+            "checkingAccount": "Comprobando que la cuenta puede ejecutar un turno",
+            "codeExpiresIn": "el código caduca en {time}",
+            "signInOnTab": "Inicia sesión en la pestaña de {destination}",
+            "signInAt": "Inicia sesión en {destination}",
+            "signInExpiresIn": "Este inicio de sesión caduca en {time}.",
+            "tabBlocked": "Tu navegador bloqueó la pestaña nueva. Abre {destination} desde aquí.",
+            "alsoWatching": "También se recoge en {where}",
+            "copyAddressBar": "Copia su dirección de la barra de direcciones y pégala arriba.",
+            "deadEndNote": "Esa página {wontLoad}: es lo esperado.",
+            "tabSignInThere": "Iniciarás sesión en la propia página de {destination}."
         },
         "connectionNotice": {
             "cantStartedRightNow": "«{name}» no se puede iniciar ahora mismo",

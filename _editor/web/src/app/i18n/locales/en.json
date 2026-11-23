@@ -5719,7 +5719,11 @@
             "didntConnect": "{provider} didn't connect",
             "opening": "Getting the sign-in page ready",
             "openingNext": "Next you'll sign in on {provider}'s own page, in a new tab.",
-            "openingSlow": "Taking longer than usual: the sandbox may be busy or still waking up."
+            "openingSlow": "Taking longer than usual: the sandbox may be busy or still waking up.",
+            "expiredTitle": "The sign-in timed out",
+            "expiredDetail": "Nobody finished it in time. Try again for a fresh one.",
+            "unstartedTitle": "The sign-in didn't start",
+            "refusedTitle": "{destination} turned the sign-in down"
         },
         "localModelLane": {
             "bestHere": "Best fit",
@@ -5791,7 +5795,6 @@
         },
         "providerPanel": {
             "connectWay": "Connect {way}",
-            "empty": "Not connected yet. Signing in takes a minute, and the account stays in this sandbox.",
             "otherLive": "Your {other} sign-in is still waiting. Connecting {provider} replaces it.",
             "showOther": "Show {other}",
             "emptyFullAccess": "Not connected yet. The owner or someone with Full access connects this one."
@@ -5827,6 +5830,31 @@
             "titleHint": "API key ··{hint}",
             "billed": "Billed per token by {vendor}",
             "couldntRemove": "Couldn't disconnect this API key."
+        },
+        "connectSteps": {
+            "open": "Open",
+            "signIn": "Sign in",
+            "connect": "Connect",
+            "label": "Sign-in steps",
+            "done": "done"
+        },
+        "landed": {
+            "title": "{provider} connected",
+            "refreshedTitle": "{provider} signed in again",
+            "readyIn": "Chats in \"{sandbox}\" can use it now",
+            "readyHere": "Chats in this sandbox can use it now",
+            "closeTab": "You can close the {destination} tab."
+        },
+        "preflight": {
+            "runs": "Runs {runs}",
+            "label": "What connecting is like",
+            "freeWith": "Free with a {requirement}",
+            "needs": "Needs a {requirement}",
+            "opens": "Opens {destination} in a new tab",
+            "aMinute": "about a minute",
+            "found": "Already signed in on this computer",
+            "oneClick": "one click",
+            "staysHere": "Stays in this sandbox, never on the platform"
         }
     },
     "desktop": {
@@ -7582,7 +7610,18 @@
             "tripDevinTokenMeans": "paste this one",
             "tabOpening": "Opening {destination}…",
             "tabEnterCode": "The next page asks for this code.",
-            "tabCopyContinue": "Copy it and continue to {destination}"
+            "tabCopyContinue": "Copy it and continue to {destination}",
+            "yourDevices": "your {count} devices",
+            "checkingAccount": "Checking the account can run a turn",
+            "codeExpiresIn": "code expires in {time}",
+            "signInOnTab": "Sign in on the {destination} tab",
+            "signInAt": "Sign in at {destination}",
+            "signInExpiresIn": "This sign-in expires in {time}.",
+            "tabBlocked": "Your browser blocked the new tab. Open {destination} from here.",
+            "alsoWatching": "Still picked up on {where}",
+            "copyAddressBar": "Copy its address from the address bar and paste it above.",
+            "deadEndNote": "That page {wontLoad}: expected.",
+            "tabSignInThere": "You'll sign in on {destination}'s own page."
         },
         "connectionNotice": {
             "cantStartedRightNow": "\"{name}\" can't be started right now",

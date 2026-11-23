@@ -36,7 +36,12 @@ import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
 import ProviderKeys from "./keys/ProviderKeys.vue";
+import AccessAsk from "../../../components/access/AccessAsk.vue";
+import type { SignInFailureKind } from "../../../models/conversations/run/signInOutcome";
 import ConnectAttempt from "./ConnectAttempt.vue";
+import ConnectLanded from "./ConnectLanded.vue";
+import ConnectPreflight from "./ConnectPreflight.vue";
+import type { LandedCard } from "./providerGrid";
 import { accountOffLine } from "./accountOff";
 import {
     type AccountReader,
@@ -76,15 +81,20 @@ const {
     chatLabel,
 } = defineProps<{
     provider: AgentProvider;
-    // This provider's sign-in, when one is starting, waiting on the reader, or just failed.
-    attempt?: { readonly phase: `starting` | `live` | `failed`; readonly kind?: `native` | `routed`; readonly problem?: string };
+    // This provider's sign-in, when one is starting, waiting on the reader, or just failed (and how it failed).
+    attempt?: {
+        readonly phase: `starting` | `live` | `failed`;
+        readonly kind?: `native` | `routed`;
+        readonly problem?: string;
+        readonly failure?: SignInFailureKind;
+    };
     finishing?: boolean;
     // Another provider's sign-in still waiting: starting one here replaces it, which the panel says before the press.
     otherLive?: AgentProvider;
     // A sign-in is on its way to the sandbox: no second press until it answers.
     busy?: boolean;
-    // What just connected here, in a sentence naming the sandbox it went to.
-    landed?: string;
+    // What just connected here: what it is, where it went, who signed in (ConnectLanded.vue).
+    landed?: LandedCard | undefined;
     // The desktop app found this provider signed in on this computer.
     found?: boolean;
     // Something an account write here was refused for (a disconnect).
@@ -392,13 +402,8 @@ const ways = computed(() =>
     }),
 );
 
-// What the empty card says: that connecting this one is Full access's, or what signing in takes.
-const emptyLine = computed(() => {
-    if (ways.value.length === 0 && !canShip.value) {
-        return t(`connect.providerPanel.emptyFullAccess`);
-    }
-    return found ? t(`connect.connect.foundSignedIn`) : t(`connect.providerPanel.empty`);
-});
+// What the empty card says to a reader who may not connect this one: who can.
+const emptyLine = computed(() => t(`connect.providerPanel.emptyFullAccess`));
 
 // A loop door's way names its own variant; the default native way names the estate, where the provider sells several.
 const ask = (via: `native` | `routed`, variant?: string): void =>
@@ -415,13 +420,9 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             </Button>
         </template>
 
-        <!-- The one thing that just happened here, with the one next move. -->
-        <RowNote v-if="landed" variant="block">
-            <div class="flex flex-wrap items-center gap-3">
-                <Icon name="check" class="shrink-0 text-success" />
-                <span class="min-w-0 flex-1 text-sm text-content">{{ landed }}</span>
-                <Button tier="accent" size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
-            </div>
+        <!-- The one thing that just happened here, with the one next move. Keyed by the landing, so a second one arrives again. -->
+        <RowNote v-if="landed" :key="`${landed.label}:${landed.who ?? ``}`" variant="block">
+            <ConnectLanded :landing="landed" :chat-label="chatLabel" @chat="emit(`chat`)" />
         </RowNote>
 
         <RowNote v-if="notice" variant="block">
@@ -454,6 +455,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                 :phase="attempt.phase"
                 :kind="attempt.kind"
                 :problem="attempt.problem"
+                :failure="attempt.failure"
                 :finishing="finishing"
                 @cancel="emit(`cancel`)"
                 @retry="emit(`retry`)"
@@ -533,18 +535,23 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             @click="expanded = !expanded"
         />
 
-        <!-- Nothing here yet: what connecting needs, and the button that does it. -->
+        <!-- Nothing here yet: what connecting is like (before the press, since the press goes straight to the provider), and
+             the button that does it; or, for a reader who may not connect it, who can and the press that asks them. -->
         <RowNote v-if="!holdsAny && attempt === undefined" variant="block">
-            <div class="flex flex-col items-start gap-3">
-                <p class="text-xs text-muted">{{ emptyLine }}</p>
+            <div class="flex flex-col items-start gap-4">
+                <div v-if="ways.length === 0 && !canShip" class="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
+                    <span class="inline-flex min-w-0 items-center gap-2"><Icon name="lock" class="shrink-0" />{{ emptyLine }}</span>
+                    <AccessAsk :reason="{ kind: `tier`, floor: `maintainer` }" :place="t(`shared.models`)" small />
+                </div>
+                <ConnectPreflight v-else :provider="provider" :found="found" />
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
                 <EstatePicker v-if="offersEstates" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
                 <div v-if="ways.length > 0 || hubWant" class="flex flex-wrap items-start gap-2">
+                    <!-- Full size: on an empty card this is the one step the page is asking for, the start of a reader's first run. -->
                     <Button
                         v-for="(way, index) in ways"
                         :key="way.key"
                         :tier="index === 0 ? `accent` : `boring`"
-                        size="small"
                         :label="way.label"
                         :disabled="busy"
                         @click="ask(way.via, way.variant)"
@@ -552,7 +559,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                         <template #icon><Icon name="sign-in" /></template>
                     </Button>
                     <!-- Saved on the owner's computer from another of their sandboxes: the alternative to signing in here. -->
-                    <HubTakeOffer v-if="hubWant" :want="hubWant" :disabled="busy" />
+                    <HubTakeOffer v-if="hubWant" :want="hubWant" :disabled="busy" :small="false" />
                 </div>
             </div>
         </RowNote>

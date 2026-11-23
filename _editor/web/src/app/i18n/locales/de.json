@@ -5719,7 +5719,11 @@
             "didntConnect": "{provider} wurde nicht verbunden",
             "opening": "Anmeldeseite wird vorbereitet",
             "openingNext": "Danach meldest du dich in einem neuen Tab auf der Seite von {provider} an.",
-            "openingSlow": "Dauert länger als üblich: Die Sandbox ist vielleicht ausgelastet oder startet noch."
+            "openingSlow": "Dauert länger als üblich: Die Sandbox ist vielleicht ausgelastet oder startet noch.",
+            "expiredTitle": "Die Anmeldung ist abgelaufen",
+            "expiredDetail": "Sie wurde nicht rechtzeitig abgeschlossen. Versuchen Sie es erneut für eine neue.",
+            "unstartedTitle": "Die Anmeldung wurde nicht gestartet",
+            "refusedTitle": "{destination} hat die Anmeldung abgelehnt"
         },
         "localModelLane": {
             "bestHere": "Beste Wahl",
@@ -5791,7 +5795,6 @@
         },
         "providerPanel": {
             "connectWay": "{way} verbinden",
-            "empty": "Noch nicht verbunden. Die Anmeldung dauert eine Minute und das Konto bleibt in dieser Sandbox.",
             "otherLive": "Ihre Anmeldung bei {other} wartet noch. Das Verbinden von {provider} ersetzt sie.",
             "showOther": "{other} anzeigen",
             "emptyFullAccess": "Noch nicht verbunden. Dieses verbindet der Eigentümer oder jemand mit vollem Zugriff."
@@ -5827,6 +5830,31 @@
             "titleHint": "API-Schlüssel ··{hint}",
             "billed": "Abrechnung pro Token durch {vendor}",
             "couldntRemove": "Der API-Schlüssel konnte nicht getrennt werden."
+        },
+        "connectSteps": {
+            "open": "Öffnen",
+            "signIn": "Anmelden",
+            "connect": "Verbinden",
+            "label": "Anmeldeschritte",
+            "done": "erledigt"
+        },
+        "landed": {
+            "title": "{provider} verbunden",
+            "refreshedTitle": "{provider} erneut angemeldet",
+            "readyIn": "Chats in „{sandbox}“ können es jetzt nutzen",
+            "readyHere": "Chats in dieser Sandbox können es jetzt nutzen",
+            "closeTab": "Sie können den {destination}-Tab schließen."
+        },
+        "preflight": {
+            "runs": "Führt {runs} aus",
+            "label": "So läuft das Verbinden",
+            "freeWith": "Kostenlos mit {requirement}",
+            "needs": "Erfordert {requirement}",
+            "opens": "Öffnet {destination} in einem neuen Tab",
+            "aMinute": "etwa eine Minute",
+            "found": "Auf diesem Computer bereits angemeldet",
+            "oneClick": "ein Klick",
+            "staysHere": "Bleibt in dieser Sandbox, nie auf der Plattform"
         }
     },
     "desktop": {
@@ -7582,7 +7610,18 @@
             "tripDevinTokenMeans": "dieses einfügen",
             "tabOpening": "{destination} wird geöffnet…",
             "tabEnterCode": "Die nächste Seite fragt nach diesem Code.",
-            "tabCopyContinue": "Kopieren und weiter zu {destination}"
+            "tabCopyContinue": "Kopieren und weiter zu {destination}",
+            "yourDevices": "Ihren {count} Geräten",
+            "checkingAccount": "Prüft, ob das Konto einen Zug ausführen kann",
+            "codeExpiresIn": "Code läuft in {time} ab",
+            "signInOnTab": "Melden Sie sich im {destination}-Tab an",
+            "signInAt": "Bei {destination} anmelden",
+            "signInExpiresIn": "Diese Anmeldung läuft in {time} ab.",
+            "tabBlocked": "Ihr Browser hat den neuen Tab blockiert. Öffnen Sie {destination} von hier.",
+            "alsoWatching": "Wird weiterhin auf {where} erkannt",
+            "copyAddressBar": "Kopieren Sie die Adresse aus der Adressleiste und fügen Sie sie oben ein.",
+            "deadEndNote": "Diese Seite {wontLoad}: das ist erwartet.",
+            "tabSignInThere": "Sie melden sich auf der eigenen Seite von {destination} an."
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}“ lässt sich gerade nicht starten",

@@ -112,6 +112,16 @@ export const linkArrival = (
     return tile === undefined ? undefined : { tile, signIn: isProviderTile(provider) && !ready(provider) };
 };
 
+// What the card of what just connected says (ConnectLanded.vue): what it is, the sandbox it went to, who signed in, whether
+// it replaced an account already here, and the provider's site whose tab the reader may now close.
+export interface LandedCard {
+    readonly label: string;
+    readonly sandbox?: string | undefined;
+    readonly who?: string | undefined;
+    readonly refreshed?: boolean | undefined;
+    readonly tab?: string | undefined;
+}
+
 // The banner once a sign-in lands: what was connected, and to which sandbox. What a reader connects lives in that one
 // sandbox, not on the account: a new user connected ChatGPT in a second sandbox, removed it, and lost the connection.
 export const landedLine = (label: string, sandboxName: string | undefined): string =>

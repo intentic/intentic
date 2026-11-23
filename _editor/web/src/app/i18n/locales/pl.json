@@ -5719,7 +5719,11 @@
             "didntConnect": "Nie udało się podłączyć: {provider}",
             "opening": "Przygotowuję stronę logowania",
             "openingNext": "Potem zalogujesz się na stronie {provider}, w nowej karcie.",
-            "openingSlow": "Trwa dłużej niż zwykle: piaskownica może być zajęta albo jeszcze się uruchamia."
+            "openingSlow": "Trwa dłużej niż zwykle: piaskownica może być zajęta albo jeszcze się uruchamia.",
+            "expiredTitle": "Logowanie wygasło",
+            "expiredDetail": "Nikt go nie dokończył na czas. Spróbuj ponownie, by dostać nowe.",
+            "unstartedTitle": "Logowanie się nie rozpoczęło",
+            "refusedTitle": "{destination} odrzucił logowanie"
         },
         "localModelLane": {
             "bestHere": "Najlepszy wybór",
@@ -5791,7 +5795,6 @@
         },
         "providerPanel": {
             "connectWay": "Podłącz: {way}",
-            "empty": "Jeszcze nie podłączono. Logowanie zajmuje minutę, a konto zostaje w tym sandboxie.",
             "otherLive": "Logowanie do {other} wciąż czeka. Podłączenie {provider} je zastąpi.",
             "showOther": "Pokaż {other}",
             "emptyFullAccess": "Jeszcze niepodłączone. To podłącza właściciel albo ktoś z pełnym dostępem."
@@ -5827,6 +5830,31 @@
             "titleHint": "Klucz API ··{hint}",
             "billed": "Rozliczany za token przez {vendor}",
             "couldntRemove": "Nie udało się odłączyć tego klucza API."
+        },
+        "connectSteps": {
+            "open": "Otwórz",
+            "signIn": "Zaloguj",
+            "connect": "Połącz",
+            "label": "Kroki logowania",
+            "done": "gotowe"
+        },
+        "landed": {
+            "title": "Połączono {provider}",
+            "refreshedTitle": "{provider} zalogowano ponownie",
+            "readyIn": "Czaty w „{sandbox}” mogą już z niego korzystać",
+            "readyHere": "Czaty w tym sandboksie mogą już z niego korzystać",
+            "closeTab": "Możesz zamknąć kartę {destination}."
+        },
+        "preflight": {
+            "runs": "Uruchamia {runs}",
+            "label": "Jak wygląda łączenie",
+            "freeWith": "Za darmo z {requirement}",
+            "needs": "Wymaga: {requirement}",
+            "opens": "Otwiera {destination} w nowej karcie",
+            "aMinute": "około minuty",
+            "found": "Już zalogowano na tym komputerze",
+            "oneClick": "jedno kliknięcie",
+            "staysHere": "Zostaje w tym sandboksie, nigdy na platformie"
         }
     },
     "desktop": {
@@ -6971,7 +6999,18 @@
             "tripDevinTokenMeans": "wklej ten",
             "tabOpening": "Otwieranie {destination}…",
             "tabEnterCode": "Następna strona poprosi o ten kod.",
-            "tabCopyContinue": "Skopiuj i przejdź do {destination}"
+            "tabCopyContinue": "Skopiuj i przejdź do {destination}",
+            "yourDevices": "Twoich {count} urządzeniach",
+            "checkingAccount": "Sprawdzanie, czy konto może wykonać turę",
+            "codeExpiresIn": "kod wygasa za {time}",
+            "signInOnTab": "Zaloguj się w karcie {destination}",
+            "signInAt": "Zaloguj się w {destination}",
+            "signInExpiresIn": "To logowanie wygaśnie za {time}.",
+            "tabBlocked": "Przeglądarka zablokowała nową kartę. Otwórz {destination} stąd.",
+            "alsoWatching": "Nadal odbierane na {where}",
+            "copyAddressBar": "Skopiuj jej adres z paska adresu i wklej go powyżej.",
+            "deadEndNote": "Ta strona {wontLoad}: tak ma być.",
+            "tabSignInThere": "Zalogujesz się na stronie {destination}."
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}” nie da się teraz uruchomić",

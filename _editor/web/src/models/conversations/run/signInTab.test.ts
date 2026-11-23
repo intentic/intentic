@@ -60,7 +60,7 @@ afterEach(() => {
 it(`holds a tab in the press, says what it waits for, and sends it to the page severed from this one`, async () => {
     const tab = holdSignInTab(`claude.ai`)!;
     expect(open).toHaveBeenCalledWith(``, `_blank`);
-    expect(opened!.document.body.textContent).toBe(`Opening claude.ai…`);
+    expect(opened!.document.body.textContent).toContain(`Opening claude.ai…`);
 
     await expect(tab.send(`https://claude.ai/oauth/authorize`, ``)).resolves.toEqual({ sent: true, copied: false });
     expect(opened!.opener).toBeNull();

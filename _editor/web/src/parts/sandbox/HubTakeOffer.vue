@@ -13,10 +13,16 @@ import { useConnectionHub } from "../../models/hub/useConnectionHub";
 
 const t = useT();
 
-const { want, disabled = false } = defineProps<{
+const {
+    want,
+    disabled = false,
+    small = true,
+} = defineProps<{
     want: HubWant;
     // Another press on the same surface is on its way (a sign-in starting).
     disabled?: boolean;
+    // Compact beside compact presses; full size beside a full-size Connect, so the two alternatives stand level.
+    small?: boolean;
 }>();
 
 const { offered, take, takeOf, dismissTake } = useConnectionHub();
@@ -26,7 +32,7 @@ const taking = computed(() => takeOf(want));
 <template>
     <!-- Only while some computer could answer: with none connected and set up, the press could only be refused. -->
     <div v-if="offered" class="flex flex-col items-start gap-1.5">
-        <Button tier="boring" size="small" :label="t(`sandbox.connectionHub.useSaved`)" :loading="taking.busy" :disabled="disabled" @click="take(want)">
+        <Button tier="boring" :size="small ? `small` : undefined" :label="t(`sandbox.connectionHub.useSaved`)" :loading="taking.busy" :disabled="disabled" @click="take(want)">
             <template #icon><Icon name="desktop" /></template>
         </Button>
         <p v-if="taking.answer" class="flex items-center gap-1.5 text-xs" :class="taking.answer.outcome === `taken` ? `text-success` : `text-muted`">

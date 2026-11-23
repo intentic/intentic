@@ -2,7 +2,7 @@
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { Icon, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import type { ModelSourceStanding } from "./modelSources";
 import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerGrid";
@@ -44,13 +44,24 @@ const LINE = {
     warning: `text-warning`,
     danger: `text-danger`,
 } as const satisfies Record<TileTone, string>;
+
+// The line last said, kept while it fades out, so its words do not vanish a frame before their fade.
+const shown = ref(line);
+watch(
+    () => line,
+    (next) => {
+        if (next !== undefined) {
+            shown.value = next;
+        }
+    },
+);
 </script>
 
 <template>
     <button
         v-tooltip.top="tip"
         type="button"
-        class="ui-row-select group relative flex w-[5.75rem] shrink-0 flex-col items-center gap-2 rounded-xl px-2 pb-3 pt-6"
+        class="ui-row-select group relative flex min-w-0 flex-col items-center gap-1.5 rounded-xl px-2 pb-2 pt-6"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
@@ -82,6 +93,13 @@ const LINE = {
         <span class="w-full truncate text-center text-xs font-medium leading-tight" :class="selected ? `text-content` : `text-muted`">{{
             name
         }}</span>
-        <span v-if="line" class="max-w-full truncate text-[0.65rem] leading-4" :class="LINE[line.tone]">{{ line.text }}</span>
+        <!-- The line's room is kept whether or not it says anything: a sign-in starting grew the tile by a line and shoved the
+             whole grid and the panel under it down, then up again when it landed. Its words fade in where they will stand. -->
+        <span
+            class="h-4 max-w-full truncate text-[0.65rem] leading-4 transition-opacity"
+            :class="[shown === undefined ? `` : LINE[shown.tone], line ? `opacity-100` : `opacity-0`]"
+            :aria-hidden="line === undefined"
+            >{{ shown?.text }}</span
+        >
     </button>
 </template>

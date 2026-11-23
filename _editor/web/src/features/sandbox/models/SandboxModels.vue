@@ -7,7 +7,8 @@ import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/mo
 import type { ProviderKey } from "@intentic/sandbox-contract/state/arrival";
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, inject, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
+import { lessMotion } from "@intentic/ui/motion";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
@@ -22,6 +23,7 @@ import { endpointProviders, keyedBeside, runnableReadFailure } from "../../../mo
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { holdSignInTab } from "../../../models/conversations/run/signInTab";
+import { holdModelsView, type SignInFailureKind } from "../../../models/conversations/run/signInOutcome";
 import { loadProviderModels } from "../../../models/conversations/accounts/useChat-catalog";
 import { rememberedModelFor, rememberPick } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
@@ -34,6 +36,7 @@ import {
     foundSignIns,
     isProviderTile,
     KEY_SOURCE_LABELS,
+    type LandedCard,
     landedLine,
     linkArrival,
     LOCAL_TILE,
@@ -117,8 +120,21 @@ watch(selected, (tile) => {
     }
 });
 const panelId = useId();
+const panelEl = useTemplateRef<HTMLElement>(`panelEl`);
+// A press on a tile whose panel opens below the fold (a phone, where the grid alone fills the screen) brings the panel up to
+// meet it: otherwise the press changed only the tile's own highlight, and the card it opened sat a screen further down.
+const PANEL_FOLD_SHARE = 0.6;
 const select = (tile: TileKey): void => {
     selected.value = selected.value === tile ? undefined : tile;
+    if (selected.value === undefined) {
+        return;
+    }
+    void nextTick(() => {
+        const panelBox = panelEl.value;
+        if (panelBox != null && panelBox.getBoundingClientRect().top > window.innerHeight * PANEL_FOLD_SHARE) {
+            panelBox.scrollIntoView({ block: `start`, behavior: lessMotion() ? `auto` : `smooth` });
+        }
+    });
 };
 
 // What each tile says, from the sources that live under it: a provider's own accounts and its vendor's API keys, or
@@ -221,7 +237,7 @@ const connect = async (provider: NativeProvider, { variant, via }: { variant?: s
     }
     // The press that asked is the one moment a tab may open, so it is held now, before anything is awaited, and the
     // provider's page goes there once the sandbox names it: one press from Add to the page (signInTab.ts).
-    const tab = holdSignInTab(providerSpec(provider)?.destination ?? provider);
+    const tab = holdSignInTab(providerSpec(provider)?.destination ?? provider, providerSpec(provider)?.brand);
     // A new attempt is the thing happening now; the last one's banner is over.
     landed.value = undefined;
     selected.value = provider;
@@ -244,7 +260,7 @@ const connect = async (provider: NativeProvider, { variant, via }: { variant?: s
 // What the open panel's sign-in block shows, if anything: the press on its way, the reader's turn, or how it ended.
 const attemptFor = (
     provider: NativeProvider,
-): { phase: `starting` | `live` | `failed`; kind?: `native` | `routed`; problem?: string } | undefined => {
+): { phase: `starting` | `live` | `failed`; kind?: `native` | `routed`; problem?: string; failure?: SignInFailureKind } | undefined => {
     if (starting.value === provider) {
         return { phase: `starting` };
     }
@@ -253,7 +269,7 @@ const attemptFor = (
         return { phase: `live`, kind: live.value.kind, problem: error.value ?? undefined };
     }
     if (signInFailure.value?.provider === provider) {
-        return { phase: `failed`, problem: signInFailure.value.message };
+        return { phase: `failed`, problem: signInFailure.value.message, failure: signInFailure.value.kind };
     }
     return undefined;
 };
@@ -300,6 +316,23 @@ const landedLabel = (provider: AgentProvider): string =>
     provider;
 const landedFor = (tile: TileKey): string | undefined =>
     landed.value === undefined || tileOf(landed.value, keyedBeside) !== tile ? undefined : landedLine(landedLabel(landed.value), activeSandbox.value?.name);
+// What a sign-in's landing said about itself (who, replaced or new, a tab opened for it); none for a key or a local model.
+const arrival = ref<{ readonly who?: string; readonly refreshed: boolean; readonly tab: boolean } | undefined>(undefined);
+// The provider card's own arrival (ConnectLanded.vue): what connected, where, who, and which tab is now free to close.
+const landedCardFor = (tile: TileKey): LandedCard | undefined => {
+    const provider = landed.value;
+    if (provider === undefined || tileOf(provider, keyedBeside) !== tile) {
+        return undefined;
+    }
+    const facts = arrival.value;
+    return {
+        label: landedLabel(provider),
+        sandbox: activeSandbox.value?.name,
+        who: facts?.who,
+        refreshed: facts?.refreshed,
+        tab: facts?.tab === true ? providerSpec(provider)?.destination : undefined,
+    };
+};
 
 // A sign-in that connected an account while this view was open, as the store saw it land: said whether or not the
 // provider was connected before, since a second account lands without its readiness changing at all. An account a person
@@ -307,6 +340,7 @@ const landedFor = (tile: TileKey): string | undefined =>
 watch(signInLanded, (now) => {
     if (now !== undefined) {
         landed.value = now.provider;
+        arrival.value = now.who === undefined ? { refreshed: now.refreshed, tab: now.tab } : { who: now.who, refreshed: now.refreshed, tab: now.tab };
         selected.value = tileOf(now.provider) ?? selected.value;
         void queryClient.invalidateQueries({ queryKey: SANDBOX_SELF_ACCESS.of() });
     }
@@ -316,6 +350,7 @@ watch(signInLanded, (now) => {
 // the connection list fetched on arrival, which has never heard of this one.
 const onLocalReady = (provider: string): void => {
     landed.value = provider;
+    arrival.value = undefined;
     void refreshConnections();
 };
 
@@ -397,6 +432,7 @@ const addKey = async (key: ProviderKey): Promise<void> => {
     if (ended.value !== undefined) {
         keyEndpointLabels.set(ended.value, t(`connect.connect.foundKeyTitle`, { provider: key.label }));
         landed.value = ended.value;
+        arrival.value = undefined;
         selected.value = tileOf(ended.value, keyedBeside) ?? LOCAL_TILE;
     }
 };
@@ -406,12 +442,18 @@ const addKey = async (key: ProviderKey): Promise<void> => {
 const keyAdded = (endpoint: AgentProvider, vendor: string): void => {
     keyEndpointLabels.set(endpoint, t(`connect.apiKey.title`, { vendor }));
     landed.value = endpoint;
+    arrival.value = undefined;
 };
 
 const otherLiveFor = (tile: TileKey): AgentProvider | undefined => {
     const other = live.value?.provider ?? starting.value;
     return other !== undefined && other !== tile ? other : undefined;
 };
+
+// While this page is on screen it owns every sign-in: landings are said in its panels, not as a toast, and the chat's strip
+// stands down beside it (signInOutcome.ts).
+const releaseView = holdModelsView();
+onUnmounted(releaseView);
 
 onMounted(() => {
     // Fetched on open rather than waiting for the reachable seam, which lags a probe plus a tunnel round-trip.
@@ -502,8 +544,8 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         </RowGroup>
         <Notice v-if="keyNotice" :of="keyNotice" />
 
-        <!-- The grid: every way in, always the same tiles in the same places. -->
-        <div role="group" :aria-label="t(`shared.models`)" class="flex flex-wrap gap-1">
+        <!-- The grid: every way in, always the same tiles in the same places; fluid columns, so a scrollbar never reflows it. -->
+        <div role="group" :aria-label="t(`shared.models`)" class="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-1">
             <ProviderTile
                 v-for="tile in tiles"
                 :key="tile"
@@ -518,7 +560,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         </div>
 
         <!-- The open tile's panel. Nothing until the lists land: an empty provider would claim "not connected". -->
-        <div :id="panelId">
+        <div :id="panelId" ref="panelEl" class="scroll-mt-4">
             <template v-if="selected !== undefined && accessKnown && tiles.includes(selected)">
                 <LocalModelsPanel
                     v-if="selected === LOCAL_TILE"
@@ -538,7 +580,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                     :finishing="finishing"
                     :other-live="otherLiveFor(selected)"
                     :busy="starting !== undefined"
-                    :landed="landedFor(selected)"
+                    :landed="landedCardFor(selected)"
                     :chat-label="chatLabel"
                     :found="foundRows.some((provider) => provider === selected)"
                     :notice="accountsNotice"
