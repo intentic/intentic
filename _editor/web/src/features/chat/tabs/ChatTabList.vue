@@ -15,7 +15,7 @@ import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered, steadyLanes } from "./laneOrder";
 import { chatDoneWith, type FinishedFold, foldFinished, runDoneWith } from "./doneFold";
 import { windowRole } from "../../../lib/windows/windowRole";
-import { tabsInLane } from "./tabs";
+import { tabLabel, tabsInLane } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
 import { useChat } from "../../../models/conversations/run/useChat";
@@ -32,6 +32,11 @@ import { useT } from "@intentic/ui/i18n";
 // by. Removed (2026-10-13) the grid of role tiles above the lanes, which scoped them to one role.
 
 const t = useT();
+
+// What the host's search band holds: the open chats and runs whose title holds it, case aside, and only those.
+const props = defineProps<{ needle?: string }>();
+const needle = computed(() => props.needle?.toLocaleLowerCase() ?? ``);
+const titled = (title: string): boolean => needle.value === `` || title.toLocaleLowerCase().includes(needle.value);
 
 const emit = defineEmits<{
     select: [id: string];
@@ -66,7 +71,7 @@ const DONE_OPEN_KEY = `intentic.chatList.doneOpen.${windowRole}`;
 const doneOpen = ref(globalThis.sessionStorage?.getItem(DONE_OPEN_KEY) === `1`);
 watch(doneOpen, (open) => globalThis.sessionStorage?.setItem(DONE_OPEN_KEY, open ? `1` : `0`));
 // An archived run is excluded entirely.
-const listedRuns = computed(() => workflowRuns.value.filter((run) => run.archivedAt === undefined));
+const listedRuns = computed(() => workflowRuns.value.filter((run) => run.archivedAt === undefined && titled(run.workflow.name)));
 // Same lane rule as the board, including a step's question putting the run in Attention. Every run of the lane: Finished
 // folds what is done with (doneFold.ts) rather than capping by count.
 const runsInAll = (lane: FleetLane): WorkflowRun[] => runsInLane(listedRuns.value, lane, Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value));
@@ -76,7 +81,8 @@ const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.
 
 // The board's trays under the list's cards: every agent a chat's conversation started, riding under its card (chatTrays.ts).
 const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
-// The list has no filter of its own: finding a chat by what was said in it is Past chats' search.
+// The trays under the cards are not filtered: a card the search keeps keeps its tray. Finding a chat by what was said in it
+// is Past chats' search.
 const NO_FILTER = { active: ref(false), needle: ref(``), matchCase: ref(false), matches: (): boolean => true };
 const trays = useChatTrays({
     filter: NO_FILTER,
@@ -101,6 +107,9 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>((drawn) => {
         const agent = agentById(conversation.conversationId);
         // A run's step rides in the run's row, and a child's own chat in its parent's tray while the parent is listed.
         if ((agent !== undefined && insideRun(agent, ledger)) || trays.ridesUnder(agent, (id) => openIds.value.has(id))) {
+            continue;
+        }
+        if (!titled(tabLabel(conversation))) {
             continue;
         }
         listed.push({ conversation, agent });
@@ -196,7 +205,12 @@ const partsOf = (lane: FleetLane): readonly LanePart[] => {
         return [owed];
     }
     const fold: LanePart = { key: `fold` };
-    return doneOpen.value ? [owed, fold, { key: `done`, runs: runFold.value.folded, chats: chatFold.value.folded }] : [owed, fold];
+    // A search looks under the fold too: a match folded away behind "N done" would read as no match at all.
+    const done: LanePart = { key: `done`, runs: runFold.value.folded, chats: chatFold.value.folded };
+    if (needle.value !== ``) {
+        return [owed, done];
+    }
+    return doneOpen.value ? [owed, fold, done] : [owed, fold];
 };
 
 // Re-fetches the archive when a registered conversation has no agent; `probed` skips ones already confirmed gone.
@@ -271,10 +285,11 @@ defineExpose({ beginRename: actions.beginRename });
         <div ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-5 overflow-y-auto">
             <!-- An empty lane isn't drawn at all (see occupiedLanes). -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :data-rail-lane="lane.key" data-fold-unit>
-                <!-- Closing a chat is lossless in every lane. -->
+                <!-- Closing a chat is lossless in every lane. Not offered while the band filters: Clear closes the whole lane,
+                     not the rows a search left showing. -->
                 <template #actions>
                     <Button
-                        v-if="clearing[lane.key].size > 0"
+                        v-if="clearing[lane.key].size > 0 && needle === ``"
                         size="small"
                         tier="quiet"
                         class="shrink-0"
@@ -330,7 +345,7 @@ defineExpose({ beginRename: actions.beginRename });
                                 </template>
                             </RailCard>
                         </div>
-                        <ChatRowList v-if="part.chats.length > 0" :entries="part.chats" />
+                        <ChatRowList v-if="part.chats.length > 0" :entries="part.chats" :needle="needle" />
                     </template>
                 </template>
             </RailLane>

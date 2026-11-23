@@ -63,16 +63,22 @@
 /* THE HORIZON — five towers on a stepped plinth, standing on the floor of the window. */
     --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23a39a8c' fill-opacity='0.1' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
 
-/* SHADOW — the one flat, unlit value in the file, and the whole of two surfaces: the navigation rail and every overlay
-   that hangs off something (a menu, a popover). Not the dialog, below. */
+/* SHADOW — the one flat, unlit value in the file, and the whole of the navigation rail. */
     --sanctum-shadow: color-mix(in oklab, var(--color-surface-950) 90%, black);
+
+/* AN OVERLAY IS A SLAB HELD UP TO THE LIGHT, the dialog's own stone (below). Every menu, popover and tooltip used to be the
+   shadow above, the darkest value in the file: under the eye that read as a hole cut into the page, darker than the pane
+   it hung over and darker still than the composer it opened from, which is the very mistake the dialog was lifted out of.
+   Now each is a step above the cards it covers, so the page reads beneath it; the drop under it says it floats. */
+    --sanctum-overlay: color-mix(in oklab, var(--color-surface-900) 50%, var(--color-surface-800));
+    --ui-anchored-fill: var(--sanctum-overlay);
 
 /* THE DIALOG IS A SLAB LIFTED INTO THE LIGHT, not a hole cut into the wall. It was the shadow above, darker than the
    cards it covered: the eye read it as a recess, its fields (cut darker still) had nothing to be cut into, and the
    page behind out-shone it. Now it is the stone a step above a card, under the overlay step its own rows reach for;
    its rule is the strong gold one, and the scrim is the room's warm black, light enough to leave the room in view. */
     --ui-scrim: rgb(9 8 7 / 0.62);
-    --ui-dialog-fill: color-mix(in oklab, var(--color-surface-900) 50%, var(--color-surface-800));
+    --ui-dialog-fill: var(--sanctum-overlay);
     --ui-dialog-line: var(--sanctum-rule-strong);
 
 /* THE BRUSHED FIELD IS NOT DECLARED HERE ANY MORE. */
@@ -219,25 +225,23 @@
         background-image: var(--sanctum-tooth);
     }
 
-    /* OVERLAYS Opaque, deliberately and without exception. */
+    /* OVERLAYS Opaque, deliberately and without exception, and lifted (`--sanctum-overlay`): the plate's tooth, the lit upper
+       lip every plaque wears, the soft rule rather than the strong one (the drop already draws the edge, and a gold frame
+       round every menu was the loudest line on screen), and a drop deep enough to read on the pane. */
     [data-skin="sanctum"] .p-popover,
     [data-skin="sanctum"] .p-menu,
+    [data-skin="sanctum"] .p-contextmenu,
+    [data-skin="sanctum"] .p-tieredmenu,
     [data-skin="sanctum"] .p-select-overlay,
     [data-skin="sanctum"] .p-multiselect-overlay,
     [data-skin="sanctum"] .p-autocomplete-overlay,
     [data-skin="sanctum"] .ui-anchored-surface {
-        background-color: var(--sanctum-shadow);
-        background-image: none;
-        border: 1px solid var(--sanctum-rule-strong);
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.66);
-    }
-
-    /* Menus take the softer rule, frame and arrow alike. */
-    [data-skin="sanctum"] .ui-anchored-menu {
-        --ui-anchored-line: var(--sanctum-rule);
-    }
-    [data-skin="sanctum"] .ui-anchored-menu .ui-anchored-surface {
-        border-color: var(--ui-anchored-line);
+        background-color: var(--sanctum-overlay);
+        background-image: var(--sanctum-tooth);
+        border: 1px solid var(--sanctum-rule);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 250, 238, 0.06),
+            0 18px 48px rgba(0, 0, 0, 0.6);
     }
 
 /* THE DIALOG takes the plate's own tooth, a lit upper lip like every plaque in the skin, and a deep drop, since a shadow
@@ -254,10 +258,10 @@
         text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
     }
 
-/* A tooltip is an overlay that happens to be small, so it takes the overlays' own value rather than one of its own: they never appear together. */
+/* A tooltip is an overlay that happens to be small, so it takes the overlays' own value rather than one of its own. */
 /* Set on the tooltip itself, not on <html>: the scheme's own tokens are unlayered there and would outrank this layer. */
     [data-skin="sanctum"] .ui-tooltip {
-        --ui-tooltip-fill: var(--sanctum-shadow);
+        --ui-tooltip-fill: var(--sanctum-overlay);
         --ui-tooltip-border: var(--sanctum-rule-strong);
     }
 
@@ -786,4 +790,10 @@
 [data-skin="sanctum"] .font-semibold.uppercase.tracking-wide {
     letter-spacing: 0.15em;
     color: var(--sanctum-gold);
+}
+/* SECTION LABELS IN AN OVERLAY ARE STONE, NOT GOLD. On the page the gold inscription heads a region; in a menu it sat beside
+   the gold of the picked row and the gold rim, and three golds in one small panel stopped saying which one was picked. */
+[data-skin="sanctum"] :is(.p-popover, .p-menu, .p-contextmenu, .ui-anchored-surface) .font-semibold.uppercase.tracking-wide {
+    color: color-mix(in oklab, var(--sanctum-stone-ink) 62%, transparent);
+    letter-spacing: 0.09em;
 }

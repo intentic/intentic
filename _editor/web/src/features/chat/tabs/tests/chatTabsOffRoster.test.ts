@@ -1,4 +1,4 @@
-// Pins the fallback text a card shows for a chat off the fleet roster (title, model, cost), checked as text
+// Pins the fallback text a card shows for a chat off the fleet roster (title, no model, no cost), checked as text
 // since jsdom lays nothing out.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
@@ -48,7 +48,9 @@ beforeEach(async () => {
     await nextTick();
 });
 
-it(`draws the model from the conversation when the fleet cannot resolve it`, async () => {
+// The model is named only where it tells two same-titled rows apart (ChatTabRow); which model the conversation answers
+// for when the fleet cannot is modelOrProvider's, pinned in cardViewModel.test.ts.
+it(`draws the title from the conversation when the fleet cannot resolve it, and no model on a lone row`, async () => {
     const chat = useChat();
     const conversation = chat.active.value;
     // Registered, so the join treats it as an agent merely off the roster, not a draft.
@@ -62,7 +64,7 @@ it(`draws the model from the conversation when the fleet cannot resolve it`, asy
 
     const card = host!.querySelector(`[data-chat-tab]`);
     expect(card?.textContent).toContain(`Detached intentic chat · fix`);
-    expect(card?.textContent).toContain(shortModelLabel(modelLabelFor(`claude`, `claude-opus-4-5`)));
+    expect(card?.textContent).not.toContain(shortModelLabel(modelLabelFor(`claude`, `claude-opus-4-5`)));
     // No spend from either half of the join: that's the board's fact, not the switcher's.
     expect(card?.textContent).not.toContain(`$7.02`);
 });

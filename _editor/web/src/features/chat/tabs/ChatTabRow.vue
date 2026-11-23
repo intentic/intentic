@@ -212,7 +212,9 @@ const closeRow = (event: Event): void => {
                 <Icon name="box" class="text-2xs text-subtle" />
             </span>
             <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
-            <span v-if="props.view.model !== undefined && modelShown" class="max-w-24 truncate">{{ props.view.model }}</span>
+            <!-- The model only where it tells two rows apart (the same prompt sent again on another model): on every row it was
+                 one word repeated down the switcher, read by nobody, since the chat a reader is looking for is named by its title. -->
+            <span v-if="twin && props.view.model !== undefined && modelShown" class="max-w-24 truncate">{{ props.view.model }}</span>
             <span v-else-if="twinFact !== undefined && modelShown" class="max-w-24 truncate">{{ twinFact }}</span>
             <!-- After the model and before the time, as on its board card. The list opens under this card only while it is on screen (ChildRows). -->
             <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />

@@ -154,9 +154,18 @@ watch(activeId, () => {
 
 // PAST CHATS RIDE UNDER THE OPEN ONES in the switcher's sheet, as the phone's sheet has them (ChatSwitcherSheet.vue), rather
 // than behind a header button of their own: both answer "take me to another chat". Re-read each time the sheet opens, so
-// the list is current as of the press; the search filters by title or content (server-side), settled so a keystroke burst
-// becomes one request.
+// the list is current as of the press. The band at the sheet's top searches both: the open chats by title, here, and the
+// past ones by title or content (server-side), settled so a keystroke burst becomes one request.
 const query = ref(``);
+const search = ref<{ focus: () => void } | null>(null);
+// Escape with words in the band takes the words back first, and only a second one closes the sheet (the document's own
+// Escape, below), so a reader who mistyped is not thrown out of the list for correcting it.
+const clearQuery = (event: KeyboardEvent): void => {
+    if (query.value !== ``) {
+        event.stopPropagation();
+        query.value = ``;
+    }
+};
 watch(useSettled(query, SEARCH_SETTLE_MS, { trim: true }), (settled) => void loadSessions(settled || undefined));
 watch(listOpen, (open) => {
     if (open) {
@@ -393,25 +402,30 @@ onBeforeUnmount(() => {
             </button>
         </div>
 
-        <!-- A MENU, AND IT LOOKS LIKE ONE: the skin's own overlay surface (opaque, with the drop every menu wears), so it stands
-             above the transcript instead of reading as a darker hole cut into it, and its open chats are rows on it
-             (`ground-menu`, styles.css), not cards boxed inside a box. Hung centred under the title at a menu's width
-             rather than stretched across a wide column, where a title and its status ended up a screen apart; capped in
-             height so the transcript is never fully covered. -->
+        <!-- A MENU, AND IT LOOKS LIKE ONE: the skin's own overlay surface (opaque, lifted a step above the transcript, with
+             the drop every menu wears), and its open chats are rows on it (`ground-menu`, styles.css), not cards boxed
+             inside a box. Hung centred under the title at a menu's width rather than stretched across a wide column, where
+             a title and its status ended up a screen apart; capped in height so the transcript is never fully covered. -->
+        <!-- THE SEARCH IS ITS FIRST ROW, edge to edge, with the caret already in it: the sheet answers "take me to another
+             chat", and typing a few letters of its name is the quickest way there, whether it is open (filtered here, by
+             title) or past (the server's search, by title or content). It used to sit inside Past chats, under every open
+             chat, and found only those. -->
         <div
             v-if="listOpen"
-            class="ui-anchored-surface ground-menu absolute left-1/2 top-full z-30 mt-1 max-h-[60vh] w-[min(40rem,calc(100%-0.75rem))] -translate-x-1/2 rounded-xl p-1.5"
+            class="ui-anchored-surface ground-menu absolute left-1/2 top-full z-30 mt-1 max-h-[60vh] w-[min(30rem,calc(100%-0.75rem))] -translate-x-1/2 rounded-xl"
         >
-            <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
+            <SearchBar
+                ref="search"
+                v-model="query"
+                class="h-10 shrink-0"
+                :aria-label="t(`chat.words.searchChats`)"
+                :placeholder="t(`chat.words.searchChatsEllipsis`)"
+                @keydown.esc="clearQuery"
+                @vue:mounted="search?.focus()"
+            />
+            <ChatTabList class="min-h-0 flex-1 p-1.5" :needle="query.trim()" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
                 <template #after>
                     <RailLane :label="t(`chat.chatTabs.pastChats`)" data-fold-unit>
-                        <SearchBar
-                            v-model="query"
-                            variant="field"
-                            clearable
-                            :aria-label="t(`chat.words.searchChats`)"
-                            :placeholder="t(`chat.words.searchChatsEllipsis`)"
-                        />
                         <div class="flex min-w-0 flex-col gap-0.5">
                             <PastChatList :sessions="pastSessions" :query="query" :failure="sessionsFailure" @open="pickNotOpen" />
                         </div>
