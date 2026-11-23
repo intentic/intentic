@@ -26,6 +26,7 @@ import ChatHeldMessages from "../../transcript/held/ChatHeldMessages.vue";
 import ChatSendingMessages from "../../transcript/held/ChatSendingMessages.vue";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
+import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 import { usePaneTranscript } from "./paneTranscript";
 import { TRANSCRIPT_PARKED, useRowBudget, windowTurns } from "./paneWindow";
 import { viewingIn } from "./paneSurface";
@@ -109,6 +110,12 @@ const budget = useRowBudget({
     edge,
 });
 const shownTurns = computed(() => windowTurns(turns.value, messages.value.length, budget.value));
+// The rows a turn draws. Those an incident folds away (chatIncidents.ts) leave no wrapper behind, so the notices on either
+// side still close up into one log (chat.css's meta run reads adjacent wrappers), unless a fork mark hangs above one.
+const drawnRows = (turn: ChatTurn): readonly ChatMessage[] => {
+    const folded = incidents.value.folded;
+    return folded.size === 0 ? turn.messages : turn.messages.filter((message) => !folded.has(message.id) || cutsAbove.value.get(message.id) !== undefined);
+};
 // Every row is drawn: only then is the column's top the conversation's (the paging press, the fork line, the prompt).
 const whole = computed(() => budget.value >= messages.value.length);
 // The top of the conversation is on screen, so the chip that says what it was told before its first word is drawn.
@@ -207,7 +214,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
 
                     <!-- A display-contents wrapper keeps message children in the section's flex flow. -->
                     <div
-                        v-for="message in turn.messages"
+                        v-for="message in drawnRows(turn)"
                         :key="message.id"
                         v-memo="[
                             message,

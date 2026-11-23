@@ -10,7 +10,13 @@ import { type SandboxNotice, sandboxNoticeOf } from "./sandbox-notice.js";
 
    The rows stay as they are in the record: the run is found again wherever it is drawn, so nothing about a stored
    transcript, a rewind index or a fork changes. Only rows next to each other fold. A row between them (the person's
-   own message, a rebase, a different refusal) ends the run, since it is part of the story the reader is owed. */
+   own message, a rebase, a different refusal) ends the run, since it is part of the story the reader is owed.
+
+   A wake is the exception (another agent's words, a watch, an answered need: a prompt nobody typed). When one wall
+   stands while a fleet of subagents reports back, every report wakes the conversation and is turned away in turn, and
+   the run read as report, refusal, report, refusal: seven subagents left fourteen rows and seventy lines on 2026-11-23.
+   The wakes the wall turned away fold into its run, and the run names them (`wakes`), so the reader still learns who
+   reported. A wake after the run's last refusal is the attempt in flight, and stays a row of its own. */
 
 /** One refused attempt an incident folds: when it was refused, and the provider's own sentence for it. */
 export interface IncidentAttempt {
@@ -26,6 +32,8 @@ export interface TranscriptIncident {
     readonly attempts: readonly IncidentAttempt[];
     // The run ended on the move (or a person's switch) that got the turn through, rather than on a refusal or a re-send.
     readonly resolved: boolean;
+    // The wakes the wall turned away, by their index in the rows, oldest first: folded into the run, never drawn.
+    readonly wakes: readonly number[];
 }
 
 type Refusal = Extract<SandboxNotice, { code: "kept" | "undelivered" | "failed" }>;
@@ -68,40 +76,73 @@ const resent = (row: TranscriptRow): boolean => {
 
 const movedOn = (row: TranscriptRow): boolean => codeOf(row, MOVED) !== undefined;
 
+// A prompt nobody at the composer typed: another agent's words, a watch's wake, an answered need.
+const isWake = (row: TranscriptRow): boolean =>
+    row.role === "notice" && (row.agentWords !== undefined || row.watchWake !== undefined || row.needWake !== undefined);
+
 const attemptOf = (row: TranscriptRow, refusal: Refusal): IncidentAttempt =>
     row.openedAt === undefined ? { said: refusal.params.message } : { at: row.openedAt, said: refusal.params.message };
+
+// The wakes right above a first refusal, down to `floor`, which met the same wall: the first of them is what it turned away.
+const wakesAbove = (rows: readonly TranscriptRow[], index: number, floor: number): number[] => {
+    let start = index;
+    while (start > floor && isWake(rows[start - 1]!)) {
+        start -= 1;
+    }
+    return Array.from({ length: index - start }, (_, offset) => start + offset);
+};
+
+// How far the run that opens on the refusal at `index` reaches: every same refusal, re-send and wake after it, up to and
+// including the move or switch that ended it. A wake is joined only once a row after it carries the run on, since one
+// after the last refusal is the attempt still in flight.
+const runFrom = <R extends TranscriptRow>(rows: readonly R[], index: number, first: Refusal, resolves: (row: R) => boolean) => {
+    const attempts = [attemptOf(rows[index]!, first)];
+    const wakes: number[] = [];
+    let pending: number[] = [];
+    let to = index;
+    let resolved = false;
+    for (let next = index + 1; next < rows.length && !resolved; next += 1) {
+        const row = rows[next]!;
+        const again = refusalOf(row);
+        if (isWake(row)) {
+            pending.push(next);
+            continue;
+        }
+        if (again !== undefined && sameRefusal(first, again)) {
+            attempts.push(attemptOf(row, again));
+        } else if (movedOn(row) || resolves(row)) {
+            resolved = true;
+        } else if (!resent(row)) {
+            break;
+        }
+        wakes.push(...pending);
+        pending = [];
+        to = next;
+    }
+    return { to, attempts, resolved, wakes };
+};
 
 /**
  * Every run of rows that says one refusal, in order. `resolves` names the reader's own rows that end one (the editor's
  * line for an account a person switched to); the sandbox's own move (`accountMoved`) always does. A lone refusal is no
- * run, and is drawn as itself.
+ * run, and is drawn as itself, as is one wake and the refusal it met.
  */
 export const transcriptIncidents = <R extends TranscriptRow>(rows: readonly R[], resolves: (row: R) => boolean = () => false): TranscriptIncident[] => {
     const found: TranscriptIncident[] = [];
     let index = 0;
+    // The first row a run may reach back to: never into the run before it.
+    let floor = 0;
     while (index < rows.length) {
         const first = refusalOf(rows[index]!);
         if (first === undefined) {
             index += 1;
             continue;
         }
-        const attempts = [attemptOf(rows[index]!, first)];
-        let to = index;
-        let resolved = false;
-        for (let next = index + 1; next < rows.length && !resolved; next += 1) {
-            const row = rows[next]!;
-            const again = refusalOf(row);
-            if (again !== undefined && sameRefusal(first, again)) {
-                attempts.push(attemptOf(row, again));
-            } else if (movedOn(row) || resolves(row)) {
-                resolved = true;
-            } else if (!resent(row)) {
-                break;
-            }
-            to = next;
-        }
-        if (to > index) {
-            found.push({ from: index, to, attempts, resolved });
+        const above = wakesAbove(rows, index, floor);
+        const { to, attempts, resolved, wakes } = runFrom(rows, index, first, resolves);
+        if (to > index || above.length > 1) {
+            found.push({ from: above[0] ?? index, to, attempts, resolved, wakes: [...above, ...wakes] });
+            floor = to + 1;
         }
         index = to + 1;
     }

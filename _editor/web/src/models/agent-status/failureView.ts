@@ -64,10 +64,10 @@ export const failureView = ({ message, error, own }: FailureSaid): FailureView =
     if (detailed !== undefined) {
         return { line: detailed(), said: message, ends };
     }
-    if (own === true) {
-        return { line: message, ends };
-    }
     const kind = kindOfCode(error);
+    if (own === true) {
+        return { ...ownLine(message, kind), ends };
+    }
     if (kind === `advisory`) {
         return { ...(spoken(message) ?? { line: message }), ends };
     }
@@ -210,6 +210,17 @@ const spoken = (said: string): Pick<FailureView, `line` | `said`> | undefined =>
 };
 
 const unclassified = (said: string): Pick<FailureView, `line` | `said`> => ({ line: t(`chat.failure.unclassified`), said });
+
+// The sandbox's own sentence is the line while it fits one row. Past that it is a paragraph (an account turned off
+// explains the re-check schedule and three ways out: seven lines, once per subagent report, on 2026-11-23), so it is
+// led by the line for its kind, or its own first claim, and kept whole behind the press.
+const ownLine = (said: string, kind: FailureKind | undefined): Pick<FailureView, `line` | `said`> => {
+    const whole = said.trim();
+    if (whole.length <= SHORT && !whole.includes(`\n`)) {
+        return { line: whole };
+    }
+    return { line: kind === undefined || kind === `advisory` ? firstClaim(whole) : KIND_LINES[kind](), said };
+};
 
 // A failure nothing coded: a safeguard flag by the CLI's words for one, else what its words say, else unclassified.
 const uncoded = (said: string): Pick<FailureView, `line` | `said`> =>

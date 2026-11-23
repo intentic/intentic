@@ -3732,8 +3732,6 @@
             "cutShort": "Agent zatrzymał się, zanim skończył.",
             "command": "Agent odczytał to jako polecenie, którego nie ma.",
             "unclassified": "Agent zatrzymał się na błędzie, którego ta aplikacja nie rozpoznaje.",
-            "details": "Szczegóły",
-            "hideDetails": "Ukryj szczegóły",
             "category": "Kategoria",
             "requestId": "ID żądania",
             "messageId": "ID wiadomości",
@@ -3814,10 +3812,7 @@
             "continueWithoutDeclined": "Kontynuuj bez odrzuconego kroku.",
             "editMessageShort": "Edytuj wiadomość",
             "expandMessage": "Rozwiń wiadomość",
-            "hideCheck": "Ukryj sprawdzenie",
-            "hideFindings": "Ukryj wyniki",
             "hideCommand": "Ukryj polecenie",
-            "hideMessage": "Ukryj wiadomość",
             "isntConnectedYet": "{name} nie jest jeszcze podłączone",
             "notNow": "Nie teraz",
             "openBeside": "Otwórz obok",
@@ -3835,10 +3830,7 @@
             "releaseToAgent": "Zwolnić {subject} dla agenta?",
             "replacesWhatFollows": "Zastępuje to, co dalej",
             "requestedBecause": "Poproszono, ponieważ: {reason}",
-            "showCheck": "Pokaż sprawdzenie",
-            "showFindings": "Pokaż wyniki",
             "showCommand": "Pokaż polecenie",
-            "showMessage": "Pokaż wiadomość",
             "showPrompt": "Pokaż prompt",
             "skipCall": "Pomiń i idź dalej",
             "skipFree": "Pomiń: za darmo",
@@ -5363,9 +5355,25 @@
             }
         },
         "incident": {
-            "attempts": "{count} odrzucona próba | {count} odrzucone próby | {count} odrzuconych prób",
-            "hideAttempts": "Ukryj próby",
-            "same": "Odrzucona w ten sam sposób."
+            "attempts": "{count} odrzucona próba | {count} odrzucone próby | {count} odrzuconych prób"
+        },
+        "noticeCard": {
+            "held": "Wstrzymane · {count}",
+            "heldFrom": "Wstrzymane · {count} · {from}",
+            "heldCount": "{count} wiadomość wstrzymana | {count} wiadomości wstrzymane | {count} wiadomości wstrzymanych",
+            "openChat": "Otwórz jego czat",
+            "sentCheck": "Co wysłało sprawdzenie",
+            "sentFindings": "Wyniki wysłane agentowi",
+            "sentMessage": "Co dostał agent",
+            "state": {
+                "failed": "Nie powiodło się",
+                "finished": "Gotowe",
+                "message": "Wiadomość",
+                "fired": "Spełniony",
+                "gaveUp": "Poddał się",
+                "given": "Dane",
+                "declined": "Odmówiono"
+            }
         },
         "accessWall": {
             "status": "{account} nie może prowadzić tej rozmowy: jego plan lub organizacja nie pozwala na {provider}, a żadne inne konto {provider} tutaj jej nie przejmie.",

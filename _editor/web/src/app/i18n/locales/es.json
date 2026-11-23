@@ -3732,8 +3732,6 @@
             "cutShort": "El agente se detuvo antes de terminar.",
             "command": "El agente leyó esto como un comando que no tiene.",
             "unclassified": "El agente se detuvo en un error que esta app no reconoce.",
-            "details": "Detalles",
-            "hideDetails": "Ocultar detalles",
             "category": "Categoría",
             "requestId": "ID de solicitud",
             "messageId": "ID de mensaje",
@@ -3814,9 +3812,6 @@
             "continueWithoutDeclined": "Continuar, sin el paso que rechacé.",
             "editMessageShort": "Editar mensaje",
             "expandMessage": "Desplegar el mensaje",
-            "hideCheck": "Ocultar la comprobación",
-            "hideFindings": "Ocultar hallazgos",
-            "hideMessage": "Ocultar el mensaje",
             "hideCommand": "Ocultar el comando",
             "isntConnectedYet": "{name} todavía no está conectado",
             "notNow": "Ahora no",
@@ -3835,9 +3830,6 @@
             "releaseToAgent": "¿Liberar {subject} al agente?",
             "replacesWhatFollows": "Reemplaza lo que sigue",
             "requestedBecause": "Solicitado porque: {reason}",
-            "showCheck": "Mostrar la comprobación",
-            "showFindings": "Mostrar hallazgos",
-            "showMessage": "Mostrar el mensaje",
             "showCommand": "Mostrar el comando",
             "showPrompt": "Ver prompt",
             "skipCall": "Omitir y seguir",
@@ -5363,9 +5355,25 @@
             }
         },
         "incident": {
-            "attempts": "{count} intento rechazado | {count} intentos rechazados",
-            "hideAttempts": "Ocultar intentos",
-            "same": "Rechazado de la misma forma."
+            "attempts": "{count} intento rechazado | {count} intentos rechazados"
+        },
+        "noticeCard": {
+            "held": "Retenidos · {count}",
+            "heldFrom": "Retenidos · {count} · {from}",
+            "heldCount": "{count} mensaje retenido | {count} mensajes retenidos",
+            "openChat": "Abrir su chat",
+            "sentCheck": "Lo que envió la comprobación",
+            "sentFindings": "Hallazgos enviados al agente",
+            "sentMessage": "Lo que recibió el agente",
+            "state": {
+                "failed": "Falló",
+                "finished": "Terminó",
+                "message": "Mensaje",
+                "fired": "Se cumplió",
+                "gaveUp": "Se rindió",
+                "given": "Dado",
+                "declined": "Rechazado"
+            }
         },
         "accessWall": {
             "status": "{account} no puede ejecutar esta conversación: su plan u organización no permite {provider}, y ninguna otra cuenta de {provider} de aquí puede encargarse.",

@@ -46,6 +46,19 @@ describe(`a failure, as one line`, () => {
         expect(failureView({ message: own, error: `trial-unavailable`, own: true })).toEqual({ line: own, ends: true });
     });
 
+    // An account its organization turned off is refused in a paragraph: the provider's reason, the re-check schedule and
+    // three ways out. Drawn whole it was seven lines, once per subagent report that woke the chat (2026-11-23).
+    it(`leads a sandbox paragraph too long for one row with its kind's line, the paragraph behind the press`, () => {
+        const held = `The Claude Code account this conversation runs on cannot serve it: Your organization has disabled Claude subscription access for Claude Code. No other connected Claude Code account can serve right now. Or connect another Claude Code account in Sandbox ▸ Agent.`;
+        expect(failureView({ message: held, error: `claude-not-entitled`, own: true })).toEqual({
+            line: `The provider refused this account: its plan or organization does not allow it.`,
+            said: held,
+            ends: true,
+        });
+        const uncoded = `${`This turn may use only Read, and this runtime cannot hold a turn to a tool list, so it was not sent. `.repeat(2)}`;
+        expect(failureView({ message: uncoded, own: true }).line).toBe(`This turn may use only Read, and this runtime cannot hold a turn to a tool list, so it was not sent.`);
+    });
+
     // The sentence a broken copy of the workspace is refused with carries the namespace holder's own error after it
     // (setup-refusal.ts): the line is this build's, in the reader's language, and all the sandbox said is the details.
     it(`says a broken copy of the workspace in this build's words, the sandbox's sentence and its holder's error behind it`, async () => {

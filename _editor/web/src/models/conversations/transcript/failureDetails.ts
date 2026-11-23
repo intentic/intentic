@@ -1,5 +1,5 @@
 /*
- * EVERYTHING A FAILURE SAID, LAID OUT TO READ: what the details press of a failure notice opens (NoticeFailureDetails.vue)
+ * EVERYTHING A FAILURE SAID, LAID OUT TO READ: what the card behind a failure notice holds (NoticeFailureDetails.vue)
  * under the line failureView gives it (agent-status/failureView.ts). The provider's prose with its links live, and the
  * facts it carried (the category, the request and message ids, a help article) pulled out of it.
  */

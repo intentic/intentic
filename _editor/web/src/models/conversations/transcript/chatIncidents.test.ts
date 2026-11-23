@@ -26,6 +26,7 @@ describe(`incidentsOf`, () => {
                 { at: 20, said: ORG_OFF },
             ],
             resolved: true,
+            wakes: [],
         });
     });
 
@@ -36,6 +37,19 @@ describe(`incidentsOf`, () => {
         const grown = incidentsOf([...rows, { id: 4, role: `user`, text: `again` }, refused(5, 30), refused(6, 40)], first);
         expect(grown).not.toBe(first);
         expect(grown.drawn.get(3)).toBe(first.drawn.get(3));
+    });
+
+    // The subagent reports the wall turned away fold with it, and the drawn row carries them, oldest first.
+    it(`carries the wakes a run folded`, () => {
+        const report = (id: number, title: string): ChatMessage => ({
+            id,
+            role: `notice`,
+            text: `Subagent "${title}" failed.`,
+            agentWords: { kind: `child`, from: `sub-${id}`, title, failed: true, sent: `report` },
+        });
+        const answer = incidentsOf([report(1, `a`), refused(2, 10), report(3, `b`), refused(4, 20)]);
+        expect([...answer.folded]).toEqual([1, 2, 3]);
+        expect(answer.drawn.get(4)?.wakes.map((wake) => wake.id)).toEqual([1, 3]);
     });
 
     // A person's own pick in the composer ends the run as the sandbox's move does; a model swap, unmarked, does not.

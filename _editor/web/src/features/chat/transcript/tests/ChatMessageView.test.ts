@@ -177,6 +177,27 @@ jest.mock("@intentic/ui", async () => {
         ContextMenu: vue.defineComponent({ render: () => undefined }),
         // A held turn's "what happens next" (TurnBreakQuestion); which answers it offers is the held line's own suite.
         SegmentedControl: vue.defineComponent({ render: () => undefined }),
+        // The card a notice's line raises, drawn in place while open: where it lands on the page is the kit's own suite.
+        AnchoredOverlay: vue.defineComponent({
+            props: { modelValue: { type: Boolean, required: true } },
+            setup: (props, { slots }) => () => (props.modelValue ? vue.h(`div`, { "data-anchored": `` }, slots[`default`]?.()) : null),
+        }),
+        // The hover clock without its timers: a pointer that arrives opens at once.
+        useHoverIntent: () => {
+            const shown = vue.ref(false);
+            return {
+                shown,
+                enter: () => (shown.value = true),
+                leave: () => (shown.value = false),
+                show: () => (shown.value = true),
+                hide: () => (shown.value = false),
+                cancel: () => {},
+            };
+        },
+        SectionHeader: vue.defineComponent({
+            props: { label: { type: String, default: undefined } },
+            setup: (props) => () => vue.h(`div`, { "data-section": `` }, props.label),
+        }),
         browserOwnsClick: () => false,
         clipboardOf: () => undefined,
         parseLoopbackLink: (uri: string) => {
@@ -321,6 +342,14 @@ const { default: ChatTurnStatus } = await import("../ChatTurnStatus.vue");
 
 const message: ChatMessage = { id: 1, role: `assistant`, text: `` };
 let app: App | undefined;
+
+// A notice row's one line, and the card a press on it raises (NoticeRow): where everything past the line is read.
+const lineOf = (element: HTMLElement): HTMLButtonElement => element.querySelector<HTMLButtonElement>(`button[data-notice-line]`)!;
+const cardOf = async (element: HTMLElement): Promise<HTMLElement> => {
+    lineOf(element).click();
+    await nextTick();
+    return element.querySelector<HTMLElement>(`[data-notice-card]`)!;
+};
 
 const mount = (subject: ChatMessage = message, extra: { doomed?: boolean; incident?: ChatIncident } = {}): HTMLElement => {
     const element = document.createElement(`div`);
@@ -1397,14 +1426,14 @@ describe(`another agent's words`, () => {
         expect([...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`))).toContain(`comments`);
     });
 
-    it(`keeps what was sent one press away, verbatim`, async () => {
+    it(`keeps what was sent on the card its line raises, verbatim`, async () => {
         const element = mount(rowOf(PEER));
         expect(element.querySelector(`pre`)).toBeNull();
-        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!;
-        expect(toggle.textContent?.trim()).toBe(`Show the message`);
-        toggle.click();
-        await nextTick();
-        expect(element.querySelector(`pre`)?.textContent).toBe(PEER);
+        expect(lineOf(element).getAttribute(`aria-expanded`)).toBe(`false`);
+        const card = await cardOf(element);
+        expect(lineOf(element).getAttribute(`aria-expanded`)).toBe(`true`);
+        expect(card.querySelector(`[data-notice-sent] [data-section]`)?.textContent).toBe(`What the agent was told`);
+        expect(card.querySelector(`[data-notice-sent] pre`)?.textContent).toBe(PEER);
     });
 
     it(`weights a subagent that failed like a watch that gave up`, () => {
@@ -1610,16 +1639,16 @@ describe(`condition watches`, () => {
         expect(icons).not.toContain(`info-circle`);
     });
 
-    it(`keeps the check out of the reading column until it is asked for, then shows what was actually sent`, async () => {
+    it(`keeps the check out of the reading column, on the card its line raises, with what was actually sent`, async () => {
         const element = mount(wakeRow());
         expect(element.querySelector(`pre`)).toBeNull();
 
-        element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!.click();
-        await nextTick();
+        const card = await cardOf(element);
 
         // Verbatim, not a summary: the exit code and the check's own tail are the evidence for a line nobody typed.
-        expect(element.querySelector(`pre`)?.textContent).toBe(WAKE);
-        expect(element.querySelector(`pre`)?.textContent).toContain(`Last exit code: 0`);
+        expect(card.querySelector(`[data-notice-sent] [data-section]`)?.textContent).toBe(`What the check sent`);
+        expect(card.querySelector(`pre`)?.textContent).toBe(WAKE);
+        expect(card.querySelector(`pre`)?.textContent).toContain(`Last exit code: 0`);
     });
 
     // The one ending that calls for a different next step, so it is the one that carries weight rather than reading as
@@ -1973,15 +2002,12 @@ describe(`a provider's failure`, () => {
         expect(element.querySelector(`[data-failure-details]`)).toBeNull();
     });
 
-    it(`opens everything it said on a press: the prose with its links, the ids to copy, and the help article`, async () => {
+    it(`raises everything it said on a card: the prose with its links, the ids to copy, and the help article`, async () => {
         const element = mount(flagged());
-        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!;
-        expect(toggle.textContent?.trim()).toBe(`Details`);
-        toggle.click();
-        await nextTick();
-        const details = element.querySelector(`[data-failure-details]`)!;
-        expect(toggle.getAttribute(`aria-expanded`)).toBe(`true`);
-        expect(toggle.textContent?.trim()).toBe(`Hide details`);
+        expect(lineOf(element).textContent).toContain(`The model's safeguards flagged this turn.`);
+        const card = await cardOf(element);
+        const details = card.querySelector(`[data-failure-details]`)!;
+        expect(lineOf(element).getAttribute(`aria-expanded`)).toBe(`true`);
         expect(details.textContent).toContain(`You may be seeing this for the first time`);
         expect([...details.querySelectorAll(`dt`)].map((term) => term.textContent)).toEqual([`Category`, `Request ID`, `Message ID`]);
         expect([...details.querySelectorAll(`dd`)].map((value) => value.textContent?.trim())).toEqual([
@@ -1993,15 +2019,30 @@ describe(`a provider's failure`, () => {
             `https://www.anthropic.com/legal/aup`,
             `https://support.claude.com/en/articles/8106465`,
         ]);
-        // One copy per id, and one for the whole message; a category is a word to read, not to paste.
-        expect(details.querySelectorAll(`.copy-stub`)).toHaveLength(3);
+        // One copy per id, and one on the card for the whole of it; a category is a word to read, not to paste.
+        expect(details.querySelectorAll(`.copy-stub`)).toHaveLength(2);
+        expect(card.querySelectorAll(`.copy-stub`)).toHaveLength(3);
+    });
+
+    // A paragraph quoted on the card reads a sentence to a line, never as a block.
+    it(`quotes a paragraph on the card a sentence to a line`, async () => {
+        const own = `The Claude Code account this conversation runs on cannot serve it: Your organization has disabled Claude subscription access for Claude Code. No other connected Claude Code account can serve right now. Or connect another Claude Code account in Sandbox ▸ Agent.`;
+        const element = mount({ id: 38, ...foldTurn([], [{ kind: `error`, code: `claude-not-entitled`, message: own, own: true, held: { ran: false } }]).at(-1)! });
+        expect(lineOf(element).textContent).toContain(`The provider refused this account: its plan or organization does not allow it.`);
+        expect(lineOf(element).textContent).not.toContain(`No other connected`);
+        const quote = (await cardOf(element)).querySelector(`[data-failure-details] p`)?.textContent ?? ``;
+        expect(quote.split(`\n`)).toEqual([
+            `The Claude Code account this conversation runs on cannot serve it: Your organization has disabled Claude subscription access for Claude Code.`,
+            `No other connected Claude Code account can serve right now.`,
+            `Or connect another Claude Code account in Sandbox ▸ Agent.`,
+        ]);
     });
 
     // However short, a provider's words are not the line: how long they ran never decided what the reader sees. Only the
     // sandbox's own sentence is drawn whole, with nothing behind it.
     it(`keeps a short provider's words behind the press too, and draws the sandbox's own sentence whole`, () => {
         const short = mount({ id: 32, ...foldTurn([], [{ kind: `error`, code: `safeguard-flagged`, message: `Flagged.` }]).at(-1)! });
-        expect([short.textContent?.includes(`Flagged.`), short.querySelector(`button[aria-expanded]`)?.textContent?.trim()]).toEqual([false, `Details`]);
+        expect([short.textContent?.includes(`Flagged.`), lineOf(short) !== null]).toEqual([false, true]);
         expect(iconsOf(short)).toEqual([`exclamation-triangle`]);
         app?.unmount();
         const own = `Free trial unavailable. Failed agent steps are not counted. Retry, or connect a model of your own.`;
@@ -2024,7 +2065,7 @@ describe(`a provider's failure`, () => {
     it(`reads a row with no code by its marks, and names a safeguard flag as one`, () => {
         const element = mount({ id: 33, role: `notice`, text: SAID });
         expect(element.textContent).toContain(`The model's safeguards flagged this turn.`);
-        expect(element.querySelector(`button[aria-expanded="false"]`)?.textContent?.trim()).toBe(`Details`);
+        expect(lineOf(element)).not.toBeNull();
     });
 
     it(`keeps the info glyph for a notice that is not a failure`, () => {
@@ -2046,13 +2087,13 @@ describe(`a runtime extension's notice`, () => {
         expect(line?.getAttribute(`data-agent-notice`)).toBe(`warning`);
         expect(line?.classList.contains(`text-warning`)).toBe(true);
         expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
-        expect(line?.textContent?.trim()).toBe(`guard-ext: Command blocked\nby the guard`);
+        expect(line?.querySelector(`[data-notice-words]`)?.textContent?.trim()).toBe(`guard-ext: Command blocked\nby the guard`);
     });
 
     it(`keeps an info line as muted as any other notice, and an error in the danger colour`, () => {
         const info = mount(noticeRow(`info`)).querySelector(`[data-agent-notice]`);
         expect(info?.classList.contains(`text-subtle`)).toBe(true);
-        expect(info?.textContent?.trim()).toBe(`Command blocked\nby the guard`);
+        expect(info?.querySelector(`[data-notice-words]`)?.textContent?.trim()).toBe(`Command blocked\nby the guard`);
         expect(mount(noticeRow(`error`)).querySelector(`[data-agent-notice]`)?.classList.contains(`text-danger`)).toBe(true);
     });
 
@@ -2065,11 +2106,9 @@ describe(`a runtime extension's notice`, () => {
         expect(iconsOf(element)).toEqual([`list-check`]);
         expect(element.querySelector(`[data-agent-notice]`)?.textContent).not.toContain(`turn checks:`);
         expect(element.querySelector(`pre`)).toBeNull();
-        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!;
-        expect(toggle.textContent?.trim()).toBe(`Show findings`);
-        toggle.click();
-        await nextTick();
-        expect(element.querySelector(`pre`)?.textContent).toBe(sent);
+        const card = await cardOf(element);
+        expect(card.querySelector(`[data-notice-sent] [data-section]`)?.textContent).toBe(`Findings sent to the agent`);
+        expect(card.querySelector(`pre`)?.textContent).toBe(sent);
     });
 });
 
@@ -2086,45 +2125,74 @@ describe(`a row standing for a refusal incident`, () => {
             { at: SECOND, said: ORG_OFF },
         ],
         resolved: true,
+        wakes: [],
     };
-    const iconsOf = (element: HTMLElement): (string | null)[] => [...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
-    const toggleOf = (element: HTMLElement): HTMLButtonElement => element.querySelector<HTMLButtonElement>(`button[aria-expanded]`)!;
+    const iconsOf = (element: HTMLElement): (string | null)[] =>
+        [...(lineOf(element) ?? element).querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
 
     it(`says where the turn ran and why, naming both accounts, under the move's own glyph and no warning`, () => {
         const element = mount(moved, { incident: twice });
         expect(element.textContent).toContain(`Ran on radarsu@gmail.com: Work's plan or organization doesn't allow it.`);
         expect(element.textContent).not.toContain(`Nothing has run yet`);
-        expect(iconsOf(element)).toEqual([`arrow-right`]);
+        expect(iconsOf(element)).toEqual([`arrow-right`, `refresh`]);
         expect(element.querySelector(`.text-warning`)).toBeNull();
     });
 
-    it(`counts the refused attempts on its press, and lists each with its moment, a repeated sentence said once`, async () => {
+    it(`counts the refused attempts on its line, and says when each was on its card, the sentence quoted once`, async () => {
         const element = mount(moved, { incident: twice });
-        expect(toggleOf(element).textContent?.trim()).toBe(`2 refused attempts`);
-        toggleOf(element).click();
-        await nextTick();
-        const rows = [...element.querySelectorAll(`[data-incident-attempts] li`)].map((item) => [...item.querySelectorAll(`span`)].map((part) => part.textContent));
-        expect(rows).toEqual([
-            [formatClock(FIRST), ORG_OFF],
-            [formatClock(SECOND), `Refused the same way.`],
-        ]);
-        expect(toggleOf(element).textContent?.trim()).toBe(`Hide attempts`);
+        expect(element.querySelector(`[data-notice-tries]`)?.textContent).toContain(`2`);
+        const card = await cardOf(element);
+        const attempts = card.querySelector(`[data-incident-attempts]`)!;
+        expect(attempts.textContent).toContain(`2 refused attempts`);
+        expect(attempts.textContent).toContain(`${formatClock(FIRST)} · ${formatClock(SECOND)}`);
+        expect(card.textContent?.split(ORG_OFF)).toHaveLength(2);
     });
 
-    // A move made on a conversation's first turn has no attempts to list: what it was made for is its details.
-    it(`keeps a lone move's reason a press away, as a failure keeps its words`, async () => {
+    // A move made on a conversation's first turn has no attempts to list: what it was made for is on its card.
+    it(`keeps a lone move's reason on its card, as a failure keeps its words`, async () => {
         const element = mount(moved);
-        expect(toggleOf(element).textContent?.trim()).toBe(`Details`);
-        toggleOf(element).click();
-        await nextTick();
-        expect(element.querySelector(`[data-failure-details]`)?.textContent).toContain(`Your organization has disabled Claude subscription access`);
+        expect(element.querySelector(`[data-notice-tries]`)).toBeNull();
+        const card = await cardOf(element);
+        expect(card.querySelector(`[data-failure-details]`)?.textContent).toContain(`Your organization has disabled Claude subscription access`);
     });
 
     it(`draws an incident still standing as its latest refusal, the attempts behind the same press`, () => {
         const kept: ChatMessage = { id: 41, ...foldTurn([], [{ kind: `error`, code: `claude-not-entitled`, message: ORG_OFF, held: { ran: false } }]).at(-1)! };
         const element = mount(kept, { incident: { ...twice, resolved: false } });
         expect(element.textContent).toContain(`The provider refused this account: its plan or organization does not allow it.`);
-        expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
-        expect(element.querySelector(`button[aria-expanded="false"]`)?.textContent?.trim()).toBe(`2 refused attempts`);
+        expect(iconsOf(element)).toEqual([`exclamation-triangle`, `refresh`]);
+        expect(element.querySelector(`[data-notice-tries]`)?.textContent).toContain(`2`);
+    });
+
+    // THE BURST THIS ROW REPLACES (2026-11-23): seven subagents reporting into one disabled account, each report and its
+    // refusal a row, the refusal seven lines long. One line now: the refusal, who reached it as a count, the card naming
+    // each once however often a re-send repeated it.
+    it(`counts the subagent reports a wall turned away on its line, and names each once on its card`, async () => {
+        const kept: ChatMessage = { id: 42, ...foldTurn([], [{ kind: `error`, code: `claude-not-entitled`, message: ORG_OFF, held: { ran: false } }]).at(-1)! };
+        const report = (id: number, title: string, failed: boolean): ChatMessage => ({
+            id,
+            role: `notice`,
+            text: `Subagent "${title}" failed.`,
+            agentWords: { kind: `child`, from: `sub-${title}`, title, failed, sent: `report` },
+        });
+        const wakes = [report(50, `Render matrices`, true), report(51, `Quaternions`, false), report(52, `Render matrices`, true)];
+        const element = mount(kept, { incident: { ...twice, resolved: false, wakes } });
+        expect(element.querySelector(`[data-notice-wakes-count]`)?.textContent).toContain(`2`);
+        expect(iconsOf(element)).toEqual([`exclamation-triangle`, `users`, `refresh`]);
+        const card = await cardOf(element);
+        expect(card.querySelector(`[data-notice-wakes] [data-section]`)?.textContent).toBe(`Held · 2`);
+        const rows = [...card.querySelectorAll(`[data-notice-wake]`)].map((row) => [...row.querySelectorAll(`span`)].map((part) => part.textContent?.trim()));
+        expect(rows).toEqual([
+            [`Render matrices`, `×2`, `Failed`],
+            [`Quaternions`, `Finished`],
+        ]);
+    });
+
+    // However long its words, a notice is one line: cut with an ellipsis, never wrapped, never opened into the column.
+    it(`draws a notice as one line that never wraps`, () => {
+        const element = mount({ id: 43, role: `notice`, text: `A sentence `.repeat(40) });
+        const words = element.querySelector(`[data-notice-words]`)!;
+        expect(words.classList.contains(`truncate`)).toBe(true);
+        expect(element.querySelector(`.chat-meta`)?.classList.contains(`flex-wrap`)).toBe(false);
     });
 });

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { browserOwnsClick, formatElapsed, MarkdownParts, parseLoopbackLink, useDevice } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
+import { browserOwnsClick, MarkdownParts, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
@@ -8,9 +7,7 @@ import { REQUEST_FIELDS, type RequestField } from "@intentic/sandbox-contract/ev
 import { type Component, computed, defineAsyncComponent, nextTick, ref, useTemplateRef, watch } from "vue";
 import { loadChunk } from "@intentic/ui/chunk";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
-import { useAgents } from "../../../models/fleet/useAgents";
 import { errandOf } from "../../../models/conversations/run/errands";
-import { chatRouteWait } from "../routing/chatRoute";
 import { changedNothing, type ChatMessage, type ChecklistView, continuationKind, foldsIntoTurn } from "../../../models/conversations/transcript/transcript";
 import { pinPrompt } from "./promptPins";
 import { watchClamp } from "./clampWatch";
@@ -41,22 +38,12 @@ import ChatNotes from "./asides/ChatNotes.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
-import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
-import { agentNoticeLookOf, isFreshStart, isTurnChecks, noticeIconOf } from "./notices/noticeLook";
-import NoticeDetails from "./notices/NoticeDetails.vue";
-import NoticeSwitchModel from "./notices/NoticeSwitchModel.vue";
-import NoticeHeld from "./notices/NoticeHeld.vue";
+import { isFreshStart } from "./notices/noticeLook";
 import NoticeFreshStart from "./notices/NoticeFreshStart.vue";
-import NoticeHomeCommit from "./notices/NoticeHomeCommit.vue";
-import { landOfRow } from "../../../models/home/homeCommits";
-import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import NoticeMemory from "./notices/NoticeMemory.vue";
-import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
+import NoticeRow from "./notices/NoticeRow.vue";
 import { isMemoryHold } from "./held/heldQueue";
-import { noticeFailure, noticeLine } from "../../../models/conversations/transcript/sandboxNotice";
 import type { ChatIncident } from "../../../models/conversations/transcript/chatIncidents";
-import { sandboxNoticeOf } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { useAudience } from "../../../app/useAudience";
 import ChatPromptAuthor from "./ChatPromptAuthor.vue";
 import type { MergedSteps } from "./steps/stepGroups";
 import { useT } from "@intentic/ui/i18n";
@@ -122,28 +109,7 @@ const CARDS: Readonly<Record<RequestField, Component>> = {
 };
 const card = computed(() => REQUEST_FIELDS.find((field) => props.message[field] !== undefined));
 
-// The follow-up each notice action offers; each decides for itself whether it still stands. A low-memory hold is not
-// here: it draws its whole row (NoticeMemory), since its sentence is the sandbox's numbers and belongs a hover away.
-// `landHold` is only on rows stored before it stopped being offered, and draws nothing.
-const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAction"]>, `sendAnyway` | `sandboxMemory` | `landHold`>, Component>> = {
-    depsInstall: NoticeDepsInstall,
-    watchStop: NoticeWatchStop,
-    sendAgain: NoticeHeld,
-    switchModel: NoticeSwitchModel,
-};
-const noticeAction = computed(() => {
-    const action = props.message.noticeAction;
-    return action === undefined || action === `sendAnyway` || action === `sandboxMemory` || action === `landHold` ? undefined : NOTICE_ACTIONS[action];
-});
-
 const { mobile } = useDevice();
-
-// The outside condition this row's wait is about, while it is still armed (AgentSummary.watches), named by id.
-const { agentById } = useAgents();
-const armedWatch = computed(() => {
-    const id = props.message.noticeWaitId;
-    return id === undefined ? undefined : agentById(conversation.value.conversationId)?.watches?.find((armed) => armed.id === id);
-});
 
 // One renderer per message, held for the component's life; file links resolve in the chat's own checkout.
 // The words through a computed: a tool or thinking patch replaces the row object with the same text, and a computed
@@ -186,63 +152,6 @@ const showTyping = computed(() => props.streaming && !props.statusBelow && (!awa
 // press (a tool still letting go reads unfinished, as it will once settled); whatever the stream's tail still brings is
 // drawn all the same.
 const live = computed(() => props.streaming && ending.value === undefined);
-
-// Wait shown by this notice while running (ChatMessage.noticeWait); undefined once it ends. Each kind is asked of
-// whoever owns that wait, since none of them is a field on the row.
-type PendingWait = { readonly at: number; readonly counts: "up" | "down" } | undefined;
-// An instant that may not exist yet: a wait nobody owns any more has no clock, which is how a settled row stops
-// ticking without the row itself being rewritten.
-const clock = (instant: number | undefined, counts: "up" | "down"): PendingWait => (instant === undefined ? undefined : { at: instant, counts });
-
-const pendingWait = computed<PendingWait>(() => {
-    switch (props.message.noticeWait) {
-        case `credentialRenewal`:
-            return clock(conversation.value.failures.credentialRenewal.value?.since, `up`);
-        case `chatRoute`:
-            return clock(chatRouteWait(conversation.value)?.since, `up`);
-        case `watch`:
-            // Counts down, like the board's own watch clock: the deadline is the next moment this conversation
-            // definitely moves, and how long it has already waited says nothing about that.
-            return clock(armedWatch.value?.deadlineAt, `down`);
-        default:
-            return undefined;
-    }
-});
-
-// Clock for a pending notice wait only; stops once the wait ends.
-const now = useNow(() => pendingWait.value !== undefined);
-const waitClock = computed(() => {
-    const wait = pendingWait.value;
-    if (wait === undefined) {
-        return undefined;
-    }
-    return wait.counts === `up` ? formatElapsed((now.value - wait.at) / 1000) : formatElapsed((wait.at - now.value) / 1000);
-});
-
-// What the model was told, for a row nobody at the composer typed; one press away.
-const watchEvidence = ref(false);
-const unspokenSent = computed(
-    () => props.message.watchWake?.sent ?? props.message.needWake?.sent ?? props.message.agentWords?.sent ?? props.message.agentNotice?.sent,
-);
-const turnChecks = computed(() => isTurnChecks(props.message));
-// A watch that never saw its condition, or a child that failed, calls for a different next step.
-const watchGaveUp = computed(
-    () => (props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`) || props.message.agentWords?.failed === true,
-);
-// A notice in the reader's language and words where the row says which one it is (sandboxNotice.ts), else as it was
-// written: a sandbox older than this app sends no code, and a newer one may send a code this build does not know.
-const { audience } = useAudience();
-// A home's lands are committed too, which its landed rows say, and then what they were committed as (NoticeHomeCommit).
-const home = computed(() => isHomeConversationId(conversation.value.conversationId));
-const homeLand = computed(() => home.value && landOfRow(props.message) !== undefined);
-const noticeText = computed(() => noticeLine(props.message, audience.value, { home: home.value }) ?? props.message.text);
-// A failure row: its own glyph and line, and the provider's or the harness's own words, where it carries any, a press away.
-const failure = computed(() => (props.message.role === `notice` ? noticeFailure(props.message) : undefined));
-// What a move to another account was made for, in the provider's words: the line names both accounts, the press the why.
-const movedFor = computed(() => (props.message.noticeCode?.code === `accountMoved` ? sandboxNoticeOf(props.message) : undefined));
-const said = computed(() => failure.value?.said ?? (movedFor.value?.code === `accountMoved` ? movedFor.value.params.said : undefined));
-const agentNoticeLook = computed(() => agentNoticeLookOf(props.message));
-const noticeIcon = computed(() => noticeIconOf(props.message, failure.value !== undefined));
 
 // Edit pencil shows only for a user prompt with a rewindIndex, never mid-turn (agent/rewind.ts), and never while this
 // message's own edit is open.
@@ -555,57 +464,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
         <!-- Where a home's memory starts over: a divider across the column, not a line down its edge. -->
         <NoticeFreshStart v-else-if="isFreshStart(message)" :message="message" />
-        <!-- A META ROW (chat.css `.chat-meta`): on the column's edge, its glyph in the mark box and its words on the hang, so a
-             run of notices reads as one log down a single edge rather than a stack of centred lines of every width. -->
-        <div
-            v-else-if="message.role === 'notice' && message.text !== ''"
-            class="chat-meta flex w-full flex-wrap items-start gap-x-2 gap-y-0.5 py-0.5 text-2xs"
-            :class="watchGaveUp ? `text-danger` : (agentNoticeLook?.tone ?? `text-subtle`)"
-            :data-agent-notice="message.agentNotice?.level"
-        >
-            <!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
-            <span class="flex min-w-0 items-start gap-x-2">
-                <!-- Spins and shows the wait's clock while it runs, then settles to a plain line (ChatMessage.noticeWait). -->
-                <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
-                <span v-if="pendingWait" class="chat-mark"><Icon name="spinner" spin class="text-xs text-info" /></span>
-                <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
-                <!-- A failure's glyph alone takes the warning colour: the line stays as quiet as every notice, the mark says which kind it is. -->
-                <span v-else class="chat-mark"
-                    ><Icon :name="noticeIcon" class="text-xs" :class="{ 'text-warning': failure && !agentNoticeLook }"
-                /></span>
-                <!-- Who said it, when the runtime named an extension: its words are not the sandbox's. -->
-                <span class="min-w-0" :class="{ 'whitespace-pre-line': message.agentNotice }"
-                    ><span v-if="message.agentNotice?.source && !turnChecks" class="font-medium">{{ message.agentNotice.source }}: </span>{{ noticeText }}</span
-                >
-                <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
-            </span>
-            <!-- Nobody at the composer typed it, so what the model was told is one press away. -->
-            <button
-                v-if="unspokenSent !== undefined"
-                type="button"
-                class="touch-target shrink-0 font-medium text-link hover:underline"
-                :aria-expanded="watchEvidence"
-                @click="watchEvidence = !watchEvidence"
-            >
-                <template v-if="message.watchWake">{{
-                    watchEvidence ? t(`chat.chatMessageView.hideCheck`) : t(`chat.chatMessageView.showCheck`)
-                }}</template>
-                <template v-else-if="turnChecks">{{
-                    watchEvidence ? t(`chat.chatMessageView.hideFindings`) : t(`chat.chatMessageView.showFindings`)
-                }}</template>
-                <template v-else>{{ watchEvidence ? t(`chat.chatMessageView.hideMessage`) : t(`chat.chatMessageView.showMessage`) }}</template>
-            </button>
-            <!-- What the provider or the harness said, behind the line above, or every attempt of the incident this row stands
-                 for: opened by a press, since it holds links and ids to copy (NoticeDetails). -->
-            <NoticeDetails :said="said" :incident="incident" />
-            <pre
-                v-if="watchEvidence && unspokenSent !== undefined"
-                class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"
-                >{{ unspokenSent }}</pre>
-            <!-- The one follow-up this notice offers, by its action's name (NOTICE_ACTIONS). -->
-            <component :is="noticeAction" v-if="noticeAction" :message="message" />
-            <NoticeHomeCommit v-if="homeLand" :message="message" />
-        </div>
+        <!-- A META ROW, one line whatever it says, the rest on the card it raises (NoticeRow). -->
+        <NoticeRow v-else-if="message.role === 'notice' && message.text !== ''" :message="message" :incident="incident" />
         <template v-else>
             <!-- Live marks the bubble currently receiving streamed text. -->
             <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="live" :merged="steps" />

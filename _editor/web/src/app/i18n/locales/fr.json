@@ -3732,8 +3732,6 @@
             "cutShort": "L'agent s'est arrêté avant d'avoir fini.",
             "command": "L'agent a lu ceci comme une commande qu'il n'a pas.",
             "unclassified": "L'agent s'est arrêté sur une erreur que cette app ne reconnaît pas.",
-            "details": "Détails",
-            "hideDetails": "Masquer les détails",
             "category": "Catégorie",
             "requestId": "ID de requête",
             "messageId": "ID de message",
@@ -3814,9 +3812,6 @@
             "continueWithoutDeclined": "Continuer, sans l'étape que j'ai refusée.",
             "editMessageShort": "Modifier le message",
             "expandMessage": "Déplier le message",
-            "hideCheck": "Masquer la vérification",
-            "hideFindings": "Masquer les constats",
-            "hideMessage": "Masquer le message",
             "hideCommand": "Masquer la commande",
             "isntConnectedYet": "{name} n'est pas encore connecté",
             "notNow": "Pas maintenant",
@@ -3835,9 +3830,6 @@
             "releaseToAgent": "Libérer {subject} pour l'agent ?",
             "replacesWhatFollows": "Remplace la suite",
             "requestedBecause": "Demandé parce que : {reason}",
-            "showCheck": "Afficher la vérification",
-            "showFindings": "Afficher les constats",
-            "showMessage": "Afficher le message",
             "showCommand": "Afficher la commande",
             "showPrompt": "Voir le prompt",
             "skipCall": "Passer et continuer",
@@ -5363,9 +5355,25 @@
             }
         },
         "incident": {
-            "attempts": "{count} tentative refusée | {count} tentatives refusées",
-            "hideAttempts": "Masquer les tentatives",
-            "same": "Refusé de la même manière."
+            "attempts": "{count} tentative refusée | {count} tentatives refusées"
+        },
+        "noticeCard": {
+            "held": "Retenus · {count}",
+            "heldFrom": "Retenus · {count} · {from}",
+            "heldCount": "{count} message retenu | {count} messages retenus",
+            "openChat": "Ouvrir son chat",
+            "sentCheck": "Ce que la vérification a envoyé",
+            "sentFindings": "Constats envoyés à l'agent",
+            "sentMessage": "Ce que l'agent a reçu",
+            "state": {
+                "failed": "Échec",
+                "finished": "Terminé",
+                "message": "Message",
+                "fired": "Déclenchée",
+                "gaveUp": "Abandonnée",
+                "given": "Fourni",
+                "declined": "Refusé"
+            }
         },
         "accessWall": {
             "status": "{account} ne peut pas exécuter cette conversation : son forfait ou son organisation n’autorise pas {provider}, et aucun autre compte {provider} ici ne peut la prendre.",

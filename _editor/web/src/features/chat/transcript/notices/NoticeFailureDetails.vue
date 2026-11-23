@@ -2,16 +2,20 @@
 import { CopyButton } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { type FailureFactKey, failureDetails } from "../../../../models/conversations/transcript/failureDetails";
+import { type FailureFactKey, type FailureRun, failureDetails } from "../../../../models/conversations/transcript/failureDetails";
 
-// What a failure row keeps behind its one line (failureView.ts), opened under it: the provider's prose with
-// its paragraphs and links kept, the ids a support request asks for, each with its own copy, and the whole message to
-// copy word for word. Opened by a press rather than a hover, since what it holds is meant to be clicked and selected.
+// What a failure said, inside the card its row raises (NoticeCard.vue): the provider's or the sandbox's words quoted,
+// a sentence to a line so a paragraph reads as steps rather than a block, its links live; the ids a support request asks
+// for, each with its own copy; and the help article it pointed to.
 
 const { said } = defineProps<{ said: string }>();
 
 const t = useT();
 const details = computed(() => failureDetails(said));
+
+// A new line after each sentence that ends inside a run of words, so a paragraph of five sentences is five short lines.
+const SENTENCE_END = /([.!?])\s+(?=[A-Z“"(])/g;
+const prose = computed<FailureRun[]>(() => details.value.prose.map((run) => (`url` in run ? run : { text: run.text.replace(SENTENCE_END, `$1\n`) })));
 
 const FACT_LABELS = {
     category: () => t(`chat.failure.category`),
@@ -22,9 +26,13 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
 </script>
 
 <template>
-    <div class="chat-inset flex w-full flex-col gap-2 px-3 py-2 text-left text-2xs leading-relaxed" data-failure-details>
-        <p v-if="details.prose.length > 0" class="break-words whitespace-pre-line select-text">
-            <template v-for="(run, index) in details.prose" :key="index"
+    <div class="flex flex-col gap-2" data-failure-details>
+        <!-- Somebody else's words, quoted: a rule down their edge, never a box of their own on the card. -->
+        <p
+            v-if="prose.length > 0"
+            class="max-h-32 overflow-auto border-l-2 border-line pl-2.5 break-words whitespace-pre-line text-muted select-text"
+        >
+            <template v-for="(run, index) in prose" :key="index"
                 ><a v-if="`url` in run" :href="run.url" target="_blank" rel="noopener noreferrer" class="touch-target text-link hover:underline">{{
                     run.label
                 }}</a
@@ -36,7 +44,7 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
             <template v-for="fact in facts" :key="fact.key">
                 <dt class="text-subtle">{{ fact.label }}</dt>
                 <dd class="flex min-h-6 min-w-0 items-center gap-1">
-                    <span class="min-w-0 break-all text-content select-text" :class="{ 'font-mono': fact.key !== `category` }">{{ fact.value }}</span>
+                    <span class="min-w-0 truncate text-content select-text" :class="{ 'font-mono': fact.key !== `category` }">{{ fact.value }}</span>
                     <CopyButton
                         v-if="fact.key !== `category`"
                         :text="fact.value"
@@ -45,17 +53,13 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
                 </dd>
             </template>
         </dl>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <a
-                v-if="details.learnMore"
-                :href="details.learnMore"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="touch-target inline-flex items-center gap-1 text-link hover:underline"
-                >{{ t(`chat.failure.learnMore`) }}<Icon name="external-link" class="text-2xs"
-            /></a>
-            <!-- The message as the provider sent it, ids and links in place: what a bug report or a support ticket wants. -->
-            <CopyButton :text="said" :label="t(`chat.failure.copyDetails`)" class="ml-auto" />
-        </div>
+        <a
+            v-if="details.learnMore"
+            :href="details.learnMore"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="touch-target inline-flex items-center gap-1 self-start text-link hover:underline"
+            >{{ t(`chat.failure.learnMore`) }}<Icon name="external-link" class="text-2xs"
+        /></a>
     </div>
 </template>

@@ -1,6 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
-import { peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
+import { childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import { accountMovedRow, startingRow } from "@intentic/sandbox-contract/text/notice-rows";
 import { NO_PRESS } from "@intentic/sandbox-contract/schemas/agent-press";
@@ -35,6 +35,34 @@ const resentRow = (): TranscriptRow => {
     return disclosure?.kind === `notice` ? resumeNoticeRow(disclosure) : { role: `notice`, text: `Sent again.` };
 };
 const refusalIncident = (at: number): TranscriptRow[] => [refusedAt(at - 7 * 60_000), resentRow(), refusedAt(at - 4 * 60_000), resentRow()];
+
+// THE BURST ONE WALL LEFT WHILE A FLEET REPORTED BACK (2026-11-23): each subagent's report woke the parent into the same
+// refusal, worded in the sandbox's own paragraph, and a re-send repeated two of the reports. The chat draws it as one
+// line, the reports counted on it and named on its card (`@intentic/web` NoticeRow).
+const HELD_FOR_ACCOUNT = `The Claude Code account this conversation runs on cannot serve it: ${SEAT_OFF}. No other connected Claude Code account can serve right now. Once your organisation's admin turns access back on, pick this account again in the composer and send, and the message is tried on it at once. A plain send re-checks the account by itself, first 5 minutes after the refusal, then with gaps growing to 30 minutes. Or connect another Claude Code account in Sandbox ▸ Agent.`;
+const heldAt = (at: number): TranscriptRow => {
+    const fold = new TranscriptFold([], () => at);
+    fold.apply({ kind: `error`, code: `claude-not-entitled`, message: HELD_FOR_ACCOUNT, own: true, held: { ran: false } });
+    return fold.rows.at(-1)!;
+};
+const sliceReport = (slug: string, title: string): TranscriptRow =>
+    unspokenPromptRow(childReportPrompt({ child: `sub-${slug}`, title, failed: true, report: ``, verification: undefined }))!;
+const fleetBurst = (at: number): TranscriptRow[] => {
+    const slices = [
+        [`sort`, `Optimizations slice: render-order sorting`],
+        [`vec`, `Optimizations slice: vectors, normals, colour, random`],
+        [`mat`, `Optimizations slice: render matrices`],
+        [`quat`, `Optimizations slice: quaternions I`],
+    ] as const;
+    return [
+        ...slices.flatMap(([slug, title], index) => [sliceReport(slug, title), heldAt(at - (8 - index) * 60_000)]),
+        sliceReport(`vec`, slices[1][1]),
+        sliceReport(`mat`, slices[2][1]),
+        heldAt(at - 3 * 60_000),
+        sliceReport(`det`, `Optimizations slice: deterministic elementary functions`),
+        heldAt(at - 60_000),
+    ];
+};
 
 // The Claude CLI's safeguard flag as a sandbox in use wrote it into a transcript, paragraphs and all.
 const SAFEGUARD_FLAG = [
@@ -296,6 +324,7 @@ const messages: TranscriptRow[] = [
     // Refused twice, then run on another account: one row, where it ran and why, both attempts behind its press.
     ...refusalIncident(Date.now() - 2 * HOUR),
     { ...accountMovedRow({ why: `refused`, from: `Claude Pro`, to: `Claude Max`, said: SEAT_OFF }), openedAt: Date.now() - 2 * HOUR },
+    ...fleetBurst(Date.now() - HOUR),
     { role: `notice`, text: `Switched to Claude: next message starts a fresh session.` },
     { role: `notice`, text: `Sent again on the switched account, same session.` },
     { role: `notice`, text: `Continued in the same session, re-reading all of it.` },

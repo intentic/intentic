@@ -3732,8 +3732,6 @@
             "cutShort": "Der Agent hat aufgehört, bevor er fertig war.",
             "command": "Der Agent hat dies als einen Befehl gelesen, den er nicht hat.",
             "unclassified": "Der Agent ist bei einem Fehler stehen geblieben, den diese App nicht kennt.",
-            "details": "Details",
-            "hideDetails": "Details ausblenden",
             "category": "Kategorie",
             "requestId": "Anfrage-ID",
             "messageId": "Nachrichten-ID",
@@ -3814,9 +3812,6 @@
             "continueWithoutDeclined": "Fortfahren, ohne den Schritt, den ich abgelehnt habe.",
             "editMessageShort": "Nachricht bearbeiten",
             "expandMessage": "Nachricht ausklappen",
-            "hideCheck": "Die Prüfung ausblenden",
-            "hideFindings": "Befunde ausblenden",
-            "hideMessage": "Die Nachricht ausblenden",
             "hideCommand": "Den Befehl ausblenden",
             "isntConnectedYet": "{name} ist noch nicht verbunden",
             "notNow": "Jetzt nicht",
@@ -3835,9 +3830,6 @@
             "releaseToAgent": "{subject} an den Agenten freigeben?",
             "replacesWhatFollows": "Ersetzt alles danach",
             "requestedBecause": "Angefragt, weil: {reason}",
-            "showCheck": "Die Prüfung anzeigen",
-            "showFindings": "Befunde anzeigen",
-            "showMessage": "Die Nachricht anzeigen",
             "showCommand": "Den Befehl anzeigen",
             "showPrompt": "Prompt zeigen",
             "skipCall": "Überspringen und weitermachen",
@@ -5363,9 +5355,25 @@
             }
         },
         "incident": {
-            "attempts": "{count} abgelehnter Versuch | {count} abgelehnte Versuche",
-            "hideAttempts": "Versuche ausblenden",
-            "same": "Auf dieselbe Weise abgelehnt."
+            "attempts": "{count} abgelehnter Versuch | {count} abgelehnte Versuche"
+        },
+        "noticeCard": {
+            "held": "Zurückgehalten · {count}",
+            "heldFrom": "Zurückgehalten · {count} · {from}",
+            "heldCount": "{count} Nachricht zurückgehalten | {count} Nachrichten zurückgehalten",
+            "openChat": "Chat öffnen",
+            "sentCheck": "Was die Prüfung sendete",
+            "sentFindings": "An den Agenten gesendete Befunde",
+            "sentMessage": "Was der Agent erhielt",
+            "state": {
+                "failed": "Fehlgeschlagen",
+                "finished": "Fertig",
+                "message": "Nachricht",
+                "fired": "Ausgelöst",
+                "gaveUp": "Aufgegeben",
+                "given": "Erhalten",
+                "declined": "Abgelehnt"
+            }
         },
         "accessWall": {
             "status": "{account} kann diese Unterhaltung nicht ausführen: Tarif oder Organisation lassen {provider} nicht zu, und kein anderes {provider}-Konto hier kann sie übernehmen.",

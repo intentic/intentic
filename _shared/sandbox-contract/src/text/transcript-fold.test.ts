@@ -1415,18 +1415,21 @@ describe("transcriptIncidents", () => {
                     { at: 2_000, said: ORG_OFF },
                 ],
                 resolved: true,
+                wakes: [],
             },
         ]);
     });
 
     // THE FAILURE THIS PREVENTS: the same sentence twice, a row apart, read as two problems.
     it("never leaves two identical refusals side by side as two rows", () => {
-        expect(transcriptIncidents([refusedAt(1), refusedAt(2)])).toEqual([{ from: 0, to: 1, attempts: [{ at: 1, said: ORG_OFF }, { at: 2, said: ORG_OFF }], resolved: false }]);
+        expect(transcriptIncidents([refusedAt(1), refusedAt(2)])).toEqual([
+            { from: 0, to: 1, attempts: [{ at: 1, said: ORG_OFF }, { at: 2, said: ORG_OFF }], resolved: false, wakes: [] },
+        ]);
     });
 
     // A re-send still in flight is the latest word: the turn is being tried again, which the refusal under it no longer says.
     it("draws a re-send in flight as the run's last row, unresolved", () => {
-        expect(transcriptIncidents([refusedAt(1), resent()])).toEqual([{ from: 0, to: 1, attempts: [{ at: 1, said: ORG_OFF }], resolved: false }]);
+        expect(transcriptIncidents([refusedAt(1), resent()])).toEqual([{ from: 0, to: 1, attempts: [{ at: 1, said: ORG_OFF }], resolved: false, wakes: [] }]);
     });
 
     it("leaves a lone refusal, a lone move and the rows around a run as they are", () => {
@@ -1458,6 +1461,41 @@ describe("transcriptIncidents", () => {
         });
         expect(transcriptIncidents([failed("account-not-entitled"), failed("account-not-entitled")])).toMatchObject([{ from: 0, to: 1 }]);
         expect(transcriptIncidents([failed(undefined), failed(undefined)])).toEqual([]);
+    });
+
+    // THE BURST THIS PREVENTS (2026-11-23): one wall while a fleet of subagents reports back, each report waking the
+    // conversation into the same refusal, left report, refusal, report, refusal down the column: one row now.
+    it("folds the subagent reports a wall turned away into its run, and names them", () => {
+        const report = (title: string): TranscriptRow => ({
+            role: "notice",
+            text: `Subagent "${title}" failed.`,
+            agentWords: { kind: "child", from: `sub-${title}`, title, failed: true, sent: "report" },
+        });
+        const rows = [userRow("go", SENT_AT, []), report("a"), refusedAt(1), report("b"), refusedAt(2), report("c"), report("d"), refusedAt(3)];
+        expect(transcriptIncidents(rows)).toEqual([
+            {
+                from: 1,
+                to: 7,
+                attempts: [
+                    { at: 1, said: ORG_OFF },
+                    { at: 2, said: ORG_OFF },
+                    { at: 3, said: ORG_OFF },
+                ],
+                resolved: false,
+                wakes: [1, 3, 5, 6],
+            },
+        ]);
+    });
+
+    // A wake after the run's last refusal is the attempt still in flight: the latest word, drawn as itself. One wake and
+    // the refusal it met are two rows, as before; two wakes the one refusal turned away fold.
+    it("leaves the wake in flight, and one wake with its refusal, as rows of their own", () => {
+        const watch: TranscriptRow = { role: "notice", text: "The watch fired", watchWake: { outcome: "met", note: "CI", elapsed: "3m", sent: "fired" } };
+        expect(transcriptIncidents([refusedAt(1), peer, refusedAt(2), watch])).toMatchObject([{ from: 0, to: 2, wakes: [1] }]);
+        expect(transcriptIncidents([peer, refusedAt(1)])).toEqual([]);
+        expect(transcriptIncidents([peer, watch, refusedAt(1)])).toMatchObject([{ from: 0, to: 2, wakes: [0, 1] }]);
+        // Never reaches back into the run before it.
+        expect(transcriptIncidents([refusedAt(1), refusedAt(2), peer, refusedAt(3)]).map(({ from, to }) => [from, to])).toEqual([[0, 3]]);
     });
 
     // A person's pick in the composer is the editor's own line, which the sandbox cannot code: the reader names it.

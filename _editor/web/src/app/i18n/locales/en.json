@@ -3732,8 +3732,6 @@
             "cutShort": "The agent stopped before it finished.",
             "command": "The agent read this as a command it does not have.",
             "unclassified": "The agent stopped on an error this app does not recognize.",
-            "details": "Details",
-            "hideDetails": "Hide details",
             "category": "Category",
             "requestId": "Request ID",
             "messageId": "Message ID",
@@ -3814,9 +3812,6 @@
             "continueWithoutDeclined": "Continue, without the step I declined.",
             "editMessageShort": "Edit message",
             "expandMessage": "Expand message",
-            "hideCheck": "Hide the check",
-            "hideFindings": "Hide findings",
-            "hideMessage": "Hide the message",
             "hideCommand": "Hide the command",
             "isntConnectedYet": "{name} isn't connected yet",
             "notNow": "Not now",
@@ -3835,9 +3830,6 @@
             "releaseToAgent": "Release {subject} to the agent?",
             "replacesWhatFollows": "Replaces what follows",
             "requestedBecause": "Requested because: {reason}",
-            "showCheck": "Show the check",
-            "showFindings": "Show findings",
-            "showMessage": "Show the message",
             "showCommand": "Show the command",
             "showPrompt": "Show prompt",
             "skipCall": "Skip this, keep going",
@@ -5363,9 +5355,25 @@
             }
         },
         "incident": {
-            "attempts": "{count} refused attempt | {count} refused attempts",
-            "hideAttempts": "Hide attempts",
-            "same": "Refused the same way."
+            "attempts": "{count} refused attempt | {count} refused attempts"
+        },
+        "noticeCard": {
+            "held": "Held · {count}",
+            "heldFrom": "Held · {count} · {from}",
+            "heldCount": "{count} message held | {count} messages held",
+            "openChat": "Open its chat",
+            "sentCheck": "What the check sent",
+            "sentFindings": "Findings sent to the agent",
+            "sentMessage": "What the agent was told",
+            "state": {
+                "failed": "Failed",
+                "finished": "Finished",
+                "message": "Message",
+                "fired": "Fired",
+                "gaveUp": "Gave up",
+                "given": "Given",
+                "declined": "Declined"
+            }
         },
         "accessWall": {
             "status": "{account} can't run this conversation: its plan or organization does not allow {provider}, and no other {provider} account here can take it.",
