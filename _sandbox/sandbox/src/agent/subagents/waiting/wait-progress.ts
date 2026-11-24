@@ -8,6 +8,8 @@ import { type BackgroundJob, jobOutputPath, runningJobsOf } from "../../tools/jo
 import { jobReport } from "../../tools/jobs/job-report.js";
 import { type OutputMark, readOutputOn, shownLine } from "./output-lines.js";
 import { childEditedPaths } from "../child-verification.js";
+import { type LaneReader, laneReaderOf, quietLaneChildWords, quietLaneNow } from "../quiet-lane-words.js";
+import type { QuietLane } from "../../../system/resources/queue/quiet-lane.js";
 
 /* WHAT A WAIT THAT RAN OUT SAYS (2026-11-19, the shinobi-society audit). Parents hit `wait`'s 1800 s cap 66 times, each a
    model step over 120k-450k tokens of context, and read their children with `agents show` between waits (21 times in one
@@ -112,8 +114,14 @@ const filesWords = (paths: readonly string[]): string | undefined => {
     return `${plural(paths.length, "file")} changed (${paths.length > FILES_NAMED ? `… ${named}` : named})`;
 };
 
+// The quiet lane as this answer read it, for a child whose own command waits in it (quiet-lane-words.ts).
+interface LaneSeen {
+    readonly lane: QuietLane | undefined;
+    readonly reader: LaneReader;
+}
+
 /** A child's progress since the last answer about it, in a line; files this as the new last look. */
-const childProgress = (actors: Actors, child: ChildSeen, now: number = Date.now()): string => {
+const childProgress = (actors: Actors, child: ChildSeen, seen: LaneSeen | undefined, now: number = Date.now()): string => {
     const before = actors.holdings(LOOKS).get(childKey(child.id))?.toolUses;
     noteChildLook(actors, child);
     const calls = child.toolUses ?? 0;
@@ -121,6 +129,7 @@ const childProgress = (actors: Actors, child: ChildSeen, now: number = Date.now(
     const parts = [
         `${child.status} ${age(now - child.startedAt)}`,
         waitsOn(child),
+        seen === undefined || child.kind !== "spawned" ? undefined : quietLaneChildWords(seen.lane, child.id, seen.reader),
         `${plural(calls, "tool call")}${before === undefined ? "" : ` (${Math.max(0, calls - before)} since your last look)`}${child.lastTool === undefined ? "" : `, last ${child.lastTool}`}`,
         filesWords(childEditedPaths(actors, child.id)),
         said === undefined ? undefined : `last said: "${said}"`,
@@ -151,10 +160,12 @@ export const progressOf = async (actors: Actors, conversationId: string, waited:
     const own = actors.holdings(ROSTER).of(conversationId);
     const children = waited.children.flatMap((id) => own.find((record) => record.id === id || record.agentId === id) ?? []);
     const jobs = waited.jobs.slice(0, DESCRIBED);
-    const said = [
-        ...(await Promise.all(jobs.map((job) => jobProgress(actors, job, now)))),
-        ...children.slice(0, Math.max(0, DESCRIBED - jobs.length)).map((child) => childProgress(actors, child, now)),
-    ];
+    const described = children.slice(0, Math.max(0, DESCRIBED - jobs.length));
+    // Read once for every child described, and only when one is a spawned child still at work: what its commands wait on.
+    const seen = described.some((child) => child.kind === "spawned" && subagentRunning(child))
+        ? { lane: await quietLaneNow(), reader: laneReaderOf(actors, conversationId) }
+        : undefined;
+    const said = [...(await Promise.all(jobs.map((job) => jobProgress(actors, job, now)))), ...described.map((child) => childProgress(actors, child, seen, now))];
     const left = waited.jobs.length + children.length - said.length;
     return left > 0 ? [...said, `… and ${String(left)} more`] : said;
 };

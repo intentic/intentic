@@ -915,7 +915,11 @@ flowchart LR
   commands by their first words, each with a pool, limit, memory price, and `exclusive` or `quiet`. `queue-run
   --exclusive` holds a gate every queued command takes the other side of (a turnstile, then a shared lock it keeps), so
   nothing else heavy runs beside such a command; `bin/quiet` is that lane for timing runs, waiting for calm and
-  printing the conditions beside the result. Cargo starts through `heavy-launch.cjs`, which picks its jobs and test
+  printing the conditions beside the result. (2026-11-24) While that lane is held or waited for, a local spawn's answer
+  says who holds it, how many runs wait for it and how many of those are the parent's own children; a wait's progress
+  says it of a child whose own command holds the lane, waits for it (its place in line) or is held at its gate.
+  `system/resources/queue/quiet-lane.ts` reads the gate's holder and waiters off /proc when that answer is written, and
+  `agent/subagents/quiet-lane-words.ts` words them. Cargo starts through `heavy-launch.cjs`, which picks its jobs and test
   threads from the room it was given. `memory-room` never starts a command below a person's turn's room: it holds it to
   its ceiling and then exits 75. (2026-11-22) The room socket prices a queued command at least at what the same command
   (`@intentic/constants` `heavy/command-peaks.mjs`) took at its peak lately, plus 15%, capped at the sandbox's limit:
@@ -1242,8 +1246,8 @@ flowchart LR
   workspace's incremental crates still compile. The wrapper starts one server per mount namespace, on
   `/tmp/sccache-<namespace inode>.sock`: the server runs rustc with the paths it sees, and over the old recipe's one
   TCP server a second isolated conversation's build failed ("extern location for itoa does not exist", its dependency
-  written into the first conversation's `target/`). It closes fd 9, queue-run's slot lock, so a server outliving its
-  build holds no build slot. Plain rustc where the cache is out of reach: no `/history` (an image build, a fenced turn)
+  written into the first conversation's `target/`). It closes fds 7, 8 and 9, queue-run's gate and slot locks, so a
+  server outliving its build by its 10-minute idle timeout holds no build slot and keeps no quiet run waiting at the gate. Plain rustc where the cache is out of reach: no `/history` (an image build, a fenced turn)
   or no sccache. Runners keep caches of their own. Memory admission still prices every Cargo build at `cargo-build`,
   since a hit rate is unknown until the build runs.
 - `sharedCargoTargets` (off by default; a prototype, 2026-11-04, `conversations/worktrees/cargo-warm.ts`) makes an
@@ -1476,8 +1480,8 @@ for trouble. Waits shorter than five seconds are clamped to five seconds. On one
 expression: the wait returns `matched` at the first complete line of its output that matches (colours removed, `(?i)` to
 ignore case), read from the output's start or just past the line the last pattern wait matched (`agent/subagents/waiting/output-lines.ts`). A
 timeout answers `progress`, a few lines per target on what moved since the last answer about it: a command's new lines
-and bytes, last lines and silence; a child's tool calls since, last words, what holds it and the files it changed
-(`subagents/waiting/wait-progress.ts`). A question or pause a wait already handed over is not handed over again by a
+and bytes, last lines and silence; a child's tool calls since, last words, what holds it, the files it changed, and
+whether its own command holds the quiet lane, waits for it or is held at its gate (`subagents/waiting/wait-progress.ts`). A question or pause a wait already handed over is not handed over again by a
 named wait either: it parks until the child moves on (2026-11-19). This bound also applies when general output
 cleaning is off. Device shell collection
 keeps its existing limits; only the model-facing copy is cleaned in the daemon.

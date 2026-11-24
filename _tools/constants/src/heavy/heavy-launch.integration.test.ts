@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     busyBetween,
+    calmVerdict,
     CARGO_JOB_BYTES,
     cargoChosen,
     cargoJobs,
@@ -10,6 +11,7 @@ import {
     idlestCpus,
     parseArgs,
     parseProcStat,
+    STUCK_MS,
     waitForIdle,
 } from "./heavy-launch.cjs";
 
@@ -19,7 +21,7 @@ import {
 
 const GIB = 1024 ** 3;
 // A look at the CPUs: `busy` of `count` cores busy.
-const look = (busy: number, count = 16) => ({ busy, count, perCpu: Array.from({ length: count }, (_, cpu) => ({ cpu, busy: busy / count })) });
+const look = (busy: number, count = 16, own?: number) => ({ busy, count, own, perCpu: Array.from({ length: count }, (_, cpu) => ({ cpu, busy: busy / count })) });
 
 let home: string;
 beforeEach(async () => {
@@ -85,24 +87,72 @@ describe("the CPUs", () => {
         expect(idlestCpus(between, 2, new Set([0, 1]))).toEqual([0, 1]);
     });
 
-    test("a wait for idle cores ends once they are idle, or at its ceiling, saying so while it waits", async () => {
+    // A fake clock and looks taken in turn: each pause moves the clock, so a wait's length is the looks it took.
+    const timed = (looks: ReturnType<typeof look>[], last: ReturnType<typeof look>) => {
+        let clock = 0;
+        return { look: async () => looks.shift() ?? last, now: () => clock, pause: async (ms: number) => void (clock += ms) };
+    };
+    const quietly = async <T,>(body: (said: string[]) => Promise<T>): Promise<T> => {
         const said: string[] = [];
         const write = jest.spyOn(process.stderr, "write").mockImplementation((line) => said.push(String(line)) > 0);
         try {
-            let clock = 0;
-            const looks = [look(15), look(14), look(4)];
-            const calm = await waitForIdle({ need: 8, ceilingSeconds: 60, prefix: "quiet", why: "", look: async () => looks.shift() ?? look(4), now: () => clock, pause: async (ms: number) => void (clock += ms) });
-            expect(calm).toMatchObject({ calm: true, waitedMs: 2000 });
-            expect(said[0]).toMatch(/^\[quiet\] waiting for 8 idle cores: 15\.0 of 16 cores busy \(load .*\)\. It starts anyway in 1m00s\.\n$/u);
-            const busy = await waitForIdle({ need: 8, ceilingSeconds: 5, prefix: "capture", why: "", look: async () => look(15), now: () => clock, pause: async (ms: number) => void (clock += ms) });
-            expect(busy).toMatchObject({ calm: false });
+            return await body(said);
         } finally {
             write.mockRestore();
         }
+    };
+
+    test("a wait for idle cores ends the moment they are idle, saying so while it waits", async () => {
+        await quietly(async (said) => {
+            const calm = await waitForIdle({ need: 8, ceilingSeconds: 60, prefix: "quiet", why: "", ...timed([look(15), look(14), look(4)], look(4)) });
+            expect(calm).toMatchObject({ calm: true, waitedMs: 2000 });
+            expect(said[0]).toMatch(/^\[quiet\] waiting for 8 idle cores: 15\.0 of 16 cores busy \(load .*\)\. It starts once they are idle, or once that load has gone 30s without easing\.\n$/u);
+        });
+    });
+
+    // (2026-11-24, the shinobi-society audit) A quiet run counted down to its 10-minute ceiling whatever the load did, then
+    // ran NOT calm anyway: waiting is worth it only while busy cores are coming free.
+    test("a load that does not ease is not waited out: the wait ends once it has gone STUCK_MS without easing", async () => {
+        await quietly(async () => {
+            const steady = await waitForIdle({ need: 8, ceilingSeconds: 600, prefix: "quiet", why: "", ...timed([], look(15)) });
+            expect(steady).toMatchObject({ calm: false, stopped: "stuck", waitedMs: STUCK_MS });
+            // Easing by a core restarts the window, so a load that keeps coming down is waited for until the cores are idle.
+            const easing = Array.from({ length: 8 }, (_, step) => look(15 - step));
+            const eased = await waitForIdle({ need: 8, ceilingSeconds: 600, prefix: "quiet", why: "", stuckMs: 1500, ...timed(easing, look(8)) });
+            expect(eased).toMatchObject({ calm: true });
+            // The ceiling is a backstop only, for a load that keeps easing and never gets there.
+            const capped = await waitForIdle({ need: 8, ceilingSeconds: 5, prefix: "capture", why: "", ...timed(Array.from({ length: 20 }, (_, step) => look(15 - step / 20)), look(15)) });
+            expect(capped).toMatchObject({ calm: false });
+        });
+    });
+
+    test("a quiet wait counts only the load outside this sandbox, which waiting can see ease; its own the gate waits out", async () => {
+        await quietly(async (said) => {
+            // 15 cores busy, 12 of them this sandbox's own builds: the 3 outside leave 13 idle once the gate drains them.
+            const own = await waitForIdle({ need: 12, ceilingSeconds: 600, prefix: "quiet", why: "", outside: true, ...timed([], look(15, 16, 12)) });
+            expect(own).toMatchObject({ calm: true, waitedMs: 0 });
+            const outside = await waitForIdle({ need: 12, ceilingSeconds: 600, prefix: "quiet", why: "Nothing in this sandbox waits on this. ", outside: true, ...timed([], look(10, 16, 1)) });
+            expect(outside).toMatchObject({ calm: false, stopped: "stuck" });
+            expect(said[0]).toMatch(/^\[quiet\] waiting for 12 idle cores: 9\.0 of 16 cores busy outside this sandbox \(1\.0 in it\) \(load .*\)\. Nothing in this sandbox waits on this\. /u);
+            // Where the sandbox's own share is unknown, every busy core counts.
+            expect(await waitForIdle({ need: 12, ceilingSeconds: 600, prefix: "quiet", why: "", outside: true, ...timed([], look(15)) })).toMatchObject({ calm: false });
+        });
+    });
+
+    test("a wait's verdict is one line: calm, how long it took, or why it went on not calm", () => {
+        expect(calmVerdict({ calm: true, look: look(2), waitedMs: 300 }, true)).toBe("calm");
+        expect(calmVerdict({ calm: true, look: look(2), waitedMs: 42_000 }, true)).toBe("calm after 42s");
+        expect(calmVerdict({ calm: false, look: look(10, 16, 1), waitedMs: 31_000, stopped: "stuck" }, true)).toBe(
+            "NOT calm (9.0 of 16 cores busy outside this sandbox (1.0 in it), not easing after 31s of waiting)",
+        );
+        // Rounded once: never 9m60s.
+        expect(calmVerdict({ calm: false, look: look(15), waitedMs: 599_600, stopped: "ceiling" }, false)).toBe("NOT calm (15.0 of 16 cores busy, still busy at its 10m00s ceiling)");
     });
 });
 
 test("its flags come before `--`, and the command after it is untouched", () => {
+    expect(parseArgs(["--calm-first", "--idle", "6", "--label", "quiet"])).toMatchObject({ calmFirst: true, idle: 6, command: ["--calm-first", "--idle", "6", "--label", "quiet"] });
+    expect(parseArgs(["--calm-first", "--idle", "6", "--"])).toMatchObject({ calmFirst: true, idle: 6, command: [] });
     expect(parseArgs(["--parallel", "cargo", "--slots", "2", "--cpus", "4", "--pin", "--quiet", "--label", "x", "--", "cargo", "--pin", "-j"])).toMatchObject({
         command: ["cargo", "--pin", "-j"],
         parallel: "cargo",

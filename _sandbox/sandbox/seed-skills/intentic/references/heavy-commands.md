@@ -88,14 +88,20 @@ For a measurement of time (a benchmark, a profile, a capture whose frames must b
 quiet [--idle N] [--pin N] [--wait SECONDS] [--max-hold SECONDS] -- <command>
 ```
 
-It waits for the heavy commands already running in this sandbox to finish and for the machine to be calm (`--idle`:
-cores that must be idle, default three quarters of them), holds every new heavy command until it ends, optionally
-pins the command to the `--pin` idlest cores, and prints the conditions beside the result:
+First, holding nothing, it waits for the machine to be calm (`--idle`: cores that must be idle, default three
+quarters of them, counting only the load from outside this sandbox: other sandboxes, the host). Then it waits for the
+heavy commands already running in this sandbox to finish, holds every new heavy command until it ends, optionally pins
+the command to the `--pin` idlest cores, and prints the conditions beside the result:
 
 ```
-[quiet] starting: 1.2 of 16 cores busy, load 3.1 4.0 6.2, pinned to cores 12,13. …
+[quiet] starting: 1.2 of 16 cores busy outside this sandbox (0.4 in it), load 3.1 4.0 6.2, pinned to cores 12,13. …
 [quiet] exit 0 after 41.2s. Ran under: before, …; while it ran, everything else kept 0.4 cores busy (it used 3.9); after, load 4.1 …
 ```
 
-After `--wait` (600 s) it runs anyway and says `NOT calm`: quote those lines with any number it produced. The load
-is the whole machine's, other sandboxes on it included, which this sandbox cannot hold off.
+The calm wait goes on only while that outside load is easing. Once it has gone 30 seconds without easing, the run
+starts and says `NOT calm (…, not easing …)`: this sandbox cannot hold other sandboxes off, and waiting longer would not
+make the number any better. Quote those lines with any number it produced, and run it again later if it matters.
+`--wait` (600 s) is only the most it ever waits.
+
+Every quiet run first waits for all of the sandbox's running builds, and only one runs at a time across the whole
+sandbox. Put every case you time into one `quiet` run rather than many, and build before it, never inside it.

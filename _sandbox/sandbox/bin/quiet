@@ -2,10 +2,11 @@
 # quiet [--idle N] [--pin N] [--wait SECONDS] [--max-hold SECONDS] -- <command> [args...]
 #
 # The quiet lane, for work whose result is a measurement of time: a benchmark, a profile, a capture whose frames must be
-# steady. It waits until nothing else heavy runs in this sandbox and the machine is calm, holds every NEW heavy command
-# in this sandbox until it ends, and prints the conditions it ran under beside its result, so a number carries them:
+# steady. It first waits, holding nothing, for the machine to be calm (cores idle, counting only load from outside this
+# sandbox), then until nothing else heavy runs in this sandbox, holds every NEW heavy command in this sandbox until it
+# ends, and prints the conditions it ran under beside its result, so a number carries them:
 #
-#   [quiet] starting: 1.2 of 16 cores busy, load 3.1 4.0 6.2, pinned to cores 12,13,14,15. …
+#   [quiet] starting: 1.2 of 16 cores busy outside this sandbox (0.4 in it), load 3.1 4.0 6.2, pinned to cores 12,13. …
 #   [quiet] exit 0 after 41.2s. Ran under: before, …; while it ran, everything else kept 0.4 cores busy (it used 3.9); after, load 4.1 3.9 6.0.
 #
 # (2026-11-19, the shinobi-society audit) Agents armed watches on /proc/loadavg, pinned with `taskset -c 0`, and wrapped
@@ -13,11 +14,13 @@
 # 2.43 ns at load 30 and 1.65 ns at load 7. This is the same queue every heavy command takes (bin/queue-run, pool
 # `quiet`, `--exclusive`), so it holds off every conversation's builds, not only this one's, and they wait for it the
 # way they wait for each other; the calm wait, the pinning and the report are heavy-launch.cjs (@intentic/constants).
+# (2026-11-24) The calm wait comes before the gate, so nothing in the sandbox waits on it, and it waits only while the
+# outside load is easing: a load that holds steady is not waited out, the run starts and says it was NOT calm.
 #
-#   --idle N        cores that must be idle before it starts (default: three quarters of the cores this sandbox has)
+#   --idle N        cores that must be idle, counting only load from outside this sandbox (default: three quarters)
 #   --pin N         pin it to the N idlest cores (taskset), and tell it N as INTENTIC_CPUS
-#   --wait S        how long it waits, for the heavy commands already running and then for calm, before it runs anyway
-#                   and says it was not calm (default 600)
+#   --wait S        the most it waits for calm, and then for the heavy commands already running, before it runs anyway
+#                   and says so (default 600)
 #   --max-hold S    how long it may hold the sandbox before it is stopped (default 3600)
 #
 # A project marks its own timing-sensitive script quiet in its .intentic/heavy.json instead, and then it needs no prefix.
@@ -25,7 +28,7 @@
 set -u
 
 usage() {
-    sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -52,7 +55,11 @@ digits "$max_hold" || max_hold=3600
 
 launch=${INTENTIC_HEAVY_LAUNCH:-/opt/sandbox/node_modules/@intentic/constants/src/heavy/heavy-launch.cjs}
 command=("$@")
+# queue-run waits for calm with this launcher BEFORE it takes the gate, holding nothing (bin/queue-run, --calm-launcher).
+calm_flags=()
 if [ -f "$launch" ] && command -v node >/dev/null 2>&1; then
+    calm_flags=(--calm-launcher "$launch")
+    digits "$idle" && calm_flags+=(--calm-idle "$idle")
     launch_args=(--quiet --calm-wait "$wait_seconds" --label quiet)
     digits "$idle" && launch_args+=(--idle "$idle")
     digits "$pin" && [ "$pin" -gt 0 ] && launch_args+=(--cpus "$pin" --pin)
@@ -71,4 +78,4 @@ if [ -z "$queue" ] || [ ! -f "$queue" ]; then
     printf '[quiet] no queue-run here: other heavy commands are not held off.\n' >&2
     exec "${command[@]}"
 fi
-exec bash "$queue" --pool quiet --limit 1 --wait "$wait_seconds" --max-hold "$max_hold" --on-deadline run --label quiet --exclusive -- "${command[@]}"
+exec bash "$queue" --pool quiet --limit 1 --wait "$wait_seconds" --max-hold "$max_hold" --on-deadline run --label quiet --exclusive ${calm_flags[@]+"${calm_flags[@]}"} -- "${command[@]}"

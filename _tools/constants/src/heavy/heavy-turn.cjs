@@ -142,7 +142,9 @@ const takeTurn = ({ program, args, command, env = process.env, cwd = process.cwd
     }
     env.INTENTIC_HEAVY_HELD = match.id;
     applyClass(spec.klass);
-    const queue = spec.queue === true && typeof spec.queueRun === "string" && runnable(spec.queueRun) ? [spec.queueRun, ...queueArgs(match, spec.rules), ...sizeArgs(match, invocation), "--"] : [];
+    // A quiet one waits for a calm machine before the gate, holding nothing (queue-run --calm-launcher).
+    const calmFirst = match.quiet === true ? ["--calm-launcher", LAUNCH] : [];
+    const queue = spec.queue === true && typeof spec.queueRun === "string" && runnable(spec.queueRun) ? [spec.queueRun, ...queueArgs(match, spec.rules), ...sizeArgs(match, invocation), ...calmFirst, "--"] : [];
     const launch = queue.length === 0 ? [] : launchFlags(match);
     // INTENTIC_OFFLOAD=0 keeps one command here, behind this sandbox's queue, when the owner sends its kind to a runner:
     // what offload-run names when it says where a command went (never INTENTIC_HEAVY_HELD, which skips the queue too).

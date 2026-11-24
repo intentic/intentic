@@ -265,7 +265,11 @@ console.log("server-started");
 describe.skipIf(!kernel.runs)(kernel.title("a project's declared script"), () => {
     const capture = { id: "capture", scripts: ["scripts/capture.py"], memory: "6G", exclusive: true };
 
-    const interpreter = async (args: readonly string[], words: string): Promise<{ report: Record<string, unknown>; queued: string[] | undefined; stderr: string }> => {
+    const interpreter = async (
+        args: readonly string[],
+        words: string,
+        klass: Record<string, unknown> = capture,
+    ): Promise<{ report: Record<string, unknown>; queued: string[] | undefined; stderr: string }> => {
         const bin = join(dir, "real-bin");
         const shims = join(dir, "interpreters");
         await mkdir(bin, { recursive: true });
@@ -285,7 +289,7 @@ describe.skipIf(!kernel.runs)(kernel.title("a project's declared script"), () =>
                 PATH: `${shims}:${bin}:${env["PATH"] ?? ""}`,
                 INTENTIC_HEAVY_EXEC: EXEC,
                 INTENTIC_HEAVY_WORDS: words,
-                INTENTIC_HEAVY: JSON.stringify({ rules: mergeHeavyRules({}, [capture]), queue: true, queueRun, klass: KLASS }),
+                INTENTIC_HEAVY: JSON.stringify({ rules: mergeHeavyRules({}, [klass]), queue: true, queueRun, klass: KLASS }),
             },
         });
         const queued = await readFile(join(dir, "queue-run.args"), "utf8").then(
@@ -305,6 +309,17 @@ describe.skipIf(!kernel.runs)(kernel.title("a project's declared script"), () =>
         ]);
         expect(queued?.slice(queued.indexOf("--") + 1)).toEqual([join(dir, "real-bin", "python3"), "./scripts/capture.py", "--frames", "600"]);
         expect(stderr).toContain("[heavy] capture: a heavy command this project declares (.intentic/heavy.json, scripts/capture.py)");
+    });
+
+    // (2026-11-24) A quiet class waits for a calm machine before the gate, holding nothing: queue-run runs the launcher's
+    // --calm-first for it, and the launcher after the gate only looks, to pin and report.
+    test("a quiet class hands queue-run the launcher that judges calm before the gate", async () => {
+        const { queued } = await interpreter(["./scripts/capture.py"], "capture.py", { ...capture, exclusive: undefined, quiet: true });
+        const flags = queued?.slice(0, queued.indexOf("--")) ?? [];
+        expect(flags).toContain("--exclusive");
+        expect(flags.slice(-2)).toEqual(["--calm-launcher", LAUNCH]);
+        // After the gate, the same launcher runs it (through whichever node runs the hook).
+        expect(queued?.[queued.indexOf("--") + 2]).toBe(LAUNCH);
     });
 
     test("the interpreter is the real one at once for anything else: an inline script, or a file no class names", async () => {

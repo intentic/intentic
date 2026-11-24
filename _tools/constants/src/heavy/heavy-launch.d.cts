@@ -1,10 +1,20 @@
 // Types for heavy-launch.cjs: what a heavy program is started through once queue-run has let it in.
 
-// One look at the CPUs: how many cores were busy over it, in all and each.
+// One look at the CPUs: how many cores were busy over it, in all and each, and how many of them this sandbox kept busy
+// (from its cgroup; absent where that is unknown).
 export interface CpuLook {
     readonly busy: number;
     readonly count: number;
     readonly perCpu: readonly { readonly cpu: number; readonly busy: number }[];
+    readonly own?: number | undefined;
+}
+
+// How a wait for idle cores ended: calm, or not, and then why it went on (the load stopped easing, or its ceiling).
+export interface CalmWait {
+    readonly calm: boolean;
+    readonly look: CpuLook;
+    readonly waitedMs: number;
+    readonly stopped?: "stuck" | "ceiling";
 }
 
 export interface CpuTicks {
@@ -14,9 +24,13 @@ export interface CpuTicks {
 }
 
 export const CARGO_JOB_BYTES: number;
+// How long a wait for idle cores goes on with the load not easing before it starts anyway.
+export const STUCK_MS: number;
 
 export function parseProcStat(text: string | undefined): CpuTicks[];
 export function busyBetween(before: readonly CpuTicks[], after: readonly CpuTicks[]): CpuLook;
+// The cores busy outside this sandbox; all of them where its own share is unknown.
+export function outsideBusy(look: CpuLook): number;
 export function waitForIdle(options: {
     readonly need: number;
     readonly ceilingSeconds: number;
@@ -25,7 +39,12 @@ export function waitForIdle(options: {
     readonly look?: () => Promise<CpuLook>;
     readonly now?: () => number;
     readonly pause?: (ms: number) => Promise<void>;
-}): Promise<{ readonly calm: boolean; readonly look: CpuLook; readonly waitedMs: number }>;
+    // Count only the load outside this sandbox.
+    readonly outside?: boolean;
+    readonly stuckMs?: number;
+}): Promise<CalmWait>;
+// One line for a wait that ended: `calm`, `calm after 42s`, or `NOT calm (…)`.
+export function calmVerdict(wait: CalmWait, outside: boolean): string;
 // The `count` idlest CPUs, among those this process may run on, in order.
 export function idlestCpus(look: CpuLook, count: number, allowed?: ReadonlySet<number>): number[];
 // Whether the command, its environment or the project's cargo config already chose cargo's jobs, and libtest's threads.
@@ -52,5 +71,6 @@ export function parseArgs(argv: readonly string[]): {
     readonly calmWait: number;
     readonly pin: boolean;
     readonly quiet: boolean;
+    readonly calmFirst: boolean;
     readonly label: string;
 };

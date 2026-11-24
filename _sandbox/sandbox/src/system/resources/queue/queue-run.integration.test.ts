@@ -570,6 +570,64 @@ describe("the gate: a command with nothing else heavy beside it", () => {
         }
     });
 
+    // (2026-11-24, the shinobi-society audit) A quiet run waited for idle cores after it took the gate exclusive, up to its
+    // whole --wait in which nothing else heavy in the sandbox could start. Its launcher now judges calm first, holding nothing.
+    const calmStub = async (queue: string): Promise<{ launcher: string; log: string }> => {
+        const launcher = join(queue, "calm-stub.cjs");
+        const log = join(queue, "calm.log");
+        await writeFile(
+            launcher,
+            `require("node:fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args: process.argv.slice(2), heavy: process.env.INTENTIC_HEAVY ?? null }) + "\\n");\n` +
+                `process.stdout.write("calm after 3s\\nsecond line\\n");\n`,
+        );
+        return { launcher, log };
+    };
+    const calmLog = (log: string): { args: string[]; heavy: string | null }[] =>
+        readFileSync(log, "utf8")
+            .trim()
+            .split("\n")
+            // SAFETY: every line is one the stub launcher wrote with JSON.stringify of exactly this shape.
+            .map((line) => JSON.parse(line) as { args: string[]; heavy: string | null });
+
+    test("a quiet run judges calm before the gate, holding nothing, and hands its verdict to the command", async () => {
+        const queue = await dir();
+        const { launcher, log } = await calmStub(queue);
+        const holder = await holdSlot(queue, alone, 30);
+        let judgedWhileHeld = false;
+        const quiet = await queueRun(
+            queue,
+            [...alone, "--wait", "40", "--calm-launcher", launcher, "--calm-idle", "6"],
+            'echo "[$INTENTIC_QUIET_CALM]"',
+            undefined,
+            { INTENTIC_HEAVY: "{}" },
+            (soFar) => {
+                // Waiting at the turnstile behind the holder: the judgment has already been made.
+                if (!judgedWhileHeld && soFar.includes("waiting: a command that must run with nothing else heavy beside it")) {
+                    judgedWhileHeld = calmLog(log).length === 1;
+                    holder.kill("SIGKILL");
+                }
+            },
+        );
+        expect(quiet.code).toBe(0);
+        expect(judgedWhileHeld).toBe(true);
+        expect(quiet.stdout.trim()).toBe("[calm after 3s]");
+        // The judgment is never itself queued by node's heavy hook.
+        expect(calmLog(log)).toEqual([{ args: ["--calm-first", "--calm-wait", "40", "--label", "capture", "--idle", "6", "--"], heavy: "" }]);
+    });
+
+    test("no judgment for a command that is not exclusive, or under one that already took a side of the gate", async () => {
+        const queue = await dir();
+        const { launcher, log } = await calmStub(queue);
+        const plain = await queueRun(queue, ["--pool", "p", "--limit", "1", "--calm-launcher", launcher], 'echo "[${INTENTIC_QUIET_CALM:-}]"');
+        expect(plain.stdout.trim()).toBe("[]");
+        const inside = await queueRun(queue, [...alone, "--calm-launcher", launcher], 'echo "[${INTENTIC_QUIET_CALM:-}]"', undefined, { INTENTIC_QUEUE_GATE: "exclusive" });
+        expect(inside.stdout.trim()).toBe("[]");
+        expect(await readdir(queue)).not.toContain("calm.log");
+        // A launcher that is not there only skips the wait.
+        const missing = await queueRun(queue, [...alone, "--calm-launcher", join(queue, "absent.cjs")], "echo ran");
+        expect(missing.stdout.trim()).toBe("ran");
+    });
+
     test("a gate planted as a link is never opened through, and the command still runs", async () => {
         const queue = await dir();
         const elsewhere = await dir();

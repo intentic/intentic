@@ -59,6 +59,7 @@ import { haltOf, liftHalt, liftHaltOnStart } from "../../conversations/actor/con
 import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedByRules, restoredStartAnswer, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 import { spawnCheckoutCostNote } from "./starting/spawn-checkout-note.js";
+import { quietLaneSpawnNote } from "./quiet-lane-words.js";
 export type { ChildRehome } from "./child-spec.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
@@ -1013,7 +1014,16 @@ const startChild = async (
         handedOff = true;
         keepChild(services, id);
         const costNote = placed.kind === "here" ? await spawnCheckoutCostNote(services, parent.conversationId, id, governed.spec) : undefined;
-        return startedWith(id, [placed.note, repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed), governed.note, siblingNewsWords(FAN_OUT.news(provider)), costNote]);
+        // A child here shares this sandbox's quiet lane with every other conversation's timed runs (quiet-lane-words.ts).
+        const laneNote = placed.kind === "here" ? await quietLaneSpawnNote(services.conversations, parent.conversationId) : undefined;
+        return startedWith(id, [
+            placed.note,
+            repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed),
+            governed.note,
+            siblingNewsWords(FAN_OUT.news(provider)),
+            costNote,
+            laneNote,
+        ]);
     } finally {
         if (!handedOff) {
             admitted.release();

@@ -67,7 +67,7 @@ describe("the note's text", () => {
                 "  Ask your parent before you edit a file a sibling is changing.",
                 "- Builds and tests:",
                 "  - The heavy-command queue sets build and test parallelism (cargo's `-j` and test threads included) and takes turns across conversations: pass no `-j` and take no turns by hand.",
-                "  - `quiet -- <command>` for anything you time: benchmarks, profiles, steady captures.",
+                "  - `quiet -- <command>` for anything you time: benchmarks, profiles, steady captures. It runs one at a time sandbox-wide, each after every running build ends: build first, then time all cases in one `quiet` run.",
                 "  - `base run <command>` runs a command at the commit your work started from: your before, beside your after.",
                 "  - A failing test run ends with a digest placing each failure against main: passed there, never run there, or failing there too. Report that; check one it could not place, or one it says load may explain, with `base run` before calling it yours.",
                 "- Report: your final message is what your parent reads. End it with these four parts:",
@@ -77,7 +77,7 @@ describe("the note's text", () => {
                 "  4. What you did not verify.",
             ].join("\n"),
         );
-        expect(words(childPreambleText(FACTS))).toBeLessThanOrEqual(350);
+        expect(words(childPreambleText(FACTS))).toBeLessThanOrEqual(370);
     });
 
     it("names only the tools installed, and nothing it was not given", () => {

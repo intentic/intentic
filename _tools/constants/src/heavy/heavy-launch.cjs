@@ -4,14 +4,20 @@
 //   unless the command, its environment or the project's cargo config already chose them. One line says what it chose.
 // - `cpus`: a declared class that keeps that many cores busy starts once that many are idle (or at its ceiling), and is
 //   told the number as INTENTIC_CPUS; with `pin`, it is pinned to that many of the idlest cores.
-// - `quiet` (bin/quiet, or a class marked quiet): it starts once the machine is calm, and the conditions it ran under
-//   (cores busy and load before, what everything else kept busy while it ran, load after) are printed with its result, so
-//   a measurement carries them.
+// - `quiet` (bin/quiet, or a class marked quiet): the conditions it ran under (cores busy and load before, what
+//   everything else kept busy while it ran, load after) are printed with its result, so a measurement carries them. Its
+//   wait for a calm machine is `--calm-first`, below, which queue-run runs BEFORE it takes the gate; after the gate
+//   this only looks once, to pin and to report, and holds no one waiting.
 // heavy-turn.cjs puts it after queue-run's `--`, so whatever ran before it holds the slot it holds; bin/quiet runs it the
 // same way. Every failure here starts the command as it was given: this is never why a command did not run.
 //
 // node heavy-launch.cjs [--parallel cargo] [--slots N] [--cpus N] [--pin] [--quiet] [--idle N] [--calm-wait S]
 //                       [--label NAME] -- <command> [args…]
+// node heavy-launch.cjs --calm-first [--idle N] [--calm-wait S] [--label NAME]
+//   queue-run's first step for a quiet run (2026-11-24, the shinobi-society audit): waits, holding nothing, for the load
+//   OUTSIDE this sandbox to leave enough cores idle, and prints its verdict on one line for INTENTIC_QUIET_CALM. A quiet
+//   run used to wait for calm after taking the gate, up to 10 minutes in which no other heavy command in the sandbox
+//   could start, for load that came mostly from other sandboxes, which holding this one's gate cannot end.
 "use strict";
 
 const { spawn, spawnSync } = require("node:child_process");
@@ -28,9 +34,17 @@ const TICKS = 100;
 // How long a look at the CPUs lasts, and how often a wait for idle cores says it is still waiting.
 const SAMPLE_MS = 250;
 const SAY_EVERY_MS = 30_000;
-// How long a wait for idle cores lasts before the command starts anyway: a quiet run, and a class that names `cpus`.
+// The most a wait for idle cores lasts while the load keeps easing: a quiet run, and a class that names `cpus`. A backstop
+// only: a wait ends when the cores are idle, or as soon as the load stops easing (STUCK_MS), whichever comes first.
 const QUIET_WAIT_SECONDS = 600;
 const CPUS_WAIT_SECONDS = 120;
+// How long a wait for idle cores goes on with the load not easing before it gives up and starts. Waiting helps only
+// while busy cores are coming free; a load that holds steady (another sandbox's build, the owner's own work) does not
+// end because this waits, and a countdown to a fixed ceiling only delayed a run that then went ahead NOT calm anyway.
+// The same rule as memory-room's stuckWait.
+const STUCK_MS = 30_000;
+// What counts as easing over that window: a core's worth of load gone.
+const EASED_CORES = 1;
 // The share of the machine's cores a quiet run wants idle when it names none.
 const QUIET_IDLE_SHARE = 0.75;
 
@@ -71,11 +85,31 @@ const busyBetween = (before, after) => {
     return { busy: perCpu.reduce((sum, entry) => sum + entry.busy, 0), count: perCpu.length, perCpu };
 };
 
+// The CPU time this sandbox's own processes have used, in seconds, from its cgroup's cpu.stat; undefined where it is not
+// in a cgroup of its own. The root cgroup has no cpu.max, so a host's whole-machine figure is never read as the sandbox's.
+const sandboxSeconds = () => {
+    if (read("/sys/fs/cgroup/cpu.max") === undefined) {
+        return undefined;
+    }
+    const usec = Number(/^usage_usec\s+(\d+)/mu.exec(read("/sys/fs/cgroup/cpu.stat") ?? "")?.[1]);
+    return Number.isFinite(usec) ? usec / 1e6 : undefined;
+};
+
+/** How busy the machine's cores were over `ms`, and how many of those cores this sandbox kept busy (`own`, when known). */
 const lookAtCpus = async (ms = SAMPLE_MS) => {
     const before = parseProcStat(read("/proc/stat"));
+    const ownBefore = sandboxSeconds();
+    const startedAt = Date.now();
     await sleep(ms);
-    return busyBetween(before, parseProcStat(read("/proc/stat")));
+    const look = busyBetween(before, parseProcStat(read("/proc/stat")));
+    const ownAfter = sandboxSeconds();
+    const wall = (Date.now() - startedAt) / 1000;
+    const own = ownBefore === undefined || ownAfter === undefined || wall <= 0 ? undefined : Math.min(look.busy, Math.max(0, (ownAfter - ownBefore) / wall));
+    return { ...look, own };
 };
+
+/** The cores busy with work outside this sandbox (other sandboxes, the host); all of them where its own share is unknown. */
+const outsideBusy = (look) => (look.own === undefined ? look.busy : Math.max(0, look.busy - look.own));
 
 /** The cores this sandbox may use: what its affinity allows, and never more than its cgroup's CPU quota. */
 const usableCores = () => {
@@ -85,30 +119,57 @@ const usableCores = () => {
 };
 
 const loadWords = () => `load ${loadavg().map((value) => value.toFixed(1)).join(" ")}`;
-const busyWords = (look) => `${look.busy.toFixed(1)} of ${look.count} cores busy`;
-const minutes = (seconds) => (seconds >= 60 ? `${Math.floor(seconds / 60)}m${String(Math.round(seconds % 60)).padStart(2, "0")}s` : `${Math.round(seconds)}s`);
+const busyWords = (look, outside = false) =>
+    outside && look.own !== undefined
+        ? `${outsideBusy(look).toFixed(1)} of ${look.count} cores busy outside this sandbox (${look.own.toFixed(1)} in it)`
+        : `${look.busy.toFixed(1)} of ${look.count} cores busy`;
+// Rounded once, so 599.6 seconds reads 10m00s, never 9m60s.
+const minutes = (seconds) => {
+    const whole = Math.round(seconds);
+    return whole >= 60 ? `${Math.floor(whole / 60)}m${String(whole % 60).padStart(2, "0")}s` : `${whole}s`;
+};
 
 /**
- * Waits until `need` cores are idle, or `ceilingSeconds` pass. Says so at once and every SAY_EVERY_MS while it waits.
- * Returns whether the machine got calm, the last look, and how long it waited.
+ * Waits until `need` cores are idle; or until the load has not eased by EASED_CORES for `stuckMs` (`stuck`), since
+ * waiting on then does not make them idle; or at the latest `ceilingSeconds`. With `outside`, only the load outside this
+ * sandbox counts. Says so at once and every SAY_EVERY_MS while it waits. Returns whether the machine got calm, the last
+ * look, how long it waited, and why it stopped when it is not calm.
  */
-const waitForIdle = async ({ need, ceilingSeconds, prefix, why, look = lookAtCpus, now = Date.now, pause = sleep }) => {
+const waitForIdle = async ({ need, ceilingSeconds, prefix, why, look = lookAtCpus, now = Date.now, pause = sleep, outside = false, stuckMs = STUCK_MS }) => {
+    const measured = (entry) => (outside ? outsideBusy(entry) : entry.busy);
     const startedAt = now();
     let last = await look();
     let saidAt;
-    while (last.count - last.busy < need) {
-        const waited = (now() - startedAt) / 1000;
-        if (waited >= ceilingSeconds) {
-            return { calm: false, look: last, waitedMs: now() - startedAt };
+    let easingSince = startedAt;
+    let base = measured(last);
+    while (last.count - measured(last) < need) {
+        const at = now();
+        if ((at - startedAt) / 1000 >= ceilingSeconds) {
+            return { calm: false, look: last, waitedMs: at - startedAt, stopped: "ceiling" };
         }
-        if (saidAt === undefined || now() - saidAt >= SAY_EVERY_MS) {
-            saidAt = now();
-            say(prefix, `waiting for ${need} idle cores: ${busyWords(last)} (${loadWords()}). ${why}It starts anyway in ${minutes(ceilingSeconds - waited)}.`);
+        if (base - measured(last) >= EASED_CORES) {
+            easingSince = at;
+            base = measured(last);
+        } else if (at - easingSince >= stuckMs) {
+            return { calm: false, look: last, waitedMs: at - startedAt, stopped: "stuck" };
+        }
+        if (saidAt === undefined || at - saidAt >= SAY_EVERY_MS) {
+            saidAt = at;
+            say(prefix, `waiting for ${need} idle cores: ${busyWords(last, outside)} (${loadWords()}). ${why}It starts once they are idle, or once that load has gone ${minutes(stuckMs / 1000)} without easing.`);
         }
         await pause(1000);
         last = await look();
     }
     return { calm: true, look: last, waitedMs: now() - startedAt };
+};
+
+/** One line for a wait that ended: `calm`, `calm after 42s`, or `NOT calm (…)` saying what was busy and why it went on. */
+const calmVerdict = ({ calm, look, waitedMs, stopped }, outside) => {
+    if (calm) {
+        return waitedMs < 1500 ? "calm" : `calm after ${minutes(waitedMs / 1000)}`;
+    }
+    const why = stopped === "stuck" ? `not easing after ${minutes(waitedMs / 1000)} of waiting` : `still busy at its ${minutes(waitedMs / 1000)} ceiling`;
+    return `NOT calm (${busyWords(look, outside)}, ${why})`;
 };
 
 /** The `count` idlest CPUs in the last look, among those this process may run on; empty when it cannot tell. */
@@ -216,7 +277,8 @@ const roomOf = async (env) => {
 
 const parseArgs = (argv) => {
     const at = argv.indexOf("--");
-    const flags = at === -1 ? [] : argv.slice(0, at);
+    // `--calm-first` runs nothing, so its flags may come with no `--` after them.
+    const flags = at === -1 ? (argv[0] === "--calm-first" ? argv : []) : argv.slice(0, at);
     const command = at === -1 ? argv : argv.slice(at + 1);
     const value = (name) => {
         const index = flags.indexOf(`--${name}`);
@@ -236,6 +298,7 @@ const parseArgs = (argv) => {
         calmWait: Number(value("calm-wait") ?? Number.NaN),
         pin: flags.includes("--pin"),
         quiet: flags.includes("--quiet"),
+        calmFirst: flags.includes("--calm-first"),
         label: value("label") ?? "heavy",
     };
 };
@@ -301,30 +364,52 @@ const become = (argv, env) => {
     process.exit(exitOf(run.status, run.signal));
 };
 
-// The quiet wait or a class's wait for its cores; undefined when neither applies.
-const calmFor = async (options) => {
-    const need = options.idle ?? (options.quiet ? Math.ceil(usableCores() * QUIET_IDLE_SHARE) : options.cpus);
+// The quiet wait or a class's wait for its cores; undefined when neither applies. A quiet one counts only the load outside
+// this sandbox: its own heavy commands are the gate's to wait out, and the gate ends that wait the instant they end.
+const calmFor = async (options, why) => {
+    const quiet = options.quiet || options.calmFirst;
+    const need = options.idle ?? (quiet ? Math.ceil(usableCores() * QUIET_IDLE_SHARE) : options.cpus);
     if (need === undefined) {
         return undefined;
     }
-    const ceilingSeconds = Number.isFinite(options.calmWait) && options.calmWait >= 0 ? options.calmWait : options.quiet ? QUIET_WAIT_SECONDS : CPUS_WAIT_SECONDS;
-    const why = options.quiet ? "New heavy commands in this sandbox wait meanwhile. " : "";
-    return { need, ...(await waitForIdle({ need, ceilingSeconds, prefix: options.quiet ? "quiet" : options.label, why })) };
+    const ceilingSeconds = Number.isFinite(options.calmWait) && options.calmWait >= 0 ? options.calmWait : quiet ? QUIET_WAIT_SECONDS : CPUS_WAIT_SECONDS;
+    return { need, ...(await waitForIdle({ need, ceilingSeconds, prefix: quiet ? "quiet" : options.label, why, outside: quiet })) };
+};
+
+// A calm check that cannot read the cores says so, so a run that goes ahead unmeasured is never read as a calm one.
+const cannotCheck = (prefix) => (error) => {
+    say(prefix, `could not check how busy the cores are (${error instanceof Error ? error.message : String(error)}): running without waiting for calm`);
+    return undefined;
+};
+
+/** --calm-first: the wait before the gate, holding nothing. Prints its verdict on one line; never fails. */
+const judgeCalm = async (options) => {
+    const calm = await calmFor(options, "Nothing in this sandbox waits on this. ").catch(cannotCheck("quiet"));
+    if (calm !== undefined) {
+        process.stdout.write(`${calmVerdict(calm, true)}\n`);
+    }
 };
 
 const main = async (argv, env = { ...process.env }) => {
     const options = parseArgs(argv);
+    if (options.calmFirst) {
+        await judgeCalm(options);
+        return;
+    }
     const program = options.command[0] === undefined ? undefined : located(options.command[0], env);
     if (program === undefined) {
         process.stderr.write(`${options.command[0] ?? "heavy-launch"}: command not found\n`);
         process.exit(127);
     }
     let command = [program, ...options.command.slice(1)];
-    // A calm check that cannot read the cores says so, so a run that goes ahead unmeasured is never read as a calm one.
-    const calm = await calmFor(options).catch((error) => {
-        say(options.quiet ? "quiet" : "heavy", `could not check how busy the cores are (${error instanceof Error ? error.message : String(error)}): running without waiting for calm`);
-        return undefined;
-    });
+    // queue-run's --calm-first already waited, before the gate: here a quiet run only looks, to pin and to report. Not
+    // passed on, so a quiet run nested in this one judges for itself.
+    const judged = options.quiet ? env.INTENTIC_QUIET_CALM : undefined;
+    delete env.INTENTIC_QUIET_CALM;
+    const calm =
+        judged !== undefined && judged !== ""
+            ? { judged, look: await lookAtCpus().catch(cannotCheck("quiet")) }
+            : await calmFor(options, options.quiet ? "New heavy commands in this sandbox wait meanwhile. " : "").catch(cannotCheck(options.quiet ? "quiet" : "heavy"));
     let look = calm?.look;
     if (options.parallel === "cargo") {
         look ??= await lookAtCpus();
@@ -347,8 +432,9 @@ const main = async (argv, env = { ...process.env }) => {
         return;
     }
     const pinned = taskset === undefined ? "" : `, pinned to cores ${pinTo.join(",")}`;
-    const ceiling = calm?.calm === false ? `NOT calm (started at its ${minutes(calm.waitedMs / 1000)} ceiling), ` : "";
-    const before = `${ceiling}${look === undefined ? "" : `${busyWords(look)}, `}${loadWords()}${pinned}`;
+    const verdict = calm?.judged ?? (calm === undefined ? "calm" : calmVerdict(calm, true));
+    const said = verdict === "calm" ? "" : `${verdict}, `;
+    const before = `${said}${look === undefined ? "" : `${busyWords(look, true)}, `}${loadWords()}${pinned}`;
     say("quiet", `starting: ${before}. New heavy commands in this sandbox wait until it ends.`);
     runReported(command, env, before);
 };
@@ -365,4 +451,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseProcStat, busyBetween, waitForIdle, idlestCpus, cargoChosen, cargoJobs, cargoParallelism, parseArgs, CARGO_JOB_BYTES };
+module.exports = { parseProcStat, busyBetween, outsideBusy, waitForIdle, calmVerdict, idlestCpus, cargoChosen, cargoJobs, cargoParallelism, parseArgs, CARGO_JOB_BYTES, STUCK_MS };

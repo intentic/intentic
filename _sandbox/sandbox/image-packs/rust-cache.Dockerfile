@@ -12,8 +12,11 @@
 # its own checkout at /work and the server runs rustc with the paths it sees, so one server shared over TCP (the
 # environment skill's recipe until this pack) built whichever checkout started it: measured that day, a second
 # namespace's build failed with "extern location for itoa does not exist", its dependency written into the first one's
-# target/. It also closes fd 9, the build queue's slot lock (bin/queue-run): the server outlives the build by its idle
-# timeout, and one started holding the lock kept the slot from every build queued behind it (shinobi, 2026-11-05).
+# target/. It also closes fds 7, 8 and 9, the build queue's gate and slot locks (bin/queue-run): the server outlives the
+# build by its idle timeout (10 minutes), and one started holding a lock kept it from every build queued behind it. Fd 9
+# held a build slot (shinobi, 2026-11-05); fd 8, the gate's `running` side, kept every quiet run waiting its whole
+# 10-minute wait for "the heavy commands let in before it" while no new heavy command could start (shinobi, 2026-11-24),
+# and a server started under a quiet run would have held the gate exclusive for 10 minutes after the benchmark ended.
 # RUSTC_WRAPPER names the wrapper through a link called `sccache` (/usr/local/lib/rust-cache/sccache, off the PATH, so
 # the wrapper's own `sccache` is still the real one): the cc crate reuses RUSTC_WRAPPER for the C and C++ a build script
 # compiles only when the wrapper's file is named sccache, cachepot, buildcache or kache (cc 1.11 rustc_wrapper_fallback).
@@ -47,8 +50,9 @@ RUN set -eu; v=0.10.0; \
         'ns=${ns#mnt:?}' \
         'ns=${ns%?}' \
         '[ -n "$ns" ] || exec "$@"' \
-        '# Without fd 9, the build queue slot lock: the server this call may start outlives the build by its idle timeout.' \
-        'SCCACHE_SERVER_UDS="/tmp/sccache-$ns.sock" exec sccache "$@" 9>&-' \
+        '# Without fds 7, 8 and 9, the build queue gate and slot locks: the server this call may start outlives the build' \
+        '# by its idle timeout. The build itself keeps them: Cargo holds its own copies.' \
+        'SCCACHE_SERVER_UDS="/tmp/sccache-$ns.sock" exec sccache "$@" 7>&- 8>&- 9>&-' \
         > /usr/local/bin/rustc-cached; \
     chmod 755 /usr/local/bin/rustc-cached; \
     mkdir -p /usr/local/lib/rust-cache; \

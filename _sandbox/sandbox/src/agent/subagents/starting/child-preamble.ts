@@ -128,7 +128,9 @@ const siblingLines = ({ siblings, moreSiblings }: ChildPreambleFacts): string[] 
 const toolLines = ({ tools }: ChildPreambleFacts): string[] => {
     const lines = [
         tools.queue ? "  - The heavy-command queue sets build and test parallelism (cargo's `-j` and test threads included) and takes turns across conversations: pass no `-j` and take no turns by hand." : undefined,
-        tools.quiet ? "  - `quiet -- <command>` for anything you time: benchmarks, profiles, steady captures." : undefined,
+        tools.quiet
+            ? "  - `quiet -- <command>` for anything you time: benchmarks, profiles, steady captures. It runs one at a time sandbox-wide, each after every running build ends: build first, then time all cases in one `quiet` run."
+            : undefined,
         tools.base ? "  - `base run <command>` runs a command at the commit your work started from: your before, beside your after." : undefined,
         tools.digest
             ? "  - A failing test run ends with a digest placing each failure against main: passed there, never run there, or failing there too. Report that; check one it could not place, or one it says load may explain, with `base run` before calling it yours."

@@ -74,34 +74,37 @@ const wrapperScript = async (): Promise<string> => {
     return path;
 };
 
-// A stand-in sccache that says how it was reached: the socket it was told to use and whether fd 9 came with it.
+// A stand-in sccache that says how it was reached: the socket it was told to use and which of the queue's lock fds
+// (7 and 8 the gate, 9 the slot) came with it.
 const stubSccache = (): string => {
     const dir = mkdtempSync(join(tmpdir(), "sccache-stub-"));
     writeFileSync(
         join(dir, "sccache"),
-        '#!/bin/sh\nfd9=closed\n[ -e /proc/self/fd/9 ] && fd9=open\necho "sccache uds=$SCCACHE_SERVER_UDS fd9=$fd9 args=$*"\n',
+        '#!/bin/sh\nlocks=\nfor fd in 7 8 9; do [ -e /proc/self/fd/$fd ] && locks="$locks$fd"; done\necho "sccache uds=$SCCACHE_SERVER_UDS locks=${locks:-none} args=$*"\n',
     );
     chmodSync(join(dir, "sccache"), 0o755);
     return dir;
 };
 
-// The wrapper run as Cargo runs it (`$RUSTC_WRAPPER rustc …`, here `echo plain`), holding fd 9 as a queued build does.
+// The wrapper run as Cargo runs it (`$RUSTC_WRAPPER rustc …`, here `echo plain`), holding fds 7, 8 and 9 as a queued
+// build under the gate does.
 const wrap = (wrapper: string, env: Record<string, string>): string => {
-    const slot = openSync(join(mkdtempSync(join(tmpdir(), "slot-")), "slot.0"), "w");
+    const locks = mkdtempSync(join(tmpdir(), "queue-"));
+    const [turnstile, running, slot] = ["turnstile", "running", "slot.0"].map((name) => openSync(join(locks, name), "w"));
     const run = spawnSync("/bin/sh", [wrapper, "echo", "plain"], {
         env: { PATH: "/usr/bin:/bin", ...env },
-        stdio: ["ignore", "pipe", "pipe", "ignore", "ignore", "ignore", "ignore", "ignore", "ignore", slot],
+        stdio: ["ignore", "pipe", "pipe", "ignore", "ignore", "ignore", "ignore", turnstile, running, slot],
         encoding: "utf8",
     });
     return run.stdout.trim();
 };
 
-test("the wrapper shares one cache on the volume through a server of this mount namespace's own, without the slot", async () => {
+test("the wrapper shares one cache on the volume through a server of this mount namespace's own, without the queue's locks", async () => {
     const wrapper = await wrapperScript();
     const stub = stubSccache();
     const cache = join(mkdtempSync(join(tmpdir(), "history-")), "cache", "sccache");
     const namespace = readlinkSync("/proc/self/ns/mnt").replace(/\D/gu, "");
-    expect(wrap(wrapper, { PATH: `${stub}:/usr/bin:/bin`, SCCACHE_DIR: cache })).toBe(`sccache uds=/tmp/sccache-${namespace}.sock fd9=closed args=echo plain`);
+    expect(wrap(wrapper, { PATH: `${stub}:/usr/bin:/bin`, SCCACHE_DIR: cache })).toBe(`sccache uds=/tmp/sccache-${namespace}.sock locks=none args=echo plain`);
     expect(existsSync(cache)).toBe(true);
 });
 

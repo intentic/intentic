@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] [--exclusive] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] [--exclusive] [--calm-launcher PATH] [--calm-idle N] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -49,6 +49,8 @@ label="command"
 on_deadline="run"
 size=""
 exclusive=0
+calm_launcher=""
+calm_idle=""
 # Only where the wait cannot be woken by the kernel (a bash before 5.1, see `next_slot`); fractions allowed.
 poll_seconds="${INTENTIC_QUEUE_POLL:-0.25}"
 
@@ -90,6 +92,8 @@ while [ "$i" -lt "${#flags[@]}" ]; do
         --on-deadline) on_deadline="${flags[$((i + 1))]:-run}"; i=$((i + 2)) ;;
         --size) size="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
         --exclusive) exclusive=1; i=$((i + 1)) ;;
+        --calm-launcher) calm_launcher="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
+        --calm-idle) calm_idle="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
         *) i=$((i + 1)) ;;
     esac
 done
@@ -140,6 +144,26 @@ case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
 # @intentic/constants/memory-room: targeted, editor-typecheck, scoped-typecheck, or a MiB count like 6144m) and prices
 # one it does not know as the whole class, so the list is not repeated here, where an image's copy would lag the daemon's.
 case "$size" in '' | *[!a-z0-9-]*) size="" ;; esac
+case "$calm_idle" in '' | *[!0-9]*) calm_idle="" ;; esac
+
+# THE WAIT FOR A CALM MACHINE COMES FIRST, HOLDING NOTHING (2026-11-24, the shinobi-society audit). A quiet run (bin/quiet,
+# or a class marked quiet) waited for idle cores AFTER it took the gate exclusive: up to its whole --wait (600 s, and
+# agents passed 1500) in which no other heavy command in this sandbox could start, for load that came mostly from other
+# sandboxes, which holding this one's gate cannot end. Its launcher (heavy-launch.cjs --calm-first) now judges the load
+# OUTSIDE this sandbox before the memory gate and the gate, while this command holds no reservation, no turnstile and no
+# slot: it goes on at once when enough cores are idle, waits only while that load is easing, and goes on as soon as it
+# is not, its verdict handed to the command's launcher in INTENTIC_QUIET_CALM for the report. This sandbox's own heavy
+# commands are not waited for here: the gate waits them out below, and its flock ends that wait the instant the last one
+# ends. Under a command that already took a side of the gate nothing is judged here; the launcher judges for itself.
+# INTENTIC_HEAVY is emptied for the launcher alone, so node's heavy hook never queues the judgment itself. Every failure
+# (no node, no launcher) only skips the wait.
+if [ -n "$calm_launcher" ] && [ "$exclusive" = 1 ] && [ -z "${INTENTIC_QUEUE_GATE:-}" ] && [ -f "$calm_launcher" ] && [ ! -L "$calm_launcher" ] &&
+    command -v node >/dev/null 2>&1; then
+    calm_args=(--calm-first --calm-wait "$wait_seconds" --label "$label")
+    [ -n "$calm_idle" ] && calm_args+=(--idle "$calm_idle")
+    calm_verdict=$(INTENTIC_HEAVY= node "$calm_launcher" "${calm_args[@]}" -- | head -n 1) || calm_verdict=""
+    [ -n "$calm_verdict" ] && export INTENTIC_QUIET_CALM="$calm_verdict"
+fi
 
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
 # sitting in it. `memory-room` asks the daemon's resource budget (the same verdict that holds a turn, and the same
