@@ -46,9 +46,10 @@ declare global {
 // allow(module-state): the one window's one face, and how many times it has changed
 const faceWorn = ref(0);
 
+// Read where there is no page at all too (a model built in a test or a worker), which is no folder window either.
 export const localFace = (): LocalFace | undefined => {
     void faceWorn.value;
-    return window.__INTENTIC_LOCAL__;
+    return globalThis.window?.__INTENTIC_LOCAL__;
 };
 
 /* THE DESKTOP APP'S SANDBOX FACE (2026-10-16, desktop-app local/sandbox.ts): this whole editor from the app's own bundle,

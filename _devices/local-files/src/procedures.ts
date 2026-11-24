@@ -1,13 +1,14 @@
 import { type FixtureRouter, Frames, refuse, servedProcedures } from "@intentic/contract-serve";
+import type { HostAgents } from "@intentic/host-agents";
 import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { TRANSLATOR_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { TranslatorAccountsSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { toRelPath } from "@intentic/workspace-ignore";
 import type { DerivedTexts } from "./derived.js";
-import type { Grant } from "./grants.js";
+import { type Grant, isHandoff } from "./grants.js";
 import { readWindow } from "./files.js";
 import { resolveExisting, within } from "./paths.js";
-import type { Ripgrep } from "./ripgrep.js";
+import { placeOf, type Ripgrep } from "./ripgrep.js";
 import { resolveIn, searchFolder } from "./search.js";
 import { type Ask, treeVerbsFor } from "./tree-verbs.js";
 import { listChildren, walkTree } from "./walk.js";
@@ -68,7 +69,14 @@ export interface ProcedureContext {
     readonly derived: DerivedTexts;
     // What searches a folder and lists its files, where this computer has it (ripgrep.ts); without it they are read here.
     readonly rg?: Ripgrep | undefined;
+    // The agents that run on this computer itself (@intentic/host-agents); absent where the app started this side
+    // without them.
+    readonly agents?: HostAgents | undefined;
 }
+
+// Whether a window's folder may have agents work in it: a folder opened to be written, by one of the app's own
+// windows. A document opened on its own, a read-only window and a handed-over document have none.
+const mayHostAgents = (grant: Grant): boolean => grant.file === undefined && grant.readOnly !== true && !isHandoff(grant);
 
 // What the hello frame says this side is: a folder, answering exactly these routes. The editor offers only what is
 // listed (useDaemonRoutes.ts in the web app), so a verb a folder has no answer for (a terminal, a ZIP) is not shown
@@ -100,6 +108,8 @@ const eventsFor = (grant: Grant, context: ProcedureContext, advertised: Advertis
         });
         const beat = setInterval(() => sink.emit({ kind: `heartbeat`, rev: 0 }), HEARTBEAT_MS);
         const unsubscribe = context.watches.subscribe(grant.root, (paths) => sink.emit({ kind: `workspaceChanged`, paths: [...paths] }));
+        // This folder's conversations, as a daemon says its roster: whole, each time one of them moves.
+        const unfollow = mayHostAgents(grant) ? context.agents?.subscribe(grant.root, (event) => sink.emit(event)) : undefined;
         // A document's text landing, as a daemon says it (`derivedChanged`): the text view that read `deriving` reloads.
         const unheard = context.derived.onLanded((abs) => {
             if (abs !== grant.root && within(grant.root, abs)) {
@@ -109,16 +119,26 @@ const eventsFor = (grant: Grant, context: ProcedureContext, advertised: Advertis
         return () => {
             clearInterval(beat);
             unsubscribe();
+            unfollow?.();
             unheard();
         };
     });
+
+// What the editor's chrome reads in this window: the empty truths, with the agents of this computer answering for their
+// own groups (the conversations, the turns, the harnesses and their sign-ins) in a folder they may work in.
+const chromeFor = (grant: Grant, context: ProcedureContext): FixtureRouter => {
+    if (context.agents === undefined || !mayHostAgents(grant)) {
+        return NO_SANDBOX_CHROME;
+    }
+    return { ...NO_SANDBOX_CHROME, ...context.agents.proceduresFor({ root: grant.root, place: placeOf(grant.root) }) };
+};
 
 const NO_CONVERSATIONS = `This folder has no conversations.`;
 
 // Every procedure but the event stream, which advertises them.
 const answersFor = (grant: Grant, context: ProcedureContext) =>
     ({
-        ...NO_SANDBOX_CHROME,
+        ...chromeFor(grant, context),
         system: {
             // Nobody else looks at a folder on this computer.
             presence: () => ({ ok: true as const }),

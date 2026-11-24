@@ -40,6 +40,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The recovery panel's button: `ic sandbox fix`, run and drawn on This device (fix.rs). A link while one
         // runs brings that run forward instead of starting a second.
         Some(Link::Fix(args)) => crate::fix::requested(app, args),
+        // "Ask an agent on this computer", from the offline page or the recovery panel: a window on Intentic's own
+        // folder here with a first message waiting in it (host_agents.rs). Nothing is sent for the reader.
+        Some(Link::AgentHere { slug }) => crate::host_agents::requested(app, slug),
         // A device's card pairing this very computer with nothing to paste (device_pair.rs): run out of sight, since
         // the card watches the device come online and keeps its command for a run that fails.
         Some(Link::DevicePair(args)) => crate::device_pair::requested(app, args),

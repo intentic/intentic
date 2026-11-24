@@ -38,6 +38,7 @@
         "@hono/node-server": "catalog:",
         "@huggingface/hub": "catalog:",
         "@huggingface/transformers": "catalog:",
+        "@intentic/acp-events": "workspace:*",
         "@intentic/agent-context": "workspace:*",
         "@intentic/api-contract": "workspace:*",
         "@intentic/base": "workspace:*",

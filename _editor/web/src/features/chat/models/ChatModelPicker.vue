@@ -6,6 +6,8 @@ import { AUTO_KEY, autoEntry, type PickerEntry } from "../../../models/conversat
 import { usePickerAccounts } from "../accounts/pickerAccounts";
 import { type RunSettingsPatch, usePickerRunSettings } from "../../../models/providers/pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
+import ComputerModelPicker from "./computer/ComputerModelPicker.vue";
+import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
 import PickerFooter from "./PickerFooter.vue";
@@ -161,7 +163,10 @@ const footerVisible = computed(() =>
 </script>
 
 <template>
+    <!-- A chat that runs on this computer picks among the coding agents installed here, each with its own models. -->
+    <ComputerModelPicker v-if="computerAgents" :conversation="conversation" @selected="emit(`selected`)" />
     <ModelPicker
+        v-else
         :provider="provider"
         :model="model"
         :unpickable="unpickable"

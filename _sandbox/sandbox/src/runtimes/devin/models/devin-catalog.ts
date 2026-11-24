@@ -5,7 +5,7 @@ import { discoveredCatalog } from "../../../agent/models/model-catalog.js";
 import { opt } from "../../../opt.js";
 import { cacheFile } from "../../../store/open-document.js";
 import type { AcpConnections } from "../../acp/acp-connection.js";
-import { type ModelChoice, sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "../../acp/acp-model.js";
+import { type ModelChoice, sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "@intentic/acp-events/model";
 import { type DevinStore, liveDevinAccounts } from "../accounts/devin-credentials.js";
 import { devinAgentId, devinCli, devinLaunch } from "../devin-cli.js";
 

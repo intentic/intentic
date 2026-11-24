@@ -1,7 +1,6 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { ApiToken, HostedPlanState, User } from "@intentic/api-contract";
 import type { LocalFound } from "@intentic/web/local-host";
 import type {
     AccountAnswer,
@@ -24,6 +23,8 @@ import type {
     SetupArgs,
     UpdateStage,
 } from "../src/desktop";
+import { ACCOUNT, PLAN, TOKENS } from "./devAccount";
+import { agentsVerb } from "./devAgents";
 import { followCopy } from "./devCopy";
 import { keyringVerb } from "./devKeyring";
 import { CHECK_CANT_RUN, CHECK_NEEDS_SETUP, CHECK_READY, CHECK_UNKNOWN } from "./devOnboarding";
@@ -416,6 +417,7 @@ type Answer =
     | Promise<void>
     | Promise<string>
     | { memoryBytes: number; cpus: number }
+    | ReturnType<typeof agentsVerb>
     | { readonly here: boolean; readonly hosted: boolean } | { readonly sandboxId: string }
     | {
           folder: string;
@@ -619,12 +621,6 @@ let devFirstTask: {
     reason?: string;
 } | null = null;
 
-/* THE ACCOUNT, as the platform answers a local window's account calls through the app (src-tauri/src/account.rs): Ada,
-   on a complimentary plan, with one API token. A rename or a new picture holds until the tab reloads. */
-const ACCOUNT: User = { id: `u_ada`, email: `ada@example.com`, name: `Ada Lovelace`, image: null };
-const PLAN: HostedPlanState = { enabled: true, onPlan: true, comped: true, priceUsd: 20 };
-const TOKENS: ApiToken[] = [{ id: `tok_1`, label: `CI deploys`, scope: `provision`, createdAt: new Date(NOW_S * 1000 - 12 * 86_400_000).toISOString() }];
-
 const replied = <Body>(body: Body, status = 200): AccountAnswer => ({ status, body: JSON.stringify(body), contentType: `application/json` });
 
 const accountAnswer = (machine: Machine, ask: AccountAsk): AccountAnswer => {
@@ -719,7 +715,7 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     if (command === `first_task_pick_folder`) {
         return `${HOME}\\code\\my-app`;
     }
-    const verb = keyringVerb(command, args) ?? folderVerb(command, args) ?? onboardingVerb(machine, command, args);
+    const verb = keyringVerb(command, args) ?? folderVerb(command, args) ?? onboardingVerb(machine, command, args) ?? agentsVerb(command);
     if (verb !== undefined) {
         return verb;
     }

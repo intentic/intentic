@@ -7,6 +7,7 @@ import { readAccount, readDeviceAccounts, revokeAccount, signOutAccount, switchA
 import { onboardingHost } from "./onboarding";
 import { pcStanding } from "./onboarding/pc";
 import { repairHost } from "./repair";
+import { hostAgentsHost } from "./agents/hostAgents";
 import {
     foundOnMachine,
     homeFacts,
@@ -171,6 +172,8 @@ export const nativeHost = (): LocalHost => ({
     project: PROJECT,
     onboarding: onboardingHost(),
     repair: repairHost(),
+    // The agents that run on this computer itself: the reader's yes to them, and a first message held for this window.
+    agents: hostAgentsHost(),
     // The remove dialog's door onto this computer: the same `ic` calls This device's rows make (device/sandboxes.ts).
     machine: {
         holds: async (slug) => (await sandboxList()).some((row) => row.slug === slug),

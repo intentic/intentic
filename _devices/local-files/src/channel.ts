@@ -12,6 +12,8 @@ export interface Channel {
     readonly server: Pick<LocalFilesServer, `forget`>;
     readonly office: Pick<LocalOffice, `prefetch`>;
     readonly asks: Pick<Asks, `answer`>;
+    // Hears whether the reader has turned agents on for this computer; absent where this process serves none.
+    readonly agentsAccepted?: ((accepted: boolean) => void) | undefined;
     readonly say: (event: ControlEvent) => void;
     readonly log: (line: string) => void;
 }
@@ -55,6 +57,9 @@ const act = (channel: Channel, message: ControlMessage): void => {
             return;
         case `prefetch-office`:
             void channel.office.prefetch().then((outcome) => channel.say({ event: `office`, ...outcome }));
+            return;
+        case `agents`:
+            channel.agentsAccepted?.(message.accepted);
             return;
         default:
             void grantFor(message).then((grant) => {

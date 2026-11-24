@@ -143,6 +143,15 @@ const advertisedPrints = computed(() => activeSurface.value.prints);
 // True for a window on a folder of this computer (the desktop app's local face).
 export const folderSurface = computed(() => activeSurface.value.surface === `folder`);
 
+// True for a window on a folder whose sidecar runs agents on this computer itself (_devices/host-agents): a folder, and
+// a hello that names `agent.run`. Positive evidence only, so a window whose sidecar serves folders alone, or has not said
+// yet, offers no chat. What is drawn there is the sandbox's own chat with everything a sandbox alone has left out: no
+// private copy and no landing, no fence around the agent, no subagents, automations or schedules.
+export const computerAgents = computed(() => {
+    const { surface, routes } = activeSurface.value;
+    return surface === `folder` && routes?.has(`agent.run`) === true;
+});
+
 // Which set names routes of this one's kind: a folder lists the few raw routes it serves among `routes`, a daemon
 // advertises them apart. Undefined either way means the surface was never stated.
 const advertisedIn = (record: DaemonSurfaceRecord, name: string): ReadonlySet<string> | undefined =>

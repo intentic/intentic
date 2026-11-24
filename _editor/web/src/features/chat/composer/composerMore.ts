@@ -65,6 +65,12 @@ export interface ComposerControlSituation {
     readonly plain?: boolean;
     /** A guest talks to the assistant it was handed, with its model and its posture: nothing here is theirs to change. */
     readonly guest?: boolean;
+    /**
+     * The chat is with an agent that runs on this computer itself, outside every sandbox (local/agents/): how much it
+     * does before asking is the one thing here to shape. Where it runs, what it starts from, who it acts as, a workflow
+     * or a loop to run it through, writing as the agent and landing are all a sandbox's. Absent reads as a sandbox's chat.
+     */
+    readonly computer?: boolean;
 }
 
 export interface ComposerMoreRow {
@@ -89,6 +95,9 @@ export type ControlFlags = Readonly<Record<ComposerControl, boolean>>;
 const offeredIn = (situation: ComposerControlSituation) => {
     if (situation.guest === true) {
         return { mode: false, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
+    }
+    if (situation.computer === true) {
+        return { mode: true, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
     }
     // Plain words keep the mode; the rest are a developer's tools and stay out of the menu.
     const developer = situation.plain !== true;

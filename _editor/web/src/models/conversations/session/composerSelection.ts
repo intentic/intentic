@@ -11,6 +11,7 @@ import { daemonRecordsSwitches } from "../../../client/sandbox/daemon/recordedSw
 import { followPick } from "./queueCalls";
 import { runServing } from "../accounts/runServing";
 import { clampEffort, ownsReasoning } from "../../providers/effortScale";
+import { capabilitiesHere } from "../run/computerRuntime";
 import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
 import { accountIntent, readsAsContinuing, type SessionRef, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
@@ -165,8 +166,9 @@ export class ComposerSelection {
     readonly effortPick = computed(() => this.state.value.effortPick);
     readonly modePick = computed(() => this.state.value.modePick);
 
-    // What this provider/harness pair can actually do (capabilitiesOf), the record the daemon plans the turn against.
-    readonly capabilities = computed(() => capabilitiesOf(this.provider.value, this.harness.value));
+    // What this provider/harness pair can actually do (capabilitiesOf), the record the daemon plans the turn against; for
+    // an agent on this computer itself, what its harness can do there (computerRuntime.ts).
+    readonly capabilities = computed(() => capabilitiesHere(capabilitiesOf(this.provider.value, this.harness.value)));
 
     // Whether the running turn can absorb a mid-flight message; used only for wording ("steer" vs "queue").
     readonly steerable = computed(() => this.capabilities.value.steering);

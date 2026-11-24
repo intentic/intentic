@@ -16,7 +16,7 @@ import { rawFor } from "./raw.js";
 // document's bytes with its token, and nothing else, and no page of the app's own may use that token.
 
 // Why this side answers nothing but a folder's files, in the log line for a route the editor asked for anyway.
-const NO_SANDBOX = `a folder on this computer has no sandbox behind it: no agents, git, terminals or apps`;
+const NO_SANDBOX = `a folder on this computer has no sandbox behind it: no git, terminals or apps, and of agents only the ones that run on this computer itself`;
 
 export interface ServerDeps {
     readonly grants: Grants;
@@ -40,7 +40,20 @@ const HOSTS = [`127.0.0.1`, `localhost`, `[::1]`];
 // Routes whose answer waits on work longer than a connection may sit idle: a rendering (up to two minutes), the app
 // moving something to the trash (as long again), a copy as large as the disk. The process serving them lifts the idle
 // bound for these alone (cli.ts), so the answer is still there to send when the work ends.
-const UNHURRIED = new Set([`workspace.derive`, `workspace.copy`, `workspace.move`, `workspace.mkdir`, `workspace.delete`]);
+// A turn on this computer is watched for as long as it runs (`agent.attach`, silent through a long tool call), and the
+// first read of a harness starts it, or fetches and signs it in.
+const UNHURRIED = new Set([
+    `workspace.derive`,
+    `workspace.copy`,
+    `workspace.move`,
+    `workspace.mkdir`,
+    `workspace.delete`,
+    `agent.attach`,
+    `accounts.start`,
+    `accounts.accounts`,
+    `providers.list`,
+    `providers.models`,
+]);
 
 export const unhurried = (request: Request): boolean => UNHURRIED.has(sandboxRouteFor(request.method, new URL(request.url).pathname)?.name ?? ``);
 

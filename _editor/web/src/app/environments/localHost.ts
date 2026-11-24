@@ -3,6 +3,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import type { Component, Ref } from "vue";
 import { askLocalApp } from "./local";
 import type { LocalDeviceAccount } from "./localHost/localAccountAnswers";
+import type { LocalAgentsHost } from "./localHost/localAgentsHost";
 import type { LocalNewSandboxHost, LocalProcessesHost } from "./processes/localProcessHost";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL. The editor draws the shell around a folder of this computer (local/LocalShell.vue):
@@ -532,6 +533,8 @@ export interface LocalHost {
     readonly onboarding?: LocalOnboardingHost;
     /** Repair, the agent that runs on this computer outside every sandbox; absent where no app is behind the page. */
     readonly repair?: LocalRepairHost;
+    /** The reader's own harnesses run in this window's folder; absent where no app is behind the page, or one from before them. */
+    readonly agents?: LocalAgentsHost;
     /** This computer's own sandboxes; absent where no app is behind the page. */
     readonly machine?: LocalMachineHost;
     /**
@@ -542,6 +545,9 @@ export interface LocalHost {
     /** A new sandbox made from this window, as Home makes one in the workspace; absent where no app is behind the page. */
     readonly newSandbox?: LocalNewSandboxHost;
 }
+
+// The agents that run on this computer itself, as the app answers for them (localHost/localAgentsHost.ts).
+export type { LocalAgentsHost } from "./localHost/localAgentsHost";
 
 // The account's answers as the app hands them over (its src/account.ts), read as the editor reads its own
 // (localHost/localAccountAnswers.ts).

@@ -7,6 +7,7 @@ import {
 } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { type RawRouteParams, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { answerParseOptions } from "./daemon/answerParse";
+import { folderRefusal } from "./daemon/folderRefusal";
 import { jsonBody } from "./jsonBody";
 import { sandboxJson } from "./sandboxClient";
 import { staleDaemonReason } from "./useDaemonRoutes";
@@ -81,6 +82,11 @@ export async function sandboxRaw<Key extends RawJsonRouteKey>(key: Key, call?: S
     // A daemon that predates this route answers 404, which on its own reaches the reader as "the request failed (404)"
     // and sends them looking for a fault in their own sandbox. The hello says which raw routes this one serves, so the
     // gap is named here instead, in the same words a missing procedure gets.
+    // A folder window's sidecar never has it, which the editor knows before asking (daemon/folderRefusal.ts).
+    const lacking = folderRefusal(key);
+    if (lacking !== undefined) {
+        throw lacking;
+    }
     const stale = staleDaemonReason(key);
     if (stale !== undefined) {
         throw new Error(stale);

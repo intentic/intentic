@@ -22,6 +22,14 @@ flowchart LR
   at most 3 seconds to close, then exits anyway. _(2026-10-05) That close waited for every open connection, which an
   editor page left open could hold, and kept this process and its binary past the app's exit, where an installer could
   not replace it._
+- **Agents on this computer** (2026-11-24). In a folder a window may write (not a document opened on its own, a
+  read-only window or a handed-over document) this process also answers the contract's `agent`, `agents`, `providers`
+  and `accounts` groups from [host-agents](../host-agents), in place of their empty truths, and says that folder's
+  roster on its event stream. So the editor's chat runs the reader's own harness in the folder, with no sandbox. The
+  app says whether the reader has turned agents on (`--agents-accepted` at the start, the `agents` line after); until
+  then no turn starts. Every turn and harness process ends with this one. `--no-agents` serves folders only, and the
+  window is then exactly what it was before. A turn's stream and a harness's first read are exempt from the
+  connection's idle bound, as the long file work is.
 - **Three gates before any route.** A loopback port is reachable by every page the user has open, so the Host header
   must name this port (a DNS-rebound page names its own host), a page's Origin must be one of the app's own, and
   the bearer must be a granted token (`server.ts`).
@@ -108,6 +116,7 @@ One JSON object per line (`control.ts`). The app writes:
 | `grant` | `token`, `id`, `path`, `kind` (`folder` or `file`); optional `readOnly`, `origins`, `expiresInMs` | Serves `path` to requests bearing `token`, answered `granted` or `refused`. |
 | `revoke` | `token` | Stops serving it and closes its office editor, answered `revoked`. |
 | `answer` | `id`, `ok`, and `error` when `ok` is false | Ends the `ask` with that id: done, or why not. |
+| `agents` | `accepted` | Whether the reader has turned agents on for this computer. Until it says yes, no turn starts and nothing is fetched or signed in. |
 | `prefetch-office` | | Downloads the office editor now, answered `office` when the download ends; once it is on disk, its largest files are read once in the background so the first document's open does not wait on them ([onlyoffice](../../_extensions/onlyoffice)). |
 
 This process writes:
@@ -120,6 +129,7 @@ This process writes:
 | `revoked` | `token` | A grant was revoked, or ended at its `expiresInMs`, noticed by its timer or a request. |
 | `ask` | `id`, `verb` (`trash`), `path` (absolute, no link in it) | It needs the app to move an entry to the system's trash. |
 | `office` | `state` (`ready` or `failed`), `error` when failed | A `prefetch-office` download ended. |
+| `agents` | `running` | How many agents' turns run on this computer now, each time that changes: they end with this process, so the app asks before it quits. |
 
 ## Key files
 

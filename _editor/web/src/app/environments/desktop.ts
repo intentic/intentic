@@ -497,6 +497,12 @@ export const desktopFixLink = (slug: string, code?: string): string => {
     return `intentic://fix?${params.toString()}`;
 };
 
+// Opens a chat with an agent on this computer itself, outside every sandbox, for a reader whose sandbox cannot be
+// reached: the app opens a window on its own folder with the first message written and unsent (`intentic://agent-here`,
+// taken from the app's own windows only). `slug` names the sandbox the reader was looking at, absent where there is none.
+export const desktopAgentHereLink = (slug?: string): string =>
+    slug === undefined || slug === `` ? `intentic://agent-here` : `intentic://agent-here?${new URLSearchParams({ slug }).toString()}`;
+
 // Whether this app runs a device's pairing on this computer itself (`intentic://device-pair`); false in a browser and in
 // a build from before it.
 export const desktopPairsDevices = (): boolean => desktopApp()?.devicePair === true;

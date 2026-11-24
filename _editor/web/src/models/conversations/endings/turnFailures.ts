@@ -10,6 +10,7 @@ import type { Conversation } from "../session/conversation";
 import type { TranscriptView } from "../session/transcriptView";
 import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../lib/staleChunk";
+import { harnessRefusedTurn } from "../../providers/computer/computerHarnesses";
 import { markNeedsReauth, providerAccounts } from "../../providers/providerAccounts";
 
 // Maps a turn failure to what this window does, by the course the contract's failure table gives its code
@@ -219,7 +220,8 @@ export class TurnFailures {
                 return;
             case `acp-auth-required`:
                 // The agent refuses every turn until it is signed in, and only its own login command does that: say where.
-                this.host.error.value = t(`chat.turnFailures.signAgentIn`);
+                // On this computer the press that runs it stands above the composer from here on (providers/computer/computerHarnesses.ts).
+                this.host.error.value = harnessRefusedTurn(this.host.selection.provider.value) ?? t(`chat.turnFailures.signAgentIn`);
                 return;
             default:
                 return;

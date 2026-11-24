@@ -5502,6 +5502,42 @@
             "resets": "Odnawia się",
             "measured": "Odczytano",
             "note": "Odczytane u dostawcy tym kluczem i odczytywane ponownie po każdej turze."
+        },
+        "computer": {
+            "badge": "Ten komputer · bez sandboxa",
+            "mode": {
+                "ask": "Najpierw pytaj",
+                "askNote": "Agent pyta, zanim coś zrobi, z wyjątkiem tego, na co już pozwalają jego własne ustawienia na tym komputerze.",
+                "planNote": "Czyta i proponuje plan. Niczego nie zmienia, dopóki nie zatwierdzisz.",
+                "acceptEdits": "Akceptuj zmiany",
+                "acceptEditsNote": "Zmienia pliki bez pytania; polecenia nadal wymagają zgody, chyba że pozwalają na nie jego własne ustawienia."
+            },
+            "waitsForTurn": "Czeka na koniec tej tury",
+            "harness": {
+                "setUp": "Skonfiguruj {harness} na tym komputerze",
+                "signIn": "Zaloguj się do {harness}",
+                "notSetUp": "{harness} nie jest jeszcze skonfigurowany na tym komputerze.",
+                "signedOut": "{harness} nie jest zalogowany na tym komputerze.",
+                "expired": "Logowanie {harness} na tym komputerze już nie działa. Zaloguj się ponownie, aby kontynuować.",
+                "refusedTurn": "{harness} odrzucił tę turę, ponieważ nie jest zalogowany na tym komputerze.",
+                "settingUp": "Konfigurowanie {harness} na tym komputerze. Może to potrwać kilka minut.",
+                "starting": "Rozpoczynanie logowania do {harness}…",
+                "inBrowser": "Dokończ logowanie do {harness} w przeglądarce na tym komputerze. Potem wszystko potoczy się samo.",
+                "openPage": "Otwórz stronę logowania",
+                "failed": "Nie udało się zalogować do {harness}: {reason}",
+                "timedOut": "Logowanie nie zostało ukończone na czas. Rozpocznij je ponownie.",
+                "terminal": "Zaloguj się do {harness} w terminalu na tym komputerze, a potem wyślij ponownie."
+            },
+            "picker": {
+                "title": "Agenci programistyczni na tym komputerze",
+                "none": "Na tym komputerze nie znaleziono żadnego agenta programistycznego. Zainstaluj Claude Code lub Codex i otwórz to ponownie.",
+                "reading": "Odczytywanie modeli…",
+                "afterTurn": "Innego agenta można wybrać po zakończeniu tej tury.",
+                "notSetUp": "Nieskonfigurowany",
+                "signedOut": "Wylogowany",
+                "ownModel": "Własny model",
+                "signedIn": "Zalogowano: {account}"
+            }
         }
     },
     "common": {
@@ -9805,7 +9841,9 @@
             "fixInApp": "Napraw na tym komputerze",
             "fixInAppNote": "albo uruchom polecenie na innym komputerze:",
             "showCommand": "Pokaż polecenie dla tamtego komputera",
-            "fixCommandLabel": "Znajdź i napraw problem"
+            "fixCommandLabel": "Znajdź i napraw problem",
+            "askHere": "Zapytaj agenta na tym komputerze",
+            "askHereNote": "Otwiera czat z agentem programistycznym działającym na tym komputerze, poza sandboxem."
         },
         "recover": {
             "title": "Twoje sandboxy nadal działają",
@@ -14608,7 +14646,29 @@
             "allowanceUsed": "Dzienny limit Naprawy się wyczerpał. Odnowi się o {time}. Sprawdzenia i poprawki nadal działają."
         },
         "setUpThisPc": "Skonfiguruj ten komputer",
-        "firstTaskSendFailed": "Przestrzeń robocza nie mogła wysłać Twojego pierwszego zadania."
+        "firstTaskSendFailed": "Przestrzeń robocza nie mogła wysłać Twojego pierwszego zadania.",
+        "agents": {
+            "title": "Agenci",
+            "conversations": "Rozmowy",
+            "newConversation": "Nowa",
+            "noConversations": "W tym folderze nie ma jeszcze rozmów.",
+            "consent": {
+                "title": "Uruchomić agenta na tym komputerze?",
+                "lead": "To uruchamia agenta programistycznego, którego już tu masz, na przykład Claude Code lub Codex, w folderze {folder}, poza jakimkolwiek sandboxem.",
+                "runsAsYou": "Działa jako Ty, z uprawnieniami Twojego konta na tym komputerze.",
+                "reach": "Może czytać, zmieniać i usuwać wszystko, co może Twoje konto: inne projekty, klucze SSH, dane przeglądarki.",
+                "noUndo": "Nie ma migawki ani cofania. To, co zmieni, pozostaje zmienione.",
+                "asks": "Pyta, zanim coś zrobi, z wyjątkiem tego, na co już pozwalają własne ustawienia agenta na tym komputerze.",
+                "sandbox": "Praca bez nadzoru lub ryzykowna powinna odbywać się w sandboxie, gdzie agent jest odizolowany, a jego praca jest sprawdzana, zanim trafi do Twoich plików.",
+                "turnOn": "Włącz agentów na tym komputerze",
+                "unavailable": "Agentów można włączyć tylko w aplikacji desktopowej Intentic."
+            },
+            "choice": {
+                "here": "Na tym komputerze (bez sandboxa)",
+                "sandbox": "W sandboxie",
+                "aboutFile": "W sprawie {path}: "
+            }
+        }
     },
     "gettingStarted": {
         "eyebrow": "Pierwsze kroki · krok {n} z {total}",

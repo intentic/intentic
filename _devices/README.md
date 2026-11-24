@@ -7,6 +7,7 @@ flowchart LR
     subgraph device["User's device"]
         launch["win-launcher<br/>starts it at logon"] --> machine["machine<br/>intentic-machine"]
         machine --> libs["browser<br/>desktop-automation<br/>local-agent"]
+        files["local-files<br/>intentic-files, the desktop app's"] --> host["host-agents<br/>the reader's own harness"]
         machine -->|"local pipe<br/>relays, reads nothing"| keyring["keyring<br/>intentic-keyring"]
         machine -->|"starts while people may reach it<br/>config file, status lines"| remoted["remoted<br/>intentic-remoted"]
         acp["acp-bridge<br/>in Zed · JetBrains"] --> libs
@@ -32,5 +33,6 @@ flowchart LR
 | [browser](browser) | Drives a separate Chromium profile over CDP for the machine. |
 | [desktop-automation](desktop-automation) | Screen capture, pointer, keyboard and windows on Windows and Linux. |
 | [local-agent](local-agent) | State directory, login autostart and pidfiles for on-device CLIs. |
+| [host-agents](host-agents) | Coding agents run on this computer itself, outside every sandbox, behind the editor's chat. |
 | [local-files](local-files) | `intentic-files`: serves the folders the desktop app opens to the editor's file views. |
 | [win-launcher](win-launcher) | Starts an agent on Windows without a console window. |

@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32 } from "node:zlib";
 import type { LocalOffice } from "@intentic/ext-onlyoffice/local-office";
+import type { HostAgents } from "@intentic/host-agents";
 import { unstubbed } from "@intentic/testing";
 import { DerivedTexts } from "./derived.js";
 import type { Grants } from "./grants.js";
@@ -30,6 +31,8 @@ export interface LocalServerOverrides {
     readonly ask?: AppAsk;
     // Where documents' text is kept; a suite that renders one names its own temp dir.
     readonly derived?: DerivedTexts;
+    // The agents of this computer, for a suite about which windows are served them.
+    readonly agents?: HostAgents;
 }
 
 export const localServer = (grants: Grants, overrides: LocalServerOverrides = {}): LocalFilesServer =>
@@ -42,6 +45,7 @@ export const localServer = (grants: Grants, overrides: LocalServerOverrides = {}
             startedAt: 0,
             ask: overrides.ask ?? NO_APP,
             derived: overrides.derived ?? new DerivedTexts({ dir: join(tmpdir(), `local-files-derived-unused`), log: () => undefined }),
+            agents: overrides.agents,
         },
         origins: new Set([APP]),
         log: () => undefined,

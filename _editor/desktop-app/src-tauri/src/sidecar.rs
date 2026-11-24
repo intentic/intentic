@@ -63,6 +63,10 @@ enum Event {
         state: String,
         error: Option<String>,
     },
+    /// How many agents' turns run on this computer now (host_agents.rs): they end with this process.
+    Agents {
+        running: usize,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -196,7 +200,12 @@ fn spawn(app: &AppHandle, port: Option<u16>) -> Result<(Child, ChildStdin, Child
         .arg("--search-tools")
         .arg(&search_tools)
         .arg("--port")
-        .arg(port.unwrap_or(0).to_string())
+        .arg(port.unwrap_or(0).to_string());
+    // The reader's yes to agents on this computer, said at the start so a file server started again mid-run keeps it.
+    if crate::host_agents::accepted(app) {
+        command.arg("--agents-accepted");
+    }
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
@@ -389,6 +398,7 @@ fn read_events(app: &AppHandle, stdout: ChildStdout, generation: u64) {
                 }
             }
             Ok(Event::Ask { id, verb, path }) => answer(app, id, verb, path),
+            Ok(Event::Agents { running }) => crate::host_agents::note_running(running),
             Ok(Event::Office { state, error }) => match error {
                 Some(error) => eprintln!("intentic-files: the office editor is {state}: {error}"),
                 None => eprintln!("intentic-files: the office editor is {state}"),
@@ -401,6 +411,8 @@ fn read_events(app: &AppHandle, stdout: ChildStdout, generation: u64) {
     }
     // A start still waiting on this process hears that it is gone, rather than waiting out READY_WAIT.
     drop(sidecar.take_ready(generation));
+    // Every turn it ran ended with it.
+    crate::host_agents::note_stopped();
     let gone = {
         let mut running = sidecar.running.lock().unwrap();
         if running
@@ -432,10 +444,28 @@ fn read_events(app: &AppHandle, stdout: ChildStdout, generation: u64) {
 /// `running` first, so its reader's exit is not the current process's and starts nothing.
 pub fn shutdown(app: &AppHandle) {
     let running = app.state::<Sidecar>().running.lock().unwrap().take();
-    if let Some(mut running) = running {
-        let _ = running.child.kill();
+    let Some(running) = running else {
+        return;
+    };
+    let Running {
+        mut child, stdin, ..
+    } = running;
+    // Agents were at work on this computer: the file server is let go of rather than killed, for a moment. Its stdin
+    // closing is how it hears the app is gone, and the first thing it does then is write down what each running turn
+    // had drawn, so the conversation opens again on what the reader saw (host-agents `interruptAll`). Killed at once,
+    // as it always was, when no turn runs: nothing of a folder's files is kept in it.
+    if crate::host_agents::running() > 0 {
+        drop(stdin);
+        let deadline = std::time::Instant::now() + LAST_WORDS;
+        while std::time::Instant::now() < deadline && matches!(child.try_wait(), Ok(None)) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
+    let _ = child.kill();
 }
+
+/// How long a file server with turns running is given to write them down before it is killed with the app.
+const LAST_WORDS: Duration = Duration::from_millis(800);
 
 /* WHAT THE SIDECAR ASKS OF THE APP. */
 
@@ -615,6 +645,10 @@ mod tests {
                 state: "failed".into(),
                 error: Some("offline".into())
             }
+        );
+        assert_eq!(
+            serde_json::from_str::<Event>(r#"{"event":"agents","running":2}"#).unwrap(),
+            Event::Agents { running: 2 }
         );
     }
 

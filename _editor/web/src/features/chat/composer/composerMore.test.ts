@@ -177,3 +177,12 @@ it(`reads placement as locked once the first message fixed it`, () => {
     expect(fixed?.description).not.toBe(open?.description);
     expect(fixed?.description.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
 });
+
+// A chat with an agent on this computer has no sandbox to place it in, start it from, land its work or give it a role:
+// how much it does before asking is the one thing left to shape, in the menu at its default and on the row once changed.
+it(`offers a chat on this computer its mode and nothing else`, () => {
+    const here = chat({ computer: true, mode: `default`, startingMode: `default`, placed: true, role: `ada`, voiceAgent: true, landOwn: true });
+    expect(keys(here)).toEqual([`mode`]);
+    expect(ridesRow(here)).toEqual({ mode: false, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false });
+    expect(ridesRow(chat({ computer: true, mode: `plan`, startingMode: `default` })).mode).toBe(true);
+});

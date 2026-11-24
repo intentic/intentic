@@ -39,6 +39,9 @@ export const ControlMessageSchema = z.discriminatedUnion(`op`, [
     z.object({ op: z.literal(`answer`), id: z.string().min(1).max(128), ok: z.boolean(), error: z.string().max(2000).optional() }),
     // Fetch the office editor now, with no document open, so the first one opens without the wait.
     z.object({ op: z.literal(`prefetch-office`) }),
+    // Whether the reader has turned agents on for this computer (the app keeps their answer): until it says yes, no
+    // turn starts here and nothing is fetched or signed in (@intentic/host-agents).
+    z.object({ op: z.literal(`agents`), accepted: z.boolean() }),
 ]);
 export type ControlMessage = z.infer<typeof ControlMessageSchema>;
 export type AnswerMessage = Extract<ControlMessage, { readonly op: `answer` }>;
@@ -49,13 +52,15 @@ export type AskVerb = `trash`;
 
 // What this process tells the app. `granted` carries what the app shows (the folder served, the name) and `refused` why
 // a path could not be served. `ask` wants an `answer` line back with its id. `office` says where the editor's download
-// ended, after a `prefetch-office`.
+// ended, after a `prefetch-office`. `agents` says how many turns run on this computer now, each time that changes: what
+// the app asks about before it quits, since they end with this process.
 export type ControlEvent =
     | { readonly event: `ready`; readonly port: number; readonly version: string }
     | { readonly event: `granted`; readonly token: string; readonly root: string; readonly name: string; readonly file?: string | undefined }
     | { readonly event: `refused`; readonly token: string; readonly error: string }
     | { readonly event: `revoked`; readonly token: string }
     | { readonly event: `ask`; readonly id: string; readonly verb: AskVerb; readonly path: string }
+    | { readonly event: `agents`; readonly running: number }
     | { readonly event: `office`; readonly state: `ready` }
     | { readonly event: `office`; readonly state: `failed`; readonly error: string };
 

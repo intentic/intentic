@@ -5,6 +5,7 @@ import { ContextMenu, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject, ref } from "vue";
+import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 import { type CardAnswer, SKIP_CALL } from "../../../../models/conversations/session/cardReplies";
 import ChatCommandBlock from "../../../../components/ChatCommandBlock.vue";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
@@ -99,10 +100,12 @@ const allow = (decision: Allowing = `once`): Promise<void> => {
 // this card's own gate can remember (a rule, a tool, a secret, installs), then everything in this conversation. A card
 // that always asks (a hard rule, a restart other conversations feel, an owner-only change) offers no "everything",
 // since no standing yes would answer it. Each row answers at once: picking a scope is the decision, not a setting.
+// Nor does an agent on this computer itself (local/agents/): a yes to everything there is the run-without-asking
+// posture nothing contains, and there is no Allowed list to take it back from.
 const menu = ref<{ show: (event: Event) => void }>();
 const wider = computed<MenuItem[]>(() => [
     ...(card.value.alwaysLabel === undefined ? [] : [{ label: card.value.alwaysLabel, icon: `lock`, command: () => void allow(`always`) }]),
-    ...(card.value.alwaysAsks === true
+    ...(card.value.alwaysAsks === true || computerAgents.value
         ? []
         : [
               {

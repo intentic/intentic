@@ -2,7 +2,7 @@
 import { Button, type CommandOs, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { desktopFixLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
+import { desktopAgentHereLink, desktopFixLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useServingSlug } from "../../../models/sandbox/environment/servingSlug";
 import { phoneBrowser } from "../../../client/endpoint/endpoint";
@@ -49,6 +49,14 @@ const where = computed(() =>
                 <template #icon><Icon name="wrench" /></template>
             </Button>
             <span class="text-xs text-subtle">{{ t(`sandbox.diagnosis.fixInAppNote`) }}</span>
+        </div>
+        <!-- The other way on from a sandbox that cannot be reached: an agent on this computer itself, which the app opens a
+             chat with (the app's `intentic://agent-here`). Nothing is sent for the reader. -->
+        <div v-if="desktop && slug" class="flex flex-wrap items-center gap-2">
+            <Button tier="boring" size="small" :label="t(`sandbox.diagnosis.askHere`)" @click="openDesktopLink(desktopAgentHereLink(slug))">
+                <template #icon><Icon name="robot" /></template>
+            </Button>
+            <span class="text-xs text-subtle">{{ t(`sandbox.diagnosis.askHereNote`) }}</span>
         </div>
         <component :is="remote ? `details` : `div`" class="min-w-0">
             <summary v-if="remote" class="cursor-pointer text-xs text-link">{{ t(`sandbox.diagnosis.showCommand`) }}</summary>

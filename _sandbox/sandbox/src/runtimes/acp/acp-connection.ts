@@ -3,8 +3,8 @@ import { withTimeout } from "@intentic/base/async";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
-import type { SessionModels } from "./acp-model.js";
-import type { SessionModes } from "./acp-modes.js";
+import type { SessionModels } from "@intentic/acp-events/model";
+import type { SessionModes } from "@intentic/acp-events/modes";
 import { routeSessions, type SessionRouting, type TurnHooks } from "./acp-routing.js";
 import { type AcpTerminals, createAcpTerminals } from "./acp-terminal.js";
 import { type AcpLaunch, spawnAcpProcess } from "./acp-spawn.js";
@@ -26,12 +26,12 @@ export interface AcpConnection {
     readonly stderrTail: () => string;
     // Session ids this process has served; one absent here needs session/load to resume.
     readonly sessions: Set<string>;
-    // Each session's model option as the agent last stated it (acp-model.ts): set from what session/new, session/load
+    // Each session's model option as the agent last stated it (acp-events model.ts): set from what session/new, session/load
     // and session/set_config_option answer, and kept current by config_option_update. Absent: the agent offers none.
     readonly models: Map<string, SessionModels>;
     // Each session's reasoning-depth option (`thought_level`), kept the same way. Absent: the agent offers none.
     readonly thoughts: Map<string, SessionModels>;
-    // Each session's modes (acp-modes.ts), from session/new and session/load, kept current by current_mode_update.
+    // Each session's modes (acp-events modes.ts), from session/new and session/load, kept current by current_mode_update.
     readonly modes: Map<string, SessionModes>;
     // Routes one session's updates/permissions to a turn and returns the unbind; marks the connection busy.
     readonly bindTurn: (sessionId: string, hooks: TurnHooks) => () => void;

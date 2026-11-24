@@ -153,13 +153,20 @@ describe(`in a desktop window on a folder`, () => {
         delete window.__INTENTIC_LOCAL__;
     });
 
-    it(`writes the two pages it has at its own addresses, and any other where the shell has it`, () => {
-        const inTheShell = here(page.agents());
+    it(`writes the pages it has at its own addresses, and any other where the shell has it`, () => {
+        const inTheShell = here(page.sandboxSettings(`agent`));
         wearFace({ daemonUrl: `http://127.0.0.1:47201`, token: `t`.repeat(64), id: `f1`, name: `shop`, path: `/home/ada/shop` });
 
         expect(here(page.account(`keybindings`, { hash: `chords` }))).toBe(localPath(`account`, { tab: `keybindings` }, { hash: `chords` }));
         expect(here(page.workspace(`src/main.ts`))).toBe(localPath(`files`, { path: `src/main.ts` }));
-        expect(here(page.agents())).toBe(inTheShell);
+        expect(here(page.sandboxSettings(`agent`))).toBe(inTheShell);
+    });
+
+    // The window's own Agents page stands for the board, the chat and any one agent's screen: a folder on this computer
+    // has one list of conversations and one chat, and a link to an agent made anywhere in the chat lands there.
+    it(`writes every page of the agents at its own Agents page`, () => {
+        wearFace({ daemonUrl: `http://127.0.0.1:47201`, token: `t`.repeat(64), id: `f1`, name: `shop`, path: `/home/ada/shop` });
+        expect([here(page.agents()), here(page.chat()), here(page.agent(`brave-otter`))]).toEqual([localPath(`agents`), localPath(`agents`), localPath(`agents`)]);
     });
 });
 

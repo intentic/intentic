@@ -6,6 +6,7 @@ import { useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
 import { attachmentPreview } from "../../drafts/attachmentPreviews";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { pickUpWhen, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
 import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
@@ -17,6 +18,8 @@ import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 const t = useT();
 const { waiting, queuePaused, streaming, awaitingDecision, pickUp, unqueue, resumeQueue } = usePaneView();
+const takesBack = computed(() => supportsRoute(`agent.queueRemove`));
+const letsGo = computed(() => supportsRoute(`agent.queueResume`));
 
 // The sandbox's own words stranded behind a spent allowance go with the held turn when it reopens (wakesHeldUntil), and
 // not before: the agent is free, yet nothing can take them, so "as soon as the agent is free" and a Send now (which the
@@ -105,7 +108,10 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
                         <p v-if="fromLine(message) !== undefined" class="text-2xs text-subtle">{{ fromLine(message) }}</p>
                     </div>
                 </div>
+                <!-- Taking a message back, and letting the queue go now, are doors only a daemon's queue has: where the one
+                     answering keeps what waits and offers neither (a folder window's agents), the rows say what waits and no more. -->
                 <button
+                    v-if="takesBack"
                     type="button"
                     class="composer-ghost touch-target h-5 w-5 shrink-0"
                     v-tooltip.top="doorTip(message)"
@@ -120,7 +126,7 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
             <span class="min-w-0 flex-1">{{ hint }}</span>
             <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. Not words a
                  spent allowance holds: the press would let nothing go, and the strip's Continue is the way to try sooner. -->
-            <Button v-if="!streaming && heldUntil === undefined" size="small" thumb tier="quiet" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <Button v-if="!streaming && heldUntil === undefined && letsGo" size="small" thumb tier="quiet" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </p>
     </div>
 </template>

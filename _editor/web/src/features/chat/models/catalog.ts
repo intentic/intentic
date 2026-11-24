@@ -3,6 +3,7 @@ import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-
 import type { ModelBadge } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { modesFor } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { localFace } from "../../../app/environments/local";
 import { agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
 import type { ConversationStatus } from "../../../models/conversations/session/conversation";
 import { t } from "@intentic/ui/i18n";
@@ -17,14 +18,32 @@ export const badgeMeta = (): Record<ModelBadge, { label: string; icon: IconName 
     fast: { label: t(`chat.catalog.fast`), icon: `bolt` },
 });
 
-// How each mode reads in the selector; which modes a runtime may pick is `modesFor(capabilities)`, not here.
-const modeTable = (): Record<PermissionMode, { label: string; icon: IconName; description: string }> => ({
-    default: { label: t(`chat.catalog.manual`), icon: `question-circle`, description: t(`chat.catalog.askBeforeEachEdit`) },
-    plan: { label: t(`chat.catalog.plan`), icon: `list-check`, description: t(`chat.catalog.proposePlanWaitApproval`) },
-    bypassPermissions: { label: t(`chat.catalog.auto`), icon: `forward`, description: t(`chat.catalog.runEverythingWithoutAsking`) },
-});
+type ModeTable = Record<PermissionMode, { label: string; icon: IconName; description: string }>;
 
-export const modeMeta = (mode: PermissionMode): { label: string; icon: IconName; description: string } => modeTable()[mode];
+// How each mode reads in the selector; which modes a runtime may pick is `modesFor(capabilities)`, not here.
+const sandboxModes = () =>
+    ({
+        default: { label: t(`chat.catalog.manual`), icon: `question-circle`, description: t(`chat.catalog.askBeforeEachEdit`) },
+        plan: { label: t(`chat.catalog.plan`), icon: `list-check`, description: t(`chat.catalog.proposePlanWaitApproval`) },
+        bypassPermissions: { label: t(`chat.catalog.auto`), icon: `forward`, description: t(`chat.catalog.runEverythingWithoutAsking`) },
+    }) satisfies ModeTable;
+
+// The same three, as they read for an agent that runs on this computer itself (local/agents/, _devices/host-agents).
+// A sandbox's third mode runs everything without asking, because the container is what holds the agent; nothing holds
+// one here, so the furthest that mode goes is file edits without a card each, with a command still asked about, and it
+// is worded as that. The first is the default there and says what it does rather than "Manual".
+const computerModes = () =>
+    ({
+        default: { label: t(`chat.computer.mode.ask`), icon: `question-circle`, description: t(`chat.computer.mode.askNote`) },
+        plan: { label: t(`chat.catalog.plan`), icon: `list-check`, description: t(`chat.computer.mode.planNote`) },
+        bypassPermissions: { label: t(`chat.computer.mode.acceptEdits`), icon: `pencil`, description: t(`chat.computer.mode.acceptEditsNote`) },
+    }) satisfies ModeTable;
+
+/** How each mode reads, in a sandbox or (`computer`) for an agent on this computer itself. Pure but for the catalog. */
+export const modeTableFor = (computer: boolean): ModeTable => (computer ? computerModes() : sandboxModes());
+
+// A desktop window on a folder has no sandbox behind it: every chat it draws is with an agent on this computer.
+export const modeMeta = (mode: PermissionMode): { label: string; icon: IconName; description: string } => modeTableFor(localFace() !== undefined)[mode];
 
 // The modes this conversation's runtime can actually be put in, in the contract's order, dressed for the menu.
 export const modeOptions = (capabilities: AgentCapabilities): { value: PermissionMode; label: string; icon: IconName; description: string }[] =>

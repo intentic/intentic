@@ -7,6 +7,7 @@ import { accessKnown, firstReadyProvider, providerRunnable } from "../../provide
 import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../../providers/pickerRunSettings";
 import { defaultModelFor, newerVersionOf, perProvider, providerModels, providerModelsState } from "../../providers/providerCatalog";
 import { offeredHarness, offeredLoops } from "../../providers/offeredLoops";
+import { localFace } from "../../../app/environments/local";
 import { TURN_DEFAULT_KEYS } from "../../../app/turnDefaultKeys";
 
 // What a new conversation starts on: the composer's last deliberate pick (model, provider, effort), never a fallback or
@@ -157,7 +158,19 @@ export const rememberHarness = (provider: AgentProvider, harness: AgentHarness):
     turnDefaults.harnesses.value = { ...turnDefaults.harnesses.value, [provider]: harness };
 };
 
+// Whether a new conversation's turns run in a worktree of their own. In a sandbox, yes. In a desktop window on a folder
+// of this computer there is no such copy: an agent there works in the reader's own folder as it is (_devices/host-agents),
+// so nothing it starts is isolated, and nothing about landing ever applies to it.
+export const startsIsolated = (): boolean => localFace() === undefined;
+
 // An isolated conversation (its own throwaway worktree) runs unattended; a main-tree one proposes a plan first. Not
 // persisted with the turn prefs: this is a per-task posture the agent can escalate mid-turn, and remembering it would
-// leak one agent's escalation onto the next agent's start.
-export const startingMode = (isolated: boolean): PermissionMode => (isolated ? `bypassPermissions` : `plan`);
+// leak one agent's escalation onto the next agent's start. On this computer, outside every sandbox, a conversation
+// starts by asking before each action, whatever it would have started on in one: nothing there contains the agent, so
+// the unattended posture a container makes safe is never the default.
+export const startingMode = (isolated: boolean): PermissionMode => {
+    if (localFace() !== undefined) {
+        return `default`;
+    }
+    return isolated ? `bypassPermissions` : `plan`;
+};

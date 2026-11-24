@@ -24,9 +24,11 @@
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
+        "@intentic/constants": "workspace:*",
         "@intentic/contract-serve": "workspace:*",
         "@intentic/ext-onlyoffice": "workspace:*",
         "@intentic/fileq": "workspace:*",
+        "@intentic/host-agents": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "zod": "catalog:"

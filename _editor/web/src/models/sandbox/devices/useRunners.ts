@@ -2,6 +2,7 @@ import { type RunnerSummary, runnerSlug, runnerTitle } from "@intentic/sandbox-c
 import { computed } from "vue";
 import { RUNNERS } from "../../../lib/queryKeys";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { manageDeviceSandbox } from "./useDevices";
 
@@ -18,6 +19,8 @@ export function useRunners(poll = true) {
     const { query, error } = useSandboxQuery({
         queryKey: RUNNERS.of(),
         queryFn: () => sandboxRaw(`GET /system/runners`),
+        // A folder window's sidecar pairs no runners (the composer's placement reads this there too, local/agents/).
+        enabled: computed(() => supportsRoute(`GET /system/runners`)),
         refetchInterval: poll ? DRIFT_POLL_MS : false,
     });
     return {

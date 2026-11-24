@@ -335,6 +335,24 @@ flowchart LR
   forget <slug>`, or, from an agent older than that verb, `sync uninstall --sandbox <id>` with the platform id this app
   remembers for the slug. _(2026-10-05) A removal used to forget only the sandbox's display name, and the agent went on
   syncing its folder until a new sandbox was made for that same folder._
+- **Agents on this computer, with no sandbox** (2026-11-24, `src-tauri/src/host_agents.rs`,
+  [host-agents](../../_devices/host-agents)). A local window's Agents page is the editor's own chat on the reader's own
+  harness (Claude Code, Codex, Gemini CLI and the rest), working in the window's folder: on this computer's side, or
+  inside the WSL distro that holds the folder. The turns, the harnesses and their sign-ins are the file server's
+  ([local-files](../../_devices/local-files)); the app keeps three things. **The reader's yes:** an agent here runs as
+  the reader with nothing between it and their files, so no turn starts until they have read that once and turned
+  agents on for this computer (`host_agents_accept`, kept in `host-agents.json` in the app's config folder, told to the
+  file server at its start and on its control channel, and said to every local window on `desktop://host-agents`). A
+  page asks by command, which needs script, which the local windows' policy lets only the bundle run: a document drawn
+  in a window cannot turn agents on for itself. **How many turns run:** the file server says so each time it changes,
+  and they end with it, so a Quit asks first and says how many (`windows/quit.rs` `hold_quit_for_agents`); a file server with turns running is then given a moment to write down what each had drawn before it is killed with the app (`sidecar.rs` `shutdown`). **The way in
+  from a sandbox that cannot be reached:** `intentic://agent-here[?slug=…]`, heard from the app's own windows only (the
+  offline page, the workspace's recovery panel), opens a window on Intentic's own folder of this computer
+  (`~/.intentic`) with a first message written out for the reader to send or change (`recovery_brief`: which sandbox,
+  where `ic` and the logs are, to ask before changing anything). The window takes it with `host_agents_take_draft`,
+  which answers only the window on the folder it was written for, once. Nothing is sent for the reader, and none of
+  this reaches the platform, so it works when Intentic's own servers are what is down. Repair (below) stays for a
+  reader with no harness of their own: it asks the platform's model and only ever runs `ic`.
 - **Fixing a sandbox the workspace cannot reach.** The workspace's recovery panel sends `intentic://fix?slug=…`; the
   app brings Devices forward in the main window, and it runs `ic sandbox fix <slug> [--code <code>] --source app
   --json` with the installed `ic`, looked for where Devices' listing looks, with no console window, one run at a

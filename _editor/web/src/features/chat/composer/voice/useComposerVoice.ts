@@ -2,6 +2,7 @@ import type { NoticeTone, TooltipValue } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, type Ref, ref, watch } from "vue";
+import { localFace } from "../../../../app/environments/local";
 import { here, page } from "../../../../lib/routes/links";
 import { UPDATE_ACTION_ANCHOR } from "../../../../models/sandbox/updateAnchor";
 import {
@@ -134,6 +135,12 @@ const UNSUPPORTED_NOTE: Record<VoiceUnsupported, () => string> = {
     policy: () => t(`chat.composerVoice.unsupportedPolicy`),
     browser: () => t(`chat.composerVoice.unsupportedBrowser`),
 };
+
+/**
+ * Whether a composer draws the mic at all. Speech is transcribed by a sandbox's own engine (models/voice/speechLink.ts),
+ * and a desktop window on a folder has no sandbox behind it: there the mic would be a button that can never work.
+ */
+export const voiceOffered: boolean = localFace() === undefined;
 
 export const useComposerVoice = (composer: {
     /** The box the words land in; an utterance joins whatever is already there. */

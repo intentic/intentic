@@ -3,6 +3,7 @@ import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import { seedComposer } from "../drafts/composerBinding";
 import type { TurnBooking } from "../drafts/sendLater";
 import { drawsChat } from "../run/chatEcho";
+import { startsIsolated } from "../run/turnDefaults";
 import { Conversation } from "../session/conversation";
 import type { StoredTab } from "../tabs/tabSnapshot";
 import {
@@ -216,7 +217,7 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         conversationId: agent.id,
         standing: agent.standing,
         // A registered agent's isolation follows its branch; a draft keeps the fresh-conversation default of isolated.
-        isolated: registered ? agent.branch !== undefined : true,
+        isolated: registered ? agent.branch !== undefined : startsIsolated(),
         registered,
         // The tab's address; carried through the same fold everywhere, so a summoned remote tab reaches the same
         // daemon.

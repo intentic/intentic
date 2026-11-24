@@ -17,6 +17,10 @@ static RUNS_ANSWERED: AtomicBool = AtomicBool::new(false);
 /// The runs question's "Quit when it's done", while it is waited out.
 static QUIT_WAIT: LazyLock<Mutex<QuitWait>> = LazyLock::new(Mutex::default);
 
+/// Set by "Quit anyway" on the question about agents still working on this computer: the exit that follows ends them
+/// and is not asked about again.
+static AGENTS_ANSWERED: AtomicBool = AtomicBool::new(false);
+
 /// "Quit when it's done", as one wait at a time with a number of its own, so a Cancel can take it back. It used to be a
 /// flag the waiting thread never looked at again: a later Quit's "Cancel" left the app to quit anyway the moment the
 /// work ended, and a wait that ended in a Cancel at the unsaved-changes question left the flag set, so "Quit when it's
@@ -63,6 +67,7 @@ impl QuitWait {
 fn quit_cancelled() {
     QUITTING.store(false, Ordering::SeqCst);
     RUNS_ANSWERED.store(false, Ordering::SeqCst);
+    AGENTS_ANSWERED.store(false, Ordering::SeqCst);
     QUIT_WAIT.lock().unwrap().cancel();
 }
 
@@ -79,7 +84,7 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
     }
     let count = unsaved_windows();
     if count == 0 {
-        return hold_quit_for_runs(app, code);
+        return hold_quit_for_agents(app, code) || hold_quit_for_runs(app, code);
     }
     if ASKING_QUIT.swap(true, Ordering::SeqCst) {
         return true;
@@ -97,6 +102,38 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
             ASKING_QUIT.store(false, Ordering::SeqCst);
             if quit {
                 QUITTING.store(true, Ordering::SeqCst);
+                handle.exit(code);
+            } else {
+                quit_cancelled();
+            }
+        });
+    true
+}
+
+/// Agents working on this computer itself end with the app: their harnesses are the file server's children, and it
+/// ends with the app (host_agents.rs). A Quit while any turn runs asks first, and says how many. `true` means the exit
+/// was held for the answer. (2026-11-24)
+fn hold_quit_for_agents(app: &AppHandle, code: i32) -> bool {
+    let running = crate::host_agents::running();
+    if running == 0 || AGENTS_ANSWERED.load(Ordering::SeqCst) {
+        return false;
+    }
+    if ASKING_QUIT.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    let handle = app.clone();
+    app.dialog()
+        .message(crate::host_agents::quit_question(running))
+        .title("Quit Intentic?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit anyway".into(),
+            "Cancel".into(),
+        ))
+        .show(move |quit| {
+            ASKING_QUIT.store(false, Ordering::SeqCst);
+            if quit {
+                AGENTS_ANSWERED.store(true, Ordering::SeqCst);
                 handle.exit(code);
             } else {
                 quit_cancelled();

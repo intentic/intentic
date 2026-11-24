@@ -6,7 +6,7 @@ import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { opt } from "../../opt.js";
 import { cacheFile } from "../../store/open-document.js";
 import type { AcpConnection, AcpConnections } from "../acp/acp-connection.js";
-import { sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "../acp/acp-model.js";
+import { sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "@intentic/acp-events/model";
 import { type CliStore, liveCliAccounts } from "./vendor-cli-store.js";
 import { cliAgentId, cliBinary, type VendorCli } from "./vendor-cli.js";
 

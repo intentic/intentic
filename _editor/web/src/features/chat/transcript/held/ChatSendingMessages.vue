@@ -3,6 +3,7 @@ import { Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
+import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import type { SendingWords } from "../../../../models/conversations/session/sendingWords";
 
@@ -12,11 +13,18 @@ import type { SendingWords } from "../../../../models/conversations/session/send
 const SLOW_MS = 5_000;
 
 const t = useT();
-const { sending } = usePaneView();
+const { sending, streaming } = usePaneView();
 const now = useNow(() => sending.value.length > 0);
 
 const wordsOf = (entry: SendingWords): string => (entry.text.length > 0 ? entry.text : entry.attachments.map((path) => basename(path)).join(`, `));
-const lineOf = (entry: SendingWords): string => (now.value - entry.sentAt >= SLOW_MS ? t(`chat.chatSending.stillSending`) : t(`chat.chatSending.sending`));
+// For an agent on this computer itself, words sent while a turn runs are not on their way anywhere: they wait, and go out
+// as the next turn (local/agents/). Said as that from the first frame, never as a sandbox being slow to take them.
+const lineOf = (entry: SendingWords): string => {
+    if (computerAgents.value && streaming.value) {
+        return t(`chat.computer.waitsForTurn`);
+    }
+    return now.value - entry.sentAt >= SLOW_MS ? t(`chat.chatSending.stillSending`) : t(`chat.chatSending.sending`);
+};
 </script>
 
 <template>
@@ -26,7 +34,7 @@ const lineOf = (entry: SendingWords): string => (now.value - entry.sentAt >= SLO
                 <div class="chat-prompt-text px-4 py-2.5 text-xs leading-relaxed whitespace-pre-wrap text-muted">{{ wordsOf(entry) }}</div>
             </div>
             <span class="flex items-center gap-1.5 text-2xs text-subtle">
-                <Icon name="spinner" spin class="text-2xs" />
+                <Icon :name="computerAgents && streaming ? `clock` : `spinner`" :spin="!(computerAgents && streaming)" class="text-2xs" />
                 <span>{{ lineOf(entry) }}</span>
             </span>
         </div>

@@ -955,6 +955,46 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  _devices/host-agents:
+    dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 'catalog:'
+        version: 2.0.2(zod@4.6.7)
+      '@intentic/acp-events':
+        specifier: workspace:*
+        version: link:../../_sandbox/acp-events
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
+      '@intentic/contract-serve':
+        specifier: workspace:*
+        version: link:../../_shared/contract-serve
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   _devices/keyring:
     dependencies:
       '@intentic/base':
@@ -1022,6 +1062,9 @@ importers:
       '@intentic/base':
         specifier: workspace:*
         version: link:../../_tools/base
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
       '@intentic/contract-serve':
         specifier: workspace:*
         version: link:../../_shared/contract-serve
@@ -1031,6 +1074,9 @@ importers:
       '@intentic/fileq':
         specifier: workspace:*
         version: link:../../_agent-tools/fileq
+      '@intentic/host-agents':
+        specifier: workspace:*
+        version: link:../host-agents
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
@@ -2302,6 +2348,37 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  _sandbox/acp-events:
+    dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 'catalog:'
+        version: 2.0.2(zod@4.6.7)
+      '@intentic/agent-context':
+        specifier: workspace:*
+        version: link:../agent-context
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   _sandbox/agent-context:
     dependencies:
       '@intentic/base':
@@ -2538,6 +2615,9 @@ importers:
       '@huggingface/transformers':
         specifier: 'catalog:'
         version: 4.3.0(@types/node@24.19.2)
+      '@intentic/acp-events':
+        specifier: workspace:*
+        version: link:../acp-events
       '@intentic/agent-context':
         specifier: workspace:*
         version: link:../agent-context
@@ -5150,8 +5230,14 @@ packages:
       '@types/node':
         optional: true
 
+  '@intentic/acp-events@file:_sandbox/acp-events':
+    resolution: {directory: _sandbox/acp-events, type: directory}
+
   '@intentic/agent-cli@file:_agent-tools/agent-cli':
     resolution: {directory: _agent-tools/agent-cli, type: directory}
+
+  '@intentic/agent-context@file:_sandbox/agent-context':
+    resolution: {directory: _sandbox/agent-context, type: directory}
 
   '@intentic/base@file:_tools/base':
     resolution: {directory: _tools/base, type: directory}
@@ -5187,6 +5273,9 @@ packages:
   '@intentic/fileq@file:_agent-tools/fileq':
     resolution: {directory: _agent-tools/fileq, type: directory}
     hasBin: true
+
+  '@intentic/host-agents@file:_devices/host-agents':
+    resolution: {directory: _devices/host-agents, type: directory}
 
   '@intentic/local-files@file:_devices/local-files':
     resolution: {directory: _devices/local-files, type: directory}
@@ -13615,11 +13704,25 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.19.2
 
+  '@intentic/acp-events@file:_sandbox/acp-events(@opentelemetry/api@1.10.0)':
+    dependencies:
+      '@agentclientprotocol/sdk': 2.0.2(zod@4.6.7)
+      '@intentic/agent-context': file:_sandbox/agent-context
+      '@intentic/sandbox-contract': file:_shared/sandbox-contract(@opentelemetry/api@1.10.0)
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   '@intentic/agent-cli@file:_agent-tools/agent-cli':
     dependencies:
       '@intentic/base': file:_tools/base
       '@intentic/constants': file:_tools/constants
       '@stricli/core': 1.3.0
+
+  '@intentic/agent-context@file:_sandbox/agent-context':
+    dependencies:
+      '@intentic/base': file:_tools/base
+      '@intentic/workspace-ignore': file:_shared/workspace-ignore
 
   '@intentic/base@file:_tools/base': {}
 
@@ -13714,12 +13817,26 @@ snapshots:
       - '@napi-rs/canvas'
       - supports-color
 
+  '@intentic/host-agents@file:_devices/host-agents(@opentelemetry/api@1.10.0)':
+    dependencies:
+      '@agentclientprotocol/sdk': 2.0.2(zod@4.6.7)
+      '@intentic/acp-events': file:_sandbox/acp-events(@opentelemetry/api@1.10.0)
+      '@intentic/base': file:_tools/base
+      '@intentic/constants': file:_tools/constants
+      '@intentic/contract-serve': file:_shared/contract-serve(@opentelemetry/api@1.10.0)
+      '@intentic/sandbox-contract': file:_shared/sandbox-contract(@opentelemetry/api@1.10.0)
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   '@intentic/local-files@file:_devices/local-files(@opentelemetry/api@1.10.0)(supports-color@10.2.2)(vue@3.5.44(typescript@6.0.3))':
     dependencies:
       '@intentic/base': file:_tools/base
+      '@intentic/constants': file:_tools/constants
       '@intentic/contract-serve': file:_shared/contract-serve(@opentelemetry/api@1.10.0)
       '@intentic/ext-onlyoffice': file:_extensions/onlyoffice(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
       '@intentic/fileq': file:_agent-tools/fileq(supports-color@10.2.2)
+      '@intentic/host-agents': file:_devices/host-agents(@opentelemetry/api@1.10.0)
       '@intentic/sandbox-contract': file:_shared/sandbox-contract(@opentelemetry/api@1.10.0)
       '@intentic/workspace-ignore': file:_shared/workspace-ignore
       zod: 4.6.7

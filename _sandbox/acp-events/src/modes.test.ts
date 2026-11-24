@@ -1,4 +1,4 @@
-import { bypassModeOf, isBypassMode, modeFor, noteMode, planModeOf, recordModes, type SessionModes } from "./acp-modes.js";
+import { bypassModeOf, isBypassMode, modeFor, noteMode, planModeOf, recordModes, type SessionModes } from "./modes.js";
 
 // The modes three real agents advertise, as their session/new answers name them.
 const DEVIN = [

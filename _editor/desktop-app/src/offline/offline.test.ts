@@ -14,8 +14,9 @@ const compiled = new Script(script, { filename: `offline.html` });
 const RUNAWAY_MS = 10_000;
 
 // Run the shipped page's script, with reduced motion and no real timers or network, and record its navigations.
-// `press` is the button pressed once the page is up: Retry, or the offer of this computer's own sandboxes.
-const recovery = async (to: string, origin: string | null = `https://app.intentic.dev`, extra = ``, press: `retry` | `face` = `retry`) => {
+// `press` is the button pressed once the page is up: Retry, the offer of this computer's own sandboxes, or of an agent
+// on this computer. A link the page hands the app (`location.href = "intentic://…"`) is recorded as a navigation too.
+const recovery = async (to: string, origin: string | null = `https://app.intentic.dev`, extra = ``, press: `retry` | `face` | `agent` = `retry`) => {
     const makeElement = () => ({
         style: {},
         classList: { add: jest.fn(), remove: jest.fn() },
@@ -57,6 +58,12 @@ const recovery = async (to: string, origin: string | null = `https://app.intenti
                 host: `tauri.localhost`,
                 search: `?${new URLSearchParams({ to })}${extra}`,
                 replace: (url: string) => {
+                    navigations.push(url);
+                },
+                get href(): string {
+                    return navigations.at(-1) ?? ``;
+                },
+                set href(url: string) {
                     navigations.push(url);
                 },
             },
@@ -131,5 +138,11 @@ describe(`this computer's own sandboxes`, () => {
         for (const address of [`https://evil.example/`, `http://tauri.localhost.evil.example/`, `//tauri.localhost/`, `javascript:alert(1)`, `/sandbox.html`]) {
             expect((await face(address)).navigations).toEqual([]);
         }
+    });
+});
+
+describe(`an agent on this computer`, () => {
+    it(`is asked of the app, naming no sandbox`, async () => {
+        expect((await recovery(``, `https://app.intentic.dev`, ``, `agent`)).navigations).toEqual([`intentic://agent-here`]);
     });
 });

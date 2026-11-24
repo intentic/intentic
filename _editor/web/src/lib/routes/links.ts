@@ -119,15 +119,23 @@ export const routeSandbox = (route: Pick<RouteRead, `params`>): string | undefin
     return named === undefined ? undefined : sandboxOfAddress(named);
 };
 
-// A desktop window on a folder (router/localRoutes.ts) has two of the shell's pages under addresses of its own: the
-// folder's files and the account's settings. A link to either is written in the window's form there, so what the shell
-// and that window share (the shortcut sheet, a file reference, the account's menu) opens in whichever it is pressed in.
+// The pages of the shell that a folder window answers with its one Agents page: the board, the chat, and a conversation
+// opened from either (its review page is a sandbox's, of work kept apart from the folder, which this window has none of).
+const FOLDER_AGENTS_PAGES: ReadonlySet<PageName> = new Set([`agents`, `chat`, `agent`, `agentPage`]);
+
+// A desktop window on a folder (router/localRoutes.ts) has three of the shell's pages under addresses of its own: the
+// folder's files, the account's settings, and the agents that run on this computer in that folder. A link to any of them
+// is written in the window's form there, so what the shell and that window share (the shortcut sheet, a file reference,
+// the account's menu, a conversation's own link) opens in whichever it is pressed in.
 const inFolderWindow = (link: PageLink): string | undefined => {
     if (localFace() === undefined) {
         return undefined;
     }
     if (link.page === `account`) {
         return localPath(`account`, link.params, link);
+    }
+    if (FOLDER_AGENTS_PAGES.has(link.page)) {
+        return localPath(`agents`, {}, link);
     }
     return link.page === `workspace` ? localPath(`files`, link.params, link) : undefined;
 };

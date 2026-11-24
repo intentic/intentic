@@ -1,8 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract/events/requests";
-import { deviceSpelledName, displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { toolCard as sharedToolCard, type ToolCardCall } from "@intentic/acp-events/tool-cards";
 import { opt } from "../../opt.js";
-import { toolDescription, toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
+import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
 
 // What every vendor event mapper builds the same way: a phase's held-back capture, its summed usage, a tool call's opening.
@@ -72,76 +71,10 @@ export const usageTotals = (): UsageTotals => {
     };
 };
 
-// A tool call's opening frame: the shared taxonomy's category unless the vendor names one, and running unless it says.
-// `parentToolUseId` is the call that started the subagent making this one, which nests it under that call's card.
-export const toolCallOpened = (call: {
-    readonly id: string;
-    readonly name: string;
-    readonly category?: ToolKind;
-    readonly status?: ToolCallStatus;
-    readonly target?: string | undefined;
-    readonly locations?: ToolCallLocation[] | undefined;
-    readonly content?: ToolCallContent[] | undefined;
-    // The call's input as bounded JSON text, for a call with no target (sessions/vocabulary/tool-calls.ts `toolInput`).
-    readonly input?: string | undefined;
-    // The agent's own words for a call that has a target (sessions/vocabulary/tool-calls.ts `toolDescription`).
-    readonly description?: string | undefined;
-    // The MCP server the call went to, which the display name drops (agent-context mcpServerOf).
-    readonly server?: string | undefined;
-    readonly parentToolUseId?: string | undefined;
-}): Extract<AgentEvent, { kind: "tool_call" }> => ({
-    kind: "tool_call",
-    id: call.id,
-    name: call.name,
-    category: call.category ?? toolCategoryOf(call.name),
-    status: call.status ?? "in_progress",
-    ...opt("target", call.target),
-    ...opt("locations", call.locations),
-    ...opt("content", call.content),
-    ...opt("input", call.input),
-    ...opt("description", call.description),
-    ...opt("server", call.server),
-    ...opt("parentToolUseId", call.parentToolUseId),
-});
+// A tool call's opening frame and its card are built in @intentic/acp-events/tool-cards, where a computer's turns
+// build theirs too. `toolCallOpened` is handed on as it is; `toolCard` reads the files a call names the daemon's way
+// (`workspacePath`).
+export { toolCallOpened } from "@intentic/acp-events/tool-cards";
 
-/**
- * A tool call's card from what the loop said of it, built one way for every mapper: shown under the shared display name
- * and categorized by the canonical one (`mcp__browser__browser_navigate` is a fetch whatever a loop prints for it), its
- * target, the files it names, and, where no one-line target says what it does, its own arguments (a browser call's
- * `account` among them). `name` is the canonical name, or the loop's own where it has no other; a vendor's own words
- * for any part win.
- */
-export const toolCard = (call: {
-    readonly id: string;
-    readonly name: string;
-    // The call's arguments as the loop handed them, before any reading of them.
-    readonly input?: unknown;
-    // Where the loop ran, against which the files it names are made workspace paths; absent names none.
-    readonly cwd?: string | undefined;
-    readonly category?: ToolKind;
-    readonly status?: ToolCallStatus;
-    readonly target?: string | undefined;
-    readonly locations?: ToolCallLocation[] | undefined;
-    readonly content?: ToolCallContent[] | undefined;
-    readonly parentToolUseId?: string | undefined;
-}): Extract<AgentEvent, { kind: "tool_call" }> => {
-    const target = call.target ?? toolTarget(call.input);
-    // A devices call reads under the computer it went to (agent-context deviceSpelledName).
-    const spelled = deviceSpelledName(call.name, call.input);
-    const name = displayNameOf(spelled);
-    // A loop's own spelling the taxonomy does not know (OpenCode's `shell`) is read by the name it is shown under.
-    const category = toolCategoryOf(call.name);
-    return toolCallOpened({
-        id: call.id,
-        name,
-        category: call.category ?? (category === "other" ? toolCategoryOf(name) : category),
-        ...opt("status", call.status),
-        target,
-        locations: call.locations ?? (call.cwd === undefined ? undefined : toolLocations(call.input, call.cwd)),
-        content: call.content,
-        input: toolInput(call.input, target),
-        description: toolDescription(call, target),
-        server: mcpServerOf(spelled),
-        parentToolUseId: call.parentToolUseId,
-    });
-};
+/** A tool call's card from what the loop said of it (acp-events `toolCard`), its files read onto the workspace's route space. */
+export const toolCard = (call: Omit<ToolCardCall, "pathOf">): Extract<AgentEvent, { kind: "tool_call" }> => sharedToolCard({ pathOf: workspacePath, ...call });

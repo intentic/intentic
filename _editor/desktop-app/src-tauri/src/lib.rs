@@ -17,6 +17,7 @@ mod fix;
 mod folder_setup;
 mod found;
 mod frame;
+mod host_agents;
 mod keyring;
 mod launch;
 mod local;
@@ -274,6 +275,10 @@ pub fn run() {
             first_task::first_task_clear,
             first_task::first_task_pick_folder,
             first_task::first_task_take_draft,
+            // Agents on this computer itself (host_agents.rs): the reader's yes, and a first message waiting for a window.
+            host_agents::host_agents_state,
+            host_agents::host_agents_accept,
+            host_agents::host_agents_take_draft,
             // Repair, the agent that runs on this computer outside every sandbox (repair.rs).
             repair::repair_state,
             repair::repair_start,

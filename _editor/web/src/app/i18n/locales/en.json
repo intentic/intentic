@@ -5502,6 +5502,42 @@
             "resets": "Resets",
             "measured": "Read",
             "note": "Read from the vendor with this key, and read again as each turn ends."
+        },
+        "computer": {
+            "badge": "This computer · not sandboxed",
+            "mode": {
+                "ask": "Ask first",
+                "askNote": "The agent asks before it acts, except for what its own settings on this computer already allow.",
+                "planNote": "Reads and proposes a plan. Changes nothing until you approve.",
+                "acceptEdits": "Accept edits",
+                "acceptEditsNote": "File edits without asking; commands still ask, unless its own settings allow them."
+            },
+            "waitsForTurn": "Waits for this turn to end",
+            "harness": {
+                "setUp": "Set up {harness} on this computer",
+                "signIn": "Sign in to {harness}",
+                "notSetUp": "{harness} is not set up on this computer yet.",
+                "signedOut": "{harness} is not signed in on this computer.",
+                "expired": "{harness}'s sign-in on this computer no longer works. Sign in again to carry on.",
+                "refusedTurn": "{harness} refused this turn because it is not signed in on this computer.",
+                "settingUp": "Setting up {harness} on this computer. This can take a few minutes.",
+                "starting": "Starting the sign-in to {harness}…",
+                "inBrowser": "Finish signing in to {harness} in the browser on this computer. This carries on by itself once you have.",
+                "openPage": "Open the sign-in page",
+                "failed": "{harness} could not be signed in: {reason}",
+                "timedOut": "The sign-in was not finished in time. Start it again.",
+                "terminal": "Sign in to {harness} in a terminal on this computer, then send again."
+            },
+            "picker": {
+                "title": "Coding agents on this computer",
+                "none": "No coding agent was found on this computer. Install Claude Code or Codex, then open this again.",
+                "reading": "Reading its models…",
+                "afterTurn": "Another agent can be chosen once this turn ends.",
+                "notSetUp": "Not set up",
+                "signedOut": "Signed out",
+                "ownModel": "Its own model",
+                "signedIn": "Signed in: {account}"
+            }
         }
     },
     "common": {
@@ -6317,7 +6353,29 @@
             "allowanceUsed": "Repair's daily allowance is used up. It resets at {time}. Checks and fixes still work."
         },
         "setUpThisPc": "Set up this PC",
-        "firstTaskSendFailed": "The workspace could not send your first task."
+        "firstTaskSendFailed": "The workspace could not send your first task.",
+        "agents": {
+            "title": "Agents",
+            "conversations": "Conversations",
+            "newConversation": "New",
+            "noConversations": "No conversations in this folder yet.",
+            "consent": {
+                "title": "Run an agent on this computer?",
+                "lead": "This starts a coding agent you already have here, such as Claude Code or Codex, in the folder {folder}, outside every sandbox.",
+                "runsAsYou": "It runs as you, with your account's rights on this computer.",
+                "reach": "It can read, change or delete anything your account can: other projects, SSH keys, browser data.",
+                "noUndo": "There is no snapshot and no rollback. What it changes stays changed.",
+                "asks": "It asks before it acts, except for what the agent's own settings on this computer already allow.",
+                "sandbox": "Unattended or risky work belongs in a sandbox, where the agent is contained and its work is reviewed before it reaches your files.",
+                "turnOn": "Turn on agents for this computer",
+                "unavailable": "Agents can be turned on from the Intentic desktop app only."
+            },
+            "choice": {
+                "here": "On this computer (not sandboxed)",
+                "sandbox": "In a sandbox",
+                "aboutFile": "About {path}: "
+            }
+        }
     },
     "needs": {
         "plan": {
@@ -10428,7 +10486,9 @@
             "fixInApp": "Fix it on this computer",
             "fixInAppNote": "or run the command on another computer:",
             "showCommand": "Show the command for that computer",
-            "fixCommandLabel": "Find and fix what's wrong"
+            "fixCommandLabel": "Find and fix what's wrong",
+            "askHere": "Ask an agent on this computer",
+            "askHereNote": "Opens a chat with a coding agent that runs on this computer itself, outside the sandbox."
         },
         "recover": {
             "title": "Your sandboxes are still running",

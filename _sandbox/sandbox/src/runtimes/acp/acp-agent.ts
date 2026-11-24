@@ -37,23 +37,15 @@ import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { type AcpConnection, type AcpConnections, releasingSession } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";
 import { answerElicitation } from "./acp-elicitation.js";
-import { sessionMissing } from "./acp-session-missing.js";
+import { sessionMissing } from "@intentic/acp-events/session-missing";
 import { acpMcpProxyFile, stdioProxyServer } from "./acp-mcp-proxy.js";
 import { sessionUpdateEvent } from "./acp-events.js";
-import { offeredChoice, recordOptions, thoughtFor } from "./acp-model.js";
-import { isBypassMode, modeFor, noteMode, recordModes } from "./acp-modes.js";
-import {
-    allowedBy,
-    decidePermission,
-    type PermissionPhase,
-    permissionCommand,
-    permissionProgram,
-    type PersonAsk,
-    type PersonDecision,
-    refusePermission,
-} from "./acp-permissions.js";
+import { offeredChoice, recordOptions, thoughtFor } from "@intentic/acp-events/model";
+import { isBypassMode, modeFor, noteMode, recordModes } from "@intentic/acp-events/modes";
+import { allowedBy, type PersonDecision, refusePermission } from "@intentic/acp-events/answers";
+import { decidePermission, type PermissionPhase, permissionCommand, permissionProgram, type PersonAsk } from "./acp-permissions.js";
 import { acpTerminalShell, terminalProgram } from "./acp-terminal.js";
-import { promptUsage } from "./acp-usage.js";
+import { promptUsage } from "@intentic/acp-events/usage";
 import { type AcpTimeouts, cancelOnStop, phasePull, sealedWords } from "./acp-prompt.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 
@@ -61,13 +53,13 @@ import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 // over any agent speaking the Agent Client Protocol. One warm connection per agent, one session per conversation. A
 // documented floor, not the native ceiling: MCP tools pass through only when advertised, and a turn names a model through
 // AcpTurnOptions only where someone picked one (a native provider's catalog, a spawn naming one). What the agent advertises
-// per session is used where it is: its modes for the turn's posture (acp-modes.ts), its `thought_level` option for the
+// per session is used where it is: its modes for the turn's posture (acp-events modes.ts), its `thought_level` option for the
 // turn's effort, and form elicitation for questions (acp-elicitation.ts).
 
 // What a provider built on this runtime decides per turn beyond the request: Devin's and the vendor CLIs' arms from their
 // catalogs, an installed agent's from the model its turn names (acp-adapter.ts).
 export interface AcpTurnOptions {
-    // A value the session's model option offers (acp-model.ts): the session is switched to it before the prompt and the
+    // A value the session's model option offers (acp-events model.ts): the session is switched to it before the prompt and the
     // turn announces it. Absent, the agent keeps its own pick and nothing is announced.
     readonly model?: string | undefined;
 }
@@ -81,7 +73,7 @@ class ModeNotLeft extends Error {}
 
 // The plan card is the daemon's on every ACP agent, whatever modes it advertises: the protocol has no signal that a plan
 // is ready for a yes, so the emulation (plan-mode.ts) runs the two phases, with the agent's own plan mode under the first
-// where it has one (acp-modes.ts).
+// where it has one (acp-events modes.ts).
 const EMULATED_PLAN: Pick<AgentCapabilities, "permissions" | "editChecks"> = { permissions: "plan", editChecks: ACP.editChecks };
 
 // The agent's MCP servers: the turn's remote list (every mount at the daemon's MCP door: browsers, the mcp-kind cards and
@@ -218,7 +210,7 @@ const settleThought = async (connection: AcpConnection, sessionId: string, effor
     }
 };
 
-// Puts the session in the mode this phase's posture maps onto (acp-modes.ts `modeFor`); an agent advertising no modes
+// Puts the session in the mode this phase's posture maps onto (acp-events modes.ts `modeFor`); an agent advertising no modes
 // is left as it is. A refused switch is tolerated, except out of a bypass mode, which ModeNotLeft refuses the turn over.
 const settleMode = async (
     connection: AcpConnection,

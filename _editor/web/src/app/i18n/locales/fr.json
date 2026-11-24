@@ -5502,6 +5502,42 @@
             "resets": "Réinitialisation",
             "measured": "Lu",
             "note": "Lu auprès du fournisseur avec cette clé, et relu à la fin de chaque tour."
+        },
+        "computer": {
+            "badge": "Cet ordinateur · hors sandbox",
+            "mode": {
+                "ask": "Demander d'abord",
+                "askNote": "L'agent demande avant d'agir, sauf pour ce que ses propres réglages sur cet ordinateur autorisent déjà.",
+                "planNote": "Lit et propose un plan. Ne modifie rien avant votre accord.",
+                "acceptEdits": "Accepter les modifications",
+                "acceptEditsNote": "Modifie les fichiers sans demander ; les commandes demandent toujours, sauf si ses propres réglages les autorisent."
+            },
+            "waitsForTurn": "Attend la fin de ce tour",
+            "harness": {
+                "setUp": "Installer {harness} sur cet ordinateur",
+                "signIn": "Se connecter à {harness}",
+                "notSetUp": "{harness} n'est pas encore installé sur cet ordinateur.",
+                "signedOut": "{harness} n'est pas connecté sur cet ordinateur.",
+                "expired": "La connexion de {harness} sur cet ordinateur ne fonctionne plus. Reconnectez-vous pour continuer.",
+                "refusedTurn": "{harness} a refusé ce tour, car il n'est pas connecté sur cet ordinateur.",
+                "settingUp": "Installation de {harness} sur cet ordinateur. Cela peut prendre quelques minutes.",
+                "starting": "Démarrage de la connexion à {harness}…",
+                "inBrowser": "Terminez la connexion à {harness} dans le navigateur de cet ordinateur. Ensuite, cela continue tout seul.",
+                "openPage": "Ouvrir la page de connexion",
+                "failed": "Impossible de connecter {harness} : {reason}",
+                "timedOut": "La connexion n'a pas été terminée à temps. Relancez-la.",
+                "terminal": "Connectez-vous à {harness} dans un terminal sur cet ordinateur, puis renvoyez."
+            },
+            "picker": {
+                "title": "Agents de code sur cet ordinateur",
+                "none": "Aucun agent de code n'a été trouvé sur cet ordinateur. Installez Claude Code ou Codex, puis rouvrez ceci.",
+                "reading": "Lecture de ses modèles…",
+                "afterTurn": "Un autre agent pourra être choisi à la fin de ce tour.",
+                "notSetUp": "Non installé",
+                "signedOut": "Déconnecté",
+                "ownModel": "Son propre modèle",
+                "signedIn": "Connecté : {account}"
+            }
         }
     },
     "common": {
@@ -6317,7 +6353,29 @@
             "allowanceUsed": "Le quota quotidien du Dépannage est épuisé. Il se réinitialise à {time}. Les vérifications et correctifs fonctionnent toujours."
         },
         "setUpThisPc": "Configurer ce PC",
-        "firstTaskSendFailed": "L'espace de travail n'a pas pu envoyer votre première tâche."
+        "firstTaskSendFailed": "L'espace de travail n'a pas pu envoyer votre première tâche.",
+        "agents": {
+            "title": "Agents",
+            "conversations": "Conversations",
+            "newConversation": "Nouvelle",
+            "noConversations": "Aucune conversation dans ce dossier pour l'instant.",
+            "consent": {
+                "title": "Exécuter un agent sur cet ordinateur ?",
+                "lead": "Cela démarre un agent de code que vous avez déjà ici, comme Claude Code ou Codex, dans le dossier {folder}, hors de toute sandbox.",
+                "runsAsYou": "Il s'exécute sous votre compte, avec ses droits sur cet ordinateur.",
+                "reach": "Il peut lire, modifier ou supprimer tout ce que votre compte peut : d'autres projets, des clés SSH, les données du navigateur.",
+                "noUndo": "Il n'y a ni instantané ni retour en arrière. Ce qu'il modifie reste modifié.",
+                "asks": "Il demande avant d'agir, sauf pour ce que les propres réglages de l'agent sur cet ordinateur autorisent déjà.",
+                "sandbox": "Le travail sans surveillance ou risqué a sa place dans une sandbox, où l'agent est contenu et son travail relu avant d'atteindre vos fichiers.",
+                "turnOn": "Activer les agents sur cet ordinateur",
+                "unavailable": "Les agents ne s'activent que depuis l'application de bureau Intentic."
+            },
+            "choice": {
+                "here": "Sur cet ordinateur (hors sandbox)",
+                "sandbox": "Dans une sandbox",
+                "aboutFile": "À propos de {path} : "
+            }
+        }
     },
     "needs": {
         "plan": {
@@ -10428,7 +10486,9 @@
             "fixInApp": "Le réparer sur cet ordinateur",
             "fixInAppNote": "ou exécutez la commande sur un autre ordinateur :",
             "showCommand": "Afficher la commande pour cet ordinateur",
-            "fixCommandLabel": "Trouver et réparer ce qui ne va pas"
+            "fixCommandLabel": "Trouver et réparer ce qui ne va pas",
+            "askHere": "Demander à un agent sur cet ordinateur",
+            "askHereNote": "Ouvre une discussion avec un agent de code qui s'exécute sur cet ordinateur même, hors de la sandbox."
         },
         "recover": {
             "title": "Vos sandboxes tournent toujours",

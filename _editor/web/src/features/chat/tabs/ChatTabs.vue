@@ -22,6 +22,8 @@ import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "../panel/PastChatList.vue";
+import ChatComputerBadge from "../models/computer/ChatComputerBadge.vue";
+import { computerAgents, supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useT } from "@intentic/ui/i18n";
 
 // The chat panel's own bar: names the active conversation and drops the full list (ChatTabList) on click, a header over a
@@ -166,11 +168,20 @@ const clearQuery = (event: KeyboardEvent): void => {
         query.value = ``;
     }
 };
-watch(useSettled(query, SEARCH_SETTLE_MS, { trim: true }), (settled) => void loadSessions(settled || undefined));
+// Past chats are the daemon's session history; a surface that keeps none (a folder window's agents, whose every
+// conversation is on its page's own list) draws no such lane and asks for nothing.
+const keepsPast = computed(() => supportsRoute(`sessions.list`));
+watch(useSettled(query, SEARCH_SETTLE_MS, { trim: true }), (settled) => {
+    if (keepsPast.value) {
+        void loadSessions(settled || undefined);
+    }
+});
 watch(listOpen, (open) => {
     if (open) {
         query.value = ``;
-        void loadSessions();
+        if (keepsPast.value) {
+            void loadSessions();
+        }
     }
 });
 // Past is what the sheet doesn't already list above it: a session open in this window is its card there, not a second row.
@@ -197,14 +208,21 @@ const barVerbs = (): MenuItem[] => [
         command: () => reopenClosed(),
     },
     { separator: true },
-    // The two ways out of the way, in the header buttons' own order: fold it within this window, then leave it.
-    ...(floats.value ? [] : [{ label: t(`chat.words.tuckChatAway`), shortcut: commandShortcut(`chat.toggleTucked`), command: toggleChatTucked }]),
-    {
-        label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
-        shortcut: commandShortcut(`chat.toggleFloating`),
-        command: (): void => toggleChatFloating(),
-    },
+    ...waysOut(),
 ];
+// The two ways out of the way, in the header buttons' own order: fold it within this window, then leave it. Neither on
+// a folder window's Agents page, where the chat is the page: there is no edge to fold it into and no window to move it to.
+const waysOut = (): MenuItem[] =>
+    computerAgents.value
+        ? []
+        : [
+              ...(floats.value ? [] : [{ label: t(`chat.words.tuckChatAway`), shortcut: commandShortcut(`chat.toggleTucked`), command: toggleChatTucked }]),
+              {
+                  label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
+                  shortcut: commandShortcut(`chat.toggleFloating`),
+                  command: (): void => toggleChatFloating(),
+              },
+          ];
 
 // The next chat waiting on the reader after the focused one, open or not (needsYouQueue): opening one reads it, so it
 // drops out and the next press goes on from the head of what is left.
@@ -380,9 +398,11 @@ onBeforeUnmount(() => {
             >
                 <Icon name="plus" class="text-sm" />
             </button>
+            <!-- Said in the header for as long as the chat is with an agent on this computer itself (ChatComputerBadge). -->
+            <ChatComputerBadge />
             <!-- Not in a window of its own, which has no edge to fold into. -->
             <button
-                v-if="!floats"
+                v-if="!floats && !computerAgents"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatTucked()"
@@ -392,6 +412,7 @@ onBeforeUnmount(() => {
                 <Icon name="chevrons-right" class="text-sm" />
             </button>
             <button
+                v-if="!computerAgents"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatFloating()"
@@ -424,7 +445,7 @@ onBeforeUnmount(() => {
                 @vue:mounted="search?.focus()"
             />
             <ChatTabList class="min-h-0 flex-1 p-1.5" :needle="query.trim()" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
-                <template #after>
+                <template v-if="keepsPast" #after>
                     <RailLane :label="t(`chat.chatTabs.pastChats`)" data-fold-unit>
                         <div class="flex min-w-0 flex-col gap-0.5">
                             <PastChatList :sessions="pastSessions" :query="query" :failure="sessionsFailure" @open="pickNotOpen" />

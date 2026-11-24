@@ -8,6 +8,7 @@ import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch
 import { trackPerf } from "../../app/perf/perf";
 import { answerParseOptions } from "./daemon/answerParse";
 import { uuid } from "../../lib/uuid";
+import { folderRefusal } from "./daemon/folderRefusal";
 import { routeRefusalText, staleDaemonReason, supportsRouteAt } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
@@ -151,6 +152,13 @@ const onceLoaded = <T extends ClientContext>(build: (contract: ContractModule) =
     return {
         call: async (path, input, options) => {
             link ??= build(await loadContract());
+            // A folder window's sidecar serves the few routes its hello lists: any other is refused here, unsent
+            // (daemon/folderRefusal.ts). Only for the active one: a call aimed at another sandbox is that sandbox's to answer.
+            // SAFETY: every client built here carries a SandboxCallContext, as `gitView` below.
+            const lacking = elsewhere(options.context as SandboxCallContext) === undefined ? folderRefusal(path.join(`.`)) : undefined;
+            if (lacking !== undefined) {
+                throw lacking;
+            }
             if (path[0] !== `git`) { return link.call(path, input, options); }
             const scoped = GitViewQuerySchema.loose().parse(input ?? {});
             // SAFETY: every client built here carries a SandboxCallContext, whose gitView is a GitView or absent.

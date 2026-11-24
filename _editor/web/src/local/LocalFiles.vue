@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, type Tip, ui } from "@intentic/ui";
+import { Button, Icon, type Tip, ui, ContextMenu } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -35,6 +35,7 @@ import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { folderButtonOf } from "./setup/setupView";
 import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
+import { useAgentChoice } from "./agents/agentChoice";
 
 // A desktop window on a folder of the user's own disk: the workspace's own explorer and editor pane, reading through the
 // app's sidecar (app/environments/local.ts), and nothing that needs a sandbox. A document opened on its own shows alone
@@ -177,7 +178,9 @@ const switchAccount = async (): Promise<void> => {
     }
 };
 const router = useRouter();
-const toSandbox = (): void => {
+// Where this computer runs agents itself, the press that asks for one offers both places (agents/agentChoice.ts).
+const { menu: choiceMenu, items: choiceItems, offer: offerAgent } = useAgentChoice();
+const toSandbox = (event?: Event): void => {
     const press = sandboxButton.value.press;
     switch (press) {
         // The folder's sandbox, started first if it is stopped (the app's project.rs `open_existing`), the button saying
@@ -191,6 +194,8 @@ const toSandbox = (): void => {
             return;
         // Asked for, or on its way: the folder's page for it, which says how far it is and holds whatever there is to do.
         case `ask`:
+            offerAgent(event, { draft: ``, sandbox: () => askForSandbox((path) => void router.push(path)) });
+            return;
         case `view`:
             askForSandbox((path) => void router.push(path));
             return;
@@ -203,10 +208,16 @@ const toSandbox = (): void => {
 
 // The way from a file to an agent: a conversation about it, which the app starts (the tree's menu offers the same).
 const activePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
-const ask = (path: string): void => askLocalApp(`ask`, { path });
-const askActive = (): void => {
+// Asked from the tree's menu, the choice opens where that menu was: the menu's own press is gone by then.
+const menuPoint = ref<{ readonly x: number; readonly y: number }>();
+const ask = (path: string, event?: Event): void => {
+    const at = menuPoint.value;
+    const where = event ?? (at === undefined ? undefined : new MouseEvent(`click`, { clientX: at.x, clientY: at.y }));
+    offerAgent(where, { draft: t(`local.agents.choice.aboutFile`, { path }), sandbox: () => askLocalApp(`ask`, { path }) });
+};
+const askActive = (event: Event): void => {
     if (activePath.value !== undefined) {
-        ask(activePath.value);
+        ask(activePath.value, event);
     }
 };
 
@@ -305,6 +316,7 @@ onUnmounted(() => {
          whole page is the folder's drop target; a folder row or the home's tiles take their own drops first. -->
     <div
         class="flex h-full w-full overflow-hidden"
+        @contextmenu.capture="menuPoint = { x: $event.clientX, y: $event.clientY }"
         @dragenter="onRootDragEnter"
         @dragover="onRootDragOver"
         @dragleave="onRootDragLeave"
@@ -381,7 +393,7 @@ onUnmounted(() => {
                     @open-directory="openDirectory"
                     @pick="(entry) => (selected = entry.path)"
                     @clear="selected = undefined"
-                    @ask="ask"
+                    @ask="(path) => ask(path)"
                 />
             </div>
             <!-- What agents changed in the folder's own sandbox, brought back on request (bring-back/LocalBringBack.vue). -->
@@ -458,5 +470,7 @@ onUnmounted(() => {
         <!-- A close that would discard unsaved edits, the window's (held back by the app) or a tab's: it happens only on the reader's word. -->
         <CloseGuardDialog :open="asking" :question="question" @cancel="keepOpen" @confirm="closeAnyway" />
         <MoveConflictDialog />
+        <!-- Where the agent asked for runs: on this computer, or in a sandbox (agents/agentChoice.ts). -->
+        <ContextMenu ref="choiceMenu" :model="choiceItems" :min-width="14" />
     </div>
 </template>

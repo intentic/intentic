@@ -135,6 +135,9 @@ export type FloatingPanel = (typeof FLOATING_PANELS)[number];
  * own, none of them a sandbox's: the folder's files, this computer's page and vault, the folder's way to a sandbox.
  */
 export const LOCAL_PAGES = {
+    // The agents that run on this computer itself, in the window's folder (_devices/host-agents): its conversations and
+    // the chat, where the app's sidecar serves them.
+    agents: `agents`,
     files: `workspace/:path(.*)*`,
     device: `device`,
     passwords: `passwords`,

@@ -37,11 +37,11 @@ const selectOf = (options: readonly SessionConfigOption[] | null | undefined, ca
     return {
         configId: option.id,
         current: option.currentValue,
-        choices: choices.map((choice) => ({
-            value: choice.value,
-            name: choice.name,
-            ...(typeof choice.description === "string" && choice.description !== "" ? { description: choice.description } : {}),
-        })),
+        choices: choices.map((choice): ModelChoice => {
+            const stated = { value: choice.value, name: choice.name };
+            const description = choice.description ?? "";
+            return description === "" ? stated : { ...stated, description };
+        }),
     };
 };
 

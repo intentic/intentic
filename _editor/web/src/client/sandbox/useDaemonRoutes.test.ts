@@ -5,6 +5,7 @@ import {
     additiveRoutes,
     appBehind,
     comparedRouteCount,
+    computerAgents,
     daemonBehind,
     daemonDrifted,
     driftedRouteReason,
@@ -362,6 +363,17 @@ describe(`a folder on this computer`, () => {
         setDaemonRoutes(FOLDER, undefined, `folder`);
         expect([folderSurface.value, supportsRoute(`workspace.tree`), supportsRoute(`workspace.mkdir`)]).toEqual([true, true, false]);
         expect([missingRoutes.value, daemonBehind.value, unknownDaemonRoutes.value, appBehind.value]).toEqual([[], false, [], false]);
+    });
+
+    // Agents on this computer are the sidecar's to offer: a folder's window has them only once its hello names the
+    // route that starts a turn. A sandbox starts turns too, and is never this computer.
+    it(`runs agents here only for a folder whose sidecar says it starts turns`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        expect(computerAgents.value).toBe(false);
+        setDaemonRoutes([...FOLDER, `agent.run`], undefined, `folder`);
+        expect(computerAgents.value).toBe(true);
+        setDaemonRoutes(LEVEL);
+        expect(computerAgents.value).toBe(false);
     });
 
     // A sidecar ships in one build with this page and lists its raw routes among the rest, so they are read from the

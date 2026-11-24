@@ -11,6 +11,7 @@ import { traceFocus } from "../../../models/conversations/run/focusTrace";
 import { openRunSessions } from "../../../models/fleet/openRun";
 import { chatRailDrawn, chatWide } from "../../../models/conversations/panel/chatPanelLayout";
 import { shownSideTabs } from "../../../workbench/side/sideViews";
+import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
 import { useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
@@ -172,6 +173,8 @@ const showsRail = computed(
     () =>
         !bar &&
         !mobile.value &&
+        // An agent on this computer spends the reader's own harness's allowance, which no sandbox meters (local/agents/).
+        !computerAgents.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         (!floating.value || shownSideTabs.value.length === 0) &&
         capacityRail.value &&

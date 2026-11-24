@@ -119,6 +119,10 @@ const COMMANDS: &[&str] = &[
     "first_task_clear",
     "first_task_pick_folder",
     "first_task_take_draft",
+    // Agents on this computer itself (host_agents.rs).
+    "host_agents_state",
+    "host_agents_accept",
+    "host_agents_take_draft",
     // Repair (repair.rs).
     "repair_state",
     "repair_start",

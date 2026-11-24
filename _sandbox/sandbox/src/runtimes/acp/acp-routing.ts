@@ -10,8 +10,8 @@ import type {
 import { methods } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { decidePermission } from "./acp-permissions.js";
-import { recordOptions, type SessionOptions } from "./acp-model.js";
-import { noteMode, type SessionModes } from "./acp-modes.js";
+import { recordOptions, type SessionOptions } from "@intentic/acp-events/model";
+import { noteMode, type SessionModes } from "@intentic/acp-events/modes";
 import type { PreparedTerminal } from "./acp-terminal.js";
 
 // How a connection hands each session's traffic to the turn bound to it, kept apart from the process that carries it

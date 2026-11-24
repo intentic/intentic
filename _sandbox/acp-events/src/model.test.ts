@@ -1,4 +1,4 @@
-import { recordOptions, type SessionModels, sessionThoughtsOf, thoughtFor } from "./acp-model.js";
+import { recordOptions, type SessionModels, sessionThoughtsOf, thoughtFor } from "./model.js";
 
 const levels = (...values: string[]): SessionModels => ({ configId: "thought", current: values[0] ?? "", choices: values.map((value) => ({ value, name: value })) });
 

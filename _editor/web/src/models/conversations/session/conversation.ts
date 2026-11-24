@@ -10,6 +10,7 @@ import type { SendLater } from "../drafts/sendLater";
 import type { PickUp } from "../endings/pickUp";
 import { TurnFailures } from "../endings/turnFailures";
 import type { BranchLink, ForkLink, FreshLink, SessionRef } from "../run/turnRequest";
+import { startsIsolated } from "../run/turnDefaults";
 import { CardReplies } from "./cardReplies";
 import { ComposerSelection } from "./composerSelection";
 import { TranscriptView } from "./transcriptView";
@@ -34,8 +35,9 @@ export class Conversation {
     // Header title for this conversation; null shows "New chat". Derived from the first user message.
     readonly title = ref<string | null>(null);
 
-    // Whether this conversation's turns run in an isolated git worktree (default) or the shared /work tree.
-    readonly isolated = ref(true);
+    // Whether this conversation's turns run in an isolated git worktree (a sandbox's default) or the shared /work tree;
+    // never isolated in a desktop window on a folder, where there is no copy to isolate it in (startsIsolated).
+    readonly isolated = ref(startsIsolated());
 
     // Machine this conversation runs on: a paired runner's id, or undefined for this sandbox; latched early.
     readonly runner = ref<string | undefined>();

@@ -1,0 +1,49 @@
+{
+    "name": "@intentic/host-agents",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Coding agents run on the user's own computer, outside every sandbox: each harness driven over the Agent Client Protocol and served to the editor's chat as the sandbox contract's own turns",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_devices/host-agents"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsc --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@agentclientprotocol/sdk": "catalog:",
+        "@intentic/acp-events": "workspace:*",
+        "@intentic/base": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/contract-serve": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}

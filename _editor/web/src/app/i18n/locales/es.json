@@ -5502,6 +5502,42 @@
             "resets": "Se reinicia",
             "measured": "Leído",
             "note": "Leído del proveedor con esta clave, y de nuevo al terminar cada turno."
+        },
+        "computer": {
+            "badge": "Este equipo · sin sandbox",
+            "mode": {
+                "ask": "Preguntar primero",
+                "askNote": "El agente pregunta antes de actuar, salvo en lo que su propia configuración en este equipo ya permite.",
+                "planNote": "Lee y propone un plan. No cambia nada hasta que lo apruebas.",
+                "acceptEdits": "Aceptar ediciones",
+                "acceptEditsNote": "Edita archivos sin preguntar; los comandos siguen preguntando, salvo que su propia configuración los permita."
+            },
+            "waitsForTurn": "Espera a que termine este turno",
+            "harness": {
+                "setUp": "Configurar {harness} en este equipo",
+                "signIn": "Iniciar sesión en {harness}",
+                "notSetUp": "{harness} aún no está configurado en este equipo.",
+                "signedOut": "{harness} no ha iniciado sesión en este equipo.",
+                "expired": "El inicio de sesión de {harness} en este equipo ya no funciona. Vuelve a iniciar sesión para continuar.",
+                "refusedTurn": "{harness} rechazó este turno porque no ha iniciado sesión en este equipo.",
+                "settingUp": "Configurando {harness} en este equipo. Puede tardar unos minutos.",
+                "starting": "Iniciando sesión en {harness}…",
+                "inBrowser": "Termina de iniciar sesión en {harness} en el navegador de este equipo. Después, esto continúa solo.",
+                "openPage": "Abrir la página de inicio de sesión",
+                "failed": "No se pudo iniciar sesión en {harness}: {reason}",
+                "timedOut": "El inicio de sesión no se completó a tiempo. Inícialo de nuevo.",
+                "terminal": "Inicia sesión en {harness} desde un terminal en este equipo y vuelve a enviar."
+            },
+            "picker": {
+                "title": "Agentes de programación en este equipo",
+                "none": "No se encontró ningún agente de programación en este equipo. Instala Claude Code o Codex y vuelve a abrir esto.",
+                "reading": "Leyendo sus modelos…",
+                "afterTurn": "Podrás elegir otro agente cuando termine este turno.",
+                "notSetUp": "Sin configurar",
+                "signedOut": "Sin sesión",
+                "ownModel": "Su propio modelo",
+                "signedIn": "Sesión iniciada: {account}"
+            }
         }
     },
     "common": {
@@ -6317,7 +6353,29 @@
             "allowanceUsed": "El cupo diario de Reparación se ha agotado. Se renueva a las {time}. Las comprobaciones y los arreglos siguen funcionando."
         },
         "setUpThisPc": "Preparar este PC",
-        "firstTaskSendFailed": "El espacio de trabajo no pudo enviar tu primera tarea."
+        "firstTaskSendFailed": "El espacio de trabajo no pudo enviar tu primera tarea.",
+        "agents": {
+            "title": "Agentes",
+            "conversations": "Conversaciones",
+            "newConversation": "Nueva",
+            "noConversations": "Aún no hay conversaciones en esta carpeta.",
+            "consent": {
+                "title": "¿Ejecutar un agente en este equipo?",
+                "lead": "Esto inicia un agente de programación que ya tienes aquí, como Claude Code o Codex, en la carpeta {folder}, fuera de cualquier sandbox.",
+                "runsAsYou": "Se ejecuta como tú, con los permisos de tu cuenta en este equipo.",
+                "reach": "Puede leer, cambiar o borrar todo lo que tu cuenta puede: otros proyectos, claves SSH, datos del navegador.",
+                "noUndo": "No hay instantánea ni vuelta atrás. Lo que cambia, queda cambiado.",
+                "asks": "Pregunta antes de actuar, salvo en lo que la propia configuración del agente en este equipo ya permite.",
+                "sandbox": "El trabajo desatendido o arriesgado corresponde a un sandbox, donde el agente está contenido y su trabajo se revisa antes de llegar a tus archivos.",
+                "turnOn": "Activar los agentes en este equipo",
+                "unavailable": "Los agentes solo se pueden activar desde la aplicación de escritorio de Intentic."
+            },
+            "choice": {
+                "here": "En este equipo (sin sandbox)",
+                "sandbox": "En un sandbox",
+                "aboutFile": "Sobre {path}: "
+            }
+        }
     },
     "needs": {
         "plan": {
@@ -10428,7 +10486,9 @@
             "fixInApp": "Repararlo en este ordenador",
             "fixInAppNote": "o ejecuta el comando en otro ordenador:",
             "showCommand": "Mostrar el comando para ese ordenador",
-            "fixCommandLabel": "Detectar y reparar el problema"
+            "fixCommandLabel": "Detectar y reparar el problema",
+            "askHere": "Preguntar a un agente en este equipo",
+            "askHereNote": "Abre un chat con un agente de programación que se ejecuta en este mismo equipo, fuera del sandbox."
         },
         "recover": {
             "title": "Tus sandboxes siguen funcionando",

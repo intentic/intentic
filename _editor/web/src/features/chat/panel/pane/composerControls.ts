@@ -9,8 +9,8 @@ import { runnerNameOf, useRunners } from "../../../../models/sandbox/devices/use
 import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
 import { useComposerLanding } from "../../composer/composerLanding";
 import type { useStartFrom } from "../../composer/composerStartFrom";
-import { type ComposerControl, overflowRows, ridesRow } from "../../composer/composerMore";
-import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
+import { type ComposerControl, type ComposerControlSituation, overflowRows, ridesRow } from "../../composer/composerMore";
+import { computerAgents, supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { composerModelName, composerModelReading } from "../../composer/composerModelLabel";
 import { modeMeta } from "../../models/catalog";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
@@ -93,6 +93,41 @@ export interface ControlsHost {
     readonly startFrom: ReturnType<typeof useStartFrom>;
 }
 
+// What a pane's own refs say beside its host: where else it could run, whether the agent's voice is armed, whether it
+// lives in another sandbox, whether it has a transcript to write into, and its answer about landing.
+interface PaneFacts {
+    readonly placementShown: boolean;
+    readonly voiceAgent: boolean;
+    readonly remote: boolean;
+    readonly placeable: boolean;
+    readonly landing: ReturnType<typeof useComposerLanding>;
+}
+
+// What the row shows vs. what the overflow holds (composerMore.ts owns the rule; this is one pane's reading of it).
+const situationOf = (host: ControlsHost, facts: PaneFacts): ComposerControlSituation => {
+    const conversation = host.conversation();
+    return {
+        mode: host.mode.value,
+        startingMode: startingMode(conversation.isolated.value),
+        placementOffered: facts.placementShown,
+        placed: placedElsewhere(conversation),
+        placementFixed: conversation.registered.value,
+        ...host.startFrom.situation.value,
+        role: conversation.selection.actsAs.value,
+        runThrough: host.runThrough.state.value,
+        voiceAgent: facts.voiceAgent,
+        roleOffered: !facts.remote,
+        voiceOffered: facts.placeable,
+        landOffered: facts.landing.offered.value,
+        lands: facts.landing.lands.value,
+        landOwn: facts.landing.own.value,
+        plain: host.plain.value,
+        guest: host.guest.value,
+        // An agent on this computer itself, outside every sandbox: only its mode is shaped here (composerMore.ts).
+        computer: computerAgents.value,
+    };
+};
+
 export const useComposerControls = (host: ControlsHost) => {
     const { conversation, runThrough } = host;
     // One open flag per picker menu (desktop panel or mobile sheet), not one per surface: they drifted apart once.
@@ -135,25 +170,9 @@ export const useComposerControls = (host: ControlsHost) => {
         }),
     );
 
-    // What the row shows vs. what the overflow holds (composerMore.ts owns the rule; this is its reading).
-    const controlSituation = computed(() => ({
-        mode: host.mode.value,
-        startingMode: startingMode(conversation().isolated.value),
-        placementOffered: placementShown.value,
-        placed: placedElsewhere(conversation()),
-        placementFixed: conversation().registered.value,
-        ...host.startFrom.situation.value,
-        role: conversation().selection.actsAs.value,
-        runThrough: runThrough.state.value,
-        voiceAgent: voiceAgent.value,
-        roleOffered: !remote.value,
-        voiceOffered: placeable.value,
-        landOffered: landing.offered.value,
-        lands: landing.lands.value,
-        landOwn: landing.own.value,
-        plain: host.plain.value,
-        guest: host.guest.value,
-    }));
+    const controlSituation = computed(() =>
+        situationOf(host, { placementShown: placementShown.value, voiceAgent: voiceAgent.value, remote: remote.value, placeable: placeable.value, landing }),
+    );
     // Whether the send's caret may book this message for later: a booking is held by this sandbox's own daemon, for a
     // send nothing else claims (a workflow or a loop takes the message somewhere a booking cannot follow).
     const laterOffered = computed(() => supportsRoute(`agent.queueSchedule`) && !remote.value && runThrough.state.value === `idle`);

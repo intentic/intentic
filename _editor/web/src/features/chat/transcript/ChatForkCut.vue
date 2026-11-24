@@ -4,6 +4,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { invalidateWorkspace } from "../../../models/changes/useHistory";
+import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { openAgentConversation } from "../../../models/conversations/panel/useChat-reveal";
@@ -17,6 +18,9 @@ import { useAudience } from "../../../app/useAudience";
 const t = useT();
 // Forking a conversation at a message is a developer's branching move; a maker's transcript carries no such strip.
 const { maker } = useAudience();
+// A fork is a copy of the chat on a copy of its files, and going back restores a saved state of them: both are a
+// sandbox's to keep. An agent on this computer itself works in the reader's own folder, with neither (local/agents/).
+const forkable = computed(() => !computerAgents.value);
 
 // A mark in the column's right gutter, costing no transcript height, hanging off the answer above it rather than the
 // prompt below. That gutter is the reader's side, what they can DO; what the agent did stands on the spine down the
@@ -267,7 +271,7 @@ const open = (event: Event): void => {
 <template>
     <!-- Negative top margin cancels the flex gap so this zero-height strip doesn't change the transcript's height. -->
     <!-- Arming survives the pointer leaving this strip, since the menu opens beside it; only the timeout disarms it. -->
-    <div v-if="!maker" class="relative z-[6] -mt-1 h-0">
+    <div v-if="!maker && forkable" class="relative z-[6] -mt-1 h-0">
         <button
             type="button"
             class="touch-target absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition hover:bg-overlay hover:text-content"

@@ -19,6 +19,8 @@ import { shipsFrom } from "./landing/shipStrip";
 import { useAudience } from "../../../app/useAudience";
 import { useTier } from "../../../client/sandbox/useTier";
 import SealAsks from "./seal/SealAsks.vue";
+import ComputerHarnessStrip from "../models/computer/ComputerHarnessStrip.vue";
+import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
 import { modelsPath } from "../../../lib/routes/modelsPath";
@@ -94,49 +96,53 @@ const activeAccountReauth = computed(() => {
 </script>
 
 <template>
-    <!-- Who asked to read this private conversation, answered by its reader here (SealAsks). -->
-    <SealAsks />
-    <!-- This conversation's agent is off the board. -->
-    <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
-        <Icon name="box" class="shrink-0" />
-        <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
-        <Button
-            size="small"
-            thumb
-            tier="boring"
-            class="shrink-0"
-            :disabled="!reachable || busyIds.includes(activeArchived.id)"
-            @click="restore([activeArchived.id])"
+    <!-- A chat on this computer has none of a sandbox's standing to report, only whether its coding agent can run. -->
+    <ComputerHarnessStrip v-if="computerAgents" />
+    <template v-else>
+        <!-- Who asked to read this private conversation, answered by its reader here (SealAsks). -->
+        <SealAsks />
+        <!-- This conversation's agent is off the board. -->
+        <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
+            <Icon name="box" class="shrink-0" />
+            <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
+            <Button
+                size="small"
+                thumb
+                tier="boring"
+                class="shrink-0"
+                :disabled="!reachable || busyIds.includes(activeArchived.id)"
+                @click="restore([activeArchived.id])"
+            >
+                {{ t(`ui.action.restore`) }}
+            </Button>
+        </div>
+        <ChatLandStrip v-else-if="landStrip !== undefined" :agent="landStrip.agent" :strip="landStrip.strip" />
+        <ChatShipStrip v-else-if="shipAgent !== undefined" :agent="shipAgent" />
+        <ChatAccountPanel />
+        <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
+        <ChatPrivacyStrip />
+        <!-- The free plan's last hours: the meter's own line, amber, with the door to Billing. -->
+        <Notice v-if="standbyLine" tone="warning" size="sm">{{ standbyLine }}</Notice>
+        <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
+            {{ hoursNotice }}
+            <template v-if="planOffered" #actions>
+                <Button :as="RouterLink" :to="here(page.account(`billing`))" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
+            </template>
+        </Notice>
+        <!-- The trial's standing: what is left of the day's allowance, and the way off it. -->
+        <ChatTrialStrip />
+        <!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
+        <RouterLink
+            v-if="activeAccountReauth"
+            :to="modelsPath({ provider })"
+            class="flex items-start gap-2 rounded-xl border px-3 py-2 text-left text-2xs text-warning"
+            :class="toneTint(`warning`, `strong`)"
         >
-            {{ t(`ui.action.restore`) }}
-        </Button>
-    </div>
-    <ChatLandStrip v-else-if="landStrip !== undefined" :agent="landStrip.agent" :strip="landStrip.strip" />
-    <ChatShipStrip v-else-if="shipAgent !== undefined" :agent="shipAgent" />
-    <ChatAccountPanel />
-    <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
-    <ChatPrivacyStrip />
-    <!-- The free plan's last hours: the meter's own line, amber, with the door to Billing. -->
-    <Notice v-if="standbyLine" tone="warning" size="sm">{{ standbyLine }}</Notice>
-    <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
-        {{ hoursNotice }}
-        <template v-if="planOffered" #actions>
-            <Button :as="RouterLink" :to="here(page.account(`billing`))" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
-        </template>
-    </Notice>
-    <!-- The trial's standing: what is left of the day's allowance, and the way off it. -->
-    <ChatTrialStrip />
-    <!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
-    <RouterLink
-        v-if="activeAccountReauth"
-        :to="modelsPath({ provider })"
-        class="flex items-start gap-2 rounded-xl border px-3 py-2 text-left text-2xs text-warning"
-        :class="toneTint(`warning`, `strong`)"
-    >
-        <Icon name="exclamation-triangle" class="shrink-0" />
-        <span
-            >{{ activeAccountReauth.detail ?? t(`chat.chatPaneNotices.accountNeedsToReconnected`) }}
-            <span class="font-semibold underline">{{ t(`ui.action.reconnect`) }}</span></span
-        >
-    </RouterLink>
+            <Icon name="exclamation-triangle" class="shrink-0" />
+            <span
+                >{{ activeAccountReauth.detail ?? t(`chat.chatPaneNotices.accountNeedsToReconnected`) }}
+                <span class="font-semibold underline">{{ t(`ui.action.reconnect`) }}</span></span
+            >
+        </RouterLink>
+    </template>
 </template>

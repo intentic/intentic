@@ -564,6 +564,7 @@
             <div class="actions">
                 <button id="retry" class="accent" type="button"></button>
                 <button id="face" type="button" hidden></button>
+                <button id="agent" type="button"></button>
                 <button id="close" class="quiet" type="button"></button>
             </div>
             <div class="foot">
@@ -595,6 +596,7 @@
                         retry: "Try now",
                         close: "Close",
                         face: "Use this computer's sandboxes",
+                        agent: "Ask an agent on this computer",
                     },
                     pl: {
                         offline: ["Ten komputer jest offline", "Sprawdź Wi-Fi albo kabel sieciowy."],
@@ -608,6 +610,7 @@
                         retry: "Spróbuj teraz",
                         close: "Zamknij",
                         face: "Użyj sandboxów z tego komputera",
+                        agent: "Zapytaj agenta na tym komputerze",
                     },
                     de: {
                         offline: ["Dieser Computer ist offline", "Prüfe WLAN oder Netzwerkkabel."],
@@ -621,6 +624,7 @@
                         retry: "Jetzt versuchen",
                         close: "Schließen",
                         face: "Sandboxen dieses Computers verwenden",
+                        agent: "Einen Agenten auf diesem Computer fragen",
                     },
                     fr: {
                         offline: ["Cet ordinateur est hors ligne", "Vérifiez le Wi-Fi ou le câble réseau."],
@@ -634,6 +638,7 @@
                         retry: "Réessayer",
                         close: "Fermer",
                         face: "Utiliser les sandboxes de cet ordinateur",
+                        agent: "Demander à un agent sur cet ordinateur",
                     },
                     es: {
                         offline: ["Este equipo no tiene conexión", "Revisa el wifi o el cable de red."],
@@ -647,6 +652,7 @@
                         retry: "Intentar ahora",
                         close: "Cerrar",
                         face: "Usar los sandboxes de este equipo",
+                        agent: "Preguntar a un agente en este equipo",
                     },
                 };
                 // A setting is the signed-in account's, in its drawer (_editor/ui/src/lib/browserStorage.ts); one still kept for the
@@ -716,6 +722,15 @@
                         location.replace(bundle + face.slice(bundle.length));
                     });
                 }
+
+                // An agent on this computer itself, outside every sandbox: the app opens a chat with one, with nothing sent
+                // (its `intentic://agent-here`, taken from the app's own windows only). Offered whatever broke the line,
+                // since it needs neither Intentic nor a sandbox, only the coding agent the reader has installed.
+                var agent = document.getElementById("agent");
+                agent.textContent = t.agent;
+                agent.addEventListener("click", function () {
+                    location.href = "intentic://agent-here";
+                });
 
                 // WHERE THE BREAK IS. No network at all is the browser's to say; an HTTP answer means Intentic was
                 // reached; a network failure with a network up could be either side, and is drawn as a question.

@@ -7,7 +7,9 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import { LOCAL_NAVIGATE_EVENT, LOCAL_PROJECT_ASK_EVENT, localFace } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
+import { computerAgents } from "../client/sandbox/useDaemonRoutes";
 import { useSandbox } from "../client/sandbox/useSandbox";
+import { useAgents } from "../models/fleet/useAgents";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { localRailUnrolled } from "../models/home/masterRail";
 import OtherSandboxes from "../shell/rail/OtherSandboxes.vue";
@@ -23,6 +25,7 @@ import { type ProcessTile, processTilesOf } from "../models/processes/processTil
 import ProcessTiles from "../parts/processes/ProcessTiles.vue";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
+import { useHeldAgentDraft } from "./agents/appHeldDraft";
 import { navigatedPath } from "./appEvents";
 import { arrivingRail, withoutRail } from "./railArrival";
 import { takeFolderSwitches } from "./folderSwitch";
@@ -100,8 +103,24 @@ const repairTile = computed<Tile | undefined>(() => {
     const badge = repairBadgeOf(repair.session.value);
     return badge === undefined ? tile : { ...tile, badge };
 });
+// AGENTS, first on the rail as the sandbox shell ranks them: this folder's conversations with the agents that run on
+// this computer itself (local/agents/), drawn only where the window's sidecar runs any (computerAgents). It wears the
+// board's own count of what waits on the reader.
+const AGENTS_PATH = localPath(`agents`);
+// A first message the app holds for this folder is taken to that page as the window comes up (agents/appHeldDraft.ts).
+useHeldAgentDraft();
+const { attention } = useAgents();
+const agentsTile = computed<Tile | undefined>(() => {
+    if (!computerAgents.value && !isActive(AGENTS_PATH)) {
+        return undefined;
+    }
+    const tile: Tile = { section: `agents`, to: AGENTS_PATH, label: t(`local.agents.title`) };
+    const waiting = attention.value;
+    return waiting > 0 ? { ...tile, badge: { count: waiting, tooltip: t(`agents.agentsTile.needYou`, { count: waiting }, waiting) } } : tile;
+});
 // This computer's own page (the view the app marks `logo`, Devices) has no tile: the logo above is its door.
 const tiles = computed<readonly Tile[]>(() => [
+    ...(agentsTile.value === undefined ? [] : [agentsTile.value]),
     { section: `workspace`, to: localPath(`files`), label: t(`shared.files`) },
     ...(setupTile.value === undefined ? [] : [setupTile.value]),
     ...(repairTile.value === undefined ? [] : [repairTile.value]),

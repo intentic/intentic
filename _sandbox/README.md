@@ -19,6 +19,7 @@ The acp-bridge in the diagram runs on the user's device, so it lives in [_device
 
 | Package | Role |
 | --- | --- |
+| [acp-events](acp-events) | What an Agent Client Protocol agent says, read into the chat's frames once, for the daemon and for the desktop app's agents on a user's own computer |
 | [agent-context](agent-context) | What an agent is told as a session opens (the project map) and the readings that measure it |
 | [cli](cli) | `intentic`, baked into the image: the sandbox's canonical `docker run` and monorepo scaffolding |
 | [netd](netd) | Rust network daemon: owns every port and the tunnel, supervises the daemon |

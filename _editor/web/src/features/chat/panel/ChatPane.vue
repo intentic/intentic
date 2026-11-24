@@ -17,7 +17,7 @@ import AccessNote from "../../../components/access/AccessNote.vue";
 import { useAudience } from "../../../app/useAudience";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useQueuedAttachments } from "../drafts/pendingAttachments";
-import { useComposerVoice } from "../composer/voice/useComposerVoice";
+import { useComposerVoice, voiceOffered } from "../composer/voice/useComposerVoice";
 import { useVoiceTalk } from "../voice/useVoiceTalk";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useEditorContextChip } from "../composer/useEditorContextChip";
@@ -868,7 +868,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                              and Send one slot between them, the way a phone's messengers do: the mic while there is nothing to send,
                                              Send from the first keystroke, and the mic again for as long as it is listening. -->
                                         <button
-                                            v-if="!strip"
+                                            v-if="!strip && voiceOffered"
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                             :class="{ 'composer-active': voiceOn, 'composer-yields': staged && !voiceOn }"

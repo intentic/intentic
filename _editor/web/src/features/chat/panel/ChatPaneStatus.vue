@@ -19,6 +19,7 @@ import { readsAsContinuing } from "../../../models/conversations/run/turnRequest
 import { useTier } from "../../../client/sandbox/useTier";
 import { useAudience } from "../../../app/useAudience";
 import { here, page } from "../../../lib/routes/links";
+import ChatComputerBadge from "../models/computer/ChatComputerBadge.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import HomeDoor from "./pane/HomeDoor.vue";
 import HomeMemory from "./pane/HomeMemory.vue";
@@ -228,6 +229,8 @@ const balanceChip = computed(() => {
              warm in the session menu, the allowance in Sandbox ▸ Usage). A home's memory has none yet: it starts fresh by
              itself there, and the two presses that empty it by hand are the desktop's. -->
         <div v-if="!mobile" class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
+            <!-- By the composer, for as long as the chat is with an agent on this computer itself (ChatComputerBadge). -->
+            <ChatComputerBadge />
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
             <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->

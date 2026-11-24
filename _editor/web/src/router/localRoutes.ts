@@ -39,6 +39,16 @@ export const localRoutes = (): RouteRecordRaw[] => [
                 meta: { title: () => localFace()?.name ?? t(`shared.files`) },
                 component: asyncView(() => import(`../local/LocalFiles.vue`)),
             },
+            // The agents that run on this computer itself, in the window's folder (local/agents/LocalAgents.vue): this
+            // folder's conversations and the chat. Always routed, since the route table is built before the sidecar has
+            // said whether it runs any; the page goes back to the folder where it does not, and the rail's tile is drawn
+            // only where it does (LocalShell.vue).
+            {
+                path: LOCAL_PAGES.agents,
+                name: `local-agents`,
+                meta: { title: () => t(`local.agents.title`) },
+                component: asyncView(() => import(`../local/agents/LocalAgents.vue`)),
+            },
             // The folder's way to a sandbox of its own (local/setup/LocalSandboxSetup.vue): its tile is on the rail while the
             // folder is on its way (LocalShell.vue), and "Work on this with an agent" in Files opens it.
             ...(localHost().project === undefined

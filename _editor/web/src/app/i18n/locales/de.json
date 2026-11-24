@@ -5502,6 +5502,42 @@
             "resets": "Setzt zurück",
             "measured": "Gelesen",
             "note": "Mit diesem Schlüssel beim Anbieter gelesen, und nach jedem Zug erneut."
+        },
+        "computer": {
+            "badge": "Dieser Computer · nicht in einer Sandbox",
+            "mode": {
+                "ask": "Erst fragen",
+                "askNote": "Der Agent fragt, bevor er handelt, außer bei dem, was seine eigenen Einstellungen auf diesem Computer bereits erlauben.",
+                "planNote": "Liest und schlägt einen Plan vor. Ändert nichts, bis du zustimmst.",
+                "acceptEdits": "Änderungen annehmen",
+                "acceptEditsNote": "Dateiänderungen ohne Rückfrage; Befehle fragen weiterhin, sofern seine eigenen Einstellungen sie nicht erlauben."
+            },
+            "waitsForTurn": "Wartet, bis dieser Durchgang endet",
+            "harness": {
+                "setUp": "{harness} auf diesem Computer einrichten",
+                "signIn": "Bei {harness} anmelden",
+                "notSetUp": "{harness} ist auf diesem Computer noch nicht eingerichtet.",
+                "signedOut": "{harness} ist auf diesem Computer nicht angemeldet.",
+                "expired": "Die Anmeldung von {harness} auf diesem Computer funktioniert nicht mehr. Melde dich erneut an, um fortzufahren.",
+                "refusedTurn": "{harness} hat diesen Durchgang abgelehnt, weil es auf diesem Computer nicht angemeldet ist.",
+                "settingUp": "{harness} wird auf diesem Computer eingerichtet. Das kann einige Minuten dauern.",
+                "starting": "Anmeldung bei {harness} wird gestartet…",
+                "inBrowser": "Schließe die Anmeldung bei {harness} im Browser auf diesem Computer ab. Danach geht es hier von selbst weiter.",
+                "openPage": "Anmeldeseite öffnen",
+                "failed": "{harness} konnte nicht angemeldet werden: {reason}",
+                "timedOut": "Die Anmeldung wurde nicht rechtzeitig abgeschlossen. Starte sie erneut.",
+                "terminal": "Melde dich in einem Terminal auf diesem Computer bei {harness} an und sende dann erneut."
+            },
+            "picker": {
+                "title": "Coding-Agenten auf diesem Computer",
+                "none": "Auf diesem Computer wurde kein Coding-Agent gefunden. Installiere Claude Code oder Codex und öffne dies dann erneut.",
+                "reading": "Modelle werden gelesen…",
+                "afterTurn": "Ein anderer Agent kann gewählt werden, sobald dieser Durchgang endet.",
+                "notSetUp": "Nicht eingerichtet",
+                "signedOut": "Abgemeldet",
+                "ownModel": "Eigenes Modell",
+                "signedIn": "Angemeldet: {account}"
+            }
         }
     },
     "common": {
@@ -6317,7 +6353,29 @@
             "allowanceUsed": "Das tägliche Kontingent der Reparatur ist aufgebraucht. Es wird um {time} zurückgesetzt. Prüfungen und Reparaturen funktionieren weiterhin."
         },
         "setUpThisPc": "Diesen PC einrichten",
-        "firstTaskSendFailed": "Der Arbeitsbereich konnte Ihre erste Aufgabe nicht senden."
+        "firstTaskSendFailed": "Der Arbeitsbereich konnte Ihre erste Aufgabe nicht senden.",
+        "agents": {
+            "title": "Agenten",
+            "conversations": "Unterhaltungen",
+            "newConversation": "Neu",
+            "noConversations": "In diesem Ordner gibt es noch keine Unterhaltungen.",
+            "consent": {
+                "title": "Einen Agenten auf diesem Computer ausführen?",
+                "lead": "Das startet einen Coding-Agenten, den du hier bereits hast, etwa Claude Code oder Codex, im Ordner {folder}, außerhalb jeder Sandbox.",
+                "runsAsYou": "Er läuft unter deinem Konto, mit dessen Rechten auf diesem Computer.",
+                "reach": "Er kann alles lesen, ändern oder löschen, was dein Konto kann: andere Projekte, SSH-Schlüssel, Browserdaten.",
+                "noUndo": "Es gibt keinen Snapshot und kein Zurücksetzen. Was er ändert, bleibt geändert.",
+                "asks": "Er fragt, bevor er handelt, außer bei dem, was die eigenen Einstellungen des Agenten auf diesem Computer bereits erlauben.",
+                "sandbox": "Unbeaufsichtigte oder riskante Arbeit gehört in eine Sandbox, wo der Agent abgeschirmt ist und seine Arbeit geprüft wird, bevor sie deine Dateien erreicht.",
+                "turnOn": "Agenten für diesen Computer einschalten",
+                "unavailable": "Agenten lassen sich nur in der Intentic-Desktop-App einschalten."
+            },
+            "choice": {
+                "here": "Auf diesem Computer (ohne Sandbox)",
+                "sandbox": "In einer Sandbox",
+                "aboutFile": "Zu {path}: "
+            }
+        }
     },
     "needs": {
         "plan": {
@@ -10428,7 +10486,9 @@
             "fixInApp": "Auf diesem Computer beheben",
             "fixInAppNote": "oder den Befehl auf einem anderen Computer ausführen:",
             "showCommand": "Befehl für diesen Computer anzeigen",
-            "fixCommandLabel": "Fehler finden und beheben"
+            "fixCommandLabel": "Fehler finden und beheben",
+            "askHere": "Einen Agenten auf diesem Computer fragen",
+            "askHereNote": "Öffnet einen Chat mit einem Coding-Agenten, der auf diesem Computer selbst läuft, außerhalb der Sandbox."
         },
         "recover": {
             "title": "Ihre Sandboxes laufen noch",

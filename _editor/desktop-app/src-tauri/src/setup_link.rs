@@ -734,6 +734,12 @@ pub enum Link {
     },
     Recreate(RecreateArgs),
     Fix(FixArgs),
+    /// `intentic://agent-here[?slug=…]`: an agent on this computer itself, asked to help with a sandbox that cannot
+    /// be reached, or with Intentic here (host_agents.rs). `slug` is the sandbox the page was about, when it was about
+    /// one. From the app's own windows only: it opens a window on Intentic's own folder of this computer.
+    AgentHere {
+        slug: Option<String>,
+    },
     /// `intentic://device-pair?url=…&pair=…`: this computer connected to a sandbox as a device (device_pair.rs).
     DevicePair(crate::device_pair::DevicePairArgs),
     Sync(SyncArgs),
@@ -1071,6 +1077,12 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             }))
         }
         "fix" => None,
+        // App-window only: it opens a window on Intentic's own folder of this computer. The slug is words for the
+        // reader's first message and nothing more, held to a slug's shape all the same; one that is not is left out.
+        "agent-here" if source.is_app() => Some(Link::AgentHere {
+            slug: get("slug").filter(|slug| is_slug(slug)),
+        }),
+        "agent-here" => None,
         // App-window only, like `sync`: both values are the sender's, and the run starts the moment it lands.
         "device-pair" if source.is_app() => {
             crate::device_pair::args_of(get("url"), get("pair")).map(Link::DevicePair)
@@ -1415,6 +1427,32 @@ mod tests {
             assert_eq!(parse_link(link, Source::External), None, "{link}");
             assert_eq!(parse_link(link, FILES), None, "{link}");
         }
+    }
+
+    /// "Ask an agent on this computer", from the offline page or the recovery panel: with the sandbox it was about,
+    /// or with none. A slug that is not one is left out rather than put into the reader's first message, and the link
+    /// is heard only from the app's own windows.
+    #[test]
+    fn an_agent_here_link_carries_the_sandbox_it_was_about() {
+        assert_eq!(
+            parse_link("intentic://agent-here?slug=work", APP),
+            Some(Link::AgentHere {
+                slug: Some("work".into())
+            })
+        );
+        assert_eq!(
+            parse_link("intentic://agent-here", APP),
+            Some(Link::AgentHere { slug: None })
+        );
+        assert_eq!(
+            parse_link("intentic://agent-here?slug=--rm", APP),
+            Some(Link::AgentHere { slug: None })
+        );
+        assert_eq!(
+            parse_link("intentic://agent-here?slug=work", Source::External),
+            None
+        );
+        assert_eq!(parse_link("intentic://agent-here?slug=work", FILES), None);
     }
 
     /// A device pairing from a device's card in the app's own window; from outside the app or a local window, nothing.

@@ -1,5 +1,4 @@
-import { isAbsolute, relative } from "node:path";
-import { z } from "zod";
+import { diffContent, pathUnder, toolLocations as locationsUnder } from "@intentic/acp-events/tool-cards";
 import type { ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract/events/requests";
 import { SCREENSHOT_VERB, screenshotImage } from "../../browser/cast/browser-artifacts.js";
 import { claudeStatePath } from "../session-store.js";
@@ -7,6 +6,10 @@ import { claudeStatePath } from "../session-store.js";
 // What the daemon's cards need of a tool call beyond its name and kind (those, and the turn readings' questions, are
 // runtime-neutral and live in @intentic/agent-context/tool-calls): result text, pictures, workspace locations and diff
 // content, derived from any backend's native stream. Every adapter maps through these instead of keeping its own copy.
+// The parts a computer's turns build too (a card's bounded input and own words, a diff's two sides, a path read against
+// the turn's folder) live in @intentic/acp-events/tool-cards, and are handed on here under the names the daemon's
+// adapters import them by.
+export { diffContent, TOOL_INPUT_CHARS, toolDescription, toolInput } from "@intentic/acp-events/tool-cards";
 
 // Flattens a tool_result block's content (string or array of text/other blocks) to plain text; non-text blocks
 // summarize by type. Shared by the live stream and session restore so a replayed card matches the original.
@@ -75,61 +78,13 @@ export const resultContent = (content: unknown, cwd: string, outputDir: string |
 
 // Normalizes a tool path onto the workspace-root-relative, forward-slash route space; undefined if it escapes the
 // workspace. Relative inputs are cwd-relative, which is already the route space.
-export const workspacePath = (raw: string, cwd: string): string | undefined => {
+export const workspacePath = (raw: string, cwd: string): string | undefined =>
     // A `~/.claude/...` path is not an escape: it symlinks onto the workspace, resolved before the cwd test.
-    const state = claudeStatePath(raw);
-    if (state !== undefined) {
-        return state;
-    }
-    const rel = isAbsolute(raw) ? relative(cwd, raw) : raw;
-    if (rel === "" || rel === "." || rel === ".." || rel.startsWith("../")) {
-        return undefined;
-    }
-    return rel;
-};
-
-const PATH_KEYS = ["file_path", "filePath", "notebook_path", "path"] as const;
+    claudeStatePath(raw) ?? pathUnder(raw, cwd);
 
 // Workspace files a tool call touches, for clickable cards and live-writes; `line` comes from Read's 1-based `offset`.
 // Undefined when the input names no workspace-addressable file.
-export const toolLocations = (input: unknown, cwd: string): ToolCallLocation[] | undefined => {
-    if (typeof input !== "object" || input === null) {
-        return undefined;
-    }
-    const record = input as Record<string, unknown>;
-    for (const key of PATH_KEYS) {
-        const value = record[key];
-        if (typeof value !== "string") {
-            continue;
-        }
-        const path = workspacePath(value, cwd);
-        if (path === undefined) {
-            return undefined;
-        }
-        const offset = record["offset"];
-        return [{ path, ...(typeof offset === "number" && offset > 0 ? { line: offset } : {}) }];
-    }
-    return undefined;
-};
-
-// Caps one side of a diff so a giant Write can't flood the event stream.
-const DIFF_SIDE_CAP = 32_000;
-const capSide = (text: string): { text: string; clipped: boolean } =>
-    text.length > DIFF_SIDE_CAP ? { text: text.slice(0, DIFF_SIDE_CAP), clipped: true } : { text, clipped: false };
-
-// The one constructor every diff on the wire goes through, whether derived from an Edit/Write input or arriving
-// ready-made from an ACP agent.
-export const diffContent = (path: string, oldText: string | undefined, newText: string): ToolCallContent => {
-    const oldCapped = oldText !== undefined ? capSide(oldText) : undefined;
-    const newCapped = capSide(newText);
-    return {
-        type: "diff",
-        path,
-        ...(oldCapped !== undefined ? { oldText: oldCapped.text } : {}),
-        newText: newCapped.text,
-        ...(oldCapped?.clipped === true || newCapped.clipped ? { truncated: true } : {}),
-    };
-};
+export const toolLocations = (input: unknown, cwd: string): ToolCallLocation[] | undefined => locationsUnder(input, cwd, workspacePath);
 
 // Structured diff content derived from an Edit/Write-style input, known at call time; handles both spelling families.
 // Unrecognized shapes degrade to undefined, never throw; a workspace-escaping path is kept as-is for display.
@@ -160,41 +115,4 @@ export const editDiffContent = (name: string, input: unknown, cwd: string): Tool
         return diffContent(path, undefined, content);
     }
     return undefined;
-};
-
-// Ceiling on the input a card keeps, in characters: enough for a delegation's prompt or an MCP call's arguments to say
-// what was asked, without a call that carried a whole file doubling the record's size.
-export const TOOL_INPUT_CHARS = 4_000;
-
-// Ceiling on a call's own description, in characters: a sentence, not a second prompt.
-const TOOL_DESCRIPTION_CHARS = 300;
-
-// The agent's own words for a call that has a target (Bash's `description`: "Show working tree status"), which the
-// card says beside the command. A call with no target keeps its whole input instead (toolInput), words and all.
-const DescribedInputSchema = z.object({ description: z.string().trim().min(1) });
-
-export const toolDescription = (call: { readonly input?: unknown }, target: string | undefined): string | undefined => {
-    const parsed = target === undefined ? undefined : DescribedInputSchema.safeParse(call.input).data;
-    const words = parsed?.description;
-    return words === undefined || words.length <= TOOL_DESCRIPTION_CHARS ? words : `${words.slice(0, TOOL_DESCRIPTION_CHARS)}…`;
-};
-
-// What a call was given, as JSON text cut at TOOL_INPUT_CHARS, for a card with no one-line `target` (an MCP tool, the
-// Agent/Task tool), which otherwise records nothing of what was asked. A call with a target keeps only that, as it
-// always has; an empty or unserializable input is no input.
-export const toolInput = (input: unknown, target: string | undefined): string | undefined => {
-    if (target !== undefined || input === undefined || input === null) {
-        return undefined;
-    }
-    let json: string | undefined;
-    try {
-        json = JSON.stringify(input);
-    } catch {
-        // allow(silent-catch): a cyclic or BigInt-bearing input is one the card cannot carry, not a failed call.
-        return undefined;
-    }
-    if (json === undefined || json === "{}" || json === "[]") {
-        return undefined;
-    }
-    return json.length > TOOL_INPUT_CHARS ? `${json.slice(0, TOOL_INPUT_CHARS)}…` : json;
 };

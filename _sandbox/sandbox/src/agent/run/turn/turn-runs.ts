@@ -18,7 +18,7 @@ import { turnPulseOf } from "./turn-pulse.js";
 import { settledOf } from "./turn-closing.js";
 import { planAnswerRows } from "./plan-answer.js";
 import type { RunLog, RunLogHead } from "../../../sessions/run-log.js";
-import { RunRowIds } from "./run-row-ids.js";
+import { RunRowIds } from "@intentic/sandbox-contract/ids/run-row-ids";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -44,7 +44,7 @@ export class TurnRun implements LiveRun {
     // Set once the settled run is on the record (or its write is over, landed or not): what ends its followers' streams.
     private isRecorded = false;
     private readonly fold: TranscriptFold;
-    // Each row's own id, kept in step with the fold's rows (run-row-ids.ts).
+    // Each row's own id, kept in step with the fold's rows (the contract's ids/run-row-ids.ts).
     private readonly rowIds: RunRowIds;
     // Facts so far, replayed to every attach so a late window learns which session and branch the turn is on.
     private readonly facts: AttachEntry[] = [];

@@ -1,6 +1,5 @@
 import type { PromptResponse } from "@agentclientprotocol/sdk/unstable";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { AcpConnection } from "./acp-connection.js";
 
 /* WHAT AN ACP TURN COST, WHERE THE AGENT SAYS.
 
@@ -17,14 +16,15 @@ interface Totals {
     readonly cacheWrite: number;
 }
 
-// The last totals each session reported, per process that served it: a process's sessions end with it.
-const seen = new WeakMap<AcpConnection, Map<string, Totals>>();
+// The last totals each session reported, per process that served it: a process's sessions end with it. The process is
+// whatever object its caller holds for it (the daemon's pooled connection, a computer's harness process).
+const seen = new WeakMap<WeakKey, Map<string, Totals>>();
 
 const grew = (now: Totals, last: Totals): boolean =>
     now.input >= last.input && now.output >= last.output && now.cacheRead >= last.cacheRead && now.cacheWrite >= last.cacheWrite;
 
 /** This turn's usage frame from the prompt response `process` gave for `session`, or undefined where it reported none. */
-export const promptUsage = (process: AcpConnection, session: string, response: PromptResponse | undefined): AgentEvent | undefined => {
+export const promptUsage = (process: WeakKey, session: string, response: PromptResponse | undefined): AgentEvent | undefined => {
     const usage = response?.usage;
     if (usage === undefined || usage === null) {
         return undefined;

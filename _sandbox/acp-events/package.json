@@ -1,0 +1,123 @@
+{
+    "name": "@intentic/acp-events",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Reads what an Agent Client Protocol agent says into the frames a chat draws: its session updates, tool cards, modes, model options, usage and permission answers, for the sandbox daemon and the desktop app alike",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/acp-events"
+    },
+    "exports": {
+        "./events": {
+            "types": "./dist/events.d.ts",
+            "import": {
+                "@intentic/src": "./src/events.ts",
+                "default": "./dist/events.js"
+            },
+            "require": {
+                "@intentic/src": "./src/events.ts",
+                "default": "./dist/events.js"
+            }
+        },
+        "./tool-cards": {
+            "types": "./dist/tool-cards.d.ts",
+            "import": {
+                "@intentic/src": "./src/tool-cards.ts",
+                "default": "./dist/tool-cards.js"
+            },
+            "require": {
+                "@intentic/src": "./src/tool-cards.ts",
+                "default": "./dist/tool-cards.js"
+            }
+        },
+        "./modes": {
+            "types": "./dist/modes.d.ts",
+            "import": {
+                "@intentic/src": "./src/modes.ts",
+                "default": "./dist/modes.js"
+            },
+            "require": {
+                "@intentic/src": "./src/modes.ts",
+                "default": "./dist/modes.js"
+            }
+        },
+        "./model": {
+            "types": "./dist/model.d.ts",
+            "import": {
+                "@intentic/src": "./src/model.ts",
+                "default": "./dist/model.js"
+            },
+            "require": {
+                "@intentic/src": "./src/model.ts",
+                "default": "./dist/model.js"
+            }
+        },
+        "./usage": {
+            "types": "./dist/usage.d.ts",
+            "import": {
+                "@intentic/src": "./src/usage.ts",
+                "default": "./dist/usage.js"
+            },
+            "require": {
+                "@intentic/src": "./src/usage.ts",
+                "default": "./dist/usage.js"
+            }
+        },
+        "./session-missing": {
+            "types": "./dist/session-missing.d.ts",
+            "import": {
+                "@intentic/src": "./src/session-missing.ts",
+                "default": "./dist/session-missing.js"
+            },
+            "require": {
+                "@intentic/src": "./src/session-missing.ts",
+                "default": "./dist/session-missing.js"
+            }
+        },
+        "./answers": {
+            "types": "./dist/answers.d.ts",
+            "import": {
+                "@intentic/src": "./src/answers.ts",
+                "default": "./dist/answers.js"
+            },
+            "require": {
+                "@intentic/src": "./src/answers.ts",
+                "default": "./dist/answers.js"
+            }
+        },
+        "./elicitation": {
+            "types": "./dist/elicitation.d.ts",
+            "import": {
+                "@intentic/src": "./src/elicitation.ts",
+                "default": "./dist/elicitation.js"
+            },
+            "require": {
+                "@intentic/src": "./src/elicitation.ts",
+                "default": "./dist/elicitation.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsc --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@agentclientprotocol/sdk": "catalog:",
+        "@intentic/agent-context": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}
