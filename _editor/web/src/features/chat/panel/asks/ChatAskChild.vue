@@ -1,9 +1,8 @@
-<!-- A child this chat started, waiting on what only a person can answer: who, what for, and the answers the board's card offers. -->
+<!-- A child this chat started, waiting on what only a person can answer: one line of the dock, who and what for, and the answers the board's card offers. -->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, inject } from "vue";
-import { CARD_HEADER_TAIL } from "../../../../components/ChatCard.vue";
+import { computed } from "vue";
 import { answerableAsk } from "../../../../models/fleet/presses/boardAnswer";
 import CardPermissionAsk from "../../../../parts/fleet/CardPermissionAsk.vue";
 import type { WaitKind } from "../../../../models/conversations/panel/pendingAsks";
@@ -12,14 +11,13 @@ import { agentTabOf } from "../../../../models/conversations/panel/useChat-revea
 import { summonChat } from "../../../../models/conversations/run/summon";
 import { agentSeed } from "../../../../models/fleet/useAgents-actions";
 import { useAgents } from "../../../../models/fleet/useAgents";
+import ChatDockRow from "../dock/ChatDockRow.vue";
 import { kindWord } from "./askWords";
 
 const t = useT();
 
-const props = defineProps<{ agentId: string; kind: WaitKind; canDrive: boolean }>();
+const props = defineProps<{ agentId: string; kind: WaitKind; canDrive: boolean; askKey: string }>();
 
-// The dock's presses, when this card's header is the dock's head (ChatAskDock).
-const tail = inject(CARD_HEADER_TAIL, undefined);
 const { agentById } = useAgents();
 const agent = computed(() => agentById(props.agentId));
 // A permission answered right here, as on the board: Allow once or Skip. Anything else is answered in the child's own chat.
@@ -33,20 +31,20 @@ const open = (): void => {
 </script>
 
 <template>
-    <div v-if="agent" class="chat-card flex w-full flex-col">
-        <div class="chat-card-header items-center text-xs">
-            <Icon name="subagents" class="text-sm text-accent" />
-            <span class="min-w-0 truncate font-semibold text-content" v-tooltip.top.overflow="agentDisplayTitle(agent)">
-                {{ agentDisplayTitle(agent) }}<span class="font-normal text-muted"> · {{ kindWord(kind, t) }}</span>
-            </span>
-            <!-- The way to the child's own chat: the one way forward when nothing is answered here, a side door when it is. -->
-            <Button size="small" :tier="answersHere ? `quiet` : `accent`" class="shrink-0" @click="open">
-                <Icon name="external-link" />{{ t(`chat.askDock.openChat`) }}
-            </Button>
-            <component :is="tail" v-if="tail" />
-        </div>
-        <div v-if="answersHere" class="chat-card-row">
-            <CardPermissionAsk :agent="agent" />
-        </div>
-    </div>
+    <!-- The way to the child's own chat: its title, a side door, when the answer is here; else the one way forward. -->
+    <ChatDockRow
+        v-if="agent"
+        icon="subagents"
+        tone="ask"
+        :kind="kindWord(kind, t)"
+        :title="agentDisplayTitle(agent)"
+        :opens="answersHere ? t(`chat.askDock.openChat`) : undefined"
+        :data-ask-line="askKey"
+        @open="open"
+    >
+        <template v-if="!answersHere" #actions>
+            <Button size="small" thumb tier="accent" @click="open"><Icon name="external-link" />{{ t(`chat.askDock.openChat`) }}</Button>
+        </template>
+        <CardPermissionAsk v-if="answersHere" :agent="agent" />
+    </ChatDockRow>
 </template>

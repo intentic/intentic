@@ -485,9 +485,6 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
         </div>
         <!-- In the shared answer row, like every other card, not floating under the last option. -->
         <template v-if="card.status === 'pending'" #actions>
-            <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers">{{
-                t(`chat.chatQuestionCard.submit`)
-            }}</ChatDecisionButton>
             <!-- Dismiss ends the turn (CardReplies.reply, afterReply); the tooltip says so before the click, and with an answer picked it asks first. -->
             <template v-if="confirmingDismiss">
                 <span class="text-2xs text-warning" role="alert">{{ t(`chat.chatQuestionCard.dismissDropsAnswer`) }}</span>
@@ -500,6 +497,9 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
             </template>
             <ChatDecisionButton v-else tone="secondary" :disabled="settling" v-tooltip.bottom="t(`chat.words.stopsTurn`)" @click="dismiss">{{
                 t(`ui.action.dismiss`)
+            }}</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers">{{
+                t(`chat.chatQuestionCard.submit`)
             }}</ChatDecisionButton>
         </template>
     </ChatCard>

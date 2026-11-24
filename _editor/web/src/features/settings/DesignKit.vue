@@ -70,6 +70,7 @@ import Checkbox from "primevue/checkbox";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import DesignKitAssistants from "./DesignKitAssistants.vue";
+import DesignKitDock from "./DesignKitDock.vue";
 import { KIT_MASTHEAD, KIT_PAIRINGS, KIT_PORTS, KIT_SANDBOXES, kitFileVerbs } from "./designKitDevices";
 
 const { scheme, set: setScheme } = useTheme();
@@ -243,7 +244,7 @@ const pickedTier = ref(`collaborator`);
 
         <div class="flex flex-col gap-10 pb-16">
             <DesignKitAssistants />
-            <!-- Scales -->
+            <DesignKitDock />
             <section class="flex flex-col gap-4">
                 <SectionHeader label="Type scale" :heading="2" />
                 <RowGroup>
@@ -461,7 +462,6 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- Lists -->
             <section class="flex flex-col gap-4">
                 <SectionHeader label="Rows" :heading="2" />
                 <div class="grid gap-4 md:grid-cols-2">

@@ -4,7 +4,7 @@
      so a refusal is asked about where every other one is. -->
 <script setup lang="ts">
 import { landedCommitMessage } from "@intentic/sandbox-contract/state/landed-commit";
-import { Button, type Tip, ui, useDevice } from "@intentic/ui";
+import { Button, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { sameScope, SHARED_SCOPE, type ViewScope } from "../../../../app/workspaceScope";
@@ -16,12 +16,15 @@ import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { usePushFlow } from "../../../../models/changes/usePushFlow";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { type PushVerb, sessionCommitsSettled, shipStripOf } from "./shipStrip";
+import ChatDockRow from "../dock/ChatDockRow.vue";
+import { useDockLit } from "../dock/dockLit";
 
 const props = defineProps<{ agent: FleetAgent }>();
 
 const t = useT();
 const words = useVocabulary();
-const { mobile } = useDevice();
+// The commit and the push are this line's bright press, unless an ask the agent waits on is beside it (dockLit.ts).
+const lit = useDockLit();
 
 // The shared tree, where a land puts its work: the review the rail already keeps, so reading it here costs no scan.
 const changes = useChanges(SHARED_SCOPE);
@@ -149,29 +152,51 @@ const pushHint = computed((): Tip | undefined => {
 </script>
 
 <template>
-    <div v-if="strip !== undefined" class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-card px-3 py-2 text-2xs shadow-sm" role="status" data-ship-strip>
-        <template v-if="strip.kind === `commit`">
-            <span class="flex min-w-0 flex-1 items-center gap-2">
-                <Icon name="check" class="shrink-0 text-success" />
-                <span class="font-medium text-content">{{ words.landed }}</span>
-                <span class="truncate text-muted">{{ t(`chat.chatLandStrip.files`, { count: strip.files }, strip.files) }}</span>
-            </span>
-            <!-- A phone gives the two presses equal halves at thumb height, as the land strip does. -->
-            <span :class="mobile ? `grid w-full grid-cols-2 gap-2` : `flex shrink-0 items-center gap-1.5`">
-                <Button
-                    :size="mobile ? undefined : `small`"
-                    :thumb="mobile"
-                    tier="boring"
-                    class="whitespace-nowrap"
-                    v-tooltip.bottom="t(`chat.chatShipStrip.openChanges`)"
-                    @click="openChanges"
-                    >{{ t(`chat.chatShipStrip.changes`) }}</Button
+    <template v-if="strip !== undefined">
+        <!-- Landed: the message it goes in under, read before the press that commits it. -->
+        <ChatDockRow v-if="strip.kind === `commit`" icon="check" tone="done" :title="words.landed" role="status" data-ship-strip>
+            <template #meta>{{ t(`chat.chatLandStrip.files`, { count: strip.files }, strip.files) }}</template>
+            <template #detail>
+                <!-- The message the commit goes under: the one drafted at land time, the wait for it, or the reader's own. -->
+                <p
+                    v-if="strip.draft.state === `written`"
+                    class="truncate font-mono"
+                    v-tooltip.bottom="strip.draft.text === strip.draft.subject ? undefined : strip.draft.text"
+                    data-ship-message
                 >
+                    {{ strip.draft.subject }}
+                </p>
+                <p v-else-if="strip.draft.state === `drafting`" class="flex min-w-0 items-center gap-1.5">
+                    <Icon name="spinner" spin class="shrink-0 text-link" />
+                    <span class="truncate">{{
+                        strip.draft.model === undefined ? t(`chat.chatShipStrip.writing`) : t(`chat.chatShipStrip.modelWriting`, { model: strip.draft.model })
+                    }}</span>
+                </p>
+                <input
+                    v-else
+                    v-model="typed"
+                    :class="ui.input({ size: `sm` }, `mt-1 w-full font-mono`)"
+                    :placeholder="t(`chat.chatShipStrip.noMessage`)"
+                    :aria-label="t(`chat.chatShipStrip.noMessage`)"
+                    v-tooltip.bottom="strip.draft.reason"
+                    data-ship-message
+                    @keydown.enter.prevent="commit"
+                />
+                <p v-if="failure !== undefined" class="mt-1 flex min-w-0 items-center gap-1.5 text-danger" role="alert" v-tooltip.bottom="failure">
+                    <Icon name="exclamation-triangle" class="shrink-0" />
+                    <span class="shrink-0 font-medium">{{ t(`chat.chatShipStrip.commitFailed`) }}</span>
+                    <span class="truncate">{{ failure }}</span>
+                </p>
+            </template>
+            <template #actions>
+                <Button size="small" thumb tier="boring" class="whitespace-nowrap" v-tooltip.bottom="t(`chat.chatShipStrip.openChanges`)" @click="openChanges">{{
+                    t(`chat.chatShipStrip.changes`)
+                }}</Button>
                 <Button
-                    :size="mobile ? undefined : `small`"
-                    :thumb="mobile"
-                    tier="accent"
-                    tone="success"
+                    size="small"
+                    thumb
+                    :tier="lit ? `accent` : `boring`"
+                    :tone="lit ? `success` : undefined"
                     class="whitespace-nowrap"
                     :disabled="!commitReady"
                     :loading="pressing"
@@ -180,74 +205,42 @@ const pushHint = computed((): Tip | undefined => {
                 >
                     <Icon name="check" />{{ t(`chat.chatShipStrip.commit`) }}
                 </Button>
-            </span>
-            <!-- The message the commit goes under: the one drafted at land time, the wait for it, or the reader's own. -->
-            <p
-                v-if="strip.draft.state === `written`"
-                class="w-full truncate font-mono text-muted"
-                v-tooltip.bottom="strip.draft.text === strip.draft.subject ? undefined : strip.draft.text"
-                data-ship-message
-            >
-                {{ strip.draft.subject }}
-            </p>
-            <p v-else-if="strip.draft.state === `drafting`" class="flex w-full min-w-0 items-center gap-1.5 text-muted">
-                <Icon name="spinner" spin class="shrink-0 text-link" />
-                <span class="truncate">{{
-                    strip.draft.model === undefined ? t(`chat.chatShipStrip.writing`) : t(`chat.chatShipStrip.modelWriting`, { model: strip.draft.model })
-                }}</span>
-            </p>
-            <input
-                v-else
-                v-model="typed"
-                :class="ui.input({ size: `sm` }, `w-full font-mono`)"
-                :placeholder="t(`chat.chatShipStrip.noMessage`)"
-                :aria-label="t(`chat.chatShipStrip.noMessage`)"
-                v-tooltip.bottom="strip.draft.reason"
-                data-ship-message
-                @keydown.enter.prevent="commit"
-            />
-            <p v-if="failure !== undefined" class="flex w-full min-w-0 items-center gap-1.5 text-danger" v-tooltip.bottom="failure">
-                <Icon name="exclamation-triangle" class="shrink-0" />
-                <span class="font-medium">{{ t(`chat.chatShipStrip.commitFailed`) }}</span>
-                <span class="truncate">{{ failure }}</span>
-            </p>
-        </template>
-        <template v-else-if="strip.kind === `blocked`">
-            <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span class="flex items-center gap-2">
-                    <Icon name="exclamation-triangle" class="shrink-0 text-warning" />
-                    <span class="font-medium text-content">{{ t(`chat.chatShipStrip.inChanges`) }}</span>
-                </span>
-                <span class="text-muted">{{ blockReason }}</span>
-            </span>
-            <Button size="small" tier="accent" class="shrink-0 whitespace-nowrap" @click="openChanges">{{ t(`chat.chatShipStrip.changes`) }}</Button>
-        </template>
-        <template v-else-if="strip.kind === `committing`">
-            <span class="flex min-w-0 flex-1 items-center gap-2 text-muted">
-                <Icon name="spinner" spin class="shrink-0 text-link" />
-                <span class="font-medium text-content">{{ t(`chat.chatShipStrip.committing`) }}</span>
-                <span v-if="awaitingAnswer" class="truncate">{{ t(`chat.chatShipStrip.answerInChanges`) }}</span>
-            </span>
-            <Button v-if="awaitingAnswer" size="small" tier="accent" class="shrink-0 whitespace-nowrap" @click="openChanges">{{
-                t(`chat.chatShipStrip.changes`)
-            }}</Button>
-        </template>
-        <template v-else-if="strip.kind === `push`">
-            <span class="flex min-w-0 flex-1 items-center gap-2">
-                <Icon :name="strip.refused ? `exclamation-triangle` : `check`" class="shrink-0" :class="strip.refused ? `text-warning` : `text-success`" />
-                <span class="font-medium text-content">{{ strip.refused ? t(`chat.chatShipStrip.pushRefused`) : t(`chat.chatShipStrip.committed`) }}</span>
-                <span class="truncate text-muted">
-                    {{ strip.commits > 0 ? t(`chat.chatShipStrip.toPush`, { count: strip.commits }, strip.commits) : t(`chat.chatShipStrip.unpublished`) }}
-                    <template v-if="strip.others > 0">· {{ t(`chat.chatShipStrip.others`, { count: strip.others }, strip.others) }}</template>
-                </span>
-            </span>
-            <span class="flex shrink-0 items-center gap-1.5">
-                <Button v-if="strip.refused && pushFlow.held.value !== undefined" size="small" tier="boring" class="whitespace-nowrap" @click="pushFlow.reopen">{{
+            </template>
+        </ChatDockRow>
+        <ChatDockRow v-else-if="strip.kind === `blocked`" icon="exclamation-triangle" tone="warning" :title="t(`chat.chatShipStrip.inChanges`)" role="status" data-ship-strip>
+            <template #detail>{{ blockReason }}</template>
+            <template #actions>
+                <Button size="small" thumb :tier="lit ? `accent` : `boring`" class="whitespace-nowrap" @click="openChanges">{{ t(`chat.chatShipStrip.changes`) }}</Button>
+            </template>
+        </ChatDockRow>
+        <ChatDockRow v-else-if="strip.kind === `committing`" icon="spinner" spin tone="busy" :title="t(`chat.chatShipStrip.committing`)" role="status" data-ship-strip>
+            <template v-if="awaitingAnswer" #detail>{{ t(`chat.chatShipStrip.answerInChanges`) }}</template>
+            <template v-if="awaitingAnswer" #actions>
+                <Button size="small" thumb :tier="lit ? `accent` : `boring`" class="whitespace-nowrap" @click="openChanges">{{ t(`chat.chatShipStrip.changes`) }}</Button>
+            </template>
+        </ChatDockRow>
+        <!-- Committed: what the push sends, and the press that sends it, success-toned as every press that ships work is. -->
+        <ChatDockRow
+            v-else-if="strip.kind === `push`"
+            :icon="strip.refused ? `exclamation-triangle` : `check`"
+            :tone="strip.refused ? `warning` : `done`"
+            :title="strip.refused ? t(`chat.chatShipStrip.pushRefused`) : t(`chat.chatShipStrip.committed`)"
+            role="status"
+            data-ship-strip
+        >
+            <template #meta>
+                {{ strip.commits > 0 ? t(`chat.chatShipStrip.toPush`, { count: strip.commits }, strip.commits) : t(`chat.chatShipStrip.unpublished`) }}
+            </template>
+            <template v-if="strip.others > 0" #detail>{{ t(`chat.chatShipStrip.others`, { count: strip.others }, strip.others) }}</template>
+            <template #actions>
+                <Button v-if="strip.refused && pushFlow.held.value !== undefined" size="small" thumb tier="boring" class="whitespace-nowrap" @click="pushFlow.reopen">{{
                     t(`chat.chatShipStrip.seeWhy`)
                 }}</Button>
                 <Button
                     size="small"
-                    tier="accent"
+                    thumb
+                    :tier="lit ? `accent` : `boring`"
+                    :tone="lit ? `success` : undefined"
                     class="whitespace-nowrap"
                     :disabled="changes.actionBusy.value || pushFlow.running.value"
                     v-tooltip.bottom="pushHint"
@@ -256,15 +249,16 @@ const pushHint = computed((): Tip | undefined => {
                     <Icon :name="verbIcon(strip.verb)" />{{ verbLabel(strip.verb) }}
                     <span v-if="strip.commits > 0" class="tabular-nums opacity-70">{{ strip.commits }}</span>
                 </Button>
-            </span>
-        </template>
-        <span v-else-if="strip.kind === `pushing`" class="flex min-w-0 items-center gap-2">
-            <Icon name="spinner" spin class="shrink-0 text-link" />
-            <span class="font-medium text-content">{{ words.pushing }}</span>
-        </span>
-        <span v-else class="flex min-w-0 items-center gap-2">
-            <Icon name="check-circle" class="shrink-0 text-success" />
-            <span class="font-medium text-content">{{ t(`workspace.reviewPanel.pushedWhat`, { what: pushFlow.pushed.value?.what ?? `` }) }}</span>
-        </span>
-    </div>
+            </template>
+        </ChatDockRow>
+        <ChatDockRow v-else-if="strip.kind === `pushing`" icon="spinner" spin tone="busy" :title="words.pushing" role="status" data-ship-strip />
+        <ChatDockRow
+            v-else
+            icon="check-circle"
+            tone="done"
+            :title="t(`workspace.reviewPanel.pushedWhat`, { what: pushFlow.pushed.value?.what ?? `` })"
+            role="status"
+            data-ship-strip
+        />
+    </template>
 </template>

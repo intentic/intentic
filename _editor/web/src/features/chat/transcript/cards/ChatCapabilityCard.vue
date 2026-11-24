@@ -67,12 +67,12 @@ const savedAs = computed(() => (card.value.outcome?.outcome === `connected` && c
         </ChatCardOutcome>
 
         <template v-if="card.status === 'pending'" #actions>
-            <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="connect">{{
-                t(`chat.chatMessageView.connect`, { name: card.offer.name })
-            }}</ChatDecisionButton>
             <!-- Final for this conversation: the agent continues without it and won't ask again. -->
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'capability_offer', connect: false })">{{
                 t(`chat.chatMessageView.notNow`)
+            }}</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="connect">{{
+                t(`chat.chatMessageView.connect`, { name: card.offer.name })
             }}</ChatDecisionButton>
         </template>
     </ChatCard>

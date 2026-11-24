@@ -28,6 +28,7 @@ import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 import { RouterLink } from "vue-router";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
+import ChatDockRow from "./dock/ChatDockRow.vue";
 import { useAccessWall } from "../../../models/conversations/endings/accessWall";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
@@ -358,6 +359,7 @@ const useLimitReset = async (): Promise<void> => {
 const waysOpen = ref(false);
 const waysAnchor = ref<HTMLElement>();
 const hasMenu = computed(() => fallback.value !== undefined);
+const mark = computed((): IconName => (accessWall.value !== undefined ? `lock` : props.ready && !spent.value ? `pause` : `clock`));
 // An emptied menu also closes it: an empty strip shouldn't leave a floating panel behind.
 watch(
     () => props.visible && hasMenu.value,
@@ -449,88 +451,85 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
 </script>
 
 <template>
-    <div v-if="shown" class="flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted" :data-access-wall="accessWall !== undefined || undefined">
-        <!-- What happened, and the press that skips whatever is booked below. -->
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Icon :name="accessWall !== undefined ? `lock` : ready && !spent ? `pause` : `clock`" class="shrink-0" />
-            <!-- Status text has a minimum width beside shrinkable controls. -->
-            <span class="min-w-[11rem] flex-1">{{ status }}</span>
-            <div ref="waysAnchor" class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
-                <!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
-                <Button
-                    v-if="canReset"
-                    size="small"
-                    thumb
-                    tier="quiet"
-                    :disabled="!reachable || resetting"
-                    v-tooltip.top="resetTip"
-                    @click="useLimitReset"
-                >
-                    <Icon name="refresh" class="mr-1 text-2xs" />{{
-                        resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
-                    }}
+    <!-- What happened, said in full, and the press that skips whatever is booked below; a wall a person must answer in the warning's colour. -->
+    <ChatDockRow v-if="shown" :icon="mark" :tone="accessWall !== undefined ? `warning` : `quiet`" :title="status" prose role="status" :data-access-wall="accessWall !== undefined || undefined">
+        <template #actions>
+            <!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
+            <Button
+                v-if="canReset"
+                size="small"
+                thumb
+                tier="quiet"
+                :disabled="!reachable || resetting"
+                v-tooltip.top="resetTip"
+                @click="useLimitReset"
+            >
+                <Icon name="refresh" class="mr-1 text-2xs" />{{
+                    resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
+                }}
+            </Button>
+            <!-- A person is needed (accessWall.ts): the fix is bright, the re-test quiet, and nothing here sends into the same refusal.
+                 Words waiting in the queue carry their own quiet press beside them (ChatHeldMessages), so it is not drawn twice. -->
+            <template v-if="accessWall !== undefined">
+                <Button v-if="waiting.length === 0" size="small" thumb tier="quiet" :disabled="!reachable || continuing" :loading="continuing" v-tooltip.top="retestHint" @click="retest">
+                    {{ accessWall.account === undefined ? t(`chat.accessWall.tryAgain`) : t(`chat.accessWall.tryAccountAgain`, { account: accessWall.account }) }}
                 </Button>
-                <!-- A person is needed (accessWall.ts): the fix is bright, the re-test quiet, and nothing here sends into the same refusal.
-                     Words waiting in the queue carry their own quiet press beside them (ChatHeldMessages), so it is not drawn twice. -->
-                <template v-if="accessWall !== undefined">
-                    <Button v-if="waiting.length === 0" size="small" thumb tier="quiet" :disabled="!reachable || continuing" :loading="continuing" v-tooltip.top="retestHint" @click="retest">
-                        {{ accessWall.account === undefined ? t(`chat.accessWall.tryAgain`) : t(`chat.accessWall.tryAccountAgain`, { account: accessWall.account }) }}
-                    </Button>
-                    <Button v-if="mayConnect" :as="RouterLink" :to="connectTo" size="small" thumb :tier="accessWall.elsewhere ? `boring` : `accent`">
-                        {{ t(`chat.accessWall.connect`, { provider: wallProvider }) }}
-                    </Button>
-                    <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.whoConnects`) }}</span>
-                    <ChatChooseModelButton v-if="accessWall.elsewhere" tier="accent" :label="t(`chat.accessWall.chooseAnother`)" />
-                </template>
-                <!-- A flagged turn's two ways on, both a press: the same model again, or another one picked here. -->
-                <template v-else-if="flagged">
-                    <span ref="modelsAnchor" class="flex">
-                        <Button
-                            v-if="otherModels.length > 0"
-                            size="small"
-                            tier="boring"
-                            :disabled="!reachable || !ready || continuing"
-                            :aria-expanded="modelsOpen"
-                            v-tooltip.top="otherModelHint"
-                            @click="modelsOpen = !modelsOpen"
-                        >
-                            {{ t(`chat.chatContinueStrip.continueOnOther`) }}<Icon name="chevron-down" class="ml-1 text-2xs" />
-                        </Button>
-                    </span>
-                    <Button tier="accent" size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.retryOn`, { model: modelLabel })" v-tooltip.top="retryHint" @click="pressContinue">
-                        {{ t(`chat.chatContinueStrip.retryOn`, { model: modelLabel }) }}
-                    </Button>
-                </template>
-                <!-- The account is spent until a named reopen: trying now is a quiet press, and the solid one continues then. -->
-                <template v-else-if="spent">
-                    <Button size="small" thumb tier="quiet" :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.tryNow`)" v-tooltip.top="continueHint" @click="pressContinue">
-                        {{ t(`chat.chatContinueStrip.tryNow`) }}
-                    </Button>
+                <Button v-if="mayConnect" :as="RouterLink" :to="connectTo" size="small" thumb :tier="accessWall.elsewhere ? `boring` : `accent`">
+                    {{ t(`chat.accessWall.connect`, { provider: wallProvider }) }}
+                </Button>
+                <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.whoConnects`) }}</span>
+                <ChatChooseModelButton v-if="accessWall.elsewhere" tier="accent" :label="t(`chat.accessWall.chooseAnother`)" />
+            </template>
+            <!-- A flagged turn's two ways on, both a press: the same model again, or another one picked here. -->
+            <template v-else-if="flagged">
+                <span ref="modelsAnchor" class="flex">
                     <Button
-                        tier="accent"
-                        v-if="atReopen === `book`"
+                        v-if="otherModels.length > 0"
                         size="small"
-                        thumb
-                        :disabled="!reachable || continuing"
-                        v-tooltip.top="continueAtHint"
-                        @click="emit(`continueAtReopen`)"
+                        tier="boring"
+                        :disabled="!reachable || !ready || continuing"
+                        :aria-expanded="modelsOpen"
+                        v-tooltip.top="otherModelHint"
+                        @click="modelsOpen = !modelsOpen"
                     >
-                        <Icon name="clock" class="mr-1 text-2xs" />{{ continueAtLabel }}
+                        {{ t(`chat.chatContinueStrip.continueOnOther`) }}<Icon name="chevron-down" class="ml-1 text-2xs" />
                     </Button>
-                </template>
-                <!-- Something in the way with no reopen to wait for (spent with none published, an account blocked, an unheld allowance before its own reset): trying is a quiet press, and it goes, since readings lag the provider and a refused try costs nothing. -->
-                <Button v-else-if="pressWay?.kind === `try`" size="small" thumb tier="quiet" :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.tryNow`)" v-tooltip.top="continueHint" @click="pressContinue">
+                </span>
+                <Button tier="accent" size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.retryOn`, { model: modelLabel })" v-tooltip.top="retryHint" @click="pressContinue">
+                    {{ t(`chat.chatContinueStrip.retryOn`, { model: modelLabel }) }}
+                </Button>
+            </template>
+            <!-- The account is spent until a named reopen: trying now is a quiet press, and the solid one continues then. -->
+            <template v-else-if="spent">
+                <Button size="small" thumb tier="quiet" :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.tryNow`)" v-tooltip.top="continueHint" @click="pressContinue">
                     {{ t(`chat.chatContinueStrip.tryNow`) }}
                 </Button>
-                <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
-                <Button tier="accent" v-else size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`ui.action.continue`)" v-tooltip.top="continueHint" @click="pressContinue">
-                    {{ t(`ui.action.continue`) }}
-                </Button>
                 <Button
-                    v-if="hasMenu"
+                    tier="accent"
+                    v-if="atReopen === `book`"
+                    size="small"
+                    thumb
+                    :disabled="!reachable || continuing"
+                    v-tooltip.top="continueAtHint"
+                    @click="emit(`continueAtReopen`)"
+                >
+                    <Icon name="clock" class="mr-1 text-2xs" />{{ continueAtLabel }}
+                </Button>
+            </template>
+            <!-- Something in the way with no reopen to wait for (spent with none published, an account blocked, an unheld allowance before its own reset): trying is a quiet press, and it goes, since readings lag the provider and a refused try costs nothing. -->
+            <Button v-else-if="pressWay?.kind === `try`" size="small" thumb tier="quiet" :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.tryNow`)" v-tooltip.top="continueHint" @click="pressContinue">
+                {{ t(`chat.chatContinueStrip.tryNow`) }}
+            </Button>
+            <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
+            <Button tier="accent" v-else size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`ui.action.continue`)" v-tooltip.top="continueHint" @click="pressContinue">
+                {{ t(`ui.action.continue`) }}
+            </Button>
+            <span v-if="hasMenu" ref="waysAnchor" class="flex" data-dock-tight>
+                <Button
                     size="small"
                     thumb
                     tier="quiet"
+                    data-dock-tight
                     :disabled="!reachable || continuing"
                     :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
                     :aria-expanded="waysOpen"
@@ -539,8 +538,8 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                 >
                     <Icon name="chevron-down" class="text-2xs" />
                 </Button>
-            </div>
-        </div>
+            </span>
+        </template>
         <!-- The one question. Exactly one answer is selected, so nothing on this card can promise two automations. -->
         <TurnBreakQuestion
             v-if="breakWall !== undefined && accessWall === undefined"
@@ -558,7 +557,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
         <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
         <!-- A sandbox too old to move a conversation: no other account is offered, and this says why and how to update. -->
         <SandboxOutdatedNotice v-if="outdated" :missing="t(`chat.chatContinueStrip.outdatedMissing`)" />
-    </div>
+    </ChatDockRow>
     <!-- The models a flagged turn can go on with: picking one switches the conversation to it and sends the turn again. -->
     <ResponsiveOverlay
         v-model="modelsOpen"

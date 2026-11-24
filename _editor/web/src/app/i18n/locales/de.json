@@ -3960,7 +3960,8 @@
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "Dieses Konto muss neu verbunden werden.",
-            "archivedOffBoardSending": "Archiviert: vom Board genommen. Eine Nachricht zu senden stellt ihn wieder her.",
+            "archived": "Archiviert",
+            "archivedDetail": "Vom Board genommen. Eine Nachricht zu senden stellt ihn wieder her.",
             "billing": "Abrechnung",
             "connectTitle": "Eigenes Modell",
             "connectWays": "Abo, API-Schlüssel, lokales Modell",
@@ -4869,7 +4870,6 @@
             "show": "Zeigen",
             "showIt": "Anzeigen",
             "fetching": "Wird aus Ihrer Sandbox geholt…",
-            "readPlan": "Plan lesen",
             "approveWithNotes": "Mit diesen Anmerkungen freigeben",
             "keepPlanning": "Weiter planen",
             "openPage": "Seite öffnen",
@@ -4878,7 +4878,8 @@
                 "plan": "Plan",
                 "question": "Frage",
                 "permission": "Berechtigung",
-                "other": "Braucht Sie"
+                "other": "Braucht Sie",
+                "page": "Seite"
             }
         },
         "sendLater": {

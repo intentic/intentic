@@ -3960,7 +3960,8 @@
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "This account needs to be reconnected.",
-            "archivedOffBoardSending": "Archived: off the board. Sending a message restores it.",
+            "archived": "Archived",
+            "archivedDetail": "Off the board. Sending a message restores it.",
             "billing": "Billing",
             "connectTitle": "Your own model",
             "connectWays": "Subscription, API key, local model",
@@ -4869,7 +4870,6 @@
             "show": "Show",
             "showIt": "Show it",
             "fetching": "Getting it from your sandbox…",
-            "readPlan": "Read plan",
             "approveWithNotes": "Approve with these notes",
             "keepPlanning": "Keep planning",
             "openPage": "Open page",
@@ -4878,7 +4878,8 @@
                 "plan": "Plan",
                 "question": "Question",
                 "permission": "Permission",
-                "other": "Needs you"
+                "other": "Needs you",
+                "page": "Page"
             }
         },
         "sendLater": {

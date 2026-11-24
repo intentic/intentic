@@ -2,7 +2,7 @@
 import { Button, type IconName } from "@intentic/ui";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 
-// Shared answer control for decision cards (plan Approve, question Submit, permission Allow). `tone` is visual weight,
+// Shared answer control for decision cards (question Submit, permission Allow, a payment), the primary one last in its row (ChatCard). `tone` is visual weight,
 // not agreement: a secondary button can still be the approval. Built on the design system's `<Button>`, so a
 // promise-returning handler locks it until settled; `to` renders the answer as a link instead of a decision.
 

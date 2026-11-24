@@ -9,6 +9,7 @@ import { turnFailureTelemetry } from "../../../../models/agent-status/turnFailur
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import ChatChooseModelButton from "../../models/ChatChooseModelButton.vue";
+import ChatDockRow from "../dock/ChatDockRow.vue";
 
 /* THE WAYS OUT OF A WALL THE SAME TURN KEEPS HITTING (wayOut.ts): drawn where Continue would be, on the same card, once
    the daemon has withdrawn Continue because pressing it again would only fail the same way. Every way is a press, and
@@ -42,6 +43,13 @@ const tierOf = (way: WayOutKind): `accent` | `boring` | `quiet` => (way === prop
 // Words the refusal handed back wait under their own press (ChatHeldMessages), which sends exactly them: this one would be
 // a second press for the same attempt.
 const retryOffered = computed(() => offers(`retry`) && waiting.value.length === 0);
+// The ways on offer, quiet to bright: the recommended one stands last, where every line of the dock keeps its lit press.
+const RANK = { quiet: 0, boring: 1, accent: 2 } as const;
+const ways = computed(() =>
+    ([`retry`, `otherModel`, `newConversation`] as const)
+        .filter((way) => (way === `retry` ? retryOffered.value : offers(way)))
+        .toSorted((a, b) => RANK[tierOf(a)] - RANK[tierOf(b)]),
+);
 
 const sandboxOf = (): string | undefined => card.value?.sandboxId ?? activeSandboxId.value;
 watch(
@@ -84,14 +92,12 @@ const retry = (): void => {
 </script>
 
 <template>
-    <div v-if="shown" class="flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted" data-way-out :data-layer="wayOut.layer">
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Icon name="repeat" class="shrink-0" />
-            <!-- Status text has a minimum width beside shrinkable controls, as the Continue card's does. -->
-            <span class="min-w-[11rem] flex-1">{{ status }}</span>
-            <div class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
+    <!-- The wall a press here would only hit again, and the ways past it, the one this layer recommends lit and last. -->
+    <ChatDockRow v-if="shown" icon="repeat" tone="warning" :title="status" prose role="status" data-way-out :data-layer="wayOut.layer">
+        <template #actions>
+            <template v-for="way in ways" :key="way">
                 <Button
-                    v-if="retryOffered"
+                    v-if="way === `retry`"
                     size="small"
                     thumb
                     :tier="tierOf(`retry`)"
@@ -103,22 +109,15 @@ const retry = (): void => {
                     {{ t(`chat.wayOut.tryAgain`) }}
                 </Button>
                 <ChatChooseModelButton
-                    v-if="offers(`otherModel`)"
+                    v-else-if="way === `otherModel`"
                     :tier="tierOf(`otherModel`) === `accent` ? `accent` : `boring`"
                     :label="t(`chat.wayOut.otherModel`)"
                     @click="taken(`otherModel`, conversation.conversationId, card?.updatedAt)"
                 />
-                <Button
-                    v-if="offers(`newConversation`)"
-                    size="small"
-                    thumb
-                    :tier="tierOf(`newConversation`)"
-                    v-tooltip.top="newSessionHint"
-                    @click="startNew"
-                >
-                    <Icon name="fork" class="mr-1 text-2xs" />{{ t(`chat.wayOut.newConversation`) }}
+                <Button v-else size="small" thumb :tier="tierOf(`newConversation`)" v-tooltip.top="newSessionHint" @click="startNew">
+                    <Icon name="fork" />{{ t(`chat.wayOut.newConversation`) }}
                 </Button>
-            </div>
-        </div>
-    </div>
+            </template>
+        </template>
+    </ChatDockRow>
 </template>

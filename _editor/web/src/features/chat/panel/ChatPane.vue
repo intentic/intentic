@@ -48,10 +48,8 @@ import ChatCommandResult from "../composer/commands/ChatCommandResult.vue";
 import ChatAgentStatus from "./ChatAgentStatus.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatWayOutStrip from "./endings/ChatWayOutStrip.vue";
-import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/later/ChatQueue.vue";
 import ComposerMentionMarks from "../composer/mentions/ComposerMentionMarks.vue";
-import ChatWaitingBar from "./pane/ChatWaitingBar.vue";
 import { provideAskDock } from "./asks/askDock";
 import ChatHeldMessages from "../transcript/held/ChatHeldMessages.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
@@ -61,6 +59,7 @@ import ChatModeMenu from "../models/run-settings/ChatModeMenu.vue";
 import ChatPlacementMenu from "./ChatPlacementMenu.vue";
 import ChatFleetSuggestion from "./fleet/ChatFleetSuggestion.vue";
 import ChatPaneNotices from "./ChatPaneNotices.vue";
+import ChatPaneDock from "./dock/ChatPaneDock.vue";
 import LeakSelectionReport from "./privacy/LeakSelectionReport.vue";
 import { provideAccountNudge } from "../accounts/accountNudge";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
@@ -542,24 +541,23 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>
                     <Notice v-else-if="blocked" tone="info" icon="clock">{{ t(`chat.chatPane.chatAvailableAfterSandbox`) }}</Notice>
                     <template v-if="!blocked">
-                        <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
+                        <!-- Whether this chat can send: the account gate, the trial, the privacy shield, a credential to renew (ChatPaneNotices). -->
                         <ChatPaneNotices />
-                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip), or the ways out of a wall a press would only hit again (ChatWayOutStrip); a subagent's bar carries its own Continue instead. -->
-                        <ChatWayOutStrip v-if="wayOut !== undefined && !subagentOf && !strip && !readOnly" :way-out="wayOut" />
-                        <ChatContinueStrip
-                            v-if="!subagentOf && !strip && !readOnly"
-                            :visible="continueStrip && wayOut === undefined"
-                            :ready="pickUpPressable"
-                            :enter-continues="continueOffer"
-                            :spent-until="spentUntil"
-                            :at-reopen="atReopen"
-                            @continue="continueTurn"
-                            @continue-at-reopen="continueAtReopen"
-                        />
-                        <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
-                        <ChatLeftRunning v-if="!strip" />
-                        <!-- What waits on the reader (every ask the agent made of them, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
-                        <ChatWaitingBar v-if="!strip" :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()" />
+                        <!-- THE DOCK: a line each to press, in one frame and in its order (ChatPaneDock): the turn that stopped and the way on
+                             (ChatContinueStrip), or out of a wall a press would only hit again (ChatWayOutStrip), a subagent's bar carrying its own. -->
+                        <ChatPaneDock :quick="strip" :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()">
+                            <ChatWayOutStrip v-if="wayOut !== undefined && !subagentOf && !strip && !readOnly" :way-out="wayOut" />
+                            <ChatContinueStrip
+                                v-if="!subagentOf && !strip && !readOnly"
+                                :visible="continueStrip && wayOut === undefined"
+                                :ready="pickUpPressable"
+                                :enter-continues="continueOffer"
+                                :spent-until="spentUntil"
+                                :at-reopen="atReopen"
+                                @continue="continueTurn"
+                                @continue-at-reopen="continueAtReopen"
+                            />
+                        </ChatPaneDock>
                         <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's, a stop, or the continue that undoes one. -->
                         <ChatSubagentBar
                             v-if="subagentOf"

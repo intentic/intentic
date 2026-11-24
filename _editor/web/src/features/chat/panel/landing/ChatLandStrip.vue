@@ -2,7 +2,7 @@
      card's Land now (or a collaborator's Request land), so a reader who opened the chat instead of landing it from the
      board lands it here, without going back. What it shows and when is landStrip.ts's. -->
 <script setup lang="ts">
-import { Button, type Tip, useDevice } from "@intentic/ui";
+import { Button, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
@@ -20,6 +20,8 @@ import AgentLandPress from "../../../../parts/fleet/AgentLandPress.vue";
 import { useCardRequests } from "../../../../models/fleet/presses/cardRequests";
 import type { LandStrip } from "./landStrip";
 import HandsOffOffer from "./HandsOffOffer.vue";
+import ChatDockRow from "../dock/ChatDockRow.vue";
+import { useDockLit } from "../dock/dockLit";
 
 const props = defineProps<{ agent: FleetAgent; strip: LandStrip }>();
 
@@ -28,7 +30,7 @@ const words = useVocabulary();
 const router = useRouter();
 const { canShip } = useTier();
 const { maker } = useAudience();
-const { mobile } = useDevice();
+const lit = useDockLit();
 
 // The collaborator's ask goes to the daemon the way the board card's does, held in the same ledger entry, so a press
 // here and one on the card or the review page hold each other.
@@ -61,56 +63,39 @@ const conflict = computed(() => ({
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-card px-3 py-2 text-2xs shadow-sm" role="status" data-land-strip>
-        <template v-if="strip.kind === `ready`">
-            <span class="flex min-w-0 flex-1 items-center gap-2" :class="explanation !== undefined ? `items-start` : `items-center`">
-                <Icon name="check" class="shrink-0 text-success" />
-                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="flex items-center gap-2">
-                        <span class="font-medium text-content">{{ words.readyToLand }}</span>
-                        <span v-if="diff !== undefined" class="flex min-w-0 items-center gap-1.5 truncate text-muted">
-                            <span>{{ t(`chat.chatLandStrip.files`, { count: diff.files }, diff.files) }}</span>
-                            <span class="tabular-nums text-success">+{{ diff.insertions }}</span>
-                            <span class="tabular-nums text-danger">−{{ diff.deletions }}</span>
-                        </span>
-                    </span>
-                    <p v-if="explanation !== undefined" class="text-2xs leading-relaxed text-muted">
-                        {{ explanation }}
-                    </p>
-                </span>
-            </span>
-            <!-- A phone gives the two presses equal halves at thumb height; AgentLandPress's own block form fills its half. -->
-            <span :class="mobile ? `grid w-full grid-cols-2 gap-2` : `flex shrink-0 items-center gap-1.5`">
-                <Button :size="mobile ? undefined : `small`" :thumb="mobile" tier="boring" class="whitespace-nowrap" @click="openReview">{{
-                    words.review
-                }}</Button>
-                <AgentLandPress
-                    :can-ship="canShip"
-                    :agent="agent"
-                    :land-disabled="landDisabled"
-                    :requesting="requesting"
-                    :land-hint="landHint"
-                    :request-hint="requestHint"
-                    :block="mobile"
-                    :explain="false"
-                    @land="land"
-                    @request="requestLand"
-                />
-            </span>
-            <!-- Under work that waits for a press: the one time letting the sandbox take such presses over is worth asking. -->
-            <HandsOffOffer />
+    <!-- The work waiting to land, its land under way, or its land refused: one line of the dock, as the board card says it. -->
+    <ChatDockRow v-if="strip.kind === `ready`" icon="git-branch" tone="done" :title="words.readyToLand" role="status" data-land-strip>
+        <template v-if="diff !== undefined" #meta>
+            <span>{{ t(`chat.chatLandStrip.files`, { count: diff.files }, diff.files) }}</span>
+            <span class="text-success">+{{ diff.insertions }}</span>
+            <span class="text-danger">−{{ diff.deletions }}</span>
         </template>
-        <span v-else-if="strip.kind === `landing`" class="flex min-w-0 items-center gap-2 text-muted">
-            <Icon name="spinner" spin class="shrink-0 text-link" />
-            <span class="font-medium text-content">{{ words.landing }}</span>
-        </span>
-        <template v-else>
-            <span class="flex min-w-0 flex-1 items-center gap-2">
-                <Icon name="exclamation-triangle" class="shrink-0 text-warning" />
-                <span class="font-medium text-content">{{ conflict.chip }}</span>
-            </span>
-            <!-- The one way on from a refused land: its review, where the conflict is read and fixed. -->
-            <Button size="small" tier="accent" class="shrink-0 whitespace-nowrap" @click="openReview">{{ conflict.verb }}</Button>
+        <template v-if="explanation !== undefined" #detail>
+            <p class="leading-relaxed">{{ explanation }}</p>
         </template>
-    </div>
+        <template #actions>
+            <Button size="small" thumb tier="boring" class="whitespace-nowrap" @click="openReview">{{ words.review }}</Button>
+            <AgentLandPress
+                :can-ship="canShip"
+                :agent="agent"
+                :land-disabled="landDisabled"
+                :requesting="requesting"
+                :land-hint="landHint"
+                :request-hint="requestHint"
+                :explain="false"
+                :lit="lit"
+                @land="land"
+                @request="requestLand"
+            />
+        </template>
+        <!-- Under work that waits for a press: the one time letting the sandbox take such presses over is worth asking. -->
+        <HandsOffOffer />
+    </ChatDockRow>
+    <ChatDockRow v-else-if="strip.kind === `landing`" icon="spinner" spin tone="busy" :title="words.landing" role="status" data-land-strip />
+    <ChatDockRow v-else icon="exclamation-triangle" tone="warning" :title="conflict.chip" role="status" data-land-strip>
+        <!-- The one way on from a refused land: its review, where the conflict is read and fixed. -->
+        <template #actions>
+            <Button size="small" thumb :tier="lit ? `accent` : `boring`" class="whitespace-nowrap" @click="openReview">{{ conflict.verb }}</Button>
+        </template>
+    </ChatDockRow>
 </template>

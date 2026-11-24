@@ -86,10 +86,10 @@ it(`asks before dismissing a picked answer, and keeps it on "Keep my answer"`, a
     await press(card, `Dismiss`);
     expect(sent).toEqual([]);
     expect(card.textContent).toContain(`Dismissing drops the answer you picked and stops the turn.`);
-    expect(labels(card).slice(-3)).toEqual([`Submit`, `Dismiss anyway`, `Keep my answer`]);
+    expect(labels(card).slice(-3)).toEqual([`Dismiss anyway`, `Keep my answer`, `Submit`]);
 
     await press(card, `Keep my answer`);
-    expect(labels(card).slice(-2)).toEqual([`Submit`, `Dismiss`]);
+    expect(labels(card).slice(-2)).toEqual([`Dismiss`, `Submit`]);
     await press(card, `Dismiss`);
     await press(card, `Dismiss anyway`);
     expect(sent).toEqual([{ kind: `question`, cancelled: true }]);

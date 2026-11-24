@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, Notice, toneTint } from "@intentic/ui";
-import { computed, watch } from "vue";
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useAgents } from "../../../models/fleet/useAgents";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { lowHoursNotice } from "../../../models/hosted-plan/hostedHours";
@@ -12,28 +11,21 @@ import { standbyNotice } from "./standby/standbyNotice";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import ChatTrialStrip from "./ChatTrialStrip.vue";
-import ChatLandStrip from "./landing/ChatLandStrip.vue";
-import ChatShipStrip from "./landing/ChatShipStrip.vue";
-import { landStripOf } from "./landing/landStrip";
-import { shipsFrom } from "./landing/shipStrip";
-import { useAudience } from "../../../app/useAudience";
-import { useTier } from "../../../client/sandbox/useTier";
-import SealAsks from "./seal/SealAsks.vue";
 import ComputerHarnessStrip from "../models/computer/ComputerHarnessStrip.vue";
 import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
 import { modelsPath } from "../../../lib/routes/modelsPath";
 
-// What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
-// (archived; work waiting to land; then what it can send with — account gate, trial, expired credential), each with its one answering
-// press. The composer's own state stays with the composer; reads this pane's conversation via the injected view,
+// Whether this chat can send, above the composer and its dock: the account gate, the privacy shield, the trial, the
+// hosted hours, an expired credential, each with its one answering press. What to do with what the chat did (its land,
+// its commit, a request to read it) is the dock's (ChatPaneLines). The composer's own state stays with the composer; reads this pane's conversation via the injected view,
 // never the focused one.
 
 const t = useT();
 
-const { conversation, provider, accounts, streaming } = usePaneView();
-const { reachable, active } = useSandbox();
+const { conversation, provider, accounts } = usePaneView();
+const { active } = useSandbox();
 
 // The last of the hours THIS sandbox spends, above the composer, to the person spending them: only on a hosted
 // sandbox, only its owner (a guest can't buy more), only in the last stretch (hostedHours.ts's threshold) rather than
@@ -45,47 +37,6 @@ const standbyLine = computed(() => standbyNotice(sandboxInfo.value));
 const hoursNotice = computed(() =>
     (active.value?.hosted ?? null) === null || active.value?.tier !== `owner` ? undefined : lowHoursNotice(hostedPlan.value, active.value?.id),
 );
-const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
-
-// An archived agent can still be read in an open tab (opened from the archive view, or swept there while open);
-// says so and offers the one way back, plus that sending un-archives it. Loaded on the reachable seam, not at
-// setup, since the pane mounts before the daemon answers; only while the list is empty.
-watch(
-    reachable,
-    (live) => {
-        if (live && archived.value.length === 0) {
-            void loadArchived();
-        }
-    },
-    { immediate: true },
-);
-const activeArchived = computed(() => {
-    const agent = agentById(conversation.value.conversationId);
-    return agent?.archivedAt === undefined ? undefined : agent;
-});
-
-// Its finished work still on its branch, its land under way, or its land refused, with the press the board card offers
-// for it (landStrip.ts): said here for the reader who opened the chat rather than landed it from the board.
-const { canShip, canReview } = useTier();
-const landStrip = computed(() => {
-    const agent = agentById(conversation.value.conversationId);
-    const strip = landStripOf(agent, {
-        canAct: canShip.value || canReview.value,
-        streaming: streaming.value,
-        elsewhere: conversation.value.box.value !== undefined,
-    });
-    return agent === undefined || strip === undefined ? undefined : { agent, strip };
-});
-
-// Once that work is in the tree, the two presses that take it the rest of the way, commit then push (shipStrip.ts):
-// for a maintainer reading in a developer's words, since a maker's save is never one chat's files alone.
-const { maker } = useAudience();
-const shipAgent = computed(() => {
-    const agent = agentById(conversation.value.conversationId);
-    const reader = { canShip: canShip.value, maker: maker.value, streaming: streaming.value, elsewhere: conversation.value.box.value !== undefined };
-    return shipsFrom(agent, reader) ? agent : undefined;
-});
-
 // The credential the next turn runs on can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.
 // Asked of the account the turn will actually run on (servingAccount), never the first listed: on auto, an expired
 // first account is one the turn skips.
@@ -99,25 +50,6 @@ const activeAccountReauth = computed(() => {
     <!-- A chat on this computer has none of a sandbox's standing to report, only whether its coding agent can run. -->
     <ComputerHarnessStrip v-if="computerAgents" />
     <template v-else>
-        <!-- Who asked to read this private conversation, answered by its reader here (SealAsks). -->
-        <SealAsks />
-        <!-- This conversation's agent is off the board. -->
-        <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
-            <Icon name="box" class="shrink-0" />
-            <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
-            <Button
-                size="small"
-                thumb
-                tier="boring"
-                class="shrink-0"
-                :disabled="!reachable || busyIds.includes(activeArchived.id)"
-                @click="restore([activeArchived.id])"
-            >
-                {{ t(`ui.action.restore`) }}
-            </Button>
-        </div>
-        <ChatLandStrip v-else-if="landStrip !== undefined" :agent="landStrip.agent" :strip="landStrip.strip" />
-        <ChatShipStrip v-else-if="shipAgent !== undefined" :agent="shipAgent" />
         <ChatAccountPanel />
         <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
         <ChatPrivacyStrip />

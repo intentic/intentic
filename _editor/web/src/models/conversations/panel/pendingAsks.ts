@@ -29,7 +29,7 @@ const DOCKED_FIELDS: ReadonlySet<RequestField> = new Set<RequestField>([
     `credentialOffer`,
 ]);
 
-// The glyph each card wears, as its own ChatCard does, so a chip and the card it opens read as one thing.
+// The glyph each card wears, as its own ChatCard does, so a line and the card it opens read as one thing.
 const CARD_ICONS = {
     plan: `list-check`,
     question: `comments`,
@@ -48,7 +48,7 @@ interface AskLook {
     /** Stable across frames: what keeps the reader's pick on the same ask while others come and go. */
     readonly key: string;
     readonly icon: IconName;
-    /** The ask in a few words, for its chip; empty where the data has none (the dock words a fallback). */
+    /** The ask in a few words, for its line; empty where the data has none (the dock words a fallback). */
     readonly label: string;
 }
 

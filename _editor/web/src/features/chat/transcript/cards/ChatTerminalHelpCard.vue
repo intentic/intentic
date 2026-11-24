@@ -28,10 +28,10 @@ const openTerminal = (): void =>
         <div class="chat-card-body text-xs text-content/85">{{ card.message }}</div>
 
         <template v-if="card.status === 'pending'" #actions>
-            <ChatDecisionButton tone="primary" icon="terminal" @click="openTerminal">{{ t(`chat.chatMessageView.openTerminal`) }}</ChatDecisionButton>
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'terminal_help', helped: false })">{{
                 t(`chat.words.cantHelpNow`)
             }}</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="terminal" @click="openTerminal">{{ t(`chat.chatMessageView.openTerminal`) }}</ChatDecisionButton>
         </template>
     </ChatCard>
 </template>

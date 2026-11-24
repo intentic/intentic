@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, Notice } from "@intentic/ui";
+import { Button, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef } from "vue";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
@@ -9,6 +9,7 @@ import { memoryShare, sendAnywayTip } from "../../../../models/agent-status/memo
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useHeldLineSeen } from "./heldLineSeen";
 import ChatAskDock from "../asks/ChatAskDock.vue";
+import ChatDockRow from "../dock/ChatDockRow.vue";
 
 // What waits on the reader, pinned right above the composer so it is on screen at any scroll position: every ask the
 // agent made of them (ChatAskDock), and a message held because the sandbox is short of memory. Both sat in the transcript
@@ -52,42 +53,41 @@ const memoryLine = computed(() => {
 </script>
 
 <template>
-    <!-- `contents`: always in the tree, so the bar can find its pane's held line before it shows, yet no gap in the footer. -->
+    <!-- `contents`: always in the tree, so the bar can find its pane's held line before it shows, yet its lines stand in the dock's own column. -->
     <div ref="root" class="contents">
-        <div class="flex flex-col gap-2 empty:hidden">
-            <ChatAskDock @approve="emit(`approve`)" @keep-planning="emit(`keepPlanning`)" />
-            <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
-                {{ reopen.blockedLine.value === undefined ? memoryLine : `${memoryLine} · ${reopen.blockedLine.value}` }}
-                <template #actions>
-                    <Button
-                        tier="accent"
-                        v-if="reopen.reopenAt.value !== undefined && props.canDrive"
-                        size="small"
-                        thumb
-                        v-tooltip.top="reopen.hint.value"
-                        @click="reopen.bookWords(heldIds)"
-                        ><Icon name="clock" class="mr-1 text-2xs" />{{ reopen.label.value }}</Button
-                    >
-                    <Button
-                        v-if="props.canDrive"
-                        size="small"
-                        thumb
-                        :tier="reopen.reopenAt.value === undefined ? `accent` : `quiet`"
-                        :disabled="reopen.blockedLine.value !== undefined"
-                        v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()"
-                        @click="sendHeld()"
-                        >{{ t(`chat.chatHeld.sendAnyway`) }}</Button
-                    >
-                    <Button
-                        size="small"
-                        thumb
-                        tier="quiet"
-                        v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: sendsItself ? t(`chat.chatWaitingBar.waitHintRoom`) : t(`chat.chatWaitingBar.waitHint`) }"
-                        @click="leftHeld = holdKey"
-                        >{{ t(`chat.chatWaitingBar.wait`) }}</Button
-                    >
-                </template>
-            </Notice>
-        </div>
+        <ChatAskDock @approve="emit(`approve`)" @keep-planning="emit(`keepPlanning`)" />
+        <ChatDockRow v-if="memoryShown" icon="pause" tone="warning" :title="memoryLine" role="status">
+            <template v-if="reopen.blockedLine.value !== undefined" #detail>{{ reopen.blockedLine.value }}</template>
+            <!-- Leaving it held first and quiet, then sending it now, then booking it for the reopen where there is one. -->
+            <template #actions>
+                <Button
+                    size="small"
+                    thumb
+                    tier="quiet"
+                    v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: sendsItself ? t(`chat.chatWaitingBar.waitHintRoom`) : t(`chat.chatWaitingBar.waitHint`) }"
+                    @click="leftHeld = holdKey"
+                    >{{ t(`chat.chatWaitingBar.wait`) }}</Button
+                >
+                <Button
+                    v-if="props.canDrive"
+                    size="small"
+                    thumb
+                    :tier="reopen.reopenAt.value === undefined ? `accent` : `quiet`"
+                    :disabled="reopen.blockedLine.value !== undefined"
+                    v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()"
+                    @click="sendHeld()"
+                    >{{ t(`chat.chatHeld.sendAnyway`) }}</Button
+                >
+                <Button
+                    v-if="reopen.reopenAt.value !== undefined && props.canDrive"
+                    tier="accent"
+                    size="small"
+                    thumb
+                    v-tooltip.top="reopen.hint.value"
+                    @click="reopen.bookWords(heldIds)"
+                    ><Icon name="clock" />{{ reopen.label.value }}</Button
+                >
+            </template>
+        </ChatDockRow>
     </div>
 </template>

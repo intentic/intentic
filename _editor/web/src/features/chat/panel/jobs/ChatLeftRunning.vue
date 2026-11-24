@@ -15,6 +15,7 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import ChatDockRow from "../dock/ChatDockRow.vue";
 
 // What a chat whose turn is over still has going, at the foot of the transcript where a reader looks to see whether it
 // is done: the jobs the turn left (the ones it waits on, which wake it when they exit, and the servers it left running
@@ -162,18 +163,19 @@ const preview = (job: AgentJob): void => {
 </script>
 
 <template>
-    <div v-if="visible" class="chat-left-running flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted" role="status">
-        <div class="flex items-start gap-2">
-            <Icon :name="wakes ? `clock` : `server`" class="shrink-0" />
-            <div class="flex min-w-0 flex-col">
-                <span class="font-medium text-content">{{ t(`chat.chatLeftRunning.title`) }}</span>
-                <span class="text-subtle">{{
-                    atPrompt ? t(`chat.chatLeftRunning.stuckAtPrompt`) : wakes ? t(`chat.chatLeftRunning.wakes`) : t(`chat.chatLeftRunning.leftForYou`)
-                }}</span>
-            </div>
-        </div>
+    <ChatDockRow
+        v-if="visible"
+        :icon="wakes ? `clock` : `server`"
+        :tone="atPrompt ? `warning` : `quiet`"
+        :title="t(`chat.chatLeftRunning.title`)"
+        class="chat-left-running"
+        role="status"
+    >
+        <template #detail>{{
+            atPrompt ? t(`chat.chatLeftRunning.stuckAtPrompt`) : wakes ? t(`chat.chatLeftRunning.wakes`) : t(`chat.chatLeftRunning.leftForYou`)
+        }}</template>
         <!-- Name above what happens next, so a narrow pane cuts neither: the deadline and the port are the point of the row. -->
-        <div v-for="row in rows" :key="row.key" class="flex min-w-0 items-center gap-2 border-t border-line pt-1.5">
+        <div v-for="row in rows" :key="row.key" class="flex min-w-0 items-center gap-2 border-t border-line py-1.5 first:border-t-0 first:pt-0 last:pb-0">
             <Icon :name="row.icon" :spin="row.spin" class="shrink-0 text-2xs" :class="row.warn ? `text-warning` : row.icon === `spinner` ? `text-link` : `text-subtle`" />
             <div class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-content" v-tooltip.top.overflow="row.label">{{ row.label }}</span>
@@ -213,6 +215,6 @@ const preview = (job: AgentJob): void => {
                 </button>
             </div>
         </div>
-        <span v-if="refused !== undefined" role="alert" class="text-danger">{{ refused }}</span>
-    </div>
+        <p v-if="refused !== undefined" role="alert" class="pt-1.5 text-danger">{{ refused }}</p>
+    </ChatDockRow>
 </template>

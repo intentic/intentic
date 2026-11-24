@@ -22,6 +22,18 @@ export const CARD_ANSWERS_WITHHELD: InjectionKey<Readonly<Ref<string | undefined
  * drawn at the end of the card's header, so the host adds no second header over the card's. Undefined draws nothing.
  */
 export const CARD_HEADER_TAIL: InjectionKey<Readonly<Ref<Component | undefined>>> = Symbol(`card-header-tail`);
+
+/**
+ * Provided by the same host: the title as a press that brings the row the card was asked in on screen, said by `label`
+ * on hover, as every line of the dock opens its own (ChatDockRow). Only a live card's title presses.
+ */
+export interface CardTitlePress {
+    readonly label: string;
+    readonly press: () => void;
+    /** What sort of ask it is, in a word before the title, as the host's folded line said it. */
+    readonly kind?: string | undefined;
+}
+export const CARD_TITLE_PRESS: InjectionKey<Readonly<Ref<CardTitlePress | undefined>>> = Symbol(`card-title-press`);
 </script>
 
 <script setup lang="ts">
@@ -47,6 +59,8 @@ const {
 
 const injected = inject(CARD_ANSWERS_WITHHELD, undefined);
 const tail = inject(CARD_HEADER_TAIL, undefined);
+const titlePress = inject(CARD_TITLE_PRESS, undefined);
+const opens = computed(() => (status === undefined ? titlePress?.value : undefined));
 // Only a live card waits on anybody; a settled one keeps its record either way.
 const withheld = computed(() => (status === undefined ? injected?.value : undefined));
 </script>
@@ -64,7 +78,19 @@ const withheld = computed(() => (status === undefined ? injected?.value : undefi
             <!-- A prose title wraps in full; a name truncates, with the full text on hover. One size and weight for both:
                  which kind a title is was never something a reader could see, so it may not set how loud it is. -->
             <!-- Semibold, not medium: with no rim or ground left on a card, weight is what keeps the ask above the labels answering it. -->
-            <span v-if="prose" class="chat-card-title min-w-0 text-xs font-semibold text-content">{{ title }}</span>
+            <!-- Dotted under at rest where it goes somewhere, as a dock line's title is (ChatDockRow). -->
+            <button
+                v-if="opens"
+                type="button"
+                class="chat-card-title min-w-0 justify-self-start rounded-sm text-left text-xs font-semibold text-content underline decoration-subtle decoration-dotted underline-offset-3 transition hover:decoration-current hover:decoration-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
+                :class="!prose && `truncate`"
+                v-tooltip.top="{ title: opens.label }"
+                @click="opens.press()"
+            >
+                <!-- `inline-block`: the dotted line under the title does not run on under the word before it. -->
+                <span v-if="opens.kind" class="mr-1.5 inline-block font-medium text-muted">{{ opens.kind }}</span>{{ title }}
+            </button>
+            <span v-else-if="prose" class="chat-card-title min-w-0 text-xs font-semibold text-content">{{ title }}</span>
             <span v-else class="chat-card-title min-w-0 truncate text-xs font-semibold text-content" v-tooltip.left.overflow="title">{{
                 title
             }}</span>
@@ -84,7 +110,9 @@ const withheld = computed(() => (status === undefined ? injected?.value : undefi
         <div v-if="$slots[`actions`] && withheld" class="chat-card-row flex items-center gap-2 text-2xs text-muted" data-card-withheld>
             <Icon name="lock" aria-hidden="true" class="shrink-0" />{{ withheld }}
         </div>
-        <div v-else-if="$slots[`actions`]" class="chat-card-row chat-card-actions flex flex-wrap items-center gap-2">
+        <!-- At the row's end, the bright answer last, as every line of the dock over the composer has its presses (ChatDockRow):
+             a card the dock carries reads like the lines around it, and the same card up the transcript like itself. -->
+        <div v-else-if="$slots[`actions`]" class="chat-card-row chat-card-actions flex flex-wrap items-center justify-end gap-2">
             <slot name="actions" />
         </div>
     </div>

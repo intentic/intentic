@@ -9,7 +9,7 @@ import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
 
 // One body for the desktop header and a phone's Changes screen, so the role split (maintainers land, collaborators
 // ask, the daemon enforcing the floor either way) is decided in one template rather than kept in step across two.
-const { block = false, explain = true } = defineProps<{
+const { block = false, explain = true, lit = true } = defineProps<{
     /** A maintainer, whose press lands. */
     canShip: boolean;
     /** The card: whether a collaborator has already asked (which turns their press into a fact), and where its land goes. */
@@ -24,6 +24,8 @@ const { block = false, explain = true } = defineProps<{
     block?: boolean;
     /** Whether to show the sentence above the button in maker mode. Defaults to true. */
     explain?: boolean;
+    /** Whether the land is the bright press where it stands; off beside a brighter one (an ask the agent waits on). */
+    lit?: boolean;
     /**
      * A refused land the agent can clear: the press becomes the fix, since landing again would only be refused again.
      * `queued` waits for the running turn to end; `working` is the fix turn itself.
@@ -61,10 +63,10 @@ const { maker } = useAudience();
         </Button>
         <!-- Success-toned with the check glyph, matching the board card's own Land now: the same action on the same work reads as such. -->
         <Button
-            tier="accent"
             v-else-if="canShip"
+            :tier="lit ? `accent` : `boring`"
             :size="block ? undefined : `small`"
-            tone="success"
+            :tone="lit ? `success` : undefined"
             :thumb="block"
             class="shrink-0 whitespace-nowrap"
             :class="block ? `w-full` : ``"

@@ -21,7 +21,7 @@ export interface AskDock {
     readonly asks: ComputedRef<readonly PendingAsk[]>;
     /** The ask the dock has open: the reader's pick, else, once that one is answered, the one after it. */
     readonly selected: ComputedRef<PendingAsk | undefined>;
-    /** Whether the dock shows the open ask's body, or only its chips. */
+    /** Whether the dock shows the picked ask's whole card, or every ask folded to its line. */
     readonly open: ComputedRef<boolean>;
     /** Whether this reader may answer, or only follows the chat. */
     readonly canDrive: ComputedRef<boolean>;
@@ -89,7 +89,7 @@ const usePick = (asks: ComputedRef<readonly PendingAsk[]>) => {
     return { choose, selected: computed(() => asks.value.find((ask) => ask.key === picked.value) ?? asks.value[0]) };
 };
 
-// OPEN WHEN THE TURN IS PARKED, folded to its chips while the agent works on without the answer (a need), unless the
+// OPEN WHEN THE TURN IS PARKED, folded to their lines while the agent works on without the answer (a need), unless the
 // reader said otherwise. A card arriving that the reader has not seen opens it again: it is the next step there is.
 const useFold = (asks: ComputedRef<readonly PendingAsk[]>, conversationId: () => string) => {
     const folded = ref<boolean | undefined>(folds.get(conversationId()));

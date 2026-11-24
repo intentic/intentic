@@ -63,7 +63,7 @@ describe(`a message held for low memory`, () => {
         const bar = mountBar(chat, sending);
         await nextTick();
 
-        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Send anyway`, `Wait`]]);
+        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Wait`, `Send anyway`]]);
         bar.press(`Send anyway`);
         // Only what the hold kept, as the held line's own press: a booking beside it stays on its time.
         expect(resume.mock.calls).toEqual([[[`m-1`]]]);
@@ -84,7 +84,7 @@ describe(`a message held for low memory`, () => {
         const bar = mountBar(chat, { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE });
         await nextTick();
 
-        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Send anyway`, `Wait`]]);
+        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Wait`, `Send anyway`]]);
     });
 
     // The held message's own line under it says the same hold with the same press: on screen, it is the one, and the bar
@@ -119,7 +119,7 @@ describe(`a message held for low memory`, () => {
             scroller.dispatchEvent(new Event(`scroll`));
             await new Promise((done) => requestAnimationFrame(() => done(undefined)));
             await nextTick();
-            expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Send anyway`, `Wait`]]);
+            expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Wait`, `Send anyway`]]);
         } finally {
             scroller.remove();
         }

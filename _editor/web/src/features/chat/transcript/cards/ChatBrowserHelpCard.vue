@@ -42,11 +42,11 @@ const waitsIn = computed(() => {
         <div class="chat-card-body text-xs text-content/85">{{ card.message }}</div>
 
         <template v-if="card.status === 'pending'" #actions>
-            <ChatDecisionButton tone="primary" icon="desktop" :to="here(page.browsers(waitsIn))">{{
-                t(`chat.chatMessageView.openBrowser`)
-            }}</ChatDecisionButton>
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'browser_help', helped: false })">{{
                 t(`chat.words.cantHelpNow`)
+            }}</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="desktop" :to="here(page.browsers(waitsIn))">{{
+                t(`chat.chatMessageView.openBrowser`)
             }}</ChatDecisionButton>
         </template>
     </ChatCard>

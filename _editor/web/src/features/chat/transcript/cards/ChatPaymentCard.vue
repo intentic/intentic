@@ -75,12 +75,12 @@ const facts = computed<CardFact[]>(() => [
         </div>
 
         <template v-if="pending && isOwner" #actions>
-            <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'payment_offer', approve: true })">{{
-                t(`chat.chatMessageView.pay2`, { amountUsd: card.offer.amountUsd })
-            }}</ChatDecisionButton>
             <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'payment_offer', approve: false })">{{
                 t(`chat.chatMessageView.skipFree`)
+            }}</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'payment_offer', approve: true })">{{
+                t(`chat.chatMessageView.pay2`, { amountUsd: card.offer.amountUsd })
             }}</ChatDecisionButton>
         </template>
     </ChatCard>

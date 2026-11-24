@@ -70,14 +70,6 @@ const someoneElse = useSomeoneElse();
         </ChatCardOutcome>
 
         <template v-if="pending" #actions>
-            <ChatDecisionButton
-                tone="primary"
-                icon="check"
-                :disabled="settling || !mayRelease"
-                v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.approversOnly`)"
-                @click="reply({ kind: 'credential_offer', approve: true })"
-                >{{ t(`chat.chatMessageView.release`) }}</ChatDecisionButton
-            >
             <!-- Declining is approver-only too, or anyone with a session could stop someone else's turn. -->
             <ChatDecisionButton
                 tone="secondary"
@@ -86,6 +78,14 @@ const someoneElse = useSomeoneElse();
                 v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.approversOnly`)"
                 @click="reply({ kind: 'credential_offer', approve: false })"
                 >{{ t(`ui.action.skip`) }}</ChatDecisionButton
+            >
+            <ChatDecisionButton
+                tone="primary"
+                icon="check"
+                :disabled="settling || !mayRelease"
+                v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.approversOnly`)"
+                @click="reply({ kind: 'credential_offer', approve: true })"
+                >{{ t(`chat.chatMessageView.release`) }}</ChatDecisionButton
             >
         </template>
     </ChatCard>

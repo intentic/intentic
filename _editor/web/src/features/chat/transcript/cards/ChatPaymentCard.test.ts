@@ -67,7 +67,7 @@ const buttons = (element: HTMLElement): string[] => [...element.querySelectorAll
 
 it(`offers the owner Pay and Skip`, () => {
     const element = mount();
-    expect(buttons(element)).toEqual([`Pay $0.10`, `Skip: free`]);
+    expect(buttons(element)).toEqual([`Skip: free`, `Pay $0.10`]);
 });
 
 it(`offers a maintainer no answer, and says whose it is`, () => {

@@ -3960,7 +3960,8 @@
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie.",
-            "archivedOffBoardSending": "Zarchiwizowane: zdjęte z tablicy. Wysłanie wiadomości je przywraca.",
+            "archived": "Zarchiwizowane",
+            "archivedDetail": "Zdjęte z tablicy. Wysłanie wiadomości je przywraca.",
             "billing": "Rozliczenia",
             "connectTitle": "Własny model",
             "connectWays": "Abonament, klucz API, model lokalny",
@@ -4869,7 +4870,6 @@
             "show": "Pokaż",
             "showIt": "Pokaż",
             "fetching": "Pobieramy to z Twojego sandboxa…",
-            "readPlan": "Przeczytaj plan",
             "approveWithNotes": "Zatwierdź z tymi uwagami",
             "keepPlanning": "Planuj dalej",
             "openPage": "Otwórz stronę",
@@ -4878,7 +4878,8 @@
                 "plan": "Plan",
                 "question": "Pytanie",
                 "permission": "Uprawnienie",
-                "other": "Potrzebuje Cię"
+                "other": "Potrzebuje Cię",
+                "page": "Strona"
             }
         },
         "sendLater": {

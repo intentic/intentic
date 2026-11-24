@@ -180,6 +180,20 @@ const allowItems = computed<MenuItem[]>(() => [
         </div>
 
         <template v-if="pending" #actions>
+            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. Its
+                 label says so, so it carries no hover of its own. -->
+            <ChatDecisionButton tone="secondary" icon="forward" :disabled="settling" @click="reply(SKIP_CALL)">{{
+                t(`chat.chatMessageView.skipCall`)
+            }}</ChatDecisionButton>
+            <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn. -->
+            <ChatDecisionButton
+                tone="secondary"
+                icon="times"
+                :disabled="settling"
+                v-tooltip.bottom="t(`chat.words.stopsTurn`)"
+                @click="reply({ kind: 'permission', decision: 'deny' })"
+                >{{ t(`ui.action.no`) }}</ChatDecisionButton
+            >
             <!-- One split control: the press is Allow once, the caret opens every wider yes this card can take. -->
             <span class="inline-flex items-stretch gap-px">
                 <ChatDecisionButton
@@ -203,20 +217,6 @@ const allowItems = computed<MenuItem[]>(() => [
                 </ChatDecisionButton>
             </span>
             <ContextMenu v-if="wider.length > 0" ref="menu" :model="allowItems" :min-width="16" />
-            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. Its
-                 label says so, so it carries no hover of its own. -->
-            <ChatDecisionButton tone="secondary" icon="forward" :disabled="settling" @click="reply(SKIP_CALL)">{{
-                t(`chat.chatMessageView.skipCall`)
-            }}</ChatDecisionButton>
-            <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn. -->
-            <ChatDecisionButton
-                tone="secondary"
-                icon="times"
-                :disabled="settling"
-                v-tooltip.bottom="t(`chat.words.stopsTurn`)"
-                @click="reply({ kind: 'permission', decision: 'deny' })"
-                >{{ t(`ui.action.no`) }}</ChatDecisionButton
-            >
         </template>
     </ChatCard>
 </template>

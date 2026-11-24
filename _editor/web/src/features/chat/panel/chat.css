@@ -906,7 +906,8 @@
 }
 /* Decision cards use shared surfaces and reserve their own row spacing. The inset, mark and gap are the column's own
    edge, mark box and gap (above), so a card's icon stands where a notice's glyph does and its words start on the hang. */
-.chat-card {
+.chat-card,
+.chat-dock {
     --chat-card-inset: 0.875rem;
 /* The header icon's own box, which every option mark below it then shares. */
     --chat-card-mark: var(--text-sm);
@@ -1004,6 +1005,44 @@
     text-decoration-color: color-mix(in srgb, var(--color-warning) 70%, transparent);
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
+}
+/* THE DOCK OVER THE COMPOSER (ChatDock): one frame, a line each (ChatDockRow), however many components draw them and
+   however deep. Every line carries the rule above it, and the frame starts a pixel up, so the first line's rule is under
+   the frame's own edge: no line has to know whether it is the first. With no line in it the frame is not drawn at all.
+   The frame is drawn OVER what it holds (`::after`), not as the box's own border: an open ask scrolls in a layer of its
+   own, and at a fractional offset the GPU snapped that layer over the bottom edge, so the frame lost its foot. */
+.chat-dock:not(:has(.chat-dock-row)) {
+    display: none;
+}
+.chat-dock::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--color-line);
+    border-radius: inherit;
+    pointer-events: none;
+}
+/* While the agent waits on the reader, the frame takes the accent: the one thing in the footer holding the turn. */
+.chat-dock:has([data-dock-tone="ask"])::after {
+    border-color: color-mix(in srgb, var(--color-primary-500) 45%, transparent);
+}
+/* A line arrives: it rises the house distance into its place, on the house pace (motion.css, which stills it). */
+.chat-dock-row {
+    border-top: 1px solid var(--color-line);
+    transition:
+        opacity var(--motion-base) var(--ease-smooth),
+        translate var(--motion-base) var(--ease-smooth);
+    @starting-style {
+        opacity: 0;
+        translate: 0 var(--motion-rise);
+    }
+}
+/* A CARD THE DOCK CARRIES WHOLE heads its line where the folded line stood: its title's first line on the folded
+   title's (the line's 8px, then half of what a 26px press stands taller than a 16px line), its fold where the folded
+   line's was, so opening one moves nothing but what it opens onto. */
+.chat-dock .chat-card-header {
+    padding-top: calc(0.5rem + 0.3125rem);
+    padding-right: 0.5rem;
 }
 /* The composer is stuck to the bottom of the transcript's own scroller (ChatPanel's footer); the box itself takes no pointer, only what stands in it and the ground under that (below). */
 .chat-footer {
