@@ -174,14 +174,19 @@ const preview = (job: AgentJob): void => {
         <template #detail>{{
             atPrompt ? t(`chat.chatLeftRunning.stuckAtPrompt`) : wakes ? t(`chat.chatLeftRunning.wakes`) : t(`chat.chatLeftRunning.leftForYou`)
         }}</template>
-        <!-- Name above what happens next, so a narrow pane cuts neither: the deadline and the port are the point of the row. -->
-        <div v-for="row in rows" :key="row.key" class="flex min-w-0 items-center gap-2 border-t border-line py-1.5 first:border-t-0 first:pt-0 last:pb-0">
-            <Icon :name="row.icon" :spin="row.spin" class="shrink-0 text-2xs" :class="row.warn ? `text-warning` : row.icon === `spinner` ? `text-link` : `text-subtle`" />
+        <!-- Name above what happens next, so a narrow pane cuts neither: the deadline and the port are the point of the row.
+             Each row is the card's own header one step in: its glyph in a box the header glyph's width, standing on the name's
+             line as the header's stands on the title's. Centred on the two lines (until 2026-11-24) it sat on neither, a stray
+             mark between the card's words and the row's rather than the row's bullet. The presses stay centred on the row. -->
+        <div v-for="row in rows" :key="row.key" class="flex min-w-0 items-start gap-(--chat-card-gap) border-t border-line py-1.5 first:border-t-0 first:pt-0 last:pb-0">
+            <span class="flex h-4 w-(--chat-card-mark) shrink-0 items-center justify-center" aria-hidden="true">
+                <Icon :name="row.icon" :spin="row.spin" class="text-xs" :class="row.warn ? `text-warning` : row.icon === `spinner` ? `text-link` : `text-subtle`" />
+            </span>
             <div class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-content" v-tooltip.top.overflow="row.label">{{ row.label }}</span>
                 <span :class="row.warn ? `text-warning` : `text-subtle`">{{ row.detail }}</span>
             </div>
-            <div class="flex shrink-0 items-center gap-0.5">
+            <div class="flex shrink-0 items-center gap-0.5 self-center">
                 <button
                     v-if="previewable(row.job)"
                     type="button"
