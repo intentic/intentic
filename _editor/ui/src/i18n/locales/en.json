@@ -81,16 +81,15 @@
         "showAll": "Show all"
     },
     "colorPicker": {
-        "brass": "Brass",
-        "cobalt": "Cobalt",
+        "clay": "Clay",
         "colour": "Color",
         "ember": "Ember",
-        "emerald": "Emerald",
-        "graphite": "Graphite",
-        "iris": "Iris",
-        "lagoon": "Lagoon",
-        "orchid": "Orchid",
-        "rose": "Rose"
+        "moss": "Moss",
+        "ochre": "Ochre",
+        "plum": "Plum",
+        "slate": "Slate",
+        "stone": "Stone",
+        "teal": "Teal"
     },
     "confirmDialog": {
         "more": "…and {count} more"

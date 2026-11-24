@@ -12,9 +12,9 @@ import { readLogoStyle } from "./presets";
 // Each lands on the nearest of the picker's swatches, so whatever arrives reads at the same strength in light and dark,
 // and the picker can always say which one is worn.
 
-// The derived colour comes from the hued swatches only: graphite is a near-grey, and a sandbox nobody coloured should
+// The derived colour comes from the hued swatches only: stone is a near-grey, and a sandbox nobody coloured should
 // still read as a colour.
-const DERIVED = SWATCHES.filter((swatch) => swatch.key !== `graphite`).map(swatchHex);
+const DERIVED = SWATCHES.filter((swatch) => swatch.key !== `stone`).map(swatchHex);
 
 const HEX = /^#[0-9a-f]{6}$/iu;
 

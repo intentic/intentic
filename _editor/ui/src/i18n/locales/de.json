@@ -81,16 +81,15 @@
         "showAll": "Alle anzeigen"
     },
     "colorPicker": {
-        "brass": "Messing",
-        "cobalt": "Kobalt",
+        "clay": "Ton",
         "colour": "Farbe",
         "ember": "Glut",
-        "emerald": "Smaragd",
-        "graphite": "Graphit",
-        "iris": "Iris",
-        "lagoon": "Lagune",
-        "orchid": "Orchidee",
-        "rose": "Rosé"
+        "moss": "Moos",
+        "ochre": "Ocker",
+        "plum": "Pflaume",
+        "slate": "Schiefer",
+        "stone": "Stein",
+        "teal": "Petrol"
     },
     "confirmDialog": {
         "more": "…und {count} weitere"

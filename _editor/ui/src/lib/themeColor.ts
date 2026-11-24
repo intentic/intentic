@@ -1,46 +1,49 @@
-// THE SWATCHES: every colour the app lets a person pick (a sandbox's own colour, a preset logo's glyph). All sit at one
-// OKLCH lightness and one chroma, so they read as one family beside the app's warm neutrals and none is louder than the
-// rest; only the hue differs. A share of each hue's own sRGB ceiling (how they were stated before 2026-11-25) made the
-// blues and greens far louder than the cyans, and the yellow-greens went olive on the warm stone of a tinted rail.
-// The hues are spaced about 40° apart, which keeps two sandboxes apart even at the low chroma of a tinted surface.
+// THE SWATCHES: every colour the app lets a person pick (a sandbox's own colour, a preset logo's glyph). Earth pigments
+// beside the app's warm stone and paper, anchored on Ember, the brand's own orange: clay, ochre, moss, a muted teal,
+// slate, plum and a warm stone grey. Each is only as colourful as it can be while still sitting in that warm room, so
+// the further a hue is from the stone's (about 65°), the quieter it is: a blue at Ember's strength is the complement of
+// everything around it and shouts. The one chroma for every hue they shared until 2026-11-24 painted pastel pinks,
+// lilacs and cyans on warm paper. The hues are about 30° to 80° apart, warm vs green vs cool vs purple telling two
+// sandboxes apart even on a tinted rail, where the warm ones all lean brown.
 
 import { hexToOklch, maxChroma, oklchToHex } from "./oklch.js";
 
-/** Where every swatch sits: the lightness of the shipped accent ramp's step 600. */
+/** Where a swatch sits unless it says otherwise: the lightness of the shipped accent ramp's step 600. */
 const SWATCH_LIGHTNESS = 0.67;
-/** How colourful every hued swatch is. In sRGB at this lightness for every hue the picker offers. */
+/** How colourful a swatch is unless it says otherwise: Ember's. */
 const SWATCH_CHROMA = 0.1;
 
-/** A swatch's hue in degrees, and its chroma where it is not the family's. */
+/** A swatch's hue in degrees, and its chroma and lightness where they are not Ember's. */
 export interface Swatch {
     readonly hue: number;
     readonly chroma?: number;
+    readonly lightness?: number;
 }
 
 /** The picker's swatches, in the order it lays them out. `key` names the swatch in `ui.colorPicker`. */
 export const SWATCHES = [
     { key: `ember`, hue: 50 },
-    { key: `rose`, hue: 10 },
-    { key: `orchid`, hue: 330 },
-    { key: `iris`, hue: 290 },
-    { key: `cobalt`, hue: 255 },
-    { key: `lagoon`, hue: 215 },
-    { key: `emerald`, hue: 175 },
-    { key: `brass`, hue: 90 },
-    // A near-grey with a blue cast, for a sandbox that should stay quiet.
-    { key: `graphite`, hue: 250, chroma: 0.02 },
+    // A brick, deeper than the rest: at their lightness a red this calm is salmon-pink.
+    { key: `clay`, hue: 30, chroma: 0.08, lightness: 0.6 },
+    { key: `ochre`, hue: 82, chroma: 0.085, lightness: 0.7 },
+    { key: `moss`, hue: 132, chroma: 0.062 },
+    { key: `teal`, hue: 195, chroma: 0.052 },
+    { key: `slate`, hue: 250, chroma: 0.052 },
+    { key: `plum`, hue: 335, chroma: 0.058 },
+    // The stone's own grey, for a sandbox that should stay quiet.
+    { key: `stone`, hue: 65, chroma: 0.014 },
 ] as const satisfies readonly (Swatch & { readonly key: string })[];
 
 export type SwatchKey = (typeof SWATCHES)[number][`key`];
 
 /** Hex for a swatch. */
-export const swatchHex = ({ hue, chroma = SWATCH_CHROMA }: Swatch): string =>
-    oklchToHex({ L: SWATCH_LIGHTNESS, C: Math.min(chroma, maxChroma(SWATCH_LIGHTNESS, hue)), h: hue });
+export const swatchHex = ({ hue, chroma = SWATCH_CHROMA, lightness = SWATCH_LIGHTNESS }: Swatch): string =>
+    oklchToHex({ L: lightness, C: Math.min(chroma, maxChroma(lightness, hue)), h: hue });
 
 /** The first swatch's hex: what a colour that cannot be read falls back to. */
 export const DEFAULT_SWATCH = swatchHex(SWATCHES[0]);
 
-// Below this chroma a colour is a grey with a cast rather than a hue, and reads as graphite.
+// Below this chroma a colour is a grey with a cast rather than a hue, and reads as stone.
 const GREY_BELOW = 0.035;
 
 const hueGap = (a: number, b: number): number => {
@@ -49,7 +52,7 @@ const hueGap = (a: number, b: number): number => {
 };
 
 /**
- * The swatch a colour is nearest, as its hex: by hue, or graphite for a near-grey. A colour stored by hand or drawn
+ * The swatch a colour is nearest, as its hex: by hue, or stone for a near-grey. A colour stored by hand or drawn
  * from a logo then still lands on one of the picker's own, so the picker can say which one is worn. Anything
  * unreadable is the first swatch.
  */
@@ -58,10 +61,10 @@ export const nearestSwatch = (hex: string): string => {
     if (read === undefined) {
         return DEFAULT_SWATCH;
     }
-    const hued = SWATCHES.filter((swatch) => swatch.key !== `graphite`);
+    const hued = SWATCHES.filter((swatch) => swatch.key !== `stone`);
     const pick =
         read.C < GREY_BELOW
-            ? SWATCHES.find((swatch) => swatch.key === `graphite`)!
+            ? SWATCHES.find((swatch) => swatch.key === `stone`)!
             : hued.reduce((best, swatch) => (hueGap(swatch.hue, read.h) < hueGap(best.hue, read.h) ? swatch : best));
     return swatchHex(pick);
 };

@@ -263,20 +263,20 @@ it(`wears the colour just pressed while the platform answers, and keeps the swat
     update.mockReturnValueOnce(new Promise(() => undefined));
     const el = mount(sandboxRow());
     const editor = await openSwatches(el);
-    swatch(editor, `Rose`).click();
-    await waitFor(() => expect(colorValue(el)!.querySelector(`button`)!.getAttribute(`aria-label`)).toBe(`Sandbox color: Rose`));
-    expect(swatch(editor, `Rose`).getAttribute(`aria-checked`)).toBe(`true`);
+    swatch(editor, `Clay`).click();
+    await waitFor(() => expect(colorValue(el)!.querySelector(`button`)!.getAttribute(`aria-label`)).toBe(`Sandbox color: Clay`));
+    expect(swatch(editor, `Clay`).getAttribute(`aria-checked`)).toBe(`true`);
     expect(document.querySelector(`[data-sandbox-color-editor]`)).not.toBeNull();
 });
 
 it(`redraws a preset logo in the colour just picked, in the same write, so the sandbox wears one colour`, async () => {
-    const rose = swatchHex(SWATCHES.find((entry) => entry.key === `rose`)!);
+    const clay = swatchHex(SWATCHES.find((entry) => entry.key === `clay`)!);
     const el = mount(sandboxRow({ image: logoStyleImage({ icon: `moon`, color: `#e07400` }) }));
-    swatch(await openSwatches(el), `Rose`).click();
+    swatch(await openSwatches(el), `Clay`).click();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     const sent = update.mock.calls[0]![1];
-    expect(sent.color).toBe(rose);
-    expect(readLogoStyle(sent.image)).toEqual({ icon: `moon`, color: rose });
+    expect(sent.color).toBe(clay);
+    expect(readLogoStyle(sent.image)).toEqual({ icon: `moon`, color: clay });
 });
 
 it(`leaves an uploaded logo as it is when the colour changes`, async () => {

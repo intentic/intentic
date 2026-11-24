@@ -9252,7 +9252,6 @@
         },
         "sandboxColor": {
             "couldntSave": "Impossible d'enregistrer la couleur.",
-            "hint": "Teinte la barre latérale, le fond d'écran et la zone de message, pour tous dans ce sandbox.",
             "title": "Couleur du sandbox"
         },
         "sandboxOverview": {

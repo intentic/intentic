@@ -81,16 +81,15 @@
         "showAll": "Tout afficher"
     },
     "colorPicker": {
-        "brass": "Laiton",
-        "cobalt": "Cobalt",
+        "clay": "Argile",
         "colour": "Couleur",
         "ember": "Braise",
-        "emerald": "Émeraude",
-        "graphite": "Graphite",
-        "iris": "Iris",
-        "lagoon": "Lagune",
-        "orchid": "Orchidée",
-        "rose": "Rose"
+        "moss": "Mousse",
+        "ochre": "Ocre",
+        "plum": "Prune",
+        "slate": "Ardoise",
+        "stone": "Pierre",
+        "teal": "Sarcelle"
     },
     "confirmDialog": {
         "more": "…et {count} de plus"

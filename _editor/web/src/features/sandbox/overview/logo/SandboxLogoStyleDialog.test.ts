@@ -50,14 +50,14 @@ it(`restores saved choices and keeps the matching preview when reopened`, async 
 it(`previews both choices before saving the exact image being previewed`, async () => {
     await mount();
     button(`Flask`).click();
-    button(`Cobalt`).click();
+    button(`Slate`).click();
     await nextTick();
     const image = preview().getAttribute(`src`)!;
     expect(readLogoStyle(image)?.icon).toBe(`flask`);
     const ink = document.createElement(`span`);
     ink.style.color = readLogoStyle(image)!.color;
-    expect(ink.style.color).toBe(button(`Cobalt`).style.backgroundColor);
-    expect(button(`Cobalt`).getAttribute(`aria-checked`)).toBe(`true`);
+    expect(ink.style.color).toBe(button(`Slate`).style.backgroundColor);
+    expect(button(`Slate`).getAttribute(`aria-checked`)).toBe(`true`);
     expect(button(`Ember`).getAttribute(`aria-checked`)).toBe(`false`);
     expect(button(`Flask`).getAttribute(`aria-pressed`)).toBe(`true`);
     expect(button(`Moon`).getAttribute(`aria-pressed`)).toBe(`false`);

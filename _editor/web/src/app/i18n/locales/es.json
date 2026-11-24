@@ -9252,7 +9252,6 @@
         },
         "sandboxColor": {
             "couldntSave": "No se pudo guardar el color.",
-            "hint": "Tiñe la barra lateral, el fondo y el cuadro de mensaje, para todos en este sandbox.",
             "title": "Color del sandbox"
         },
         "sandboxOverview": {

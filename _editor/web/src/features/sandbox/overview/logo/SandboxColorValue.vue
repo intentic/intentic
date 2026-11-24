@@ -100,7 +100,6 @@ const pick = async (color: string): Promise<void> => {
                     <ColorPicker :model-value="current" :label="titleId === undefined ? t(`sandbox.sandboxColor.title`) : undefined" @update:model-value="pick" />
                     <!-- As wide as the swatches above it and no wider: the row of colours sets the panel's width. -->
                     <p v-if="error" role="alert" class="w-0 min-w-full text-xs text-danger">{{ error }}</p>
-                    <p v-else class="w-0 min-w-full text-xs leading-relaxed text-muted">{{ t(`sandbox.sandboxColor.hint`) }}</p>
                 </div>
             </template>
         </ResponsiveOverlay>
