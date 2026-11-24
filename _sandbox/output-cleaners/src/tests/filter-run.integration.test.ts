@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { filterRun, retainIn } from "../agent-output-filter.mjs";
 import { CACHE_MARKER } from "../cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../stats/filter-stats.mjs";
@@ -125,4 +127,19 @@ test("raw-output retention keeps the newest 500 files, the one just written amon
     expect(kept).toContain("new.log");
     expect(kept).not.toContain("old-5.log");
     expect(kept).toContain("old-6.log");
+});
+
+// Under node, as the sandbox runs the bin: V8's regex engine ran out of stack on the wide-run pattern over a run of a few
+// million characters (bun's never does, so an in-process test could not see it), and the whole 8 MB went to the agent.
+test("an unbroken run of millions of characters comes back cut under node, not raw", () => {
+    const filter = fileURLToPath(new URL("../agent-output-filter.mjs", import.meta.url));
+    const ran = spawnSync("node", [filter, "cat dist/app.js.map", "0", "0"], {
+        input: `${"x".repeat(8_000_000)}\n`,
+        encoding: "utf8",
+        env: { PATH: process.env["PATH"] ?? "" },
+        maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).toMatch(/… \d+ chars elided …/);
+    expect(ran.stdout.length).toBeLessThan(1_000);
 });

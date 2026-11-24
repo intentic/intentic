@@ -33,6 +33,33 @@ const WIDE_HEAD = 240;
 const WIDE_TAIL = 80;
 // Head-heavy: a blob's first characters say what it is (the JSON keys, the `data:` prefix), its last say where it ends.
 const elideRun = (run) => `${run.slice(0, WIDE_HEAD)}… ${run.length - WIDE_HEAD - WIDE_TAIL} chars elided …${run.slice(-WIDE_TAIL)}`;
-const WIDE_PATTERN = new RegExp(String.raw`\S{${WIDE_RUN + 1},}`, "g");
-export const elideWideRuns = (lines) =>
-    lines.map((line) => (line.length > WIDE_RUN && !IMPORTANT.test(line) ? line.replaceAll(WIDE_PATTERN, elideRun) : line));
+
+// What `\s` matches, by UTF-16 code unit: ECMAScript's white space and line terminators.
+const isSpace = (code) =>
+    code === 0x20 ||
+    (code >= 0x09 && code <= 0x0d) ||
+    (code >= 0xa0 &&
+        (code === 0xa0 || code === 0x1680 || (code >= 0x2000 && code <= 0x200a) || code === 0x2028 || code === 0x2029 || code === 0x202f || code === 0x205f || code === 0x3000 || code === 0xfeff));
+
+// Every run of more than WIDE_RUN non-space characters cut down by elideRun: `\S{401,}` replaced, by a scan. The pattern
+// threw "Maximum call stack size exceeded" under node on a run of about six million (2026-11-24): a sourcemap, a
+// `base64 -w0`, a minified API answer, after which the whole filter answered with the raw text, every byte of it.
+const elideWide = (line) => {
+    let out = "";
+    let copied = 0;
+    let runStart = -1;
+    for (let at = 0; at <= line.length; at += 1) {
+        if (at < line.length && !isSpace(line.charCodeAt(at))) {
+            runStart = runStart === -1 ? at : runStart;
+            continue;
+        }
+        if (runStart !== -1 && at - runStart > WIDE_RUN) {
+            out += line.slice(copied, runStart) + elideRun(line.slice(runStart, at));
+            copied = at;
+        }
+        runStart = -1;
+    }
+    return copied === 0 ? line : out + line.slice(copied);
+};
+
+export const elideWideRuns = (lines) => lines.map((line) => (line.length > WIDE_RUN && !IMPORTANT.test(line) ? elideWide(line) : line));
