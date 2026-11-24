@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { SectionHeader } from "@intentic/ui";
+import ToggleSwitch from "primevue/toggleswitch";
 import { computed, toRef } from "vue";
 import { type RunSettingsPatch, usePickerRunSettings } from "../../../../models/providers/pickerRunSettings";
 import EffortMeter from "../../composer/EffortMeter.vue";
@@ -56,53 +57,48 @@ const chipsShown = computed(() => props.settings && (thinkingOffered.value || fa
 </script>
 
 <template>
-    <!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
-    <SectionHeader v-if="effortShown" :label="t(`chat.words.reasoningEffort`)" density="dense">
-        <template #actions>
-            <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
-        </template>
-    </SectionHeader>
+    <!-- ONE BLOCK UNDER ONE RULE spanning the panel whenever anything stands above it in the footer (PickerFooter), so the
+         controls for how the model runs read as the footer's last group rather than more account rows. -->
+    <div class="-mx-3 flex flex-col gap-2 px-3 py-2 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line">
+        <!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
+        <SectionHeader v-if="effortShown" :label="t(`chat.words.reasoningEffort`)" density="dense">
+            <template #actions>
+                <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
+            </template>
+        </SectionHeader>
 
-    <!-- THE TOOLBAR: the same shape for every provider, so the eye finds each control where it was on the last one. -->
-    <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-        <LoopChips
-            :provider="provider"
-            :harness="harness"
-            :choosable="loopChoosable"
-            :disabled="loopLocked"
-            @select="emit(`selectHarness`, $event)"
-        />
-        <div v-if="chipsShown" class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-            <button
-                v-if="thinkingOffered"
-                type="button"
-                class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
-                :class="{ 'composer-active': thinkingOn }"
-                :aria-label="t(`chat.pickerRunSettings.extendedThinking`)"
-                :aria-pressed="thinkingOn"
-                @click="emit(`update`, { thinking: !thinkingOn })"
-            >
-                <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-current" :class="{ 'bg-current': thinkingOn }" aria-hidden="true"></span>
-                <span>{{ t(`chat.pickerRunSettings.extendedThinking`) }}</span>
-                <span aria-hidden="true" class="rounded bg-current/10 px-1.5 py-0.5 text-2xs">{{ thinkingOn ? t(`chat.pickerRunSettings.on`) : t(`chat.pickerRunSettings.off`) }}</span>
-            </button>
-            <button
-                v-if="fastOffered"
-                type="button"
-                class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
-                :class="{ 'composer-active': fastOn }"
-                :aria-label="t(`chat.pickerRunSettings.fastSpeed`)"
-                :aria-pressed="fastOn"
-                :aria-description="fastNotice"
-                v-tooltip.top="fastNotice"
-                @click="emit(`update`, { fast: !fastOn })"
-            >
-                <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-current" :class="{ 'bg-current': fastOn }" aria-hidden="true"></span>
-                <span>{{ t(`chat.pickerRunSettings.fastSpeed`) }}</span>
-                <span aria-hidden="true" class="rounded bg-current/10 px-1.5 py-0.5 text-2xs">{{ fastOn ? t(`chat.pickerRunSettings.on`) : t(`chat.pickerRunSettings.off`) }}</span>
-                <!-- Said only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
-                <Icon v-if="fastNotice !== undefined" name="exclamation-triangle" class="shrink-0 text-warning" aria-hidden="true" />
-            </button>
+        <!-- THE TOOLBAR: the same shape for every provider, so the eye finds each control where it was on the last one. -->
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+            <LoopChips
+                :provider="provider"
+                :harness="harness"
+                :choosable="loopChoosable"
+                :disabled="loopLocked"
+                @select="emit(`selectHarness`, $event)"
+            />
+            <!-- EACH SETTING IS ITS NAME AND THE APP'S OWN SWITCH, the whole label pressing it. It was a pill holding a dot and a
+                 second pill saying On or Off: a box in a box, three marks for one bit, and lit in the accent beside the
+                 picked model and account. The switch says the state on its own, in every look, and a screen reader hears a
+                 switch named by its words. -->
+            <div v-if="chipsShown" class="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1.5">
+                <label v-if="thinkingOffered" class="flex cursor-pointer items-center gap-2 text-2xs text-muted transition-colors hover:text-content max-md:min-h-11">
+                    <span data-switch-name>{{ t(`chat.pickerRunSettings.extendedThinking`) }}</span>
+                    <ToggleSwitch class="ui-switch-xs shrink-0" :model-value="thinkingOn" @update:model-value="(on: boolean) => emit(`update`, { thinking: on })" />
+                </label>
+                <label
+                    v-if="fastOffered"
+                    class="flex cursor-pointer items-center gap-2 text-2xs text-muted transition-colors hover:text-content max-md:min-h-11"
+                    v-tooltip.top="fastNotice"
+                >
+                    <span data-switch-name>{{ t(`chat.pickerRunSettings.fastSpeed`) }}</span>
+                    <!-- Said only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
+                    <template v-if="fastNotice !== undefined">
+                        <Icon name="exclamation-triangle" class="shrink-0 text-warning" aria-hidden="true" />
+                        <span class="sr-only">{{ fastNotice }}</span>
+                    </template>
+                    <ToggleSwitch class="ui-switch-xs shrink-0" :model-value="fastOn" @update:model-value="(on: boolean) => emit(`update`, { fast: on })" />
+                </label>
+            </div>
         </div>
     </div>
 </template>

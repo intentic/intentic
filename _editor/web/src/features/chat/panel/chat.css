@@ -1199,17 +1199,6 @@
     background: color-mix(in srgb, var(--color-primary-500) 24%, transparent);
     color: var(--color-primary-500);
 }
-/* A GHOST CONTROL THAT IS A TOGGLE, and therefore has to look pressable in the state where it is doing nothing. */
-.composer-toggle {
-    border: 1px solid var(--color-line);
-    transition:
-        background-color var(--motion-hover),
-        border-color var(--motion-hover),
-        color var(--motion-hover);
-}
-.composer-toggle.composer-active {
-    border-color: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
-}
 /* The pill whose value an `@` pick just changed (ChatPane's flashed): one ring, since the token that changed it left the text. */
 .composer-flash {
     animation: composer-flash 0.7s ease-out;

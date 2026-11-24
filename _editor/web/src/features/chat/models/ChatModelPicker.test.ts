@@ -30,6 +30,7 @@ jest.mock(`../accounts/pickerAccounts`, () => ({
         unplacedRefusal: computed(() => undefined),
         routedRows: computed(() => []),
         onKey: computed(() => false),
+        choosable: computed(() => false),
     }),
 }));
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
@@ -120,14 +121,13 @@ const note = (element: HTMLElement): string => element.querySelector(`[role="not
 // The limits hint's trigger: the parent of the focusable span it sits in (a harness segment is focusable too, so by its look).
 const hint = (element: HTMLElement): HTMLElement => element.querySelector<HTMLElement>(`.cursor-help[tabindex="0"]`)!.parentElement!;
 
-// The run-settings chips, by the shape a chip has: a pressed-state button carrying its own name. Read as
-// `label → lit`, so a test says both which chips exist and which of them are on.
+// The run settings, by the shape a setting has: a switch named by the words of the label it sits in. Read as
+// `label → on`, so a test says both which settings exist and which of them are on.
+const switchName = (input: HTMLInputElement): string => input.closest(`label`)?.querySelector(`[data-switch-name]`)?.textContent?.trim() ?? ``;
 const chips = (element: HTMLElement): Record<string, boolean> =>
-    Object.fromEntries(
-        [...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => [chip.getAttribute(`aria-label`) ?? chip.textContent ?? ``, chip.getAttribute(`aria-pressed`) === `true`]),
-    );
-const chip = (element: HTMLElement, label: string): HTMLElement =>
-    [...element.querySelectorAll<HTMLElement>(`button[aria-pressed]`)].find((candidate) => (candidate.getAttribute(`aria-label`) ?? candidate.textContent) === label)!;
+    Object.fromEntries([...element.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)].map((input) => [switchName(input), input.getAttribute(`aria-checked`) === `true`]));
+const chip = (element: HTMLElement, label: string): HTMLInputElement =>
+    [...element.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)].find((candidate) => switchName(candidate) === label)!;
 
 afterEach(() => {
     app?.unmount();
@@ -205,12 +205,14 @@ it(`asks the thinking question with the shared chip`, () => {
     const { element, conversation } = mount(CEILING);
 
     expect(chips(element)).toEqual({ "Extended thinking": conversation.selection.thinking.value });
-    expect(chip(element, `Extended thinking`).textContent).toBe(`Extended thinkingOff`);
+    expect(chip(element, `Extended thinking`).checked).toBe(false);
 });
 
-it(`names the thinking state visibly while keeping its accessible toggle name stable`, () => {
+// The state is the switch's own, drawn and spoken: no second pill saying On or Off inside the first.
+it(`shows the thinking state on the switch while keeping its accessible name stable`, () => {
     const { element } = mount(CEILING, { thinking: true });
-    expect(chip(element, `Extended thinking`).textContent).toBe(`Extended thinkingOn`);
+    expect(chip(element, `Extended thinking`).checked).toBe(true);
+    expect(chip(element, `Extended thinking`).closest(`label`)?.textContent?.trim()).toBe(`Extended thinking`);
     expect(chips(element)).toEqual({ "Extended thinking": true });
 });
 

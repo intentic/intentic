@@ -7,6 +7,7 @@ import UsageMeter from "../session/UsageMeter.vue";
 import KeyBalanceFigure from "./KeyBalanceFigure.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, sameModelOn, usePickerAccounts } from "./pickerAccounts";
 import { runServing } from "../../../models/conversations/accounts/runServing";
+import { remainingFigure } from "../../../models/providers/usageStatus";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
@@ -178,11 +179,14 @@ const pickProvider = (target: AgentProvider): void => {
 
 <template>
     <!-- The list above browses across providers; this footer configures what's selected. Nothing here but rows: what the
-         footer has to SAY (a refusal, a live turn) is PickerStatus's one line above. -->
+         footer has to SAY (a refusal, a live turn) is PickerStatus's line above, which is also these rows' group header. -->
     <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
     <SandboxOutdatedNotice v-if="accountsOutdated" :missing="t(`chat.pickerAccounts.outdatedMissing`)" />
 
-    <!-- No frame per row: only the tint marks the active one, hover shows the rest are choosable. -->
+    <!-- EVERY ROW HERE IS A MODEL ROW'S SHAPE (ModelPicker): one line, the name in the list's type, a quiet description
+         beside it, what it has left at the end. The account the next turn runs on is marked as the picked model is, by
+         its name in the pick's ink and a tick at the row's end, never a standing tint: a tint here beside the list's own
+         cursor drew two "picked" rows in one panel. -->
     <template v-if="choosable">
         <!-- Shown only once the list is folded and long; a filter over a short, readable list would be a control looking for a reason to exist. -->
         <SearchBar
@@ -210,45 +214,45 @@ const pickProvider = (target: AgentProvider): void => {
                 :key="a.id"
                 type="button"
                 :data-current="activeAccountId === a.id"
-                class="ui-row-select ui-off flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
-                :class="{ 'ui-row-select-on': activeAccountId === a.id }"
+                class="ui-row-select ui-off flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
                 :disabled="accountsLocked || (onKey && providerLocked)"
                 @click="pickAccount(a.id)"
             >
-                <!-- Row grows a line only when there's a refusal, a spent pool or a subtitle to show; the condition takes that second line over the subtitle. -->
-                <span class="flex min-w-0 flex-col items-start leading-tight">
-                    <span class="flex max-w-full items-baseline gap-1.5">
-                        <!-- A row that can take no turn dims its name and ring, never the line saying why. -->
-                        <span class="truncate text-content" :class="{ 'opacity-50': a.demoted }">{{ a.label }}</span>
-                        <!-- The tick nobody chose says who chose it: the runtime, by allowance left. -->
-                        <span
-                            v-if="autoPickedId === a.id"
-                            class="shrink-0 text-2xs text-subtle"
-                            v-tooltip.top="{ title: t(`chat.pickerAccounts.autoPicked`), note: t(`chat.pickerAccounts.byAllowanceLeft`) }"
-                            >{{ t(`chat.words.autoLabel`) }}</span
-                        >
-                    </span>
-                    <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
-                    <span v-if="a.refused" class="flex max-w-full items-start gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
-                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs" aria-hidden="true" />
-                        <span class="truncate">{{ a.refused }}</span>
-                    </span>
-                    <span v-else-if="a.waiting" class="max-w-full truncate text-2xs text-subtle">{{ a.waiting }}</span>
-                    <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle" :class="{ 'opacity-50': a.demoted }">{{
-                        a.subtitle
-                    }}</span>
+                <!-- A row that can take no turn dims its name and meter, never the words saying why. -->
+                <span
+                    data-account-name
+                    class="max-w-[60%] shrink-0 truncate text-sm md:text-xs"
+                    :class="[activeAccountId === a.id ? `text-link` : `text-content`, { 'opacity-50': a.demoted }]"
+                    >{{ a.label }}</span
+                >
+                <!-- The tick nobody chose says who chose it: the runtime, by allowance left. -->
+                <span
+                    v-if="autoPickedId === a.id"
+                    class="shrink-0 text-2xs text-subtle"
+                    v-tooltip.top="{ title: t(`chat.pickerAccounts.autoPicked`), note: t(`chat.pickerAccounts.byAllowanceLeft`) }"
+                    >{{ t(`chat.words.autoLabel`) }}</span
+                >
+                <!-- THE DESCRIPTION SLOT, as a model row's: why it can take no turn, else when it can again, else who it is.
+                     Truncated on the row, whole on hover. -->
+                <span v-if="a.refused" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
+                    <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
+                    <span class="truncate">{{ a.refused }}</span>
                 </span>
-                <!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
-                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" :class="{ 'opacity-50': a.demoted }" />
+                <span v-else-if="a.waiting" class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ a.waiting }}</span>
+                <span v-else class="min-w-0 flex-1 truncate text-2xs text-subtle" :class="{ 'opacity-50': a.demoted }">{{ a.subtitle }}</span>
+                <!-- What it has left, as a figure beside its meter: the question a reader picks an account by, answered without a hover. -->
+                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="shrink-0" :class="{ 'opacity-50': a.demoted }">
+                    <span class="text-2xs tabular-nums text-subtle">{{ remainingFigure(a.headroom.percent, a.headroom.stale) }}</span>
+                </UsageMeter>
                 <!-- A plan without the model has no room for it to show: it says so where the meter would be, quietly, since nothing is wrong. -->
-                <span v-else-if="a.offPlan" class="ml-auto shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
+                <span v-else-if="a.offPlan" class="shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
                 <Icon
                     v-if="a.needsReauth"
                     name="exclamation-triangle"
                     class="shrink-0 text-2xs text-warning"
-                    :class="{ 'ml-auto': !a.headroom }"
                     v-tooltip.top="a.detail ?? t(`chat.words.reconnectNeeded`)"
                 />
+                <Icon v-if="activeAccountId === a.id" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
             <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->
             <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
@@ -260,16 +264,16 @@ const pickProvider = (target: AgentProvider): void => {
                 :key="k.provider"
                 type="button"
                 :data-current="provider === k.provider"
-                class="ui-row-select ui-off flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
-                :class="{ 'ui-row-select-on': provider === k.provider }"
+                class="ui-row-select ui-off flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
                 :disabled="provider !== k.provider && providerLocked"
                 @click="pickProvider(k.provider)"
             >
-                <span class="flex min-w-0 flex-col items-start leading-tight">
-                    <span class="truncate text-content">{{ k.label }}</span>
-                    <span v-if="k.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ k.subtitle }}</span>
-                </span>
+                <span data-account-name class="max-w-[60%] shrink-0 truncate text-sm md:text-xs" :class="provider === k.provider ? `text-link` : `text-content`">{{
+                    k.label
+                }}</span>
+                <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ k.subtitle }}</span>
                 <KeyBalanceFigure :provider="k.provider" />
+                <Icon v-if="provider === k.provider" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
         </div>
 
@@ -320,21 +324,24 @@ const pickProvider = (target: AgentProvider): void => {
                 :key="a.name"
                 :type="onKey ? `button` : undefined"
                 :disabled="onKey ? providerLocked : undefined"
-                class="flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs"
+                class="flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left"
                 :class="{ 'ui-row-select ui-off max-md:min-h-11': onKey }"
                 @click="onKey && pickProvider(family)"
             >
-                <!-- The same reading as the choosable rows: dimmed when it takes no turn on this model, and a line saying why or until when. -->
-                <span class="flex min-w-0 flex-col items-start leading-tight">
-                    <span class="max-w-full truncate text-content" :class="{ 'opacity-50': a.demoted }">{{ a.label }}</span>
-                    <span v-if="a.refused" class="flex max-w-full items-start gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
-                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs" aria-hidden="true" />
-                        <span class="truncate">{{ a.refused }}</span>
-                    </span>
-                    <span v-else-if="a.waiting" class="max-w-full truncate text-2xs text-subtle" v-tooltip.top="restTip(a.rests)">{{ a.waiting }}</span>
+                <!-- The same reading as the choosable rows: dimmed when it takes no turn on this model, and words saying why or until when. -->
+                <span data-account-name class="max-w-[60%] shrink-0 truncate text-sm text-content md:text-xs" :class="{ 'opacity-50': a.demoted }">{{
+                    a.label
+                }}</span>
+                <span v-if="a.refused" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
+                    <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
+                    <span class="truncate">{{ a.refused }}</span>
                 </span>
-                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" :class="{ 'opacity-50': a.demoted }" />
-                <span v-else-if="a.offPlan" class="ml-auto shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
+                <span v-else-if="a.waiting" class="min-w-0 flex-1 truncate text-2xs text-subtle" v-tooltip.top="restTip(a.rests)">{{ a.waiting }}</span>
+                <span v-else class="min-w-0 flex-1" />
+                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="shrink-0" :class="{ 'opacity-50': a.demoted }">
+                    <span class="text-2xs tabular-nums text-subtle">{{ remainingFigure(a.headroom.percent, a.headroom.stale) }}</span>
+                </UsageMeter>
+                <span v-else-if="a.offPlan" class="shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
             </component>
             <p v-if="routedOpen && routedShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
                 {{ t(`chat.pickerAccounts.noAccountsMatch`) }}

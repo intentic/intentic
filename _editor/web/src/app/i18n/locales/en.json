@@ -4617,8 +4617,6 @@
             "spread": "{count} accounts, spread automatically"
         },
         "pickerRunSettings": {
-            "on": "On",
-            "off": "Off",
             "defaultEffort": "default effort",
             "extendedThinking": "Extended thinking",
             "fast": "fast",

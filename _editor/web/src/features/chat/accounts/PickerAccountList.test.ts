@@ -59,7 +59,8 @@ const mount = (props: { account?: string; named?: boolean; provider?: AgentProvi
 };
 
 const rows = (element: HTMLElement): HTMLElement[] => [...element.querySelectorAll<HTMLElement>(`#picker-account-list button`)];
-const labelOf = (row: HTMLElement): string => row.querySelector(`.text-content`)?.textContent?.trim() ?? ``;
+const nameOf = (row: HTMLElement): HTMLElement | null => row.querySelector<HTMLElement>(`[data-account-name]`);
+const labelOf = (row: HTMLElement): string => nameOf(row)?.textContent?.trim() ?? ``;
 const ticked = (element: HTMLElement): string[] =>
     rows(element)
         .filter((row) => row.dataset[`current`] === `true`)
@@ -85,7 +86,9 @@ it(`ticks the account a turn naming none runs on, says the runtime picked it, an
     expect(ticked(element)).toEqual([`spare@example.com`]);
     const spare = rows(element).find((row) => labelOf(row) === `spare@example.com`)!;
     expect(spare.textContent).toContain(`Auto`);
-    expect(spare.className).toContain(`ui-row-select-on`);
+    // Marked as the list marks its picked model: the name in the pick's ink, never a standing tint beside the list's cursor.
+    expect(nameOf(spare)?.className).toContain(`text-link`);
+    expect(spare.className).not.toContain(`ui-row-select-on`);
 });
 
 it(`draws the accounts that can take a turn first, the spent ones next, the ones a person has to fix last`, () => {
@@ -105,12 +108,12 @@ it(`dims a row that can take no turn but keeps its reason legible, and says when
     const element = mount();
     const row = (id: string): HTMLElement => rows(element).find((candidate) => labelOf(candidate) === `${id}@example.com`)!;
 
-    expect(row(`work`).querySelector(`.text-content`)?.className).toContain(`opacity-50`);
+    expect(row(`work`).querySelector(`[data-account-name]`)?.className).toContain(`opacity-50`);
     expect(row(`work`).querySelector(`.text-warning`)?.textContent).toContain(`Your organization has disabled Claude subscription access.`);
     expect(row(`work`).querySelector(`.text-warning`)?.className).not.toContain(`opacity-50`);
-    expect(row(`drained`).querySelector(`.text-content`)?.className).toContain(`opacity-50`);
+    expect(row(`drained`).querySelector(`[data-account-name]`)?.className).toContain(`opacity-50`);
     expect(row(`drained`).textContent).toContain(`Allowance used up, reopens`);
-    expect(row(`personal`).querySelector(`.text-content`)?.className).not.toContain(`opacity-50`);
+    expect(row(`personal`).querySelector(`[data-account-name]`)?.className).not.toContain(`opacity-50`);
     // Dimmed, never disabled: picking one is an attempt on it.
     row(`work`).click();
     expect(picks).toEqual([`work`]);
@@ -135,6 +138,19 @@ it(`names the model's own pool when only that is spent, so the row never reads a
     // An allowance every model spends is still the account's own.
     expect(row(`drained`).textContent).toContain(`Allowance used up, reopens`);
     expect(row(`drained`).textContent).not.toContain(`Fable`);
+});
+
+// The reported row: "radarsu@gmail.com" over "radarsu@gmail.com's Organization", the provider's name for a personal org.
+it(`drops an organization that only restates its owner's address, and keeps a team's`, () => {
+    listed = [
+        account(`solo`, { ...room(40), email: `solo@example.com`, organization: `solo@example.com's Organization` }),
+        account(`team`, { ...room(70), email: `team@example.com`, organization: `Acme` }),
+    ];
+    const element = mount();
+    const row = (id: string): HTMLElement => rows(element).find((candidate) => labelOf(candidate) === `${id}@example.com`)!;
+
+    expect(row(`solo`).textContent).not.toContain(`Organization`);
+    expect(row(`team`).textContent).toContain(`Acme`);
 });
 
 it(`ticks a pick the turn names whatever its state, as the one the turn is tried on`, () => {
@@ -242,7 +258,7 @@ describe(`a subscription whose plans differ by model`, () => {
         expect(first?.textContent).toContain(`Allowance used up, reopens`);
         for (const row of rest) {
             expect(row.textContent).toContain(`not on plan`);
-            expect(row.querySelector(`.text-content`)?.className).toContain(`opacity-50`);
+            expect(row.querySelector(`[data-account-name]`)?.className).toContain(`opacity-50`);
             expect(row.querySelector(`.text-warning`)).toBeNull();
         }
         // One account runs Sol: nothing is spread.

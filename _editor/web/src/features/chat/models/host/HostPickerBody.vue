@@ -10,6 +10,7 @@ import { usePickerRunSettings } from "../../../../models/providers/pickerRunSett
 import ModelPicker from "../ModelPicker.vue";
 import PickerAccounts from "../../accounts/PickerAccounts.vue";
 import PickerRunSettings from "../run-settings/PickerRunSettings.vue";
+import PickerFooter from "../PickerFooter.vue";
 import PickerStatus from "../../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../../models/providers/offeredLoops";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
@@ -146,9 +147,8 @@ const choose = (entry: PickerEntry): void => {
         @close="dismissModelPick()"
     >
         <template #footer>
-            <!-- Picker and composer share the footer metrics. -->
-            <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
-                <!-- The composer picker's own three parts: the status line, the account rows, the toolbar under a rule. -->
+            <!-- The composer picker's own footer and its three parts: the status line, the account rows, the toolbar under a rule. -->
+            <PickerFooter v-if="footerVisible">
                 <PickerStatus :provider="request.provider" :harness="request.harness ?? `native`" :model="request.model" />
                 <PickerAccounts
                     v-if="hasContent"
@@ -159,29 +159,26 @@ const choose = (entry: PickerEntry): void => {
                     @select-account="stageModelPick({ account: $event })"
                     @select-credential="(pick, account) => stageModelPick({ provider: pick.provider, model: pick.value, account, harness: undefined })"
                 />
-                <div
+                <!-- A caller that does not carry run settings (`chooseRun`) gets the harness alone: a control whose answer is dropped is worse than none. -->
+                <PickerRunSettings
                     v-if="runShown"
-                    class="-mx-3 flex flex-col gap-2 px-3 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line [&:not(:first-child)]:pt-2"
-                >
-                    <!-- A caller that does not carry run settings (`chooseRun`) gets the harness alone: a control whose answer is dropped is worse than none. -->
-                    <PickerRunSettings
-                        :provider="request.provider"
-                        :model="request.model"
-                        :harness="request.harness ?? `native`"
-                        :effort="request.effort"
-                        :thinking="request.thinking"
-                        :fast="request.fast"
-                        :settings="runSettings"
-                        @update="stageModelPick($event)"
-                        @select-harness="stageModelPick({ harness: $event })"
-                    />
-                </div>
-            </div>
+                    :provider="request.provider"
+                    :model="request.model"
+                    :harness="request.harness ?? `native`"
+                    :effort="request.effort"
+                    :thinking="request.thinking"
+                    :fast="request.fast"
+                    :settings="runSettings"
+                    @update="stageModelPick($event)"
+                    @select-harness="stageModelPick({ harness: $event })"
+                />
+            </PickerFooter>
         </template>
 
-        <!-- THE END OF THE PANEL, and the whole reason it now has one. -->
+        <!-- THE END OF THE PANEL, and the whole reason it now has one. On the overlay's own slab like the footer above it
+             (PickerFooter says why not the canvas); filled only on a phone, where the sheet scrolls under it, in the sheet's card. -->
         <template #commit>
-            <div class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-1.5 border-t border-line bg-canvas px-3 py-2">
+            <div class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-1.5 border-t border-line px-3 py-2 max-md:bg-card">
                 <span class="truncate text-2xs" :class="chosen ? `text-subtle` : `text-muted`">{{ spend }}</span>
                 <!-- OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT (hostModelPicker.ts, AttemptOnOffer): the line names it and the verbs say what the press does to it. -->
                 <template v-if="request.attempt">

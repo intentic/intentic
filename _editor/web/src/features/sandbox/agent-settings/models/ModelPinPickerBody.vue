@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import ModelPicker from "../../../chat/models/ModelPicker.vue";
 import PickerRunSettings from "../../../chat/models/run-settings/PickerRunSettings.vue";
+import PickerFooter from "../../../chat/models/PickerFooter.vue";
 import { loopRowShown, offeredLoops } from "../../../../models/providers/offeredLoops";
 import type { PickerEntry } from "../../../../models/conversations/accounts/modelPickerState";
 import { carryPinKnobs, defaultPinRunSettings, honoredPinKnobs, usePickerRunSettings } from "../../../../models/providers/pickerRunSettings";
@@ -94,8 +95,8 @@ const unpickable = (entry: PickerEntry): boolean =>
 <template>
     <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" :helper-jobs="helperJobs" @pick="pick" @close="emit(`close`)">
         <template #footer>
-            <!-- Composer footer's own spacing, so a reader can't tell whether this opened from a settings row or the composer. -->
-            <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+            <!-- The composer picker's own footer, so a reader can't tell whether this opened from a settings row or the composer. -->
+            <PickerFooter v-if="footerVisible">
                 <!-- The composer picker's own toolbar, so a reader can't tell whether this opened from a settings row or the composer:
                      reasoning effort, then the harness with what it can't do and what its vendor says (shown even with one loop to
                      name, since a pin is a choice made for runs nobody is watching), then extended thinking and speed. -->
@@ -109,7 +110,7 @@ const unpickable = (entry: PickerEntry): boolean =>
                     @update="configure($event)"
                     @select-harness="configure({ harness: $event })"
                 />
-            </div>
+            </PickerFooter>
         </template>
     </ModelPicker>
 </template>

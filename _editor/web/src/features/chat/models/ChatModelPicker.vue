@@ -8,6 +8,7 @@ import { type RunSettingsPatch, usePickerRunSettings } from "../../../models/pro
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
+import PickerFooter from "./PickerFooter.vue";
 import PickerStatus from "../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../models/providers/offeredLoops";
 import { accessKnown, anyProviderReady } from "../../../models/providers/access";
@@ -171,12 +172,9 @@ const footerVisible = computed(() =>
     >
         <template #footer>
             <!-- Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed, and this runtime's limits. -->
-            <!-- Matches the model list's own px-3 rhythm; row groups counter it with -mx-3 so their tint still spans the panel. -->
-            <!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
-            <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
-            <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+            <PickerFooter v-if="footerVisible">
                 <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
-                <div v-if="auto" class="flex flex-col gap-1">
+                <div v-if="auto" class="flex flex-col gap-1 py-2">
                     <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
                     <!-- The one part of Auto a sandbox configures: which model does the reading; a maintainer's page to open. -->
                     <RouterLink v-if="canShip" :to="here(page.sandboxSettings(`agent`, { hash: `models` }))" class="text-2xs text-link hover:underline" @click="emit(`selected`)">
@@ -184,8 +182,8 @@ const footerVisible = computed(() =>
                     </RouterLink>
                 </div>
 
-                <!-- THE STATUS LINE: every message this footer has, in one line: a live turn (whose model it finishes on), a refusal no row
-                     carries, how fresh the meters are. Never a paragraph above or below the rows. -->
+                <!-- THE STATUS LINE: the account rows' group header, and every message this footer has at its end: a live turn (whose
+                     model it finishes on), a refusal no row carries. Never a paragraph above or below the rows. -->
                 <PickerStatus v-if="!auto" :provider="provider" :harness="harness" :model="model" :note="liveTurnNote" :accounts="accountsHere" />
 
                 <!-- THE ROWS: who pays, shared with the shell's own picker. Ticks the account the next turn runs on, as the selection's servingAccount does. -->
@@ -202,28 +200,24 @@ const footerVisible = computed(() =>
                     @select-credential="(pick, named) => conversation.selection.apply({ kind: `selectModel`, pick, account: named })"
                 />
 
-                <!-- THE TOOLBAR: how it runs, under one rule spanning the panel whenever anything stands above it. The harness locks
-                     once a turn streams, since switching it retires the session the turn runs in. -->
-                <div
+                <!-- THE TOOLBAR: how it runs, under its own rule whenever anything stands above it. The harness locks once a turn
+                     streams, since switching it retires the session the turn runs in. -->
+                <PickerRunSettings
                     v-if="runShown"
-                    class="-mx-3 flex flex-col gap-2 px-3 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line [&:not(:first-child)]:pt-2"
-                >
-                    <PickerRunSettings
-                        :provider="provider"
-                        :model="model"
-                        :harness="harness"
-                        :effort="effort"
-                        :thinking="thinking"
-                        :fast="fast"
-                        :effort-row="false"
-                        :loop-choosable="loopChoosable"
-                        :loop-locked="streaming"
-                        :fast-notice="fastSpeedNotice"
-                        @update="applyRun($event)"
-                        @select-harness="conversation.selection.apply({ kind: `selectHarness`, harness: $event })"
-                    />
-                </div>
-            </div>
+                    :provider="provider"
+                    :model="model"
+                    :harness="harness"
+                    :effort="effort"
+                    :thinking="thinking"
+                    :fast="fast"
+                    :effort-row="false"
+                    :loop-choosable="loopChoosable"
+                    :loop-locked="streaming"
+                    :fast-notice="fastSpeedNotice"
+                    @update="applyRun($event)"
+                    @select-harness="conversation.selection.apply({ kind: `selectHarness`, harness: $event })"
+                />
+            </PickerFooter>
         </template>
     </ModelPicker>
 </template>

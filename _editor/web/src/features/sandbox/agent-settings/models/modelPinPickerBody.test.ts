@@ -93,11 +93,11 @@ const row = (host: HTMLElement, label: string): HTMLElement | undefined =>
 const loops = (host: HTMLElement): HTMLButtonElement[] => [...host.querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)];
 const segment = (host: HTMLElement, option: string): HTMLButtonElement => loops(host).find((button) => button.textContent?.trim() === option)!;
 
-/* The two switches, which are chips and not rows: `.composer-toggle` is the chip recipe. */
-const chips = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll<HTMLElement>(`button.composer-toggle`)].map((chip) => chip.getAttribute(`aria-label`) ?? chip.textContent?.trim() ?? ``);
-const chip = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`button.composer-toggle`)].find((candidate) => (candidate.getAttribute(`aria-label`) ?? candidate.textContent?.trim()) === label)!;
+/* The two switches, on the toolbar and not rows: each the app's switch, named by the words of the label it sits in. */
+const switchName = (input: HTMLInputElement): string => input.closest(`label`)?.querySelector(`[data-switch-name]`)?.textContent?.trim() ?? ``;
+const chips = (host: HTMLElement): string[] => [...host.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)].map(switchName);
+const chip = (host: HTMLElement, label: string): HTMLInputElement =>
+    [...host.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)].find((candidate) => switchName(candidate) === label)!;
 
 test("a list whose entries carry no run settings gets the list and no footer at all", async () => {
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5` }, knobs: false });

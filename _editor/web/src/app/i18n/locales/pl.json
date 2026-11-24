@@ -4617,8 +4617,6 @@
             "spread": "Konta ({count}), tury rozkładane automatycznie"
         },
         "pickerRunSettings": {
-            "on": "Wł.",
-            "off": "Wył.",
             "defaultEffort": "domyślny wysiłek",
             "extendedThinking": "Rozszerzone myślenie",
             "fast": "szybko",

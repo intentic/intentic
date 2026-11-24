@@ -81,6 +81,7 @@ jest.mock(`../../accounts/pickerAccounts`, () => ({
         unplacedRefusal: computed(() => undefined),
         routedRows: computed(() => []),
         onKey: computed(() => false),
+        choosable: computed(() => false),
     }),
 }));
 
@@ -107,6 +108,10 @@ const mount = (): HTMLElement => {
 // A control by the word on it: the rungs the meter offered, the thinking stops, and the commit bar's own verb.
 const button = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => (candidate.getAttribute(`aria-label`) ?? candidate.textContent) === label);
+// A run setting's switch, named by the words of the label it sits in.
+const switchName = (input: HTMLInputElement): string => input.closest(`label`)?.querySelector(`[data-switch-name]`)?.textContent?.trim() ?? ``;
+const runSwitch = (element: HTMLElement, label: string): HTMLInputElement | undefined =>
+    [...element.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)].find((input) => switchName(input) === label);
 
 afterEach(() => {
     settleModelPick(undefined);
@@ -270,8 +275,8 @@ it(`repairs a top-tier pick when thinking is switched off under it`, async () =>
     });
     const element = mount();
 
-    // The chip opens lit (the seed leaves thinking on), so one press is what switches it off.
-    button(element, `Extended thinking`)!.click();
+    // The switch opens on (the seed leaves thinking on), so one press is what switches it off.
+    runSwitch(element, `Extended thinking`)!.click();
     await nextTick();
     button(element, `Fix with agent`)!.click();
 
@@ -301,7 +306,7 @@ it(`carries fast speed into the answer`, async () => {
     });
     const element = mount();
 
-    button(element, `Fast speed`)!.click();
+    runSwitch(element, `Fast speed`)!.click();
     await nextTick();
     button(element, `Fix with agent`)!.click();
 
@@ -342,8 +347,8 @@ it(`offers no way to unset a run setting once the panel has shown one`, () => {
     });
     const element = mount();
 
-    // The two switches are chips and nothing else in the panel is pressable except the list and the bar.
-    expect([...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => chip.getAttribute(`aria-label`))).toEqual([`Extended thinking`]);
+    // The settings are switches, and nothing else in the panel is pressable except the list and the bar.
+    expect([...element.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)].map(switchName)).toEqual([`Extended thinking`]);
     expect([...element.querySelectorAll(`button`)].map((candidate) => candidate.getAttribute(`aria-label`))).not.toContain(
         `Take this model's own default effort`,
     );

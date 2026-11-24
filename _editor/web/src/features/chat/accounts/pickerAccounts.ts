@@ -126,6 +126,24 @@ const rowStanding = (state: AccountState, readable: boolean): RowStanding => {
     return { offPlan, waiting: spentLine(state) ?? benchLine(state), demoted: offPlan || band === `spent` || band === `blocked` };
 };
 
+// A personal organization is named after its owner ("ada@acme.dev's Organization"): beside that address it says nothing
+// the row doesn't, and it was most of every such row's words. Only an address counts as the owner's name, so a plan's
+// name inside a team's ("Max" in "Max Labs") never hides the team.
+const namedAfterOwner = (entry: OauthAccount): boolean => {
+    const org = entry.organization;
+    return org !== undefined && [entry.email, entry.label].some((name) => name?.includes(`@`) === true && org !== name && org.includes(name));
+};
+
+// What a row says of who it is, beside its name: the parts of its identity the name doesn't already carry, or, for a name
+// two accounts share and nothing else tells apart, when it was connected.
+const subtitleOf = (entry: OauthAccount, ambiguous: boolean): string | undefined => {
+    const identity = [entry.email, namedAfterOwner(entry) ? undefined : entry.organization].filter((part) => part !== undefined && part !== entry.label);
+    if (identity.length > 0) {
+        return identity.join(` · `);
+    }
+    return ambiguous ? t(`chat.pickerAccounts.connectedAgo`, { age: timeAgo(entry.connectedAt, { days: true }) }) : undefined;
+};
+
 // Filters a folded list against everything a row shows (label and subtitle), since a pool of
 // near-identical addresses is looked up by whichever part the reader remembers.
 export const matchAccounts = <T extends { readonly label: string; readonly subtitle?: string | undefined }>(
@@ -274,13 +292,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         const note = refusalFor(family.value);
         const readable = reportsPlanLimits(family.value);
         return accounts.value.map((entry) => {
-            const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
-            const subtitle =
-                identity.length > 0
-                    ? identity.join(` · `)
-                    : ambiguousLabels.value.has(entry.label)
-                      ? t(`chat.pickerAccounts.connectedAgo`, { age: timeAgo(entry.connectedAt, { days: true }) })
-                      : undefined;
+            const subtitle = subtitleOf(entry, ambiguousLabels.value.has(entry.label));
             const state = accountState(family.value, accountFacts(entry), modelRef.value);
             const standing = rowStanding(state, readable);
             return Object.assign({}, entry, standing, {
