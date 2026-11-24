@@ -13,13 +13,15 @@ pub struct HostDisk {
     pub free_bytes: u64,
     pub total_bytes: u64,
     pub backing_path: String,
+    /// What the VHDX takes on the drive: its allocated clusters, not its length ([`allocated_bytes`]).
     pub backing_bytes: u64,
 }
 
 #[cfg(windows)]
 pub fn measure(engine: super::Kind) -> Option<HostDisk> {
     let backing = backing_path(engine)?;
-    let backing_bytes = std::fs::metadata(&backing).ok()?.len();
+    let length = std::fs::metadata(&backing).ok()?.len();
+    let backing_bytes = allocated_bytes(&backing).unwrap_or(length);
     let text = backing.to_string_lossy();
     let drive = drive_of(&text)?;
     let (free_bytes, total_bytes) = drive_space(&drive)?;
@@ -55,6 +57,38 @@ fn backing_path(engine: super::Kind) -> Option<PathBuf> {
         }
         super::Kind::Native => None,
     }
+}
+
+/// WHAT THE BACKING FILE TAKES ON ITS DRIVE (2026-11-24), which is the room the guest can refill without the drive
+/// giving more. A sparse VHDX's length counts its holes: on omen Docker Desktop's `docker_data.vhdx` was 379 GiB long
+/// with 240 GiB allocated and 202 GiB used inside, so the length put 262 GiB within reach where C: had 136 GiB free.
+/// For a dense file this is its length. None when Windows would not say, which leaves the caller with the length.
+#[cfg(windows)]
+fn allocated_bytes(path: &std::path::Path) -> Option<u64> {
+    use std::os::windows::ffi::OsStrExt as _;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCompressedFileSizeW(name: *const u16, high: *mut u32) -> u32;
+        fn SetLastError(code: u32);
+        fn GetLastError() -> u32;
+    }
+    const INVALID_FILE_SIZE: u32 = u32::MAX;
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut high = 0u32;
+    // SAFETY: the path is NUL-terminated UTF-16 and `high` is a writable local. A low word of INVALID_FILE_SIZE is
+    // also a real size, so the error is cleared first and only a set one means failure.
+    let low = unsafe {
+        SetLastError(0);
+        GetCompressedFileSizeW(wide.as_ptr(), &mut high)
+    };
+    if low == INVALID_FILE_SIZE && unsafe { GetLastError() } != 0 {
+        return None;
+    }
+    Some((u64::from(high) << 32) | u64::from(low))
 }
 
 #[cfg(windows)]
@@ -236,5 +270,31 @@ mod tests {
         assert_eq!(available, 94 * GIB);
         assert_eq!(total, 394 * GIB);
         assert!(limited);
+    }
+
+    #[test]
+    fn a_sparse_disk_allocated_below_its_use_leaves_only_the_drive_free_space() {
+        // omen, 2026-11-24: 240 GiB allocated of a 379 GiB long docker_data.vhdx, 253 GiB used by df's non-root count.
+        let host = HostDisk {
+            drive: "C:\\".into(),
+            free_bytes: 136 * GIB,
+            total_bytes: 951 * GIB,
+            backing_path: "C:\\docker_data.vhdx".into(),
+            backing_bytes: 240 * GIB,
+        };
+        let (total, available, limited) = effective(1_007 * GIB, 754 * GIB, Some(&host));
+        assert_eq!(available, 136 * GIB);
+        assert_eq!(total, 389 * GIB);
+        assert!(limited);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_written_file_is_allocated_its_length_and_a_missing_one_says_nothing() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("dense.bin");
+        std::fs::write(&path, vec![7u8; 1 << 20]).expect("write");
+        assert_eq!(allocated_bytes(&path), Some(1 << 20));
+        assert_eq!(allocated_bytes(&dir.path().join("absent.bin")), None);
     }
 }

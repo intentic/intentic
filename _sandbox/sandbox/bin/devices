@@ -235,6 +235,11 @@ const parse = (args, { flags = [], values = [] }) => {
 
 const deviceRoute = (device, tail) => `/devices/${encodeURIComponent(device)}${tail}`;
 
+// Removed however this process ends: `die` exits without unwinding a `finally`. 2026-11-24: a sandbox on rog held three
+// 2.5 GB `devices-push-*` tars a refused push had left in /tmp, which is the container's own layer. A kill that runs no
+// handler still leaves one; the daemon's /tmp sweep takes those after a day (src/system/boot/reaper.ts).
+const scratchOnExit = (path) => process.on("exit", () => rmSync(path, { recursive: true, force: true }));
+
 // Pushes a file or a folder; answers { path, reused, size, sha256, kind }.
 const pushPath = async (device, absolute, name) => {
     let stats;
@@ -254,6 +259,7 @@ const pushPath = async (device, absolute, name) => {
     if (stats.isDirectory()) {
         // A folder travels as one tar, packed here and unpacked there; `tar` is on every computer the agent runs on.
         scratch = mkdtempSync(join(tmpdir(), "devices-push-"));
+        scratchOnExit(scratch);
         file = join(scratch, `${filed}.tar`);
         const packed = spawnSync("tar", ["-cf", file, "-C", absolute, "."], { encoding: "utf8" });
         if (packed.status !== 0) {
@@ -316,9 +322,6 @@ const megabytesOf = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 // A path's last segment on the computer, whichever separator it uses there.
 const lastSegment = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
-
-// Removed however this process ends: `die` exits without unwinding a `finally`.
-const scratchOnExit = (path) => process.on("exit", () => rmSync(path, { recursive: true, force: true }));
 
 const copyOnto = async ({ device, path }, local, overwrite) => {
     let stats;
@@ -647,6 +650,7 @@ const stage = (root, target) => {
         return { path: join(root, target.artifact), scratch: undefined };
     }
     const scratch = mkdtempSync(join(tmpdir(), "devices-run-"));
+    scratchOnExit(scratch);
     const folder = join(scratch, target.name);
     for (const [name, rel] of Object.entries(target.artifact)) {
         const from = join(root, rel);

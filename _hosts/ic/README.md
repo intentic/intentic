@@ -704,7 +704,7 @@ flowchart LR
     the engine again; before shutdown it requires at least 5 GiB free on the drive containing the VHDX. This restarts
     Docker Desktop and every other WSL distro too. `ic sandbox fix` offers the same machine-wide repair as a consented
     step. Free space first when the drive is nearly full.
-  - **Compacting the engine disk.** `ic engine compact` measures the guest's used blocks and the VHDX size, and skips
+  - **Compacting the engine disk.** `ic engine compact` measures the guest's used blocks and the VHDX's allocated size, and skips
     an estimated reclaim below 5 GiB unless `--force` is passed. It trims the running guest, then asks before stopping
     the engine and its workloads (or accepts `--yes`). Once the VHDX is released it uses DiskPart's read-only attach and
     compact steps through one administrator prompt; `--wsl` consents to `wsl --shutdown` if WSL still holds the file,
@@ -728,7 +728,8 @@ flowchart LR
     at the same share), `critical` under 5%, `full` under the size of the ballast the keeper holds back
     ([engine/README.md](engine/README.md#its-disk)). `--json` is the machine agent's.
     On Windows, ic also measures the Windows drive holding the engine's VHDX and caps Available to the space that can
-    actually be written there, accounting for blocks already allocated by the dense VHDX. When that drive is the limit,
+    actually be written there, accounting for blocks already allocated by the dense VHDX (counted as what the file takes
+    on the drive, never its length, which on a sparse VHDX includes holes a write must fill from the drive). When that drive is the limit,
     the total and level use the capped figures and human output names the drive; JSON keeps the effective
     `totalBytes`/`availableBytes`, adds raw `diskTotalBytes`/`diskAvailableBytes`, `limitedBy`, and the `host` drive and
     backing file details. Each reading refreshes `~/.intentic/host/disk-<engine>.json` atomically. Windows sandbox

@@ -33,7 +33,8 @@ struct Report {
     drive: String,
 }
 
-/// Estimated free blocks that could be handed back by compaction, from the guest's used blocks and the VHDX length.
+/// Estimated free blocks that could be handed back by compaction, from the guest's used blocks and what the VHDX takes
+/// on its drive (`host_disk::measure`: allocated clusters, so a sparse disk's holes do not count as reclaimable).
 pub fn estimated_reclaim(vhdx_bytes: u64, guest_used_bytes: u64) -> u64 {
     vhdx_bytes.saturating_sub(guest_used_bytes)
 }

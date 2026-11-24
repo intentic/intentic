@@ -101,6 +101,10 @@ On Windows, `ic engine disk` also checks the drive containing `ext4.vhdx`. The W
 at `/run/intentic/host`. The effective Available count is the smaller of ext4's Available and the drive's free space
 plus space the already allocated VHDX can reuse; this prevents a dense VHDX from appearing to have more writable space
 than its Windows drive does. The same hint is written for Docker Desktop when one of its supported VHDX paths exists.
+The VHDX counts by what it takes on the drive (its allocated clusters, `GetCompressedFileSizeW`), not its length
+(2026-11-24): a sparse VHDX's length includes its holes, and refilling a hole takes new space from the drive. On omen
+Docker Desktop's `docker_data.vhdx` was 379 GiB long with 240 GiB allocated, so its length put 262 GiB within reach
+where C: had 136 GiB free. For a dense VHDX the two are the same.
 
 - **What.** One file, `/var/lib/intentic-engine/ballast`, of 2% of the disk, within 2 and 10 GiB (10 GiB on a 1 TB
   disk). It is made with `fallocate`: its blocks are reserved and nothing is written, so the VHDX under it does not grow
@@ -122,7 +126,8 @@ than its Windows drive does. The same hint is written for Docker Desktop when on
 ## Compacting the Windows VHDX
 
 The engine VHDX is deliberately kept dense and is never touched while WSL has it attached read-write. `ic engine compact`
-first reads ext4's used bytes with `df` while the distro runs and compares them with the VHDX file size. If the estimated
+first reads ext4's used bytes with `df` while the distro runs and compares them with what the VHDX takes on its drive
+(the same allocated size as above). If the estimated
 reclaim is under 5 GiB it skips the interruption unless `--force` is given. It then names running Intentic sandboxes
 and asks before stopping the engine; `--yes` answers that confirmation for an unattended caller.
 

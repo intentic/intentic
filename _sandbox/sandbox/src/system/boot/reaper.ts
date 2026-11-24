@@ -75,6 +75,10 @@ const TMP_SWEEPS: readonly { readonly prefix: string; readonly maxAgeMs: number 
     // and a runner's own offload-* (runners/runner-command.ts). A day, like a run's capture: past any run's timeout (six
     // hours at most), and a patch that would not apply is left there on purpose, for someone to apply by hand.
     { prefix: "offload-", maxAgeMs: 24 * 3_600_000 },
+    // bin/devices' scratch: the tar a folder travels as (push, copy, a run's gathered artifacts) and exec's stage and
+    // delta. Each removes its own as it exits; a refused push (before it did) and a killed exec left theirs (2026-11-24,
+    // rog: 7.4 GB of push tars and an exec's 0.5 GB delta in one sandbox's /tmp). A day is past any still packing or sending.
+    ...["devices-push-", "devices-copy-", "devices-run-", "devices-exec-"].map((prefix) => ({ prefix, maxAgeMs: 24 * 3_600_000 })),
 ];
 
 // How old a /tmp entry of this name may get before the sweep removes it; undefined for one it never touches.

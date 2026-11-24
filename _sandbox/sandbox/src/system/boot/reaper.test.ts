@@ -96,6 +96,15 @@ test("an offloaded command's scratch in /tmp ages out after a day, whichever sid
     }
 });
 
+// 2026-11-24: three 2.5 GB push tars a refused `devices push` left, and an exec's delta a kill left, in rog's /tmp.
+test("the devices CLI's scratch in /tmp ages out after a day, and an agent's own devices folder stays", () => {
+    for (const entry of ["devices-push-SPtumu", "devices-copy-a1B2c3", "devices-run-a1B2c3", "devices-exec-YLgfA6"]) {
+        expect(tmpSweepAgeOf(entry)).toBe(24 * 60 * MINUTE);
+    }
+    expect(tmpSweepAgeOf("devices")).toBeUndefined();
+    expect(tmpSweepAgeOf("devices-notes")).toBeUndefined();
+});
+
 test("the /tmp sweep keeps its own ages, and touches no name it does not know", () => {
     expect(tmpSweepAgeOf("intentic-run-x")).toBe(24 * 60 * MINUTE);
     expect(tmpSweepAgeOf("intentic-land-x")).toBe(6 * 60 * MINUTE);
