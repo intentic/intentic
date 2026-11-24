@@ -299,8 +299,8 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                 // Its own reading beside the streamed map (liveUsage): the row's is usually the newer of the two.
                 headroom: standing.offPlan ? undefined : accountHeadroom(family.value, entry.id, { attached: entry.usage, model: modelRef.value }),
                 state,
-                // Why no turn runs on it (a lost seat outlives the turn it refused), unless the reconnect button already says
-                // so; any other refusal shows only while it stands, on the account it names.
+                // Why no turn runs on it (a lost seat outlives the turn it refused), unless the row's "Reconnect needed" already
+                // says so; any other refusal shows only while it stands, on the account it names.
                 refused:
                     state.kind === `blocked` && !standing.offPlan && entry.needsReauth !== true
                         ? state.reason

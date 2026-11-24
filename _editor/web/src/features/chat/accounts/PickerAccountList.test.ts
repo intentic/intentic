@@ -86,9 +86,24 @@ it(`ticks the account a turn naming none runs on, says the runtime picked it, an
     expect(ticked(element)).toEqual([`spare@example.com`]);
     const spare = rows(element).find((row) => labelOf(row) === `spare@example.com`)!;
     expect(spare.textContent).toContain(`Auto`);
-    // Marked as the list marks its picked model: the name in the pick's ink, never a standing tint beside the list's cursor.
+    // Marked as the app marks a picked row, and only that row: its wash and leading mark, its name in the pick's ink, and
+    // no tick at its end to push its meter out of the column.
+    expect(rows(element).filter((row) => row.classList.contains(`ui-row-select-on`)).map(labelOf)).toEqual([`spare@example.com`]);
+    expect(rows(element).filter((row) => row.getAttribute(`aria-current`) === `true`).map(labelOf)).toEqual([`spare@example.com`]);
     expect(nameOf(spare)?.className).toContain(`text-link`);
-    expect(spare.className).not.toContain(`ui-row-select-on`);
+    expect(element.querySelector(`[data-icon="check"]`)).toBeNull();
+});
+
+it(`says a lost sign-in in words where the row's description goes, never as an icon after its meter`, () => {
+    listed = [account(`personal`, room(40)), account(`lapsed`, { ...room(60), needsReauth: true })];
+    const element = mount();
+    const lapsed = rows(element).find((row) => labelOf(row) === `lapsed@example.com`)!;
+
+    expect(lapsed.querySelector(`.text-warning`)?.textContent).toContain(`Reconnect needed`);
+    // The meter ends every row, so the meters read down one column.
+    for (const row of rows(element)) {
+        expect(row.lastElementChild?.querySelector(`.tabular-nums`)?.textContent).toMatch(/%$/);
+    }
 });
 
 it(`draws the accounts that can take a turn first, the spent ones next, the ones a person has to fix last`, () => {

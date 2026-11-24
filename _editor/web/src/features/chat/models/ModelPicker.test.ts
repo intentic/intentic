@@ -176,6 +176,35 @@ it(`still finds a folded provider's models by search`, async () => {
     expect([...element.querySelectorAll(`[role="option"]`)].map((row) => row.textContent?.replace(/\s+/g, ` `).trim())).toEqual([`Gemini 3 Pro`]);
 });
 
+// The cursor wears the picked row's mark, as the account footer's pick does, so it opens on the pick rather than on
+// whichever row leads the list; a search hands it to the best match, which Enter takes.
+it(`opens its cursor on the picked model, and on a search's best match while searching`, async () => {
+    const claude = [...oneModel(`Claude Sonnet 5`), ...oneModel(`Claude Opus 4 6`)];
+    providerModels.value = { ...providerModels.value, claude };
+    browsingCatalog.snapshots.value = [
+        ...browsingCatalog.snapshots.value.filter((snapshot) => snapshot.provider !== `claude`),
+        { provider: `claude`, verifiedAt: Date.now(), models: claude.map((row) => ({ id: row.value, label: row.label })) },
+    ];
+    const element = mountWith({ model: `claude-sonnet-5` });
+    await nextTick();
+    const cursor = (): string | undefined => element.querySelector(`[role="option"].ui-row-select-on`)?.getAttribute(`aria-label`) ?? undefined;
+    const search = (text: string): void => {
+        const field = element.querySelector(`input`)!;
+        field.value = text;
+        field.dispatchEvent(new Event(`input`));
+    };
+
+    // Not the row the list leads with, so resting on the first row would miss it.
+    expect(element.querySelector(`[role="option"]`)?.getAttribute(`aria-label`)).toContain(`Opus`);
+    expect(cursor()).toContain(`Sonnet`);
+    search(`opus`);
+    await nextTick();
+    expect(cursor()).toContain(`Opus`);
+    search(``);
+    await nextTick();
+    expect(cursor()).toContain(`Sonnet`);
+});
+
 // With nothing connected every row is locked, so the way to unlock them leads the list; once anything runs it goes,
 // since the connect view is reachable from many other places. Only once both reads have answered.
 it(`leads with connecting a model while nothing here can run, and drops it once something can`, async () => {

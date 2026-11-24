@@ -184,9 +184,12 @@ const pickProvider = (target: AgentProvider): void => {
     <SandboxOutdatedNotice v-if="accountsOutdated" :missing="t(`chat.pickerAccounts.outdatedMissing`)" />
 
     <!-- EVERY ROW HERE IS A MODEL ROW'S SHAPE (ModelPicker): one line, the name in the list's type, a quiet description
-         beside it, what it has left at the end. The account the next turn runs on is marked as the picked model is, by
-         its name in the pick's ink and a tick at the row's end, never a standing tint: a tint here beside the list's own
-         cursor drew two "picked" rows in one panel. -->
+         beside it, what it has left at the end. The account the next turn runs on wears the app's picked row
+         (`ui-row-select-on`: the wash and the skin's leading mark, as the model list's cursor resting on its pick does)
+         and its name in the pick's ink. Never a tick at the row's end (2026-11-24): it was the only picked mark of its
+         kind among the app's rows, and it pushed that row's meter out of the column the others read down. So the end
+         of a row holds its meter and nothing after it; what is wrong with an account is said in its description slot. -->
+
     <template v-if="choosable">
         <!-- Shown only once the list is folded and long; a filter over a short, readable list would be a control looking for a reason to exist. -->
         <SearchBar
@@ -214,7 +217,9 @@ const pickProvider = (target: AgentProvider): void => {
                 :key="a.id"
                 type="button"
                 :data-current="activeAccountId === a.id"
+                :aria-current="activeAccountId === a.id ? `true` : undefined"
                 class="ui-row-select ui-off flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
+                :class="{ 'ui-row-select-on': activeAccountId === a.id }"
                 :disabled="accountsLocked || (onKey && providerLocked)"
                 @click="pickAccount(a.id)"
             >
@@ -225,34 +230,36 @@ const pickProvider = (target: AgentProvider): void => {
                     :class="[activeAccountId === a.id ? `text-link` : `text-content`, { 'opacity-50': a.demoted }]"
                     >{{ a.label }}</span
                 >
-                <!-- The tick nobody chose says who chose it: the runtime, by allowance left. -->
+                <!-- The pick nobody made says who made it: the runtime, by allowance left. -->
                 <span
                     v-if="autoPickedId === a.id"
                     class="shrink-0 text-2xs text-subtle"
                     v-tooltip.top="{ title: t(`chat.pickerAccounts.autoPicked`), note: t(`chat.pickerAccounts.byAllowanceLeft`) }"
                     >{{ t(`chat.words.autoLabel`) }}</span
                 >
-                <!-- THE DESCRIPTION SLOT, as a model row's: why it can take no turn, else when it can again, else who it is.
-                     Truncated on the row, whole on hover. -->
+                <!-- THE DESCRIPTION SLOT, as a model row's: why it can take no turn (a refusal, a lost sign-in), else when it
+                     can again, else who it is. Truncated on the row, whole on hover. -->
                 <span v-if="a.refused" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
                     <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
                     <span class="truncate">{{ a.refused }}</span>
                 </span>
+                <span
+                    v-else-if="a.needsReauth"
+                    class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-warning"
+                    v-tooltip.top="a.detail ?? t(`chat.words.reconnectNeeded`)"
+                >
+                    <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
+                    <span class="truncate">{{ t(`chat.words.reconnectNeeded`) }}</span>
+                </span>
                 <span v-else-if="a.waiting" class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ a.waiting }}</span>
                 <span v-else class="min-w-0 flex-1 truncate text-2xs text-subtle" :class="{ 'opacity-50': a.demoted }">{{ a.subtitle }}</span>
-                <!-- What it has left, as a figure beside its meter: the question a reader picks an account by, answered without a hover. -->
+                <!-- What it has left, as a figure beside its meter: the question a reader picks an account by, answered without a hover.
+                     The figure keeps a width of its own, right-aligned, so the bars stand in one column whatever the number. -->
                 <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="shrink-0" :class="{ 'opacity-50': a.demoted }">
-                    <span class="text-2xs tabular-nums text-subtle">{{ remainingFigure(a.headroom.percent, a.headroom.stale) }}</span>
+                    <span class="min-w-9 text-right text-2xs tabular-nums text-subtle">{{ remainingFigure(a.headroom.percent, a.headroom.stale) }}</span>
                 </UsageMeter>
                 <!-- A plan without the model has no room for it to show: it says so where the meter would be, quietly, since nothing is wrong. -->
                 <span v-else-if="a.offPlan" class="shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
-                <Icon
-                    v-if="a.needsReauth"
-                    name="exclamation-triangle"
-                    class="shrink-0 text-2xs text-warning"
-                    v-tooltip.top="a.detail ?? t(`chat.words.reconnectNeeded`)"
-                />
-                <Icon v-if="activeAccountId === a.id" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
             <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->
             <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
@@ -264,7 +271,9 @@ const pickProvider = (target: AgentProvider): void => {
                 :key="k.provider"
                 type="button"
                 :data-current="provider === k.provider"
+                :aria-current="provider === k.provider ? `true` : undefined"
                 class="ui-row-select ui-off flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
+                :class="{ 'ui-row-select-on': provider === k.provider }"
                 :disabled="provider !== k.provider && providerLocked"
                 @click="pickProvider(k.provider)"
             >
@@ -273,7 +282,6 @@ const pickProvider = (target: AgentProvider): void => {
                 }}</span>
                 <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ k.subtitle }}</span>
                 <KeyBalanceFigure :provider="k.provider" />
-                <Icon v-if="provider === k.provider" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
         </div>
 

@@ -231,13 +231,20 @@ const flat = computed<readonly PickerEntry[]>(() =>
     sections.value.flatMap((section) => section.blocks.flatMap((block) => block.rows.map((row) => row.entry))),
 );
 
-const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entry) => entry.key);
-
 // The selected row: the caller's current pair (the harness, where a caller has one, is a separate axis).
 // A selected lead row takes the tick alone: while a mode is on there is no model pick to confirm, and ticking the one
 // it would fall back to would claim a decision nobody has made yet.
 const isSelected = (entry: PickerEntry): boolean =>
     leadSelected === undefined ? entry.provider === provider && entry.value === model : entry.key === leadSelected;
+
+// The cursor wears the picked row's mark, so browsing it rests on the pick, as a listbox opens on the value it holds;
+// resting on the first row drew that mark on "Auto" while another model was picked, beside the account footer's mark on
+// its own pick (2026-11-24). A search rests on its best match, so Enter takes it.
+const { activeIndex, activeRow, move, setRowEl } = useListNavigation(
+    flat,
+    (entry) => entry.key,
+    (rows) => (searching.value ? 0 : rows.findIndex(isSelected)),
+);
 // A model that can only write one-shot jobs on a list picking for a turn is listed, not vanished, and refused with its
 // reason where its description would be (the daemon refuses it too); so is a row the caller refuses in words.
 const isHelperOnly = (entry: PickerEntry): boolean => !helperJobs && entry.helperOnly !== undefined;
