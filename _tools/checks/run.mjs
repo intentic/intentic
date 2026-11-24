@@ -17,6 +17,10 @@ import { dirname, join } from "node:path";
 import { blocksCi, CHECKS, CI_REPORTED } from "./manifest.mjs";
 import { checkPool, editLane, pooledMap } from "./lib/check-pool.mjs";
 import { createReporter } from "./lib/ci-report.mjs";
+import { cacheCompiles } from "./lib/compile-cache.mjs";
+
+// Before the checks load: under `--paths` they are imported into this process, and every run starts its own node.
+cacheCompiles();
 
 const here = dirname(new URL(import.meta.url).pathname);
 const args = process.argv.slice(2);

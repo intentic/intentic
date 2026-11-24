@@ -24,6 +24,7 @@ import { shellFor } from "./shell.js";
 import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../environments/wsl.js";
 import { machineId } from "../../machine-id.js";
 import { deviceFeatures, icOutOfDate, icOverrides, type InstalledIc, installedIc } from "./ic-binary.js";
+import { sharedReading } from "./listing/ic-readings.js";
 import { previousExit, thisRun } from "../../resident/last-exit.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { readUpkeepSummary } from "../../upkeep/reconcile.js";
@@ -37,7 +38,13 @@ import { powerFacts } from "../../power/host-power.js";
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
 // capability card.
 
-const osName = async (): Promise<string> => {
+// (2026-11-24) The facts are asked at every hello and every two minutes on every link, and each ask was a PowerShell
+// (0.34 s of CPU on rog), a `docker info`, a `wsl.exe` and an `ic --version`. What they read changes with an OS update
+// (which restarts the agent), a resized engine or a distro added: the OS name is kept for the process, a caption Windows
+// did not give is asked again, and the engine and the distros are kept FACTS_HELD_MS.
+const FACTS_HELD_MS = 5 * 60_000;
+
+const readOsName = async (): Promise<{ readonly name: string; readonly sure: boolean }> => {
     if (platform() === "win32") {
         const { stdout } = await execBounded(
             "powershell.exe",
@@ -47,18 +54,30 @@ const osName = async (): Promise<string> => {
             { timeoutMs: 30_000 },
         ).catch(() => ({ stdout: "" }));
         const caption = stdout.trim();
-        return caption === "" ? `Windows (${release()})` : `${caption} (build ${release()})`;
+        return caption === "" ? { name: `Windows (${release()})`, sure: false } : { name: `${caption} (build ${release()})`, sure: true };
     }
     // /etc/os-release is the one file every modern distribution has, and PRETTY_NAME is the line humans use.
     const { stdout } = await execBounded("sh", ["-c", '. /etc/os-release 2>/dev/null && printf %s "$PRETTY_NAME"'], { timeoutMs: 10_000 }).catch(() => ({ stdout: "" }));
     const pretty = stdout.trim();
-    return pretty === "" ? `${type()} ${release()}` : `${pretty} (kernel ${release()})`;
+    return { name: pretty === "" ? `${type()} ${release()}` : `${pretty} (kernel ${release()})`, sure: pretty !== "" };
+};
+
+let osNamed: string | undefined;
+const osName = async (): Promise<string> => {
+    if (osNamed !== undefined) {
+        return osNamed;
+    }
+    const { name, sure } = await readOsName();
+    if (sure) {
+        osNamed = name;
+    }
+    return name;
 };
 
 // How big the Docker engine is, the ceiling every sandbox is bounded by (the WSL guest, the Desktop VM, or the
 // host). Read via `docker info` since on two of the three platforms that's a different computer from this
 // one's own /proc. Bounded by a short timeout; absent, never guessed.
-const engineFacts = async (): Promise<DeviceFacts["engine"]> => {
+const readEngineFacts = async (): Promise<DeviceFacts["engine"]> => {
     const { stdout } = await execBounded("docker", ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], { timeoutMs: 5_000 }).catch(() => ({
         stdout: "",
     }));
@@ -66,11 +85,18 @@ const engineFacts = async (): Promise<DeviceFacts["engine"]> => {
     return memoryBytes !== undefined && cpus !== undefined && memoryBytes > 0 && cpus > 0 ? { memoryBytes, cpus } : undefined;
 };
 
+const engineReading = sharedReading(readEngineFacts, { heldMs: FACTS_HELD_MS, dropOnIcChange: false });
+const engineFacts = async (): Promise<DeviceFacts["engine"]> => await engineReading.get();
+
 // Windows only: the distros `run_command`'s `in: "wsl:<name>"` can reach; absent, never guessed, where the listing fails.
-const wslDistros = async (): Promise<string[] | undefined> => {
-    const distros = WINDOWS_SIDE ? await listDistros() : undefined;
-    return distros === undefined || distros.length === 0 ? undefined : distros;
-};
+const distrosReading = sharedReading(
+    async () => {
+        const distros = WINDOWS_SIDE ? await listDistros() : undefined;
+        return distros === undefined || distros.length === 0 ? undefined : distros;
+    },
+    { heldMs: FACTS_HELD_MS, dropOnIcChange: false },
+);
+const wslDistros = async (): Promise<string[] | undefined> => await distrosReading.get();
 
 // This machine's links as a count, from the stamp the resident agent keeps (device/config.ts) rather than from the
 // sockets, since `describe` is answered on one of them and knows only its own. Which links count as unreachable is

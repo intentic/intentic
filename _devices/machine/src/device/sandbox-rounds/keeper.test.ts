@@ -20,6 +20,7 @@ import {
     restartIntent,
     RESTART_INTENT_PATH,
     runKeeperRound,
+    SWEEP_BACKSTOP_MS,
     trashedFrom,
     UNREACHABLE_AFTER_MS,
     verdictLine,
@@ -732,4 +733,50 @@ test.each(["wsl", "windows", "linux", "mac"] as const)("what the keeper writes f
 test("the keeper's intent has exactly the fields the golden example has, and the example is one the schema accepts", () => {
     const written = restartIntent("Restarting the sandbox", { kind: "link", since: undefined }, "wsl", "rog", NOW);
     expect(Object.keys(written).toSorted()).toEqual(Object.keys(RestartIntentSchema.parse(GOLDEN_INTENT.example)).toSorted());
+});
+
+test("a sweep whose look finds every sandbox running or asleep is skipped, up to a quarter hour since the last that ran", async () => {
+    const { fake, round } = setup();
+    fake.records = ["work", "nap"];
+    fake.listing = [
+        { slug: "work", running: true },
+        { slug: "nap", running: false, asleep: true },
+    ];
+    // The first sweep after start always runs: the logon case.
+    await round(NOW + 30_000);
+    expect(fake.asked).toEqual([undefined]);
+    // Five and ten minutes on, nothing looks wrong: no ic.
+    await round(NOW + 30_000 + 5 * MIN);
+    await round(NOW + 30_000 + 10 * MIN);
+    expect(fake.asked).toEqual([undefined]);
+    // A quarter hour since the last that ran: the backstop, which also renews the keeper's lease (ic's keeper.json).
+    expect(SWEEP_BACKSTOP_MS).toBeLessThan(30 * MIN);
+    await round(NOW + 30_000 + 15 * MIN);
+    expect(fake.asked).toEqual([undefined, undefined]);
+});
+
+test("a sweep runs at its five minutes when a sandbox is listed stopped, has no container, or Docker does not answer", async () => {
+    const { fake, round } = setup();
+    fake.records = ["work"];
+    fake.listing = [{ slug: "work", running: true }];
+    await round(NOW + 30_000);
+    expect(fake.asked).toEqual([undefined]);
+    // Stopped, and not asleep.
+    fake.listing = [{ slug: "work", running: false }];
+    await round(NOW + 30_000 + 5 * MIN);
+    expect(fake.asked).toEqual([undefined, undefined]);
+    // Docker not answering the listing.
+    fake.listing = new Error("Cannot connect to the Docker daemon");
+    await round(NOW + 30_000 + 10 * MIN);
+    expect(fake.asked).toEqual([undefined, undefined, undefined]);
+});
+
+test("a sweep that left something is followed by one at its next turn, however well the look reads", async () => {
+    const { fake, round } = setup();
+    fake.records = ["work"];
+    fake.listing = [{ slug: "work", running: true }];
+    fake.answer = async () => await Promise.resolve(fixRun([{ slug: "work", outcome: "needs-you", checks: [{ id: "disk", label: "Disk", state: "fail", problem: "1 GB free", fix: "you" }] }], { code: 1 }));
+    await round(NOW + 30_000);
+    await round(NOW + 30_000 + 5 * MIN);
+    expect(fake.asked).toEqual([undefined, undefined]);
 });

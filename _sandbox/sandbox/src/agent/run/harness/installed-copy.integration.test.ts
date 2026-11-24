@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { observeGitCommands } from "@intentic/base/git";
+import { useCheckoutFeed } from "../../../git/feed/checkout-feed.js";
 import { installedCopyDirtyPaths, installedCopyNote, installedCopyOf, installedCopyReviewer } from "./installed-copy.js";
 
 // A real workspace on disk: an install is a git clone under .intentic/local/extensions/<capability id>, its source is a
@@ -157,5 +159,56 @@ describe(`shell writes into an install`, () => {
 
     test(`a workspace with no installs lists nothing`, async () => {
         expect(await installedCopyDirtyPaths(join(root, "nowhere"))()).toEqual([]);
+    });
+});
+
+// On the checkout feed an install nothing touched answers from memory; one whose tracked files sit where git ignores (a
+// committed dist/ its .gitignore names) is out of netd's walk, so it is read from git every time.
+describe(`an install's status on the checkout feed`, () => {
+    const counts = new Map<string, number>();
+    let statuses = 0;
+    beforeEach(() => {
+        statuses = 0;
+        observeGitCommands(({ args }) => {
+            statuses += args.includes("status") ? 1 : 0;
+        });
+        useCheckoutFeed({ generation: async (dir) => counts.get(dir) ?? 0 });
+    });
+    afterEach(() => {
+        useCheckoutFeed(undefined);
+        observeGitCommands(() => undefined);
+    });
+
+    test(`is read once per generation, and again once the count moves`, async () => {
+        const read = installedCopyDirtyPaths(root);
+        expect(await read()).toEqual([]);
+        expect(await read()).toEqual([]);
+        expect(statuses).toBe(1);
+        writeFileSync(join(install, "dist", "extension.js"), "export default 3;\n");
+        counts.set(install, 1);
+        expect(await read()).toEqual([".intentic/local/extensions/acme-widgets/dist/extension.js"]);
+        expect(statuses).toBe(2);
+        git(install, "checkout", "--", "dist/extension.js");
+        counts.set(install, 2);
+    });
+
+    test(`is read from git every time where a tracked file is one git ignores`, async () => {
+        writeFileSync(join(install, ".gitignore"), "dist/\n");
+        counts.set(install, 3);
+        const read = installedCopyDirtyPaths(root);
+        try {
+            expect(await read()).toEqual([".intentic/local/extensions/acme-widgets/.gitignore"]);
+            // The generation stands still: netd never saw this write, since it walks no ignored directory.
+            writeFileSync(join(install, "dist", "extension.js"), "export default 4;\n");
+            expect((await read()).toSorted()).toEqual([
+                ".intentic/local/extensions/acme-widgets/.gitignore",
+                ".intentic/local/extensions/acme-widgets/dist/extension.js",
+            ]);
+            expect(statuses).toBe(2);
+        } finally {
+            rmSync(join(install, ".gitignore"));
+            git(install, "checkout", "--", "dist/extension.js");
+            counts.set(install, 4);
+        }
     });
 });

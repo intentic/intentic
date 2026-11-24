@@ -602,9 +602,9 @@ pub fn stream(args: &[&str], stdin: Option<&[u8]>, shown: Shown, log: &Log) -> R
     let said = Said::default();
     // A run whose stdout is machine output (`ic sandbox fix --json`) keeps docker's chatter off it.
     let terminal: Box<dyn Write + Send> = if crate::ui::human_on_stderr() {
-        Box::new(std::io::stderr())
+        Box::new(crate::answer::stderr())
     } else {
-        Box::new(std::io::stdout())
+        Box::new(crate::answer::stdout())
     };
     let out_thread = pump(
         child.stdout.take().expect("stdout was piped"),
@@ -615,7 +615,7 @@ pub fn stream(args: &[&str], stdin: Option<&[u8]>, shown: Shown, log: &Log) -> R
     );
     let err_thread = pump(
         child.stderr.take().expect("stderr was piped"),
-        std::io::stderr(),
+        crate::answer::stderr(),
         shown,
         log,
         &said,

@@ -7,31 +7,32 @@ macro_rules! println {
     () => {{
         use std::io::Write as _;
         if crate::ui::human_on_stderr() {
-            let _ = writeln!(std::io::stderr());
+            let _ = writeln!(crate::answer::stderr());
         } else {
-            let _ = writeln!(std::io::stdout());
+            let _ = writeln!(crate::answer::stdout());
         }
     }};
     ($($arg:tt)*) => {{
         use std::io::Write as _;
         if crate::ui::human_on_stderr() {
-            let _ = writeln!(std::io::stderr(), $($arg)*);
+            let _ = writeln!(crate::answer::stderr(), $($arg)*);
         } else {
-            let _ = writeln!(std::io::stdout(), $($arg)*);
+            let _ = writeln!(crate::answer::stdout(), $($arg)*);
         }
     }};
 }
 macro_rules! eprintln {
     () => {{
         use std::io::Write as _;
-        let _ = writeln!(std::io::stderr());
+        let _ = writeln!(crate::answer::stderr());
     }};
     ($($arg:tt)*) => {{
         use std::io::Write as _;
-        let _ = writeln!(std::io::stderr(), $($arg)*);
+        let _ = writeln!(crate::answer::stderr(), $($arg)*);
     }};
 }
 
+mod answer;
 mod checks;
 mod cloudflare;
 mod contract;
@@ -48,6 +49,7 @@ mod prepare;
 mod record;
 mod runner;
 mod sandbox;
+mod serve;
 mod shape;
 mod tty;
 mod ui;
@@ -102,6 +104,13 @@ enum Command {
         /// One line of JSON, `{"features": [...]}` (the machine agent reads this)
         #[arg(long)]
         json: bool,
+    },
+    /// Answer the machine agent's periodic reads from one long-lived process instead of one process each: requests
+    /// and answers as lines of JSON on stdin and stdout, each answer what the per-call verb prints
+    Serve {
+        /// Speak over stdin and stdout (the only transport there is)
+        #[arg(long)]
+        stdio: bool,
     },
     /// Intentic OS, the Linux that boots straight into Intentic: its image, updates, boot health and first-boot
     /// pairing. Exit 3 on any machine that is not Intentic OS
@@ -1264,10 +1273,25 @@ enum RunnerCommand {
 }
 
 fn main() {
+    let cli = Cli::parse();
+    if let Command::Serve { stdio } = cli.command {
+        engine::adopt();
+        #[cfg(windows)]
+        docker::adopt_program_folder();
+        std::process::exit(serve::run(stdio));
+    }
+    let code = execute(cli);
+    if code != 0 {
+        std::process::exit(code);
+    }
+}
+
+/// One command, start to finish, answered with its exit code: what `ic <args>` does, and what `ic serve` runs for
+/// each request it answers (serve.rs), so the two cannot drift.
+fn execute(mut cli: Cli) -> i32 {
     engine::adopt();
     #[cfg(windows)]
     docker::adopt_program_folder();
-    let mut cli = Cli::parse();
     // A move between engines stops sandboxes and copies their volumes: nothing else may change them meanwhile, and a
     // background round (the machine agent's watch, keeper, tidy) is told so rather than restarting one mid-copy.
     match engine::moves::state() {
@@ -1277,7 +1301,7 @@ fn main() {
                 None,
                 Some("wait for the move to finish, then run the same command again."),
             ));
-            std::process::exit(3);
+            return 3;
         }
         // A move whose ic is gone left sandboxes renamed aside. The verbs a person presses roll it back first: the
         // sandbox verbs here, before they act on a sandbox that may not be there by its name, refused if that does not
@@ -1300,7 +1324,7 @@ fn main() {
                     reason.as_deref(),
                     Some("run `ic engine move --abort` (or the desktop app's Prepare this PC) to put every sandbox back, then run the same command again."),
                 ));
-                std::process::exit(3);
+                return 3;
             }
         }
         _ => {}
@@ -1308,7 +1332,7 @@ fn main() {
     // A sandbox may be named by the owner's name for it as `ic sandbox list` shows it, as well as by its slug.
     if let Err(util::Fail(message)) = by_slug(&mut cli.command) {
         ui::error(&message);
-        std::process::exit(1);
+        return 1;
     }
     let result = match cli.command {
         Command::Sandbox(command) => match command {
@@ -1713,6 +1737,10 @@ fn main() {
         },
         Command::Os(command) => run_os(command),
         Command::Features { json } => features::run(json),
+        // main answers `serve` before it gets here; a request asking for one is refused by serve.rs's own list.
+        Command::Serve { .. } => Err(util::Fail(
+            "ic serve is not a command ic serve answers.".into(),
+        )),
         Command::Uninstall {
             keep_sandboxes,
             delete_data,
@@ -1735,8 +1763,9 @@ fn main() {
     };
     if let Err(util::Fail(message)) = result {
         ui::error(&message);
-        std::process::exit(1);
+        return 1;
     }
+    0
 }
 
 /// Every name a command gives for a sandbox already on this device turned into its slug (sandbox::slug_for), before

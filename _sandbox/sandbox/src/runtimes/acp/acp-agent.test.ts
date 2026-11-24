@@ -499,6 +499,13 @@ test("a launch's session meta rides session/new", async () => {
 
 // A helper's question (agent-request.ts `policy.sealed`): the prompt is everything the model reads, so the agent is put in
 // its read-only mode, every call it asks about is refused without a card, and its answer streams as the reply.
+// The session's end is sent without waiting on it, so its answer lands a few ticks after the turn.
+const until = async (done: () => boolean): Promise<void> => {
+    for (let tick = 0; tick < 100 && !done(); tick += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+};
+
 describe("a sealed request asks once, with nothing the agent can run", () => {
     const sealedRequest = (prompt: string, systemPrompt?: string): AgentRequest<ContainerCredential> => {
         const base = request(prompt);
@@ -526,6 +533,36 @@ describe("a sealed request asks once, with nothing the agent can run", () => {
         const form = await collect(agent, sealedRequest("ask-form"));
         expect(said(form)).toBe(`form:${JSON.stringify({ action: "decline" })}`);
         expect(form.some((event) => event.kind === "question")).toBe(false);
+    });
+
+    // Devin's CLI re-scans every live session's skills each 15 s, so a helper's session left open costs its process CPU
+    // for as long as it lives; on 2026-11-24 one process held 25 of them, and its idle reap never came.
+    test("its session ends with its answer, by delete where the agent offers it, else close, and is forgotten", async () => {
+        const ended: string[] = [];
+        const app = fakeAcpAgentApp({ ended: (sessionId, how) => ended.push(`${how}:${sessionId}`) });
+        const deleting = fakeAcpConnection(app, { loadSession: false, sessionCapabilities: { delete: {}, close: {} } });
+        const events = await collect(createAcpAgent(connectionsOf(deleting), TIMEOUTS), sealedRequest("hello"));
+        const opened = events.flatMap((event) => (event.kind === "session" ? [event.sessionId] : []));
+        expect(opened).toEqual([expect.any(String)]);
+        await until(() => ended.length === 1);
+        expect(ended).toEqual([`delete:${opened[0] ?? ""}`]);
+        expect(deleting.sessions.size).toBe(0);
+
+        const closing = fakeAcpConnection(app, { loadSession: false, sessionCapabilities: { close: {} } });
+        await collect(createAcpAgent(connectionsOf(closing), TIMEOUTS), sealedRequest("hello"));
+        await until(() => ended.length === 2);
+        expect(ended[1]).toMatch(/^close:/);
+    });
+
+    test("a conversation's own session is kept for its next turn", async () => {
+        const ended: string[] = [];
+        const connection = fakeAcpConnection(fakeAcpAgentApp({ ended: (sessionId) => ended.push(sessionId) }), {
+            loadSession: false,
+            sessionCapabilities: { delete: {} },
+        });
+        await collect(createAcpAgent(connectionsOf(connection), TIMEOUTS), request("hello"));
+        expect(connection.sessions.size).toBe(1);
+        expect(ended).toEqual([]);
     });
 
     test("the system prompt rides in front of the words, the protocol having no channel of its own for it", async () => {

@@ -2,6 +2,7 @@ import type { UpkeepEntry } from "./entry.js";
 import { LOGIN_ENTRIES } from "./login.js";
 import { RETENTION_ENTRIES } from "./retention.js";
 import { RETIRED_ENTRIES } from "./retired.js";
+import { OTHER_ACCOUNT_ENTRIES } from "./other-account.js";
 import { SECOND_IC_ENTRIES } from "./second-ic.js";
 
 /* THE KNOWN-ARTIFACTS MANIFEST (2026-10-05): every kind of thing an install of this agent may hold that a release has
@@ -12,4 +13,4 @@ import { SECOND_IC_ENTRIES } from "./second-ic.js";
 
    In order: what old generations left, then what this agent writes itself, then the stores it bounds, then what it can
    only report. */
-export const MANIFEST: readonly UpkeepEntry[] = [...RETIRED_ENTRIES, ...LOGIN_ENTRIES, ...RETENTION_ENTRIES, ...SECOND_IC_ENTRIES];
+export const MANIFEST: readonly UpkeepEntry[] = [...RETIRED_ENTRIES, ...LOGIN_ENTRIES, ...RETENTION_ENTRIES, ...SECOND_IC_ENTRIES, ...OTHER_ACCOUNT_ENTRIES];

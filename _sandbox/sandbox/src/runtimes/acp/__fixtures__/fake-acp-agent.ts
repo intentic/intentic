@@ -14,7 +14,7 @@ import {
     type SessionUpdate,
 } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
-import type { AcpConnection } from "../acp-connection.js";
+import { type AcpConnection, releaseSession } from "../acp-connection.js";
 import type { AcpSessionMeta } from "../acp-spawn.js";
 import { routeSessions, type SessionRouting } from "../acp-routing.js";
 
@@ -106,6 +106,8 @@ export const fakeAcpAgentApp = (
         readonly modes?: readonly { readonly id: string; readonly name: string }[];
         // Told the `_meta` each session/new arrived with, as Grok Build reads its per-session switches there.
         readonly sessionMeta?: (meta: AcpSessionMeta | undefined) => void;
+        // Told each session ended by session/delete or session/close, and by which.
+        readonly ended?: (sessionId: string, how: "delete" | "close") => void;
     } = {},
 ): AgentApp => {
     let nextSession = 0;
@@ -193,6 +195,14 @@ export const fakeAcpAgentApp = (
                 sessionId: params.sessionId,
                 update: { sessionUpdate: "current_mode_update", currentModeId: params.modeId },
             });
+            return {};
+        })
+        .onRequest(methods.agent.session.delete, ({ params }) => {
+            options.ended?.(params.sessionId, "delete");
+            return {};
+        })
+        .onRequest(methods.agent.session.close, ({ params }) => {
+            options.ended?.(params.sessionId, "close");
             return {};
         })
         .onNotification(methods.agent.session.cancel, ({ params }) => {
@@ -302,7 +312,7 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
             return { terminalId: `term-${(terminals += 1)}` };
         })
         .connect(app);
-    return {
+    const connection: AcpConnection = {
         agent: conn.agent,
         capabilities,
         alive: () => !dead,
@@ -327,8 +337,10 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
                 dead = true;
             }
         },
+        release: (sessionId) => releaseSession(connection, sessionId, () => {}),
         kill: () => {
             dead = true;
         },
     };
+    return connection;
 };

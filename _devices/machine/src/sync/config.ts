@@ -134,6 +134,10 @@ export interface Pairing {
     // it (project-transfer.ts `holdStill`), set before its pause and cleared as it lets go. One killed between the two
     // leaves it behind, and the watcher clears it once the folder's lock names no live process (holds.ts).
     readonly transferSince?: number | undefined;
+    // (2026-11-24) Since when the sandbox has answered its workspace change signal (changes/sync-changes.ts), written on every
+    // pairing of it. While set, its sessions scan the sandbox only as a backstop (mutagen.ts sandboxPollSeconds); cleared
+    // only by the sandbox answering that it has no such route, never by a failed ask, so a blip recreates nothing.
+    readonly changeSignalSince?: number | undefined;
 }
 
 // Why the bridge stopped fetching one repo: git went quiet mid-fetch (`stalled`), the fetch was still moving at its
@@ -529,6 +533,20 @@ export const pruneBridgeHolds = async (key: string, repos: readonly string[]): P
 // slug ic keeps it under), by its id.
 const updateSandboxPairings = async (sandboxId: string, change: (held: Pairing) => Pairing): Promise<void> =>
     await updateState((state) => ({ pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? change(held) : held)) }));
+
+// Whether the sandbox pushes its changes, on all of its pairings at once. Answers the keys of the pairings whose record
+// moved, which are the ones whose sessions are no longer what this build would make.
+export const setChangeSignal = async (sandboxId: string, pushes: boolean, now: number = Date.now()): Promise<string[]> => {
+    const moved: string[] = [];
+    await updateSandboxPairings(sandboxId, (held) => {
+        if ((held.changeSignalSince !== undefined) === pushes) {
+            return held;
+        }
+        moved.push(pairingKey(held));
+        return { ...held, changeSignalSince: pushes ? now : undefined };
+    });
+    return moved;
+};
 
 // The sandbox's fate on all of its pairings at once; undefined clears it (the sandbox answered again).
 export const setSandboxGone = async (

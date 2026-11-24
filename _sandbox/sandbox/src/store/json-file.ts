@@ -1,15 +1,17 @@
 import { lstat, readFile, rename } from "node:fs/promises";
 import { basename } from "node:path";
-import { errnoCode, isMissing, undefinedIfMissing } from "@intentic/base/errors";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
-import { type DocumentParse, readDocument } from "@intentic/sandbox-contract/documents";
+import { type DocumentParse, type DocumentRead, readDocument } from "@intentic/sandbox-contract/documents";
 import { CHECK_SETTLES } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "./manifest/manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest/manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
 import type { IdKeys } from "./evolution/passthrough.js";
-import { AtRestKeyError, decryptAtRest, encryptAtRest } from "./encryption/at-rest.js";
+import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract/schemas/data-protection";
+import { AT_REST_PREVIOUS_KEY_FILE_ENV, AtRestKeyError, decryptAtRest, encryptAtRest } from "./encryption/at-rest.js";
+import { deepFreeze, heldAfterWrite, type MemoCell, readThrough } from "./memo/file-memo.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
@@ -21,6 +23,9 @@ import { AtRestKeyError, decryptAtRest, encryptAtRest } from "./encryption/at-re
 // - downgrades: an update over content this build could not read sets it aside first (`<name>.corrupt`), or refuses
 //   outright when the file is one the owner maintains (`onUnreadable`) or a newer build has run this workspace
 // - silence: every read reports its outcome to the manifest-problems registry, so a clean read clears a prior complaint
+// - memo: a handle holds what its file last read as while the file provably has not changed (memo/file-memo.ts), so an
+//   unchanged file is read, converted and parsed once; its own writes refill it. What a read or an update is handed is
+//   that held value, frozen: a reader that wants to change it builds a new one, as `update` already requires
 
 export interface JsonFile<T> {
     // Contents, or the fallback if unreadable; not queued, since a write is never observable half-done.
@@ -77,17 +82,31 @@ export interface JsonEntriesOptions<E> extends Omit<JsonFileOptions<E[]>, "parse
 export const asideOf = async (path: string): Promise<string> =>
     (await lstat(`${path}.corrupt`).catch(undefinedIfMissing)) === undefined ? `${path}.corrupt` : `${path}.corrupt.${Date.now()}`;
 
+// Whatever JSON.stringify takes: a store's own value, or the bytes passthrough carried for it.
+type JsonValueOf = Parameters<typeof JSON.stringify>[0];
+
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
 // path. `durable` flushes it to the disk first, for the files nothing may replace (the owner's, `onUnreadable:
 // "refuse"`) and the conversion journal: a power cut must not leave any of them an empty name.
 export const writeJsonFile = async (path: string, value: unknown, mode?: number, durable = false, atRestPurpose?: string): Promise<void> =>
-    writeFileAtomic(path, atRestPurpose === undefined ? `${JSON.stringify(value, undefined, 2)}\n` : await encryptAtRest(`${JSON.stringify(value, undefined, 2)}\n`, atRestPurpose), mode, { durable });
+    writeFileAtomic(path, await jsonBytes(value, atRestPurpose), mode, { durable });
+
+// The bytes a JSON file holds for `value`: pretty-printed, and sealed when it is kept encrypted at rest.
+const jsonBytes = async (value: JsonValueOf, atRestPurpose: string | undefined): Promise<string> =>
+    atRestPurpose === undefined ? `${JSON.stringify(value, undefined, 2)}\n` : await encryptAtRest(`${JSON.stringify(value, undefined, 2)}\n`, atRestPurpose);
 
 interface Read<T> {
     readonly state: JsonFileState<T>;
     // Present only for a readable file: the bytes a change to its value writes.
-    readonly carry?: (updated: T) => unknown;
+    readonly carry?: DocumentRead<T>["carry"] | undefined;
 }
+
+// What one set of bytes read as: the value with what a change to it writes, or why it is unreadable; and the problems
+// to record either way. Held by the memo, so a read of an unchanged file records the same problems without a parse.
+type Reading<T> = { readonly problems: readonly ManifestProblem[] } & (
+    | { readonly value: T; readonly carry?: DocumentRead<T>["carry"]; readonly unreadable?: undefined }
+    | { readonly unreadable: string }
+);
 
 interface Store<T> {
     // How the file reads (@intentic/sandbox-contract/documents, readDocument): whole, or one entry at a time.
@@ -100,52 +119,75 @@ interface Store<T> {
     readonly atRestPurpose: string | undefined;
 }
 
+// Which at-rest key files are configured now, current and previous.
+const atRestKeys = (): string => `${process.env[AT_REST_KEY_FILE_ENV] ?? ""}\u0000${process.env[AT_REST_PREVIOUS_KEY_FILE_ENV] ?? ""}`;
+
 // A file with no document has no conversions to run.
 const NO_HISTORY = { history: [], granularity: "object" } as const;
 
-const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
-    const { how, fallback, mode, onUnreadable, document, strict, atRestPurpose } = store;
-    // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
-    // either way.
-    const readState = async (): Promise<Read<T>> => {
-        // Recorded on every read, including clean ones, so the registry self-clears when a complaint no longer applies.
-        const problems: ManifestProblem[] = [];
-        const done = (read: Read<T>): Read<T> => {
-            recordManifestProblems(path, problems);
-            return read;
-        };
-        const unreadable = (detail: string): Read<T> => {
-            problems.push({ kind: "unreadable", reason: "io", detail });
-            return done({ state: { value: fallback(), unreadable: true, detail } });
-        };
-        let text: string;
-        try {
-            text = await readFile(path, "utf8");
-        } catch (error) {
-            // Only absence is "nothing written yet"; a file that exists but cannot be read must never be written over.
-            if (isMissing(error)) {
-                return done({ state: { value: fallback(), unreadable: false } });
-            }
-            return unreadable(`the file could not be read (${errnoCode(error) ?? String(error)})`);
-        }
+// What a file's bytes read as, before the fallback stands in: decrypted, converted, parsed, and judged.
+const interpreter =
+    <T>(path: string, { how, document, strict, atRestPurpose }: Store<T>) =>
+    async (bytes: string): Promise<Reading<T>> => {
+        let text = bytes;
         if (atRestPurpose !== undefined) {
             try {
-                text = await decryptAtRest(text, atRestPurpose);
+                text = await decryptAtRest(bytes, atRestPurpose);
             } catch (error) {
                 if (error instanceof AtRestKeyError) {throw error;}
                 throw new AtRestKeyError(`could not decrypt ${path}: ${String(error)}; refusing to replace it`);
             }
         }
         const read = readDocument(text, document ?? NO_HISTORY, how, CHECK_SETTLES);
-        problems.push(...read.problems);
         if (read.value === undefined) {
-            const detail = read.problems[0]?.detail ?? "the file does not match what this build expects";
-            return done({ state: { value: fallback(), unreadable: true, detail } });
+            return { problems: read.problems, unreadable: read.problems[0]?.detail ?? "the file does not match what this build expects" };
         }
         if (strict && read.problems.some((problem) => problem.kind === "invalidEntry")) {
-            return done({ state: { value: fallback(), unreadable: true, detail: "an entry in it is not one this build can read" } });
+            return { problems: read.problems, unreadable: "an entry in it is not one this build can read" };
         }
-        return done({ state: { value: read.value, unreadable: false }, carry: read.carry });
+        // Frozen: the memo hands this one value to every later read and update until the file changes (memo/file-memo.ts).
+        return { problems: read.problems, value: deepFreeze(read.value), carry: read.carry };
+    };
+
+const ioUnreadable = <T>(reason: string): Reading<T> => {
+    const detail = `the file could not be read (${reason})`;
+    return { problems: [{ kind: "unreadable", reason: "io", detail }], unreadable: detail };
+};
+
+const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
+    const { fallback, mode, onUnreadable, atRestPurpose } = store;
+    const interpret = interpreter(path, store);
+    // The last reading and the file identity it was made at; reads skip the file while it stands (memo/file-memo.ts).
+    const cell: MemoCell<Reading<T>> = { memo: undefined };
+    let sealedUnder = "";
+    // Nothing written yet: the fallback, with nothing for a write to carry.
+    const absent = (): Reading<T> => ({ problems: [], value: fallback() });
+
+    // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
+    // either way. Recorded on every read, including clean ones and memo hits, so the registry self-clears when a
+    // complaint no longer applies.
+    const readState = async (): Promise<Read<T>> => {
+        // A memo of a sealed file holds what the keys named when it was made decrypted it to; other keys must decrypt
+        // it again, so a file the new key cannot open is refused as it would have been without the memo.
+        const sealing = atRestPurpose === undefined ? "" : atRestKeys();
+        if (sealing !== sealedUnder) {
+            cell.memo = undefined;
+            sealedUnder = sealing;
+        }
+        // Only absence is "nothing written yet"; a file that exists but cannot be read must never be written over.
+        const reading = await readThrough(cell, path, { absent, failed: ioUnreadable<T>, interpret });
+        recordManifestProblems(path, reading.problems);
+        return reading.unreadable === undefined
+            ? { state: { value: reading.value, unreadable: false }, carry: reading.carry }
+            : { state: { value: fallback(), unreadable: true, detail: reading.unreadable } };
+    };
+
+    // Writes the file whole and holds what it wrote as the memo, so the next read parses nothing it did not have to.
+    const write = async (value: JsonValueOf): Promise<void> => {
+        cell.memo = undefined;
+        const bytes = await jsonBytes(value, atRestPurpose);
+        await writeFileAtomic(path, bytes, mode, { durable: onUnreadable === "refuse" });
+        await heldAfterWrite(cell, path, bytes, interpret);
     };
 
     // Edits the raw JSON on the same queue as update, for removing a key `parse` already drops before `update` ever
@@ -172,6 +214,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
             }
             // As durable as `update` writes the same file: a repair is no reason to risk an owner's file.
             await writeJsonFile(path, updated, mode, onUnreadable === "refuse", atRestPurpose);
+            cell.memo = undefined;
             return true;
         });
 
@@ -189,7 +232,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     return updated;
                 }
                 if (carry !== undefined) {
-                    await writeJsonFile(path, carry(updated), mode, onUnreadable === "refuse", atRestPurpose);
+                    await write(carry(updated));
                     return updated;
                 }
                 // Content this build could not read is never overwritten: refused, or set aside where a later
@@ -201,7 +244,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     }
                     await rename(path, await asideOf(path)).catch(undefinedIfMissing);
                 }
-                await writeJsonFile(path, updated, mode, onUnreadable === "refuse", atRestPurpose);
+                await write(updated);
                 return updated;
             }),
     };

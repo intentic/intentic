@@ -69,7 +69,8 @@ export const moveSandbox = async (
     if (!SLUG.test(slug)) {
         throw new Error(`"${slug}" is not a sandbox name.`);
     }
-    const here = await fleet();
+    // Fresh: the collision check before a receive must not read a listing from before another flow made that sandbox.
+    const here = await fleet({ fresh: true });
     if (op === "move-out") {
         findIn(here, slug);
     } else if (op === "move-prepare" && here.some((box) => box.slug === slug)) {

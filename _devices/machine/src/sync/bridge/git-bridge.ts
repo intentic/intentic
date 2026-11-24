@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -6,6 +6,7 @@ import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { GIT_GLOBAL_ARGS } from "@intentic/base/git";
 import { untranslatedEnv } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
+import type { BridgeHead } from "@intentic/sandbox-contract/schemas/bridge-heads";
 import { type BridgeHold, type BridgeHoldReason, isProjectPairing, type Pairing, pairingKey, pruneBridgeHolds, setBridgeHold } from "../config.js";
 import { runProcess, runWatched } from "../exec.js";
 import { cutBeyondClone } from "./shallow-sandbox.js";
@@ -13,7 +14,8 @@ import { sshAlias } from "../ssh.js";
 
 // Moves git state, not worktree files, which file sync owns, from the sandbox's real git dirs to the local clone:
 // fetch, then fast-forward. One-way only: local commits or staged work the sandbox lacks freeze the bridge rather
-// than being rebased, reset or merged. Steady state costs one ls-remote per repo.
+// than being rebased, reset or merged. Steady state costs no process at all against a sandbox that advertises its heads
+// (below), and one ls-remote per repo against one from before that.
 //
 // A FETCH THAT CANNOT FINISH MUST NOT RUN AGAIN EVERY PASS (2026-10-18). The fetch used to share the two-minute deadline
 // of every other command here and run again on the next pass when it was cut off. A repository whose history did not
@@ -258,11 +260,85 @@ const HOLD_SAID = {
     failed: "git refused the fetch",
 } as const satisfies Record<BridgeHoldReason, string>;
 
+/* A SANDBOX THAT SAYS WHERE ITS BRANCHES ARE (2026-11-24). The bridge learned each repo's branch and tip with
+   `git ls-remote --symref sandbox HEAD`, and the repo list with an `ls /history/gits`, each a fresh SSH login through the
+   sandbox's sync door, its sshd and PAM and a git-upload-pack: with ten repos two logins a second, every second, for
+   nothing on almost every pass, and six local gits per repo per pass beside them. A sandbox since then names every
+   repo's branch and tip on the `/ports` answer the watcher polls anyway (`PortsList.bridgeHeads`, read off its git
+   dirs' files), and against it:
+
+   - no ls-remote and no listing: the repo set and each repo's branch and tip are the advertisement's;
+   - a repo level with what it advertises costs no process. What the last pass read of the clone (its config, remote,
+     HEAD, branch and marker) is kept with the stamps of the files those answers come from (`.git/config`, `HEAD`,
+     `packed-refs`, the branch's ref and its marker); while none of them changed and the advertised tip is the one the
+     clone was level with, nothing is asked again. Anything that writes a ref (git renames a new file over it) or the
+     config moves a stamp, this bridge's own fetch and reset included, and the next pass reads afresh;
+   - a repo whose advertised tip differs fetches, and only that repo, unless its `refs/remotes/sandbox/<branch>` already
+     holds that tip (local commits keep it from following): then nothing is fetched, and a diverged clone is kept as
+     settled like a level one until it or the tip moves;
+   - one the sandbox could not read (`probe`) asks over SSH as before.
+
+   Against a sandbox from before the field the bridge runs exactly as it did. */
+
+// What the advertisement says of one repo, once it names something to follow.
+export interface AdvertisedTip {
+    readonly branch: string;
+    readonly tip: string;
+}
+
+// Where a clone's level-with-the-sandbox verdict is kept between passes, and how its files are stamped.
+export interface LocalMemo {
+    // A file's identity (kind, inode, size, mtime), or "-" when it is not there.
+    readonly stamp: (path: string) => string;
+    // Per clone dir: the stamps and advertised tip at which a pass last found nothing to do (level with the sandbox, or
+    // diverged from it), and when.
+    readonly settled: Map<string, { readonly key: string; readonly at: number }>;
+}
+
+// A verdict older than this is read again whatever the stamps say: the bound on what a filesystem whose stamps do not
+// move (a network share, a clock that jumped) can hide.
+export const LEVEL_KEPT_MS = 5 * 60_000;
+
+// Synchronous on purpose: a handful of stats per repo, where an await each would cost more than the stat.
+const statOf = (path: string): ReturnType<typeof statSync> | undefined => {
+    try {
+        return statSync(path);
+    } catch {
+        // allow(silent-catch): a path that cannot be looked at (missing, ENOTDIR under a branch with a slash) reads as absent, which reads again once it appears.
+        return undefined;
+    }
+};
+
+export const realLocalMemo = (): LocalMemo => ({
+    stamp: (path) => {
+        const info = statOf(path);
+        return info === undefined ? "-" : `${info.isDirectory() ? "d" : "f"}:${info.ino}:${info.size}:${info.mtimeMs}`;
+    },
+    settled: new Map(),
+});
+
+// The files every answer the level and divergence checks read comes from, stamped; undefined where `.git` is no directory (a pointer
+// file into a git dir elsewhere), whose files this does not chase, so that clone is always read afresh.
+const levelKey = (memo: LocalMemo, dir: string, advertised: AdvertisedTip): string | undefined => {
+    const gitDir = join(dir, ".git");
+    const own = memo.stamp(gitDir);
+    if (!own.startsWith("d:")) {
+        return undefined;
+    }
+    const { branch } = advertised;
+    const files = ["config", "HEAD", "packed-refs", `refs/heads/${branch}`, `refs/intentic/bridged/${branch}`, `refs/remotes/sandbox/${branch}`];
+    return [own, ...files.map((file) => memo.stamp(join(gitDir, file))), branch, advertised.tip].join("|");
+};
+
 export interface BridgeOptions {
     readonly memory?: BridgeMemory | undefined;
     readonly packs?: PackFs | undefined;
     readonly signal?: AbortSignal | undefined;
     readonly now?: (() => number) | undefined;
+    // What the sandbox advertised for this repo; absent, the repo is asked over SSH.
+    readonly advertised?: AdvertisedTip | undefined;
+    // Kept answers about the clone, used only with an advertisement.
+    readonly local?: LocalMemo | undefined;
 }
 
 // Repo-id shape enforced by workspace/repo-discovery.ts: 1-4 segments, each starting alphanumeric. Re-checked here
@@ -396,71 +472,34 @@ const prepareClone = async (exec: BridgeExec, alias: string, dir: string, repo: 
     return true;
 };
 
-// Brings one local repo up to the sandbox's history, fast-forward only. Every early return leaves the repo alone
-// this pass rather than touch the user's work.
-export const bridgeRepo = async (
-    exec: BridgeExec,
-    alias: string,
-    localDir: string,
-    repo: string,
-    log: Log,
-    options: BridgeOptions = {},
-): Promise<void> => {
-    const memory = options.memory ?? forgetfulMemory;
-    const packs = options.packs ?? realPackFs;
-    const now = options.now ?? Date.now;
-    const dir = join(localDir, repo);
-    if (!exec.exists(dir) || !(await prepareClone(exec, alias, dir, repo, log))) {
-        return;
-    }
-    await sweepLeftovers({ exec, packs, now, log }, dir, repo);
-    // The one round trip a quiet repo pays for: answers branch, tip, and reachability together.
-    const symref = (await exec.run("git", ["ls-remote", "--symref", "sandbox", "HEAD"], dir)) ?? "";
-    const branch = /^ref:\s+refs\/heads\/(\S+)\s+HEAD/m.exec(symref)?.[1];
-    // Sha line of the listing; unchecked length also matches sha256; anchor excludes origin/HEAD below.
-    const remoteTip = /^([0-9a-f]+)\s+HEAD\s*$/m.exec(symref)?.[1];
-    if (branch === undefined || remoteTip === undefined) {
-        return; // unreachable, or an unborn HEAD in the sandbox: nothing to bridge yet
-    }
-    // Local and free; read before the fetch so the quiet case can be decided without one.
-    const head = (await exec.run("git", ["rev-parse", "-q", "--verify", "HEAD"], dir))?.trim();
-    const localBranch = (await exec.run("git", ["symbolic-ref", "--short", "-q", "HEAD"], dir))?.trim();
-    // Records what the bridge itself installed into this branch, not the remote-tracking ref: a fetch advances that
-    // regardless of whether HEAD followed. The ref moves only when HEAD moves.
+// What the clone held before a fetch: HEAD's commit, the branch it names, and what the bridge last installed there.
+interface CloneHeads {
+    readonly head: string | undefined;
+    readonly localBranch: string | undefined;
+    readonly installed: string | undefined;
+}
+
+// After a fetch landed: the sandbox's branch moved into the clone, fast-forward only, never over staged work or local
+// commits the sandbox lacks.
+// Answers `diverged` when local work kept the sandbox's branch out, which stays so until the clone or the tip moves.
+const installFetched = async (exec: BridgeExec, dir: string, repo: string, branch: string, clone: CloneHeads, log: Log): Promise<"diverged" | undefined> => {
+    const { head, localBranch, installed } = clone;
     const bridged = `refs/intentic/bridged/${branch}`;
-    const installed = (await exec.run("git", ["rev-parse", "-q", "--verify", bridged], dir))?.trim();
-    if (head === remoteTip && localBranch === branch) {
-        // Level with the sandbox: nothing to do, but converge the marker here too — a repo that never falls behind
-        // never
-        // reaches the reset that would otherwise write it. A hold has nothing left to wait for (the owner fetched by hand).
-        if (head !== undefined && installed !== head) {
-            await exec.run("git", ["update-ref", bridged, head], dir);
-        }
-        await memory.record(repo, undefined);
-        return;
-    }
-    const hold = memory.held(repo);
-    if (holdWaiting(hold, now())) {
-        return; // said when it was held, and in the report since: not again every pass
-    }
-    if (!(await fetchFromSandbox({ exec, alias, packs, memory, now, log, signal: options.signal }, dir, repo, branch, head, hold))) {
-        return;
-    }
     // Re-reads the tip from the fetch's ref, not the probe's: the sandbox may have committed again meanwhile.
     const tip = (await exec.run("git", ["rev-parse", "-q", "--verify", `refs/remotes/sandbox/${branch}`], dir))?.trim();
     if (tip === undefined || tip === "") {
-        return;
+        return undefined;
     }
     // Anything staged is a commit the user is composing, the mixed reset below would silently unstage it.
     if (head !== undefined && (await exec.run("git", ["diff", "--cached", "--quiet"], dir)) === undefined) {
-        return;
+        return undefined;
     }
     // Fast-forward only, unless local HEAD is exactly what the bridge last installed: then the sandbox rewound its
     // own history, and this follows it back.
     if (head !== undefined && head !== tip && (await exec.run("git", ["merge-base", "--is-ancestor", "HEAD", tip], dir)) === undefined) {
         if (head !== installed) {
             log(`  ${repo}: local commits diverge from the sandbox, leaving it alone`);
-            return;
+            return "diverged";
         }
         log(`  ${repo}: the sandbox rewound ${branch}, following it back`);
     }
@@ -477,11 +516,11 @@ export const bridgeRepo = async (
             (await exec.run("git", ["merge-base", "--is-ancestor", existing, tip], dir)) === undefined
         ) {
             log(`  ${repo}: local branch ${branch} diverges from the sandbox, leaving it alone`);
-            return;
+            return "diverged";
         }
         await exec.run("git", ["symbolic-ref", "HEAD", `refs/heads/${branch}`], dir);
     } else if (head === tip) {
-        return; // already there
+        return undefined; // already there
     }
     if ((await exec.run("git", ["reset", "-q", tip], dir)) !== undefined) {
         // Records what was just installed, right after the reset: this is the valve's only memory, and a reset whose
@@ -489,10 +528,142 @@ export const bridgeRepo = async (
         await exec.run("git", ["update-ref", bridged, tip], dir);
         log(`  ${repo}: fast-forwarded ${branch} to ${tip.slice(0, 8)}`);
     }
+    return undefined;
+};
+
+// A clone settled at this key within LEVEL_KEPT_MS (level, or kept off by local work): nothing in it moved and the
+// sandbox says the same tip.
+const keptLevel = (local: LocalMemo | undefined, dir: string, key: string | undefined, now: number): boolean => {
+    const kept = key === undefined ? undefined : local?.settled.get(dir);
+    return kept !== undefined && kept.key === key && now - kept.at < LEVEL_KEPT_MS;
+};
+
+// The sandbox's branch and tip over SSH: the one round trip a quiet repo paid for before the advertisement, and still
+// does against a sandbox without it. Answers branch, tip, and reachability together.
+const askRemote = async (exec: BridgeExec, dir: string): Promise<AdvertisedTip | undefined> => {
+    const symref = (await exec.run("git", ["ls-remote", "--symref", "sandbox", "HEAD"], dir)) ?? "";
+    const branch = /^ref:\s+refs\/heads\/(\S+)\s+HEAD/m.exec(symref)?.[1];
+    // Sha line of the listing; unchecked length also matches sha256; anchor excludes origin/HEAD below.
+    const tip = /^([0-9a-f]+)\s+HEAD\s*$/m.exec(symref)?.[1];
+    return branch === undefined || tip === undefined ? undefined : { branch, tip };
+};
+
+// Brings one local repo up to the sandbox's history, fast-forward only. Every early return leaves the repo alone
+// this pass rather than touch the user's work.
+export const bridgeRepo = async (
+    exec: BridgeExec,
+    alias: string,
+    localDir: string,
+    repo: string,
+    log: Log,
+    options: BridgeOptions = {},
+): Promise<void> => {
+    const memory = options.memory ?? forgetfulMemory;
+    const packs = options.packs ?? realPackFs;
+    const now = options.now ?? Date.now;
+    const dir = join(localDir, repo);
+    if (!exec.exists(dir)) {
+        return;
+    }
+    const { advertised, local } = options;
+    // Stamped before anything is read or written: a change landing after this leaves a key that no longer matches.
+    const key = advertised === undefined || local === undefined ? undefined : levelKey(local, dir, advertised);
+    if (keptLevel(local, dir, key, now())) {
+        await sweepLeftovers({ exec, packs, now, log }, dir, repo);
+        await memory.record(repo, undefined);
+        return; // level with what the sandbox says, and nothing in the clone moved since that was read
+    }
+    local?.settled.delete(dir);
+    if (!(await prepareClone(exec, alias, dir, repo, log))) {
+        return;
+    }
+    await sweepLeftovers({ exec, packs, now, log }, dir, repo);
+    const remote = advertised ?? (await askRemote(exec, dir));
+    if (remote === undefined) {
+        return; // unreachable, or an unborn HEAD in the sandbox: nothing to bridge yet
+    }
+    const { branch, tip: remoteTip } = remote;
+    // Local and free; read before the fetch so the quiet case can be decided without one.
+    const head = (await exec.run("git", ["rev-parse", "-q", "--verify", "HEAD"], dir))?.trim();
+    const localBranch = (await exec.run("git", ["symbolic-ref", "--short", "-q", "HEAD"], dir))?.trim();
+    // Records what the bridge itself installed into this branch, not the remote-tracking ref: a fetch advances that
+    // regardless of whether HEAD followed. The ref moves only when HEAD moves.
+    const bridged = `refs/intentic/bridged/${branch}`;
+    const installed = (await exec.run("git", ["rev-parse", "-q", "--verify", bridged], dir))?.trim();
+    if (head === remoteTip && localBranch === branch) {
+        // Level with the sandbox: nothing to do, but converge the marker here too — a repo that never falls behind
+        // never
+        // reaches the reset that would otherwise write it. A hold has nothing left to wait for (the owner fetched by hand).
+        if (head !== undefined && installed !== head) {
+            await exec.run("git", ["update-ref", bridged, head], dir);
+        } else if (key !== undefined) {
+            // Kept only once nothing was written: a pass that wrote the marker (or the config) reads again next time.
+            local?.settled.set(dir, { key, at: now() });
+        }
+        await memory.record(repo, undefined);
+        return;
+    }
+    const hold = memory.held(repo);
+    if (holdWaiting(hold, now())) {
+        return; // said when it was held, and in the report since: not again every pass
+    }
+    // The advertised tip already fetched (a clone whose local work keeps it from following): nothing to ask the sandbox.
+    const fetched = advertised !== undefined && (await exec.run("git", ["rev-parse", "-q", "--verify", `refs/remotes/sandbox/${branch}`], dir))?.trim() === advertised.tip;
+    if (!fetched && !(await fetchFromSandbox({ exec, alias, packs, memory, now, log, signal: options.signal }, dir, repo, branch, head, hold))) {
+        return;
+    }
+    if ((await installFetched(exec, dir, repo, branch, { head, localBranch, installed }, log)) === "diverged" && key !== undefined) {
+        // Said once; asked again when the clone or the advertised tip moves.
+        local?.settled.set(dir, { key, at: now() });
+    }
+};
+
+// What the bridge makes of each advertised repo: the branch and tip to follow; `probe`, asked over SSH since the sandbox
+// could not read it; or `nothing` for a detached HEAD or a branch with no commits yet, which ls-remote's answer gave
+// nothing to follow for either. The workspace root and ids that could escape the local dir are left out, as the
+// listing leaves them.
+const followedHeads = (advertised: readonly BridgeHead[]): Map<string, AdvertisedTip | "probe" | "nothing"> => {
+    const followed = new Map<string, AdvertisedTip | "probe" | "nothing">();
+    for (const { repo, branch, tip, probe } of advertised) {
+        if (repo !== "root" && isSafeRepoId(repo)) {
+            followed.set(repo, probe === true ? "probe" : branch === undefined || tip === undefined ? "nothing" : { branch, tip });
+        }
+    }
+    return followed;
+};
+
+// A deleted repo's hold goes once a fresh repo set no longer names it.
+const pruneGone = async (pairing: Pairing, repos: readonly string[]): Promise<void> => {
+    if ((pairing.bridgeHolds ?? []).some((hold) => !repos.includes(hold.repo))) {
+        await pruneBridgeHolds(pairingKey(pairing), repos);
+    }
+};
+
+// The repo set off the advertisement, fresh every pass.
+const advertisedRepos = async (pairing: Pairing, heads: ReadonlyMap<string, unknown>): Promise<string[]> => {
+    const repos = [...heads.keys()];
+    await pruneGone(pairing, repos);
+    return repos;
+};
+
+// The repo set as an earlier pass listed it, or listed again over SSH; undefined while the sandbox cannot be reached.
+const listedRepos = async (exec: BridgeExec, pairing: Pairing, alias: string, known: readonly string[] | undefined, log: Log): Promise<readonly string[] | undefined> => {
+    if (known !== undefined) {
+        return known;
+    }
+    const repos = await listSandboxRepos(exec, alias);
+    if (repos === undefined) {
+        // Named so a reader can tell which sandbox is down when one machine bridges a fleet.
+        log(`  ${pairing.sandboxId}: git bridge couldn't list the sandbox's repos, will retry next pass`);
+        return undefined;
+    }
+    await pruneGone(pairing, repos);
+    return repos;
 };
 
 // One bridge pass over a pairing's sandbox repos (sync-mode only). `known` lets the caller skip re-listing over
-// ssh when the repo set is unchanged; returns the list used, or undefined if there was nothing to bridge. Never for a
+// ssh when the repo set is unchanged, and `advertised` (the sandbox's `bridgeHeads`) replaces both the listing and
+// every repo's ls-remote; returns the list used, or undefined if there was nothing to bridge. Never for a
 // project pairing: its folder is one of the owner's own repos, whose `.git` is theirs, and the sandbox's history of it
 // is a separate repository the bridge would init, re-point and reset theirs onto.
 export const runGitBridge = async (
@@ -500,30 +671,34 @@ export const runGitBridge = async (
     pairing: Pairing,
     log: Log,
     known: readonly string[] | undefined,
-    options: Pick<BridgeOptions, "signal" | "packs" | "now"> & { readonly memory?: BridgeMemory | undefined } = {},
+    options: Pick<BridgeOptions, "signal" | "packs" | "now" | "local"> & {
+        readonly memory?: BridgeMemory | undefined;
+        readonly advertised?: readonly BridgeHead[] | undefined;
+    } = {},
 ): Promise<readonly string[] | undefined> => {
     if (pairing.mode !== "sync" || pairing.localDir === undefined || isProjectPairing(pairing)) {
         return undefined;
     }
     const alias = sshAlias(pairing.sandboxId);
-    const repos = known ?? (await listSandboxRepos(exec, alias));
+    const { advertised, ...rest } = options;
+    const heads = advertised === undefined ? undefined : followedHeads(advertised);
+    const repos = heads === undefined ? await listedRepos(exec, pairing, alias, known, log) : await advertisedRepos(pairing, heads);
     if (repos === undefined) {
-        // Named so a reader can tell which sandbox is down when one machine bridges a fleet.
-        log(`  ${pairing.sandboxId}: git bridge couldn't list the sandbox's repos, will retry next pass`);
         return undefined;
-    }
-    // A fresh listing is the moment a deleted repo's hold can go.
-    if (known === undefined && (pairing.bridgeHolds ?? []).some((hold) => !repos.includes(hold.repo))) {
-        await pruneBridgeHolds(pairingKey(pairing), repos);
     }
     const memory = options.memory ?? pairingMemory(pairing);
     for (const repo of repos) {
         if (options.signal?.aborted === true) {
             break;
         }
+        const head = heads?.get(repo);
+        if (head === "nothing") {
+            continue;
+        }
+        const tip = head === "probe" ? undefined : head;
         // one repo at a time, on purpose: they share one ssh
         // transport and log; concurrent fetches would contend for both.
-        await bridgeRepo(exec, alias, pairing.localDir, repo, log, { ...options, memory });
+        await bridgeRepo(exec, alias, pairing.localDir, repo, log, { ...rest, memory, advertised: tip });
     }
     return repos;
 };

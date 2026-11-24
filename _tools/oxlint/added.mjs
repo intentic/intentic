@@ -3,7 +3,7 @@
 // adds and never on what it found.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
 
@@ -32,6 +32,14 @@ export const oxlintCommand = (oxlint, args) => {
     const entry = join(dirname(oxlint), `../oxlint/bin/oxlint`);
     return existsSync(entry) ? [process.execPath, [entry, ...args]] : [oxlint, args];
 };
+
+/**
+ * `--threads` for a run over `files` files: one per file, up to the machine's cores, which is oxlint's own default.
+ * oxlint lints a file on one thread, so the rest of a default pool over one file only start and spin: on one daemon
+ * `.ts` file under the plugins config, 0.47 s of CPU at the default and 0.28 s at one thread, the same wall time and
+ * the same report (2026-11-24, 16 cores).
+ */
+export const threadsFor = (files) => [`--threads`, String(Math.max(1, Math.min(files, availableParallelism())))];
 
 // A message that states a measured score against a limit ("Function 'f' has Cognitive Complexity of 38. Maximum allowed
 // is 20." then a breakdown of every line that scored) is about the function it names: `head` is the rule's metric and that
@@ -117,9 +125,10 @@ export const reportFlags = (checkout, config) => [
     ...(config === PLUGINS_CONFIG ? [`--report-unused-disable-directives`] : []),
 ];
 
-/** oxlint's stdout for `args`, run from `checkout`; throws as execFileSync does, with the report on `error.stdout`. */
+/** oxlint's stdout for `args`, run from `checkout`; throws as execFileSync does, with the report on `error.stdout`.
+ *  Every caller lints one file (lint-edit.mjs, and `report` for it), so it runs on one thread (`threadsFor`). */
 export const oxlintOut = (oxlint, checkout, args) => {
-    const [file, argv] = oxlintCommand(oxlint, args);
+    const [file, argv] = oxlintCommand(oxlint, [...threadsFor(1), ...args]);
     return execFileSync(file, argv, {
         cwd: checkout,
         encoding: `utf8`,

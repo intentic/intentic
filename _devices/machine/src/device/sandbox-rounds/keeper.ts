@@ -33,13 +33,19 @@ export { hostedSlugs, keeperScope, type ListedSandbox, trashedFrom } from "./kee
 // THE KEEPER: when a sandbox on this machine stops answering (Docker Desktop not started after a reboot, a container
 // that stopped, a daemon whose registration gave up, a full disk), `ic sandbox fix --auto` heals what is safe to heal
 // unasked and reports the rest, which it also posts to the platform itself. ic decides every fix; this keeps the clock:
-// a sweep over every sandbox half a minute after start (the logon case) and every five minutes, and a fix of one
+// a sweep over every sandbox half a minute after start (the logon case) and every five minutes when its look finds
+// something wrong, else every quarter hour (sweepWanted), and a fix of one
 // sandbox as soon as this agent's link to it has failed for a minute, when that sandbox runs here. It never answers a
 // question ic would ask a person (`--auto` applies only what needs no yes), and it never talks to the platform.
 
 // Soon after start, when Docker Desktop is most likely still off after a reboot, but after the machine has settled.
 const FIRST_SWEEP_MS = 30_000;
 const SWEEP_EVERY_MS = 5 * 60_000;
+// (2026-11-24) A sweep whose look finds nothing wrong (every sandbox this side keeps listed running or asleep, Docker
+// answering, the last sweep clean) is skipped, up to this long since the last one ran. Not longer: each sweep is also the
+// keeper's lease on its sandboxes (ic's /history/.ic/keeper.json, written by `fix --auto`), and the other side of the PC
+// adopts a sandbox whose keeper has been silent for 30 minutes (ic: sandbox/side.rs, SILENT_AFTER_MS).
+export const SWEEP_BACKSTOP_MS = 15 * 60_000;
 // How often the keeper looks at its links: reading them costs nothing, and a minute of silence is the trigger.
 const LOOK_EVERY_MS = 10_000;
 // How long a link to a sandbox on this machine fails before the keeper fixes that sandbox: longer than a restart.
@@ -283,6 +289,8 @@ interface Wait {
 export interface KeeperState {
     sweepDueAt: number;
     sweepFailures: number;
+    // When a sweep last ran ic; never, until the first (FIRST_SWEEP_MS), which always runs.
+    sweptAt: number;
     // An ic that cannot fix: every run waits this out, doubling as a failing sandbox does.
     unavailable: Wait;
     // Per sandbox, the wait before it is fixed again for a failing link.
@@ -306,6 +314,7 @@ export interface KeeperState {
 export const newKeeperState = (start: number, sleepers: Sleepers = newSleepers()): KeeperState => ({
     sweepDueAt: start + FIRST_SWEEP_MS,
     sweepFailures: 0,
+    sweptAt: Number.NEGATIVE_INFINITY,
     unavailable: { failures: 0, until: 0 },
     waits: new Map(),
     said: new Map(),
@@ -570,11 +579,12 @@ const runFix = async (
 
 // The listing again, and ic's trash with it when a record names a sandbox the listing does not: what a sweep decides on,
 // and what the links are judged by until the next. A listing that fails keeps the last one that answered.
-const relist = async (state: KeeperState, seams: KeeperSeams, records: readonly string[]): Promise<void> => {
+// Answers whether the listing answered.
+const relist = async (state: KeeperState, seams: KeeperSeams, records: readonly string[]): Promise<boolean> => {
     // allow(silent-catch): a listing that fails is Docker being down; the last one that answered (and the trash read with it) still stands
     const listed = await seams.listing().catch(() => undefined);
     if (listed === undefined) {
-        return;
+        return false;
     }
     state.listed = listed;
     // The listing is the truth about who sleeps on this side: a sandbox woken by hand is listed awake. One this agent
@@ -593,17 +603,38 @@ const relist = async (state: KeeperState, seams: KeeperSeams, records: readonly 
     const containers = new Set(listed.map((row) => row.slug));
     // allow(silent-catch): a trash that cannot be read is none (keeperScope): no record is taken for a sandbox on a guess
     state.trashed = records.some((slug) => !containers.has(slug)) ? await seams.trashed().catch(() => undefined) : [];
+    return true;
+};
+
+// Whether a due sweep runs ic, or the look that preceded it found nothing for it to do. It runs: the first time, once
+// SWEEP_BACKSTOP_MS have passed since the last, after a sweep that left something, while Docker does not answer the
+// listing (the logon case, where the fix starts Docker Desktop), and while a sandbox this side keeps is listed neither
+// running nor asleep, or has no container at all. Pure.
+const sweepWanted = (state: KeeperState, scope: KeeperScope, answered: boolean, now: number): boolean => {
+    if (now - state.sweptAt >= SWEEP_BACKSTOP_MS || state.sweepFailures > 0 || !answered || state.listed === undefined) {
+        return true;
+    }
+    const rows = new Map(state.listed.map((row) => [row.slug, row]));
+    return scope.own.some((slug) => {
+        const row = rows.get(slug);
+        return row === undefined || (row.running !== true && row.asleep !== true);
+    });
 };
 
 // Every sandbox this environment keeps, when the sweep is due: its cadence stretches on the same ladder while a sweep
 // leaves something. An environment that keeps none has nothing to sweep (KeeperScope says why), and says so once.
-const sweep = async (state: KeeperState, seams: KeeperSeams, scope: KeeperScope, log: Log): Promise<void> => {
+const sweep = async (state: KeeperState, seams: KeeperSeams, scope: KeeperScope, answered: boolean, log: Log): Promise<void> => {
     if (scope.own.length === 0) {
         sayOnce(state, ":none", "keeper: this environment keeps no sandbox of its own, so there is nothing to sweep.", log);
         state.sweepDueAt = seams.now() + SWEEP_EVERY_MS;
         return;
     }
     state.said.delete(":none");
+    if (!sweepWanted(state, scope, answered, seams.now())) {
+        state.sweepDueAt = seams.now() + SWEEP_EVERY_MS;
+        return;
+    }
+    state.sweptAt = seams.now();
     const run = await runFix(state, seams, undefined, scope.running, log);
     const now = seams.now();
     const clean = noteRun(state, run, undefined, log, now);
@@ -674,9 +705,7 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
     }
     const records = await seams.records();
     const sweepDue = seams.now() >= state.sweepDueAt && seams.busy.size === 0;
-    if (sweepDue) {
-        await relist(state, seams, records);
-    }
+    const answered = sweepDue ? await relist(state, seams, records) : true;
     const scope = keeperScope(state.listed, records, state.trashed);
     if (seams.runners !== undefined && keptRunners(state.listed).length > 0) {
         // Held like a fix, so no other round starts work under a start or restart it makes.
@@ -684,7 +713,7 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
         await runRunnerRound(state.runners, seams.runners, keptRunners(state.listed), log).finally(() => (state.fixing = false));
     }
     if (sweepDue) {
-        await sweep(state, seams, scope, log);
+        await sweep(state, seams, scope, answered, log);
         if (scope.own.length > 0) {
             await sleepUnneeded(state, seams, scope, log);
             return;

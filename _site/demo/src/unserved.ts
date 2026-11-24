@@ -66,6 +66,7 @@ export const UNSERVED = {
     "GET /system/phones/passwords/keyrings": NOT_THE_EDITORS,
     "GET /system/runners/connect": NOT_THE_EDITORS,
     "GET /system/runners/git/{repo}/info/refs": NOT_THE_EDITORS,
+    "GET /system/sync/changes": NOT_THE_EDITORS,
     "GET /system/sync/ssh": NOT_THE_EDITORS,
     "GET /system/webext/connect": NOT_THE_EDITORS,
     "GET /wallet/history": NOT_THE_EDITORS,

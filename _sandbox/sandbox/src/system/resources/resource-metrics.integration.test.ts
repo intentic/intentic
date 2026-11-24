@@ -126,3 +126,21 @@ test("a steady OOM counter is silent: the alarm is the delta, not the level", as
     metrics.stop();
     expect(error).not.toHaveBeenCalled();
 });
+
+test("the first sample's CPU window runs from the process's start, not a millisecond before it", async () => {
+    const historyRoot = await mkdtemp(join(tmpdir(), "resource-metrics-"));
+    roots.push(historyRoot);
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: jest.fn(), error: jest.fn() }, intervalMs: 3_600_000, oom: { observe: async () => [], check: async () => [] } });
+
+    await metrics.sample();
+    metrics.stop();
+
+    // SAFETY: the line is one this sampler just wrote, a ResourceSnapshot whose window carries these figures.
+    const [first] = (await readFile(join(historyRoot, "logs", RESOURCE_METRICS_FILE), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { window: { elapsedMs: number; cpu: { userMs: number; utilizationPercent: number } } });
+    // Opened when the sampler was made, the window was ~1 ms and 1 ms of CPU read as 125-140% of a core at every boot.
+    expect(first?.window.elapsedMs).toBeGreaterThan(100);
+    expect(first?.window.cpu.userMs).toBeGreaterThan(0);
+});

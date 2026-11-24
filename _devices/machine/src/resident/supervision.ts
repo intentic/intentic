@@ -133,7 +133,8 @@ export const waitOutSwaps = async (log: Log): Promise<void> => {
     let said = "";
     await pollUntil(
         async () => {
-            const swapping = swapsUnderway(await readSwaps()).join(", ");
+            // Fresh: the gate in front of a restart, where a held answer is not good enough.
+            const swapping = swapsUnderway(await readSwaps(undefined, { fresh: true })).join(", ");
             if (swapping !== "" && swapping !== said) {
                 log(`Waiting for ${swapping} to finish swapping before the agent restarts…`);
             }

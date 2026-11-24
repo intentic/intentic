@@ -10,6 +10,7 @@ import { withManagedInclude, withoutManagedIncludes } from "@intentic/base/ssh-c
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
 import { SshHostKeySchema } from "@intentic/sandbox-contract/schemas/devices";
+import { IGNORES } from "@intentic/sandbox-contract/sync/workspace-sync-ignores";
 import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 import { baseDir } from "../config.js";
 import {
@@ -28,87 +29,12 @@ import { readRepoIgnores } from "./ignores/repo-ignores.js";
 import { runProcess } from "./exec.js";
 import { syncSshPort, syncSshPorts } from "./tunnel.js";
 
-// Mutagen's two-way ignore set: also excludes secrets and the daemon's `.intentic` state, never the search-ignore
-// set's job. `.git` matches every level, since git state travels by git's own protocol (git-bridge.ts), not file sync.
-// Every name here is frozen into a session at its creation, so changing the list replaces every session this agent
-// holds, each from a settled state (mutagen.ts readyForReplacement). A project folder's share of it (PROJECT_IGNORES) is
-// also `project-ignores.fixture.json`, which the desktop app's NOT_SYNCED is held to: change them together.
-// The folders Cargo fills inside a profile folder that no run starts from.
-const CARGO_PROFILE_CACHES = ["incremental", ".fingerprint", "deps", "build", "examples"] as const;
+// Mutagen's two-way ignore set, frozen into every session at its creation: changing it replaces every session this agent
+// holds, each from a settled state (mutagen.ts readyForReplacement). It lives in sandbox-contract, beside the matcher the
+// sandbox's change signal filters by, so both ends read one list.
+export { IGNORES };
 
-export const IGNORES = [
-    "node_modules",
-    "dist",
-    ".turbo",
-    ".cache",
-    ".next",
-    ".angular",
-    // Astro's build cache; `.astro/dev.json` holds machine-local paths, so both sides regenerating it is a
-    // create-vs-create conflict that never settles.
-    ".astro",
-    // What the daemon's own walk already leaves out (@intentic/workspace-ignore IGNORED_DIRS): Python environments and
-    // bytecode, Gradle's caches and scratch space. An environment holds interpreter paths and compiled wheels for the
-    // machine that built it, so carried across it is broken on the other side, and each side rebuilding its own is the
-    // same create-vs-create standoff as `.astro`.
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".gradle",
-    ".tmp",
-    ".env",
-    // The machine-local env files every framework's loader reads over `.env` (Vite, Next, CRA): secrets by convention,
-    // and per machine by name. `.env.example` and the other committed variants still sync.
-    ".env.local",
-    ".env.*.local",
-    ".secrets.json",
-    "claude.json",
-    // No `capabilities.json` entry: its credentials live in the vault now, and the daemon's own copy sits under
-    // STATE_DIR already. Keeping it would only exclude a same-named file of the user's.
-    // ANCHORED TO THE ROOT, unlike `.git` below, because two different directories share this name: the WORKSPACE's
-    // state dir (the sandbox's own, carried one-way by the `-state` session) and a REPOSITORY's own `.intentic/`,
-    // which is committed content — this repo keeps its `checks.json` there. Depth-matched, the one pattern swallowed
-    // both, and since the bridge moves git state while file sync moves the files, a tracked file that never arrives
-    // reads as deleted in the clone for good: `intentic/.intentic/checks.json` sat in VS Code's Source Control as a
-    // phantom `D` that no amount of syncing could clear.
-    `/${STATE_DIR}`,
-    // The reference shelf, anchored for the same reason the state dir above is: the TOP-LEVEL `refs/` is consultation
-    // material — already excluded from workspace views, search and dependency setup by this same constant — while a
-    // repository's own `refs/` at any depth is ordinary content. Left in, it is the whole cost of syncing: measured on
-    // a dogfooding machine as 215,555 of the workspace's 222,000 entries, an 18 GB upload, and a full rescan of all of
-    // it every poll on an endpoint that has no file watcher.
-    `/${REFERENCE_DIR}`,
-    ".git",
-    ".pnpm-store",
-    // The image build's staging tree, for the same reason as `.astro` above and measured on a dogfooding machine:
-    // both sides write their own `package.json`/`pnpm-lock.yaml` per extension into it, which is 98 create-vs-create
-    // conflicts that two-way-safe will never settle — and while they stand, that pairing propagates nothing at all.
-    ".image-out",
-    // A REPOSITORY's own `.intentic/` travels (its `checks.json` is committed), but these two folders under it are the
-    // machine's own: `.intentic/local` (caches, logs, runtime and temporary files) and the older `.intentic/cache`.
-    // Each end writes its own, so carried across they are create-vs-create conflicts that two-way-safe will never
-    // settle, measured on a dogfooding machine as a stuck `index.db-shm` of a search index that has since been removed.
-    // `**/` is Mutagen's (doublestar) spelling for "at any depth, the root included"; a path without it is anchored.
-    `**/${STATE_DIR}/cache`,
-    `**/${STATE_DIR}/local`,
-    // Cargo's build output: a profile folder under `target/`, natively or under a target triple
-    // (`target/x86_64-pc-windows-msvc/release`). Measured on rog, 2026-10-26: three crates' `target/` were 16 of the
-    // workspace's 18 GB and 31,000 of its 44,000 entries, SHA-1 hashed and shipped both ways on every `cargo build`
-    // either side ran, and rescanned every poll. Matched by its profile folders rather than a bare `target`, which is
-    // also an ordinary folder name in source trees; what is left of `target/` (CACHEDIR.TAG, .rustc_info.json) is bytes.
-    "**/target/debug",
-    "**/target/release",
-    "**/target/*/debug",
-    "**/target/*/release",
-    // Every other profile's (a custom `--profile fast` lands in `target/fast`) caches, natively and under a triple:
-    // the incremental state, fingerprints, compiled dependencies, build-script output and examples. Measured on the
-    // owner's shinobi workspace, 2026-11: `target/fast` alone was 1.2-1.9 GB of these, carried both ways on every
-    // build. The profile folder's own top level (the finished binary, its `.d` file) still travels, so a build made on
-    // one side can be started by hand on the other; a device run never needs it, since `devices run` pushes its
-    // artifact over the device link (sandbox bin/devices).
-    ...CARGO_PROFILE_CACHES.flatMap((cache) => [`**/target/*/${cache}`, `**/target/*/*/${cache}`]),
-];
-
-// The two entries above that describe the WORKSPACE root rather than any folder: a project pairing syncs one folder
+// The two entries in IGNORES that describe the WORKSPACE root rather than any folder: a project pairing syncs one folder
 // under it, whose own `.intentic/` (a repository's committed config) and `refs/` are ordinary content of that project.
 const WORKSPACE_ROOT_ONLY: ReadonlySet<string> = new Set([`/${STATE_DIR}`, `/${REFERENCE_DIR}`]);
 

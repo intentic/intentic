@@ -3,11 +3,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { plural } from "@intentic/base/format";
-import { execBounded, stopProcessTree } from "@intentic/base/process";
+import { stopProcessTree } from "@intentic/base/process";
 import { explain, homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
-    DeviceSandboxSchema,
     icForgetShapeArgs,
     icPowerArgs,
     icShapeArgs,
@@ -18,11 +17,12 @@ import {
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
-import { ensureCurrentIc, icCandidates, icOutOfDate } from "./ic-binary.js";
+import { ensureCurrentIc, icCandidates } from "./ic-binary.js";
+import { aroundIcRun } from "./listing/ic-readings.js";
 import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
 import { swapOnlyNow } from "./shape-now.js";
-import { withName } from "./listing/listed-name.js";
 import { findIn } from "./listing/find-sandbox.js";
+import { fleet } from "./listing/sandbox-fleet.js";
 
 export { findIn };
 
@@ -32,86 +32,7 @@ export { findIn };
 // takes `sandboxes`. Every verb runs through the `ic` CLI rather than being reimplemented: ic owns what runs and
 // what should run after the next restart, and this file is a caller of it, one implementation for every door.
 
-// Long enough for a listing on a busy machine (ic bounds each docker read inside it at 20s); longer is a machine in
-// trouble, and every caller is a screen or a model waiting to draw.
-const LIST_TIMEOUT_MS = 60_000;
-
-// Room for every container's share, well past exec's 1 MB default.
-const MAX_BUFFER = 8 * 1024 * 1024;
-
-// One row of the listing as it arrived, before it is read as the contract's.
-const ListedRowSchema = z.record(z.string(), z.json());
-type ListedRow = z.infer<typeof ListedRowSchema>;
-
-// What a row is (which sandbox, its container, whether it runs, on what image) against what an ic newer than this agent
-// may say about it in a way this agent cannot read yet: a new outcome word, a new kind of rollback target.
-const REQUIRED_FIELDS: ReadonlySet<string> = new Set(["slug", "container", "running", "image"]);
-
-// A row read as the contract's, dropping only the optional fields that do not parse, so a newer ic's answer about one
-// of them costs that field rather than the whole listing. A row whose identity does not parse is no row at all.
-const rowFrom = (listed: ListedRow): DeviceSandbox | undefined => {
-    const row = withName(listed);
-    const whole = DeviceSandboxSchema.safeParse(row);
-    if (whole.success) {
-        return whole.data;
-    }
-    const failed = new Set(whole.error.issues.map((issue) => String(issue.path[0] ?? "")));
-    if ([...failed].some((field) => REQUIRED_FIELDS.has(field) || field === "")) {
-        return undefined;
-    }
-    const kept = DeviceSandboxSchema.safeParse(Object.fromEntries(Object.entries(row).filter(([field]) => !failed.has(field))));
-    return kept.success ? kept.data : undefined;
-};
-
-// `ic sandbox list --json` prints one line of JSON on stdout (notes, if any, go to stderr), in the contract's own
-// shape: running state, the share docker enforces, the shape the container runs with, the shape saved for its next
-// restart, the update staged for it, and (from a newer ic) its version, whether it is parked mid-swap, its probation
-// and what it can roll back to. Parsed, not trusted: a line that is not a list of rows is ic too old or broken.
-export const fleetFrom = (stdout: string): DeviceSandbox[] => {
-    const line = stdout
-        .split(/\r?\n/)
-        .map((text) => text.trim())
-        .findLast((text) => text.startsWith("["));
-    const parsed = line === undefined ? undefined : z.array(ListedRowSchema).safeParse(JSON.parse(line));
-    const rows = parsed?.success === true ? parsed.data.map(rowFrom) : [undefined];
-    const read = rows.filter((row) => row !== undefined);
-    if (read.length !== rows.length) {
-        throw new Error("The `ic` on this device did not answer `ic sandbox list --json`. Re-run the sandbox's install command on it to update ic.");
-    }
-    return read;
-};
-
-// What runs on this machine, as ic answers it. Exported for the auto-prepare tick (../auto-prepare.ts): one producer of
-// "what runs on me", whoever is asking. `current: false` asks whatever ic is installed without first fetching a newer
-// one: what a command deciding whether the agent stays needs (resident.ts), where a download would be out of place.
-export const fleet = async ({ current = true }: { readonly current?: boolean } = {}): Promise<DeviceSandbox[]> => {
-    if (current) {
-        await ensureCurrentIc();
-    }
-    const candidates = icCandidates(process.platform, homeDir());
-    for (const [index, binary] of candidates.entries()) {
-        // candidates are tried in order; ENOENT means try the next
-        const answer = await execBounded(binary, ["sandbox", "list", "--json"], { timeoutMs: LIST_TIMEOUT_MS, maxOutput: MAX_BUFFER }).catch(
-            (error: NodeJS.ErrnoException & { stderr?: string }) => {
-                if (error.code === "ENOENT" && index < candidates.length - 1) {
-                    return undefined;
-                }
-                // An ic this agent failed to bring up to date is the likeliest reason, and its note names both versions:
-                // first, since the first line is what a card falling back to a command shows (Device.sandboxesUnread).
-                const stale = icOutOfDate();
-                throw error.code === "ENOENT"
-                    ? new Error("This device has no `ic` command, so its sandboxes can't be listed or managed from here. Re-run the sandbox's install command on it to get one.")
-                    : new Error(
-                          `${stale === undefined ? "" : `${stale}\n\n`}ic could not list this device's sandboxes: ${(error.stderr ?? error.message).trim()}`,
-                      );
-            },
-        );
-        if (answer !== undefined) {
-            return fleetFrom(answer.stdout);
-        }
-    }
-    throw new Error("no ic candidate was tried");
-};
+export { fleet, fleetFrom } from "./listing/sandbox-fleet.js";
 
 // Which slugs an `ic` flow is touching right now, in this process. The background rounds (auto-prepare, the daily
 // backup, the probation watch) read it so a timer never starts work under an update someone is watching stream. Only
@@ -374,7 +295,7 @@ export interface IcRun {
 }
 
 // A deadline in the words a log line says it in.
-const spanOf = (ms: number): string => (ms >= 60_000 ? plural(Math.round(ms / 60_000), "minute") : plural(Math.round(ms / 1_000), "second"));
+export const spanOf = (ms: number): string => (ms >= 60_000 ? plural(Math.round(ms / 60_000), "minute") : plural(Math.round(ms / 1_000), "second"));
 
 // How long a stopped run's process group has to leave after SIGTERM before it is killed outright.
 const STOP_GRACE_MS = 10_000;
@@ -472,6 +393,15 @@ export const runIc = async (
     { deadlineMs, input }: { readonly deadlineMs?: number | undefined; readonly input?: string | undefined } = {},
 ): Promise<IcRun> => {
     await ensureCurrentIc();
+    return await aroundIcRun(args, async () => await runFirstIc(args, onLine, env, { deadlineMs, input }));
+};
+
+const runFirstIc = async (
+    args: readonly string[],
+    onLine: (line: string) => void,
+    env: Readonly<Record<string, string>>,
+    { deadlineMs, input }: { readonly deadlineMs?: number | undefined; readonly input?: string | undefined },
+): Promise<IcRun> => {
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         const attempt = await runStreamed(binary, args, onLine, env, { deadlineMs, input });
@@ -493,6 +423,10 @@ export const runIc = async (
 // the person watching. Answers ic's exit code.
 export const runIcAttached = async (args: readonly string[]): Promise<number> => {
     await ensureCurrentIc();
+    return await aroundIcRun(args, async () => await runFirstIcAttached(args));
+};
+
+const runFirstIcAttached = async (args: readonly string[]): Promise<number> => {
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         // candidates are tried in order; ENOENT means try the next

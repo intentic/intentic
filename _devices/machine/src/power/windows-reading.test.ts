@@ -9,6 +9,7 @@ import {
     planListFrom,
     POWER_SETTINGS,
     WindowsAnswerSchema,
+    powerAssemblyPath,
     windowsPowerScript,
     windowsReadingFrom,
 } from "./windows-reading.js";
@@ -143,13 +144,34 @@ test("a value PowerShell writes oddly reads as unknown, never as a failed read",
 });
 
 test("the script asks for every setting by GUID and answers in ASCII, and travels as UTF-16LE base64", () => {
-    const script = windowsPowerScript();
+    const script = windowsPowerScript("C:\\Users\\o'brien\\.intentic\\machine\\cache\\intentic-power-x.dll");
     for (const { sub, setting } of Object.values(POWER_SETTINGS)) {
         expect(script).toContain(`sub = '${sub}'; setting = '${setting}'`);
     }
     expect(script).toContain("powercfg.exe /qh $plan $s.sub $s.setting");
     expect(script).toContain("[^\\x00-\\x7e]");
     // The here-string's opening and closing marks stand on lines of their own, as PowerShell requires.
-    expect(script.split("\n")).toEqual(expect.arrayContaining(["Add-Type -TypeDefinition @'", "'@"]));
+    expect(script.split("\n")).toEqual(expect.arrayContaining(["$native = @'", "'@"]));
     expect(Buffer.from(encodedCommand(script), "base64").toString("utf16le")).toBe(script);
+});
+
+test("the C# is compiled into a DLL once and loaded from it after, falling back to an in-memory compile", () => {
+    const script = windowsPowerScript("C:\\Users\\o'brien\\cache\\intentic-power-x.dll");
+    // The path is a single-quoted literal, its quote doubled.
+    expect(script).toContain("$assembly = 'C:\\Users\\o''brien\\cache\\intentic-power-x.dll'");
+    // Compiled to a part file and renamed into place, only when the DLL is not there yet, and only when the type is not loaded.
+    expect(script).toContain("if (-not ('IntenticPower' -as [type])) {");
+    expect(script).toContain("if (-not (Test-Path -LiteralPath $assembly)) {");
+    expect(script).toContain("Add-Type -TypeDefinition $native -OutputAssembly $part -OutputType Library");
+    expect(script).toContain("Add-Type -LiteralPath $assembly");
+    // A DLL that will not load is deleted and the type compiled in memory, as before.
+    expect(script).toContain("catch { Remove-Item -LiteralPath $assembly -Force -ErrorAction SilentlyContinue; Add-Type -TypeDefinition $native }");
+    // The compile-to-file must come before the load in the script.
+    expect(script.indexOf("-OutputAssembly")).toBeLessThan(script.indexOf("Add-Type -LiteralPath"));
+});
+
+test("the DLL is named by the C#'s own hash, in the agent's cache folder", () => {
+    const path = powerAssemblyPath("/home/x/.intentic/machine/cache");
+    expect(path).toMatch(/^\/home\/x\/\.intentic\/machine\/cache\/intentic-power-[0-9a-f]{16}\.dll$/);
+    expect(powerAssemblyPath("/home/x/.intentic/machine/cache")).toBe(path);
 });

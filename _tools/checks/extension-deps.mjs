@@ -8,11 +8,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ALLOWED, BUILD_ONLY, CONSUMERS, consumerFindings, manifestFindings, SHIPPED, specifierFindings } from "./lib/extension-deps.mjs";
 import { finish } from "./lib/report.mjs";
-import { root, subjectFiles } from "./lib/repo.mjs";
-import { readWorkspaceGraph } from "./lib/workspace-graph.mjs";
+import { root, subjectFiles, workspaceGraph } from "./lib/repo.mjs";
 
 // Only the manifests pnpm links as members: a fixture's or a seed's package.json installs nothing.
-const graph = readWorkspaceGraph(root);
+const graph = workspaceGraph();
 const members = new Set([...graph.packages.values()].map(({ dir }) => `${dir}/package.json`));
 const subjects = subjectFiles("_extensions/*/package.json").filter((path) => members.has(path));
 

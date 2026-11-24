@@ -14,7 +14,8 @@ import { type IcRun, lastLine } from "./ic-rounds.js";
    container running and its daemon answering, never dialled its parent again after 2026-11-05T10:34.
 
    So this machine keeps its runners the way it keeps a person's sandbox, by the one signal that matters for a runner:
-   its link. Once a minute, for every runner this side of the computer keeps:
+   its link. Once a minute, for every runner this side of the computer keeps (one `docker exec` that reads the link, and
+   an inspect only when it fails, lookAt):
    - a container that is not running (stopped, asleep, exited) is started;
    - a running one whose link (runner-protocol.ts RUNNER_LINK_PATH, which the runner writes) has been down for ten
      minutes of this keeper watching, while its parent answers this machine, is restarted. A parent that does not answer
@@ -136,12 +137,17 @@ export const keptRunners = (
         isRunner(row.slug) && row.keptElsewhere === undefined ? [{ slug: row.slug, container: row.container ?? `intentic-sandbox-${row.slug}` }] : [],
     );
 
+// What one look at a runner's container saw.
+export interface RunnerSight {
+    readonly running: boolean;
+    readonly reading: RunnerLinkReading | undefined;
+}
+
 // Everything the round reads or runs, injected so its decisions are asserted without docker, a parent or an ic.
 export interface RunnerKeeperSeams {
-    // Whether the container runs now (undefined when docker did not answer: nothing is decided on that).
-    readonly running: (container: string) => Promise<boolean | undefined>;
-    // The runner's reading of its link, or undefined when it wrote none.
-    readonly reading: (container: string) => Promise<RunnerLinkReading | undefined>;
+    // Whether the container runs now and, when it does, the runner's reading of its link (undefined when it wrote none);
+    // undefined when docker did not answer: nothing is decided on that.
+    readonly look: (container: string) => Promise<RunnerSight | undefined>;
     // Whether the parent answers this machine (its /health).
     readonly parentAnswers: (parent: string) => Promise<boolean>;
     readonly power: (op: "start" | "restart", slug: string) => Promise<IcRun>;
@@ -189,11 +195,12 @@ const act = async (
 
 // One runner: looked at, and started or restarted when its verdict says so.
 const keepRunner = async (state: RunnerKeeperState, seams: RunnerKeeperSeams, row: RunnerRow, log: Log): Promise<void> => {
-    const running = await seams.running(row.container);
-    if (running === undefined) {
+    const sight = await seams.look(row.container);
+    if (sight === undefined) {
         return;
     }
-    const reading = running ? await seams.reading(row.container) : undefined;
+    const { running } = sight;
+    const reading = running ? sight.reading : undefined;
     const now = seams.now();
     const { verdict, watch } = judgeRunner(running, reading, state.watches.get(row.slug) ?? { tries: 0, retryAt: 0 }, now);
     state.watches.set(row.slug, watch);
@@ -270,14 +277,31 @@ const containerRunning = async (container: string): Promise<boolean | undefined>
     }
 };
 
-const linkReading = async (container: string): Promise<RunnerLinkReading | undefined> => {
+// The reading's text, or undefined when the exec failed: a container not running, an image from before the reading, a
+// daemon still booting, or a docker that does not answer.
+const readingText = async (container: string): Promise<string | undefined> => {
     try {
-        const { stdout } = await execBounded("docker", ["exec", container, "cat", RUNNER_LINK_PATH], { timeoutMs: DOCKER_READ_MS });
-        return parseJsonWith(stdout.trim(), RunnerLinkReadingSchema);
+        return (await execBounded("docker", ["exec", container, "cat", RUNNER_LINK_PATH], { timeoutMs: DOCKER_READ_MS })).stdout;
     } catch {
-        // allow(silent-catch): no reading is an image from before it, or a daemon still booting: the link is not judged
+        // allow(silent-catch): which of those it was is the inspect's to say (lookAt)
         return undefined;
     }
+};
+
+/* (2026-11-24) ONE DOCKER CALL A MINUTE PER RUNNER, NOT TWO. An exec runs only in a running container, so a reading read
+   is a running container: the inspect is asked only when the exec failed, to tell a stopped container from a running one
+   that wrote no reading. Before, every look was an inspect and then the exec. */
+export const lookAt = async (
+    container: string,
+    read: (container: string) => Promise<string | undefined> = readingText,
+    running: (container: string) => Promise<boolean | undefined> = containerRunning,
+): Promise<RunnerSight | undefined> => {
+    const text = await read(container);
+    if (text !== undefined) {
+        return { running: true, reading: parseJsonWith(text.trim(), RunnerLinkReadingSchema) };
+    }
+    const runs = await running(container);
+    return runs === undefined ? undefined : { running: runs, reading: undefined };
 };
 
 // Any answer from the parent's daemon: a sandbox asleep or gone answers its address with an error, or nothing.
@@ -297,8 +321,7 @@ export const machineRunnerSeams = (
     busy: ReadonlySet<string>,
     hold: (slug: string) => () => void,
 ): RunnerKeeperSeams => ({
-    running: containerRunning,
-    reading: linkReading,
+    look: async (container) => await lookAt(container),
     parentAnswers: parentAnswersFromHere,
     power: async (op, slug) => await runIc(icPowerArgs(op, slug)),
     busy,

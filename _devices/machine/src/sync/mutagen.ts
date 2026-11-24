@@ -360,7 +360,7 @@ export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, sy
     ignores: ignoresFor(pairing),
     from: "local",
     symlinks,
-    pollSeconds: SANDBOX_POLL_SECONDS,
+    pollSeconds: sandboxPollSeconds(pairing),
     ...(owner === undefined ? {} : { labels: sessionLabels(pairing.sandboxId, "sync", owner) }),
 });
 
@@ -384,6 +384,17 @@ const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: 
 // change made in the sandbox reaching the device: Mutagen's Linux agent has no recursive watcher, so the poll is what
 // notices. The device's own end is left at the default, since Windows and macOS watch recursively for real.
 const SANDBOX_POLL_SECONDS = 2;
+
+// A SANDBOX THAT PUSHES ITS CHANGES IS SCANNED ONLY AS A BACKSTOP (2026-11-24). One that answers the workspace change
+// signal (changes/sync-changes.ts) asks for a cycle itself when a path the session carries changes, and the scan is then only for
+// what the signal cannot see: a change while the follow was reconnecting, or one in a folder the daemon's watcher prunes
+// and this session carries (`.yarn`, the Python tools' caches). Measured on rog, the 2-second scan of ~18k entries was
+// 3.6% of a core for the synchronizer in the sandbox all day; at this interval an idle sandbox scans twice a minute.
+// Changing it recreates a session through the drift check below, from a settled state like any other rule.
+export const SIGNALLED_POLL_SECONDS = 30;
+
+export const sandboxPollSeconds = (pairing: Pick<Pairing, "changeSignalSince">): number =>
+    pairing.changeSignalSince === undefined ? SANDBOX_POLL_SECONDS : SIGNALLED_POLL_SECONDS;
 
 // THE SANDBOX SIDE IS SCANNED ON ITS TIMER AND ON NOTHING ELSE. Mutagen's default there (`portable`) also puts inotify
 // watches on the 50 paths that changed last, after the first change (an idle agent holds none, which is how it once
@@ -528,6 +539,25 @@ const readSessions = (mutagen: string, name: string): LiveSession[] | undefined 
 // gone included: a dogfooding PC with 10 pairings spawned 80 Mutagen processes a minute for it. A daemon that does not
 // answer is undefined, which the report reads as Mutagen not consulted, never as a daemon holding nothing.
 export const readAllSessions = (mutagen: string): LiveSession[] | undefined => listSessions(mutagen, []);
+
+// ONE LISTING A PASS (2026-11-24). The holds check and the report each read every session, and on a reporting pass that
+// was two `sync list` calls a few hundred milliseconds apart, each a daemon round trip that serializes every session's
+// state. A pass reads it once here and hands it to both; whoever changes what it says (a pause, a resume) drops it, so
+// the next reader asks again rather than report the state from before. A listing that did not answer is not kept.
+export interface PassListing {
+    readonly read: () => LiveSession[] | undefined;
+    readonly invalidate: () => void;
+}
+
+export const passListing = (list: () => LiveSession[] | undefined): PassListing => {
+    let held: LiveSession[] | undefined;
+    return {
+        read: () => (held ??= list()),
+        invalidate: () => {
+            held = undefined;
+        },
+    };
+};
 
 // `sync list <name>` exits non-zero both for a name it holds no session under and for a daemon that did not answer.
 // Asking by name would make those one answer, so a name is looked up in the whole listing instead: a name it lacks is

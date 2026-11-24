@@ -11,6 +11,7 @@ import { baseDir, memoryLogPath, runLogPath, runPidPath } from "../config.js";
 import { startAutoBackup } from "../device/sandbox-rounds/auto-backup.js";
 import { startAutoPrepare } from "../device/sandbox-rounds/auto-prepare.js";
 import { startEngineDiskWatch } from "../device/sandbox-rounds/engine-disk.js";
+import { enableIcServe } from "../device/tools/ic-serve/ic-serve.js";
 import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "../device/config.js";
 import { connect, type MarkedLink, reachedOverLoopback } from "../device/connection.js";
 import { hostedSlugs, keeperOn, startKeeper } from "../device/sandbox-rounds/keeper.js";
@@ -319,6 +320,8 @@ const SUPERVISED_ROUND_DELAY_MS = 30 * 60_000;
 
 // The rounds of an agent somebody is signed in for, or that runs where there is no sign-in to wait for (a distro, Linux).
 const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Connection>, lease: PidRecord, log: Log): { stop: () => void }[] => {
+    // The rounds' repeated reads go to one resident ic rather than a process each (device/tools/ic-serve.ts).
+    enableIcServe(log);
     const watch = startProbationWatch(log, { sweeps: true });
     const keeper = startKeeper(log, {
         links: () => [...connections].map(([url, held]) => ({ url, reading: linkReading(held.peer, held.link) })),

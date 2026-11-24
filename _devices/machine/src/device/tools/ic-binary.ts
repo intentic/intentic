@@ -16,6 +16,7 @@ import { verifyReleaseFiles } from "../../release/release-verify.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
+import { sharedReading } from "./listing/ic-readings.js";
 
 // WHICH `ic` THIS AGENT RUNS, and keeping it at least as new as the agent. Every sandbox verb here is an `ic` verb, so an
 // agent that learned `ic sandbox list --json` or `ic sandbox shape` in the same release as ic did must not be left
@@ -57,7 +58,7 @@ export interface InstalledIc {
     readonly modified?: string;
 }
 
-export const installedIc = async (): Promise<InstalledIc | undefined> => {
+const readInstalledIc = async (): Promise<InstalledIc | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
         // allow(silent-catch): a candidate that is missing or will not say its version is not the installed ic, and the next is tried
         // candidates are tried in order; the first that answers wins
@@ -75,6 +76,12 @@ export const installedIc = async (): Promise<InstalledIc | undefined> => {
     }
     return undefined;
 };
+
+// (2026-11-24) Asked by every `describe` (every hello and every two minutes, on every link): held while the ic file stays
+// as it was (icSignature, a stat), and IC_HELD_MS at most, for an ic found on PATH that no stat sees replaced.
+const IC_HELD_MS = 5 * 60_000;
+const icReading = sharedReading(readInstalledIc, { heldMs: IC_HELD_MS, stamp: async () => await icSignature(), dropOnIcChange: false });
+export const installedIc = async (): Promise<InstalledIc | undefined> => await icReading.get();
 
 const installedVersion = async (): Promise<string | undefined> => (await installedIc())?.version;
 
@@ -122,19 +129,22 @@ export const fetchIc = async (target: string, installed: string | undefined, age
     }
 };
 
-// Which ic file a check was about: the first candidate that exists, by path, size and modification time. Bare names
-// (PATH lookups) are not files this agent writes or can stat, so they read as none.
-const icSignature = async (): Promise<string> => {
+// Which ic file this agent runs: the first candidate that exists, with its signature (path, size and modification
+// time). Bare names (PATH lookups) are not files this agent writes or can stat, so they read as none. What a check
+// holds for (ensureCurrentIc) and what the resident server is restarted on (ic-serve.ts).
+export const icFile = async (): Promise<{ path: string; signature: string } | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
         // A candidate that is not there is the next one's turn.
         // candidates are tried in order; the first that exists wins
         const info = await stat(candidate).catch(undefinedIfMissing);
         if (info !== undefined) {
-            return `${candidate}:${info.size}:${info.mtimeMs}`;
+            return { path: candidate, signature: `${candidate}:${info.size}:${info.mtimeMs}` };
         }
     }
-    return "none";
+    return undefined;
 };
+
+const icSignature = async (): Promise<string> => (await icFile())?.signature ?? "none";
 
 /**
  * Runs `check` once per state of the ic file, as `signature` reads it. Once per PROCESS was the old rule, and it let a

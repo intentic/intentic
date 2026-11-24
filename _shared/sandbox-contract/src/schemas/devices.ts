@@ -653,3 +653,15 @@ export const SyncStatusSchema = z.object({
     machines: z.array(DeviceReportSchema).optional(),
 });
 export type SyncStatus = z.infer<typeof SyncStatusSchema>;
+
+// GET /system/sync/changes: the workspace's change signal, held open by the daemon until something file sync carries has
+// changed (2026-11-24). A device asks with the generation it last saw (`?after=`, beside `?epoch=`) and is answered at
+// once when the daemon has moved past it or restarted since, else when a change comes or the hold runs out. A device that
+// gets this answer at all knows the sandbox pushes, and lets its own scan of the sandbox fall back to a backstop.
+export const SyncChangesSchema = z.object({
+    // This daemon run: a restart starts the count over, so a generation is only comparable within one epoch.
+    epoch: z.string(),
+    // How many coalesced batches of carried changes this run has seen.
+    generation: z.number().int().nonnegative(),
+});
+export type SyncChanges = z.infer<typeof SyncChangesSchema>;

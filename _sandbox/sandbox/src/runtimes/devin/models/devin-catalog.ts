@@ -94,12 +94,8 @@ export const createDevinCatalog = (deps: DevinCatalogDeps): DevinCatalog => {
             // The account's own warm process, the one its turns use, so the list costs no second sign-in.
             const connection = await deps.connections().acquire(devinAgentId(account.id), devinLaunch(binary, account.apiKey, deps.sessionsDir), deps.probeDir);
             const created = await connection.agent.request(methods.agent.session.new, { cwd: deps.probeDir, mcpServers: [] });
-            if (connection.capabilities.sessionCapabilities?.delete != null) {
-                // Nobody resumes a probe, so it leaves Devin's own session list as soon as it has answered.
-                void connection.agent
-                    .request(methods.agent.session.delete, { sessionId: created.sessionId })
-                    .catch((error: unknown) => deps.store.logger.warn({ err: error }, "devin: could not delete the model probe's session"));
-            }
+            // Nobody resumes a probe, so it leaves Devin's own session list as soon as it has answered.
+            connection.release(created.sessionId);
             const models = sessionModelsOf(created.configOptions);
             // As of CLI 3000.11.3 Devin offers no `thought_level` option (DEVIN.effort stays false); read anyway, so the
             // day it does the catalog already says which depths the account's default takes.

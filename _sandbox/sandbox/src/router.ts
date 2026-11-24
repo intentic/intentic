@@ -45,6 +45,7 @@ import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createRunsRoutes } from "./hosts/runs/runs.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
+import { createBridgeHeads } from "./git/remote/bridge-heads.js";
 import { createPublicRoutes } from "./public/public.routes.js";
 import { createPagesRoutes } from "./agent/pages/pages.routes.js";
 import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
@@ -225,6 +226,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     // Every other agent's port by its conversation, from its jobs or its shell's tmux session (agent/tools/jobs/port-owners.ts).
     ports: createPortsRoutes({
         ...services,
+        bridgeHeads: createBridgeHeads(services.config.historyRoot),
         jobOn: (port) => portJobOf(services.conversations, port),
         nameHandedPorts: (listeners) => reattributeHandedPorts({ conversations: services.conversations, logger: services.logger }, listeners),
         ownerOn: (listener) =>

@@ -747,7 +747,7 @@ fn stamp() -> String {
 
 /// Write whole lines to stdout in one lock.
 fn emit(lines: &[String]) {
-    let mut out = std::io::stdout().lock();
+    let mut out = crate::answer::stdout();
     for line in lines {
         let _ = writeln!(out, "{line}");
     }
@@ -1285,7 +1285,7 @@ pub fn error(message: &str) {
     }
     settle(&mut state, Tone::Fail, None);
     state.spinning = false;
-    let mut out = std::io::stderr().lock();
+    let mut out = crate::answer::stderr();
     for line in stop_lines(&state.pen(), message) {
         let _ = writeln!(out, "{line}");
     }
@@ -1762,7 +1762,7 @@ fn erase(state: &mut State) {
     if !state.live {
         return;
     }
-    let mut out = std::io::stdout().lock();
+    let mut out = crate::answer::stdout();
     // Spaces rather than an erase-to-end-of-line escape: this is the one repaint that has to work on a
     // console that refused virtual-terminal processing, where an escape would print as literal text. One short of
     // the width, as the live line is: a console that wraps on reaching the last column would push this a row down.
@@ -1796,7 +1796,7 @@ fn repaint(state: &mut State) {
         &state.detail,
         &right,
     );
-    let mut out = std::io::stdout().lock();
+    let mut out = crate::answer::stdout();
     let _ = write!(out, "\r{text}");
     let _ = out.flush();
     state.live = true;

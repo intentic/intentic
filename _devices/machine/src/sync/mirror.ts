@@ -3,7 +3,8 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
 import { type DeviceReport, type PortSkipReason, WATCHER_STALL_MS } from "@intentic/sandbox-contract/schemas/devices";
-import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract/schemas/ports";
+import { type BridgeHead, SyncPortsListSchema } from "@intentic/sandbox-contract/schemas/bridge-heads";
+import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import {
     type MirroredPort,
     type Pairing,
@@ -27,7 +28,7 @@ import { retireSandbox } from "./retire.js";
 import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
-import { realBridgeExec, runGitBridge } from "./bridge/git-bridge.js";
+import { realBridgeExec, realLocalMemo, runGitBridge } from "./bridge/git-bridge.js";
 import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, settledFromStep, shouldReleaseForwards, swapBegan, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
 import { createHeartbeat, stopHeartbeat } from "./heartbeat.js";
 import { guardDisks } from "./low-disk.js";
@@ -40,6 +41,9 @@ import {
     MUTAGEN_CALL_TIMEOUT_MS,
     mutagenForwardArgs,
     ourForwardSessions,
+    type PassListing,
+    passListing,
+    readAllSessions,
     type RelabelBudget,
     relabelBudget,
     retireOrphanSessions,
@@ -54,6 +58,7 @@ import { ensureMutagen, repairAgentBundle } from "./binary/mutagen-binary.js";
 import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { quieted } from "./repeats.js";
 import { sleepUnlessWoken } from "./wake.js";
+import { type ChangeFollow, createChangeFollow } from "./changes/change-follow.js";
 import { deviceReport, scopedReport } from "./report.js";
 import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
@@ -103,9 +108,16 @@ export const pollDue = (held: Unreachable | undefined, now: number): boolean =>
 // the pairing, a blip retries next tick.
 export class SyncAuthError extends Error {}
 
+// What one poll of a sandbox's /ports answers this device: its forwardable workspace ports, and, from a sandbox since
+// 2026-11-24, each repository's branch and tip for the git bridge (absent from an older one).
+export interface WorkspaceListing {
+    readonly ports: PortSummary[];
+    readonly bridgeHeads: readonly BridgeHead[] | undefined;
+}
+
 // Fetches a sandbox's listening workspace ports over its sync token, filtering out system ports and non-forwardable
 // binds (e.g. a loopback alias Mutagen can't dial).
-export const fetchWorkspacePorts = async (base: string, syncToken: string): Promise<PortSummary[]> => {
+export const fetchWorkspaceListing = async (base: string, syncToken: string): Promise<WorkspaceListing> => {
     const response = await fetch(`${base.replace(/\/$/, "")}/ports`, {
         headers: { "x-intentic-sync": syncToken },
         signal: AbortSignal.timeout(PORTS_TIMEOUT_MS),
@@ -123,8 +135,11 @@ export const fetchWorkspacePorts = async (base: string, syncToken: string): Prom
     if (!response.ok) {
         throw new Error(`reading the sandbox's ports failed (${response.status}): ${await response.text()}`);
     }
-    return PortsListSchema.parse(await response.json()).ports.filter((port) => port.kind === "workspace" && port.forwardable);
+    const listed = SyncPortsListSchema.parse(await response.json());
+    return { ports: listed.ports.filter((port) => port.kind === "workspace" && port.forwardable), bridgeHeads: listed.bridgeHeads };
 };
+
+export const fetchWorkspacePorts = async (base: string, syncToken: string): Promise<PortSummary[]> => (await fetchWorkspaceListing(base, syncToken)).ports;
 
 // AN AGENT'S OWN SERVER STAYS IN THE SANDBOX (2026-11-03). A port the sandbox names an agent's (PortSummary.owner: its
 // shell, or a background job it ran) is left off this device's localhost, unless the agent left it running for the
@@ -459,16 +474,21 @@ const holdsFor = async (memory: HolderMemory, pairing: Pairing): Promise<LocalHo
 };
 
 // One pairing's pass: reconciles its port forwards and returns what it ended up mirroring, so the caller can mark
-// those ports claimed for pairings after it. A SyncAuthError propagates for the caller to count.
-const servePairing = async (context: PassContext, pairing: Pairing, base: string): Promise<readonly MirroredPort[]> => {
+// those ports claimed for pairings after it, with what the sandbox advertised for the git bridge. A SyncAuthError
+// propagates for the caller to count.
+const servePairing = async (
+    context: PassContext,
+    pairing: Pairing,
+    base: string,
+): Promise<{ readonly mirrored: readonly MirroredPort[]; readonly bridgeHeads: readonly BridgeHead[] | undefined }> => {
     const { mutagen, claimedBy, holding, holders, say: log } = context;
     const baseline = pairing.mirroredPorts ?? [];
     // Ports are polled even with mirroring off: the read doubles as the pairing's liveness probe and the only way a
     // revoked enrollment is noticed. The switch only changes what's done with the answer.
-    const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(base, pairing.syncToken);
+    const { ports, bridgeHeads } = pairing.syncToken === undefined ? { ports: [], bridgeHeads: undefined } : await fetchWorkspaceListing(base, pairing.syncToken);
     if (pairing.mirrorOff === true) {
         await retireSwitchedOff(mutagen, pairing, log);
-        return [];
+        return { mirrored: [], bridgeHeads };
     }
     const ignored = new Set(pairing.ignoredPorts ?? []);
     const included = new Set(pairing.includedPorts ?? []);
@@ -481,7 +501,7 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
     if (!sameMirrorSet(baseline, next) || !sameSkippedSet(pairing.skippedPorts ?? [], skipped)) {
         await savePorts(pairingKey(pairing), next, skipped);
     }
-    return next;
+    return { mirrored: next, bridgeHeads };
 };
 
 // One report per sandbox, carried by the first of its pairings that holds a token.
@@ -518,12 +538,13 @@ const postReports = async (
     unsupported: Set<string>,
     gone: (pairing: Pairing) => Promise<void>,
     log: Log,
+    listing?: PassListing,
 ): Promise<void> => {
     const reportable = reportCarriers(dialed, unsupported);
     if (reportable.length === 0) {
         return;
     }
-    const report = await deviceReport(mutagen);
+    const report = await deviceReport(mutagen, listing?.read);
     for (const { pairing, base } of reportable) {
         try {
             // one sandbox at a time, like every other pass in this agent
@@ -631,6 +652,9 @@ interface PairingTracking {
     readonly rejectedPolls: Map<string, number>;
     readonly unreachable: Map<string, Unreachable>;
     readonly repos: Map<string, readonly string[]>;
+    // The sandboxes whose last answered poll advertised their git heads (`bridgeHeads`), whose bridge then never asks
+    // over SSH; a pass whose poll failed leaves their bridge be until one answers again.
+    readonly advertises: Set<string>;
     readonly sessionsPending: Set<string>;
     // The git bridge run in flight for each sandbox, if any (`startBridge`).
     readonly bridges: Map<string, BridgeRun>;
@@ -638,26 +662,42 @@ interface PairingTracking {
     readonly swaps: SwapWatch;
 }
 
+// A watcher's tallies before its first pass: nothing known of any pairing.
+const freshTracking = (): PairingTracking => ({
+    rejectedPolls: new Map(),
+    unreachable: new Map(),
+    repos: new Map(),
+    advertises: new Set(),
+    sessionsPending: new Set(),
+    bridges: new Map(),
+    swaps: { answeredAt: new Map(), settledFrom: new Map() },
+});
+
 // One sandbox's git bridge, running beside the passes: what ends it, and when it has.
 interface BridgeRun {
     readonly stop: AbortController;
     readonly done: Promise<void>;
 }
 
+// What the bridge read of each local clone, kept for the life of the process (git-bridge.ts `LocalMemo`).
+const localMemo = realLocalMemo();
+
 /* THE GIT BRIDGE RUNS BESIDE THE PASS, NOT IN IT (2026-10-18). A fetch may now take as long as it keeps moving
    (git-bridge.ts), which for a big repository over a home connection is hours: awaited by the pass, it held every other
    pairing's ports, the reports and the heartbeat behind it, and the stall check below would have restarted the watcher
    under it. So each sandbox has at most one bridge run in flight, started by a pass and left be by the passes after it
    until it ends. It is stopped when its pairing pauses or goes, and with the watcher it belongs to. */
-const startBridge = (tracking: PairingTracking, pairing: Pairing, tick: number, say: Log): void => {
+const startBridge = (tracking: PairingTracking, pairing: Pairing, tick: number, say: Log, advertised: readonly BridgeHead[] | undefined): void => {
     const id = pairing.sandboxId;
-    if (tracking.bridges.has(id)) {
+    // A sandbox that advertises its heads, whose poll this pass got no answer from: nothing new to follow, and asking
+    // it over SSH instead would cost every repo the login the advertisement exists to spare.
+    if (tracking.bridges.has(id) || (advertised === undefined && tracking.advertises.has(id))) {
         return;
     }
     const stop = new AbortController();
     const known = tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : tracking.repos.get(id);
     const done = guard(say, `${id}: git bridge`, async () => {
-        const listed = await runGitBridge(realBridgeExec, pairing, say, known, { signal: stop.signal });
+        const listed = await runGitBridge(realBridgeExec, pairing, say, known, { signal: stop.signal, advertised, local: localMemo });
         if (listed === undefined) {
             tracking.repos.delete(id);
         } else {
@@ -917,8 +957,15 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
     const swapping = swapHeld.has(pairing.sandboxId);
     const short = context.diskHeld.has(pairingKey(pairing));
     let heldThisPass = false;
+    let advertised: readonly BridgeHead[] | undefined;
     try {
-        const mirrored = await servePairing(context, pairing, base);
+        const { mirrored, bridgeHeads } = await servePairing(context, pairing, base);
+        advertised = bridgeHeads;
+        if (bridgeHeads === undefined) {
+            tracking.advertises.delete(pairing.sandboxId); // an older sandbox, or one rolled back to before the field
+        } else {
+            tracking.advertises.add(pairing.sandboxId);
+        }
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
         tracking.swaps.answeredAt.set(pairing.sandboxId, Date.now());
@@ -964,7 +1011,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
     await healPairing(mutagen, pairing, tick, say);
     // The bridge has its own catch inside: it rides ssh, while the ports read above rides https (which 502s through
     // Cloudflare often enough), so one must not cost the other a whole pass.
-    startBridge(tracking, pairing, tick, say);
+    startBridge(tracking, pairing, tick, say, advertised);
 };
 
 // What a pass does about a polling pairing whose sandbox was said to be gone (gone.ts `goneStep`): nothing until its
@@ -1148,6 +1195,8 @@ interface Watch {
     readonly fate: FateSeams;
     readonly gone: (pairing: Pairing) => Promise<void>;
     readonly holders: HolderMemory;
+    // Each syncing sandbox's change signal, followed beside the passes (changes/change-follow.ts).
+    readonly changes: ChangeFollow;
     // The ssh config fragment as last written, so a tick writes it again only when its pairings' transports changed.
     sshConfig: string;
 }
@@ -1215,14 +1264,7 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))),
     );
     // Per-sandbox state keyed by sandbox id, and the sessions still owed by pairing key; entries come and go with them.
-    const tracking: PairingTracking = {
-        rejectedPolls: new Map(),
-        unreachable: new Map(),
-        repos: new Map(),
-        sessionsPending: new Set(),
-        bridges: new Map(),
-        swaps: { answeredAt: new Map(), settledFrom: new Map() },
-    };
+    const tracking = freshTracking();
     // An abandoned run's bridge fetches end with it: the run that replaces it starts its own.
     generation.signal.addEventListener("abort", () => stopBridges(tracking), { once: true });
     // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
@@ -1254,6 +1296,7 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         // What the bind probe cannot see, kept for the watcher's lifetime: Docker's answer, cached, and the grace each
         // port a pass found busy is serving. Only the busy rows reach the disk, so a restart starts every grace over.
         holders: { dockerPorts: publishedPortsReader(say), freeSince: new Map() },
+        changes: createChangeFollow(mutagen, tracking.sessionsPending, say, generation.signal),
         sshConfig,
     };
     await prepareSessions(
@@ -1267,6 +1310,20 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     await guard(say, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, say));
     log(`sync started; polling ${plural(initial.pairings.length, "paired sandbox")} every ${POLL_MS / 1000}s`);
     return watch;
+};
+
+// After every rule of a pass has kept its fact: Mutagen made to agree with what holds each pairing (holds.ts), before the
+// report reads it, both off one `sync list` unless the holds changed what it says (mutagen.ts PassListing). The report
+// runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state, so
+// reporting last reports this tick, not the previous one.
+const holdThenReport = async (watch: Watch, dialed: readonly Dialed<Pairing>[], tick: number): Promise<void> => {
+    const { mutagen, say } = watch;
+    const listing = passListing(() => readAllSessions(mutagen));
+    await guard(say, "holding file sync still where something holds it", async () => void (await holdSessions(mutagen, (await readState()).pairings, say, Date.now(), listing)));
+    watch.progress("holding file sync");
+    if (tick % REPORT_EVERY_TICKS === 0) {
+        await guard(say, "posting this machine's reports", async () => await postReports(dialed, mutagen, watch.reportUnsupported, watch.gone, say, listing));
+    }
 };
 
 // One tick: "stop" when nothing is paired any more (or this run was abandoned), "next" otherwise.
@@ -1286,6 +1343,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
         // Nothing left to sync: stops this half for good rather than polling empty forever. A pairing revoked mid-loop
         // lands here next tick.
         stopBridges(tracking);
+        watch.changes.stopAll();
         await watch.tunnels.stopAll();
         watch.log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
         return "stop";
@@ -1298,6 +1356,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     // Where this pass dials each pairing, decided once and shared by the transport reconcile, ports poll, and report
     // below. Cached, so a tick pays for a probe only when the answer could have moved.
     const dialed = await dialedPairings(state.pairings, watch.bases);
+    watch.changes.update(dialed);
     // Runs before the port reconcile and git bridge, both of which ride this transport; a newly added pairing needs
     // its listener up first, and a moved base gets rebound here too.
     await guard(say, "reconciling the sync transports", async () => await watch.tunnels.reconcile(tunnelTargets(dialed)));
@@ -1355,15 +1414,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     if (!watch.live()) {
         return "stop";
     }
-    // After every rule above has kept its fact this tick: Mutagen made to agree with what holds each pairing (holds.ts),
-    // before the report below reads it.
-    await guard(say, "holding file sync still where something holds it", async () => void (await holdSessions(mutagen, (await readState()).pairings, say)));
-    progress("holding file sync");
-    // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state, so
-    // reporting last reports this tick, not the previous one.
-    if (tick % REPORT_EVERY_TICKS === 0) {
-        await guard(say, "posting this machine's reports", async () => await postReports(dialed, mutagen, watch.reportUnsupported, watch.gone, say));
-    }
+    await holdThenReport(watch, dialed, tick);
     await standingSweeps(context, dialed);
     progress("the end of a pass");
     return "next";

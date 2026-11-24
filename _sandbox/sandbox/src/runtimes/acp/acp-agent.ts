@@ -34,7 +34,7 @@ import { opt } from "../../opt.js";
 import { answerVendorAsk } from "../decorators/vendor-ask.js";
 import { withStderrTail } from "../../engines/failure-sentences.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
-import type { AcpConnection, AcpConnections } from "./acp-connection.js";
+import { type AcpConnection, type AcpConnections, releasingSession } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";
 import { answerElicitation } from "./acp-elicitation.js";
 import { sessionMissing } from "./acp-session-missing.js";
@@ -568,12 +568,16 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeout
                         // A helper's one question on a fresh session with nothing mounted (mcpServersOf reads an empty
                         // list), in the agent's read-only plan mode where it has one, its answer streamed rather than
                         // held. ACP has no system prompt channel, so it rides in front of the words, as Cursor's does.
-                        yield* runAcpTurn(connection, request, [{ type: "text", text: sealedWords(request) }], undefined, {
-                            ...phase,
-                            phase: "plan",
-                            captureText: false,
-                            sealed: true,
-                        });
+                        // Nobody resumes a helper's session, so it ends with its answer, or with the helper stopped.
+                        yield* releasingSession(
+                            connection,
+                            runAcpTurn(connection, request, [{ type: "text", text: sealedWords(request) }], undefined, {
+                                ...phase,
+                                phase: "plan",
+                                captureText: false,
+                                sealed: true,
+                            }),
+                        );
                         return;
                     }
                     // Native image blocks when the agent advertises image prompts; everything else rides the file note.

@@ -15,6 +15,13 @@ flowchart LR
 
 - One resident process per environment (`resident.ts`) serves both halves and re-reads its state every tick. A login
   entry from [local-agent](../local-agent) restarts it; inside a WSL distro the Windows side does.
+- (2026-11-24) **One agent per computer, whichever account installed it.** The pidfile, `machine-id` and links live
+  under the installing account's home, so they alone made the singleton one per home: a connect one-liner pasted as
+  root on a machine where a user's agent already ran put a second agent beside it, a second computer to the sandboxes.
+  `setup` now reads the process table and refuses beside another account's agent, naming it and how to run the command
+  as that account instead (`INTENTIC_SECOND_AGENT=1` keeps both on purpose), and upkeep reports one on every pass
+  ([`resident/other-accounts.ts`](src/resident/other-accounts.ts)). Linux and macOS; Windows' agent is per user by its
+  login entry.
 - (2026-10-15) **Before anyone signs in**, on Windows: `intentic-machine before-sign-in on` asks Windows (one UAC
   prompt on that PC) for a boot task that starts the agent when the PC starts, with no session
   ([`autostart/before-sign-in.ts`](src/autostart/before-sign-in.ts)). That agent serves what needs no desktop, its
@@ -169,7 +176,9 @@ flowchart LR
   own process group like every `ic` flow. The agent advertises `sandbox-move` exactly when the ic it drives does
   (`ic features --json`), so an older ic is never sent the ops.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
-  `ic sandbox list --json` passed through (a sandbox is named by any column it shows: slug, 12-hex sandbox id,
+  `ic sandbox list --json` passed through, one listing shared by every caller in this process and held 30 s, dropped by
+  any `ic` run of this agent that changes something ([`tools/listing/ic-readings.ts`](src/device/tools/listing/ic-readings.ts),
+  2026-11-24; a move's collision check asks fresh) (a sandbox is named by any column it shows: slug, 12-hex sandbox id,
   container name or the owner's name, whatever the case, by `findIn` in
   [`tools/listing/find-sandbox.ts`](src/device/tools/listing/find-sandbox.ts), and by ic itself for the verbs that skip
   the listing; a name two sandboxes share is refused naming both), and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
@@ -281,8 +290,26 @@ flowchart LR
   changed last, which no interval bounds. Each scan that finds a change is a cycle here, and a cycle's cost follows
   the size of the tree rather than of the change: the daemon reads the sandbox's whole snapshot again and reconciles
   all of it. This device's side watches for real, but Mutagen's watcher wakes on every write under the folder, ignored
-  paths included, so the backup landing in `.intentic` wakes the workspace session too. The report reads every session
-  in one `sync list`.
+  paths included, so the backup landing in `.intentic` wakes the workspace session too. Each pass reads every session
+  in one `sync list`, shared by the holds check and the report (`PassListing`, [`sync/mutagen.ts`](src/sync/mutagen.ts)).
+
+  (2026-11-24) **A sandbox that says when it changed is scanned only as a backstop.** Its daemon already watches
+  `/work` (one recursive watcher, batches 250 ms apart), and `GET /system/sync/changes` holds a request open until a
+  batch holds a path the workspace session carries, judged by the same `IGNORES`, which now live in
+  `@intentic/sandbox-contract/sync/workspace-sync-ignores` for both ends. The watcher follows it, one held request per
+  syncing sandbox ([`sync/changes/change-follow.ts`](src/sync/changes/change-follow.ts), [`sync/changes/sync-changes.ts`](src/sync/changes/sync-changes.ts)),
+  and asks Mutagen for a cycle (`sync flush --skip-wait`) when it moves: 100 ms after the first signal, one flush in
+  flight, at least 2 s apart, so a file written without pause costs no more than the 2-second scan did. A sandbox
+  that answers it is recorded on its pairings (`changeSignalSince`), and their sessions poll at 30 s
+  (`SIGNALLED_POLL_SECONDS`) for what the signal cannot see: a change made while the follow reconnected, or one under a
+  folder the daemon's watcher prunes and this session carries (`.yarn`, the Python tools' caches). The new interval is
+  drift like any other rule, so an existing session is replaced once, from a settled state. An older sandbox answers
+  the route 403 (its sync token reaches no route it never declared) or 404, keeps the 2-second scan, and is asked again
+  every 10 minutes. A failed ask changes no record, so an outage recreates nothing; the first answer after one asks
+  for a cycle. Measured before it: the sandbox's synchronizer spent 3.6% of a core around the clock scanning ~18k
+  entries every 2 s. Pushing over the device link was rejected: there the device serves and the sandbox calls, so it
+  would need a procedure on the device for each sandbox to call, where a long poll needs nothing new on either side's
+  link.
 
   (2026-10-02) Measured on Windows with Mutagen 0.18.1, its daemon isolated and a container standing in for the
   sandbox (a 9k-file workspace, a 15k-entry state dir with three transcripts growing by 6 KB a second, an edit every
@@ -412,8 +439,9 @@ flowchart LR
 - (2026-11-03) The same heartbeat answer carries the GPU resets and crashes Windows logged in the last day
   (`crashes`, [`environments/windows-crash-events.ts`](src/environments/windows-crash-events.ts)). On 2026-11-02 a
   sandbox's browser rendered on rog's display GPU through WSL, the driver lost the device (LiveKernelEvent 0x141) and
-  the PC powered off, and the sandbox could only say it had been killed without warning. One PowerShell, at most once a
-  minute and never two at once, reads the event log: System's Display 4101 (a GPU timeout the driver recovered from),
+  the PC powered off, and the sandbox could only say it had been killed without warning. One PowerShell, at most every
+  five minutes (once a minute until 2026-11-24) and never two at once, reads the event log, filtered by the event log
+  service itself (`-FilterXPath`) and from the last record each log answered with, the whole day again every six hours: System's Display 4101 (a GPU timeout the driver recovered from),
   Kernel-Power 41 (rebooted without a clean shutdown) and WER-SystemErrorReporting 1001 (a bugcheck; 0x116, 0x117 and
   0x141 are the display driver's), and Application's Windows Error Reporting 1001 for a LiveKernelEvent whose P1 is
   141, 117 or 116. P1 193 is left out: rog writes a benign 193 live dump every few days. Each is a `gpu-reset` or a
@@ -767,6 +795,16 @@ whose it is.
   exits 0 with a ref refused counts as failed, never as landed. Before 2026-10-21 every full clone behind a shallow
   sandbox was held for a day, then up to a week, including clones that held the cut commit. Leftovers older than an
   hour from an earlier agent are cleared once per process. Holds are in `status` and the report.
+- **A quiet repo costs the bridge no SSH login** (2026-11-24, [`sync/bridge/git-bridge.ts`](src/sync/bridge/git-bridge.ts)).
+  The bridge asked every repo's branch and tip with `git ls-remote` over a fresh SSH login every five seconds, and
+  listed the repos with `ls /history/gits` every minute: two logins a second into a ten-repo sandbox, each one sshd,
+  PAM and a `git-upload-pack` there, plus six local gits per repo per pass here. A sandbox since then names every repo's
+  branch and tip on the `/ports` answer the watcher polls anyway (`bridgeHeads`, read off its git dirs' files,
+  [`bridge-heads.ts`](../../_sandbox/sandbox/src/git/remote/bridge-heads.ts)). Against it the bridge runs no
+  ls-remote and no listing, fetches only a repo whose advertised tip differs from the clone's, and keeps what it read of
+  a level clone with the stamps of the files those answers come from (`.git/config`, `HEAD`, `packed-refs`, the
+  branch's ref and its marker), so a repo nothing moved in costs no process; a pass whose poll failed leaves such a
+  sandbox's bridge be. Against a sandbox without the field, the bridge runs as before.
 - **A nearly full drive holds folder sync still** (2026-10-18, [`sync/low-disk.ts`](src/sync/low-disk.ts)). Every
   pass measures the drive holding each folder whose session writes there (not a copy-first project, which only sends).
   Under 2% of the drive, clamped to 5–20 GiB, the pairing's sync and git bridge hold still (`lowDisk`); they carry on
@@ -791,7 +829,9 @@ whose it is.
   `sandbox fix` past its deadline (below), which is not a swap. Every restart of the agent (the auto-upgrade
   tick, `upgrade`, `run`, the browser's Update and Restart) waits while `ic sandbox swaps --json` says a cutover is in
   progress, or while this process runs a flow that moves a container
-  ([`device/sandbox-rounds/ic-swaps.ts`](src/device/sandbox-rounds/ic-swaps.ts)). The verdict is ic's own, heartbeat
+  ([`device/sandbox-rounds/ic-swaps.ts`](src/device/sandbox-rounds/ic-swaps.ts)). One answer serves every reader (the
+  mirror pass every 5 s, the probation watch, the keeper, the auto-upgrade), held while ic's channel records stay
+  unchanged and 30 s at most; the restart's own gate asks fresh (2026-11-24). The verdict is ic's own, heartbeat
   and all, and the command answers without Docker. An older ic that lacks it is read by a fallback that applies the
   same rule from the shared `swap-verdicts.json` fixture, marked `COMPAT(ic-swaps)`. The keeper skips a sandbox on the
   same answer. The agent no longer reads ic's records itself. The tick
@@ -890,7 +930,10 @@ daemon whose registration gave up, a full disk), the agent heals what is safe to
 clock.
 
 - **When.** `ic sandbox fix --auto --json --source agent` over every sandbox half a minute after the agent starts (the
-  logon case: Docker Desktop is off by default after a reboot) and every five minutes, and `ic sandbox fix <slug> …` as
+  logon case: Docker Desktop is off by default after a reboot), then every five minutes while the look before it finds
+  something wrong (a sandbox of this side listed neither running nor asleep or with no container, Docker not answering,
+  the last sweep not clean) and every quarter hour otherwise (2026-11-24; under ic's 30-minute adoption window, since
+  each sweep writes the keeper's lease), and `ic sandbox fix <slug> …` as
   soon as the agent's link to a sandbox that runs on this machine has failed for a minute. A link's sandbox runs here
   when this environment's ic has a record of it or listed it (by its hostname's first label or the id in it, as sync's
   swap pause maps them), or when the agent has reached it over loopback.
@@ -943,7 +986,8 @@ clock.
   told, so the records stand in for the listing, which is the logon case the keeper is for.
 - **Runners** ([`device/sandbox-rounds/runner-keeper.ts`](src/device/sandbox-rounds/runner-keeper.ts), 2026-11-09)
   are kept by their link, not by `ic sandbox fix`: nobody opens a runner, and its parent cannot reach this machine's
-  Docker, so nothing else would bring one back. Once a minute, for every runner this side keeps, a container that is not
+  Docker, so nothing else would bring one back. Once a minute, for every runner this side keeps (one `docker exec` that
+  reads its link, and a `docker inspect` only when that fails), a container that is not
   running (asleep, stopped, exited) is started with `ic sandbox start`, and a running one whose link to its parent has
   been down for ten minutes of the keeper watching is restarted with `ic sandbox restart`, but only while that parent
   answers `/health` from this machine (otherwise it is asleep, restarting or gone, and the runner keeps dialling on its
@@ -1051,8 +1095,10 @@ what each does, and changes them only at the owner's word ([`power/`](src/power)
     (`sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target`, `sudo pmset -c sleep 0`)
     and the agent never runs it. A MacBook's lid sleeps it whatever the setting, unless an external display is attached.
 - **Where it goes.** The device's facts carry it as `power` (`describe` at every hello and every two minutes), so the
-  sandbox can raise a card when work it booked would be slept through. A reading is kept five minutes and an older one
-  is answered while the next is read; a read that fails is said once in `machine.log` and leaves the field absent until
+  sandbox can raise a card when work it booked would be slept through. A reading is kept half an hour (dropped at
+  once when this agent's own stay-on or restore changed the settings) and an older one is answered while the next is
+  read; the C# it loads for the native read is compiled once into a DLL under `~/.intentic/machine/cache` rather than on
+  every reading; a read that fails is said once in `machine.log` and leaves the field absent until
   one works. `describe` says the findings in one line and that they are the owner's to change. The Windows side
   advertises `power`, the feature that says it takes the `power-stay-on` op.
 - **Stay-on** (Windows only, [`writes.ts`](src/power/writes.ts) decides, [`apply.ts`](src/power/apply.ts) does). The
@@ -1086,7 +1132,8 @@ Windows side's agent now watches that disk
 ([`device/sandbox-rounds/engine-disk.ts`](src/device/sandbox-rounds/engine-disk.ts)). ic does the measuring and the
 clearing ([`ic engine disk`](../../_hosts/ic/README.md)); this keeps the clock and tells.
 
-- **Every minute**, `ic engine disk --json`: the effective space, limited by the guest disk or the Windows drive holding
+- **Every minute**, `ic engine disk --json` (at `ok`, every ten minutes while 20% or more is left, every five from 15%,
+  and sooner when the last two readings say the space is going fast; 2026-11-24): the effective space, limited by the guest disk or the Windows drive holding
   the engine's VHDX, and the level it makes. When the Windows drive is limiting, the line names it and its free space
   (for example, `Windows drive C:\ has 18.5 GB free under the engine's disk (376.0 GB)`). `ok`; `low` under 10% of
   the disk left to write; `critical` under 5%; `full` under the ballast the engine's keeper holds back (2% of the disk,

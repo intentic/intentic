@@ -20,6 +20,7 @@ const { runPidPath } = await import("../../config.js");
 const {
     BUSY_GRACE_MS,
     busyLastPass,
+    fetchWorkspaceListing,
     fetchWorkspacePorts,
     handOver,
     markPrepared,
@@ -209,6 +210,14 @@ describe("fetchWorkspacePorts", () => {
             // Bounded, because the watcher agent is sequential: an unbounded read here stalls the git bridge too.
             signal: expect.any(AbortSignal),
         });
+    });
+
+    it("hands the git bridge what the sandbox advertised, and nothing from a sandbox from before the field", async () => {
+        const heads = [{ repo: "intentic", branch: "main", tip: "a".repeat(40) }];
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { ports: [], bridgeHeads: heads })));
+        expect(await fetchWorkspaceListing("https://s.example.dev", "ist_tok")).toEqual({ ports: [], bridgeHeads: heads });
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { ports: [] })));
+        expect(await fetchWorkspaceListing("https://s.example.dev", "ist_tok")).toEqual({ ports: [], bridgeHeads: undefined });
     });
 
     it("maps a rejected token to the re-pair message", async () => {

@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
-import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { onRuntimeChange, publishRuntimeChange, type RuntimeAudiences } from "../seams/runtime-feed.js";
-import { foreground, PANE_FORMAT, paneStates } from "../terminal/pane-state.js";
+import { recentPanes, SHARED_LISTING_MS } from "../terminal/pane-listing.js";
+import { foreground, paneStates } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 
@@ -45,11 +45,11 @@ export const paneFingerprint = (stdout: string): string =>
         .toSorted()
         .join("\n");
 
-// One exec for the whole tmux server. No server yet means no sessions, which is a fingerprint like any other; any other
+// One exec for the whole tmux server, shared with the managed processes' timed sweep (pane-listing.ts). No server yet means no sessions, which is a fingerprint like any other; any other
 // failure rejects, so the sampler skips the tick rather than reading it as every terminal gone.
 const tmuxFingerprint = async (): Promise<string> => {
     try {
-        const { stdout } = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
+        const { stdout } = await recentPanes(SHARED_LISTING_MS);
         return paneFingerprint(stdout);
     } catch (error) {
         if (isNoTmuxServer(error)) {

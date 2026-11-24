@@ -19,6 +19,7 @@ import { allowNote, deniedByThePc } from "./release/security-hint.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 import { readRegistryValue, type RegistryValue } from "./windows-registry.js";
+import { refuseBesideOtherAccount } from "./resident/other-accounts.js";
 import { z } from "zod";
 
 // Everything an installer used to decide, decided once, here: the shims put a first agent down and exec `setup`.
@@ -249,9 +250,11 @@ const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     }
 };
 
-// What every `setup` runs before it enrolls anything: move onto the machine's newest agent, then repair what the
-// machine owes the user around the binary. The repairs run only when this process IS the installed agent.
+// What every `setup` runs before it enrolls anything: refuse to become this computer's second agent (another account's
+// already runs here: resident/other-accounts.ts), move onto the machine's newest agent, then repair what the machine owes
+// the user around the binary. The repairs run only when this process IS the installed agent.
 export const prepareSetup = async (out: Log, args: readonly string[]): Promise<void> => {
+    await refuseBesideOtherAccount("This device was not connected.");
     await selfUpdateBeforeSetup(realSelfUpdateIo(out), process.env, args, out);
     if (!runningAsInstalledAgent()) {
         return;

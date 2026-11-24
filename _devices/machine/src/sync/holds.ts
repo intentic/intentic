@@ -5,7 +5,7 @@ import type { DeviceSyncHold } from "@intentic/sandbox-contract/schemas/devices"
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { baseDir } from "../config.js";
 import { type Pairing, pairingKey, pairingSlugs, updateState } from "./config.js";
-import { type LiveSession, pauseSessions, readAllSessions, resumeSessions, syncSessionNames } from "./mutagen.js";
+import { type LiveSession, type PassListing, passListing, pauseSessions, readAllSessions, resumeSessions, syncSessionNames } from "./mutagen.js";
 import { operationRunning } from "./project/project-transfer.js";
 
 /* WHETHER A PAIRING'S FILE SYNC RUNS IS ONE DECISION, READ OFF FACTS (2026-10-20). Eight things hold it still: the
@@ -74,8 +74,14 @@ const disagreeing = (pairing: Pairing, live: readonly LiveSession[], now: number
 
 // Makes Mutagen agree with every pairing's holds, off one listing. A listing that did not answer acts on nothing: the
 // next pass asks again. Answers the keys whose sessions still disagree, the pause or resume Mutagen did not take.
-export const holdSessions = async (mutagen: string, pairings: readonly Pairing[], say: Log, now: number = Date.now()): Promise<ReadonlySet<string>> => {
-    const live = readAllSessions(mutagen);
+export const holdSessions = async (
+    mutagen: string,
+    pairings: readonly Pairing[],
+    say: Log,
+    now: number = Date.now(),
+    listing: PassListing = passListing(() => readAllSessions(mutagen)),
+): Promise<ReadonlySet<string>> => {
+    const live = listing.read();
     if (live === undefined) {
         return new Set();
     }
@@ -86,6 +92,8 @@ export const holdSessions = async (mutagen: string, pairings: readonly Pairing[]
         if (names.length === 0) {
             continue;
         }
+        // What the pass read no longer says what Mutagen holds, so a reader after this one asks again.
+        listing.invalidate();
         // one pairing's sessions at a time, as every Mutagen call here; a resume is one call per session, read back
         const took = held ? pauseSessions(mutagen, names) : await resumeSessions(mutagen, names);
         if (!took) {

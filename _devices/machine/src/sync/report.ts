@@ -201,14 +201,15 @@ export const buildReport = (
 });
 
 // The report for this machine right now, the one entry point every carrier uses.
-export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> => {
+// `listed` is the pass's own listing when the watcher has one (mutagen.ts PassListing), so a report costs no second read.
+export const deviceReport = async (mutagen: string | undefined, listed?: () => LiveSession[] | undefined): Promise<DeviceReport> => {
     const [state, wsl] = await Promise.all([readState(), wslEnvironment()]);
     const agent = await agentState(installedBuild(), state.pairings.length > 0);
     // Read only when some pairing syncs files: a machine that only mirrors ports has no session to ask about.
     const syncing = mutagen !== undefined && state.pairings.some((pairing) => pairing.mode === "sync");
     // A daemon that did not answer leaves every session status out, as Mutagen not consulted does: never "no session".
-    const listed = syncing ? readAllSessions(mutagen) : undefined;
-    const sessions = listed === undefined ? undefined : sessionsByName(listed);
+    const live = syncing ? (listed ?? (() => readAllSessions(mutagen)))() : undefined;
+    const sessions = live === undefined ? undefined : sessionsByName(live);
     return buildReport(state, sessions, agent, Date.now(), wsl, machineId());
 };
 

@@ -7,6 +7,7 @@ import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-id
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { newRowId } from "@intentic/sandbox-contract/ids/row-ids";
 import { conversationsRoot, conversationUnit, quarantinedUnits } from "../store/conversation-units.js";
+import { recordBlobNames } from "./record/record-blob-names.js";
 import { getBlob, hashOf, putBlob, sweepBlobs } from "./record/record-blobs.js";
 import { type Converted, convertLegacy, framesByTurn, keptLines, type PutBlob } from "./record/record-convert.js";
 import { appendLog, current, frameOfRow, type LogIndex, openLog, readFrame, repairLog, writeLog } from "./record/record-log.js";
@@ -140,6 +141,8 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
     const named = new Set<string>();
     // One sweep at a time: each starts by forgetting what was named before it read the logs.
     let sweeps: Promise<unknown> = Promise.resolve();
+    // What each record named at the last sweep, so a record at rest is not decoded again (record/record-blob-names.ts).
+    const recordNames = recordBlobNames();
     const indexes = new Map<string, LogIndex>();
     const frames = new Map<string, readonly string[]>();
     let framesChars = 0;
@@ -305,14 +308,14 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             .filter((entry) => entry.isDirectory() && isConversationId(entry.name) && !gone.has(entry.name))
             .map((entry) => transcriptFile(historyRoot, entry.name));
         const setAside = (await quarantinedUnits(historyRoot)).map((dir) => join(dir, RECORD_NAME));
-        for (const record of [...live, ...setAside]) {
-            // one record at a time; the sweep is never waited on.
-            for (const line of await scanned(record)) {
-                for (const hash of blobNamesIn(line)) {
-                    referenced.add(hash);
-                }
+        const records = [...live, ...setAside];
+        for (const record of records) {
+            // one record at a time, an unchanged one from the last sweep's reading; the sweep is never waited on.
+            for (const hash of await recordNames.namesOf(record)) {
+                referenced.add(hash);
             }
         }
+        recordNames.keepOnly(new Set(records));
         return sweepBlobs(historyRoot, referenced, (hash) => pinned.has(hash) || named.has(hash), Date.now(), BLOB_GRACE_MS);
     };
 

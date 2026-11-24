@@ -515,6 +515,10 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
         body: JSON.stringify(report),
     });
     expect(filed.status).toBe(200);
+    // The same token reaches the workspace's change signal; an ask naming no epoch of this run is answered at once.
+    const changes = await withToken("/system/sync/changes?after=0&epoch=another-run");
+    expect(changes.status).toBe(200);
+    expect(await changes.json()).toEqual({ epoch: expect.any(String), generation: expect.any(Number) });
     // A body that isn't a report is refused as malformed: this route takes a shape, not raw JSON.
     const malformed = await app.request("/system/sync/report", {
         method: "POST",

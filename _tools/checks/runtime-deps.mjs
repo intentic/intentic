@@ -13,13 +13,12 @@ import { publishSet } from "../scripts/lib/packages.mjs";
 import { allowedAt } from "./lib/allow.mjs";
 import { importsOf } from "./lib/imports.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
-import { configFor, excludesOf, git, root, subjectFiles, subjectScope, TEST_FILE } from "./lib/repo.mjs";
-import { readWorkspaceGraph } from "./lib/workspace-graph.mjs";
+import { configFor, excludesOf, git, root, subjectFiles, subjectScope, TEST_FILE, workspaceGraph } from "./lib/repo.mjs";
 
 const CHECK = "runtime-deps";
 const PRODUCTION = ["dependencies", "optionalDependencies", "peerDependencies"];
 
-const graph = readWorkspaceGraph(root);
+const graph = workspaceGraph();
 const memberAt = new Map([...graph.packages.values()].map((member) => [member.dir, member]));
 const manifestOf = (member) => JSON.parse(readFileSync(join(root, member.dir, "package.json"), "utf8"));
 

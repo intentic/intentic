@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, extname, join, relative } from "node:path";
+import { cacheCompiles } from "../checks/lib/compile-cache.mjs";
 import { keptAnswer } from "../checks/lib/kept.mjs";
 import { repoRoot } from "../constants/src/node.mjs";
 import { diagnosticsOf, introduced, LINTABLE, oxlintIn, oxlintOut, PLUGINS_CONFIG, report as lintReport, reportFlags, ROOT_CONFIG } from "./added.mjs";
@@ -201,6 +202,8 @@ const main = () => {
     return 2;
 };
 
+// Every oxlint this starts is a node that loads its own JS and the plugins' again: kept compiled across edits.
+cacheCompiles();
 try {
     process.exit(main());
 } catch {

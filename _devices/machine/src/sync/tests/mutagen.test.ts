@@ -31,6 +31,7 @@ import {
     strayBackupSessions,
     syncMode,
     syncSessionNames,
+    SIGNALLED_POLL_SECONDS,
 } from "../mutagen.js";
 import { PROJECT_IGNORES } from "../ssh.js";
 import { join } from "node:path";
@@ -110,6 +111,18 @@ describe("a project's sync mode", () => {
         expect(liveMode(live())).toBe("two-way-safe");
         expect(sessionMatchesSpec(live(), sessionSpec({ ...project, direction: "both" }, "portable"))).toBe(true);
         expect(sessionMatchesSpec(live(), sessionSpec(project, "portable"))).toBe(false);
+    });
+
+    // A sandbox that pushes its changes is scanned only as a backstop; a session made at the old interval is drift, and
+    // is replaced through the same settled path as any other rule, while an older sandbox keeps the 2-second scan.
+    it("scans a sandbox that pushes at the backstop interval, and counts the old interval as drift", () => {
+        const pushing = { ...project, direction: "both" as const, changeSignalSince: 1 };
+        expect(sessionSpec(project, "portable").pollSeconds).toBe(2);
+        expect(sessionSpec(pushing, "portable").pollSeconds).toBe(SIGNALLED_POLL_SECONDS);
+        expect(convergePlan([live("two-way-safe")], sessionSpec(pushing, "portable"))).toBe("replace");
+        const backstopped = { ...live("two-way-safe"), beta: { ...live().beta, watch: { mode: "force-poll", pollingInterval: SIGNALLED_POLL_SECONDS } } };
+        expect(convergePlan([backstopped], sessionSpec(pushing, "portable"))).toBe("keep");
+        expect(mutagenCreateArgs(sessionSpec(pushing, "portable"), false).join(" ")).toContain(`--watch-polling-interval-beta ${SIGNALLED_POLL_SECONDS}`);
     });
 
     // A replacement settles and sweeps first only between two two-way sessions: into copy-first that would carry the

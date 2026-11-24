@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { join } from "node:path";
+import type { BridgeHead } from "@intentic/sandbox-contract/schemas/bridge-heads";
 import type { BridgeHold, Pairing } from "../config.js";
 import {
     type BridgeExec,
@@ -8,6 +9,8 @@ import {
     type FetchResult,
     failureReason,
     holdWaiting,
+    LEVEL_KEPT_MS,
+    type LocalMemo,
     listSandboxRepos,
     nextHold,
     refusedRef,
@@ -623,5 +626,171 @@ describe("bridgeRepo holds", () => {
         expect(removed).toEqual([join(LOCAL, "cutoff", ".git", "objects", "pack", "tmp_pack_cut")]);
         await pass(NOW + STALE_TEMP_MS + MINUTE);
         expect(removed).toHaveLength(1);
+    });
+});
+
+// A sandbox that advertises its heads on /ports (PortsList.bridgeHeads): no ls-remote, no listing over SSH, and a clone
+// level with it costs no process at all once read.
+describe("runGitBridge against an advertising sandbox", () => {
+    const config: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "x", mode: "sync", localDir: LOCAL };
+    const SHA_TIP = "a".repeat(40);
+    const SHA_NEW = "e".repeat(40);
+    const SHA_OTHER = "f".repeat(40);
+
+    // Each repo's clone scripted on its own, since one pass asks several; every call is recorded as `<repo>: <line>`.
+    // `sequences` answer successive calls in order (last entry repeats), ahead of `byRepo`.
+    type Script = Record<string, string | undefined>;
+    const clones = (byRepo: Record<string, Script>, sequences: Record<string, Record<string, readonly (string | undefined)[]>> = {}) => {
+        const calls: string[] = [];
+        const seen = new Map<string, number>();
+        const repoOf = (cwd: string | undefined): string => Object.keys(byRepo).find((repo) => cwd === join(LOCAL, repo)) ?? "?";
+        const answer = (repo: string, line: string): string | undefined => {
+            calls.push(`${repo}: ${line}`);
+            const sequence = Object.entries(sequences[repo] ?? {}).find(([prefix]) => line.startsWith(prefix));
+            if (sequence !== undefined) {
+                const nth = seen.get(`${repo} ${sequence[0]}`) ?? 0;
+                seen.set(`${repo} ${sequence[0]}`, nth + 1);
+                return sequence[1][Math.min(nth, sequence[1].length - 1)];
+            }
+            const match = Object.entries(byRepo[repo] ?? {}).find(([prefix]) => line.startsWith(prefix));
+            return match === undefined ? "" : match[1];
+        };
+        const paths = new Set(Object.keys(byRepo).flatMap((repo) => [join(LOCAL, repo), join(LOCAL, repo, ".git")]));
+        const exec: BridgeExec = {
+            run: async (command, args, cwd) => await Promise.resolve(answer(repoOf(cwd), [command, ...args].join(" "))),
+            fetch: async (args, cwd) => {
+                const out = answer(repoOf(cwd), ["git", ...args].join(" "));
+                return await Promise.resolve({ outcome: out === undefined ? "failed" : "fetched", stderr: "" } as const);
+            },
+            exists: (path) => paths.has(path),
+        };
+        return { calls, exec };
+    };
+
+    // A clone sitting on `head` of main, its marker converged, its remote already the sandbox's.
+    const levelAt = (repo: string, head: string, extra: Script = {}): Script => ({
+        "git config --local --get core.fileMode": "false\n",
+        "git remote get-url": `${ALIAS}:/history/gits/${repo}\n`,
+        "git rev-parse -q --verify HEAD": `${head}\n`,
+        "git symbolic-ref --short -q HEAD": "main\n",
+        "git rev-parse -q --verify refs/intentic/bridged/main": `${head}\n`,
+        "git rev-parse --git-path": ".git/objects/pack\n",
+        "git rev-parse --is-shallow-repository": "false\n",
+        ...extra,
+    });
+
+    // Stamps every clone's `.git` as a directory and each file by what `files` says now, "-" for absent.
+    const memo = (files: Map<string, string> = new Map()): LocalMemo => ({
+        stamp: (path) => (path.endsWith(".git") ? "d:1" : (files.get(path) ?? "-")),
+        settled: new Map(),
+    });
+
+    const options = (local: LocalMemo, advertised: readonly BridgeHead[] | undefined) => ({
+        memory: remembered().memory,
+        packs: packFolder([[]]).packs,
+        now: () => 1_000,
+        local,
+        advertised,
+    });
+
+    it("asks nothing over SSH for repos level with what the sandbox advertises, and nothing at all the pass after", async () => {
+        const { calls, exec } = clones({ intentic: levelAt("intentic", SHA_TIP), notes: levelAt("notes", SHA_OTHER) });
+        const local = memo();
+        const heads = [
+            { repo: "intentic", branch: "main", tip: SHA_TIP },
+            { repo: "notes", branch: "main", tip: SHA_OTHER },
+        ];
+        expect(await runGitBridge(exec, config, () => undefined, undefined, options(local, heads))).toEqual(["intentic", "notes"]);
+        expect(calls.filter((line) => line.includes("ls-remote") || line.includes("ssh") || line.includes("fetch"))).toEqual([]);
+        calls.length = 0;
+        expect(await runGitBridge(exec, config, () => undefined, ["stale"], options(local, heads))).toEqual(["intentic", "notes"]);
+        expect(calls).toEqual([]);
+    });
+
+    it("fetches only the repo whose advertised tip moved", async () => {
+        const { calls, exec } = clones(
+            { intentic: levelAt("intentic", SHA_TIP), notes: levelAt("notes", SHA_OTHER) },
+            // Where the last fetch left the sandbox's branch, then where this one takes it.
+            { intentic: { "git rev-parse -q --verify refs/remotes/sandbox/main": [`${SHA_TIP}\n`, `${SHA_NEW}\n`] } },
+        );
+        const local = memo();
+        const before = [
+            { repo: "intentic", branch: "main", tip: SHA_TIP },
+            { repo: "notes", branch: "main", tip: SHA_OTHER },
+        ];
+        await runGitBridge(exec, config, () => undefined, undefined, options(local, before));
+        calls.length = 0;
+        const moved = [{ ...before[0]!, tip: SHA_NEW }, before[1]!];
+        await runGitBridge(exec, config, () => undefined, undefined, options(local, moved));
+        expect(calls.filter((line) => line.includes("git fetch"))).toEqual(["intentic: git fetch --progress sandbox +refs/heads/main:refs/remotes/sandbox/main"]);
+        expect(calls).toContain(`intentic: git reset -q ${SHA_NEW}`);
+        expect(calls.filter((line) => line.startsWith("notes:"))).toEqual([]);
+        expect(calls.some((line) => line.includes("ls-remote"))).toBe(false);
+    });
+
+    it("never fetches again a tip it already holds when local commits keep the clone from following, and says so once", async () => {
+        const said: string[] = [];
+        const { calls, exec } = clones({
+            intentic: levelAt("intentic", SHA_OTHER, {
+                "git rev-parse -q --verify refs/remotes/sandbox/main": `${SHA_TIP}\n`, // fetched on an earlier pass
+                "git rev-parse -q --verify refs/intentic/bridged/main": `${SHA_NEW}\n`,
+                [`git merge-base --is-ancestor HEAD ${SHA_TIP}`]: undefined, // the owner's own commit on top
+            }),
+        });
+        const local = memo();
+        const heads = [{ repo: "intentic", branch: "main", tip: SHA_TIP }];
+        await runGitBridge(exec, config, (line) => said.push(line), undefined, options(local, heads));
+        expect(calls.some((line) => line.includes("fetch") || line.includes("ls-remote") || line.includes("reset"))).toBe(false);
+        expect(said).toEqual(["  intentic: local commits diverge from the sandbox, leaving it alone"]);
+        calls.length = 0;
+        await runGitBridge(exec, config, (line) => said.push(line), undefined, options(local, heads));
+        expect(calls).toEqual([]);
+        expect(said).toHaveLength(1);
+    });
+
+    it("reads a clone again once one of its files moved, as the owner's own commit moves its branch", async () => {
+        const files = new Map<string, string>();
+        const { calls, exec } = clones({ intentic: levelAt("intentic", SHA_TIP) });
+        const local = memo(files);
+        const heads = [{ repo: "intentic", branch: "main", tip: SHA_TIP }];
+        await runGitBridge(exec, config, () => undefined, undefined, options(local, heads));
+        calls.length = 0;
+        files.set(join(LOCAL, "intentic", ".git", "refs", "heads", "main"), "f:2:41:5");
+        await runGitBridge(exec, config, () => undefined, undefined, options(local, heads));
+        expect(calls).toContain("intentic: git rev-parse -q --verify HEAD");
+        expect(calls.some((line) => line.includes("ls-remote"))).toBe(false);
+    });
+
+    it("asks git over SSH only for a repo the sandbox could not read, and leaves unborn and detached ones be", async () => {
+        const { calls, exec } = clones({
+            odd: levelAt("odd", SHA_TIP, { "git ls-remote": `ref: refs/heads/main\tHEAD\n${SHA_TIP}\tHEAD\n` }),
+            unborn: levelAt("unborn", SHA_TIP),
+            detached: levelAt("detached", SHA_TIP),
+        });
+        const heads = [{ repo: "odd", probe: true as const }, { repo: "unborn", branch: "main" }, { repo: "detached" }, { repo: "../escape", branch: "main", tip: SHA_TIP }];
+        expect(await runGitBridge(exec, config, () => undefined, undefined, options(memo(), heads))).toEqual(["odd", "unborn", "detached"]);
+        expect(calls.filter((line) => line.includes("ls-remote"))).toEqual(["odd: git ls-remote --symref sandbox HEAD"]);
+        expect(calls.filter((line) => line.startsWith("unborn:") || line.startsWith("detached:"))).toEqual([]);
+    });
+
+    it("against a sandbox from before the advertisement, lists over SSH and asks ls-remote per repo, as before", async () => {
+        const { calls, exec } = clones({ intentic: levelAt("intentic", SHA_TIP, { "git ls-remote": `ref: refs/heads/main\tHEAD\n${SHA_TIP}\tHEAD\n` }) });
+        const listing: BridgeExec = { ...exec, run: async (command, args, cwd) => (command === "ssh" ? "intentic\nroot\n" : await exec.run(command, args, cwd)) };
+        const local = memo();
+        // Two passes: the kept answers are never used without an advertisement.
+        expect(await runGitBridge(listing, config, () => undefined, undefined, options(local, undefined))).toEqual(["intentic"]);
+        expect(await runGitBridge(listing, config, () => undefined, undefined, options(local, undefined))).toEqual(["intentic"]);
+        expect(calls.filter((line) => line.includes("ls-remote"))).toEqual(["intentic: git ls-remote --symref sandbox HEAD", "intentic: git ls-remote --symref sandbox HEAD"]);
+        expect(calls.filter((line) => line.endsWith("git rev-parse -q --verify HEAD"))).toHaveLength(2);
+    });
+
+    it("reads a level clone again once its verdict is older than LEVEL_KEPT_MS, whatever the stamps say", async () => {
+        const { calls, exec } = clones({ intentic: levelAt("intentic", SHA_TIP) });
+        const local = memo();
+        const heads = [{ repo: "intentic", branch: "main", tip: SHA_TIP }];
+        await runGitBridge(exec, config, () => undefined, undefined, options(local, heads));
+        calls.length = 0;
+        await runGitBridge(exec, config, () => undefined, undefined, { ...options(local, heads), now: () => 1_000 + LEVEL_KEPT_MS });
+        expect(calls).toContain("intentic: git rev-parse -q --verify HEAD");
     });
 });

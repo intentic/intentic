@@ -21,7 +21,7 @@ export interface PaneState {
 
 // One PANE_FORMAT line as tmux wrote it, or undefined when the line isn't one (blank tail, a session that ended
 // mid-read).
-interface Pane {
+export interface Pane {
     readonly name: string;
     readonly command: string;
     readonly alive: boolean;
@@ -45,6 +45,9 @@ const parsePane = (line: string): Pane | undefined => {
         activityAt: Number.isFinite(activitySeconds) && activitySeconds > 0 ? activitySeconds * 1000 : 0,
     };
 };
+
+/** Each pane a PANE_FORMAT listing names, in tmux's order: the session and its foreground command among them. */
+export const paneLines = (stdout: string): Pane[] => stdout.split("\n").flatMap((line) => parsePane(line) ?? []);
 
 export const paneStates = (stdout: string): Map<string, PaneState> => {
     const states = new Map<string, PaneState>();

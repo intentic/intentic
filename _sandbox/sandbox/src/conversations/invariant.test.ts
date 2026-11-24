@@ -171,6 +171,41 @@ test("a conversation with no branch of its own is not held to one", async () => 
     ).resolves.toBeUndefined();
 });
 
+// A turn settling is news about its own conversation: every other card that did not move answers as it was last read,
+// and the sweep reads them all again.
+test("at turn-settled only a conversation whose card moved is read again; the sweep reads every one", async () => {
+    const asked: string[] = [];
+    const strayed = new Map<string, readonly StrayStanding[]>();
+    const entries = { c1: ONE_REPO, c2: ONE_REPO };
+    const check = checkNamed("stray-work-reaches-its-own-branch", {
+        agents: fleetOf(entries),
+        conversations: actorsOf({}),
+        agentWorktrees: SETTLED,
+        live: () => [],
+        strays: async (id) => {
+            asked.push(id);
+            return strayed.get(id) ?? [];
+        },
+    });
+    await check.run({ moment: "turn-settled", fail });
+    expect(asked.toSorted()).toEqual(["c1", "c2"]);
+    asked.length = 0;
+
+    // c2's copy moves under an untouched card: a settled turn elsewhere does not read it, so the finding waits for the sweep.
+    strayed.set("c2", [{ repo: "registry", carried: false, uncommitted: false }]);
+    entries.c1 = { ...ONE_REPO, updatedAt: ONE_REPO.updatedAt + 1 };
+    await expect(check.run({ moment: "turn-settled", fail })).resolves.toBeUndefined();
+    expect(asked).toEqual(["c1"]);
+    asked.length = 0;
+    await expect(check.run({ moment: "sweep", fail })).rejects.toThrow(/: c2\/registry on a detached HEAD$/);
+    expect(asked.toSorted()).toEqual(["c1", "c2"]);
+    asked.length = 0;
+
+    // What a reading found stands at the next turn-settled that does not read it again.
+    await expect(check.run({ moment: "turn-settled", fail })).rejects.toThrow(/: c2\/registry on a detached HEAD$/);
+    expect(asked).toEqual([]);
+});
+
 test("the check runs at turn-settled, after the turn's carry, and on the sweep", () => {
     const check = checkNamed("stray-work-reaches-its-own-branch", { agents: fleetOf({}), conversations: actorsOf({}), agentWorktrees: SETTLED });
     expect([...check.on].sort()).toEqual(["sweep", "turn-settled"]);

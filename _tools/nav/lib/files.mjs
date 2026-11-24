@@ -37,19 +37,20 @@ const extensionOf = (path) => {
 };
 
 // All present tracked and untracked/nonignored paths (or only committed paths at a ref), unfiltered; workspace import
-// resolution needs the package.json manifests that source filtering drops.
+// resolution needs the package.json manifests that source filtering drops. NUL-separated, so a path git would quote
+// (a non-ASCII or control character) is listed as itself rather than as a quoted name no file has.
 export const listTracked = (root, ref) => {
-    const args = ref ? ["ls-tree", "-r", "--name-only", ref] : ["ls-files", "--cached", "--others", "--exclude-standard"];
+    const args = ref ? ["ls-tree", "-r", "-z", "--name-only", ref] : ["ls-files", "-z", "--cached", "--others", "--exclude-standard"];
     const paths = execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 })
-        .split("\n")
+        .split("\0")
         .filter(Boolean);
     return [...new Set(paths)].filter((path) => ref || existsSync(join(root, path)));
 };
 
 // Splits listed files into source and test. `ref` reads a git ref instead of the working tree, for a baseline without
-// checkout.
-export const listFiles = (root, ref, scope = "") => {
-    const all = listTracked(root, ref);
+// checkout. `listed` is the caller's own `listTracked(root)` when it already holds one, in any order.
+export const listFiles = (root, ref, scope = "", listed = undefined) => {
+    const all = listed ?? listTracked(root, ref);
     const prefix = relative(root, resolve(root, scope)).split("\\").join("/");
     if (prefix === ".." || prefix.startsWith("../")) {
         throw new Error(`nav: scope is outside the repository: ${scope}`);

@@ -124,15 +124,7 @@ export const createCliCatalog = ({ cli, store, connections, persistPath, probeDi
             });
             const offered = await offeredModels(connection, created.sessionId, created.configOptions);
             // Nobody resumes a probe, so it leaves the CLI's own session list as soon as it has answered.
-            const capabilities = connection.capabilities.sessionCapabilities;
-            const leave =
-                capabilities?.delete != null ? methods.agent.session.delete : capabilities?.close != null ? methods.agent.session.close : undefined;
-            if (leave !== undefined) {
-                void connection.agent.request(leave, { sessionId: created.sessionId }).then(
-                    () => undefined,
-                    (error: Error) => store.logger.warn({ err: error }, `${cli.runtime}: could not end the model probe's session`),
-                );
-            }
+            connection.release(created.sessionId);
             return offered;
         } catch (error) {
             store.logger.warn({ err: error }, `${cli.runtime}: model discovery failed, serving the last-known-good list`);

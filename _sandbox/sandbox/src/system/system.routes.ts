@@ -24,7 +24,8 @@ import type { OrpcContext } from "../app-env.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { serviceSession } from "../processes/service-processes.js";
-import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
+import { freshPanes, panesChanged } from "../terminal/pane-listing.js";
+import { foreground, paneStates, SHELL } from "../terminal/pane-state.js";
 import { publishRuntimeChange, runtimeGeneration } from "../seams/runtime-feed.js";
 import { subscribeFileFrames } from "./file-frames.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
@@ -277,7 +278,7 @@ const listTerminals = async (services: Services): Promise<TerminalsList> => {
         ...extensionProcesses.get(service.key),
     }));
     // No tmux server is no sessions; any other failed listing is the route's error, not an empty panel.
-    const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]).catch((error: unknown) => {
+    const listed = await freshPanes().catch((error: unknown) => {
         if (isNoTmuxServer(error)) {
             return undefined;
         }
@@ -543,6 +544,7 @@ export const createSystemRoutes = (services: Services) => {
             }
             // `=` forces an exact target match, a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.
             await forkedExec("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
+            panesChanged();
             // An agent parked on a prompt is waiting on a person; killing the session must tell it the terminal is
             // gone.
             settleTerminalHelpFor(input.name);

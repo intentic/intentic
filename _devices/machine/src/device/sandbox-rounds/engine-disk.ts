@@ -5,7 +5,7 @@ import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
-import { runIc } from "../tools/sandboxes.js";
+import { runIcRead } from "../tools/ic-serve/ic-read.js";
 
 /* THE ENGINE'S DISK (2026-11-03). On a Windows PC every sandbox and every compose project its owner runs on the intentic
    engine writes to one disk inside the engine's distro. On rog, 2026-11-03, one sandbox's history volume (462 GB of Rust
@@ -13,7 +13,8 @@ import { runIc } from "../tools/sandboxes.js";
    anywhere: WSL's and Windows' own tools show other disks, each sandbox's disk watch can clean only its own checkouts,
    and the daily tidy came too late. So the Windows side watches it. ic does the measuring and the clearing
    (`ic engine disk`, ic's src/engine/disk.rs); this keeps the clock and tells:
-   - every minute, the cheap reading (one `df` in the distro): the level, `ok`, `low` (under 10% left to write),
+   - every minute, the cheap reading (one `df` in the distro; at ok, every five or ten minutes while far from the low
+     line, okLookMs): the level, `ok`, `low` (under 10% left to write),
      `critical` (under 5%) or `full` (less than the ballast the engine's keeper holds back);
    - on each level crossed upwards, and again every RELIEVE_AGAIN_MS while it stands at critical or full, ic clears what
      is nobody's data for that level (`--relieve`: build cache and dangling images, and at full the ballast). Never a
@@ -196,6 +197,8 @@ export interface DiskWatchState {
     unreadableTold: boolean;
     // VHDX space that a compact could return is said once per low-space stretch.
     compactTold: boolean;
+    // The last reading at ok and when it was taken: how fast the space goes is what the next look waits on (okLookMs).
+    lastOk: { readonly at: number; readonly availableBytes: number } | undefined;
 }
 
 export const newDiskWatchState = (): DiskWatchState => ({
@@ -209,7 +212,28 @@ export const newDiskWatchState = (): DiskWatchState => ({
     unwatched: undefined,
     unreadableTold: false,
     compactTold: false,
+    lastOk: undefined,
 });
+
+/* (2026-11-24) HOW LONG UNTIL THE NEXT LOOK WHILE THE DISK IS OK. Every look is an `ic` and two `wsl.exe`, so a disk far
+   from the low line (10% left, ic's) is looked at every ten minutes, one nearer every five, and one near it every
+   minute, as every look was before. Space going fast shortens the wait to a quarter of the time the last two readings
+   say is left before the low line, never under a minute: rog's 462 GB of Rust build output did not arrive in ten
+   minutes, but a pull of a few images can. Pure. */
+export const OK_FAR_MS = 10 * 60_000;
+export const OK_NEAR_MS = 5 * 60_000;
+const LOW_LINE = 0.1;
+export const okLookMs = (read: Space, last: DiskWatchState["lastOk"], now: number): number => {
+    const left = read.availableBytes / Math.max(read.totalBytes, 1);
+    const wait = left >= 2 * LOW_LINE ? OK_FAR_MS : left >= 1.5 * LOW_LINE ? OK_NEAR_MS : EVERY_MS;
+    const spent = last === undefined ? 0 : last.availableBytes - read.availableBytes;
+    if (last === undefined || spent <= 0 || now <= last.at) {
+        return wait;
+    }
+    const aboveLine = read.availableBytes - LOW_LINE * read.totalBytes;
+    const untilLine = aboveLine / (spent / (now - last.at));
+    return Math.max(EVERY_MS, Math.min(wait, Math.floor(untilLine / 4)));
+};
 
 // Whether to clear now: a level worse than any cleared at this stretch, or critical or worse and the last clearing old. Pure.
 export const reliefDue = (state: DiskWatchState, level: DiskLevel, now: number): boolean =>
@@ -383,8 +407,11 @@ export const diskRound = async (state: DiskWatchState, deps: DiskWatchDeps): Pro
     tellCompact(state, deps, read, answer);
     if (read.level === "ok") {
         settle(state, deps.log, read);
-        return EVERY_MS;
+        const next = okLookMs(read, state.lastOk, deps.now());
+        state.lastOk = { at: deps.now(), availableBytes: read.availableBytes };
+        return next;
     }
+    state.lastOk = undefined;
     await actOn(state, deps, read, answer);
     if (measureDue(state, deps.now())) {
         state.measureTriedAt = deps.now();
@@ -399,7 +426,9 @@ export const diskRound = async (state: DiskWatchState, deps: DiskWatchDeps): Pro
 export const startEngineDiskWatch = (log: Log): Rounds => {
     const state = newDiskWatchState();
     const deps: DiskWatchDeps = {
-        run: async (args, deadlineMs) => await runIc(args, () => undefined, {}, { deadlineMs }),
+        // The minute's read is asked of the resident ic when there is one (ic-serve.ts serves `engine disk --json`
+        // alone); a relief or a measurement is its own run, as before.
+        run: async (args, deadlineMs) => await runIcRead(args, deadlineMs),
         // A config that does not read throws, and the round is skipped: it may be the one holding the clearing off.
         reliefOn: async () => (await readMachineConfig()).engineDiskRelief !== false,
         log,

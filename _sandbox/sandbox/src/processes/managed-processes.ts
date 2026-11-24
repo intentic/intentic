@@ -6,7 +6,8 @@ import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { endSession } from "../seams/session-processes.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { SHELL } from "../terminal/pane-state.js";
+import { freshPanes, panesChanged, recentPanes, SHARED_LISTING_MS } from "../terminal/pane-listing.js";
+import { paneLines, SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { isNoTmuxServer, isNoTmuxTarget } from "../terminal/tmux-server.js";
 import { withSavedPanels } from "./panel-records.js";
@@ -51,7 +52,8 @@ const installFinished = (cwd: string): boolean =>
 export interface ProcessRunner {
     readonly launch: (session: string, spec: ProcessSpec & { port: number }) => Promise<void>;
     readonly kill: (session: string) => void | Promise<void>;
-    readonly states: () => Promise<Map<string, string>>;
+    // `recent` lets a timed sweep share a listing begun up to a second ago (pane-listing.ts); every other reader lists afresh.
+    readonly states: (recent?: boolean) => Promise<Map<string, string>>;
     // Ends what a finished one-shot left running in its session, the shell at the prompt excepted.
     readonly endLeftovers?: (session: string) => Promise<void>;
 }
@@ -118,6 +120,8 @@ const defaultRunner: ProcessRunner = {
         await endPanes(session);
         await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
         const created = await forkedExec("tmux", ["new-session", "-d", "-P", "-F", "#{pane_pid}", "-s", session, "-c", spec.cwd, ...envFlags]);
+        // Once it stands: a sweep's shared listing from before would read the new session as one already gone.
+        panesChanged();
         // The pane's shell hangs off the tmux server, not the daemon, so it is put in its class here, at the prompt,
         // before it is handed the command: everything the command forks inherits the class.
         const shell = Number(created.stdout.trim());
@@ -141,23 +145,22 @@ const defaultRunner: ProcessRunner = {
     kill: async (session) => {
         await endPanes(session);
         await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
+        panesChanged();
     },
     endLeftovers: endPanes,
     // One call for all sessions; pane_current_command at the prompt is how a oneShot's completion is seen. A shell exit
-    // destroys the session, reporting as absence; no tmux server means no sessions.
-    states: async () => {
+    // destroys the session, reporting as absence; no tmux server means no sessions. The listing is the runtime
+    // sampler's too (pane-listing.ts): PANE_FORMAT's first field is the session, its last the pane's command.
+    states: async (recent) => {
         const states = new Map<string, string>();
-        const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_current_command}"]).catch((error: unknown) => {
+        const listed = await (recent === true ? recentPanes(SHARED_LISTING_MS) : freshPanes()).catch((error: unknown) => {
             if (isNoTmuxServer(error)) {
                 return undefined;
             }
             throw error;
         });
-        for (const line of listed?.stdout.split("\n") ?? []) {
-            const [name, command] = line.split("\t");
-            if (name !== undefined && name !== "" && command !== undefined) {
-                states.set(name, command);
-            }
+        for (const pane of paneLines(listed?.stdout ?? "")) {
+            states.set(pane.name, pane.command);
         }
         return states;
     },
@@ -282,16 +285,17 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
     };
 
     // A sweep that could not list the panes changes nothing: untracking on it would report every live run as finished.
-    const sweepLogged = (fromPrompt: boolean): void =>
-        void sweep(fromPrompt).catch((error: unknown) => options.logger?.warn({ err: error }, "managed processes: tmux panes could not be listed"));
+    const sweepLogged = (fromPrompt: boolean, timed = false): void =>
+        void sweep(fromPrompt, timed).catch((error: unknown) => options.logger?.warn({ err: error }, "managed processes: tmux panes could not be listed"));
 
     const ensureWatching = (): void => {
-        timer ??= setInterval(() => sweepLogged(false), POLL_MS);
+        timer ??= setInterval(() => sweepLogged(false, true), POLL_MS);
         unwatchPrompts ??= watchPrompts(() => sweepLogged(true));
     };
 
-    const sweep = async (fromPrompt = false): Promise<void> => {
-        const states = await runner.states();
+    // A timed sweep shares the runtime sampler's listing; one a prompt woke reads afresh, since the prompt is the news.
+    const sweep = async (fromPrompt = false, timed = false): Promise<void> => {
+        const states = await runner.states(timed);
         for (const [key, entry] of current) {
             const command = states.get(panelSession(key));
             if (command === undefined) {

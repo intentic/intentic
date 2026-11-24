@@ -1,8 +1,9 @@
 import { join } from "node:path";
 import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
-import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { defaultGit, type GitRunner, politeGit } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { readOnFeed } from "../feed/checkout-feed.js";
+import { headShaFromFiles } from "../../store/git/head-files.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "./changes-porcelain.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
@@ -15,7 +16,13 @@ import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 // (`truncated`), not enumerated rows. Kept beside the scan, which counts lines only for the untracked files it can ship.
 export const MAX_REPO_CHANGES = 500;
 
-const readHead = async (dir: string, git: GitRunner): Promise<string> => (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
+// Off the files where they say it plainly (head-files.ts), from git otherwise; only for the daemon's own runners, so a
+// caller with a runner of its own (a test double) is answered by it.
+const readHead = async (dir: string, git: GitRunner): Promise<string> => {
+    // allow(silent-catch): a file this cannot read is git's to read, which answers or fails as it always did.
+    const read = git === defaultGit || git === politeGit ? await headShaFromFiles(dir).catch(() => undefined) : undefined;
+    return read ?? (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
+};
 
 // HEAD's sha as `read` takes it; undefined when git answers with an exit status (unborn HEAD, no repository at `dir`).
 // A git that never answered (spawn failure, kill, a dead forker) throws: read as unborn, a discard would untrack and

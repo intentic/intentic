@@ -115,8 +115,8 @@ const writeAll = async (io: PowerIo, reading: WindowsPowerReading, writes: reado
         }
     }
     if (failed.length < writes.length) {
-        // A stamp that cannot be written costs only a stale reading for up to five minutes: never a failed run.
-        // allow(silent-catch): a missing stamp only leaves the resident's reading stale for up to five minutes
+        // A stamp that cannot be written costs only a stale reading for up to half an hour (POWER_REFRESH_MS): never a failed run.
+        // allow(silent-catch): a missing stamp only leaves the resident's reading stale for up to half an hour (POWER_REFRESH_MS)
         await io.changed().catch(() => undefined);
     }
     return { failed, activateFailed };

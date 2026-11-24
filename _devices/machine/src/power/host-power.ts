@@ -48,7 +48,7 @@ const readPowerFacts = async (): Promise<HostPower | undefined> => {
 };
 
 /* The facts are asked at every hello and every two minutes, and the settings change when a person changes them: a
-   reading is kept five minutes, and an older one is answered while the next is read, so describe never waits on
+   reading is kept half an hour, and an older one is answered while the next is read, so describe never waits on
    PowerShell but for the very first reading, and then at most a few seconds (on rog the read takes about a second).
    A read that fails is said once, until one works again, and the last reading stands; with none yet the field is absent.
 
@@ -58,7 +58,10 @@ const readPowerFacts = async (): Promise<HostPower | undefined> => {
    sandbox's op as a detached child of this agent, or a person in a terminal. Each ask compares the stamp's time with
    the one seen when the kept reading began, a stat and nothing more; the op also forgets the reading itself as it
    ends (device/tools/agent.ts), should the stamp not have been written. */
-export const POWER_REFRESH_MS = 5 * 60_000;
+// (2026-11-24) Half an hour, from five minutes: each reading is a PowerShell (about 0.35 s of CPU on rog), and the one
+// change that must show at once, this agent's own, is the stamp's to say (above). A change made in Windows' own Settings
+// shows within the half hour.
+export const POWER_REFRESH_MS = 30 * 60_000;
 const POWER_FIRST_WAIT_MS = 3_000;
 
 export interface PowerWatch {
@@ -160,7 +163,7 @@ const stampTime = async (): Promise<number | undefined> => await stat(powerChang
 
 let watch: PowerWatch | undefined;
 
-/** The device facts' `power`: this environment's reading, kept five minutes; undefined where it does not own them. */
+/** The device facts' `power`: this environment's reading, kept half an hour; undefined where it does not own them. */
 export const powerFacts = async (log: (message: string) => void): Promise<HostPower | undefined> => await (watch ??= createPowerWatch({ read: readPowerFacts, changedAt: stampTime })).current(log);
 
 /** After this agent changed the settings (the `power-stay-on` op): the next facts read them again. */

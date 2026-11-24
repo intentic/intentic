@@ -1,5 +1,5 @@
 import { HOST_CRASH_LOOKBACK_MS, HOST_CRASHES_MAX, type HostCrashEvent } from "@intentic/sandbox-contract/schemas/hosts";
-import { CRASH_REFRESH_MS, crashEventsFrom, createCrashWatch, crashScript } from "./windows-crash-events.js";
+import { CRASH_REBASE_MS, CRASH_REFRESH_MS, type CrashMarks, crashAnswerFrom, crashEventsFrom, crashScript, crashXPaths, createCrashWatch } from "./windows-crash-events.js";
 
 // Shaped like the script's ConvertTo-Json output: the fields Get-WinEvent gives, plus WER's properties.
 const wer = (recordId: number, at: string, p1: string, eventName = "LiveKernelEvent") => ({
@@ -110,32 +110,71 @@ test("the answer is capped and each event appears once", () => {
     expect(events[0]?.id).toBe(`Application:${String(HOST_CRASHES_MAX + 4)}`);
 });
 
-test("the script reads from a day back, in Unix ms", () => {
-    expect(crashScript(1_800_000_000_000)).toContain("FromUnixTimeMilliseconds(1800000000000)");
-    expect(crashScript(1_800_000_000_000)).toContain("Id = 41, 1001, 4101");
+test("the whole day is asked by XPath, filtered by the event log service: ids, provider, a day back in ms, and WER's LiveKernelEvents alone", () => {
+    const paths = crashXPaths(HOST_CRASH_LOOKBACK_MS);
+    expect(paths.System).toBe("*[System[(EventID=41 or EventID=1001 or EventID=4101) and TimeCreated[timediff(@SystemTime) <= 86400000]]]");
+    expect(paths.Application).toBe(
+        "*[System[Provider[@Name='Windows Error Reporting'] and EventID=1001 and TimeCreated[timediff(@SystemTime) <= 86400000]] and EventData[Data='LiveKernelEvent']]",
+    );
+    const script = crashScript(HOST_CRASH_LOOKBACK_MS);
+    expect(script).toContain(`@{ Log = 'System'; Path = "${paths.System}" }`);
+    expect(script).toContain(`@{ Log = 'Application'; Path = "${paths.Application}" }`);
+    expect(script).toContain("Get-WinEvent -LogName $query.Log -FilterXPath $query.Path");
+    // No date of the locale is parsed, and no message is rendered to choose which events to keep.
+    expect(script).not.toContain("StartTime");
+    expect(script).not.toContain("-match 'LiveKernelEvent'");
+});
+
+test("a later query asks only for the records after the last one each log answered with", () => {
+    const paths = crashXPaths(HOST_CRASH_LOOKBACK_MS, { System: 25_064, Application: 47_938 });
+    expect(paths.System).toContain("(EventID=41 or EventID=1001 or EventID=4101) and EventRecordID > 25064 and TimeCreated");
+    expect(paths.Application).toContain("EventID=1001 and EventRecordID > 47938 and TimeCreated");
+    // A log with no mark is asked for its whole day.
+    expect(crashXPaths(HOST_CRASH_LOOKBACK_MS, { System: 7 }).Application).not.toContain("EventRecordID");
+    expect(crashScript(HOST_CRASH_LOOKBACK_MS, { System: 25_064 })).toContain("EventRecordID > 25064");
+    // The newest record each log answered with comes back with the rows.
+    expect(crashScript(HOST_CRASH_LOOKBACK_MS)).toContain("$last[$query.Log] = ($got | Measure-Object -Property RecordId -Maximum).Maximum");
+    expect(crashScript(HOST_CRASH_LOOKBACK_MS)).toContain("ConvertTo-Json -InputObject ([pscustomobject]@{ rows = $rows; last = $last })");
+});
+
+test("the answer is its rows' events and each log's last record; anything else is nothing", () => {
+    const answer = crashAnswerFrom(JSON.stringify({ rows: ROG, last: { System: 48_213, Application: 9002 } }));
+    expect(answer.events.map((event) => event.code)).toEqual(["Kernel-Power 41", "LiveKernelEvent 141", "Display 4101"]);
+    expect(answer.last).toEqual({ System: 48_213, Application: 9002 });
+    // As rog answered with nothing new (measured 2026-11-24).
+    expect(crashAnswerFrom('{"rows":[],"last":{}}')).toEqual({ events: [], last: {} });
+    // One row written as a bare object.
+    expect(crashAnswerFrom(JSON.stringify({ rows: ROG[0], last: { Application: 9001 } })).events).toHaveLength(1);
+    expect(crashAnswerFrom("WARNING: something")).toEqual({ events: [], last: {} });
+    expect(crashAnswerFrom("[]")).toEqual({ events: [], last: {} });
 });
 
 // The query's answer and its bookkeeping, both a few promise steps away.
 const settle = async (): Promise<void> => await new Promise((resolve) => setTimeout(resolve, 0));
 
-test("the watch asks at most once a minute, never twice at once, keeps its last answer on a failure and says so once", async () => {
+test("the watch asks at most every five minutes, never twice at once, keeps its last answer on a failure and says so once", async () => {
     let now = Date.parse("2026-11-02T20:00:00Z");
-    const asked: number[] = [];
+    const asked: CrashMarks[] = [];
     const logged: string[] = [];
-    let answer: () => Promise<HostCrashEvent[]> = async () => crashEventsFrom(JSON.stringify(ROG));
+    let answer: () => Promise<ReturnType<typeof crashAnswerFrom>> = async () => crashAnswerFrom(JSON.stringify({ rows: ROG, last: { System: 48_213, Application: 9002 } }));
     const watch = createCrashWatch({
-        query: async (at) => {
-            asked.push(at);
+        query: async (after) => {
+            asked.push(after);
             return await answer();
         },
         log: (message) => logged.push(message),
         now: () => now,
     });
+    expect(CRASH_REFRESH_MS).toBe(5 * 60_000);
     expect(watch.current()).toEqual([]);
     expect(watch.current()).toEqual([]);
     await settle();
-    expect(asked).toHaveLength(1);
+    expect(asked).toEqual([{}]);
     expect(watch.current().map((event) => event.code)).toEqual(["Kernel-Power 41", "LiveKernelEvent 141", "Display 4101"]);
+    now += CRASH_REFRESH_MS - 1;
+    watch.current();
+    await settle();
+    expect(asked).toHaveLength(1);
     answer = async () => {
         throw new Error("The RPC server is unavailable.");
     };
@@ -150,6 +189,58 @@ test("the watch asks at most once a minute, never twice at once, keeps its last 
     // A day after the events, they are no longer answered.
     now = Date.parse("2026-11-02T19:33:40.123Z") + HOST_CRASH_LOOKBACK_MS + 1;
     expect(watch.current().map((event) => event.code)).toEqual([]);
+});
+
+test("later queries start after the marks and add to what was held; a report logged again stays the event it was", async () => {
+    let now = Date.parse("2026-11-02T20:00:00Z");
+    const asked: CrashMarks[] = [];
+    const answers = [
+        { rows: ROG, last: { System: 48_213, Application: 9002 } },
+        // Nothing new in System (no mark back: the old one stands); a new 117 in Application.
+        { rows: [wer(9010, "2026-11-02T20:04:00Z", "117")], last: { Application: 9010 } },
+    ];
+    const watch = createCrashWatch({
+        query: async (after) => {
+            asked.push(after);
+            return crashAnswerFrom(JSON.stringify(answers.shift() ?? { rows: [], last: {} }));
+        },
+        log: () => undefined,
+        now: () => now,
+    });
+    watch.current();
+    await settle();
+    now += CRASH_REFRESH_MS;
+    watch.current();
+    await settle();
+    expect(asked).toEqual([{}, { System: 48_213, Application: 9002 }]);
+    expect(watch.current().map((event) => event.code)).toEqual(["LiveKernelEvent 117", "Kernel-Power 41", "LiveKernelEvent 141", "Display 4101"]);
+    now += CRASH_REFRESH_MS;
+    watch.current();
+    await settle();
+    expect(asked[2]).toEqual({ System: 48_213, Application: 9010 });
+});
+
+test("asked fresh, the watch queries at once; the whole day is asked again every few hours", async () => {
+    let now = Date.parse("2026-11-02T20:00:00Z");
+    const asked: CrashMarks[] = [];
+    const watch = createCrashWatch({
+        query: async (after) => {
+            asked.push(after);
+            return { events: [], last: { System: 10, Application: 20 } };
+        },
+        log: () => undefined,
+        now: () => now,
+    });
+    watch.current();
+    await settle();
+    watch.current({ fresh: true });
+    await settle();
+    expect(asked).toEqual([{}, { System: 10, Application: 20 }]);
+    now += CRASH_REBASE_MS;
+    watch.current();
+    await settle();
+    // A cleared log starts its records over: the whole day again, not from a mark past them.
+    expect(asked[2]).toEqual({});
 });
 
 // Measured on rog, 2026-11-03: WER logs each queued report again every few minutes until it uploads, so the 2026-11-02

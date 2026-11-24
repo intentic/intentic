@@ -17,6 +17,7 @@ import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-wa
 import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { closeCheckoutFollow } from "../workspace/watch/checkout-follow.js";
 import type { BootPhase } from "./boot-phase.js";
+import { syncChangeFeed } from "../hosts/sync/sync-changes.js";
 import { inBackground } from "../system/background-git.js";
 import { startWorkOverlap } from "../conversations/overlap/overlap-watch.js";
 
@@ -66,6 +67,8 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
     shutdown.push(closeCheckoutFollow);
     shutdown.push(subscribeWorkspaceChanges(services.workspaceTreeChanged));
     shutdown.push(subscribeUnwatchedWrites(() => services.workspaceTreeChanged([])));
+    // A paired device's file sync asks for a cycle when this moves, instead of rescanning the tree on a timer (hosts/sync/sync-changes.ts).
+    shutdown.push(subscribeWorkspaceChanges(syncChangeFeed.batch));
     // Loaded code can't be unloaded, so a debounced restart is the reload; one that declares new powers waits for approval
     // again, and keeps none of its processes meanwhile.
     shutdown.push(

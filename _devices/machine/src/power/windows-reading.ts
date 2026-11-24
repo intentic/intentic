@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { execBounded } from "@intentic/base/process";
+import { agentHome } from "@intentic/local-agent";
 import { z } from "zod";
 
 /* WHAT WINDOWS' POWER PLANS SAY ABOUT WORK LEFT RUNNING (2026-11-22). rog's plan slept it five hours after the last
@@ -76,9 +80,17 @@ public static class IntenticPower {
   public static string Name(string scheme) { Guid g = new Guid(scheme); byte[] b = new byte[2048]; uint size = (uint)b.Length; if (PowerReadFriendlyName(IntPtr.Zero, ref g, IntPtr.Zero, IntPtr.Zero, b, ref size) != 0) return null; return System.Text.Encoding.Unicode.GetString(b, 0, (int)Math.Min(size, (uint)b.Length)).TrimEnd('\\0'); }
 }`;
 
+// A PowerShell single-quoted literal: nothing in it is expanded, and a quote is written twice. Pure.
+const psLiteral = (text: string): string => `'${text.replaceAll("'", "''")}'`;
+
+// Where the compiled C# is kept: named by its source's hash, so a release that changes the C# compiles its own.
+export const powerAssemblyPath = (dir: string = join(agentHome("machine").dir, "cache")): string =>
+    join(dir, `intentic-power-${createHash("sha256").update(NATIVE).digest("hex").slice(0, 16)}.dll`);
+
 // The script: powercfg for the plans and every setting of each, the native capabilities and names, the active hours
-// from the registry, the local offset from UTC. Its lines are joined with newlines (the C# is a here-string).
-export const windowsPowerScript = (): string =>
+// from the registry, the local offset from UTC. Its lines are joined with newlines (the C# is a here-string). `assembly`
+// is the DLL the C# is compiled into once and loaded from after (powerAssemblyPath).
+export const windowsPowerScript = (assembly: string): string =>
     [
         "$ErrorActionPreference = 'Stop'",
         "$ProgressPreference = 'SilentlyContinue'",
@@ -87,10 +99,20 @@ export const windowsPowerScript = (): string =>
         `$plans = @([regex]::Matches($list, '${GUID.source}', 'IgnoreCase') | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)`,
         "$queries = @(foreach ($plan in $plans) { foreach ($s in $settings) { $text = (powercfg.exe /qh $plan $s.sub $s.setting) -join \"`n\"; [pscustomobject]@{ plan = $plan; setting = $s.setting; code = $LASTEXITCODE; text = $text } } })",
         "$capabilities = $null; $names = @{}; $nativeError = $null",
-        "try {",
-        "Add-Type -TypeDefinition @'",
+        "$native = @'",
         NATIVE,
         "'@",
+        `$assembly = ${psLiteral(assembly)}`,
+        "try {",
+        // (2026-11-24) Compiled once into a DLL and loaded from it after: Add-Type's in-memory compile runs csc.exe on every
+        // reading. A DLL that will not load (a half-written file, a .NET that refuses it) is deleted and the type compiled
+        // in memory, as before; Add-Type refused outright (constrained language mode) falls to the catch below.
+        "if (-not ('IntenticPower' -as [type])) {",
+        "try {",
+        "if (-not (Test-Path -LiteralPath $assembly)) { $part = \"$assembly.$PID.part\"; Add-Type -TypeDefinition $native -OutputAssembly $part -OutputType Library; Move-Item -LiteralPath $part -Destination $assembly -Force }",
+        "Add-Type -LiteralPath $assembly",
+        "} catch { Remove-Item -LiteralPath $assembly -Force -ErrorAction SilentlyContinue; Add-Type -TypeDefinition $native }",
+        "}",
         "$bytes = [IntenticPower]::Capabilities(); if ($bytes) { $capabilities = [Convert]::ToBase64String($bytes) }",
         "foreach ($plan in $plans) { $name = [IntenticPower]::Name($plan); if ($name) { $names[$plan] = $name } }",
         "} catch { $nativeError = $_.Exception.Message }",
@@ -211,13 +233,17 @@ export const windowsReadingFrom = (answer: WindowsAnswer, at: number): WindowsPo
 // PowerShell's -EncodedCommand (UTF-16LE, base64): the script's quotes reach it untouched by any command-line quoting.
 export const encodedCommand = (script: string): string => Buffer.from(script, "utf16le").toString("base64");
 
-// The read takes under a second on rog (16 powercfg queries, ~60 ms, and Add-Type's compile, ~300 ms); the deadline is
+// The read takes under a second on rog (16 powercfg queries, ~60 ms, and Add-Type's first compile, ~300 ms, later loads
+// of the compiled DLL ~70 ms); the deadline is
 // for a machine paging itself to a standstill.
 const READ_TIMEOUT_MS = 30_000;
 
 // Reads it, on Windows' own side only. Throws when PowerShell fails or answers something that is not the shape above.
 export const readWindowsPower = async (now: () => number = Date.now): Promise<WindowsPowerReading> => {
-    const { stdout } = await execBounded("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(windowsPowerScript())], {
+    const assembly = powerAssemblyPath();
+    // allow(silent-catch): a folder that cannot be made leaves the compile to fail inside the script, which then compiles in memory
+    await mkdir(dirname(assembly), { recursive: true }).catch(() => undefined);
+    const { stdout } = await execBounded("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(windowsPowerScript(assembly))], {
         timeoutMs: READ_TIMEOUT_MS,
         maxOutput: 256 * 1024,
     });

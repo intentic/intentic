@@ -6,6 +6,7 @@ import { extensionIdOf, type ExtensionManifest } from "@intentic/extension-manif
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../../../capabilities/extension-dirs.js";
 import { statusPaths } from "../../../git/changes/changes.js";
+import { readOnFeed } from "../../../git/feed/checkout-feed.js";
 import { parseRemote, remoteUrlsOf } from "../../../git/remote/remote-urls.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 
@@ -170,15 +171,29 @@ export const installedCopyReviewer = (deps: InstalledCopyDeps) => {
     };
 };
 
-// A runner of its own so the status read is never served from the checkout feed's cache: a rebuilt dist/ is under an
-// ignored directory name, so nothing would have told the cache it changed.
-const uncachedGit: GitRunner = (dir, args, env) => defaultGit(dir, args, env);
+// Whether a status read of the install may be kept on the checkout feed. netd's walk leaves out every directory git
+// ignores, so a tracked file under one (an install that commits a `dist/` its .gitignore names) changes unseen, and a
+// rebuild there would be answered from a stale reading. Asked once per generation, and only where it is no: a
+// .gitignore edit moves the count and netd walks again from the root, so the answer holds as long as the count does.
+const feedSeesAll = (dir: string, git: GitRunner): Promise<boolean> =>
+    readOnFeed("tracked-ignored", dir, git, async () => (await git(dir, ["ls-files", "-z", "--cached", "--ignored", "--exclude-standard"])).stdout === "");
+
+// The install's dirty paths: on the feed where it sees every file a status reads, from git directly where it does not.
+// 2026-11-24 audit: read uncached after every shell command of every turn, these were 40% of the daemon's git.
+const installStatusPaths = async (dir: string, git: GitRunner): Promise<string[]> =>
+    (await feedSeesAll(dir, git)) ? statusPaths(dir, git) : statusPaths(dir, uncached(git));
+
+// The same runner under another name, so readOnFeed never keeps what it reads.
+const uncached =
+    (git: GitRunner): GitRunner =>
+    (dir, args, env) =>
+        git(dir, args, env);
 
 // Every dirty file in the installs' checkouts, workspace-relative (.intentic/local/extensions/<id>/<path>), for the
 // shell edit tracker: a build or a `sed -i` inside an install shows up as a change the command made, so the note above
 // answers it too. Installs are git clones, so their own status is the honest reading.
 export const installedCopyDirtyPaths =
-    (root: string, git: GitRunner = uncachedGit) =>
+    (root: string, git: GitRunner = defaultGit) =>
     async (): Promise<string[]> => {
         const base = extensionsRoot(root);
         // No installs folder is no install; any other refusal reaches the caller.
@@ -192,7 +207,7 @@ export const installedCopyDirtyPaths =
             dirs
                 .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
                 .map(async (entry) =>
-                    (await statusPaths(join(base, entry.name), git).catch((): string[] => [])).map(
+                    (await installStatusPaths(join(base, entry.name), git).catch((): string[] => [])).map(
                         (path) => `.intentic/local/extensions/${entry.name}/${path}`,
                     ),
                 ),

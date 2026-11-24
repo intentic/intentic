@@ -460,7 +460,7 @@ pub fn result_line(slug: &str, report: &serde_json::Value) -> String {
 }
 
 pub fn emit(line: &str) {
-    let mut out = std::io::stdout().lock();
+    let mut out = crate::answer::stdout();
     let _ = writeln!(out, "{line}");
     let _ = out.flush();
 }

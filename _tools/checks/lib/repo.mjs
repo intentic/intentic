@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { cannotMeasure } from "./report.mjs";
+import { readWorkspaceGraph } from "./workspace-graph.mjs";
 
 export const root = repoRoot(import.meta.url);
 
@@ -149,6 +150,56 @@ export const rememberGit = () => {
     remembered ??= new Map();
 };
 
+// git's own reading of a pathspec with no magic (no `:(…)`, no GIT_*_PATHSPECS in the environment), as a test of one
+// listed path, for the shapes the checks ask: a path, which matches itself and everything under it, and a pattern whose
+// only wildcard is `*`, which git matches with wildmatch and no WM_PATHNAME, so any run of `*` crosses `/` and a `**/`
+// is no shell globstar (`**/*.vue` lists no top-level `a.vue`). Undefined for every other shape (`?`, a class, an
+// escape), which git is asked. repo.integration.test.mjs holds each shape to git's own answer.
+const SPEC_ENV = ["GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_LITERAL_PATHSPECS", "GIT_ICASE_PATHSPECS"];
+export const pathspecTest = (spec) => {
+    if (PLAIN_PATH.test(spec)) {
+        return (path) => path === spec || path.startsWith(`${spec}/`);
+    }
+    if (spec === "" || spec.startsWith(":") || /[?[\\]/u.test(spec) || SPEC_ENV.some((name) => process.env[name] !== undefined)) {
+        return undefined;
+    }
+    const pattern = new RegExp(`^${spec.split("*").map((part) => part.replace(/[.+^${}()|[\]]/gu, "\\$&")).join(".*")}$`, "su");
+    return (path) => pattern.test(path);
+};
+
+// The whole index listing as paths, split once for every listing answered from it.
+let whole;
+const wholeListing = () => {
+    if (whole === undefined) {
+        const listed = git("ls-files", "-z");
+        whole = listed === undefined ? null : { paths: listed.split("\0").filter((path) => path !== ""), set: undefined };
+        if (whole !== null) {
+            whole.set = new Set(whole.paths);
+        }
+    }
+    return whole ?? undefined;
+};
+
+// `git ls-files -z <specs>` answered from the whole listing, in its order, or undefined when a spec is one git must read.
+const listedFromWhole = (specs) => {
+    const tests = specs.map(pathspecTest);
+    if (tests.some((test) => test === undefined)) {
+        return undefined;
+    }
+    const listing = wholeListing();
+    if (listing === undefined) {
+        return undefined;
+    }
+    // A plain spec naming a listed file matches that file alone: a file has nothing under it.
+    if (specs.length === 1 && PLAIN_PATH.test(specs[0]) && listing.set.has(specs[0])) {
+        return `${specs[0]}\0`;
+    }
+    return listing.paths
+        .filter((path) => tests.some((test) => test(path)))
+        .map((path) => `${path}\0`)
+        .join("");
+};
+
 // A git question answered from the checkout, or undefined when git says no.
 export const git = (...args) => {
     if (remembered === undefined) {
@@ -157,31 +208,36 @@ export const git = (...args) => {
     const key = args.join("\0");
     if (!remembered.has(key)) {
         const [verb, flag, ...specs] = args;
-        const plain = verb === "ls-files" && flag === "-z" && specs.length > 0 && specs.every((spec) => PLAIN_PATH.test(spec));
-        const whole = plain ? git("ls-files", "-z") : undefined;
-        remembered.set(
-            key,
-            whole === undefined
-                ? asked(args)
-                : whole
-                      .split("\0")
-                      .filter((path) => path !== "" && specs.some((spec) => path === spec || path.startsWith(`${spec}/`)))
-                      .map((path) => `${path}\0`)
-                      .join(""),
-        );
+        const listing = verb === "ls-files" && flag === "-z" && specs.length > 0 ? listedFromWhole(specs) : undefined;
+        remembered.set(key, listing ?? asked(args));
     }
     return remembered.get(key);
 };
 
 // Every tracked path that still exists on disk; the index can list a file whose deletion is unstaged.
+// Kept beside the listings it is read from once `rememberGit()` asks: every check of an edit that lists the tree
+// would otherwise stat its fourteen thousand files again.
+let tracked;
 export const trackedFiles = () => {
+    if (remembered !== undefined && tracked !== undefined) {
+        return [...tracked];
+    }
     const listed = git("ls-files", "-z");
     // An empty list reads every directory as a ghost, and layout.mjs removes ghosts.
     if (listed === undefined) {
         throw new Error(`git ls-files failed in ${root}: a check cannot judge a tree it cannot list`);
     }
-    return listed.split("\0").filter((path) => path !== "" && existsSync(join(root, path)));
+    const present = listed.split("\0").filter((path) => path !== "" && existsSync(join(root, path)));
+    if (remembered !== undefined) {
+        tracked = present;
+    }
+    return [...present];
 };
+
+// The workspace's members and their edges (workspace-graph.mjs), read once per process once `rememberGit()` asks, as
+// the listings are: three checks of every edit walk the tree for it.
+let graph;
+export const workspaceGraph = () => (remembered === undefined ? readWorkspaceGraph(root) : (graph ??= readWorkspaceGraph(root)));
 
 /* SCOPE: the files this run is asked to judge, which is not the same question as what it may read. */
 
@@ -216,6 +272,12 @@ export const subjectFiles = (...patterns) => {
     }
     return listed.split("\0").filter((path) => path !== "" && (scope === undefined || scope.has(path)) && existsSync(join(root, path)));
 };
+
+// What nav's `listTracked(root)` answers (every present path, tracked or untracked and not ignored), from the listings
+// kept once `rememberGit()` asks, so code-shape's own listing costs no git run and no second stat of the tree.
+// Undefined otherwise, which leaves nav to list it.
+export const presentFiles = () =>
+    remembered === undefined ? undefined : [...new Set([...untrackedFiles().filter((path) => existsSync(join(root, path))), ...trackedFiles()])];
 
 // Every path git sees, untracked and not ignored: a land's brand-new package before `git add`. Lets a ghost
 // (all-ignored or empty) be told apart from a directory merely not yet committed.

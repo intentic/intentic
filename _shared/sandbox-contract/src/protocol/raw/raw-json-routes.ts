@@ -13,7 +13,7 @@ import {
     EnvironmentRuntimeDecisionSchema,
     EnvironmentSchema,
 } from "../../schemas/environment.js";
-import { SyncStatusSchema } from "../../schemas/devices.js";
+import { SyncChangesSchema, SyncStatusSchema } from "../../schemas/devices.js";
 import { ConversationBundleSchema, DiagnosticsAnswerSchema, DiagnosticsAskSchema, DiagnosticsQuerySchema } from "../../schemas/diagnostics.js";
 import { HostsListSchema } from "../../schemas/hosts.js";
 import { VoicesViewSchema } from "../../schemas/voice.js";
@@ -185,6 +185,7 @@ export const RAW_JSON_ROUTES = {
     "POST /system/runners/{id}/label": { input: RunnerLabelSchema, output: OkSchema },
     // Desktop sync: the sandbox-level state, the pairing (`?mode=mirror` asks for the narrower one), one machine's key.
     "GET /system/sync": { output: SyncStatusSchema },
+    "GET /system/sync/changes": { output: SyncChangesSchema },
     "POST /system/sync/pair": { input: SyncPairRequestSchema, output: SyncPairAnswerSchema },
     "DELETE /system/authorized-key/{machine}": { output: OkSchema },
     // Every browser session revoked, the owner's own included.

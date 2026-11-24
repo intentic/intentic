@@ -1,11 +1,12 @@
-import { type AgentCapabilities, client, type ClientConnection, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
+import { type AgentCapabilities, client, type ClientApp, type ClientConnection, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { withTimeout } from "@intentic/base/async";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import type { SessionModels } from "./acp-model.js";
 import type { SessionModes } from "./acp-modes.js";
 import { routeSessions, type SessionRouting, type TurnHooks } from "./acp-routing.js";
-import { createAcpTerminals } from "./acp-terminal.js";
+import { type AcpTerminals, createAcpTerminals } from "./acp-terminal.js";
 import { type AcpLaunch, spawnAcpProcess } from "./acp-spawn.js";
 
 // One warm subprocess per agent capability, kept across turns since ACP multiplexes sessions over one connection;
@@ -41,6 +42,10 @@ export interface AcpConnection {
     // outright still dies once the last turn on it gives up. Until a turn binds the session again, a permission it asks
     // for is refused rather than auto-allowed: it was told to stop, and no turn is left to judge the ask.
     readonly abandon: (sessionId: string) => void;
+    // Ends a session nobody will resume (a sealed request's, a model probe's) and forgets what was recorded of it. An
+    // agent keeps every session it opened live until it is told otherwise: Devin's CLI re-scans each one's skills every
+    // 15 s, so a helper's sessions left open made an idle process busier by the hour and held its idle reap off.
+    readonly release: (sessionId: string) => void;
     readonly kill: () => void;
 }
 
@@ -53,6 +58,51 @@ export interface AcpConnections {
 interface Pooled {
     readonly configKey: string;
     readonly connection: AcpConnection;
+}
+
+// The method that ends a session in the agent, preferring `delete` (gone from its list too) over `close`; undefined when
+// the agent advertises neither, and its sessions then live as long as its process.
+const endMethod = (capabilities: AgentCapabilities) =>
+    capabilities.sessionCapabilities?.delete != null
+        ? methods.agent.session.delete
+        : capabilities.sessionCapabilities?.close != null
+          ? methods.agent.session.close
+          : undefined;
+
+// What `release` does, shared with the in-process fixture: forget the session's recorded state, then end it in the agent.
+// A refusal is only said: a session that never ends costs idle CPU, not correctness.
+export const releaseSession = (
+    connection: Pick<AcpConnection, "agent" | "capabilities" | "alive" | "sessions" | "models" | "thoughts" | "modes">,
+    sessionId: string,
+    refused: (reason: string) => void,
+): void => {
+    connection.sessions.delete(sessionId);
+    connection.models.delete(sessionId);
+    connection.thoughts.delete(sessionId);
+    connection.modes.delete(sessionId);
+    const method = endMethod(connection.capabilities);
+    if (method !== undefined && connection.alive()) {
+        connection.agent.request(method, { sessionId }).then(
+            () => undefined,
+            (error: Error) => refused(error.message),
+        );
+    }
+};
+
+// A turn's events passed through, with the session they opened released (`AcpConnection.release`) once they end or are
+// stopped: for a turn whose session nobody resumes.
+export async function* releasingSession(connection: Pick<AcpConnection, "release">, events: AsyncIterable<AgentEvent>): AsyncGenerator<AgentEvent> {
+    let opened: string | undefined;
+    try {
+        for await (const event of events) {
+            opened = event.kind === "session" ? event.sessionId : opened;
+            yield event;
+        }
+    } finally {
+        if (opened !== undefined) {
+            connection.release(opened);
+        }
+    }
 }
 
 // The launch's sign-in, sent with the first method the agent advertises: the credential rides `_meta`, which is where an
@@ -68,6 +118,40 @@ const signIn = async (
     }
     await withTimeout(agent.request(methods.agent.authenticate, { methodId: method.id, _meta: { ...meta } }), INIT_TIMEOUT_MS);
 };
+
+// The client's terminal methods, run in the bound turn's tmux session (acp-terminal.ts).
+const serveTerminals = (app: ClientApp, terminals: AcpTerminals, terminalContext: (sessionId: string) => NonNullable<TurnHooks["terminal"]>): ClientApp =>
+    app
+        .onRequest(methods.client.terminal.create, async ({ params }) => {
+            const context = terminalContext(params.sessionId);
+            const prepared = await context.admit(params);
+            context.onCreate();
+            return { terminalId: terminals.create(context.session, context.cwd, params, prepared) };
+        })
+        .onRequest(methods.client.terminal.output, ({ params }) => {
+            const response = terminals.output(params.terminalId);
+            if (response === undefined) {
+                throw new Error(`unknown terminal ${params.terminalId}`);
+            }
+            return response;
+        })
+        .onRequest(methods.client.terminal.waitForExit, ({ params }) => {
+            const exit = terminals.waitForExit(params.terminalId);
+            if (exit === undefined) {
+                throw new Error(`unknown terminal ${params.terminalId}`);
+            }
+            return exit;
+        })
+        .onRequest(methods.client.terminal.kill, ({ params }) => {
+            if (!terminals.kill(params.terminalId)) {
+                throw new Error(`unknown terminal ${params.terminalId}`);
+            }
+            return {};
+        })
+        .onRequest(methods.client.terminal.release, ({ params }) => {
+            terminals.release(params.terminalId);
+            return {};
+        });
 
 export const createAcpConnections = (logger: Services["logger"], terminalRun: TerminalRunner): AcpConnections => {
     const pool = new Map<string, Pooled>();
@@ -119,37 +203,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             }
             return context;
         };
-        const app = routeSessions(client({ name: "intentic" }), routing)
-            .onRequest(methods.client.terminal.create, async ({ params }) => {
-                const context = terminalContext(params.sessionId);
-                const prepared = await context.admit(params);
-                context.onCreate();
-                return { terminalId: terminals.create(context.session, context.cwd, params, prepared) };
-            })
-            .onRequest(methods.client.terminal.output, ({ params }) => {
-                const response = terminals.output(params.terminalId);
-                if (response === undefined) {
-                    throw new Error(`unknown terminal ${params.terminalId}`);
-                }
-                return response;
-            })
-            .onRequest(methods.client.terminal.waitForExit, ({ params }) => {
-                const exit = terminals.waitForExit(params.terminalId);
-                if (exit === undefined) {
-                    throw new Error(`unknown terminal ${params.terminalId}`);
-                }
-                return exit;
-            })
-            .onRequest(methods.client.terminal.kill, ({ params }) => {
-                if (!terminals.kill(params.terminalId)) {
-                    throw new Error(`unknown terminal ${params.terminalId}`);
-                }
-                return {};
-            })
-            .onRequest(methods.client.terminal.release, ({ params }) => {
-                terminals.release(params.terminalId);
-                return {};
-            });
+        const app = serveTerminals(routeSessions(client({ name: "intentic" }), routing), terminals, terminalContext);
         const conn = app.connect(proc.stream);
 
         // Hard timeout: SDK cancellation is cooperative, so a non-answering binary would otherwise hang forever.
@@ -210,6 +264,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
                     kill();
                 }
             },
+            release: (sessionId) => releaseSession(connection, sessionId, (reason) => logger.warn({ agent: id, reason }, "acp: could not end a session nobody resumes")),
             kill,
         };
         published = connection;

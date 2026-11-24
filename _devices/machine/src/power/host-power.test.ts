@@ -1,7 +1,7 @@
 import type { HostPower } from "@intentic/sandbox-contract/schemas/host-power";
 import { createPowerWatch, POWER_REFRESH_MS } from "./host-power.js";
 
-/* THE READING THE DEVICE'S FACTS CARRY: read once, kept five minutes, an older one answered while the next is read,
+/* THE READING THE DEVICE'S FACTS CARRY: read once, kept POWER_REFRESH_MS, an older one answered while the next is read,
    a failure said once, and forgotten when this agent changed the settings. */
 
 const power = (at: number): HostPower => ({ at, utcOffsetMinutes: 60, findings: [] });
@@ -28,7 +28,7 @@ const reads = () => {
     return { read, pending, begun };
 };
 
-test("the first reading is waited for, then kept five minutes, then the old one is answered while the next is read", async () => {
+test("the first reading is waited for, then kept for the refresh, then the old one is answered while the next is read", async () => {
     let clock = 0;
     const { read, pending, begun } = reads();
     const watch = createPowerWatch({ read, now: () => clock, firstWaitMs: 1000 });

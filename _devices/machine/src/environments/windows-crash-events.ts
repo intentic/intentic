@@ -156,22 +156,71 @@ export const crashEventsFrom = (json: string): HostCrashEvent[] => {
     return events.toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, HOST_CRASHES_MAX);
 };
 
-// The script. Times go in as Unix ms, so no date format of the locale is parsed; a log with no matching event is no
-// events, never an error. WER's Application 1001 is filtered to the display driver's live kernel events here, since it
-// also carries every application crash on the machine, and to one row per report (crashEventOf says why), each with
-// the time in its dump's name (`WATCHDOG-20261102-2030.dmp`, Windows' local time) and only the head of its message:
-// a day of re-logged reports ran to 700 KB whole.
-export const crashScript = (sinceMs: number): string =>
-    [
+// The last record each log answered with: a later query asks only for records after it (crashScript).
+export interface CrashMarks {
+    readonly System?: number | undefined;
+    readonly Application?: number | undefined;
+}
+
+// (2026-11-24) The two queries, filtered by the event log service itself: the ids, the provider, the records after the
+// last one seen, the last day, and for WER only the reports whose event data names a LiveKernelEvent. The old query took
+// every Application 1001 of the day and rendered each one's `.Message` to find those, and WER logs every application
+// crash on the machine there. The time bound is `timediff`, in ms before now, so no date format of the locale is parsed.
+export const crashXPaths = (lookbackMs: number, after: CrashMarks = {}) => {
+    const since = `TimeCreated[timediff(@SystemTime) <= ${Math.round(lookbackMs)}]`;
+    const from = (mark: number | undefined): string => (mark === undefined ? "" : ` and EventRecordID > ${Math.trunc(mark)}`);
+    return {
+        System: `*[System[(EventID=41 or EventID=1001 or EventID=4101)${from(after.System)} and ${since}]]`,
+        Application: `*[System[Provider[@Name='${WER}'] and EventID=1001${from(after.Application)} and ${since}] and EventData[Data='LiveKernelEvent']]`,
+    };
+};
+
+// The script. A log with no matching event is no events, never an error. WER's reports come one row per report
+// (crashEventOf says why), each with the time in its dump's name (`WATCHDOG-20261102-2030.dmp`, Windows' local time) and
+// only the head of its message: a day of re-logged reports ran to 700 KB whole. `last` is the newest record each log
+// answered with, which the next query starts after.
+export const crashScript = (lookbackMs: number, after: CrashMarks = {}): string => {
+    const paths = crashXPaths(lookbackMs, after);
+    return [
         "$ErrorActionPreference = 'Stop'",
         "$ProgressPreference = 'SilentlyContinue'",
-        `$since = [DateTimeOffset]::FromUnixTimeMilliseconds(${Math.round(sinceMs)}).LocalDateTime`,
         "$found = @()",
-        `foreach ($filter in @(@{ LogName = 'System'; Id = 41, 1001, 4101; StartTime = $since }, @{ LogName = 'Application'; ProviderName = '${WER}'; Id = 1001; StartTime = $since })) { try { $found += @(Get-WinEvent -FilterHashtable $filter -ErrorAction Stop) } catch { if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { throw } } }`,
-        `$rows = @($found | Where-Object { $_.LogName -ne 'Application' -or ([string]$_.Message) -match 'LiveKernelEvent' } | ForEach-Object { $p = $_.Properties; $m = [string]$_.Message; $app = $_.LogName -eq 'Application'; $dump = ''; $key = ''; if ($app -and $m -match 'WATCHDOG-([0-9]{8}-[0-9]{4})') { $dump = [datetime]::ParseExact($Matches[1], 'yyyyMMdd-HHmm', [Globalization.CultureInfo]::InvariantCulture).ToUniversalTime().ToString('o') }; if ($app -and $m -match 'Kernel_[0-9a-fA-F]+_[0-9a-fA-F]+_[0-9a-fA-F]+_([0-9a-fA-F-]{36})') { $key = 'WER:' + $Matches[1] }; [pscustomobject]@{ LogName = $_.LogName; RecordId = $_.RecordId; Id = $_.Id; ProviderName = $_.ProviderName; TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o'); Message = $m.Substring(0, [Math]::Min($m.Length, 600)); EventName = $(if ($app -and $p.Count -gt 5) { [string]$p[2].Value }); P1 = $(if ($app -and $p.Count -gt 5) { [string]$p[5].Value }); Data0 = $(if ($_.Id -eq 1001 -and -not $app -and $p.Count -gt 0) { [string]$p[0].Value }); Key = $key; DumpTime = $dump } } | Where-Object { $_.LogName -ne 'Application' -or -not $_.P1 -or @('141', '117', '116') -contains ($_.P1 -replace '^0+', '') })`,
+        "$last = @{}",
+        `foreach ($query in @(@{ Log = 'System'; Path = "${paths.System}" }, @{ Log = 'Application'; Path = "${paths.Application}" })) { try { $got = @(Get-WinEvent -LogName $query.Log -FilterXPath $query.Path -ErrorAction Stop); if ($got.Count -gt 0) { $last[$query.Log] = ($got | Measure-Object -Property RecordId -Maximum).Maximum }; $found += $got } catch { if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { throw } } }`,
+        `$rows = @($found | ForEach-Object { $p = $_.Properties; $m = [string]$_.Message; $app = $_.LogName -eq 'Application'; $dump = ''; $key = ''; if ($app -and $m -match 'WATCHDOG-([0-9]{8}-[0-9]{4})') { $dump = [datetime]::ParseExact($Matches[1], 'yyyyMMdd-HHmm', [Globalization.CultureInfo]::InvariantCulture).ToUniversalTime().ToString('o') }; if ($app -and $m -match 'Kernel_[0-9a-fA-F]+_[0-9a-fA-F]+_[0-9a-fA-F]+_([0-9a-fA-F-]{36})') { $key = 'WER:' + $Matches[1] }; [pscustomobject]@{ LogName = $_.LogName; RecordId = $_.RecordId; Id = $_.Id; ProviderName = $_.ProviderName; TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o'); Message = $m.Substring(0, [Math]::Min($m.Length, 600)); EventName = $(if ($app -and $p.Count -gt 5) { [string]$p[2].Value }); P1 = $(if ($app -and $p.Count -gt 5) { [string]$p[5].Value }); Data0 = $(if ($_.Id -eq 1001 -and -not $app -and $p.Count -gt 0) { [string]$p[0].Value }); Key = $key; DumpTime = $dump } } | Where-Object { $_.LogName -ne 'Application' -or -not $_.P1 -or @('141', '117', '116') -contains ($_.P1 -replace '^0+', '') })`,
         "$rows = @($rows | Group-Object { if ($_.Key) { $_.Key } else { [string]$_.LogName + ':' + [string]$_.RecordId } } | ForEach-Object { $_.Group[0] })",
-        "ConvertTo-Json -InputObject $rows -Compress -Depth 3",
+        "ConvertTo-Json -InputObject ([pscustomobject]@{ rows = $rows; last = $last }) -Compress -Depth 4",
     ].join("; ");
+};
+
+const MarkSchema = z.number().int().nonnegative().optional().catch(undefined);
+const AnswerSchema = z.object({
+    rows: z.unknown(),
+    last: z.object({ System: MarkSchema, Application: MarkSchema }).catch({}),
+});
+
+export interface CrashAnswer {
+    readonly events: HostCrashEvent[];
+    readonly last: CrashMarks;
+}
+
+// The script's answer: its events (crashEventsFrom) and the newest record each log answered with. Output that is not
+// the answer is no events and no marks, so the next query asks the whole day again. Pure.
+export const crashAnswerFrom = (json: string): CrashAnswer => {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(json.trim());
+    } catch {
+        // allow(silent-catch): output that is not JSON (a PowerShell warning) reads as no events; the next refresh asks again
+        return { events: [], last: {} };
+    }
+    const answer = AnswerSchema.safeParse(parsed);
+    if (!answer.success) {
+        return { events: [], last: {} };
+    }
+    const rows = answer.data.rows ?? [];
+    return { events: crashEventsFrom(JSON.stringify(rows)), last: answer.data.last };
+};
 
 // PowerShell's -EncodedCommand (UTF-16LE, base64): the script's quotes reach it untouched by any command-line quoting.
 const encodedCommand = (script: string): string => Buffer.from(script, "utf16le").toString("base64");
@@ -179,41 +228,69 @@ const encodedCommand = (script: string): string => Buffer.from(script, "utf16le"
 // Reading the logs takes a second or two; the deadline is for an event log service that hangs.
 const QUERY_TIMEOUT_MS = 30_000;
 
-const queryWindows = async (now: number): Promise<HostCrashEvent[]> => {
-    const { stdout } = await execBounded("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(crashScript(now - HOST_CRASH_LOOKBACK_MS))], {
+const queryWindows = async (after: CrashMarks): Promise<CrashAnswer> => {
+    const { stdout } = await execBounded("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(crashScript(HOST_CRASH_LOOKBACK_MS, after))], {
         timeoutMs: QUERY_TIMEOUT_MS,
         maxOutput: 512 * 1024,
     });
-    return crashEventsFrom(stdout);
+    return crashAnswerFrom(stdout);
 };
 
-// At most one query this often: a heartbeat comes every 30 s from each linked sandbox, and a reset is news within a minute.
-export const CRASH_REFRESH_MS = 60_000;
+// (2026-11-24) At most one query this often, from once a minute: a heartbeat comes every 30 s from each linked sandbox,
+// and each query was a PowerShell. A GPU reset that matters takes the sandbox down with it, and is read at the
+// reconnect's first heartbeat after the agent restarts, or within five minutes.
+export const CRASH_REFRESH_MS = 5 * 60_000;
+// How often the whole day is asked again rather than what came after the last record: a cleared log starts its records
+// over, and a query from a mark past them would find nothing until this.
+export const CRASH_REBASE_MS = 6 * 60 * 60_000;
 
 export interface CrashWatch {
-    // The last answer, those of the last day only; asks again in the background once it is CRASH_REFRESH_MS old. Never
-    // throws and never waits.
-    readonly current: () => HostCrashEvent[];
+    // The events of the last day; asks again in the background once the last ask is CRASH_REFRESH_MS old, or at once
+    // with `fresh`. Never throws and never waits.
+    readonly current: (options?: { readonly fresh?: boolean }) => HostCrashEvent[];
 }
 
 interface CrashWatchDeps {
-    readonly query: (now: number) => Promise<HostCrashEvent[]>;
+    readonly query: (after: CrashMarks) => Promise<CrashAnswer>;
     readonly log: (message: string) => void;
     readonly now?: () => number;
 }
 
+const newer = (held: number | undefined, answered: number | undefined): number | undefined =>
+    held === undefined ? answered : answered === undefined ? held : Math.max(held, answered);
+
 export const createCrashWatch = ({ query, log, now = Date.now }: CrashWatchDeps): CrashWatch => {
-    let events: HostCrashEvent[] = [];
+    // By id, the first sighting kept: a report WER logs again is the event it was.
+    let events = new Map<string, HostCrashEvent>();
+    let marks: CrashMarks = {};
     let askedAt = Number.NEGATIVE_INFINITY;
+    let wholeAt = Number.NEGATIVE_INFINITY;
     let underway = false;
     // A failing query is said once, not on every refresh, and again only after one has worked.
     let failing = false;
     const refresh = (): void => {
         underway = true;
         askedAt = now();
-        void query(askedAt)
+        const whole = askedAt - wholeAt >= CRASH_REBASE_MS;
+        void query(whole ? {} : marks)
             .then((answer) => {
-                events = answer;
+                const since = now() - HOST_CRASH_LOOKBACK_MS;
+                const kept = whole ? new Map<string, HostCrashEvent>() : events;
+                for (const event of answer.events) {
+                    if (!kept.has(event.id)) {
+                        kept.set(event.id, event);
+                    }
+                }
+                events = new Map(
+                    [...kept]
+                        .filter(([, event]) => Date.parse(event.at) >= since)
+                        .toSorted(([, a], [, b]) => Date.parse(b.at) - Date.parse(a.at))
+                        .slice(0, HOST_CRASHES_MAX),
+                );
+                marks = whole ? answer.last : { System: newer(marks.System, answer.last.System), Application: newer(marks.Application, answer.last.Application) };
+                if (whole) {
+                    wholeAt = askedAt;
+                }
                 failing = false;
             })
             .catch((error: Error) => {
@@ -227,12 +304,12 @@ export const createCrashWatch = ({ query, log, now = Date.now }: CrashWatchDeps)
             });
     };
     return {
-        current: () => {
-            if (!underway && now() - askedAt >= CRASH_REFRESH_MS) {
+        current: (options) => {
+            if (!underway && (options?.fresh === true || now() - askedAt >= CRASH_REFRESH_MS)) {
                 refresh();
             }
             const since = now() - HOST_CRASH_LOOKBACK_MS;
-            return events.filter((event) => Date.parse(event.at) >= since);
+            return [...events.values()].filter((event) => Date.parse(event.at) >= since);
         },
     };
 };

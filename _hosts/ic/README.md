@@ -279,6 +279,12 @@ flowchart LR
   composes what it was built from. A plain rebuild still builds the approved file by its reviewed hash, since the
   running daemon is the target. `ic features [--json]` lists the optional ops this ic implements in the contract's words
   (`features.rs`, golden `ic-features.json`), which the machine agent advertises in its facts.
+- **`ic serve --stdio` answers the machine agent's periodic reads from one process** (`serve.rs`, 2026-11-24): a JSON
+  line per request (`{"id","args"}`), a JSON line per answer (`{"id","code","stdout","stderr","output"}`), a hello line
+  first naming the verbs it serves (`sandbox list --json`, `sandbox swaps --json`, `engine disk --json`), exit 0 when
+  stdin closes. Each request runs through main's own `execute` with every write kept (`answer.rs`), so an answer is what
+  the per-call verb prints, byte for byte (`tests/serve.rs`). Starting a process costs ~180 ms of CPU on Windows, and the
+  agent asks these every minute.
 - **An overlay is built in layers where its base says how** (`layered.rs`, 2026-11-19). The sandbox image has two
   stages: `tools` (the OS, the CLIs, the feature packs) and the per-commit `runtime` on it. An image built from a
   checkout or released since names the image of its `tools` stage in its `dev.intentic.tools` label, and carries a

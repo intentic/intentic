@@ -386,6 +386,9 @@ export const RAW_ROUTES = {
     "GET /system/sync": { control: "never" },
     // The sync agent's own machine report, the daemon's only view of SYNC_DIR.
     "POST /system/sync/report": { sync: "poll", control: "never" },
+    // The workspace's change signal (devices.ts SyncChangesSchema): a long poll the sync agent holds open, so the request
+    // timer leaves it out, and like the byte pipe no check-in; the ports poll beside it is the heartbeat.
+    "GET /system/sync/changes": { sync: "pipe", control: "never", stream: true },
     "DELETE /system/authorized-key": { auth: "door", control: "never" },
     // The owner revoking one machine is no door: it goes through the session middleware.
     "DELETE /system/authorized-key/{machine}": { control: "never" },

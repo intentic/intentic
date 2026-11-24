@@ -943,7 +943,11 @@ flowchart LR
   in the contract, and a document added without its line broke CI twice; a store opens it with `store/open-document.ts` (`openDocument`, `openEntries`, `openIdList`,
   `openDirectory`), which parses with the document's own schema through the contract's one `readDocument`, runs its
   conversions on every read and keeps what this build does not know on writes, so a store's next save is what
-  persists a converted shape. Families of files with one shape (the doors' enrollment and burn files, the two vaults,
+  persists a converted shape. A handle holds what its file last read as, frozen, and answers from it while the file's
+  stat identity provably has not moved (`store/memo/file-memo.ts`: racy timestamps re-read the bytes and compare); its own
+  writes refill it, and every read still records its manifest problems. (2026-11-24) Before, every read re-read,
+  converted and validated an unchanged file; cloning per read was rejected because passthrough pairs a write's
+  entries with the read's by reference. Families of files with one shape (the doors' enrollment and burn files, the two vaults,
   the two install ledgers) are one spec factory each. A runtime's regrowable cache is the only file opened without a
   document (`cacheFile`); `store/documents-coverage.test.ts` fails on any other. Before any store opens, `store/evolution/state-convergence.ts` does only what a read
   cannot (documents that moved, structural steps: a regroup, a database schema, an import) under a journal a

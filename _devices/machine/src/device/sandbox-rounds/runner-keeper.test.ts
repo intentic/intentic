@@ -3,6 +3,7 @@ import type { IcRun } from "./ic-rounds.js";
 import {
     judgeRunner,
     keptRunners,
+    lookAt,
     newRunnerKeeperState,
     RUNNER_DOWN_RESTART_MS,
     RUNNER_LOOK_EVERY_MS,
@@ -101,8 +102,7 @@ interface Fake {
 const setup = () => {
     const fake: Fake = { running: true, reading: undefined, parentAnswers: true, powered: [], result: { code: 0, output: "" }, clock: NOW, busy: new Set() };
     const seams: RunnerKeeperSeams = {
-        running: async () => await Promise.resolve(fake.running),
-        reading: async () => await Promise.resolve(fake.reading),
+        look: async () => await Promise.resolve(fake.running === undefined ? undefined : { running: fake.running, reading: fake.reading }),
         parentAnswers: async () => await Promise.resolve(fake.parentAnswers),
         power: async (op, slug) => {
             fake.powered.push(`${op} ${slug}`);
@@ -179,4 +179,27 @@ test("the round looks once a minute however often the keeper ticks", async () =>
     await look(NOW);
     await look(NOW + 10_000);
     expect(fake.powered).toEqual(["start runner-omen"]);
+});
+
+test("a look is one exec while the runner writes its reading, and an inspect only when the exec fails", async () => {
+    const calls: string[] = [];
+    const read = (text: string | undefined) => async (container: string) => {
+        calls.push(`exec ${container}`);
+        return await Promise.resolve(text);
+    };
+    const inspect = (runs: boolean | undefined) => async (container: string) => {
+        calls.push(`inspect ${container}`);
+        return await Promise.resolve(runs);
+    };
+    const written = reading(NOW);
+    expect(await lookAt("c", read(JSON.stringify(written)), inspect(true))).toEqual({ running: true, reading: written });
+    expect(calls).toEqual(["exec c"]);
+    calls.length = 0;
+    // The exec failed: stopped, running without a reading, or docker not answering.
+    expect(await lookAt("c", read(undefined), inspect(false))).toEqual({ running: false, reading: undefined });
+    expect(await lookAt("c", read(undefined), inspect(true))).toEqual({ running: true, reading: undefined });
+    expect(await lookAt("c", read(undefined), inspect(undefined))).toBeUndefined();
+    expect(calls).toEqual(["exec c", "inspect c", "exec c", "inspect c", "exec c", "inspect c"]);
+    // A reading that does not parse is a running container with none.
+    expect(await lookAt("c", read("not json"), inspect(true))).toEqual({ running: true, reading: undefined });
 });

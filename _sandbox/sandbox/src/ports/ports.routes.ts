@@ -11,6 +11,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { publicAddressOf } from "../env.config.js";
 import { createPreviewGuardRoutes } from "./preview-guard.routes.js";
+import type { BridgeHeads } from "../git/remote/bridge-heads.js";
 
 // list scans procfs on demand, no background poller; forward/unforward drive the slot table. Forwarding is the explicit
 // exposure gesture: a preview is public once forwarded; the daemon's own surfaces are never listed.
@@ -38,6 +39,9 @@ export type PortsRoutesDeps = Pick<
         readonly nameHandedPorts?: (listeners: readonly ListeningPort[]) => Promise<void>;
         // The conversation whose agent listens there, by its jobs or its shell's tmux session (agent/tools/jobs/port-owners.ts).
         readonly ownerOn?: (listener: { readonly port: number; readonly session?: string | undefined }) => PortOwner | undefined;
+        // Every repository's branch and tip for a paired computer's git bridge (git/remote/bridge-heads.ts); absent, the
+        // list carries none and the device asks over SSH as it did before.
+        readonly bridgeHeads?: BridgeHeads;
     };
 
 export interface PortOwner {
@@ -53,7 +57,7 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const reserved = daemonListenerPorts(services.config);
 
     return {
-        list: i.list.handler(async () => {
+        list: i.list.handler(async ({ context }) => {
             const listeners = await services.scanPorts();
             await services.nameHandedPorts?.(listeners);
             // A tunnel to one of the owner's computers is that computer's own port: mirrored back, it would loop.
@@ -64,7 +68,10 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
             const extensionProcesses = await extensionProcessIndex(services).catch(() => new Map());
             const servicePorts = new Map(services.serviceProcesses.list().map((service) => [service.port, service.key]));
             const attribution = { workspaceRoot: services.workspace.root, extensionProcesses, servicePorts };
+            // Only a desktop-sync caller follows the sandbox's git; the editor's and an agent's lists stay as they were.
+            const heads = services.bridgeHeads !== undefined && context.headers.has("x-intentic-sync") ? { bridgeHeads: await services.bridgeHeads.list() } : {};
             return {
+                ...heads,
                 ports: listeners
                     .filter(({ port }) => !reserved.has(port) && !tunnels.has(port))
                     .map((listener) => {

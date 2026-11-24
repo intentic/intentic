@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { statePath } from "../state-paths.js";
+import { deepFreeze, type MemoCell, readThrough } from "../store/memo/file-memo.js";
 
 // Git-installed extension checkouts live at .intentic/local/extensions/<id>; baked extensions live at EXTENSIONS_DIR.
 // Both use the raw extensionRead, never the workspace-scoped read that refuses paths outside /work.
@@ -22,24 +23,49 @@ export const extensionRootOf = (dir: string, path: string | undefined): string =
 // cannot be read throws, so a skill sweep or environment compose stops instead of acting as though it were gone.
 export const extensionRead = async (absPath: string): Promise<string | undefined> => readFile(absPath, "utf8").catch(undefinedIfMissing);
 
-// Reads and validates intentic-extension.json, keeping the failure: a checkout treats it as a filter, but a workspace
-// extension (no install moment) surfaces it as the author's only feedback. Per extension, so one unreadable folder
-// never sinks the others.
-export const parseExtensionManifest = async (dir: string): Promise<{ manifest: ExtensionManifest } | { error: string }> => {
-    let raw: string | undefined;
-    try {
-        raw = await extensionRead(join(dir, "intentic-extension.json"));
-    } catch (error) {
-        return { error: `intentic-extension.json could not be read (${errnoCode(error) ?? errorMessage(error)})` };
+type ManifestRead = { manifest: ExtensionManifest } | { error: string };
+
+// What each manifest last read as, by its path, held while the file provably has not changed (store/memo/file-memo.ts): the
+// inventory reads every extension's manifest on each listing. Bounded, since a land's review reads copies in places
+// that are read once and gone; the oldest path goes first.
+const MANIFESTS_HELD = 256;
+const manifestCells = new Map<string, MemoCell<ManifestRead>>();
+
+const cellOf = (path: string): MemoCell<ManifestRead> => {
+    const held = manifestCells.get(path);
+    if (held !== undefined) {
+        return held;
     }
-    if (raw === undefined) {
-        return { error: "no intentic-extension.json at the extension root" };
+    const cell: MemoCell<ManifestRead> = { memo: undefined };
+    manifestCells.set(path, cell);
+    if (manifestCells.size > MANIFESTS_HELD) {
+        const [oldest] = manifestCells.keys();
+        if (oldest !== undefined) {
+            manifestCells.delete(oldest);
+        }
     }
+    return cell;
+};
+
+const interpretManifest = (raw: string): ManifestRead => {
     try {
-        return { manifest: ExtensionManifestSchema.parse(JSON.parse(raw)) };
+        // Frozen: every later read of the unchanged file is handed this same manifest.
+        return { manifest: deepFreeze(ExtensionManifestSchema.parse(JSON.parse(raw))) };
     } catch (error) {
         return { error: errorMessage(error) };
     }
+};
+
+// Reads and validates intentic-extension.json, keeping the failure: a checkout treats it as a filter, but a workspace
+// extension (no install moment) surfaces it as the author's only feedback. Per extension, so one unreadable folder
+// never sinks the others. An unchanged manifest is read and validated once.
+export const parseExtensionManifest = async (dir: string): Promise<ManifestRead> => {
+    const path = join(dir, "intentic-extension.json");
+    return readThrough(cellOf(path), path, {
+        absent: () => ({ error: "no intentic-extension.json at the extension root" }),
+        failed: (reason) => ({ error: `intentic-extension.json could not be read (${reason})` }),
+        interpret: interpretManifest,
+    });
 };
 
 // Discards the error, for callers that only care about directories that parse.

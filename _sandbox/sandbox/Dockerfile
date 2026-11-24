@@ -60,8 +60,15 @@ RUN git config --global init.defaultBranch main
 # Auth POLICY is baked (it is a constant of the image); the host key — the sandbox's SSH identity — is not, so
 # that a rebuild cannot change who the sandbox claims to be. docker-entrypoint.sh writes the matching HostKey
 # drop-in at boot.
+# (2026-11-24) No message of the day and no last-login line: every login here is a machine's (Mutagen, the desktop git
+# bridge), key-only and never read by a person, and Debian's sshd PAM stack ran `run-parts /etc/update-motd.d` (34
+# shells every 30 s under a paired device's polling) for each one. The rest of the session stack stays as Debian has it:
+# pam_loginuid, pam_keyinit, pam_limits (the ulimits a sync session runs under) and pam_env.
 RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
-    && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
+    && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' 'PrintMotd no' 'PrintLastLog no' > /etc/ssh/sshd_config.d/intentic.conf \
+    && sed -i '/pam_motd\.so/d' /etc/pam.d/sshd \
+    && ! grep -q pam_motd /etc/pam.d/sshd \
+    && rm -rf /etc/update-motd.d /etc/motd
 # Fetch OMZ/plugin archives to avoid Git auth prompts. HISTFILE uses := on /history; HIST_SAVE_BY_COPY breaks history symlinks.
 # Keep zle_highlight's other defaults and bracketed paste when setting paste:none.
 # Disable OMZ titles: tmux control mode exposes ESC-k payloads as visible xterm text.

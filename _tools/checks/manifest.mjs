@@ -66,7 +66,8 @@ export const CHECKS = [
         about: "an extension's manifest names only the @intentic/* packages its imports may reach (the extension SDK, the wire contract, base; testing and tsconfig as devDependencies)",
     },
     {
-        id: "runtime-deps",
+        // What it judges (a script's imports, a manifest's dependencies) and the files whose shape it reads first.
+        id: "runtime-deps", applies: /(?:\.(?:[cm]?[jt]s|vue)|(?:^|\/)(?:package\.json|pnpm-workspace\.yaml|prepare-image-trees\.sh|packages\.sh))$/u,
         file: "runtime-deps.mjs",
         needs: "checkout",
         gate: "tidy",
@@ -134,7 +135,8 @@ export const CHECKS = [
         about: "no new handler throws an error away unnarrowed and unexplained (ratcheted)",
     },
     {
-        id: "code-shape",
+        // nav's source files (lib/files.mjs SOURCE_EXTENSIONS), and the config and baseline it reads before any of them.
+        id: "code-shape", applies: /(?:\.(?:[cm]?ts|tsx|vue|mjs|js)|(?:^|\/)(?:\.oxlintrc\.plugins\.json|code-shape\.json))$/u,
         file: "code-shape.mjs",
         needs: "node_modules",
         gate: "tidy",

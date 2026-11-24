@@ -2,12 +2,12 @@ import { procedure } from "../protocol/route-meta.js";
 import {
     PortForwardInputSchema,
     PortForwardResultSchema,
-    PortsListSchema,
     PreviewGuardSchema,
     PreviewPassRequestSchema,
     PreviewPassSchema,
 } from "../schemas/ports.js";
 import { OkSchema } from "../schemas/shared.js";
+import { SyncPortsListSchema } from "../schemas/bridge-heads.js";
 
 // Listening TCP ports in the sandbox + explicit forwarding through the preview proxy (see the ports section in
 // schemas/ports.ts). `forward` is idempotent, re-forwarding a port returns its existing slot's URL; `unforward`
@@ -23,7 +23,7 @@ export const portsContract = {
         // The desktop-sync watcher's poll, and the machine's check-in; and `devices ports`, an agent's answer to whose
         // server holds which port.
         .meta({ sync: "poll", agent: true })
-        .output(PortsListSchema),
+        .output(SyncPortsListSchema),
     forward: procedure
         .route({
             method: "POST",

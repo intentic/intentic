@@ -99,7 +99,7 @@ export const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queu
 
 // What the card says the conversation is: where it works, where it came from and as whom, its name, who answers for it
 // and what people left on it, and the settings its last turn ran under.
-export const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt, commits, freshPending, seal }: PersistedAgent) => ({
+const describe = ({ placement, identity, profile, social, sessionId, archivedAt, commits, freshPending, seal }: PersistedAgent) => ({
     provider: profile.provider,
     harness: profile.harness,
     // `branches`: what it was started from and lands onto instead of the main line (land/branch-repos.ts).
@@ -138,6 +138,21 @@ export const describedBy = ({ placement, identity, profile, social, sessionId, a
     ...opt("archivedAt", archivedAt),
 });
 
+// The registry replaces an entry whole on every change and never edits one in place (agents-registry.ts `replace`), so
+// what an entry says is projected once per entry rather than on every roster read. Shared between those reads, so a
+// reader must not edit what it is handed; none does (auth/fleet-scope.ts frames a card by copying it).
+const described = new WeakMap<PersistedAgent, ReturnType<typeof describe>>();
+
+export const describedBy = (entry: PersistedAgent): ReturnType<typeof describe> => {
+    const held = described.get(entry);
+    if (held !== undefined) {
+        return held;
+    }
+    const projected = describe(entry);
+    described.set(entry, projected);
+    return projected;
+};
+
 // Lifetime totals plus the running turn's not-yet-flushed usage, each shown once it is more than nothing, so a chip
 // appears on content rather than as a column of zeros. Subagents: the running count from the roster its actors hold,
 // the lifetime total from the entry, since the roster forgets a finished child.
@@ -159,7 +174,7 @@ export const spentBy = (totals: Totals, usage: TurnUsage, running: number) => {
 
 // What the actor holds for the card: the live turn's readings, the checklist, and the loop, workflow, watches, jobs and runs
 // its pumps last published. An empty list is turned absent, indistinguishable from never having watched.
-export const liveReadings = (entry: PersistedAgent, state: ConversationState | undefined) => {
+const readingsOf = (entry: PersistedAgent, state: ConversationState | undefined) => {
     const { loop, workflow, watches, jobs, scriptRuns, needs } = cardReadings(state);
     return {
         ...contextFill(state),
@@ -174,4 +189,22 @@ export const liveReadings = (entry: PersistedAgent, state: ConversationState | u
         ...opt("scriptRuns", scriptRuns === undefined || scriptRuns.length === 0 ? undefined : [...scriptRuns]),
         ...(needs !== undefined && needs.length > 0 ? { needs: [...needs] } : {}),
     };
+};
+
+// An actor's state is replaced whole by every event (conversation-actors.ts `send`), and the readings read nothing
+// else but the entry's own `unfinished` and the process's time zone, so they are projected once per state and entry:
+// the cache clock's day boundary in particular is a time-zone computation a busy roster otherwise repeats per card.
+const readings = new WeakMap<ConversationState, { readonly entry: PersistedAgent; readonly readings: ReturnType<typeof readingsOf> }>();
+
+export const liveReadings = (entry: PersistedAgent, state: ConversationState | undefined): ReturnType<typeof readingsOf> => {
+    if (state === undefined) {
+        return readingsOf(entry, state);
+    }
+    const held = readings.get(state);
+    if (held?.entry === entry) {
+        return held.readings;
+    }
+    const projected = readingsOf(entry, state);
+    readings.set(state, { entry, readings: projected });
+    return projected;
 };

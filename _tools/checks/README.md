@@ -52,6 +52,13 @@ flowchart LR
   git processes an edit, ~4.7 s of CPU, and with a whole-tree run holding the slots a wait as long as that run's checks,
   up to the edit's 60 s ceiling. In one process it is 23 processes and ~1.4 s of CPU. A worker thread per check was
   rejected: each reloads every module, and cost as much CPU as the children.
+  (2026-11-24) The rest of that 1.4 s was module compiling, git and stats: `run.mjs` and `lint-edit.mjs` now turn on
+  node's compile cache (`lib/compile-cache.mjs`, for the oxlint they start too), a `--paths` run answers every
+  `ls-files -z` pathspec it can model from the one whole listing (`pathspecTest`, held to git's own answers by
+  `lib/repo.integration.test.mjs`), stats the tracked files once and reads the workspace graph once (`workspaceGraph`),
+  code-shape takes its listing from those and loads typescript only for a file that can hold a function over the cap,
+  and `code-shape` and `runtime-deps` declare `applies`, so a catalog or a README edit skips them. A long-lived worker
+  process was rejected: a check's module state (`packages`, the kept listings) would outlive the tree it read.
 - Ratcheted checks (`ratchet: true`) keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may
   shrink and never grow unasked. A check run never writes one: it fails on growth and only says where the tree beats
   it. Before a conversation's work lands, the fixers in its worktree (`_tools/scripts/verify/fixers.mjs`) run each

@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
+import { type SyncPortsList, SyncPortsListSchema } from "@intentic/sandbox-contract/schemas/bridge-heads";
+import { PortsListSchema } from "@intentic/sandbox-contract/schemas/ports";
 import { portUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { workspacePaths } from "../workspace/workspace.js";
@@ -357,4 +359,34 @@ test("ports.list names the conversation, and its one running job, behind every a
     } finally {
         rmSync(tmp, { recursive: true, force: true });
     }
+});
+
+// The git bridge's advertisement (git/remote/bridge-heads.ts) rides the list only to a desktop-sync caller, which the
+// auth middleware has already let in by its `x-intentic-sync` token.
+describe("the bridge heads on the ports list", () => {
+    const heads = [
+        { repo: "intentic", branch: "main", tip: "a".repeat(40) },
+        { repo: "unborn", branch: "main" },
+    ];
+    const listAs = async (headers: Record<string, string>): Promise<SyncPortsList> => {
+        const handler = new OpenAPIHandler(createPortsRoutes(portsDeps({ bridgeHeads: { list: async () => heads } })));
+        const request = new Request("http://sandbox/ports", { headers });
+        const { response } = await handler.handle(request, { context: { headers: request.headers, method: "GET", url: "/ports" } });
+        return SyncPortsListSchema.parse(await response?.json());
+    };
+
+    test("a desktop-sync caller gets every repository's branch and tip beside the ports", async () => {
+        expect(await listAs({ "x-intentic-sync": "ist_tok" })).toEqual({ ports: [], bridgeHeads: heads });
+    });
+
+    test("the editor's and an agent's list carries none", async () => {
+        expect(await listAs({})).toEqual({ ports: [] });
+    });
+
+    test("the field parses on the device's side, a list from an older sandbox parses without it, and an extension's parse drops it", () => {
+        expect(SyncPortsListSchema.parse({ ports: [], bridgeHeads: heads })).toEqual({ ports: [], bridgeHeads: heads });
+        expect(SyncPortsListSchema.parse({ ports: [] })).toEqual({ ports: [] });
+        expect(() => SyncPortsListSchema.parse({ ports: [], bridgeHeads: [{ repo: "x", tip: "not-a-sha" }] })).toThrow(/bridgeHeads/);
+        expect(PortsListSchema.parse({ ports: [], bridgeHeads: heads })).toEqual({ ports: [] });
+    });
 });

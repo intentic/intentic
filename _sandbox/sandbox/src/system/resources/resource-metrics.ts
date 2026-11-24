@@ -308,10 +308,11 @@ const createResourceSampler = (
     });
     gcObserver.observe({ entryTypes: ["gc"] });
 
-    let lastCpu = process.cpuUsage();
+    // The first window opens at process start (performance.now()'s origin): opened here, it lasted ~1 ms and read 125-140%.
+    let lastCpu: NodeJS.CpuUsage = { user: 0, system: 0 };
     let lastUsage = process.resourceUsage();
     let lastElu = performance.eventLoopUtilization();
-    let lastAt = performance.now();
+    let lastAt = 0;
     let previousProcessCpu: ReadonlyMap<number, number> = new Map();
     let lastProcesses: readonly KnownProcess[] = [];
 

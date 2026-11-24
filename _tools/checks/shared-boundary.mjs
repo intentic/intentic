@@ -6,8 +6,7 @@ import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { importsOf } from "./lib/imports.mjs";
 import { finish } from "./lib/report.mjs";
-import { root, subjectFiles, subjectScope } from "./lib/repo.mjs";
-import { readWorkspaceGraph } from "./lib/workspace-graph.mjs";
+import { root, subjectFiles, subjectScope, workspaceGraph } from "./lib/repo.mjs";
 
 // "<package in _shared/> -> <package outside it>": why the edge stands.
 const EXCEPTIONS = new Map([
@@ -25,7 +24,7 @@ if (subjects.length === 0) {
     process.exit(0);
 }
 
-const graph = readWorkspaceGraph(root);
+const graph = workspaceGraph();
 const ownerOf = (path) => graph.byDir.find(([dir]) => path === dir || path.startsWith(`${dir}/`))?.[1];
 
 // `_tools/` holds what every part needs (_tools/README.md), so `_shared/` may stand on it, but only on a member that

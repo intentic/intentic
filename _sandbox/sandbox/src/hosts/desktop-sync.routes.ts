@@ -24,6 +24,7 @@ import {
     type SyncMode,
 } from "../peers/desktop-sync.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { syncChangesRoute } from "./sync/sync-changes.js";
 
 // Desktop sync's enrollment surface: a browser-minted pairing token is redeemed at /system/authorized-key to land an SSH
 // key, once per machine key. The pairing carries the mode: a maintainer or the owner gets sync, anyone below only ever
@@ -213,6 +214,7 @@ export const desktopSyncRawRoutes = defineRawRoutes((services: Services) => {
         "POST /system/authorized-key": sync.enrollKey,
         "GET /system/sync": sync.state,
         "POST /system/sync/report": sync.report,
+        "GET /system/sync/changes": syncChangesRoute(),
         "DELETE /system/authorized-key": sync.revokeOwn,
         "DELETE /system/authorized-key/{machine}": sync.revokeMachine,
     };

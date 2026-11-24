@@ -513,6 +513,17 @@ pub fn adopt() {
     });
 }
 
+/// The engine adopted again, from nothing, as a fresh `ic` would: `ic serve` lives across an engine's install, move or
+/// removal, and each request it answers reads the engine record as it is then.
+pub fn readopt() {
+    adopt();
+    #[cfg(windows)]
+    {
+        crate::docker::set_intentic_engine(None);
+        windows::adopt_env();
+    }
+}
+
 pub use commands::{
     default_action, docker_desktop_installed, run_compact, run_copy, run_disk, run_fetch, run_hold,
     run_install, run_prefer, run_relay, run_remove, run_restart, run_start, run_status, run_stop,

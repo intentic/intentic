@@ -11,10 +11,10 @@ import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listFiles, vueScript } from "../nav/lib/files.mjs";
-import { OXLINT_TIMEOUT_MS, oxlintCommand, oxlintIn, PLUGINS_CONFIG } from "../oxlint/added.mjs";
+import { OXLINT_TIMEOUT_MS, oxlintCommand, oxlintIn, PLUGINS_CONFIG, threadsFor } from "../oxlint/added.mjs";
 import { ADOPTING, allowanceOf, ratchet } from "./lib/ratchet.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
-import { root, subjectScope } from "./lib/repo.mjs";
+import { presentFiles, root, subjectScope } from "./lib/repo.mjs";
 import { CAPS, complexityOf, findingOf, functionAt, ignoredBy, judge, keyOf, lineCount, measuredSource, parseJsonc, partsOf, qualified, touchedBy } from "./lib/shape.mjs";
 
 const NAME = `code-shape`;
@@ -22,7 +22,8 @@ const RULE = `complexity/complexity`;
 
 const config = parseJsonc(readFileSync(join(root, PLUGINS_CONFIG), `utf8`));
 const ignored = ignoredBy(config.ignorePatterns ?? []);
-const fileSet = new Set(listFiles(root).source.filter((path) => measuredSource(path, ignored) && existsSync(join(root, path))));
+// listFiles keeps only paths present on disk.
+const fileSet = new Set(listFiles(root, undefined, "", presentFiles()).source.filter((path) => measuredSource(path, ignored)));
 const scope = subjectScope();
 const subjects = [...fileSet].filter((path) => scope === undefined || scope.has(path));
 
@@ -75,7 +76,7 @@ const startMeter = (paths) => {
     writeFileSync(join(scratch, `oxlintrc.json`), JSON.stringify(meter));
     const out = openSync(join(scratch, `out.json`), `w`);
     return new Promise((resolve) => {
-        const [command, args] = oxlintCommand(oxlint, [`-c`, join(scratch, `oxlintrc.json`), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...paths]);
+        const [command, args] = oxlintCommand(oxlint, [...threadsFor(paths.length), `-c`, join(scratch, `oxlintrc.json`), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...paths]);
         const child = spawn(command, args, {
             cwd: root,
             stdio: [`ignore`, out, `ignore`],
@@ -129,23 +130,25 @@ const unparsed = new Set();
 // Every measurement over its cap in `paths`.
 const measure = async (paths) => {
     const pending = startMeter(paths);
-    // Nothing to parse (an edit to a file that is not source) loads no parser: typescript is most of this check's cost.
-    if (paths.length > 0) {
-        await loadParser();
-    }
+    // The parser is loaded only for a file that could hold a function over the cap, or a complexity score to name: a
+    // file of at most CAPS.lines lines needs neither, and typescript is most of this check's cost.
     const items = [];
     for (const path of paths) {
         const lines = lineCount(textOf(path));
         if (lines > CAPS.file) {
             items.push({ path, metric: `file`, value: lines, line: 1 });
         }
-        if (parse !== undefined && lines > CAPS.lines) {
+        if (typescript !== undefined && lines > CAPS.lines) {
+            await loadParser();
             for (const fn of functionsIn(path).filter((each) => each.lines > CAPS.lines)) {
                 items.push({ path, symbol: fn.name, metric: `lines`, value: fn.lines, line: fn.startLine });
             }
         }
     }
     const { scores, broken } = await pending;
+    if (scores.length > 0) {
+        await loadParser();
+    }
     for (const path of broken) {
         unparsed.add(path);
     }

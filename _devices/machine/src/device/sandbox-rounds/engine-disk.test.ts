@@ -11,6 +11,9 @@ import {
     MEASURE_RETRY_MS,
     measureDue,
     newDiskWatchState,
+    OK_FAR_MS,
+    OK_NEAR_MS,
+    okLookMs,
     RELIEVE_AGAIN_MS,
     reliefDue,
 } from "./engine-disk.js";
@@ -276,4 +279,37 @@ describe("the clocks", () => {
         expect(measureDue(state({ measuring: Promise.resolve() }), 0)).toBe(false);
         expect(measureDue(state({ measureTriedAt: 0 }), MEASURE_RETRY_MS - 1)).toBe(false);
     });
+});
+
+test("at ok the next look waits on how far the disk is from the low line, and on how fast the space goes", () => {
+    const at = (left: number) => ({ level: "ok" as const, totalBytes: TOTAL, availableBytes: left * GIB });
+    // Far from the line (10% left), nearer, and near it.
+    expect(okLookMs(at(500), undefined, HOUR)).toBe(OK_FAR_MS);
+    expect(okLookMs(at(200), undefined, HOUR)).toBe(OK_FAR_MS);
+    expect(okLookMs(at(160), undefined, HOUR)).toBe(OK_NEAR_MS);
+    expect(okLookMs(at(120), undefined, HOUR)).toBe(60_000);
+    // Space that came back, or that stood still, changes nothing.
+    expect(okLookMs(at(500), { at: HOUR - OK_FAR_MS, availableBytes: 400 * GIB }, HOUR)).toBe(OK_FAR_MS);
+    expect(okLookMs(at(500), { at: HOUR - OK_FAR_MS, availableBytes: 500 * GIB }, HOUR)).toBe(OK_FAR_MS);
+    // 40 GB in ten minutes with 400 GB above the line: 100 minutes left, a quarter of it is past the ten-minute wait.
+    expect(okLookMs(at(500), { at: HOUR - OK_FAR_MS, availableBytes: 540 * GIB }, HOUR)).toBe(OK_FAR_MS);
+    // 200 GB in ten minutes: 20 minutes left before the line, looked at again in five.
+    expect(okLookMs(at(500), { at: HOUR - OK_FAR_MS, availableBytes: 700 * GIB }, HOUR)).toBe(5 * 60_000);
+    // Gone so fast that a quarter of what is left is under a minute: a minute, as every look was before.
+    expect(okLookMs(at(500), { at: HOUR - 60_000, availableBytes: 900 * GIB }, HOUR)).toBe(60_000);
+});
+
+test("a round at ok answers the adaptive wait, and a round below ok forgets the reading it was measured from", async () => {
+    const disk = watch({ [READ]: measured("ok", 500) });
+    expect(await disk.round()).toBe(OK_FAR_MS);
+    expect(disk.state.lastOk).toEqual({ at: 10 * HOUR, availableBytes: 500 * GIB });
+    disk.clock.now += OK_FAR_MS;
+    disk.answers[READ] = measured("ok", 300);
+    // 200 GB in ten minutes with 200 GB above the line: ten minutes left, looked at again in a quarter of them.
+    expect(await disk.round()).toBe(Math.floor(OK_FAR_MS / 4));
+    disk.answers[READ] = measured("low", 80);
+    disk.answers[RELIEVE_AND_TELL] = measured("low", 80);
+    disk.clock.now += 60_000;
+    expect(await disk.round()).toBe(60_000);
+    expect(disk.state.lastOk).toBeUndefined();
 });

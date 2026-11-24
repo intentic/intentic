@@ -1,4 +1,5 @@
-import type { GitRunner } from "@intentic/base/git";
+import { defaultGit, type GitRunner, politeGit } from "@intentic/base/git";
+import { refShaFromFiles } from "../store/git/head-files.js";
 import { readOnFeed } from "./feed/checkout-feed.js";
 
 // Archived agents keep their branch but move it off `refs/heads/` onto a shelf, `refs/agent/<id>`, since git resolves a
@@ -13,7 +14,18 @@ const parkedRef = (branch: string): string => `${REFS}${branch}`;
 
 // Tip of an agent's branch as the main repo sees it, live or parked; undefined means nothing of this agent's remains.
 // Reads both ref spellings in one for-each-ref, since a crash mid-parkAgentRefs can briefly leave both existing.
+// The daemon's own runners read the two refs off the files first (head-files.ts), the parked one first as git's sorted
+// listing has it: every roster read asked this of every conversation, a spawn each (2026-11-24). A name the files do
+// not hold is asked of git, which also matches what lies under the name.
 export const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
+    if (git === defaultGit || git === politeGit) {
+        // allow(silent-catch): a ref file this cannot read is git's to read.
+        const files = async (name: string): Promise<string | undefined> => refShaFromFiles(main, name).catch(() => undefined);
+        const read = (await files(parkedRef(branch))) ?? (await files(`${HEADS}${branch}`));
+        if (read !== undefined) {
+            return read;
+        }
+    }
     const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname)", `${HEADS}${branch}`, parkedRef(branch)]);
     return stdout.split("\n").find((line) => line !== "");
 };
