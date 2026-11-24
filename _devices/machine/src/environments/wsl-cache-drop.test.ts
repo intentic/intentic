@@ -52,6 +52,30 @@ test("low Windows drops the cache once through a running distro and logs before 
     expect(run.dropped).toEqual(["Ubuntu", "Ubuntu"]);
 });
 
+// rog on 2026-11-24: Windows at 2-3 GiB of 31.4 for days, every drop giving back about 0.2 GiB.
+test("drops that give back little come further apart, and Windows recovering brings the five minutes back", async () => {
+    const stuck = { availableBytes: 2.4 * GIB, totalBytes: 31.4 * GIB };
+    const littleBack = { availableBytes: 2.6 * GIB, totalBytes: 31.4 * GIB };
+    const recovered = { availableBytes: 9 * GIB, totalBytes: 31.4 * GIB };
+    // Each pass reads Windows once before and, when it drops, once after: drop, held, drop, recovered, drop.
+    const run = harness([stuck, littleBack, stuck, stuck, littleBack, recovered, stuck, littleBack], ["archlinux"]);
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(1);
+    expect(run.lines[0]).toContain("the next drop waits 10 min");
+    run.advance(DROP_COOLDOWN_MS);
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(1);
+    run.advance(DROP_COOLDOWN_MS);
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(2);
+    expect(run.lines[1]).toContain("the next drop waits 20 min");
+    // Recovered: the next time Windows is low, five minutes after the last drop is enough again.
+    run.advance(DROP_COOLDOWN_MS);
+    await run.cache.pass();
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(3);
+});
+
 test("with WSL not running, or not answering, nothing is dropped and nothing booted", async () => {
     for (const running of [[], undefined]) {
         const run = harness([low], running);

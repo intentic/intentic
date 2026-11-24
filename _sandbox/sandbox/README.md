@@ -1209,7 +1209,12 @@ flowchart LR
   went, and the rust-cache pack's sccache makes that minutes rather than ten. `node_modules` and
   `dist` are never touched, since in an isolated checkout they are overlay mount points. `leanRustBuilds` (off by
   default) puts `CARGO_PROFILE_DEV_DEBUG` and `CARGO_PROFILE_TEST_DEBUG=line-tables-only` in every turn's shell
-  (`agent/run/harness/turn-env.ts`), which overrides a repository's own debug-info profile.
+  (`agent/run/harness/turn-env.ts`), which overrides a repository's own debug-info profile. `rustIncrementalOff` (off
+  by default) puts `CARGO_INCREMENTAL=0` there too (`rustIncrementalEnv`), which overrides a repository's own
+  `[profile] incremental`. A disk I/O audit on rog (2026-11-24) found one sandbox's Rust builds wrote 173 GB of the
+  engine's 197 GB in 4.3 h, each checkout's `target/debug/incremental/` (0.15–12 GB) rewritten on every compile, and
+  sccache cannot cache a crate compiled incrementally. Off, it can cache the workspace's crates too; the cost is that a
+  repeated edit and rebuild of one big crate in the same checkout recompiles it whole.
 - Every checkout's Rust builds share one compiler cache (2026-11-17, the shinobi-society audit). Wherever the overlay
   installs a Rust toolchain and sets no `RUSTC_WRAPPER` of its own, the daemon composes the `rust-cache` pack in front of
   the custom section (`environment/packs/rust-cache-pack.ts`, `image-packs/rust-cache.Dockerfile`): sccache 0.10.0, a

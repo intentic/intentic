@@ -477,6 +477,16 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Build Rust with line tables only for debug info (CARGO_PROFILE_DEV_DEBUG and CARGO_PROFILE_TEST_DEBUG set to `line-tables-only` in agents' shells). A debug target takes less disk and backtraces keep their file and line, but a debugger sees no local variables. It overrides what a repository's own Cargo.toml says about debug info.",
         ),
+    // Read live into every turn's shell (agent/run/harness/turn-env.ts); off by default, since it overrides a repository's
+    // own incremental setting and costs repeated rebuilds of one big crate. Measured 2026-11-24 (disk I/O audit on rog):
+    // the shinobi-society sandbox's Rust builds wrote 173 GB of the engine's 197 GB in 4.3 h, and each checkout's
+    // `target/debug/incremental/` held 0.15-12 GB rewritten on every compile; sccache cannot cache incremental crates.
+    rustIncrementalOff: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Turn off Cargo's incremental compilation (CARGO_INCREMENTAL=0 in agents' shells). Builds stop writing each checkout's `target/debug/incremental/` (0.15-12 GB per checkout, rewritten on every compile) and the compiler cache can cache the workspace's own crates too. A repeated edit and rebuild of one big crate in the same checkout recompiles that crate whole. It overrides a repository's own `[profile] incremental` and CARGO_INCREMENTAL.",
+        ),
     commitAttribution: commitAttributionSetting,
     // A prototype, off by default (2026-11-04): an isolated checkout's Cargo `target/` laid over a frozen copy of the main
     // checkout's, so each checkout keeps only what it compiled differently (conversations/worktrees/cargo-warm.ts).

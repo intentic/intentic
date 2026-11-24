@@ -7,9 +7,15 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { baseOf, checksAt, indexWithNewFiles, LINES_PER_CHECK, renamesSince, run, runGuarded, turnReport } from "./verify-turn.mjs";
+
+// A run keeps its base checkouts under the temp dir for the next run (check-snapshot.mjs); this file's repositories, and
+// the checkouts kept for them, go under a temp dir of its own, removed when it ends.
+const ownTmp = mkdtempSync(join(tmpdir(), "verify-turn-test-"));
+process.env.TMPDIR = ownTmp;
+after(() => rmSync(ownTmp, { recursive: true, force: true }));
 
 // The shape _tools/checks/run.mjs emits per check.
 const verdict = (id, gate, { ok = false, measured = true } = {}) => ({ id, file: `${id}.mjs`, gate, ok, measured, stdout: "", stderr: "", ms: 1 });

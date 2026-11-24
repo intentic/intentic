@@ -196,7 +196,9 @@ export const openDirectory = <D extends AnyDocument<Granularity, true>>(spec: D,
 };
 
 // When a ledger gives up its oldest lines. Every ledger names one, so whether it may lose history is said where it is
-// opened: an audit trail may, a money log never may.
+// opened: an audit trail may, a money log never may. What a cut keeps must sit well under `overBytes` at the ledger's
+// real line size: a cut that leaves it over is made again by the very next append, a whole-file rewrite per line
+// (2026-11-24, usage-readings.jsonl: 20,000 lines kept were 5.1 MB against a 4 MB cap).
 export type LedgerCap =
     | "never"
     | {

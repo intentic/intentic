@@ -22,6 +22,11 @@ const sshAgentEnv = async (services: Services, conversationId: string | undefine
 export const leanRustEnv = (on: boolean): Record<string, string> =>
     on ? { CARGO_PROFILE_DEV_DEBUG: "line-tables-only", CARGO_PROFILE_TEST_DEBUG: "line-tables-only" } : {};
 
+// RUST INCREMENTAL OFF (2026-11-24, disk I/O audit on rog): shinobi-society's Rust builds wrote 173 GB of the engine's
+// 197 GB in 4.3 h; each checkout's `target/debug/incremental/` held 0.15-12 GB, rewritten on every compile, and sccache
+// cannot cache a crate compiled incrementally. Cargo reads CARGO_INCREMENTAL over a profile's `incremental`.
+export const rustIncrementalEnv = (off: boolean): Record<string, string> => (off ? { CARGO_INCREMENTAL: "0" } : {});
+
 // The environment a turn's shell runs with: connected cli capabilities' variables (credential-gateway addresses for every
 // brokered card, the credential itself only for one delivered raw), extension settings env, extension bin dirs on PATH,
 // the conversation's own ssh agent socket, the ripgrep config that makes `rg` search documents, lean Rust debug info
@@ -41,6 +46,7 @@ export const turnCliEnv = async (services: Services, conversationId: string | un
         // `rg` reading documents through fileq, while the keeper keeps their shadows (derived/search-env.ts).
         ...(await documentSearchEnv(settings.documentSearch)),
         ...leanRustEnv(settings.leanRustBuilds),
+        ...rustIncrementalEnv(settings.rustIncrementalOff),
         // Who its own `git commit` signs as: the person it works for, when the owner's policy names people, else the agent.
         ...(await agentCommitEnv(services, settings.commitAttribution, conversationId)),
     };

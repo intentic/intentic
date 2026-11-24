@@ -271,7 +271,7 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         part: `finishing`,
         partLabel: () => t(`sandbox.sandboxAgent.finishing`),
         title: () => t(`sandbox.agentDiskSpace.heading`),
-        terms: () => [t(`sandbox.agentDiskSpace.buildOutputIdle`), t(`sandbox.agentDiskSpace.reapBelow`), t(`sandbox.agentDiskSpace.leanRust`)],
+        terms: () => [t(`sandbox.agentDiskSpace.buildOutputIdle`), t(`sandbox.agentDiskSpace.reapBelow`), t(`sandbox.agentDiskSpace.leanRust`), t(`sandbox.agentDiskSpace.rustIncrementalOff`)],
     },
     {
         id: `agent-changelog`,

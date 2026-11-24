@@ -37,8 +37,12 @@ export const readingsLogDocument = defineDocument({
     boot: false,
 });
 
+// Past MAX_BYTES the log is cut to its newest KEEP_BYTES of whole lines, a megabyte under the cap, so one cut is paid
+// per megabyte of new readings. (2026-11-24) It was cut to its newest 20,000 lines, which at about 255 bytes a line is
+// 5.1 MB, still over the cap: every reading after that rewrote the whole file, 14-20 times a minute on rog, 98% of the
+// daemon's own file writes.
 const MAX_BYTES = 4_000_000;
-const KEEP_LINES = 20_000;
+const KEEP_BYTES = 3_000_000;
 
 export interface ReadingsLog {
     // Appends the reading where it moved something since the account's last line; answers whether it wrote one.
@@ -58,7 +62,7 @@ const lineOf = (provider: string, account: string, usage: AccountUsage): Reading
 const sayingOf = (line: ReadingLine): string => JSON.stringify(line.windows);
 
 export const fileReadingsLog = (path: string): ReadingsLog => {
-    const ledger = openLedger(readingsLogDocument, path, { cap: { overBytes: MAX_BYTES, keepLines: KEEP_LINES } });
+    const ledger = openLedger(readingsLogDocument, path, { cap: { overBytes: MAX_BYTES, keepBytes: KEEP_BYTES } });
     // What each account's last line said, as this process wrote it; a restart writes each account's first reading again.
     const last = new Map<string, string>();
     return {

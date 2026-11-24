@@ -53,6 +53,15 @@ const REAP_OPTIONS = [`10`, `15`, `25`].map((value) => ({ label: `${value}%`, va
                 />
             </template>
         </Row>
+        <Row icon="box" :title="t(`sandbox.agentDiskSpace.rustIncrementalOff`)" :description="t(`sandbox.agentDiskSpace.rustIncrementalOffNote`)">
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.rustIncrementalOff ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ rustIncrementalOff: value })"
+                />
+            </template>
+        </Row>
         <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

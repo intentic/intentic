@@ -1,5 +1,5 @@
 import { freemem, totalmem } from "node:os";
-import { type HostMemory, hostMemoryLowBytes, WSL_ENGINE_DISTRO, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract/schemas/hosts";
+import { HOST_LOW_FLOOR_BYTES, type HostMemory, hostMemoryLowBytes, WSL_ENGINE_DISTRO, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract/schemas/hosts";
 import { WINDOWS_SIDE } from "./wsl.js";
 
 /* WINDOWS' MEMORY, AND WHEN TO GIVE IT BACK FROM WSL (2026-11-02). The WSL2 VM keeps the file cache it builds (a build,
@@ -29,15 +29,42 @@ export const DROP_COOLDOWN_MS = 5 * 60_000;
 const EARLY_DROP_SHARE = 0.2;
 export const EARLY_DROP_COOLDOWN_MS = 30 * 60_000;
 
-// Whether to drop the VM's cache now: Windows is under the host line both sides keep (hostMemoryLowBytes) and the last
-// drop is DROP_COOLDOWN_MS old, or under a fifth of the machine and the last drop is EARLY_DROP_COOLDOWN_MS old. Never
-// asked whether WSL runs: that is a spawn, paid only once this says yes.
-export const shouldDropCache = (memory: HostMemory, lastDropAt: number, now: number): boolean => {
+/* A DROP THAT GAVE WINDOWS NOTHING IS NOT REPEATED EVERY FIVE MINUTES (2026-11-24). rog's Windows sits at 2-3 GiB of
+   31.4 available whatever the VM's cache holds: .wslconfig gives the VM 22 GB and the VM keeps it, so Windows stays under
+   its 3.1 GiB low line for good. The agent dropped 287 times in 39 hours, 5.07 minutes apart, for a median 0.2 GiB back
+   each, while every drop threw away up to 8.5 GB of every sandbox's cache, which they then read back from disk at
+   100-260 MB/s. So after a drop that gave back less than WORTHWHILE_DROP_BYTES the next one under the low line waits
+   twice as long, up to MAX_DROP_COOLDOWN_MS; one that gave back that much, or Windows climbing out of tight altogether,
+   brings the five minutes back. Under the 1.5 GiB floor, where rog froze, the five minutes hold however little the last
+   drop gave: there a quarter of a gigabyte can be the difference. */
+export const WORTHWHILE_DROP_BYTES = 0.5 * 1024 ** 3;
+export const MAX_DROP_COOLDOWN_MS = 60 * 60_000;
+
+// The cooldown under the low line after a drop gave back `freedBytes` (undefined: the drop failed, or Windows could not
+// be read after it, which says nothing about whether drops help).
+export const nextDropCooldown = (cooldownMs: number, freedBytes: number | undefined): number => {
+    if (freedBytes === undefined) {
+        return cooldownMs;
+    }
+    return freedBytes >= WORTHWHILE_DROP_BYTES ? DROP_COOLDOWN_MS : Math.min(MAX_DROP_COOLDOWN_MS, cooldownMs * 2);
+};
+
+// Windows out of tight altogether: whatever drops did before, the next time it runs low starts at five minutes again.
+export const recoveredFromTight = (memory: HostMemory): boolean => memory.availableBytes >= EARLY_DROP_SHARE * memory.totalBytes;
+
+// Whether to drop the VM's cache now: Windows is under the 1.5 GiB floor and the last drop is DROP_COOLDOWN_MS old, under
+// the host line both sides keep (hostMemoryLowBytes) and the last drop is `cooldownMs` old (nextDropCooldown), or under a
+// fifth of the machine and the last drop is EARLY_DROP_COOLDOWN_MS old, or `cooldownMs` if longer. Never asked whether
+// WSL runs: that is a spawn, paid only once this says yes.
+export const shouldDropCache = (memory: HostMemory, lastDropAt: number, now: number, cooldownMs: number = DROP_COOLDOWN_MS): boolean => {
     const since = now - lastDropAt;
-    if (memory.availableBytes < hostMemoryLowBytes(memory.totalBytes)) {
+    if (memory.availableBytes < HOST_LOW_FLOOR_BYTES) {
         return since >= DROP_COOLDOWN_MS;
     }
-    return memory.availableBytes < EARLY_DROP_SHARE * memory.totalBytes && since >= EARLY_DROP_COOLDOWN_MS;
+    if (memory.availableBytes < hostMemoryLowBytes(memory.totalBytes)) {
+        return since >= cooldownMs;
+    }
+    return memory.availableBytes < EARLY_DROP_SHARE * memory.totalBytes && since >= Math.max(EARLY_DROP_COOLDOWN_MS, cooldownMs);
 };
 
 // A WSL registration name: letters, digits, dots, dashes and underscores, never a space. Whatever else a listing prints
@@ -70,6 +97,9 @@ export const cacheDropDistro = (running: readonly string[]): string | undefined 
 const GIB = 1024 ** 3;
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
-// The one line a drop leaves in the agent's log: how much Windows had before, and a few seconds after.
-export const dropLine = (distro: string, before: HostMemory, after: HostMemory, afterMs: number): string =>
-    `Windows was low on memory (${gib(before.availableBytes)} of ${gib(before.totalBytes)} available): dropped the WSL VM's file cache through ${distro}; ${gib(after.availableBytes)} available ${Math.round(afterMs / 1000)}s later.`;
+// The one line a drop leaves in the agent's log: how much Windows had before, and a few seconds after, and the longer
+// wait the next drop now has when this one gave back little (nextDropCooldown).
+export const dropLine = (distro: string, before: HostMemory, after: HostMemory, afterMs: number, backedOffMs?: number): string =>
+    `Windows was low on memory (${gib(before.availableBytes)} of ${gib(before.totalBytes)} available): dropped the WSL VM's file cache through ${distro}; ${gib(after.availableBytes)} available ${Math.round(afterMs / 1000)}s later.${
+        backedOffMs === undefined ? "" : ` It gave back little, so the next drop waits ${Math.round(backedOffMs / 60_000)} min unless Windows falls under ${gib(HOST_LOW_FLOOR_BYTES)}.`
+    }`;

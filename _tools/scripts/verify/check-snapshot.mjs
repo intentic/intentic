@@ -4,7 +4,8 @@
 // that earlier commit to run them in again. This is that pair.
 // turn-findings.mjs reads the two answers against each other; nothing here interprets them.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { constants as osConstants, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { git } from "../lib/git.mjs";
@@ -175,34 +176,147 @@ const guardSnapshots = () => {
     }
 };
 
+/* BASE CHECKOUTS ARE KEPT AND MOVED, NOT MADE AND THROWN AWAY (2026-11-24). Every turn that ended with a check failing
+   (one main already fails counts) checked the whole base commit out under the temp dir and deleted it again, and the
+   reach typecheck could take a second: 14,107 files and 202 MB for this repository, about 237 MB written per run as
+   measured on rog, and as much again trimmed when it went, for a base that is main's tip and moves a few files at a
+   time. So each repository keeps POOL_SLOTS checkouts under the temp dir, one per run at once, each held by a lock file
+   while a run uses it; a run moves its slot to its base with a forced detached checkout, which writes only the files
+   that differ, and `clean -ffdx` takes away whatever the last run's checks left. The neighbours and node_modules lent to
+   it are taken back as before. With every slot held, or a slot git cannot move or make, the run takes a throwaway
+   snapshot the old way. */
+const POOL_PREFIX = "verify-base-";
+const POOL_SLOTS = 3;
+const LOCK_SUFFIX = ".lock";
+
+/** Where `root`'s repository keeps its base checkouts: one folder per repository, named by its git common dir, which every
+ *  conversation's checkout of it shares. `undefined` when git cannot name that dir. */
+export const snapshotPoolOf = (root) => {
+    const common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();
+    // A common dir that is not there has nothing to keep checkouts for.
+    if (common === undefined || common === "" || !existsSync(common)) {
+        return undefined;
+    }
+    return join(tmpdir(), `${POOL_PREFIX}${createHash("sha256").update(realpathSync(common)).digest("hex").slice(0, 12)}`);
+};
+
+// A free slot's lock, made exclusively so two runs never share a checkout; `undefined` when every slot is held. A lock
+// older than STALE_AFTER_MS belongs to a run killed outright (SIGKILL, which no exit handler sees) and is taken over.
+const claimSlot = (pool, now = Date.now()) => {
+    try {
+        mkdirSync(pool, { recursive: true });
+    } catch {
+        // allow(silent-catch): a temp dir that takes no folder means no pool; the throwaway snapshot is tried next and fails visibly
+        return undefined;
+    }
+    for (let slot = 0; slot < POOL_SLOTS; slot += 1) {
+        const lock = join(pool, `slot-${slot}${LOCK_SUFFIX}`);
+        for (const retry of [false, true]) {
+            try {
+                closeSync(openSync(lock, "wx"));
+                return lock;
+            } catch (error) {
+                if (error?.code !== "EEXIST" || retry || !isStale(lock, now)) {
+                    break;
+                }
+                rmSync(lock, { force: true });
+            }
+        }
+    }
+    return undefined;
+};
+
+// A lock gone since it was found held is free to take.
+const isStale = (lock, now) => {
+    const stats = statSync(lock, { throwIfNoEntry: false });
+    return stats === undefined || now - stats.mtimeMs > STALE_AFTER_MS;
+};
+
+// The slot's checkout moved to `rev` and put back to exactly what git holds there: forced, so a file the last run's
+// checks changed is restored, and cleaned of every untracked and ignored file they left. Only the files that differ
+// between the two commits are written. False when there is no checkout there or git could not move it.
+const moveCheckout = (snapshot, rev) =>
+    existsSync(join(snapshot, ".git")) &&
+    git(snapshot, "checkout", "--detach", "--force", "-q", rev) !== undefined &&
+    git(snapshot, "clean", "-ffdxq") !== undefined;
+
+// The slot's checkout made anew. Whatever stood there goes first, its registration too, even when its folder is gone
+// (a container made again empties the temp dir but not the repository's list): git would otherwise add a second entry
+// for the same path beside the stale one. Forced twice for one a killed `worktree add` left locked "initializing".
+const makeCheckout = (root, snapshot, rev) => {
+    git(root, "worktree", "remove", "--force", "--force", snapshot);
+    rmSync(snapshot, { recursive: true, force: true });
+    return git(root, "worktree", "add", "--detach", snapshot, rev) !== undefined;
+};
+
+// A pooled checkout of `rev`, its path, with `holding` told at once how to give the slot back; `undefined` when no
+// slot is free or neither moving nor making its checkout worked, the slot given back already. Not on Windows: a run
+// killed outright leaves its node_modules lent as junctions in the slot, and whether `git clean` deletes a junction or
+// walks into the checkout it points at is Git for Windows' to decide; there every run takes a throwaway snapshot.
+const pooledSnapshot = (root, rev, holding) => {
+    if (process.platform === "win32") {
+        return undefined;
+    }
+    const pool = snapshotPoolOf(root);
+    const lock = pool === undefined ? undefined : claimSlot(pool);
+    if (lock === undefined) {
+        return undefined;
+    }
+    const giveBack = () => rmSync(lock, { force: true });
+    holding(giveBack);
+    const snapshot = join(lock.slice(0, -LOCK_SUFFIX.length), "before");
+    if (moveCheckout(snapshot, rev) || makeCheckout(root, snapshot, rev)) {
+        return snapshot;
+    }
+    giveBack();
+    holding(() => undefined);
+    return undefined;
+};
+
+// A checkout of `rev` made for this run alone and removed with it, as every run took before the pool.
+const throwawaySnapshot = (root, rev, holding) => {
+    const parent = mkdtempSync(join(tmpdir(), SNAPSHOT_PREFIX));
+    const snapshot = join(parent, "before");
+    holding(() => {
+        // Forced twice: a `worktree add` killed between its checkout and its last step leaves the worktree locked
+        // ("initializing"), which one --force refuses to remove and `worktree prune` never takes back.
+        git(root, "worktree", "remove", "--force", "--force", snapshot);
+        rmSync(parent, { recursive: true, force: true });
+    });
+    return git(root, "worktree", "add", "--detach", snapshot, rev) === undefined ? undefined : snapshot;
+};
+
 /**
- * `use(snapshot, lent)` run in a throwaway worktree of `rev` (not a stash, which would mutate the tree the caller is
- * standing in) — `--detach`, since nothing here needs a branch — with this checkout's node_modules lent to it, `lent`
- * saying whether they were. `undefined` when the snapshot couldn't be taken. The worktree is taken back however the run
- * ends: after `use`, on a termination signal, or by the next run's sweep when the process was killed outright.
+ * `use(snapshot, lent)` run in a worktree of `rev` (not a stash, which would mutate the tree the caller is standing in) —
+ * `--detach`, since nothing here needs a branch — with this checkout's node_modules lent to it, `lent` saying whether
+ * they were. The worktree is one of the repository's kept base checkouts, moved to `rev`, or a throwaway one when none is
+ * free. `undefined` when the snapshot couldn't be taken. What the run borrowed is given back however it ends: after
+ * `use`, on a termination signal, or, for a throwaway worktree of a process killed outright, by the next run's sweep.
  */
 export const withSnapshot = (root, rev, use) => {
-    if (git(root, "rev-parse", "-q", "--verify", rev) === undefined) {
+    // Named here, in the caller's checkout: inside a kept checkout `HEAD` (and `HEAD~3`) is that checkout's own.
+    const commit = git(root, "rev-parse", "-q", "--verify", `${rev}^{commit}`)?.trim();
+    if (commit === undefined || commit === "") {
         return undefined; // a rev this checkout does not have: there is no "before" to look at
     }
     sweepSnapshots(root);
     guardSnapshots();
-    const parent = mkdtempSync(join(tmpdir(), SNAPSHOT_PREFIX));
-    const snapshot = join(parent, "before");
     let borrowed = { links: [], lent: false };
+    let giveBack = () => undefined;
+    const holding = (back) => {
+        giveBack = back;
+    };
     const release = () => {
         held.delete(release);
         for (const link of borrowed.links) {
             rmSync(link, { force: true }); // unlinks the link itself: node's rm reads it with lstat and never walks through one
         }
-        // Forced twice: a `worktree add` killed between its checkout and its last step leaves the worktree locked
-        // ("initializing"), which one --force refuses to remove and `worktree prune` never takes back.
-        git(root, "worktree", "remove", "--force", "--force", snapshot);
-        rmSync(parent, { recursive: true, force: true });
+        giveBack();
     };
     held.add(release);
     try {
-        if (git(root, "worktree", "add", "--detach", snapshot, rev) === undefined) {
+        const snapshot = pooledSnapshot(root, commit, holding) ?? throwawaySnapshot(root, commit, holding);
+        if (snapshot === undefined) {
             return undefined;
         }
         borrowed = lendModules(root, snapshot);

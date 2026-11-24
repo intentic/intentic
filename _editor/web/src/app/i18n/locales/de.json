@@ -11901,7 +11901,9 @@
             "reapBelow": "Aufräumen, wenn der freie Speicher unter",
             "reapBelowNote": "Build-Ausgabe wird aus jeder Unterhaltung entfernt, in der nichts läuft, die am längsten untätige zuerst, bis wieder Platz ist. Unter 10 % und erneut unter 5 % wirst du benachrichtigt.",
             "leanRust": "Schlanke Rust-Builds",
-            "leanRustNote": "Agenten bauen Rust nur mit Zeilentabellen als Debug-Info. Targets brauchen weniger Platz und Backtraces behalten Datei und Zeile, aber ein Debugger sieht keine lokalen Variablen. Überschreibt, was die Cargo.toml eines Repositorys zur Debug-Info sagt."
+            "leanRustNote": "Agenten bauen Rust nur mit Zeilentabellen als Debug-Info. Targets brauchen weniger Platz und Backtraces behalten Datei und Zeile, aber ein Debugger sieht keine lokalen Variablen. Überschreibt, was die Cargo.toml eines Repositorys zur Debug-Info sagt.",
+            "rustIncrementalOff": "Rust-Inkrementell-Builds aus",
+            "rustIncrementalOffNote": "Agenten bauen Rust ohne Cargos inkrementellen Cache, sodass Targets nicht bei jedem Build neu geschrieben werden und der Compiler-Cache Workspace-Crates wiederverwenden kann, aber ein wiederholter Build eines großen Crates kompiliert es komplett neu. Überschreibt die Inkrementell-Einstellung eines Repositorys."
         },
         "sealHouse": {
             "title": "Wer wessen Unterhaltungen liest",

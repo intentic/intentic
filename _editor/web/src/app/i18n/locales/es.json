@@ -11901,7 +11901,9 @@
             "reapBelow": "Limpiar cuando el espacio libre baje del",
             "reapBelowNote": "Se quita la salida de compilación de cada conversación sin nada en marcha, empezando por la más inactiva, hasta que vuelva a haber sitio. Se te avisa por debajo del 10 % y otra vez por debajo del 5 %.",
             "leanRust": "Compilaciones de Rust ligeras",
-            "leanRustNote": "Los agentes compilan Rust solo con tablas de líneas como información de depuración. Los targets ocupan menos y las trazas conservan archivo y línea, pero un depurador no ve variables locales. Anula lo que el Cargo.toml de un repositorio diga sobre la información de depuración."
+            "leanRustNote": "Los agentes compilan Rust solo con tablas de líneas como información de depuración. Los targets ocupan menos y las trazas conservan archivo y línea, pero un depurador no ve variables locales. Anula lo que el Cargo.toml de un repositorio diga sobre la información de depuración.",
+            "rustIncrementalOff": "Compilaciones Rust sin incremental",
+            "rustIncrementalOffNote": "Los agentes compilan Rust sin la caché incremental de Cargo: los targets dejan de reescribirse en cada compilación y la caché del compilador puede reutilizar los crates del workspace, pero recompilar a menudo un crate grande lo rehace entero. Anula el ajuste incremental de un repositorio."
         },
         "sealHouse": {
             "title": "Quién lee las conversaciones de quién",

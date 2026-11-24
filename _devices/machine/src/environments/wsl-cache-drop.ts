@@ -3,7 +3,17 @@ import { errorMessage } from "@intentic/base/errors";
 import { execBounded, runBoundedBytes } from "@intentic/base/process";
 import type { HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
 import type { Log } from "@intentic/local-agent";
-import { cacheDropDistro, decodeWslListing, dropLine, runningDistrosFrom, shouldDropCache, windowsMemory } from "./windows-memory.js";
+import {
+    cacheDropDistro,
+    decodeWslListing,
+    DROP_COOLDOWN_MS,
+    dropLine,
+    nextDropCooldown,
+    recoveredFromTight,
+    runningDistrosFrom,
+    shouldDropCache,
+    windowsMemory,
+} from "./windows-memory.js";
 
 // The Windows side's resident agent gives the WSL VM's file cache back to Windows when Windows runs low (windows-memory.ts
 // says why and when). Started by the resident agent on the Windows side only; each tick asks, and the cheap part (one
@@ -65,10 +75,15 @@ export const startCacheDrop = (
     { read = windowsMemory, running = listRunning, drop = dropThrough, now = Date.now, settleMs = SETTLE_MS }: CacheDropDeps = {},
 ): CacheDrop & { readonly pass: () => Promise<void> } => {
     let lastDropAt = Number.NEGATIVE_INFINITY;
+    // How long the next drop under the low line waits: longer after each drop that gave Windows little (nextDropCooldown).
+    let cooldownMs = DROP_COOLDOWN_MS;
     let underway: Promise<void> | undefined;
     const attempt = async (): Promise<void> => {
         const before = read();
-        if (before === undefined || !shouldDropCache(before, lastDropAt, now())) {
+        if (before !== undefined && recoveredFromTight(before)) {
+            cooldownMs = DROP_COOLDOWN_MS;
+        }
+        if (before === undefined || !shouldDropCache(before, lastDropAt, now(), cooldownMs)) {
             return;
         }
         // Counted from the attempt, not the success: a drop that keeps failing is tried again in five minutes, not every tick.
@@ -88,8 +103,10 @@ export const startCacheDrop = (
         }
         await sleep(settleMs);
         const after = read();
+        const previous = cooldownMs;
+        cooldownMs = nextDropCooldown(cooldownMs, after === undefined ? undefined : after.availableBytes - before.availableBytes);
         if (after !== undefined) {
-            log(dropLine(distro, before, after, settleMs));
+            log(dropLine(distro, before, after, settleMs, cooldownMs > previous ? cooldownMs : undefined));
         }
     };
     // Whatever goes wrong is said and absorbed here: this runs beside the resident agent's tick, which it must never end.

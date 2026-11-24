@@ -11901,7 +11901,9 @@
             "reapBelow": "Clean up when free space falls below",
             "reapBelowNote": "Build output goes from every conversation with nothing running, the longest idle first, until there is room again. You are told under 10% and again under 5%.",
             "leanRust": "Lean Rust builds",
-            "leanRustNote": "Agents build Rust with line tables only for debug info. Targets take less disk and backtraces keep their file and line, but a debugger sees no local variables. Overrides what a repository's Cargo.toml says about debug info."
+            "leanRustNote": "Agents build Rust with line tables only for debug info. Targets take less disk and backtraces keep their file and line, but a debugger sees no local variables. Overrides what a repository's Cargo.toml says about debug info.",
+            "rustIncrementalOff": "Rust incremental builds off",
+            "rustIncrementalOffNote": "Agents build Rust without Cargo's incremental cache, so targets stop being rewritten on every compile and the compiler cache can reuse workspace crates, but a repeated rebuild of one big crate recompiles it whole. Overrides a repository's own incremental setting."
         },
         "sealHouse": {
             "title": "Who reads whose conversations",

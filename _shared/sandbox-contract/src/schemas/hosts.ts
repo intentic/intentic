@@ -173,7 +173,7 @@ const GIB = 1024 ** 3;
    below it. Windows' memory manager trims working sets and pages hard well before it reaches zero: rog froze with 1.1 GB
    left, so the floor sits above that. A tenth scales it with the machine, where one browser or a game can take a few
    gigabytes in a second and 1.5 GiB of a 64 GiB machine is no margin at all. */
-const HOST_LOW_FLOOR_BYTES = 1.5 * GIB;
+export const HOST_LOW_FLOOR_BYTES = 1.5 * GIB;
 const HOST_LOW_SHARE = 0.1;
 export const hostMemoryLowBytes = (totalBytes: number): number => Math.max(HOST_LOW_FLOOR_BYTES, HOST_LOW_SHARE * totalBytes);
 

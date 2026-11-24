@@ -244,6 +244,7 @@ test("build output defaults: six idle hours, reaping under 15% free, full debug 
     expect(defaults.buildOutputIdleHours).toBe(6);
     expect(defaults.diskReapBelowPercent).toBe(15);
     expect(defaults.leanRustBuilds).toBe(false);
+    expect(defaults.rustIncrementalOff).toBe(false);
     expect(SandboxSettingsSchema.safeParse({ buildOutputIdleHours: 0 }).success).toBe(false);
     expect(SandboxSettingsSchema.safeParse({ diskReapBelowPercent: 4 }).success).toBe(false);
 });

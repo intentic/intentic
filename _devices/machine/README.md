@@ -371,10 +371,16 @@ flowchart LR
   the cache its builds and pulls leave as memory taken from Windows, and `.wslconfig`'s autoMemoryReclaim returns it
   only once WSL is idle: on 2026-11-02 rog had 1.1 GB available while the VM held 20 GB, half of it cache, and froze
   for 43 s. Each tick reads Windows' available memory (`os.freemem()`, which is ullAvailPhys there); under 1.5 GiB or a
-  tenth of the machine, whichever is more, and at most once every five minutes, it runs `sync; echo 1 >
-  /proc/sys/vm/drop_caches` as root in one running distro (the user's own first, else docker-desktop: every distro shares
-  the one kernel). WSL is never booted for this: with nothing in `wsl.exe --list --running` there is no cache to give.
-  The agent's log gets one line per drop with what Windows had before and five seconds after. The same side answers the
+  tenth of the machine, whichever is more, and at most once every five minutes, it runs `sync; echo 3 >
+  /proc/sys/vm/drop_caches` and compacts memory as root in one running distro (the user's own first, else
+  docker-desktop: every distro shares the one kernel). Under a fifth of the machine it drops at most every 30 minutes.
+  WSL is never booted for this: with nothing in `wsl.exe --list --running` there is no cache to give.
+  The agent's log gets one line per drop with what Windows had before and five seconds after. (2026-11-24) A drop that
+  gave Windows back less than 0.5 GiB doubles the wait before the next one under the tenth-of-the-machine line, up to an
+  hour; one that gave back more, or Windows climbing over a fifth of the machine, brings the five minutes back, and under
+  1.5 GiB they hold regardless. rog's Windows never left that line while its VM kept the 22 GB `.wslconfig` gives it: 287
+  drops in 39 hours, five minutes apart, a median 0.2 GiB back each, and each one cost every sandbox up to 8.5 GB of
+  cache read back from disk. The same side answers the
   sandbox's heartbeat (`ping`) with Windows' available and total memory, which the sandbox's heavy-command gate holds
   work back on while this PC is the one running it ([sandbox README](../../_sandbox/sandbox/README.md)); a distro's agent
   and other platforms answer `{ ok: true }` as before.

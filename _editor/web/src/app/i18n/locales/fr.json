@@ -11901,7 +11901,9 @@
             "reapBelow": "Nettoyer quand l'espace libre passe sous",
             "reapBelowNote": "La sortie de compilation est supprimée de chaque conversation où rien ne tourne, la plus longtemps inactive d'abord, jusqu'à ce qu'il y ait de nouveau de la place. Vous êtes prévenu sous 10 % puis sous 5 %.",
             "leanRust": "Compilations Rust allégées",
-            "leanRustNote": "Les agents compilent Rust avec les seules tables de lignes comme informations de débogage. Les targets prennent moins de place et les traces gardent fichier et ligne, mais un débogueur ne voit pas les variables locales. Remplace ce que le Cargo.toml d'un dépôt dit des informations de débogage."
+            "leanRustNote": "Les agents compilent Rust avec les seules tables de lignes comme informations de débogage. Les targets prennent moins de place et les traces gardent fichier et ligne, mais un débogueur ne voit pas les variables locales. Remplace ce que le Cargo.toml d'un dépôt dit des informations de débogage.",
+            "rustIncrementalOff": "Compilations Rust sans incrémental",
+            "rustIncrementalOffNote": "Les agents compilent Rust sans le cache incrémental de Cargo : les targets ne sont plus réécrits à chaque compilation et le cache du compilateur peut réutiliser les crates du workspace, mais recompiler souvent un gros crate le refait en entier. Remplace le réglage incrémental d'un dépôt."
         },
         "sealHouse": {
             "title": "Qui lit les conversations de qui",

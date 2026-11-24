@@ -1,4 +1,16 @@
-import { cacheDropDistro, decodeWslListing, DROP_COOLDOWN_MS, dropLine, EARLY_DROP_COOLDOWN_MS, runningDistrosFrom, shouldDropCache } from "./windows-memory.js";
+import {
+    cacheDropDistro,
+    decodeWslListing,
+    DROP_COOLDOWN_MS,
+    dropLine,
+    EARLY_DROP_COOLDOWN_MS,
+    MAX_DROP_COOLDOWN_MS,
+    nextDropCooldown,
+    recoveredFromTight,
+    runningDistrosFrom,
+    shouldDropCache,
+    WORTHWHILE_DROP_BYTES,
+} from "./windows-memory.js";
 
 const GIB = 1024 ** 3;
 const NOW = 1_800_000_000_000;
@@ -61,4 +73,35 @@ test("the log line says what Windows had before and after", () => {
     expect(dropLine("Ubuntu", { availableBytes: 1.1 * GIB, totalBytes: 32 * GIB }, { availableBytes: 7.4 * GIB, totalBytes: 32 * GIB }, 5_000)).toBe(
         "Windows was low on memory (1.1 GiB of 32.0 GiB available): dropped the WSL VM's file cache through Ubuntu; 7.4 GiB available 5s later.",
     );
+    expect(dropLine("archlinux", { availableBytes: 2.4 * GIB, totalBytes: 31.4 * GIB }, { availableBytes: 2.6 * GIB, totalBytes: 31.4 * GIB }, 5_000, 20 * 60_000)).toBe(
+        "Windows was low on memory (2.4 GiB of 31.4 GiB available): dropped the WSL VM's file cache through archlinux; 2.6 GiB available 5s later. It gave back little, so the next drop waits 20 min unless Windows falls under 1.5 GiB.",
+    );
+});
+
+// rog on 2026-11-24: 287 drops in 39 hours, five minutes apart, a median 0.2 GiB back each.
+test("a drop that gave back little doubles the wait up to an hour, one that gave back half a gigabyte resets it", () => {
+    expect(nextDropCooldown(DROP_COOLDOWN_MS, 0.2 * GIB)).toBe(10 * 60_000);
+    expect(nextDropCooldown(40 * 60_000, 0.2 * GIB)).toBe(MAX_DROP_COOLDOWN_MS);
+    expect(nextDropCooldown(MAX_DROP_COOLDOWN_MS, -0.3 * GIB)).toBe(MAX_DROP_COOLDOWN_MS);
+    expect(nextDropCooldown(MAX_DROP_COOLDOWN_MS, WORTHWHILE_DROP_BYTES)).toBe(DROP_COOLDOWN_MS);
+    // A failed drop, or one Windows could not be read after, leaves the wait as it was.
+    expect(nextDropCooldown(20 * 60_000, undefined)).toBe(20 * 60_000);
+});
+
+test("a backed-off wait holds under the low line and above it, never under the 1.5 GiB floor", () => {
+    const backedOff = 40 * 60_000;
+    const lowLine = { availableBytes: 2.5 * GIB, totalBytes: 31.4 * GIB };
+    expect(shouldDropCache(lowLine, NOW - DROP_COOLDOWN_MS, NOW, backedOff)).toBe(false);
+    expect(shouldDropCache(lowLine, NOW - backedOff, NOW, backedOff)).toBe(true);
+    // Tight but over the low line: the longer of the two waits.
+    const tight = { availableBytes: 4.5 * GIB, totalBytes: 31.4 * GIB };
+    expect(shouldDropCache(tight, NOW - EARLY_DROP_COOLDOWN_MS, NOW, backedOff)).toBe(false);
+    expect(shouldDropCache(tight, NOW - backedOff, NOW, backedOff)).toBe(true);
+    // rog froze at 1.1 GB: there five minutes is the wait however little the last drop gave.
+    expect(shouldDropCache({ availableBytes: 1.4 * GIB, totalBytes: 31.4 * GIB }, NOW - DROP_COOLDOWN_MS, NOW, MAX_DROP_COOLDOWN_MS)).toBe(true);
+});
+
+test("Windows over a fifth of its memory has recovered; at a fifth or under it has not", () => {
+    expect(recoveredFromTight({ availableBytes: 6.3 * GIB, totalBytes: 31.4 * GIB })).toBe(true);
+    expect(recoveredFromTight({ availableBytes: 6.2 * GIB, totalBytes: 31.4 * GIB })).toBe(false);
 });
