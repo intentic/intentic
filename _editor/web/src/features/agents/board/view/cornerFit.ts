@@ -31,9 +31,11 @@ export interface CornerFitHost {
 // above is 16px because the hover bar floats 14px over the card's top (CardHoverBar's `-top-3.5`): 12px cut its edge off.
 const BLEED = `-mx-2 -mt-4 px-2 pt-4 pb-6`;
 // That room above reaches 16px up over the lane's header, which paints no ground under a wallpaper: scrolled, a card
-// sliding through it drew over the header's name and chips. Once the box is scrolled at all, that band is masked out,
-// so the cards end at the header's foot; at the top it stays open, for the first card's hover bar.
-const SCROLLED_MASK = `[mask-image:linear-gradient(to_bottom,transparent_1rem,#000_1rem)]`;
+// sliding through it drew over the header's name and chips. Once the box is scrolled at all, that band is clipped away,
+// so the cards end at the header's foot; at the top it stays open, for the first card's hover bar. A clip, not a mask: a
+// mask only hides the band, and as a stacking context the masked box then sat over the unraised header and took every
+// press on the fold and Clear that fell in it, invisibly. A clipped-out band takes no pointer.
+const SCROLLED_CLIP = `[clip-path:inset(1rem_0_0_0)]`;
 
 // How far the cut box lets its cards paint past its edge. A wallpaper's card drop reaches 2rem and more below the card
 // (skins/wallpapers.css, 14px down with a 30px blur), and this was 0.75rem, which sliced that drop into a hard-edged
@@ -165,7 +167,7 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, t
         if (!active.value) {
             return `contents`;
         }
-        return scrolls.value ? `flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain ${BLEED}${scrolled.value ? ` ${SCROLLED_MASK}` : ``}` : `flex min-h-0 flex-1 flex-col overflow-clip ${CLIP_MARGIN}`;
+        return scrolls.value ? `flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain ${BLEED}${scrolled.value ? ` ${SCROLLED_CLIP}` : ``}` : `flex min-h-0 flex-1 flex-col overflow-clip ${CLIP_MARGIN}`;
     });
     // Finished's fold counts the cards its window leaves out and the ones the corner left no room for; expanded, it
     // always offers the fold back, since the corner's cut is not counted while the lane scrolls.
