@@ -1,3 +1,4 @@
+import { afterResize } from "@intentic/ui";
 import type { BoardView } from "./boardView";
 import { type ComponentPublicInstance, computed, type CSSProperties, onBeforeUnmount, onMounted, type Ref, ref, watch } from "vue";
 
@@ -87,14 +88,18 @@ const roomIn = (port: HTMLElement, lanes: HTMLElement): LaneRoom => {
     return { top, height: Math.max(0, port.clientHeight - top - (Number.parseFloat(style.paddingBottom) || 0)) };
 };
 
-// Re-runs `read` once a frame at most, whenever the box's cards, the box or the scroller change.
+// Reads the box once a frame at most, after any resize handle rests or is released.
 const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElement | undefined>, read: () => void): (() => void) => {
     let frame = 0;
-    const schedule = (): void => {
+    const readOnFrame = (): void => {
         frame ||= requestAnimationFrame(() => {
             frame = 0;
             read();
         });
+    };
+    let waiting = (): void => {};
+    const schedule = (): void => {
+        waiting = afterResize(readOnFrame);
     };
     const resized = new ResizeObserver(schedule);
     const changed = new MutationObserver(schedule);
@@ -116,6 +121,7 @@ const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElem
     });
     onMounted(schedule);
     onBeforeUnmount(() => {
+        waiting();
         cancelAnimationFrame(frame);
         resized.disconnect();
         changed.disconnect();
@@ -147,7 +153,10 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, t
     onBeforeUnmount(() => box.value?.removeEventListener(`scroll`, onScroll));
     const schedule = useWatchedBox(box, scroller, () => {
         if (scroller.value !== undefined && grid.value !== undefined) {
-            room.value = roomIn(scroller.value, grid.value);
+            const measured = roomIn(scroller.value, grid.value);
+            if (measured.top !== room.value.top || measured.height !== room.value.height) {
+                room.value = measured;
+            }
         }
         cut.value = box.value === undefined ? 0 : cutCards(box.value, active.value && !scrolls.value, hiddenFinished.value > 0, tailRow());
     });

@@ -637,7 +637,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 </ChatAttachmentStrip>
                                 <!-- The composer uses transcript body sizing on desktop; sent @-mentions are marked behind its words. -->
                                 <div class="relative">
-                                    <ComposerMentionMarks :text="draft" :input="input" />
+                                    <ComposerMentionMarks v-if="draft.includes('@')" :text="draft" :input="input" />
                                     <textarea
                                         ref="input"
                                         rows="1"
