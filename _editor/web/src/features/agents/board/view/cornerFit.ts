@@ -1,6 +1,7 @@
-import { afterResize } from "@intentic/ui";
+import { afterResize, layoutResizing } from "@intentic/ui";
+import { canAnimate, FOLD_EASE, lessMotion, REVEAL_MS, slideFrom } from "@intentic/ui/motion";
 import type { BoardView } from "./boardView";
-import { type ComponentPublicInstance, computed, type CSSProperties, onBeforeUnmount, onMounted, type Ref, ref, watch } from "vue";
+import { type ComponentPublicInstance, computed, type CSSProperties, nextTick, onBeforeUnmount, onMounted, type Ref, ref, watch } from "vue";
 
 // FINISHED BROKERS THE CORNER. While the host stands something in the board's bottom-right corner (Agents.vue: Usage left,
 // when the chat beside the board has no room for it), the Finished lane is held to exactly the board's visible height and
@@ -13,6 +14,14 @@ import { type ComponentPublicInstance, computed, type CSSProperties, onBeforeUnm
 // The fit is read off the drawn cards, never estimated: every card of Finished's window is rendered, all are shown and
 // measured, and the ones whose bottom falls past the lane's card box (less the tile board's "N earlier" row under them)
 // are taken out, in one frame before it paints, so nothing flickers.
+//
+// EVERY FRAME IS RIGHT, A DRAG'S INCLUDED. While a resize handle is dragged, the full read waits for the hand to rest or
+// let go, as most measuring does (resizeGesture.ts). Two things cannot wait for it. The corner arriving or leaving, and
+// Finished starting or stopping its own scroll, are read the moment they are drawn. And while the corner stands, every
+// frame of the drag takes out whatever card has stopped fitting: a lane narrowing under the hand rewraps its cards taller.
+// Until 2026-11-24 both waited for the drag to end, and cards ran down over the corner for as long as the hand moved. A
+// card the drag took out comes back once the hand rests, fading in, as do the cards the corner gives back by leaving.
+// Pinned or let go, the lane slides from where it stood rather than blinking to its new place.
 
 export interface CornerFitHost {
     // A corner is drawn, and whether the board is stacked: a stacked board has no corner to hold, so the corner follows
@@ -51,30 +60,63 @@ const CLIP_MARGIN = `[overflow-clip-margin:2.5rem]`;
 const LIST_PAD_PX = 10;
 const TAIL_PX = 34;
 
-// Takes out every card from the first whose bottom falls past the box (never skipping one to show a later one), and
-// answers how many it took out. Room for the "N earlier" row is kept whenever there will be one (`tailRow`, and the window
-// already leaves cards out (`folded`), or this cut does). Not cutting, it shows them all.
-const cutCards = (box: HTMLElement, cutting: boolean, folded: boolean, tailRow: boolean): number => {
-    const units = [...box.querySelectorAll<HTMLElement>(`[data-fold-unit], [data-fit-unit]`)];
+const unitsIn = (box: HTMLElement): HTMLElement[] => [...box.querySelectorAll<HTMLElement>(`[data-fold-unit], [data-fit-unit]`)];
+const isOut = (unit: HTMLElement): boolean => unit.style.display === `none`;
+
+// The line no card's bottom may pass: the box's own foot, less room for the "N earlier" row whenever there will be one
+// (`tailRow`, and the window already leaves cards out (`folded`), or a card of `units` falls past the foot), else less the
+// list's padding alone, so the gap down to the corner never shrinks to the corner's own padding.
+const floorOf = (box: HTMLElement, units: readonly HTMLElement[], folded: boolean, tailRow: boolean): number => {
+    const bottom = box.getBoundingClientRect().bottom + 0.5;
+    if (!tailRow || !(folded || units.some((unit) => unit.getBoundingClientRect().bottom > bottom))) {
+        return bottom - LIST_PAD_PX;
+    }
+    // Its own bottom margin may fall under the corner's top padding, so it is not room the cards give up.
+    return bottom - (box.querySelector<HTMLElement>(`[data-fit-tail]`)?.offsetHeight ?? TAIL_PX) - LIST_PAD_PX;
+};
+
+// A card given back after it was taken out fades in where it stands, rather than appearing in one frame.
+const fadeIn = (units: readonly HTMLElement[]): void => {
+    if (units.length === 0 || lessMotion()) {
+        return;
+    }
     for (const unit of units) {
+        if (canAnimate(unit)) {
+            unit.animate([{ opacity: 0 }, { opacity: 1 }], { duration: REVEAL_MS, easing: FOLD_EASE });
+        }
+    }
+};
+
+// Takes out every card from the first whose bottom falls past the floor (never skipping one to show a later one), and
+// answers how many it took out. Not cutting, it shows them all.
+const cutCards = (box: HTMLElement, cutting: boolean, folded: boolean, tailRow: boolean): number => {
+    const units = unitsIn(box);
+    const wereOut = units.filter(isOut);
+    for (const unit of wereOut) {
         unit.style.display = ``;
     }
-    if (!cutting) {
-        return 0;
-    }
-    const bottom = box.getBoundingClientRect().bottom + 0.5;
-    const tail = box.querySelector<HTMLElement>(`[data-fit-tail]`);
-    // Its own bottom margin may fall under the corner's top padding, so it is not room the cards give up.
-    const tailRoom = (tail?.offsetHeight ?? TAIL_PX) + LIST_PAD_PX;
-    // Without the row, the last card still keeps the list's padding under it, so the gap down to the corner never shrinks
-    // to the corner's own padding alone.
-    const floor = tailRow && (folded || units.some((unit) => unit.getBoundingClientRect().bottom > bottom)) ? bottom - tailRoom : bottom - LIST_PAD_PX;
+    const floor = cutting ? floorOf(box, units, folded, tailRow) : Number.POSITIVE_INFINITY;
     const from = units.findIndex((unit) => unit.getBoundingClientRect().bottom > floor);
     const cut = from === -1 ? [] : units.slice(from);
     for (const unit of cut) {
         unit.style.display = `none`;
     }
+    fadeIn(wereOut.filter((unit) => !cut.includes(unit)));
     return cut.length;
+};
+
+// One frame of a drag: takes out the cards that have stopped fitting, from the first whose bottom falls past the floor,
+// and gives none back (that waits for the full read once the hand rests, which can show every card to measure it). It
+// reads only the layout the frame draws anyway and writes only when a card crosses, so the drag keeps its frames.
+const trimCards = (box: HTMLElement, folded: boolean, tailRow: boolean): number => {
+    const units = unitsIn(box);
+    const shown = units.filter((unit) => !isOut(unit));
+    const floor = floorOf(box, shown, folded || shown.length < units.length, tailRow);
+    const from = units.findIndex((unit) => !isOut(unit) && unit.getBoundingClientRect().bottom > floor);
+    for (const unit of from === -1 ? [] : units.slice(from)) {
+        unit.style.display = `none`;
+    }
+    return units.filter(isOut).length;
 };
 
 // Where a lane pinned in the grid stands and how tall it is: the scroller's height, less the grid's padding above and below.
@@ -88,8 +130,8 @@ const roomIn = (port: HTMLElement, lanes: HTMLElement): LaneRoom => {
     return { top, height: Math.max(0, port.clientHeight - top - (Number.parseFloat(style.paddingBottom) || 0)) };
 };
 
-// Reads the box once a frame at most, after any resize handle rests or is released.
-const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElement | undefined>, read: () => void): (() => void) => {
+// Reads the box once a frame at most, after any resize handle rests or is released; mid-drag, keeps up once a frame.
+const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElement | undefined>, read: () => void, keepUp: () => void): void => {
     let frame = 0;
     const readOnFrame = (): void => {
         frame ||= requestAnimationFrame(() => {
@@ -97,9 +139,19 @@ const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElem
             read();
         });
     };
+    let keepFrame = 0;
+    const keepUpOnFrame = (): void => {
+        keepFrame ||= requestAnimationFrame(() => {
+            keepFrame = 0;
+            keepUp();
+        });
+    };
     let waiting = (): void => {};
     const schedule = (): void => {
         waiting = afterResize(readOnFrame);
+        if (layoutResizing.value) {
+            keepUpOnFrame();
+        }
     };
     const resized = new ResizeObserver(schedule);
     const changed = new MutationObserver(schedule);
@@ -123,10 +175,43 @@ const useWatchedBox = (box: Ref<HTMLElement | undefined>, scroller: Ref<HTMLElem
     onBeforeUnmount(() => {
         waiting();
         cancelAnimationFrame(frame);
+        cancelAnimationFrame(keepFrame);
         resized.disconnect();
         changed.disconnect();
     });
-    return schedule;
+};
+
+// PINNED OR LET GO, THE LANE SLIDES THERE. The corner arriving pins Finished to the top of the board's window and its
+// leaving puts the lane back in the board's scroll, so on a scrolled board either one moves the whole column. It is drawn
+// at its new place at once and plays the move back as a slide the compositor runs (fold.ts, FLIP), at most a screen's
+// height of it. Not when the board stacks or unstacks, which moves every lane at once.
+const useLaneSlide = (box: Readonly<Ref<HTMLElement | undefined>>, corner: () => boolean, narrow: Readonly<Ref<boolean>>): void => {
+    const laneOf = (): HTMLElement | null | undefined => box.value?.closest<HTMLElement>(`[data-lane]`);
+    let before: number | undefined;
+    watch(
+        corner,
+        () => {
+            before = lessMotion() || narrow.value ? undefined : laneOf()?.getBoundingClientRect().top;
+        },
+        { flush: `pre` },
+    );
+    watch(
+        corner,
+        () => {
+            const lane = laneOf();
+            const was = before;
+            before = undefined;
+            if (was === undefined || narrow.value || !canAnimate(lane)) {
+                return;
+            }
+            const reach = globalThis.innerHeight;
+            const dy = Math.max(-reach, Math.min(reach, was - lane.getBoundingClientRect().top));
+            if (Math.abs(dy) >= 0.5) {
+                slideFrom(lane, dy);
+            }
+        },
+        { flush: `post` },
+    );
 };
 
 export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, tailRow }: CornerFitHost) => {
@@ -151,16 +236,33 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, t
         onScroll();
     });
     onBeforeUnmount(() => box.value?.removeEventListener(`scroll`, onScroll));
-    const schedule = useWatchedBox(box, scroller, () => {
+    const cutNow = (): void => {
+        cut.value = box.value === undefined ? 0 : cutCards(box.value, active.value && !scrolls.value, hiddenFinished.value > 0, tailRow());
+    };
+    const read = (): void => {
         if (scroller.value !== undefined && grid.value !== undefined) {
             const measured = roomIn(scroller.value, grid.value);
             if (measured.top !== room.value.top || measured.height !== room.value.height) {
                 room.value = measured;
+                // The lane is pinned anew from that room: cut once it has been drawn there (still before this frame
+                // paints), not against where it stood. The board's fold changing its padding on the frame the corner
+                // arrives left one frame of every card drawn whole and clipped below the corner.
+                void nextTick(cutNow);
+                return;
             }
         }
-        cut.value = box.value === undefined ? 0 : cutCards(box.value, active.value && !scrolls.value, hiddenFinished.value > 0, tailRow());
-    });
-    watch([active, scrolls, hiddenFinished, tailRow], schedule);
+        cutNow();
+    };
+    const keepUp = (): void => {
+        if (box.value !== undefined && active.value && !scrolls.value) {
+            cut.value = trimCards(box.value, hiddenFinished.value > 0, tailRow());
+        }
+    };
+    useWatchedBox(box, scroller, read, keepUp);
+    // Drawn differently (the corner come or gone, the lane scrolling or cutting, its window or fold row changed): read
+    // straight after the render that draws it, before that frame paints, whether or not a hand is on a resize handle.
+    watch([active, scrolls, hiddenFinished, tailRow], read, { flush: `post` });
+    useLaneSlide(box, drawn, narrow);
 
     // Finished's card box, by a function ref, so a v-for does not make it a list.
     const attach = (el: Element | ComponentPublicInstance | null): void => {

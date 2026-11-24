@@ -21,8 +21,13 @@ import { useRemeasure } from "../../accounts/pickerAccounts";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 import { useRailMark } from "./railCarries";
+import { useUsageTravel } from "./usageTravel";
 
 // Headroom rail in chat pop-out: displays runnable provider capacity without full Usage tab reconciliation.
+
+// Moving between its two homes (the board's corner, the chat's rail), it travels from one to the other (usageTravel.ts).
+const root = ref<HTMLElement>();
+useUsageTravel(root);
 
 // Refreshes on mount: pools are account-wide, shared across apps, so a stale window shows stale numbers.
 const t = useT();
@@ -261,7 +266,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
 <template>
     <!-- No surface of its own: whitespace and the heading mark it as a region, not a panel with a border or fill. -->
     <!-- Placed and sized by ChatSideRail, which owns the strip this shares with the chat's checklist. -->
-    <section class="flex min-h-0 flex-col" :aria-label="t(`chat.chatCapacityRail.planHeadroom`)">
+    <section ref="root" class="flex min-h-0 flex-col" :aria-label="t(`chat.chatCapacityRail.planHeadroom`)">
         <!-- One press target, the whole row: a figure alone is too small to aim at, and every one opens the same column. The
              header is the open column's own line, so folding changes what follows the heading, not the heading; the press
              lies over it (a header is no button's content). -->

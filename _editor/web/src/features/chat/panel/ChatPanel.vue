@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Button, Icon, useDevice, ui } from "@intentic/ui";
+import { afterResize, Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CAPACITY_RAIL_PX, railFitsBeside } from "./capacity/chatCapacity";
 import { useCapacityRail } from "./capacity/capacityMemory";
 import { provideRailCarries } from "./capacity/railCarries";
+import { useRailRoom } from "./capacity/usageTravel";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../../../models/conversations/run/chatRun";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { traceFocus } from "../../../models/conversations/run/focusTrace";
@@ -146,6 +147,19 @@ watch(
     { immediate: true },
 );
 onBeforeUnmount(stopMeasuring);
+// THE RAIL COMES AND GOES WHEN THE HAND RESTS. Its width is decided off the panel's, but while a resize handle is dragged
+// that decision holds until the pointer rests or lets go (resizeGesture.ts), as the board beside it holds its own fold:
+// the rail and Usage left change homes once, where the reader stopped, and travel there (usageTravel.ts), rather than at
+// whatever pixel the drag passed, and back again if the hand wavers over it.
+const railWidth = ref(0);
+const settleRailWidth = (): void => {
+    railWidth.value = panelWidth.value;
+};
+let railWaits = (): void => {};
+watch(panelWidth, () => {
+    railWaits = afterResize(settleRailWidth);
+});
+onBeforeUnmount(() => railWaits());
 
 // Without tabs, reserve matching space on the left so the right rail cannot shift the chat off the panel's centre.
 // Only reserved with something in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
@@ -161,7 +175,7 @@ const showsRail = computed(
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         (!floating.value || shownSideTabs.value.length === 0) &&
         capacityRail.value &&
-        railFitsBeside(panelWidth.value, tabs ? 0 : CAPACITY_RAIL_PX, shown.value.length),
+        railFitsBeside(railWidth.value, tabs ? 0 : CAPACITY_RAIL_PX, shown.value.length),
 );
 // Told to the page beside the chat: the Agents board holds Usage left under itself only while this rail is not drawn.
 // The home conversation's panel (`only`) stands on Home's own page, beside no board.
@@ -179,6 +193,8 @@ onBeforeUnmount(() => {
         chatRailDrawn.value = false;
     }
 });
+// The panes' reading column glides aside for the rail, and back (usageTravel.ts).
+useRailRoom(root, () => showsRail.value);
 // Beside one chat, the rail's marked row is that chat's allowance, so its composer chip gives the figure to the rail.
 provideRailCarries(() => showsRail.value && !split.value);
 
