@@ -25,23 +25,28 @@ impl Backoff {
 
     /// How long to wait before the next attempt, after one that lasted `lived`.
     pub fn after(&mut self, lived: Duration) -> Duration {
-        self.after_drawing(lived, false, jitter())
+        self.after_proven(lived, false)
     }
 
     /// The same, for an attempt that may have proved itself before it ended: `proven` when it carried at least one
     /// answered liveness round, which counts it as working whatever its age.
     pub fn after_proven(&mut self, lived: Duration, proven: bool) -> Duration {
-        self.after_drawing(lived, proven, jitter())
+        self.after_drawing(lived, proven, between)
     }
 
-    // `draw` in [0, 1) places the wait between the floor and this rung's ceiling.
-    fn after_drawing(&mut self, lived: Duration, proven: bool, draw: f64) -> Duration {
+    /// Advance the ladder and let `draw` choose a wait between the floor and the new ceiling.
+    pub fn after_drawing(
+        &mut self,
+        lived: Duration,
+        proven: bool,
+        draw: impl FnOnce(Duration, Duration) -> Duration,
+    ) -> Duration {
         if proven || lived >= self.stable_after {
             self.rung = self.floor;
         }
         let ceiling = (self.rung * 2).min(self.cap);
         self.rung = ceiling;
-        self.floor + (ceiling - self.floor).mul_f64(draw)
+        draw(self.floor, ceiling)
     }
 }
 
@@ -70,28 +75,35 @@ mod tests {
 
     const SECOND: Duration = Duration::from_secs(1);
 
+    fn top(_floor: Duration, ceiling: Duration) -> Duration {
+        ceiling
+    }
+
     #[test]
     fn the_ceiling_doubles_to_the_cap_and_a_stable_life_starts_it_again() {
         let mut backoff = Backoff::new(SECOND, 30 * SECOND, 60 * SECOND);
         let ceilings: Vec<Duration> = (0..6)
-            .map(|_| backoff.after_drawing(Duration::ZERO, false, 1.0))
+            .map(|_| backoff.after_drawing(Duration::ZERO, false, top))
             .collect();
         assert_eq!(
             ceilings,
             [2, 4, 8, 16, 30, 30].map(|seconds| seconds * SECOND)
         );
-        assert_eq!(backoff.after_drawing(60 * SECOND, false, 1.0), 2 * SECOND);
-        assert_eq!(backoff.after_drawing(Duration::ZERO, false, 0.0), SECOND);
+        assert_eq!(backoff.after_drawing(60 * SECOND, false, top), 2 * SECOND);
+        assert_eq!(
+            backoff.after_drawing(Duration::ZERO, false, |floor, _| floor),
+            SECOND
+        );
     }
 
     #[test]
     fn a_short_life_that_answered_a_liveness_round_starts_the_ladder_again() {
         let mut backoff = Backoff::new(SECOND, 30 * SECOND, 60 * SECOND);
         for _ in 0..5 {
-            backoff.after_drawing(45 * SECOND, false, 1.0);
+            backoff.after_drawing(45 * SECOND, false, top);
         }
-        assert_eq!(backoff.after_drawing(45 * SECOND, false, 1.0), 30 * SECOND);
-        assert_eq!(backoff.after_drawing(45 * SECOND, true, 1.0), 2 * SECOND);
+        assert_eq!(backoff.after_drawing(45 * SECOND, false, top), 30 * SECOND);
+        assert_eq!(backoff.after_drawing(45 * SECOND, true, top), 2 * SECOND);
     }
 
     #[test]

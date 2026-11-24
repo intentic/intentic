@@ -120,9 +120,14 @@ impl Pace {
             self.refusals = 0;
         }
         let (wait, refused) = match outcome {
-            Outcome::Dropped { proven, .. } => (self.backoff.after_proven(lived, *proven), None),
+            Outcome::Dropped { proven, .. } => {
+                (self.backoff.after_drawing(lived, *proven, draw), None)
+            }
             // Its age says nothing: a half-dead path holds a connection a long while, and must not redial at once.
-            Outcome::Demoted => (self.backoff.after_proven(Duration::ZERO, false), None),
+            Outcome::Demoted => (
+                self.backoff.after_drawing(Duration::ZERO, false, draw),
+                None,
+            ),
             Outcome::Displaced => (draw(STAND_BACK.0, STAND_BACK.1), None),
             Outcome::Elsewhere(host) => {
                 self.refusals = self.refusals.saturating_add(1);
@@ -387,18 +392,13 @@ mod tests {
             why: "idle".into(),
             proven: true,
         };
-        assert!(pace.next(&proven, 45 * SECOND).wait <= 2 * SECOND);
-        // However long it lived, a demoted connection climbs the ladder: its last waits reach past the floor's double,
-        // which a ladder started again at every demotion would never draw.
+        assert_eq!(pace.drawing(&proven, 45 * SECOND, top).wait, 2 * SECOND);
+        // A demotion climbs to the cap even when the carrier lived long enough to count as stable.
         let mut demoted = Pace::default();
-        let waits: Vec<Duration> = (0..10)
-            .map(|_| demoted.next(&Outcome::Demoted, 600 * SECOND).wait)
+        let waits: Vec<Duration> = (0..6)
+            .map(|_| demoted.drawing(&Outcome::Demoted, 600 * SECOND, top).wait)
             .collect();
-        assert!(waits.iter().all(|wait| *wait <= 30 * SECOND));
-        assert!(
-            waits[5..].iter().any(|wait| *wait > 2 * SECOND),
-            "{waits:?}"
-        );
+        assert_eq!(waits, [2, 4, 8, 16, 30, 30].map(|seconds| seconds * SECOND));
     }
 
     #[test]
