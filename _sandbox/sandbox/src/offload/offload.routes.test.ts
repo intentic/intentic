@@ -71,6 +71,9 @@ const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<st
             // SAFETY: the fleet reading touches only `online` and `facts` of a runner's state.
             state: (id: string) => (runners[id] === undefined || runners[id] === "offline" ? { online: false } : { online: true, facts: facts[id] }) as never,
         }),
+        // No machine has said what its own OS has free, so only the runners' facts decide.
+        // SAFETY: the fleet reading touches only `pinged` of a device's state.
+        hostHub: unstubbed<OffloadDeps["hostHub"]>("hostHub", { state: () => ({}) as never }),
         logger: unstubbed<OffloadDeps["logger"]>("logger", { warn: () => undefined }),
         heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", {
             read: async () => mergeHeavyRules({}, [{ id: "capture", scripts: ["scripts/capture.py", "scripts/render.py"] }]),

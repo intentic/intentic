@@ -1,0 +1,36 @@
+import type { HostRoom } from "@intentic/constants/memory-room";
+import { DevicePingSchema, HOST_NATIVE_ENVIRONMENT, hostConnectionKey, hostMemoryLowBytes, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
+import type { Pinged } from "../peers/peer-hub.js";
+
+/* WHAT A CONNECTED MACHINE'S OWN OS HAS FREE, from the last heartbeat its agent answered (DevicePingSchema `memory`).
+   Pure, so both readers share it without the device-report machinery: the room gate asks it for the machine this
+   sandbox runs on (host-memory.ts), and the fleet reading for the machine each runner runs on (runners/fleet-advice.ts).
+
+   It fails open everywhere: no door, a distro whose Windows side is not connected, an agent older than the field, or a
+   last answer older than HOST_MEMORY_STALE_MS: each is "no host to answer to", never "no room", so a PC that went to
+   sleep never holds every heavy command. */
+
+// Four missed heartbeats: a reading older than that is a machine that stopped answering, and its memory says nothing now.
+export const HOST_MEMORY_STALE_MS = 2 * 60_000;
+
+// The host part of a reading, from a door (a hub key: a card, or `<card>::wsl:<distro>`) and each door's last heartbeat.
+// That door's own answer first; a distro's door has none, so its machine's Windows side (the card's native door) is
+// asked next, since the distro and Docker Desktop's VM live in the same Windows.
+export const hostRoomFrom = (door: string | undefined, pinged: (door: string) => Pinged | undefined, now: number): HostRoom | undefined => {
+    if (door === undefined) {
+        return undefined;
+    }
+    const { card } = parseHostConnection(door);
+    for (const asked of new Set([door, hostConnectionKey(card, HOST_NATIVE_ENVIRONMENT)])) {
+        const beat = pinged(asked);
+        if (beat === undefined || now - beat.at > HOST_MEMORY_STALE_MS) {
+            continue;
+        }
+        const parsed = DevicePingSchema.safeParse(beat.answer);
+        const memory = parsed.success ? parsed.data.memory : undefined;
+        if (memory !== undefined) {
+            return { name: card, availableBytes: memory.availableBytes, totalBytes: memory.totalBytes, reserveBytes: hostMemoryLowBytes(memory.totalBytes) };
+        }
+    }
+    return undefined;
+};

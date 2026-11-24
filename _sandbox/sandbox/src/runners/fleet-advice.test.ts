@@ -154,12 +154,16 @@ describe("which machine a new session is pointed at", () => {
 
 // The reading every placement shares, with what this daemon placed a moment ago and no measurement shows yet.
 describe("the fleet as one reading", () => {
-    const deps = (runners: Record<string, RunnerFacts>, running = 0): FleetReadDeps =>
+    // What each device's agent last answered its heartbeat with, by hub door (a card, or `<card>::wsl:<distro>`).
+    type Beats = Record<string, { readonly at: number; readonly answer: unknown }>;
+    const deps = (runners: Record<string, RunnerFacts>, running = 0, beats: Beats = {}): FleetReadDeps =>
         unstubbed<FleetReadDeps>("fleet", {
             // SAFETY: the reading touches only a runner's `id` and `host` in the enrolment list.
             runners: unstubbed<FleetReadDeps["runners"]>("runners", { list: async () => Object.keys(runners).map((id) => ({ id, host: `${id}-pc` })) as never }),
             // SAFETY: the reading touches only `online` and `facts` of a runner's state.
             runnerHub: unstubbed<FleetReadDeps["runnerHub"]>("runnerHub", { refresh: async () => undefined, state: (id: string) => ({ online: true, facts: runners[id] }) as never }),
+            // SAFETY: the reading touches only `pinged` of a device's state.
+            hostHub: unstubbed<FleetReadDeps["hostHub"]>("hostHub", { state: (door: string) => ({ pinged: beats[door] }) as never }),
             conversations: unstubbed<FleetReadDeps["conversations"]>("conversations", { inFlightByRunner: () => new Map(), activeTurnCount: () => running }),
         });
     afterEach(() => measureHereForTest(undefined));
@@ -181,5 +185,45 @@ describe("the fleet as one reading", () => {
         expect(await fleetPressure(fleet)).toBeUndefined();
         measureHereForTest(async () => idle({ memoryFreeMb: 500 }));
         expect(await fleetPressure(deps({ z440: idle({ load: 1 }) }))).toBeUndefined();
+    });
+
+    // 2026-11-23: omen's Windows had 0.3 to 3 GiB of its 31.6 available for four hours while its runner's container, in a
+    // 26 GiB WSL VM shared with another sandbox's runner and the owner's CI, read as roomy; the machine froze and its
+    // Docker engine died with five turns on it. The device's own heartbeat said so all along.
+    const GIB = 1024 ** 3;
+    const windows = (availableGib: number) => ({ at: Date.now() - 10_000, answer: { ok: true, memory: { availableBytes: availableGib * GIB, totalBytes: 31.6 * GIB } } });
+
+    // The one runner a fleet of one reads as.
+    const omenOf = async (fleet: FleetReadDeps): Promise<RunnerReading> => {
+        const [omen] = await readRunners(fleet, { refresh: false });
+        if (omen === undefined) {
+            throw new Error("the fleet read no runner");
+        }
+        return omen;
+    };
+
+    test("a runner has no more free than its machine's own OS has above the line it thrashes under", async () => {
+        const short = await omenOf(deps({ omen: idle() }, 0, { "omen-pc": windows(2.5) }));
+        expect(short.facts?.memoryFreeMb).toBe(0);
+        expect(fleetMachine(short, FITS).load).toMatchObject({ standing: "full", strain: ["memory"] });
+        // 9 GiB available less the 3.16 GiB reserve a 31.6 GiB machine keeps: under the container's own 28 000 MiB.
+        const roomy = await omenOf(deps({ omen: idle() }, 0, { "omen-pc": windows(9) }));
+        expect(roomy.facts?.memoryFreeMb).toBe(Math.floor((9 - 3.16) * 1024));
+        expect(fleetMachine(roomy, FITS).load?.standing).toBe("calm");
+    });
+
+    test("a full host is never suggested, nor named as having room, however idle its runner's container reads", async () => {
+        const fleet = deps({ omen: idle() }, 0, { "omen-pc": windows(1.2) });
+        measureHereForTest(async () => idle({ memoryFreeMb: 500 }));
+        expect(await fleetPressure(fleet)).toBeUndefined();
+        const readings = await readRunners(fleet, { refresh: false });
+        expect(suggestionFor("auto", machineLoad(idle({ load: 0.95 }), 1), readings.map((entry) => fleetMachine(entry, FITS)))).toBeUndefined();
+    });
+
+    // A machine that stopped answering, or one whose agent predates the field, says nothing about now: no room is taken.
+    test("a stale heartbeat or none at all leaves the runner's own reading as it was", async () => {
+        const stale = { ...windows(0.5), at: Date.now() - 10 * 60_000 };
+        expect((await omenOf(deps({ omen: idle() }, 0, { "omen-pc": stale }))).facts?.memoryFreeMb).toBe(28_000);
+        expect((await omenOf(deps({ omen: idle() }))).facts?.memoryFreeMb).toBe(28_000);
     });
 });

@@ -1,4 +1,4 @@
-import { HOST_MEMORY_STALE_MS, hostRoomFrom } from "./host-memory.js";
+import { HOST_MEMORY_STALE_MS, hostRoomFrom } from "./host-room.js";
 
 const GIB = 1024 ** 3;
 const NOW = 1_800_000_000_000;

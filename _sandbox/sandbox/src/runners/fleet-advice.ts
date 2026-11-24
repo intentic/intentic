@@ -14,9 +14,10 @@ import type {
 } from "@intentic/sandbox-contract/schemas/offload";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Services } from "../composition.js";
+import { hostRoomFrom } from "../hosts/host-room.js";
 import { opt } from "../opt.js";
 import { refreshRunnerFacts } from "./fleet-facts.js";
-import { machineFacts } from "./machine-facts.js";
+import { machineFacts, onHost } from "./machine-facts.js";
 import { credentialsTravel, runnerSlots } from "./runner-scheduler.js";
 
 // WHICH MACHINE A NEW SESSION SHOULD START ON (settings `offload.sessions`, GET /offload/placement). Every machine, this
@@ -179,7 +180,10 @@ export const suggestionFor = (
     return best === undefined ? undefined : { runner: best.machine.runner, name: best.machine.name };
 };
 
-export type FleetAdviceDeps = Pick<Services, "runners" | "runnerHub" | "conversations" | "resources" | "privacyShield" | "sandboxSettings" | "workspace">;
+export type FleetAdviceDeps = Pick<
+    Services,
+    "runners" | "runnerHub" | "hostHub" | "conversations" | "resources" | "privacyShield" | "sandboxSettings" | "workspace"
+>;
 
 // Whether the shield keeps a session with this provider here: it would refuse it on a runner, as stream-agent.ts does.
 const shieldHolds = async (deps: Pick<Services, "privacyShield">, provider: AgentProvider, conversationId: string | undefined): Promise<boolean> =>
@@ -208,7 +212,7 @@ const NOTHING_PENDING: PendingWork = { here: 0, runners: new Map() };
 const lessPending = (facts: RunnerFacts, pending: number): RunnerFacts =>
     pending === 0 || facts.memoryFreeMb === undefined ? facts : { ...facts, memoryFreeMb: Math.max(0, facts.memoryFreeMb - pending * AGENT_MB) };
 
-export type FleetReadDeps = Pick<Services, "runners" | "runnerHub" | "conversations" | "resources" | "workspace">;
+export type FleetReadDeps = Pick<Services, "runners" | "runnerHub" | "hostHub" | "conversations" | "resources" | "workspace">;
 
 // This machine, by the ruler every runner is measured with. Swapped in tests: the load of the box a suite happens to run
 // on says nothing about the case under test.
@@ -229,7 +233,9 @@ export const readHere = async (deps: FleetReadDeps, pending: PendingWork = NOTHI
 /**
  * Every enrolled runner as the hub knows it, the word the owner knows its machine by, and the conversations running a
  * turn on it. `refresh` asks each one again first (at most once per FACTS_FRESH_MS, and never longer than its timeout);
- * without it the last answer stands, for a reader that must not wait on the fleet.
+ * without it the last answer stands, for a reader that must not wait on the fleet. A runner on a connected device has
+ * no more free than that device's own OS has room for (machine-facts.ts onHost): its container sees only its WSL VM,
+ * which other sandboxes' runners and the owner's own work share, while the device's heartbeat says what Windows has.
  */
 export const readRunners = async (deps: FleetReadDeps, options: { readonly refresh: boolean; readonly pending?: PendingWork }): Promise<RunnerReading[]> => {
     const enrolled = await deps.runners.list();
@@ -241,14 +247,16 @@ export const readRunners = async (deps: FleetReadDeps, options: { readonly refre
     }
     const inFlight = deps.conversations.inFlightByRunner();
     const pending = options.pending ?? NOTHING_PENDING;
+    const now = Date.now();
     return enrolled.map((runner) => {
         const state = deps.runnerHub.state(runner.id);
         const waiting = pending.runners.get(runner.id) ?? 0;
+        const host = hostRoomFrom(runner.host, (door) => deps.hostHub.state(door).pinged, now);
         return {
             id: runner.id,
             name: runner.host ?? runner.id,
             online: state.online,
-            facts: state.facts === undefined ? undefined : lessPending(state.facts, waiting),
+            facts: state.facts === undefined ? undefined : lessPending(onHost(state.facts, host), waiting),
             agents: (inFlight.get(runner.id) ?? 0) + waiting,
         };
     });

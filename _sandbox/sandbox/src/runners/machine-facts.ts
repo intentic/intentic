@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
+import type { HostRoom } from "@intentic/constants/memory-room";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { GPU_LIBRARY_ENV, gpuHere, WSL_GPU_LIBRARY_PATH } from "../hosts/gpu/gpu-state.js";
 import { type Pressure, readPressure } from "../system/resources/cgroup.js";
@@ -88,6 +89,39 @@ const cachedGpus = (): Promise<GpuFacts> => {
     return gpusOnce;
 };
 
+/* THE HOST'S OWN MEMORY IS PART OF A MACHINE'S ROOM (2026-11-24). A sandbox or runner on a Windows PC measures its cgroup
+   and the WSL2 VM under it, never Windows, and one VM holds every tenant of that PC: each sandbox's runner, the owner's
+   CI runners, `devices exec` work in a distro. On 2026-11-23 omen's Windows sat at 0.3 to 3 GiB available of 31.6 for
+   four hours while the intentic and shinobi-society runners there (22 GiB caps each, in a 26 GiB VM) both read as
+   roomy; the parents kept placing sessions and subagents on them until the machine froze (its agent's event loop stalled
+   185 s), and Docker's engine died at 23:19 with five turns on it. So a machine's free memory is never more than what its
+   host has above the line under which it thrashes (hosts.ts hostMemoryLowBytes, the reserve heavy work already keeps),
+   less what was admitted and does not show yet. The host part comes from that machine's agent (host-room.ts): for this
+   sandbox the budget's own reading carries it, and for a runner the parent joins it from the heartbeat of the device the
+   runner runs on (fleet-advice.ts readRunners). Absent, it constrains nothing. */
+const hostRoomMb = (host: HostRoom, reservedBytes = 0): number =>
+    Math.max(0, Math.floor((host.availableBytes - host.reserveBytes - reservedBytes) / MB));
+
+// A machine's facts with its host's room folded into what it has free. Unchanged without a host part.
+export const onHost = (facts: RunnerFacts, host: HostRoom | undefined): RunnerFacts => {
+    if (host === undefined) {
+        return facts;
+    }
+    const room = hostRoomMb(host);
+    return { ...facts, memoryFreeMb: Math.min(facts.memoryFreeMb ?? room, room) };
+};
+
+// What the budget has free, never more than its host has room for (above).
+const freeMbOf = (snapshot: BudgetSnapshot): number | undefined => {
+    const own = snapshot.freeBytes === undefined ? undefined : Math.max(0, Math.floor(snapshot.freeBytes / MB));
+    const { host } = snapshot.reading;
+    if (host === undefined) {
+        return own;
+    }
+    const room = hostRoomMb(host, snapshot.reservedBytes);
+    return own === undefined ? room : Math.min(own, room);
+};
+
 // The budget's own reading, not a second one: what the turn door admits by is what "free" means everywhere.
 const budgetFigures = (snapshot: BudgetSnapshot | undefined): Pick<RunnerFacts, "memoryFreeMb" | "memoryLimitMb" | "memoryStall"> => {
     if (snapshot === undefined) {
@@ -95,7 +129,7 @@ const budgetFigures = (snapshot: BudgetSnapshot | undefined): Pick<RunnerFacts, 
     }
     const limit = snapshot.reading.limitBytes;
     return {
-        ...opt("memoryFreeMb", snapshot.freeBytes === undefined ? undefined : Math.max(0, Math.floor(snapshot.freeBytes / MB))),
+        ...opt("memoryFreeMb", freeMbOf(snapshot)),
         ...opt("memoryLimitMb", limit === undefined || limit <= 0 ? undefined : Math.max(1, Math.round(limit / MB))),
         memoryStall: snapshot.reading.stallPercent,
     };

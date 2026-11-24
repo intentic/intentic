@@ -83,6 +83,30 @@ test("a machine's GPUs are read off nvidia-smi's answer", () => {
     ]);
 });
 
+// The budget carries what this sandbox's host last said: a VM with room on a Windows that has none is not a machine with
+// room, and what was admitted a moment ago is not in the host's figure yet either.
+test("a machine's free memory never exceeds what its host has above its reserve", async () => {
+    const measured = (host: { availableBytes: number; totalBytes: number; reserveBytes: number }, reservedBytes = 0) =>
+        machineFacts(WORKSPACE_ROOT, {
+            budget: {
+                snapshot: async () => {
+                    const base = snapshot(12 * GIB, 22 * GIB);
+                    return { ...base, reading: { ...base.reading, host: { name: "omen", ...host } }, reservedBytes };
+                },
+            },
+            pressure: async () => ({ cpu: undefined, memory: undefined, io: undefined }),
+            os: () => ({ cores: 16, totalMemoryBytes: 26 * GIB, loadOne: 1 }),
+            disk: async () => ({ freeBytes: 10 * GIB }),
+            gpus: async () => [],
+        });
+    const windows = { totalBytes: 32 * GIB, reserveBytes: 3.2 * GIB };
+    expect((await measured({ ...windows, availableBytes: 2 * GIB })).memoryFreeMb).toBe(0);
+    expect((await measured({ ...windows, availableBytes: 7.2 * GIB })).memoryFreeMb).toBe(4_096);
+    expect((await measured({ ...windows, availableBytes: 7.2 * GIB }, GIB)).memoryFreeMb).toBe(3_072);
+    // A host with more room than the budget leaves the budget's own figure.
+    expect((await measured({ ...windows, availableBytes: 30 * GIB })).memoryFreeMb).toBe(12_288);
+});
+
 test("what a machine cannot measure is left out, never reported as zero", async () => {
     const facts = await machineFacts(WORKSPACE_ROOT, {
         budget: { snapshot: async () => snapshot(undefined, undefined) },
