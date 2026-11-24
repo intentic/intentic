@@ -9253,7 +9253,7 @@
         "sandboxColor": {
             "couldntSave": "Couldn't save the color.",
             "hint": "Tints the rail, the wallpaper and the message box, for everyone in this sandbox.",
-            "label": "Color"
+            "title": "Sandbox color"
         },
         "sandboxOverview": {
             "addLogo": "Add a logo",

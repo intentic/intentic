@@ -9253,7 +9253,7 @@
         "sandboxColor": {
             "couldntSave": "No se pudo guardar el color.",
             "hint": "Tiñe la barra lateral, el fondo y el cuadro de mensaje, para todos en este sandbox.",
-            "label": "Color"
+            "title": "Color del sandbox"
         },
         "sandboxOverview": {
             "addLogo": "Añadir un logo",

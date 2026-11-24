@@ -8706,7 +8706,7 @@
         "sandboxColor": {
             "couldntSave": "Nie udało się zapisać koloru.",
             "hint": "Barwi pasek boczny, tapetę i pole wiadomości, dla wszystkich w tym sandboksie.",
-            "label": "Kolor"
+            "title": "Kolor sandboksa"
         },
         "sandboxOverview": {
             "addLogo": "Dodaj logo",

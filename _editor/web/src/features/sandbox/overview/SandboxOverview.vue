@@ -47,7 +47,7 @@ import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import { diskPressing } from "./storage/diskPressureView";
 import { useDiskPressure } from "./storage/useDiskPressure";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
-import SandboxColorRow from "./logo/SandboxColorRow.vue";
+import SandboxColorValue from "./logo/SandboxColorValue.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { sandboxColor } from "./logo/sandboxColor";
 import { useT } from "@intentic/ui/i18n";
@@ -84,7 +84,7 @@ const copyImage = async (): Promise<void> => {
 };
 
 const isOwner = computed(() => sandbox.active.value?.tier === `owner`);
-// The name and the logo are the owner's and Full access's to change (the platform's `requireFullAccess`).
+// The name, the logo and the colour are the owner's and Full access's to change (the platform's `requireFullAccess`).
 // (2026-11-09) Both live on the platform, so neither is offered while it isn't answering or the window is open without
 // it: the name and logo show as they are, and the rail's offline tile says why (RailSignals.vue).
 const platformAnswering = computed(() => !platformHealth.down.value && !directMode.value);
@@ -267,10 +267,13 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <!-- Identity: name + logo (owner and Full access edit them), self-reported image/version/URL. -->
+        <!-- Identity: logo, name and colour (owner and Full access edit them), self-reported image/version/URL. -->
         <Card data-setting="overview-name" class="flex flex-col gap-4">
-            <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
-                <div class="flex min-w-0 flex-1 items-center gap-3">
+            <!-- WHO IT IS, as one block: the logo, and beside it the name over its colour, each the press that changes it.
+                 What it runs (the image, the version) stands at the far end with room, and under the name, on the name's
+                 own edge, without, so nothing is ever stranded under the logo. -->
+            <div class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5 @2xl:grid-cols-[3rem_minmax(12rem,1fr)_minmax(0,auto)] @2xl:gap-x-6">
+                <div class="relative size-12">
                     <!-- The logo tile is the control itself for the owner and Full access, in every state; anyone else sees the logo alone. -->
                     <SandboxLogo v-if="!canEditIdentity" :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" class="shrink-0" />
                     <!-- allow(recipes): THE OVERVIEW HEADING'S 48px SANDBOX LOGO is the button: its box is the logo's
@@ -336,32 +339,38 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
                         :write="saveStyledLogo"
                         @close="stylingSandbox = undefined"
                     />
+                </div>
 
-                    <div class="-ml-1 min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <!-- The card's heading IS the rename: text at rest, a field in the same box, nothing added beside it.
-                                 It stays an <h2> around that, so renaming the sandbox doesn't cost the card its heading. -->
-                            <h2 class="flex min-w-0 text-lg font-semibold @2xl:max-w-md">
-                                <InlineRename
-                                    :value="sandbox.active.value?.name"
-                                    :write="writeName"
-                                    :label="t(`sandbox.sandboxOverview.sandboxName`)"
-                                    :action="t(`sandbox.sandboxOverview.renameSandbox`)"
-                                    fallback="Sandbox"
-                                    :editable="canEditIdentity"
-                                    :maxlength="SANDBOX_NAME_MAX"
-                                    failure="Couldn't save the sandbox's name."
-                                />
-                            </h2>
-                            <StatusBadge
-                                v-if="showAvailabilityBadge"
-                                class="shrink-0"
-                                :variant="availabilityBadge.variant"
-                                :label="availabilityBadge.label"
-                                dot
+                <!-- Pulled back by the name's own inset, so its first letter, the colour's dot and the facts under them
+                     on a narrow pane share one edge. -->
+                <div class="-ml-1 flex min-w-0 flex-col gap-0.5">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <!-- The card's heading IS the rename: text at rest, a field in the same box, nothing added beside it.
+                             It stays an <h2> around that, so renaming the sandbox doesn't cost the card its heading. -->
+                        <h2 class="flex min-w-0 text-lg font-semibold @2xl:max-w-md">
+                            <InlineRename
+                                :value="sandbox.active.value?.name"
+                                :write="writeName"
+                                :label="t(`sandbox.sandboxOverview.sandboxName`)"
+                                :action="t(`sandbox.sandboxOverview.renameSandbox`)"
+                                fallback="Sandbox"
+                                :editable="canEditIdentity"
+                                :maxlength="SANDBOX_NAME_MAX"
+                                failure="Couldn't save the sandbox's name."
                             />
-                        </div>
-                        <p v-if="subline.text" class="h-4 truncate px-1 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
+                        </h2>
+                        <StatusBadge
+                            v-if="showAvailabilityBadge"
+                            class="shrink-0"
+                            :variant="availabilityBadge.variant"
+                            :label="availabilityBadge.label"
+                            dot
+                        />
+                    </div>
+                    <!-- The line under the name: its colour, then, while it lasts, what the logo or the sandbox has to report. -->
+                    <div class="flex min-w-0 flex-wrap items-center gap-x-3">
+                        <SandboxColorValue :editable="canEditIdentity" />
+                        <p v-if="subline.text" class="min-w-0 truncate text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
                 </div>
                 <!-- Which image it runs and the version installed in it, as two chips at the heading's far end. The image is
@@ -371,7 +380,7 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
                 <div
                     v-if="sandbox.reachable.value && (imageParts || installed)"
                     data-overview="image"
-                    class="flex min-w-0 flex-wrap items-center gap-1.5 @2xl:max-w-2/3 @2xl:justify-end"
+                    class="col-start-2 flex min-w-0 flex-wrap items-center gap-1.5 @2xl:col-start-3 @2xl:row-start-1 @2xl:justify-end"
                 >
                     <button
                         v-if="imageParts"
@@ -405,10 +414,6 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
                     </span>
                 </div>
             </div>
-
-            <!-- Its colour, the third part of who it is beside its name and logo: the platform's, so it needs no answer from
-                 the sandbox itself, and only for those who may change the other two. -->
-            <SandboxColorRow v-if="canEditIdentity" />
 
             <!-- What the sandbox reports about itself, relayed via /info and never stored by the platform. Its one wait, the
                  first read, is the hub section's own (lazySection), which holds this page's last look until /info answers.

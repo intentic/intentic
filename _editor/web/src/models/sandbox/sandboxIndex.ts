@@ -36,13 +36,18 @@ export const sandboxPageTerms = () =>
 // to read them from. In the index's own order: the box, its configuration, who it reaches, then how it handles what
 // passes through it.
 export const SANDBOX_CARDS: readonly SettingEntry[] = [
-    // Overview: what the sandbox is called and looks like, its share of the machine, and its disk. The rest of the page
+    // Overview: what the sandbox is called and looks like (its name, logo and colour), its share of the machine, and its disk. The rest of the page
     // is the sandbox's own report on itself, read rather than set.
     {
         id: `overview-name`,
         slug: `overview`,
         title: () => t(`sandbox.sandboxOverview.sandboxName`),
-        terms: () => [t(`sandbox.sandboxOverview.renameSandbox`), t(`sandbox.sandboxOverview.logoChange`), t(`sandbox.search.overviewName`)],
+        terms: () => [
+            t(`sandbox.sandboxOverview.renameSandbox`),
+            t(`sandbox.sandboxOverview.logoChange`),
+            t(`sandbox.sandboxColor.title`),
+            t(`sandbox.search.overviewName`),
+        ],
     },
     // How it runs (overview/mode/SandboxModeRow.vue): either mode's name, and the question it answers, find it.
     { id: `overview-mode`, slug: `overview`, title: () => t(`sandbox.mode.howItRuns`), terms: () => [t(`sandbox.search.overviewMode`)] },

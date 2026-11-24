@@ -232,23 +232,47 @@ it(`hands Full access the name and the logo, as the owner has them`, () => {
     expect(logoTile(el)).not.toBeNull();
 });
 
-const swatch = (el: HTMLElement, label: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`[data-setting="sandbox-color"] button[aria-label="${label}"]`)!;
+// The colour reads under the name, and is the press that opens its swatches (logo/SandboxColorValue.vue).
+const colorValue = (el: HTMLElement): HTMLElement | null => el.querySelector<HTMLElement>(`[data-setting="sandbox-color"]`);
+const openSwatches = async (el: HTMLElement): Promise<HTMLElement> => {
+    const press = colorValue(el)!.querySelector<HTMLButtonElement>(`button`)!;
+    // jsdom lays nothing out, and the anchored panel closes off an anchor with no box (AnchoredOverlay.vue): this one
+    // is given the size it has on a page.
+    press.getBoundingClientRect = () => new DOMRect(0, 0, 80, 24);
+    press.click();
+    await waitFor(() => expect(document.querySelector(`[data-sandbox-color-editor]`)).not.toBeNull());
+    return document.querySelector<HTMLElement>(`[data-sandbox-color-editor]`)!;
+};
+const swatch = (editor: HTMLElement, label: string): HTMLButtonElement => editor.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+const unpicked = (editor: HTMLElement): HTMLButtonElement => editor.querySelector<HTMLButtonElement>(`button[aria-checked="false"]`)!;
 
-it(`shows the sandbox's colour as picked before anyone has chosen one, and saves a press on its own`, async () => {
+it(`names the sandbox's colour under its name before anyone has chosen one, and saves a swatch's press on its own`, async () => {
     const el = mount(sandboxRow({ id: `s1` }));
-    const picked = el.querySelectorAll(`[data-setting="sandbox-color"] button[aria-checked="true"]`);
-    expect(picked).toHaveLength(1);
-    el.querySelector<HTMLButtonElement>(`[data-setting="sandbox-color"] button[aria-checked="false"]`)!.click();
+    // A word for the colour, not only a dot: the swatch's own name, and what the value is for whoever cannot see it.
+    expect(colorValue(el)!.querySelector(`button`)!.getAttribute(`aria-label`)).toMatch(/^Sandbox color: \w+$/u);
+    const editor = await openSwatches(el);
+    expect(editor.querySelectorAll(`button[aria-checked="true"]`)).toHaveLength(1);
+    unpicked(editor).click();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     expect(update.mock.calls[0]?.[0]).toBe(`s1`);
-    // The colour alone: no logo to redraw here, and the name is not this row's.
+    // The colour alone: no logo to redraw here, and the name is not this value's.
     expect(update.mock.calls[0]?.[1]).toEqual({ color: expect.stringMatching(/^#[0-9a-f]{6}$/u) });
+});
+
+it(`wears the colour just pressed while the platform answers, and keeps the swatches open to try another`, async () => {
+    update.mockReturnValueOnce(new Promise(() => undefined));
+    const el = mount(sandboxRow());
+    const editor = await openSwatches(el);
+    swatch(editor, `Rose`).click();
+    await waitFor(() => expect(colorValue(el)!.querySelector(`button`)!.getAttribute(`aria-label`)).toBe(`Sandbox color: Rose`));
+    expect(swatch(editor, `Rose`).getAttribute(`aria-checked`)).toBe(`true`);
+    expect(document.querySelector(`[data-sandbox-color-editor]`)).not.toBeNull();
 });
 
 it(`redraws a preset logo in the colour just picked, in the same write, so the sandbox wears one colour`, async () => {
     const rose = swatchHex(SWATCHES.find((entry) => entry.key === `rose`)!);
     const el = mount(sandboxRow({ image: logoStyleImage({ icon: `moon`, color: `#e07400` }) }));
-    swatch(el, `Rose`).click();
+    swatch(await openSwatches(el), `Rose`).click();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     const sent = update.mock.calls[0]![1];
     expect(sent.color).toBe(rose);
@@ -258,14 +282,16 @@ it(`redraws a preset logo in the colour just picked, in the same write, so the s
 it(`leaves an uploaded logo as it is when the colour changes`, async () => {
     const el = mount(sandboxRow({ image: `data:image/webp;base64,OLD` }));
     // Any swatch but the one already worn, which is derived from the id and would save nothing.
-    el.querySelector<HTMLButtonElement>(`[data-setting="sandbox-color"] button[aria-checked="false"]`)!.click();
+    unpicked(await openSwatches(el)).click();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     expect(update.mock.calls[0]?.[1]).not.toHaveProperty(`image`);
 });
 
-it(`keeps a member to the colour they see on the rail, with no swatches to press`, () => {
+it(`shows a member the colour they see on the rail, with nothing to press`, () => {
     const el = mount(sandboxRow({ tier: `collaborator` }));
-    expect(el.querySelector(`[data-setting="sandbox-color"]`)).toBeNull();
+    expect(colorValue(el)).not.toBeNull();
+    expect(colorValue(el)!.textContent?.trim()).toMatch(/^\w+$/u);
+    expect(colorValue(el)!.querySelector(`button`)).toBeNull();
 });
 
 it(`saves the picked file on its own, fitted rather than cropped`, async () => {
