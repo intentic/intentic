@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
-import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
+import { InfoHint, Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
@@ -24,7 +24,11 @@ const setRule = (key: AdmissionKey, rule: AdmissionRule): void => {
 
 <template>
     <RowGroup data-setting="guardrails-admission" :label="t(`sandbox.guardrails.admission.title`)">
-        <RowNote>{{ t(`sandbox.guardrails.admission.intro`) }}</RowNote>
+        <template #info>
+            <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.guardrails.admission.title`) })">
+                <span class="block text-xs text-content">{{ t(`sandbox.guardrails.admission.intro`) }}</span>
+            </InfoHint>
+        </template>
         <Row v-for="key in ADMISSION_KEYS" :key="key" icon="automations" :title="t(`sandbox.guardrails.admission.${key}`)">
             <template #control>
                 <Picker

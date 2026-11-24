@@ -7419,12 +7419,12 @@
             "spawnSubagents": "Lanzar subagentes",
             "spawnedSubagentSpends": "Un subagente lanzado funciona como una conversación propia, en cualquier proveedor conectado, y gasta las mismas cuentas conectadas que este.",
             "spawningRefusedOutright": "Lanzar subagentes está rechazado de plano, así que los límites de abajo solo acotan los subagentes que un entorno inicia dentro de su proceso.",
+            "changeInGuardrails": "Cambiar en Salvaguardas",
             "subagentsAtOnce": "Subagentes a la vez",
             "subagentsPerConversation": "Subagentes por conversación",
             "totalDelegatedAgentsAllowed": "Total de agentes delegados permitidos por conversación.",
             "waitForReset": "Esperar al reinicio",
-            "waitForResetHours": "Horas que un subagente rechazado por cuota agotada espera al reinicio antes de detenerse. Uno con alternativas pasa a ellas a los 90 minutos.",
-            "whetherInGuardrails": "Si puede lanzar subagentes, y cuándo pregunta antes:"
+            "waitForResetHours": "Horas que un subagente rechazado por cuota agotada espera al reinicio antes de detenerse. Uno con alternativas pasa a ellas a los 90 minutos."
         },
         "aiAccountSection": {
             "account": "Cuenta de {managedLabel}",
@@ -9986,7 +9986,6 @@
             "anyRunner": "Cualquier máquina con capacidad",
             "anyRunnerDetail": "Se ejecuta aquí mientras este sandbox esté tranquilo; cuando está ocupado, en el runner con más capacidad en ese momento.",
             "anyRunnerNone": "Se ejecuta aquí hasta que configures un runner en una de tus máquinas.",
-            "intro": "Ejecuta tests, comprobaciones de tipos y checks completos en un runner en tu máquina en lugar de aquí; la salida y los archivos modificados se sincronizan, o se ejecutan aquí si está desconectada u ocupada.",
             "kindBunTest": "Ejecuciones de pruebas (bun test)",
             "kindBunTestDetail": "bun test y el ejecutor de pruebas propio de cada paquete.",
             "kindCustomDetail": "Comandos que coinciden con {pattern}",
@@ -10003,7 +10002,7 @@
             "lastRunFailed": "Última: {command}, terminó con {code}",
             "lastRunGoing": "En ejecución: {command}",
             "lastRunPassed": "Última: {command}, correcta",
-            "noRunners": " Aún no hay runner: añade uno en {devices} → máquina → Runners.",
+            "noRunners": "Aún no hay runner: añade uno en {devices} → máquina → Runners.",
             "runnerGone": "El ejecutor «{runner}» ya no está configurado, así que esto se ejecuta aquí.",
             "runnerOffline": "Sin conexión: el trabajo enviado aquí se ejecuta en este sandbox hasta que vuelva",
             "runnerOnline": "Conectado",
@@ -10912,8 +10911,6 @@
             "whoChanges": "Esto lo cambia el propietario o alguien con acceso total."
         },
         "dataProtection": {
-            "intro": "Tres pasos antes de que este sandbox trate datos personales.",
-            "introHint": "Activa las protecciones recomendadas, comprueba adónde van los datos y entrega los documentos a tu delegado de protección de datos. Nada cambia hasta que pulses «Aplicar» en el paso 1.",
             "about": "Acerca de: {name}",
             "steps": "Pasos",
             "step": {
@@ -12446,8 +12443,8 @@
             "notAllowed": "Tu cuenta no puede gestionar tokens aquí.",
             "serverTrouble": "El servidor tuvo un problema. Inténtalo de nuevo en un momento.",
             "whatFor": "Permite que un sandbox cree sandboxes en tu cuenta.",
+            "none": "Aún no hay tokens. Cada uno permite que un sandbox cree sandboxes en tu cuenta.",
             "hint": {
-                "title": "Tokens de aprovisionamiento",
                 "lane": "Cada sandbox que crea su agente",
                 "holder": "Sandbox con token",
                 "youApprove": "Dices que sí en el chat",
@@ -12550,8 +12547,8 @@
             "sandbox": "Sandbox",
             "claim": "Asignar",
             "whatFor": "Elige el sandbox que recibe los informes de problemas de cada repositorio.",
+            "none": "Aún no has reclamado ningún proyecto. Reclama un repositorio para elegir el sandbox que recibe sus informes de problemas.",
             "hint": {
-                "title": "Informes de proyecto",
                 "lane": "Un problema visto en un proyecto",
                 "anySandbox": "Cualquiera de tus sandboxes",
                 "claimedInbox": "Incidencias del sandbox elegido",

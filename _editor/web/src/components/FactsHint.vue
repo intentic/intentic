@@ -2,8 +2,9 @@
 import { Icon, type IconName, InfoHint } from "@intentic/ui";
 import { ARROW, AREA_GOOD, LANE } from "./explainerAtoms";
 
-// The (i) a settings section keeps its details behind, so the page itself says one line. Inside, the details are
-// glanced at, not read: a headline, an optional picture of how the thing travels (`steps`, tiles joined by arrows,
+// The (i) a settings section says what it is for in, and the only place it says so: the page under it starts with its
+// rows, never with a line repeating the card. Inside, it is glanced at, not read: the one sentence the section needs as
+// its headline (what it is for, not the section's name again), an optional picture of how the thing travels (`steps`, tiles joined by arrows,
 // the last one usually the outcome), then a column of facts, each an icon and a few words. A fact may lead with a term
 // in the headline's ink, for a legend ("Read-only …"). Drawn with explainerAtoms, as every explainer card is.
 

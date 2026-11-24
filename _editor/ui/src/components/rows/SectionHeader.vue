@@ -5,8 +5,9 @@ import { type SectionLabelVariants, ui } from "../../lib/ui.js";
 import { ROW_TIERS, type RowDensity, useRowDensity } from "./row.js";
 
 // What it cannot say, on purpose. NO COUNT: the rows under it are the tally. NO CAPTION: words beside a label were
-// removed view by view until the owner called them useless, so a reader who needs a sentence gets a <RowNote> in the
-// list. NO FILL: a band behind a header reads as a dark box on a textured skin, which is why it also cannot pin. NO
+// removed view by view until the owner called them useless, and the sentence that then led the list beside an (i) was
+// the same words twice (2026-11-24): what a section is for is said once, as the headline of the (i) in `#info`, and a
+// <RowNote> in the list is only what is true now (`_tools/checks/row-tiers.mjs`, leadNoteFindings). NO FILL: a band behind a header reads as a dark box on a textured skin, which is why it also cannot pin. NO
 // CLASS FOR ITS GEOMETRY: its size is its tier's (row.ts), so a rail's header is a step under a page's, and the room
 // under it is the <Section>'s, <RowGroup>'s or <NavRail>'s that draws it, at that tier's distance.
 const {

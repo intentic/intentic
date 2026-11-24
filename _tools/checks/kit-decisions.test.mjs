@@ -5,11 +5,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { extensionFindings } from "../../_shared/extension-ui/check/extension.mjs";
-import { boxOverrides, glyphFindings, sectionFindings, substituteFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
+import { boxOverrides, glyphFindings, leadNoteFindings, sectionFindings, substituteFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { blank } from "./lib/templates.mjs";
 
 const sfc = (template) => blank(`<script setup lang="ts">\nconst a = 1;\n</script>\n\n<template>\n${template}\n</template>\n`);
 const sections = (template) => sectionFindings(`View.vue`, sfc(template)).map(({ why }) => why);
+const leadNotes = (template) => leadNoteFindings(`View.vue`, sfc(template)).length;
 const glyphs = (template) => glyphFindings(`View.vue`, sfc(template)).map(({ why }) => why);
 const substitutes = (template, path = `View.vue`) => substituteFindings(path, sfc(template)).map(({ rule }) => rule);
 
@@ -46,6 +47,23 @@ test(`a tab strip, a search field and an open row drawn by hand are refused outs
     assert.deepEqual(substitutes(`<div :class="{ 'ui-row-open': open }"><button>row</button></div>`), [`open`]);
     assert.deepEqual(substitutes(`<div class="ui-row-open-later">x</div>`), []);
     assert.deepEqual(substitutes(`<div :class="ui-row-open" />`, `_editor/ui/src/components/rows/DisclosureRow.vue`), []);
+});
+
+test(`a group opening on a fixed sentence about itself is refused; its (i), a state, an empty list or a later note are not`, () => {
+    // The sentence beside an (i) that says it again, as a slot or as a label, with or without a glyph.
+    assert.equal(leadNotes(`<RowGroup label="A"><template #info><InfoHint label="About A">More</InfoHint></template><RowNote icon="send">{{ t(\`a.whatFor\`) }}</RowNote><Row title="r" /></RowGroup>`), 1);
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote :label="t(\`a.intro\`)" /><Row title="r" /></RowGroup>`), 1);
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote variant="note">\n    {{ t(\`a.intro\`) }}\n</RowNote></RowGroup>`), 1);
+    // What is true now: conditional on the note or on a template around it, toned, empty, or not one fixed message.
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote v-if="stale">{{ t(\`a.stale\`) }}</RowNote></RowGroup>`), 0);
+    assert.equal(leadNotes(`<RowGroup label="A"><template v-if="stale"><RowNote>{{ t(\`a.stale\`) }}</RowNote></template></RowGroup>`), 0);
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote tone="warning" :label="t(\`a.warn\`)" /></RowGroup>`), 0);
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote variant="empty">{{ t(\`a.none\`) }}</RowNote></RowGroup>`), 0);
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote>{{ t(\`a.count\`, { n }) }}</RowNote></RowGroup>`), 0);
+    assert.equal(leadNotes(`<RowGroup label="A"><RowNote :label="units.join(' · ')" /></RowGroup>`), 0);
+    // Only the group's first line is judged: a note under its rows, or in a <Section>, is something else.
+    assert.equal(leadNotes(`<RowGroup label="A"><Row title="r" /><RowNote>{{ t(\`a.foot\`) }}</RowNote></RowGroup>`), 0);
+    assert.equal(leadNotes(`<Section label="A"><RowNote>{{ t(\`a.intro\`) }}</RowNote></Section>`), 0);
 });
 
 test(`a group among another group's rows nests a card in a card; on the group's surface through a note it does not`, () => {

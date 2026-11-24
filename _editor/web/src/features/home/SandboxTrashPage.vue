@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS } from "@intentic/api-contract";
-import { Button, Notice, type NoticeModel, Page, PageHeader, Row, RowGroup, RowNote, SandboxLogo, SkeletonRows, toneInk } from "@intentic/ui";
+import { Button, InfoHint, Notice, type NoticeModel, Page, PageHeader, Row, RowGroup, RowNote, SandboxLogo, SkeletonRows, toneInk } from "@intentic/ui";
 import { formatDateTime, formatDayMonthTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -28,6 +28,7 @@ const state = computed(() =>
     trashState({ rows: trash.recoverable.value.length, read: trash.deleted.value !== undefined, readError: trash.readError.value !== undefined }),
 );
 const lanes = computed(() => trashLanes(trash.recoverable.value));
+const laneLabel = (lane: string): string => (lane === `cloud` ? t(`sandbox.placement.cloudLabel`) : t(`sandbox.recentlyDeleted.ownLane`));
 
 
 // A failed restore and a failed read are both said above the lists; a failed re-read leaves the rows it had.
@@ -78,11 +79,16 @@ const restore = async (trashId: string): Promise<void> => {
             <RowGroup
                 v-for="group in lanes"
                 :key="group.lane"
-                :label="group.lane === `cloud` ? t(`sandbox.placement.cloudLabel`) : t(`sandbox.recentlyDeleted.ownLane`)"
+                :label="laneLabel(group.lane)"
             >
-                <RowNote>{{
-                    group.lane === `cloud` ? t(`sandbox.recentlyDeleted.comesBackWithMachine`) : t(`sandbox.recentlyDeleted.comesBackAsName`)
-                }}</RowNote>
+                <!-- What restoring one of these brings back is the same for every row in the lane: the lane's (i). -->
+                <template #info>
+                    <InfoHint :label="t(`settings.explainers.about`, { name: laneLabel(group.lane) })">
+                        <span class="block text-xs text-content">{{
+                            group.lane === `cloud` ? t(`sandbox.recentlyDeleted.comesBackWithMachine`) : t(`sandbox.recentlyDeleted.comesBackAsName`)
+                        }}</span>
+                    </InfoHint>
+                </template>
                 <Row
                     v-for="row in group.rows"
                     :key="row.id"

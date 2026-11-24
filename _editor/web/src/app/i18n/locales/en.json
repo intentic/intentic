@@ -7419,12 +7419,12 @@
             "spawnSubagents": "Spawn subagents",
             "spawnedSubagentSpends": "A spawned subagent runs as a conversation of its own, on any connected provider, and spends the same connected accounts this one does.",
             "spawningRefusedOutright": "Spawning is refused outright, so the limits below bound only the subagents a runtime starts in-process.",
+            "changeInGuardrails": "Change in Guardrails",
             "subagentsAtOnce": "Subagents at once",
             "subagentsPerConversation": "Subagents per conversation",
             "totalDelegatedAgentsAllowed": "Total delegated agents allowed per conversation.",
             "waitForReset": "Wait for a reset",
-            "waitForResetHours": "Hours a subagent refused for a spent allowance waits for the reset before it stops. One with fallbacks moves to them after 90 minutes.",
-            "whetherInGuardrails": "Whether it may start subagents at all, and when it asks first:"
+            "waitForResetHours": "Hours a subagent refused for a spent allowance waits for the reset before it stops. One with fallbacks moves to them after 90 minutes."
         },
         "aiAccountSection": {
             "account": "{managedLabel} account",
@@ -9986,7 +9986,6 @@
             "anyRunner": "Any machine with room",
             "anyRunnerDetail": "Runs here while this sandbox is calm; while it is busy, on whichever runner has the most room at that moment.",
             "anyRunnerNone": "Runs here until a runner is set up on one of your machines.",
-            "intro": "Run tests, typechecks and full checks on a runner on your machine instead of here; output and changed files sync back, or run here when it's offline or busy.",
             "kindBunTest": "Test runs (bun test)",
             "kindBunTestDetail": "bun test, and each package's own test runner.",
             "kindCustomDetail": "Commands matching {pattern}",
@@ -10003,7 +10002,7 @@
             "lastRunFailed": "Last: {command}, exited {code}",
             "lastRunGoing": "Running now: {command}",
             "lastRunPassed": "Last: {command}, passed",
-            "noRunners": " No runner yet—add one under {devices} → a machine → Runners.",
+            "noRunners": "No runner yet—add one under {devices} → a machine → Runners.",
             "runnerGone": "The runner \"{runner}\" is no longer set up, so this runs here.",
             "runnerOffline": "Offline now: work sent here runs in this sandbox until it's back",
             "runnerOnline": "Connected",
@@ -10912,8 +10911,6 @@
             "whoChanges": "The owner or someone with Full access changes this."
         },
         "dataProtection": {
-            "intro": "Three steps before this sandbox handles anyone's personal data.",
-            "introHint": "Switch on the recommended protections, check where data goes, then hand your data protection officer the documents. Nothing changes until you press Apply in step 1.",
             "about": "About {name}",
             "steps": "Steps",
             "step": {
@@ -12446,8 +12443,8 @@
             "notAllowed": "Your account isn't allowed to manage tokens here.",
             "serverTrouble": "The server had a problem. Try again in a moment.",
             "whatFor": "Lets a sandbox create sandboxes on your account.",
+            "none": "No tokens yet. Each one lets a sandbox create sandboxes on your account.",
             "hint": {
-                "title": "Provisioning tokens",
                 "lane": "Each sandbox its agent makes",
                 "holder": "Sandbox with a token",
                 "youApprove": "You say yes in chat",
@@ -12550,8 +12547,8 @@
             "sandbox": "Sandbox",
             "claim": "Claim",
             "whatFor": "Pick the sandbox that gets problem reports about each repository.",
+            "none": "No project claimed yet. Claim a repository to pick the sandbox that gets its problem reports.",
             "hint": {
-                "title": "Project reports",
                 "lane": "A problem seen in a project",
                 "anySandbox": "Any of your sandboxes",
                 "claimedInbox": "Named sandbox's issues",

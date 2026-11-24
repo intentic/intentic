@@ -76,7 +76,8 @@ const withdraw = async (id: string): Promise<void> => {
     <section v-if="canShip && keys.length > 0" class="flex flex-col gap-3">
         <Notice v-if="notice" :of="notice" />
         <RowGroup :label="t(`sandbox.cardlessKeys.title`)">
-            <RowNote :label="t(`sandbox.cardlessKeys.caption`)" />
+            <!-- Not what the group is: what is wrong with each key in it and the step it asks for, so it leads, in the warning's ink. -->
+            <RowNote icon="exclamation-circle" tone="warning" :label="t(`sandbox.cardlessKeys.caption`)" />
             <!-- Titled by the name the computer was connected under: the one the owner once typed, not the connection key. -->
             <Row v-for="key in keys" :key="key.id" icon="key" :title="key.card" :description="describe(key)">
                 <template #control>

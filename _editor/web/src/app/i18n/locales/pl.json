@@ -6796,12 +6796,12 @@
             "spawnSubagents": "Uruchamiaj podagenty",
             "spawnedSubagentSpends": "Uruchomiony podagent działa jako osobna rozmowa, na dowolnym podłączonym dostawcy, i wydaje te same podłączone konta co ten.",
             "spawningRefusedOutright": "Uruchamianie jest odrzucane wprost, więc limity poniżej ograniczają tylko podagenty, które środowisko uruchomieniowe startuje w swoim procesie.",
+            "changeInGuardrails": "Zmień w Bezpiecznikach",
             "subagentsAtOnce": "Podagentów naraz",
             "subagentsPerConversation": "Podagentów na rozmowę",
             "totalDelegatedAgentsAllowed": "Łączna liczba delegowanych agentów dozwolona na rozmowę.",
             "waitForReset": "Czekaj na odnowienie",
-            "waitForResetHours": "Ile godzin podagent odrzucony z powodu wyczerpanego limitu czeka na odnowienie, zanim się zatrzyma. Podagent z zapasowymi modelami przechodzi na nie po 90 minutach.",
-            "whetherInGuardrails": "Czy w ogóle może uruchamiać podagenty i kiedy najpierw pyta:"
+            "waitForResetHours": "Ile godzin podagent odrzucony z powodu wyczerpanego limitu czeka na odnowienie, zanim się zatrzyma. Podagent z zapasowymi modelami przechodzi na nie po 90 minutach."
         },
         "aiAccountSection": {
             "account": "Konto {managedLabel}",
@@ -9314,7 +9314,6 @@
             "anyRunner": "Dowolna maszyna z zapasem",
             "anyRunnerDetail": "Działa tutaj, dopóki ten sandbox nie jest obciążony; gdy jest zajęty, na runnerze, który ma w danej chwili największy zapas.",
             "anyRunnerNone": "Działa tutaj, dopóki na jednej z twoich maszyn nie zostanie skonfigurowany runner.",
-            "intro": "Uruchamiaj testy, sprawdzanie typów i pełne kontrole na runnerze na swojej maszynie zamiast tutaj; wynik i zmienione pliki wracają, a gdy maszyna jest offline lub zajęta, praca zostaje tutaj.",
             "kindBunTest": "Testy (bun test)",
             "kindBunTestDetail": "bun test oraz własny runner testów każdego pakietu.",
             "kindCustomDetail": "Polecenia pasujące do {pattern}",
@@ -9331,7 +9330,7 @@
             "lastRunFailed": "Ostatnio: {command}, kod wyjścia {code}",
             "lastRunGoing": "Teraz działa: {command}",
             "lastRunPassed": "Ostatnio: {command}, przeszło",
-            "noRunners": " Nie masz jeszcze runnera — dodaj go w {devices} → maszyna → Runnery.",
+            "noRunners": "Nie masz jeszcze runnera — dodaj go w {devices} → maszyna → Runnery.",
             "runnerGone": "Runner „{runner}” nie jest już skonfigurowany, więc to działa tutaj.",
             "runnerOffline": "Teraz offline: praca wysłana tutaj działa w tym sandboxie, dopóki nie wróci",
             "runnerOnline": "Połączony",
@@ -10289,8 +10288,6 @@
             "whoChanges": "Zmienia to właściciel albo ktoś z pełnym dostępem."
         },
         "dataProtection": {
-            "intro": "Trzy kroki, zanim ten sandbox zacznie przetwarzać czyjekolwiek dane osobowe.",
-            "introHint": "Włącz zalecane zabezpieczenia, sprawdź, dokąd trafiają dane, i przekaż dokumenty inspektorowi ochrony danych. Nic się nie zmieni, dopóki nie naciśniesz „Zastosuj” w kroku 1.",
             "about": "Więcej o: {name}",
             "steps": "Kroki",
             "step": {
@@ -11823,8 +11820,8 @@
             "notAllowed": "Twoje konto nie może tu zarządzać tokenami.",
             "serverTrouble": "Serwer miał problem. Spróbuj ponownie za chwilę.",
             "whatFor": "Pozwala sandboxowi tworzyć sandboxy na Twoim koncie.",
+            "none": "Nie ma jeszcze tokenów. Każdy pozwala sandboxowi tworzyć sandboxy na Twoim koncie.",
             "hint": {
-                "title": "Tokeny provisioningu",
                 "lane": "Każdy sandbox tworzony przez jego agenta",
                 "holder": "Sandbox z tokenem",
                 "youApprove": "Zgadzasz się na czacie",
@@ -11927,8 +11924,8 @@
             "sandbox": "Piaskownica",
             "claim": "Przypisz",
             "whatFor": "Wybierz sandbox, który dostaje zgłoszenia problemów z każdego repozytorium.",
+            "none": "Nie przypisano jeszcze żadnego projektu. Przypisz repozytorium, aby wybrać sandbox, który dostaje jego zgłoszenia problemów.",
             "hint": {
-                "title": "Zgłoszenia projektów",
                 "lane": "Problem zauważony w projekcie",
                 "anySandbox": "Dowolny z Twoich sandboxów",
                 "claimedInbox": "Zgłoszenia wybranego sandboxa",

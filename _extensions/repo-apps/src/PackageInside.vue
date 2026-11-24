@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PackageUnit, PackageUnitEdge, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
-import { Await, Card, Notice, noticeOf, RowGroup, RowNote, Row, StatStrip, ui } from "@intentic/extension-ui";
+import { Await, Card, InfoHint, Notice, noticeOf, RowGroup, RowNote, Row, StatStrip, ui } from "@intentic/extension-ui";
 import { computed, ref, toRef, watch } from "vue";
 import { isUpward, stackOf, unitLinks } from "./layerModel";
 import { usePackageModules } from "./useWorkspaceGraph";
@@ -176,7 +176,11 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
                         v-if="stack.upward.length > 0"
                         :label="t(`dependenciesView.inside.upward`)"
                     >
-                        <RowNote :label="t(`dependenciesView.inside.upwardCaption`)" />
+                        <template #info>
+                            <InfoHint :label="t(`dependenciesView.inside.upward`)">
+                                <span class="block text-xs text-content">{{ t(`dependenciesView.inside.upwardCaption`) }}</span>
+                            </InfoHint>
+                        </template>
                         <Row
                             v-for="edge in stack.upward"
                             :key="`${edge.from}>${edge.to}`"

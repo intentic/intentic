@@ -2,7 +2,7 @@
 import { computed, ref, toRaw } from "vue";
 import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
 import type { OrgCeiling } from "@intentic/sandbox-contract/schemas/organisation";
-import { Button, Icon, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, Icon, InfoHint, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { idFromName } from "../../lib/idFromName";
@@ -59,7 +59,11 @@ const shelves = (profile: AccessProfile) =>
                     ><template #icon><Icon name="plus" /></template
                 ></Button>
             </template>
-            <RowNote>{{ t(`organisations.accessPolicy.profileNote`) }}</RowNote>
+            <template #info>
+                <InfoHint :label="t(`settings.explainers.about`, { name: t(`organisations.accessPolicy.profiles`) })">
+                    <span class="block text-xs text-content">{{ t(`organisations.accessPolicy.profileNote`) }}</span>
+                </InfoHint>
+            </template>
             <RowNote v-if="!profiles?.length">{{ t(`organisations.accessPolicy.empty`) }}</RowNote>
             <!-- A block at the group's own tier, so each profile's form sits on the rows' surface rather than off it. -->
             <RowNote v-for="(profile, index) in profiles" :key="index" variant="block">
@@ -139,7 +143,11 @@ const shelves = (profile: AccessProfile) =>
             </RowNote>
         </RowGroup>
         <RowGroup :label="t(`organisations.accessPolicy.ceiling`)">
-            <RowNote>{{ t(`organisations.accessPolicy.ceilingNote`) }}</RowNote>
+            <template #info>
+                <InfoHint :label="t(`settings.explainers.about`, { name: t(`organisations.accessPolicy.ceiling`) })">
+                    <span class="block text-xs text-content">{{ t(`organisations.accessPolicy.ceilingNote`) }}</span>
+                </InfoHint>
+            </template>
             <OrgToolCeiling v-model="tools" :readonly="readonly" />
             <OrgPolicyList
                 v-model="accounts"

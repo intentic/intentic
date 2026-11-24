@@ -70,8 +70,8 @@ const onPolicyKey = async (event: KeyboardEvent): Promise<void> => {
     }
 };
 
-// What each group's one line leaves out, behind the (i) beside its name: the three ways a part is held as a legend, what
-// a required setting withstands, and what "only this organisation's people" does to someone removed.
+// Each group's (i): what the group governs as its headline, then the three ways a part is held as a legend, what a
+// required setting withstands, and what "only this organisation's people" does to someone removed.
 const modeLegend = computed<readonly HintFact[]>(() => [
     { icon: `unlock`, term: t(`organisations.mode.open`), text: t(`organisations.detail.legend.open`) },
     { icon: `lock`, term: t(`organisations.mode.locked`), text: t(`organisations.detail.legend.locked`) },
@@ -130,11 +130,10 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
             <template #info>
                 <FactsHint
                     :label="t(`settings.explainers.about`, { name: t(`organisations.detail.legend.title`) })"
-                    :title="t(`organisations.detail.legend.title`)"
+                    :title="t(`organisations.detail.policyScope`)"
                     :facts="modeLegend"
                 />
             </template>
-            <RowNote icon="shield">{{ t(`organisations.detail.policyScope`) }}</RowNote>
             <Row v-for="row in draft" :key="row.section" :title="t(`organisations.section.${row.section}`)">
                 <template #control>
                     <SegmentedControl v-if="admin" v-model="row.mode" :options="modeOptions" :aria-label="t(`organisations.section.${row.section}`)" size="xs" />
@@ -147,11 +146,10 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
             <template #info>
                 <FactsHint
                     :label="t(`settings.explainers.about`, { name: t(`organisations.preset.group`) })"
-                    :title="t(`organisations.preset.group`)"
+                    :title="t(`organisations.preset.scope`)"
                     :facts="presetFacts"
                 />
             </template>
-            <RowNote icon="lock">{{ t(`organisations.preset.scope`) }}</RowNote>
             <Row v-for="row in pins" :key="row.group" :title="t(`organisations.preset.${row.group}`)">
                 <template #control>
                     <ToggleSwitch v-if="admin" v-model="row.pinned" :aria-label="t(`organisations.preset.${row.group}`)" />

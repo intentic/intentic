@@ -3,7 +3,8 @@
 // Reject redundant compact density, retired header props, ungrouped rows, nested groups, missing section gaps and per-row heights.
 // Ground decides card fill; a group's rows share one height by themselves, so `equal-rows` is retired. Hand-drawn headers belong to kit-substitutes.mjs.
 // Shared sectionFindings in extension-ui/check/kit-decisions.mjs also enforces section rules in published extension checks.
-import { sectionFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
+// A group never opens on a fixed sentence about itself (leadNoteFindings): that sentence is its header's (i).
+import { leadNoteFindings, sectionFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 
 // Any Tailwind padding utility, at any breakpoint; `p-0`/`py-0` are a deliberate reset, not geometry.
@@ -24,7 +25,7 @@ const usages = new Map();
 
 for (const path of tracked) {
     const scan = blank(templateSource(path));
-    findings.push(...sectionFindings(path, scan));
+    findings.push(...sectionFindings(path, scan), ...leadNoteFindings(path, scan));
     const stack = [];
     // `<template v-if>`/`v-for` draw nothing, so a row inside one is still the group's child; `<template #slot>` is
     // somebody else's content, owned by its own component.

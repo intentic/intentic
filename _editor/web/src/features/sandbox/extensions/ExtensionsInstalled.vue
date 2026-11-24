@@ -264,7 +264,7 @@ const confirmRemove = async (): Promise<void> => {
         <template v-else>
             <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
             <RowGroup v-if="waiting.length > 0" :label="t(`sandbox.extensionsInstalled.waitingForApproval`)">
-                <RowNote :label="t(`sandbox.extensionsInstalled.waitingCaption`)" />
+                <RowNote icon="exclamation-circle" tone="warning" :label="t(`sandbox.extensionsInstalled.waitingCaption`)" />
                 <Row v-for="extension in waiting" :key="extension.id">
                     <template #title>
                         <span class="block truncate">{{ extension.id }}</span>

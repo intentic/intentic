@@ -4,11 +4,11 @@ import {
     Button,
     ConfirmDialog,
     FilterBar,
+    InfoHint,
     Notice,
     type NoticeModel,
     Row,
     RowGroup,
-    RowNote,
     Section,
     SplitView,
     StatusBadge,
@@ -428,7 +428,11 @@ onBeforeUnmount(() => {
 
                         <!-- The gateway serving these connections, answering "is this still working" where the connector page is actually read. -->
                         <RowGroup v-if="cardProcesses.length > 0" :label="t(`capabilities.capabilities.backgroundProcess`)">
-                            <RowNote :label="t(`capabilities.capabilities.relaysEventsToAgent`)" />
+                            <template #info>
+                                <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`capabilities.capabilities.backgroundProcess`) })">
+                                    <span class="block text-xs text-content">{{ t(`capabilities.capabilities.relaysEventsToAgent`) }}</span>
+                                </InfoHint>
+                            </template>
                             <Row v-for="row in cardProcesses" :key="row.id">
                                 <!-- State dot goes in `#lead`, where every other list in the app puts one. -->
                                 <template #lead>

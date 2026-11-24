@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { endpointProvider, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
-import { Button, Notice, type NoticeModel, Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Button, InfoHint, Notice, type NoticeModel, Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
@@ -66,8 +66,11 @@ const conversationGrants = computed(() => policy?.conversations.length ?? 0);
 
 <template>
     <RowGroup :label="t(`sandbox.agentPrivacyShield.trustedProviders`)">
-        <RowNote>{{ t(`sandbox.agentPrivacyShield.trustedIntro`) }}</RowNote>
-
+        <template #info>
+            <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.agentPrivacyShield.trustedProviders`) })">
+                <span class="block text-xs text-content">{{ t(`sandbox.agentPrivacyShield.trustedIntro`) }}</span>
+            </InfoHint>
+        </template>
         <RowNote v-if="providers.length === 0" variant="empty">{{ t(`sandbox.agentPrivacyShield.noProviders`) }}</RowNote>
 
         <Row v-for="row in rows" :key="row.provider.id" lead="face" :title="row.provider.label" :description="row.note">

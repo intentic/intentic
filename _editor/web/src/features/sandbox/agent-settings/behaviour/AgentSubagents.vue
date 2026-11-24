@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Icon, ui, Notice, Row, RowGroup, RowNote } from "@intentic/ui";
+import { Button, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { numberSetting, commitCount } from "../models/numberInputs";
-import { postureOf } from "../../guardrails/spawnPosture";
+import { postureOf, postures } from "../../guardrails/spawnPosture";
 import { useT } from "@intentic/ui/i18n";
 import DetailSwitch from "./DetailSwitch.vue";
 import { useDetailLevel } from "./detailLevel";
@@ -36,19 +36,30 @@ const RERUN_HOURS = numberSetting(SandboxSettingsSchema.shape.childRerunHorizonH
 const RESERVE = numberSetting(SandboxSettingsSchema.shape.subagentReservePercent);
 
 // Whether spawning is refused, which leaves the ceilings below bounding only the subagents a runtime starts itself.
-const spawnDenied = computed(() => postureOf(settings.value?.actionRules ?? {}) === `deny`);
+const posture = computed(() => postureOf(settings.value?.actionRules ?? {}));
+const spawnDenied = computed(() => posture.value === `deny`);
+// The posture as Guardrails' own picker names it, so the word read here is the one found there.
+const postureLabel = computed(() => postures().find((option) => option.value === posture.value)?.label);
 </script>
 
 <template>
     <RowGroup data-setting="agent-subagents" :label="t(`shared.subagents`)">
         <template #info><SubagentsExplainer /></template>
         <template #actions><DetailSwitch v-model="level" :label="t(`shared.subagents`)" /></template>
-        <RowNote>
-            {{ spawnDenied ? t(`sandbox.agentSubagents.spawningRefusedOutright`) : t(`sandbox.agentSubagents.whetherInGuardrails`) }}
-            <RouterLink :to="here(page.sandboxSettings(`guardrails`))" :class="ui.textButton()"
-                >{{ t(`sandbox.sandboxNav.guardrails`) }}<Icon name="arrow-right" class="text-2xs"
-            /></RouterLink>
-        </RowNote>
+        <!-- Whether it may spawn at all is a guardrail, set on Guardrails beside everything else it may do without asking:
+             read-only here, as the row it is, with the way to change it. Refused outright, it says what that leaves the
+             ceilings below to bound. -->
+        <Row
+            icon="subagents"
+            :title="t(`sandbox.agentSubagents.spawnSubagents`)"
+            :description="spawnDenied ? t(`sandbox.agentSubagents.spawningRefusedOutright`) : postureLabel"
+        >
+            <template #control>
+                <Button :as="RouterLink" :to="here(page.sandboxSettings(`guardrails`))" size="small" tier="quiet">
+                    {{ t(`sandbox.agentSubagents.changeInGuardrails`) }}
+                </Button>
+            </template>
+        </Row>
 
         <!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->
         <Row

@@ -7419,12 +7419,12 @@
             "spawnSubagents": "Lancer des sous-agents",
             "spawnedSubagentSpends": "Un sous-agent lancé tourne comme une conversation à part entière, sur n'importe quel fournisseur connecté, et dépense les mêmes comptes connectés que celui-ci.",
             "spawningRefusedOutright": "Le lancement est refusé d'emblée : les limites ci-dessous ne bornent donc que les sous-agents qu'un environnement démarre dans son propre processus.",
+            "changeInGuardrails": "Changer dans Garde-fous",
             "subagentsAtOnce": "Sous-agents à la fois",
             "subagentsPerConversation": "Sous-agents par conversation",
             "totalDelegatedAgentsAllowed": "Total d'agents délégués autorisés par conversation.",
             "waitForReset": "Attendre la réinitialisation",
-            "waitForResetHours": "Heures pendant lesquelles un sous-agent refusé faute de quota attend la réinitialisation avant de s'arrêter. Un sous-agent avec des solutions de repli y passe après 90 minutes.",
-            "whetherInGuardrails": "S'il peut lancer des sous-agents, et quand il demande d'abord :"
+            "waitForResetHours": "Heures pendant lesquelles un sous-agent refusé faute de quota attend la réinitialisation avant de s'arrêter. Un sous-agent avec des solutions de repli y passe après 90 minutes."
         },
         "aiAccountSection": {
             "account": "Compte {managedLabel}",
@@ -9986,7 +9986,6 @@
             "anyRunner": "N'importe quelle machine qui a de la place",
             "anyRunnerDetail": "S'exécute ici tant que ce sandbox est calme ; quand il est chargé, sur le runner qui a le plus de place à ce moment-là.",
             "anyRunnerNone": "S'exécute ici jusqu'à ce qu'un runner soit configuré sur l'une de vos machines.",
-            "intro": "Lancez tests, vérifications de types et contrôles complets sur un runner sur votre machine plutôt qu'ici ; la sortie et les fichiers modifiés se synchronisent, ou s'exécutent ici si la machine est hors ligne ou occupée.",
             "kindBunTest": "Exécutions de tests (bun test)",
             "kindBunTestDetail": "bun test, et le lanceur de tests propre à chaque paquet.",
             "kindCustomDetail": "Commandes correspondant à {pattern}",
@@ -10003,7 +10002,7 @@
             "lastRunFailed": "Dernière : {command}, sortie {code}",
             "lastRunGoing": "En cours : {command}",
             "lastRunPassed": "Dernière : {command}, réussie",
-            "noRunners": " Pas encore de runner — ajoutez-en un via {devices} → machine → Runners.",
+            "noRunners": "Pas encore de runner — ajoutez-en un via {devices} → machine → Runners.",
             "runnerGone": "Le runner « {runner} » n'est plus configuré : ceci s'exécute donc ici.",
             "runnerOffline": "Hors ligne : le travail envoyé ici s'exécute dans ce sandbox jusqu'à son retour",
             "runnerOnline": "Connecté",
@@ -10912,8 +10911,6 @@
             "whoChanges": "Modifiable par le propriétaire ou une personne ayant l’accès complet."
         },
         "dataProtection": {
-            "intro": "Trois étapes avant que ce sandbox traite des données personnelles.",
-            "introHint": "Activez les protections recommandées, vérifiez où vont les données, puis remettez les documents à votre délégué à la protection des données. Rien ne change tant que vous n'appuyez pas sur « Appliquer » à l'étape 1.",
             "about": "À propos : {name}",
             "steps": "Étapes",
             "step": {
@@ -12446,8 +12443,8 @@
             "notAllowed": "Votre compte ne peut pas gérer les jetons ici.",
             "serverTrouble": "Le serveur a rencontré un problème. Réessayez dans un instant.",
             "whatFor": "Permet à un sandbox de créer des sandboxes sur votre compte.",
+            "none": "Aucun jeton pour l'instant. Chacun permet à un sandbox de créer des sandboxes sur votre compte.",
             "hint": {
-                "title": "Jetons d'approvisionnement",
                 "lane": "Chaque sandbox que crée son agent",
                 "holder": "Sandbox avec un jeton",
                 "youApprove": "Vous acceptez dans le chat",
@@ -12550,8 +12547,8 @@
             "sandbox": "Sandbox",
             "claim": "Attribuer",
             "whatFor": "Choisissez le sandbox qui reçoit les signalements de chaque dépôt.",
+            "none": "Aucun projet revendiqué pour l'instant. Revendiquez un dépôt pour choisir le sandbox qui reçoit ses signalements.",
             "hint": {
-                "title": "Signalements de projet",
                 "lane": "Un problème vu dans un projet",
                 "anySandbox": "N'importe lequel de vos sandboxes",
                 "claimedInbox": "Problèmes du sandbox choisi",

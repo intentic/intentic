@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
-import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
+import { InfoHint, Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useExtensions } from "../../../models/extensions/useExtensions";
@@ -38,7 +38,11 @@ const mixedLine = (row: ServiceRow): string =>
 
 <template>
     <RowGroup data-setting="guardrails-outside-actions" :label="t(`sandbox.guardrails.actions.title`)">
-        <RowNote>{{ t(`sandbox.guardrails.actions.intro`) }}</RowNote>
+        <template #info>
+            <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.guardrails.actions.title`) })">
+                <span class="block text-xs text-content">{{ t(`sandbox.guardrails.actions.intro`) }}</span>
+            </InfoHint>
+        </template>
         <Row icon="subagents" :title="t(`sandbox.agentSubagents.spawnSubagents`)" :description="t(`sandbox.agentSubagents.spawnedSubagentSpends`)">
             <template #control>
                 <Picker

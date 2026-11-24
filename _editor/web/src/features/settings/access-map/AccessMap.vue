@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, SegmentedControl } from "@intentic/ui";
+import { Button, Icon, InfoHint, SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { settingKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
@@ -159,10 +159,15 @@ const look = {
     <div ref="root" class="flex flex-col gap-5" :style="look" data-setting="access-map">
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 flex-col gap-1">
-                <p class="max-w-prose text-sm text-muted">{{ t(`settings.accessMap.intro`) }}</p>
-                <p class="text-xs text-subtle">
-                    <span class="text-content">{{ tally.join(` · `) }}</span>
-                    <template v-if="freshness !== ``"> · {{ freshness }}</template>
+                <!-- What the map is and how to read it is the (i) beside the tally, as on every other page: the map starts at once. -->
+                <p class="flex items-center gap-2 text-xs text-subtle">
+                    <span>
+                        <span class="text-content">{{ tally.join(` · `) }}</span>
+                        <template v-if="freshness !== ``"> · {{ freshness }}</template>
+                    </span>
+                    <InfoHint :label="t(`settings.explainers.about`, { name: t(`settings.section.access`) })">
+                        <span class="block text-xs text-content">{{ t(`settings.accessMap.intro`) }}</span>
+                    </InfoHint>
                 </p>
             </div>
             <div class="flex shrink-0 items-center gap-2">

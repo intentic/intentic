@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ReceivedDrop } from "@intentic/sandbox-contract/schemas/account-routes";
 import { errorMessage } from "@intentic/base/errors";
-import { Button, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, InfoHint, Notice, Row, RowGroup, ui } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -68,7 +68,11 @@ const notice = computed(() => outcome.value);
 
 <template>
     <RowGroup v-if="drops.length > 0" :id="RECEIVED_ANCHOR" :label="t(`sandbox.sandboxReceivedCard.heading`)" data-received-drops>
-        <RowNote icon="download">{{ t(`sandbox.sandboxReceivedCard.whatFor`) }}</RowNote>
+        <template #info>
+            <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.sandboxReceivedCard.heading`) })">
+                <span class="block text-xs text-content">{{ t(`sandbox.sandboxReceivedCard.whatFor`) }}</span>
+            </InfoHint>
+        </template>
         <Notice v-if="notice" :of="notice" />
         <div class="divide-y divide-line-subtle">
             <Row

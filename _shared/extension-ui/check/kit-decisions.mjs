@@ -98,6 +98,52 @@ const unspaced = (frame) => {
         : `<${frame.name}> holds several <RowGroup>/<Section>s and states no gap between them, so their headers touch the section above: give it the stack's gap (\`flex flex-col gap-6\`)`;
 };
 
+// ── 11 · a fixed sentence about a group leading its rows. What a section is for is said once, in its header's (i); a note
+// on the surface is what is true now (a warning, an empty list, a step to take). The two together were the same words
+// twice, one of them dressed as a row, and the owner asked for one place (2026-11-24).
+const STATEFUL = /(?:^|\s)(?:v-if|v-else-if|v-else|v-show)(?:[\s=>]|$)/u;
+// One catalog message, nothing interpolated: what a note says whatever the state.
+const FIXED_TEXT = /^\s*t\(\s*`[\w.-]+`\s*\)\s*$/u;
+
+// A note drawn whatever the state, untoned, a sentence (not empty / action / block), whose words are one fixed message,
+// as its `label` or as its whole slot.
+const fixedNote = (attrs, scan, bodyStart, selfClosing) => {
+    if (STATEFUL.test(attrs) || /(?:^|\s):?tone="/u.test(attrs) || /(?:^|\s)variant="(?!note")/u.test(attrs)) {
+        return false;
+    }
+    const label = /(?:^|\s):label="([^"]*)"/u.exec(attrs)?.[1];
+    if (label !== undefined) {
+        return FIXED_TEXT.test(label);
+    }
+    const close = selfClosing === `` ? scan.indexOf(`</RowNote>`, bodyStart) : -1;
+    const said = close === -1 ? undefined : /^\s*\{\{([\s\S]*)\}\}\s*$/u.exec(scan.slice(bodyStart, close))?.[1];
+    return said !== undefined && FIXED_TEXT.test(said);
+};
+
+/** A blanked template's groups that open on a fixed sentence about themselves (11). */
+export const leadNoteFindings = (path, scan) => {
+    const findings = [];
+    walk(scan, ({ name, attrs, index, end, selfClosing }, stack) => {
+        const transparent = name === `template` && !/(?:^|\s)(?:#|v-slot)/u.test(attrs);
+        const namedSlot = name === `template` && !transparent;
+        const parentAt = stack.findLastIndex((frame) => !frame.transparent);
+        const group = stack[parentAt]?.name === `RowGroup` ? stack[parentAt] : undefined;
+        if (group !== undefined && !namedSlot && !transparent && group.drawn !== true) {
+            group.drawn = true;
+            // A `<template v-if>` between the note and its group makes it as conditional as a `v-if` on the note.
+            const gated = stack.slice(parentAt + 1).some((frame) => frame.gated);
+            if (name === `RowNote` && !gated && fixedNote(attrs, scan, end, selfClosing)) {
+                findings.push({
+                    at: at(path, scan, index),
+                    why: `<RowNote> opens its <RowGroup> with a fixed sentence about the group: what a section is for goes in its header's (i) (\`#info\`, with the sentence as the card's headline), and a list with nothing in it says so in a \`variant="empty"\` note. A note leading the rows is what is true now: conditional (\`v-if\`), toned (\`tone\`), or not one fixed catalog sentence`,
+                });
+            }
+        }
+        return { name, transparent, gated: transparent && STATEFUL.test(attrs) };
+    });
+    return findings;
+};
+
 /**
  * A blanked template's section findings: a header decision taken at the call site (4), a group among another group's
  * rows (8), sections side by side with nothing spacing them (9), a row given a height (10).

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CheckoutPress, CheckoutUsage } from "@intentic/sandbox-contract/schemas/metrics";
-import { Button, ConfirmDialog, type Tip } from "@intentic/ui";
+import { Button, ConfirmDialog, InfoHint, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatBytes, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
@@ -68,6 +68,9 @@ const freeLanded = (): void => {
     <section v-if="rows.length > 0" class="flex flex-col gap-1.5 border-t border-line-subtle pt-3" data-storage-checkouts>
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h4 class="text-xs font-medium text-content">{{ t(`sandbox.storageCheckouts.heading`) }}</h4>
+            <InfoHint class="self-center" :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.storageCheckouts.heading`) })">
+                <span class="block text-xs text-content">{{ t(`sandbox.storageCheckouts.intro`) }}</span>
+            </InfoHint>
             <span class="text-2xs tabular-nums text-subtle">{{
                 t(`sandbox.storageCheckouts.summary`, { count: rows.length, bytes: formatBytes(total) }, rows.length)
             }}</span>
@@ -85,7 +88,6 @@ const freeLanded = (): void => {
                 <template #icon><Icon name="box" /></template>
             </Button>
         </div>
-        <p class="text-2xs leading-relaxed text-muted">{{ t(`sandbox.storageCheckouts.intro`) }}</p>
 
         <ul class="flex flex-col">
             <li

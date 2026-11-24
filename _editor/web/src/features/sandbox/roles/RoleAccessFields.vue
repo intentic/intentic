@@ -2,7 +2,7 @@
 import { fenceCovers } from "@intentic/sandbox-contract/policy/fence-paths";
 import { roleHome } from "@intentic/sandbox-contract/policy/role-home";
 import type { AccessProfileEntry } from "@intentic/sandbox-contract/schemas/access-profiles";
-import { Notice, type NoticeModel, Picker, SectionHeader, ui } from "@intentic/ui";
+import { InfoHint, Notice, type NoticeModel, Picker, SectionHeader, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -86,8 +86,13 @@ const pick = async (id: string | undefined): Promise<void> => {
         </div>
 
         <div class="flex flex-col gap-2">
-            <SectionHeader :label="t(`sandbox.roleAccess.heldTo`)" />
-            <p class="m-0 text-xs text-subtle">{{ t(`sandbox.roleAccess.intro`) }}</p>
+            <SectionHeader :label="t(`sandbox.roleAccess.heldTo`)">
+                <template #info>
+                    <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.roleAccess.heldTo`) })">
+                        <span class="block text-xs text-content">{{ t(`sandbox.roleAccess.intro`) }}</span>
+                    </InfoHint>
+                </template>
+            </SectionHeader>
             <!-- Read where the profiles cannot be: someone below Full access without People & access. -->
             <p v-if="!available" class="m-0 text-xs text-subtle">{{ t(`sandbox.roleAccess.unreadable`) }}</p>
             <template v-else>

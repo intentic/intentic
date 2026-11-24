@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, InfoHint, Notice, type NoticeModel, type Tone, toneInk, toneWash } from "@intentic/ui";
+import { Icon, Notice, type NoticeModel, type Tone, toneInk, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, useId } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -109,12 +109,6 @@ const pageNotice = computed<NoticeModel | undefined>(() =>
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <p class="flex items-center gap-2 text-xs text-muted">
-            {{ t(`sandbox.dataProtection.intro`) }}
-            <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.sandboxNav.dataProtection`) })">
-                <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.introHint`) }}</span>
-            </InfoHint>
-        </p>
         <Notice v-if="pageNotice" :of="pageNotice" />
 
         <!-- allow(substitutes): a wizard's steps, each a tile of several lines with its done state, which a segment cannot hold -->

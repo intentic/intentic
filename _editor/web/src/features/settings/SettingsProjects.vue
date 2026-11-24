@@ -102,17 +102,20 @@ const notice = computed(() => (failure.value === undefined ? undefined : { tone:
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup :label="t(`settings.section.projects`)">
-            <!-- What a claim does, in one line; where a report travels and the rules a claim follows sit behind the (i). -->
+            <!-- What a claim does is the (i)'s headline, with where a report travels and the rules a claim follows under
+                 it; the list itself starts with the list. An empty one says what it is for, the one time that helps. -->
             <template #info>
                 <FactsHint
                     :label="t(`settings.explainers.about`, { name: t(`settings.section.projects`) })"
-                    :title="t(`settings.settingsProjects.hint.title`)"
+                    :title="t(`settings.settingsProjects.whatFor`)"
                     :lane="t(`settings.settingsProjects.hint.lane`)"
                     :steps="hintSteps"
                     :facts="hintFacts"
                 />
             </template>
-            <RowNote icon="send">{{ t(`settings.settingsProjects.whatFor`) }}</RowNote>
+            <RowNote v-if="claims.isSuccess.value && (claims.data.value ?? []).length === 0 && suggestions.length === 0" variant="empty">{{
+                t(`settings.settingsProjects.none`)
+            }}</RowNote>
             <div v-if="(claims.data.value ?? []).length > 0" class="divide-y divide-line-subtle">
                 <Row
                     v-for="row in claims.data.value"

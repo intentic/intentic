@@ -47,9 +47,9 @@ const setKind = (kind: string, runner: string | undefined): void => {
     <RowGroup data-setting="agent-offload" :label="t(`sandbox.agentOffload.title`)">
         <template #info><OffloadExplainer /></template>
         <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentOffload.title`)" /></template>
-        <RowNote>
-            {{ t(`sandbox.agentOffload.intro`) }}
-            <i18n-t v-if="noRunners" keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
+        <!-- What offloading is lives in the (i); the page only says why nothing can move yet, with the way to fix it. -->
+        <RowNote v-if="noRunners" icon="exclamation-circle" tone="warning">
+            <i18n-t keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
                 <template #devices
                     ><RouterLink :to="here(page.devices())" class="underline">{{ t(`sandbox.words.devicesSection`) }}</RouterLink></template
                 >

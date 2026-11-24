@@ -7419,12 +7419,12 @@
             "spawnSubagents": "Subagenten starten",
             "spawnedSubagentSpends": "Ein gestarteter Subagent läuft als eigene Unterhaltung, auf jedem verbundenen Anbieter, und verbraucht dieselben verbundenen Konten wie dieser.",
             "spawningRefusedOutright": "Das Starten wird rundheraus verweigert, die Grenzen unten begrenzen also nur die Subagenten, die eine Laufzeit prozessintern startet.",
+            "changeInGuardrails": "In „Leitplanken“ ändern",
             "subagentsAtOnce": "Subagenten gleichzeitig",
             "subagentsPerConversation": "Subagenten pro Unterhaltung",
             "totalDelegatedAgentsAllowed": "Gesamtzahl delegierter Agenten pro Unterhaltung.",
             "waitForReset": "Auf Zurücksetzung warten",
-            "waitForResetHours": "Stunden, die ein Subagent nach erschöpftem Kontingent auf die Zurücksetzung wartet, bevor er aufhört. Einer mit Ausweichmodellen wechselt nach 90 Minuten zu ihnen.",
-            "whetherInGuardrails": "Ob er überhaupt Subagenten starten darf, und wann er zuerst fragt:"
+            "waitForResetHours": "Stunden, die ein Subagent nach erschöpftem Kontingent auf die Zurücksetzung wartet, bevor er aufhört. Einer mit Ausweichmodellen wechselt nach 90 Minuten zu ihnen."
         },
         "aiAccountSection": {
             "account": "{managedLabel}-Konto",
@@ -9986,7 +9986,6 @@
             "anyRunner": "Jeder Rechner mit freier Kapazität",
             "anyRunnerDetail": "Läuft hier, solange diese Sandbox ruhig ist; ist sie ausgelastet, auf dem Runner mit der meisten freien Kapazität in diesem Moment.",
             "anyRunnerNone": "Läuft hier, bis auf einem Ihrer Rechner ein Runner eingerichtet ist.",
-            "intro": "Tests, Typprüfungen und volle Checks laufen auf einem Runner auf deinem Rechner statt hier; Ausgabe und geänderte Dateien synchronisieren zurück, oder laufen hier, wenn er offline oder ausgelastet ist.",
             "kindBunTest": "Testläufe (bun test)",
             "kindBunTestDetail": "bun test und der eigene Test-Runner jedes Pakets.",
             "kindCustomDetail": "Befehle, die auf {pattern} passen",
@@ -10003,7 +10002,7 @@
             "lastRunFailed": "Zuletzt: {command}, beendet mit {code}",
             "lastRunGoing": "Läuft gerade: {command}",
             "lastRunPassed": "Zuletzt: {command}, bestanden",
-            "noRunners": " Noch kein Runner — einen unter {devices} → Rechner → Runner hinzufügen.",
+            "noRunners": "Noch kein Runner — einen unter {devices} → Rechner → Runner hinzufügen.",
             "runnerGone": "Der Runner „{runner}“ ist nicht mehr eingerichtet, daher läuft dies hier.",
             "runnerOffline": "Gerade offline: Hierhin geschickte Arbeit läuft in dieser Sandbox, bis er zurück ist",
             "runnerOnline": "Verbunden",
@@ -10912,8 +10911,6 @@
             "whoChanges": "Das ändert der Eigentümer oder jemand mit vollem Zugriff."
         },
         "dataProtection": {
-            "intro": "Drei Schritte, bevor diese Sandbox personenbezogene Daten verarbeitet.",
-            "introHint": "Schalte die empfohlenen Schutzmaßnahmen ein, prüfe, wohin Daten gehen, und gib deinem Datenschutzbeauftragten die Dokumente. Nichts ändert sich, bis du in Schritt 1 auf „Anwenden“ drückst.",
             "about": "Mehr zu: {name}",
             "steps": "Schritte",
             "step": {
@@ -12446,8 +12443,8 @@
             "notAllowed": "Dein Konto darf hier keine Tokens verwalten.",
             "serverTrouble": "Der Server hatte ein Problem. Versuch es gleich noch einmal.",
             "whatFor": "Damit kann eine Sandbox Sandboxes in deinem Konto anlegen.",
+            "none": "Noch keine Tokens. Jedes lässt eine Sandbox Sandboxes in deinem Konto anlegen.",
             "hint": {
-                "title": "Bereitstellungs-Tokens",
                 "lane": "Jede Sandbox, die ihr Agent anlegt",
                 "holder": "Sandbox mit Token",
                 "youApprove": "Du stimmst im Chat zu",
@@ -12550,8 +12547,8 @@
             "sandbox": "Sandbox",
             "claim": "Zuweisen",
             "whatFor": "Wähle die Sandbox, die Problemmeldungen zu jedem Repository bekommt.",
+            "none": "Noch kein Projekt beansprucht. Beanspruche ein Repository, um die Sandbox zu wählen, die seine Problemmeldungen bekommt.",
             "hint": {
-                "title": "Projektmeldungen",
                 "lane": "Ein Problem in einem Projekt",
                 "anySandbox": "Eine deiner Sandboxes",
                 "claimedInbox": "Probleme der gewählten Sandbox",

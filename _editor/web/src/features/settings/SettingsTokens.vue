@@ -85,17 +85,17 @@ const hintFacts = computed<readonly HintFact[]>(() => [
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup :label="t(`shared.apiTokens`)">
-            <!-- What a token is for, in one line; how it works and when to mint one here sit behind the (i). -->
+            <!-- What a token is for is the (i)'s headline, with how it works and when to mint one here under it; the list
+                 itself starts with the list. An empty one says what it is for, the one time that helps. -->
             <template #info>
                 <FactsHint
                     :label="t(`settings.explainers.about`, { name: t(`shared.apiTokens`) })"
-                    :title="t(`settings.settingsTokens.hint.title`)"
+                    :title="t(`settings.settingsTokens.whatFor`)"
                     :lane="t(`settings.settingsTokens.hint.lane`)"
                     :steps="hintSteps"
                     :facts="hintFacts"
                 />
             </template>
-            <RowNote icon="box-plus">{{ t(`settings.settingsTokens.whatFor`) }}</RowNote>
             <!-- The list as it last looked here while it is read; an emptied one is remembered as nothing. The mint form
                  below never waits on it, and a list that did not load is said in the notice there. -->
             <Await :of="loaded" imprint="settings.tokens" :label="t(`settings.settingsTokens.readingTokens`)">
@@ -107,6 +107,7 @@ const hintFacts = computed<readonly HintFact[]>(() => [
                             </template>
                         </Row>
                     </div>
+                    <RowNote v-else variant="empty">{{ t(`settings.settingsTokens.none`) }}</RowNote>
                 </template>
                 <template #fallback>
                     <div role="status" aria-busy="true" :aria-label="t(`settings.settingsTokens.readingTokens`)" class="divide-y divide-line-subtle">

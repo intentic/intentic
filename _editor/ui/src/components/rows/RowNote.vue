@@ -7,7 +7,9 @@ import Icon from "../primitives/Icon.vue";
 import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, ROW_TONES, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
 
 const { variant = `note`, lead = `icon`, tone = `default` } = defineProps<{
-    // `note`: a sentence in the group's padding. `empty`: centred "nothing here yet", with room for an empty surface.
+    // `note`: a sentence in the group's padding about what is true now (a warning, a step to take, why a control is
+    // held), never what the group is for, which is its header's (i) (row-tiers.mjs refuses a fixed one leading the
+    // rows). `empty`: centred "nothing here yet", with room for an empty surface.
     // `action`: a pressable line about the list itself (show older, show fewer). NOT how a list adds one: adding is
     // a filled `<Button size="small" tier="boring">` with a plus in the group's `#actions`, top right, as every list
     // in the app adds (`_tools/checks/button-tiers.mjs`). `block`: arbitrary content (a form, a figure), padded like

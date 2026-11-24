@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PERSONAL_DATA_CLASSES, type PersonalDataClass, type PrivacyShieldStatus } from "@intentic/sandbox-contract/schemas/privacy";
 import { PRIVACY_LEAK_VALUE_MAX, type PrivacyLeakView } from "@intentic/sandbox-contract/schemas/privacy-leaks";
-import { Await, Button, Notice, Picker, Row, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
+import { Await, Button, InfoHint, Notice, Picker, Row, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -135,8 +135,11 @@ const proposalNotice = (id: string) => {
             </RowGroup>
         </template>
         <RowGroup data-setting="privacy-shield-leaks" :label="t(`sandbox.agentPrivacyShield.leaks.title`)">
-            <RowNote>{{ t(`sandbox.agentPrivacyShield.leaks.intro`) }}</RowNote>
-
+            <template #info>
+                <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.agentPrivacyShield.leaks.title`) })">
+                    <span class="block text-xs text-content">{{ t(`sandbox.agentPrivacyShield.leaks.intro`) }}</span>
+                </InfoHint>
+            </template>
             <Row
                 icon="shield"
                 :title="t(`sandbox.agentPrivacyShield.leaks.report.title`)"
