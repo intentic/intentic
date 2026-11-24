@@ -9913,18 +9913,17 @@
             "cleaningBuildOutput": "Build-Ausgabe von {name} wird entfernt",
             "freeingCheckout": "Arbeitskopie von {name} wird freigegeben",
             "trashingCheckout": "{name} wird in den Papierkorb verschoben",
-            "couldntPress": "In {name} ließ sich kein Speicher freigeben"
+            "couldntPress": "In {name} ließ sich kein Speicher freigeben",
+            "categories": "{count} Kategorie | {count} Kategorien"
         },
         "sandboxStorageCard": {
             "historyLow": "Auf dem Historien-Datenträger sind {free} frei, weniger als die {floor}, die für neue Unterhaltungen frei gehalten werden. Schaffen Sie hier Platz und senden Sie dann erneut.",
             "largeCheckout": "Jede Unterhaltung erhält ihre eigene vollständige Kopie von {repo} (etwa {bytes}). Lassen Sie es über die Repository-Auswahl einer Rolle aus Unterhaltungen heraus, die es nicht brauchen.",
             "chooseRepositories": "Repositories in den „Bringt mit“-Einstellungen einer Rolle wählen",
-            "changedTodayOrInUse": "Heute geändert oder in Gebrauch",
             "heading": "Speicherplatz",
             "measured": "Gemessen {when}",
             "staleNote": "Erneut scannen für aktuelle Größen.",
             "measuring": "Wird gemessen…",
-            "otherUsage": "Sonstige Belegung",
             "stop": "Anhalten",
             "scan": "Scannen",
             "scanAgain": "Erneut scannen",
@@ -9935,19 +9934,13 @@
             "partial": "Der Scan hat sein Zeitlimit erreicht, bevor er alles gelesen hatte; jede Größe ist also mindestens so groß wie angegeben.",
             "clean": "Bereinigen",
             "free": "{bytes} freigeben",
-            "systemProgramsFilesystem": "System, Programme, Dateisystem",
-            "tooRecent": "Zu neu",
-            "waiting": "Noch nichts freizugeben",
-            "more": "{count} kleinere Kategorie | {count} kleinere Kategorien",
-            "fewer": "Weniger anzeigen",
-            "uncounted": "Vom Scan nicht erfasst",
             "unreadable": "{count} Datei oder Ordner ließ sich nicht lesen und ist nicht mitgezählt. | {count} Dateien oder Ordner ließen sich nicht lesen und sind nicht mitgezählt.",
             "confirmHeader": "{category} bereinigen?",
             "freed": "{bytes} aus {category} freigegeben.",
             "keptItems": "{count} Element ist geblieben: in Gebrauch oder am letzten Tag geändert. | {count} Elemente sind geblieben: in Gebrauch oder am letzten Tag geändert.",
             "failedItems": "{count} Element ließ sich nicht entfernen. | {count} Elemente ließen sich nicht entfernen.",
             "diskFree": "{bytes} frei",
-            "details": "Was den Platz belegt"
+            "freedMany": "{bytes} aus {count} Kategorie freigegeben. | {bytes} aus {count} Kategorien freigegeben."
         },
         "storageCategories": {
             "workspace": {
@@ -10054,6 +10047,46 @@
                 "label": "Build-Ausgabe in Checkouts",
                 "reason": "Was Builds in den Checkouts der Unterhaltungen hinterlassen haben, etwa ein Rust-Ordner target. Beim Bereinigen wird es aus Checkouts entfernt, deren Unterhaltung gerade nichts ausführt; der nächste Build erzeugt es neu, Checkout und Arbeit bleiben."
             }
+        },
+        "diskMap": {
+            "free": "Kann bereinigt werden",
+            "yours": "Deine Arbeit",
+            "own": "Betreibt die Sandbox",
+            "outside": "Außerhalb der Sandbox",
+            "outsideNote": "System und andere Programme",
+            "size": "Größe",
+            "ofSandbox": "Anteil an der Sandbox",
+            "smaller": "{count} kleinere | {count} kleinere",
+            "label": "Was die Sandbox belegt"
+        },
+        "storagePage": {
+            "smaller": "Kleinere Kategorien",
+            "share": "{percent} der Sandbox",
+            "files": "{count} Datei | {count} Dateien",
+            "gone": "Beim letzten Scan war hier nichts.",
+            "waiting": "Hier lässt sich noch nichts freigeben: Alles wurde am letzten Tag geändert oder ist in Gebrauch.",
+            "largest": "Größte Teile"
+        },
+        "diskReclaim": {
+            "title": "Platz zurückholen",
+            "nothing": "Gerade lässt sich nichts freigeben",
+            "safe": "Bis zu {bytes} sofort",
+            "asked": "{bytes}, wenn du es auswählst",
+            "both": "Bis zu {safe} sofort, {asked} mehr nach Auswahl",
+            "cleanUp": "Aufräumen",
+            "what": "Was bereinigt wird",
+            "upTo": "bis zu {bytes}",
+            "clean": "{bytes} bereinigen"
+        },
+        "diskRules": {
+            "title": "Im Griff behalten",
+            "buildOutput": "Build-Ausgaben untätiger Unterhaltungen werden nach {after} entfernt.",
+            "reap": "Unter {below} freiem Speicher werden sie aus allen untätigen Unterhaltungen auf einmal entfernt.",
+            "rust": "Rust-Builds der Agenten behalten {debug} und {incremental}.",
+            "fullDebug": "volle Debug-Infos",
+            "leanDebug": "nur Zeilentabellen",
+            "incrementalOn": "einen inkrementellen Cache",
+            "incrementalOff": "keinen inkrementellen Cache"
         },
         "agentOffload": {
             "here": "Diese Sandbox",
@@ -11984,7 +12017,6 @@
             "showFewer": "Weniger anzeigen"
         },
         "agentDiskSpace": {
-            "heading": "Speicherplatz",
             "buildOutputIdle": "Build-Ausgabe untätiger Unterhaltungen entfernen nach",
             "buildOutputIdleNote": "Ein Rust-Target allein kann pro Unterhaltung zig Gigabyte groß sein. Die Arbeitskopie und ihre Arbeit bleiben, der nächste Build erzeugt die Ausgabe neu. Bei übernommenen Unterhaltungen und für Cargos inkrementellen Cache nach einer Stunde.",
             "n1Hour": "1 Stunde",

@@ -81,7 +81,14 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         id: `overview-disk`,
         slug: `overview`,
         title: () => t(`sandbox.sandboxStorageCard.heading`),
-        terms: () => [t(`sandbox.search.overviewDisk`)],
+        // The rules that keep it from filling live on the card too (DiskRules.vue).
+        terms: () => [
+            t(`sandbox.search.overviewDisk`),
+            t(`sandbox.agentDiskSpace.buildOutputIdle`),
+            t(`sandbox.agentDiskSpace.reapBelow`),
+            t(`sandbox.agentDiskSpace.leanRust`),
+            t(`sandbox.agentDiskSpace.rustIncrementalOff`),
+        ],
         shown: (reader) => reader.canShip,
     },
     // Removing it, or leaving it for a member: the page's last card, for anyone who may open the page.
@@ -262,14 +269,6 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         partLabel: () => t(`sandbox.sandboxAgent.finishing`),
         title: () => t(`sandbox.agentCommitAuthor.group`),
         terms: () => [t(`sandbox.agentCommitAuthor.attribution`), t(`sandbox.agentCommitAuthor.yours`), t(`sandbox.search.agentCommitAuthor`)],
-    },
-    {
-        id: `agent-disk-space`,
-        slug: `agent`,
-        part: `finishing`,
-        partLabel: () => t(`sandbox.sandboxAgent.finishing`),
-        title: () => t(`sandbox.agentDiskSpace.heading`),
-        terms: () => [t(`sandbox.agentDiskSpace.buildOutputIdle`), t(`sandbox.agentDiskSpace.reapBelow`), t(`sandbox.agentDiskSpace.leanRust`), t(`sandbox.agentDiskSpace.rustIncrementalOff`)],
     },
     {
         id: `agent-changelog`,

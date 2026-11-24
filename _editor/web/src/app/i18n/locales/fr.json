@@ -9913,18 +9913,17 @@
             "cleaningBuildOutput": "Suppression de la sortie de compilation de {name}",
             "freeingCheckout": "Libération de la copie de {name}",
             "trashingCheckout": "Mise à la corbeille de {name}",
-            "couldntPress": "Impossible de libérer de l'espace dans {name}"
+            "couldntPress": "Impossible de libérer de l'espace dans {name}",
+            "categories": "{count} catégorie | {count} catégories"
         },
         "sandboxStorageCard": {
             "historyLow": "Le disque d'historique n'a plus que {free} de libre, sous les {floor} réservés aux nouvelles conversations. Libérez de l'espace ici, puis renvoyez.",
             "largeCheckout": "Chaque conversation reçoit sa propre copie complète de {repo} (environ {bytes}). Excluez-le des conversations qui n'en ont pas besoin avec la sélection de dépôts d'un rôle.",
             "chooseRepositories": "Choisir les dépôts dans les réglages Porte d'un rôle",
-            "changedTodayOrInUse": "Modifié aujourd'hui ou utilisé",
             "heading": "Disque",
             "measured": "Mesuré {when}",
             "staleNote": "Analysez à nouveau pour les tailles actuelles.",
             "measuring": "Mesure en cours…",
-            "otherUsage": "Autre usage",
             "stop": "Arrêter",
             "scan": "Analyser",
             "scanAgain": "Analyser à nouveau",
@@ -9935,19 +9934,13 @@
             "partial": "L'analyse a atteint sa limite de temps avant de tout lire : chaque taille est donc au moins celle indiquée.",
             "clean": "Nettoyer",
             "free": "Libérer {bytes}",
-            "systemProgramsFilesystem": "Système, programmes, système de fichiers",
-            "tooRecent": "Trop récent",
-            "waiting": "Rien à libérer pour l'instant",
-            "more": "{count} catégorie plus petite | {count} catégories plus petites",
-            "fewer": "Afficher moins",
-            "uncounted": "Non compté par l'analyse",
             "unreadable": "{count} fichier ou dossier n'a pas pu être lu et n'est pas compté. | {count} fichiers ou dossiers n'ont pas pu être lus et ne sont pas comptés.",
             "confirmHeader": "Nettoyer {category} ?",
             "freed": "{bytes} libérés dans {category}.",
             "keptItems": "{count} élément est resté : en cours d'utilisation, ou modifié au cours du dernier jour. | {count} éléments sont restés : en cours d'utilisation, ou modifiés au cours du dernier jour.",
             "failedItems": "{count} élément n'a pas pu être supprimé. | {count} éléments n'ont pas pu être supprimés.",
             "diskFree": "{bytes} libres",
-            "details": "Ce qui occupe l’espace"
+            "freedMany": "{bytes} libérés dans {count} catégorie. | {bytes} libérés dans {count} catégories."
         },
         "storageCategories": {
             "workspace": {
@@ -10054,6 +10047,46 @@
                 "label": "Sorties de build dans les checkouts",
                 "reason": "Ce que les builds ont laissé dans les checkouts des conversations, comme un dossier target de Rust. Le nettoyage le retire des checkouts dont la conversation n'exécute rien ; le prochain build le recrée, et le checkout et son travail restent."
             }
+        },
+        "diskMap": {
+            "free": "Peut être nettoyé",
+            "yours": "Votre travail",
+            "own": "Fait tourner la sandbox",
+            "outside": "Hors de la sandbox",
+            "outsideNote": "Système et autres programmes",
+            "size": "Taille",
+            "ofSandbox": "Part de la sandbox",
+            "smaller": "{count} plus petite | {count} plus petites",
+            "label": "Ce qu'occupe la sandbox"
+        },
+        "storagePage": {
+            "smaller": "Catégories plus petites",
+            "share": "{percent} de la sandbox",
+            "files": "{count} fichier | {count} fichiers",
+            "gone": "Rien ici lors de la dernière analyse.",
+            "waiting": "Rien ici ne peut encore être libéré : tout a changé dans la dernière journée ou est en cours d'utilisation.",
+            "largest": "Plus grandes parties"
+        },
+        "diskReclaim": {
+            "title": "Récupérer de l'espace",
+            "nothing": "Rien ne peut être libéré pour l'instant",
+            "safe": "Jusqu'à {bytes} maintenant",
+            "asked": "{bytes} si vous le choisissez",
+            "both": "Jusqu'à {safe} maintenant, {asked} de plus si vous le choisissez",
+            "cleanUp": "Nettoyer",
+            "what": "Que nettoyer",
+            "upTo": "jusqu'à {bytes}",
+            "clean": "Nettoyer {bytes}"
+        },
+        "diskRules": {
+            "title": "Sous contrôle",
+            "buildOutput": "La sortie de compilation des conversations inactives part après {after}.",
+            "reap": "Sous {below} d'espace libre, elle part de toutes les conversations inactives à la fois.",
+            "rust": "Les compilations Rust des agents gardent {debug} et {incremental}.",
+            "fullDebug": "toutes les infos de débogage",
+            "leanDebug": "les tables de lignes seules",
+            "incrementalOn": "un cache incrémental",
+            "incrementalOff": "aucun cache incrémental"
         },
         "agentOffload": {
             "here": "Ce sandbox",
@@ -11984,7 +12017,6 @@
             "showFewer": "Afficher moins"
         },
         "agentDiskSpace": {
-            "heading": "Espace disque",
             "buildOutputIdle": "Supprimer la sortie de compilation des conversations inactives après",
             "buildOutputIdleNote": "Un target Rust peut à lui seul peser des dizaines de gigaoctets par conversation. La copie et son travail restent ; la compilation suivante recrée la sortie. Pour les conversations intégrées et le cache incrémental de Cargo, après une heure.",
             "n1Hour": "1 heure",

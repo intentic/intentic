@@ -1,6 +1,7 @@
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import {
     STORAGE_CLEANABILITY,
+    type CheckoutUsage,
     type DiskPressure,
     type StorageCategoryId,
     type StorageCategoryUsage,
@@ -179,8 +180,9 @@ const scanAt = (finishedAt: number) => {
         startedAt: finishedAt - 14_000,
         finishedAt,
         outcome: `complete`,
-        // What the scan counts plus the system's own share, on the volume the geek metrics report.
-        disk: { usedBytes: Math.round(counted + 1.6 * GIB), totalBytes: 100 * GIB },
+        // What the scan counts plus what the volume holds outside the sandbox (the system, programs, other images), on
+        // the volume the geek metrics report: enough of it that the Disk card's hatched stretch can be seen.
+        disk: { usedBytes: Math.round(counted + 9.4 * GIB), totalBytes: 100 * GIB },
         categories,
         unreadable: 0,
     } satisfies StorageScan;
@@ -194,7 +196,50 @@ let last = scanAt(Date.now() - 3 * 24 * 3_600_000);
 const SCAN_MS = 4_000;
 let running: { readonly timer: ReturnType<typeof setTimeout>; readonly done: PromiseWithResolvers<StorageReport> } | undefined;
 
-export const demoStorageReport = (): StorageReport => ({ scan: last, scanning: running !== undefined });
+// The checkouts category taken apart by conversation, for its page on the Disk card: one at work, one idle with a build
+// to free, one landed and free to go, and a directory no conversation owns.
+const demoCheckouts = (): CheckoutUsage[] => [
+    {
+        id: `checkout-stripe`,
+        title: `Stripe checkout for the Growth plan`,
+        state: `working`,
+        updatedAt: Date.now() - 4 * 60_000,
+        bytes: 2.1 * GIB,
+        buildOutputBytes: 0,
+        overlayBytes: 1.4 * GIB,
+        can: { cleanBuildOutput: false, release: false, trash: false },
+    },
+    {
+        id: `fix-cart-rounding`,
+        title: `Fix cart rounding on discounted items`,
+        state: `idle`,
+        updatedAt: Date.now() - 9 * 3_600_000,
+        bytes: 0.6 * GIB,
+        buildOutputBytes: 1.3 * GIB,
+        overlayBytes: 0,
+        can: { cleanBuildOutput: true, release: false, trash: false },
+    },
+    {
+        id: `search-facets`,
+        title: `Search facets by size and colour`,
+        state: `landed`,
+        updatedAt: Date.now() - 2 * 24 * 3_600_000,
+        bytes: 1.8 * GIB,
+        buildOutputBytes: 0,
+        overlayBytes: 0,
+        can: { cleanBuildOutput: false, release: true, trash: false },
+    },
+    {
+        id: `9f2c1e7a-old-spike`,
+        state: `leftover`,
+        bytes: 0.4 * GIB,
+        buildOutputBytes: 0,
+        overlayBytes: 0,
+        can: { cleanBuildOutput: false, release: false, trash: true },
+    },
+];
+
+export const demoStorageReport = (): StorageReport => ({ scan: last, scanning: running !== undefined, checkouts: demoCheckouts() });
 
 export const demoDiskPressure = (): DiskPressure => ({
     level: "ok",

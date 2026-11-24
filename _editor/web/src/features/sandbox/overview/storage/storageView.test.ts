@@ -5,7 +5,7 @@ import {
     type StorageScan,
 } from "@intentic/sandbox-contract/schemas/metrics";
 import { storageCategoryText } from "./storageCategories";
-import { cleanOffer, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
+import { cleanOffer, shareOfCounted, uncountedBytes } from "./storageView";
 
 // What the Disk card decides from a scan: what the scan could not account for, how long each row's bar is, and what
 // each category's button offers. Pinned at the edges, where a card would otherwise say something false.
@@ -51,19 +51,6 @@ describe(`shareOfCounted`, () => {
     it(`never draws past the end, and draws nothing from an empty scan`, () => {
         expect(shareOfCounted(2000, scanOf(counted))).toBe(100);
         expect(shareOfCounted(10, scanOf([]))).toBe(0);
-    });
-});
-
-describe(`splitCategories`, () => {
-    const letters = [`a`, `b`, `c`, `d`, `e`, `f`, `g`, `h`, `i`];
-
-    it(`lists the largest and folds the tail`, () => {
-        expect(splitCategories(letters, 6)).toEqual({ lead: letters.slice(0, 6), rest: letters.slice(6) });
-    });
-
-    it(`never folds a tail of one row`, () => {
-        expect(splitCategories(letters.slice(0, 7), 6)).toEqual({ lead: letters.slice(0, 7), rest: [] });
-        expect(splitCategories([], 6)).toEqual({ lead: [], rest: [] });
     });
 });
 

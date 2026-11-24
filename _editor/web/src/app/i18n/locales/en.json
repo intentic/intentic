@@ -9913,18 +9913,17 @@
             "cleaningBuildOutput": "Removing build output from {name}",
             "freeingCheckout": "Freeing the checkout of {name}",
             "trashingCheckout": "Moving {name} to the trash",
-            "couldntPress": "Couldn't free space in {name}"
+            "couldntPress": "Couldn't free space in {name}",
+            "categories": "{count} category | {count} categories"
         },
         "sandboxStorageCard": {
             "historyLow": "The history disk has {free} free, below the {floor} kept free for new conversations. Free space here, then send again.",
             "largeCheckout": "Every conversation gets its own full copy of {repo} (about {bytes}). Leave it out of conversations that don't need it with a role's repository selection.",
             "chooseRepositories": "Choose repositories on a role's Carries controls",
-            "changedTodayOrInUse": "Changed today or in use",
             "heading": "Disk",
             "measured": "Measured {when}",
             "staleNote": "Scan again for current sizes.",
             "measuring": "Measuring…",
-            "otherUsage": "Other usage",
             "stop": "Stop",
             "scan": "Scan",
             "scanAgain": "Scan again",
@@ -9935,19 +9934,13 @@
             "partial": "The scan reached its time limit before it read everything, so each size is at least what it says.",
             "clean": "Clean",
             "free": "Free {bytes}",
-            "systemProgramsFilesystem": "System, programs, filesystem",
-            "tooRecent": "Too recent",
-            "waiting": "Nothing to free yet",
-            "more": "{count} smaller category | {count} smaller categories",
-            "fewer": "Show fewer",
-            "uncounted": "Not counted by the scan",
             "unreadable": "{count} file or folder could not be read and is not counted. | {count} files or folders could not be read and are not counted.",
             "confirmHeader": "Clean {category}?",
             "freed": "Freed {bytes} from {category}.",
             "keptItems": "{count} item stayed: in use, or changed in the last day. | {count} items stayed: in use, or changed in the last day.",
             "failedItems": "{count} item could not be removed. | {count} items could not be removed.",
             "diskFree": "{bytes} free",
-            "details": "What uses the space"
+            "freedMany": "Freed {bytes} from {count} category. | Freed {bytes} from {count} categories."
         },
         "storageCategories": {
             "workspace": {
@@ -10054,6 +10047,46 @@
                 "label": "Build output in checkouts",
                 "reason": "What builds left inside conversation checkouts, such as a Rust target folder. Cleaning removes it from checkouts whose conversation has nothing running; the next build makes it again, and the checkout and its work stay."
             }
+        },
+        "diskMap": {
+            "free": "Can be cleaned",
+            "yours": "Your work",
+            "own": "Runs the sandbox",
+            "outside": "Outside the sandbox",
+            "outsideNote": "System and other programs",
+            "size": "Size",
+            "ofSandbox": "Of the sandbox",
+            "smaller": "{count} smaller | {count} smaller",
+            "label": "What the sandbox holds"
+        },
+        "storagePage": {
+            "smaller": "Smaller categories",
+            "share": "{percent} of the sandbox",
+            "files": "{count} file | {count} files",
+            "gone": "This held nothing at the last scan.",
+            "waiting": "Nothing here can be freed yet: all of it changed in the last day or is in use.",
+            "largest": "Largest parts"
+        },
+        "diskReclaim": {
+            "title": "Get space back",
+            "nothing": "Nothing can be freed right now",
+            "safe": "Up to {bytes} now",
+            "asked": "{bytes} if you choose",
+            "both": "Up to {safe} now, {asked} more if you choose",
+            "cleanUp": "Clean up",
+            "what": "What to clean",
+            "upTo": "up to {bytes}",
+            "clean": "Clean {bytes}"
+        },
+        "diskRules": {
+            "title": "Kept in check",
+            "buildOutput": "Build output in idle conversations goes after {after}.",
+            "reap": "Below {below} free space, it goes from every idle conversation at once.",
+            "rust": "Agents' Rust builds keep {debug} and {incremental}.",
+            "fullDebug": "full debug info",
+            "leanDebug": "line tables only",
+            "incrementalOn": "an incremental cache",
+            "incrementalOff": "no incremental cache"
         },
         "agentOffload": {
             "here": "This sandbox",
@@ -11984,7 +12017,6 @@
             "showFewer": "Show fewer"
         },
         "agentDiskSpace": {
-            "heading": "Disk space",
             "buildOutputIdle": "Remove build output from idle conversations after",
             "buildOutputIdleNote": "A Rust target alone can be tens of gigabytes per conversation. The checkout and its work stay; the next build makes the output again. Landed conversations and Cargo's incremental cache go after an hour.",
             "n1Hour": "1 hour",

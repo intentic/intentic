@@ -962,13 +962,22 @@ app's window to another face, or sent the workspace to `/setup`.)_
 
 `/repair` (`local/repair/LocalRepair.vue`) is the Repair view in the desktop app's local shell (no rail tile). Copy: `local.repair.*` in `src/app/i18n/locales/en.json`.
 
-The sandbox Storage card warns when the history volume falls below its checkout floor, separately from the workspace
-volume. It also names repositories whose full checkout costs at least 1 GiB and links to Roles → Runs on → Carries.
-The same cost appears beside those repositories in a role's selection controls.
-Under its categories it lists every conversation's checkout from the last scan (`overview/storage/StorageCheckouts.vue`,
-2026-11-03): largest first, with its standing, its parts, and the presses the daemon allows it now (free its build
-output, free the checkout, move a leftover nobody owns to the trash, or free every landed one at once). A press writes
-the row's new standing into the report (`checkoutsView.ts afterPress`) instead of scanning again, since a scan reads every
-file. A board card marks a checkout of 1 GiB or more with its size, linking to the card (`CardDiskUse.vue`). Agent →
-Finishing → Disk space holds the build-output idle time, the free-space threshold for cleaning everything idle, and
-lean Rust builds (`AgentDiskSpace.vue`).
+The sandbox Disk card (`overview/storage/SandboxStorageCard.vue`, redrawn 2026-11-24) draws the disk to scale
+(`DiskMap.vue`, figures in `diskMap.ts`): the whole volume as a bar, split into what can be cleaned, the reader's own
+work, what runs the sandbox, and what the volume holds outside the sandbox, hatched; the sandbox's share opens into a
+treemap whose tiles are as big as what they hold, with categories under a hundredth folded into one tile. A tile opens
+its page in the side panel (`StoragePage.vue` through `shell/side/SideStorage.vue`; a sheet on a phone): why the space
+is held, its largest parts, and its clean, which asks first where the daemon says cleaning costs something.
+"Get space back" (`DiskReclaim.vue`) lists every category cleanable now in one checklist, the safe ones ticked, and
+cleans the ticked ones in one run before measuring again. "Kept in check" (`DiskRules.vue`) says the build-output idle
+time, the free-space threshold for cleaning everything idle, and the Rust build settings as sentences with a picker in
+each, saved as picked.
+The card warns when the history volume falls below its checkout floor, separately from the workspace volume. It also
+names repositories whose full checkout costs at least 1 GiB and links to Roles → Runs on → Carries. The same cost
+appears beside those repositories in a role's selection controls.
+The Conversation checkouts page lists every conversation's checkout from the last scan
+(`overview/storage/StorageCheckouts.vue`, 2026-11-03): largest first, with its standing, its parts, and the presses the
+daemon allows it now (free its build output, free the checkout, move a leftover nobody owns to the trash, or free every
+landed one at once). A press writes the row's new standing into the report (`checkoutsView.ts afterPress`) instead of
+scanning again, since a scan reads every file. A board card marks a checkout of 1 GiB or more with its size, linking to
+the card (`CardDiskUse.vue`).

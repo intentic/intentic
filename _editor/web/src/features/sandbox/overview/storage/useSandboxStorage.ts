@@ -16,13 +16,16 @@ import { useTier } from "../../../../client/sandbox/useTier";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useOperation } from "../../../../workbench/operations/operations";
 import { afterPress } from "./checkoutsView";
+import { storageCategoryLabel } from "./storageCategories";
+import { cleanedNotice } from "./storageView";
 
 // The Disk card's data: the daemon's last measurement, a scan that leaves it on screen until the new one lands, and a
-// clean that measures again once it is done. The daemon holds the one scan, so a second window joins it. Both runs
+// clean (of one category from its page, or of several ticked in the card's clean-up list) that measures again once it
+// is done. The daemon holds the one scan, so a second window joins it. Both runs
 // are the sandbox's, kept in the operations ledger: a clean takes as long as the folder is big, and the card opened
 // again meanwhile holds its buttons and then says what it freed.
 
-// The tag of a run over several checkouts at once: every row's buttons wait on it.
+// The tag of a run over several checkouts, or several categories, at once: every press waits on it.
 export const PRESSING_MANY = `*`;
 
 // What the operations ledger says while a checkout press runs, and on its receipt.
@@ -37,6 +40,15 @@ const pressingWhat = (press: CheckoutPress, name: string): string => {
     }
 };
 
+// Each category in turn, the daemon's own clean for each; the first refusal ends the run, and says why.
+const cleanEach = async (categories: readonly StorageCategoryId[]): Promise<StorageCleanResult[]> => {
+    const results: StorageCleanResult[] = [];
+    for (const category of categories) {
+        results.push(await sandboxRpc.system.cleanStorage({ category }, { context: { deadline: false } }));
+    }
+    return results;
+};
+
 export function useSandboxStorage() {
     const { canShip } = useTier();
     // Maintainer-floored at the daemon, and absent from a daemon older than the card.
@@ -44,9 +56,9 @@ export function useSandboxStorage() {
     const read = rpcQuery(`system.storage`, undefined, { unpersisted: true });
     const { query, error } = useSandboxQuery({ ...read, enabled: available, staleTime: 0 });
     const scanning = useOperation(`sandbox/storage/scan`);
-    const cleaning = useOperation<StorageCleanResult>(`sandbox/storage/clean`);
-    // Which category is being cleaned, by the run's own tag.
-    const cleaningCategory = computed(() => (cleaning.busy.value ? (cleaning.operation.value?.tag as StorageCategoryId | undefined) : undefined));
+    const cleaning = useOperation<readonly StorageCleanResult[]>(`sandbox/storage/clean`);
+    // Which category is being cleaned, by the run's own tag; PRESSING_MANY while a ticked list goes one after another.
+    const cleaningCategory = computed(() => (cleaning.busy.value ? cleaning.operation.value?.tag : undefined));
 
     // A scan answers when it ends, however long that takes; the daemon's own time limit bounds it, not the tab's.
     // Quiet: its end is the card's own figures changing.
@@ -67,15 +79,18 @@ export function useSandboxStorage() {
         void sandboxRpc.system.cancelStorageScan().catch(() => undefined);
     };
 
-    const clean = async (category: StorageCategoryId, label: string): Promise<void> => {
-        if (cleaning.busy.value) {
+    // One after another in one run, each the daemon's own clean, then one measurement for all of them.
+    const clean = async (categories: readonly StorageCategoryId[]): Promise<void> => {
+        const [first] = categories;
+        if (cleaning.busy.value || first === undefined) {
             return;
         }
+        const label = categories.length === 1 ? storageCategoryLabel(first) : t(`sandbox.useSandboxStorage.categories`, { count: categories.length }, categories.length);
         await cleaning.run({
             what: t(`sandbox.useSandboxStorage.cleaning`, { category: label }),
-            tag: category,
+            tag: categories.length === 1 ? first : PRESSING_MANY,
             failed: t(`sandbox.useSandboxStorage.couldntClean`, { category: label }),
-            task: () => sandboxRpc.system.cleanStorage({ category }, { context: { deadline: false } }),
+            task: () => cleanEach(categories),
         });
         // What the clean freed is only true of the disk once measured again.
         await scan();
@@ -124,6 +139,7 @@ export function useSandboxStorage() {
         scanNotice: scanning.failure,
         cleanNotice: cleaning.failure,
         cleaned: cleaning.value,
+        cleanedNotice: computed(() => cleanedNotice(cleaning.value.value ?? [])),
         cleaningCategory,
         pressNotice: pressing.failure,
         pressingCheckout,

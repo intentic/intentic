@@ -10,9 +10,10 @@ import { checkoutParts, checkoutTotal, LEADING_CHECKOUTS, landedReleasable } fro
 import { checkoutPartLabel, checkoutStateLabel } from "./checkoutLabels";
 import { PRESSING_MANY } from "./useSandboxStorage";
 
-// Every conversation's checkout on the history volume, largest first, with what may be done with each now (the daemon's
-// checkout-usage.ts says, by the rules it applies when asked): free its build output, free the checkout itself (its work
-// is committed onto its branch and its next turn brings it back), or move a leftover nobody owns to the trash. Sizes
+// Every conversation's checkout on the history volume, on the Disk card's Conversation checkouts page, largest first,
+// with what may be done with each now (the daemon's checkout-usage.ts says, by the rules it applies when asked): free its
+// build output, free the checkout itself (its work is committed onto its branch and its next turn brings it back), or
+// move a leftover nobody owns to the trash. Sizes
 // are the last scan's; a press takes the row's own figures off without measuring again.
 
 const t = useT();
@@ -65,15 +66,15 @@ const freeLanded = (): void => {
 </script>
 
 <template>
-    <section v-if="rows.length > 0" class="flex flex-col gap-1.5 border-t border-line-subtle pt-3" data-storage-checkouts>
+    <!-- On the Conversation checkouts page (StoragePage.vue), whose title names it: the list leads with its count. -->
+    <section v-if="rows.length > 0" class="flex flex-col gap-1.5" data-storage-checkouts>
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h4 class="text-xs font-medium text-content">{{ t(`sandbox.storageCheckouts.heading`) }}</h4>
+            <span class="text-xs tabular-nums text-muted">{{
+                t(`sandbox.storageCheckouts.summary`, { count: rows.length, bytes: formatBytes(total) }, rows.length)
+            }}</span>
             <InfoHint class="self-center" :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.storageCheckouts.heading`) })">
                 <span class="block text-xs text-content">{{ t(`sandbox.storageCheckouts.intro`) }}</span>
             </InfoHint>
-            <span class="text-2xs tabular-nums text-subtle">{{
-                t(`sandbox.storageCheckouts.summary`, { count: rows.length, bytes: formatBytes(total) }, rows.length)
-            }}</span>
             <Button
                 v-if="landed.length > 1"
                 class="ml-auto"

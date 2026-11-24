@@ -1,4 +1,5 @@
 import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract/schemas/metrics";
+import type { DiskGroup } from "./diskMap";
 import { t } from "@intentic/ui/i18n";
 
 // What each disk category is called and why it holds what it holds, in the reader's language. Looked up when drawn,
@@ -18,3 +19,6 @@ export const storageCategoryText = ({ id, cleanability }: Pick<StorageCategoryUs
     reason: t(`sandbox.storageCategories.${id}.reason`),
     ...(cleanability === `confirm` ? { warning: t(`sandbox.storageCategories.${id}.warning`) } : {}),
 });
+
+// What the reader can do about a stretch of the disk (diskMap.ts groupOf), or the stretch no category holds.
+export const diskGroupLabel = (key: DiskGroup | `outside`): string => t(`sandbox.diskMap.${key}`);

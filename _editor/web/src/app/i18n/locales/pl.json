@@ -8888,7 +8888,6 @@
             "historyLow": "Na dysku historii pozostało {free} wolnego miejsca, poniżej progu {floor} wymaganego dla nowych rozmów. Zwolnij tutaj miejsce, a następnie wyślij ponownie.",
             "largeCheckout": "Każda rozmowa otrzymuje własną pełną kopię repozytorium {repo} (około {bytes}). Pomiń je w rozmowach, które go nie potrzebują, wybierając repozytoria na karcie roli.",
             "chooseRepositories": "Wybierz repozytoria w polu „Niesie” na karcie roli",
-            "changedTodayOrInUse": "Zmienione dziś lub w użyciu",
             "clean": "Wyczyść",
             "confirmHeader": "Wyczyścić „{category}”?",
             "couldntRead": "Nie udało się odczytać ostatniego pomiaru",
@@ -8903,20 +8902,13 @@
             "measured": "Zmierzono {when}",
             "staleNote": "Zeskanuj ponownie, by zobaczyć aktualne rozmiary.",
             "measuring": "Trwa pomiar…",
-            "otherUsage": "Inne użycie",
             "partial": "Skan osiągnął limit czasu, zanim przeczytał wszystko, więc każdy rozmiar jest co najmniej taki, jak podano.",
             "scan": "Skanuj",
             "scanAgain": "Skanuj ponownie",
             "stop": "Zatrzymaj",
-            "systemProgramsFilesystem": "System, programy, system plików",
-            "tooRecent": "Zbyt świeże",
-            "uncounted": "Poza skanem",
             "unreadable": "Nie udało się odczytać {count} pliku lub folderu, więc nie został policzony. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone.",
-            "waiting": "Na razie nic do zwolnienia",
-            "more": "{count} mniejsza kategoria | {count} mniejsze kategorie | {count} mniejszych kategorii",
-            "fewer": "Pokaż mniej",
             "diskFree": "Wolne {bytes}",
-            "details": "Co zajmuje miejsce"
+            "freedMany": "Zwolniono {bytes} z {count} kategorii. | Zwolniono {bytes} z {count} kategorii. | Zwolniono {bytes} z {count} kategorii."
         },
         "sandboxSwitcher": {
             "couldntDeleteThere": "Nie udało się go usunąć z {machine}.",
@@ -9361,6 +9353,46 @@
                 "reason": "Twoje repozytoria, ich zależności i wszystko inne w przestrzeni roboczej. Usuń to, czego już nie potrzebujesz, w Plikach albo w terminalu."
             }
         },
+        "diskMap": {
+            "free": "Do wyczyszczenia",
+            "yours": "Twoja praca",
+            "own": "Utrzymuje sandbox",
+            "outside": "Poza sandboxem",
+            "outsideNote": "System i inne programy",
+            "size": "Rozmiar",
+            "ofSandbox": "Część sandboxa",
+            "smaller": "{count} mniejsza | {count} mniejsze | {count} mniejszych",
+            "label": "Co zajmuje sandbox"
+        },
+        "storagePage": {
+            "smaller": "Mniejsze kategorie",
+            "share": "{percent} sandboxa",
+            "files": "{count} plik | {count} pliki | {count} plików",
+            "gone": "Przy ostatnim skanowaniu nic tu nie było.",
+            "waiting": "Nic tu jeszcze nie da się zwolnić: wszystko zmieniło się w ostatniej dobie albo jest w użyciu.",
+            "largest": "Największe części"
+        },
+        "diskReclaim": {
+            "title": "Odzyskaj miejsce",
+            "nothing": "Teraz nie da się nic zwolnić",
+            "safe": "Do {bytes} od razu",
+            "asked": "{bytes}, jeśli wybierzesz",
+            "both": "Do {safe} od razu, {asked} więcej, jeśli wybierzesz",
+            "cleanUp": "Wyczyść",
+            "what": "Co wyczyścić",
+            "upTo": "do {bytes}",
+            "clean": "Wyczyść {bytes}"
+        },
+        "diskRules": {
+            "title": "Pod kontrolą",
+            "buildOutput": "Wyniki kompilacji bezczynnych rozmów znikają po {after}.",
+            "reap": "Poniżej {below} wolnego miejsca znikają ze wszystkich bezczynnych rozmów naraz.",
+            "rust": "Kompilacje Rusta u agentów zachowują {debug} i {incremental}.",
+            "fullDebug": "pełne dane debugowania",
+            "leanDebug": "tylko tablice wierszy",
+            "incrementalOn": "pamięć podręczną przyrostową",
+            "incrementalOff": "bez pamięci przyrostowej"
+        },
         "agentOffload": {
             "here": "Ten sandbox",
             "anyRunner": "Dowolna maszyna z zapasem",
@@ -9447,7 +9479,8 @@
             "cleaningBuildOutput": "Usuwanie wyników kompilacji: {name}",
             "freeingCheckout": "Zwalnianie kopii: {name}",
             "trashingCheckout": "Przenoszenie do kosza: {name}",
-            "couldntPress": "Nie udało się zwolnić miejsca: {name}"
+            "couldntPress": "Nie udało się zwolnić miejsca: {name}",
+            "categories": "{count} kategoria | {count} kategorie | {count} kategorii"
         },
         "words": {
             "addSandbox": "Dodaj sandbox",
@@ -11339,7 +11372,6 @@
             "showFewer": "Pokaż mniej"
         },
         "agentDiskSpace": {
-            "heading": "Miejsce na dysku",
             "buildOutputIdle": "Usuwaj wyniki kompilacji bezczynnych rozmów po",
             "buildOutputIdleNote": "Sam target Rusta może zajmować dziesiątki gigabajtów na rozmowę. Kopia i jej praca zostają; następna kompilacja odtworzy wyniki. Wdrożone rozmowy i przyrostowa pamięć podręczna Cargo znikają po godzinie.",
             "n1Hour": "1 godzina",

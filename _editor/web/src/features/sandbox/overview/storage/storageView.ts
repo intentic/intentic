@@ -1,4 +1,8 @@
-import type { StorageCategoryUsage, StorageScan } from "@intentic/sandbox-contract/schemas/metrics";
+import type { StorageCategoryUsage, StorageCleanResult, StorageScan } from "@intentic/sandbox-contract/schemas/metrics";
+import type { NoticeModel } from "@intentic/ui";
+import { formatBytes } from "@intentic/ui/format";
+import { t } from "@intentic/ui/i18n";
+import { storageCategoryLabel } from "./storageCategories";
 
 // How the Disk card reads a scan: what the scan could not account for, how full the volume is, and what each
 // category's button offers. Pure, so the card draws decisions rather than making them.
@@ -13,20 +17,13 @@ export const uncountedBytes = (scan: StorageScan): number | undefined => {
     return rest > 0 ? rest : undefined;
 };
 
-// A category's share of everything the scan counted, in percent. Measured against the counted total rather than the
-// whole volume: against a terabyte disk every row's bar would be a sliver, and the bars are there to rank the rows.
+// A category's share of everything the scan counted, in percent: what the sandbox's own space is made of, said on a
+// tile of the map and on the category's page. Measured against the counted total rather than the whole volume, whose
+// unclaimed rest is the map's own stretch of the bar.
 export const shareOfCounted = (bytes: number, scan: StorageScan): number => {
     const whole = scan.categories.reduce((total, category) => total + category.bytes, 0);
     return whole <= 0 ? 0 : Math.min(100, (bytes / whole) * 100);
 };
-
-// How many of the largest categories the card lists before folding the rest behind one "more" row. The folded tail is
-// the small change of the disk; the categories arrive largest first, so the split keeps the ones worth reading.
-export const LEADING_CATEGORIES = 6;
-
-export const splitCategories = <T>(categories: readonly T[], keep = LEADING_CATEGORIES): { readonly lead: readonly T[]; readonly rest: readonly T[] } =>
-    // Folding a single row saves no space and costs a click, so a tail of one stays in the lead.
-    categories.length <= keep + 1 ? { lead: categories, rest: [] } : { lead: categories.slice(0, keep), rest: categories.slice(keep) };
 
 // What a category's button does. `waiting`: it may be cleaned, but nothing in it is old enough or idle enough yet.
 // `clean` names the bytes it would free when the daemon could say, and whether it asks first.
@@ -47,4 +44,26 @@ export const cleanOffer = (category: StorageCategoryUsage): CleanOffer => {
         confirm: category.cleanability === `confirm`,
         ...(category.cleanableBytes === undefined ? {} : { bytes: category.cleanableBytes }),
     };
+};
+
+// What the last clean did, said once and in words: what it gave back, and what it deliberately left. A run over several
+// categories says them as one sum, since the reader ticked them as one decision.
+export const cleanedNotice = (results: readonly StorageCleanResult[]): NoticeModel | undefined => {
+    const [first] = results;
+    if (first === undefined) {
+        return undefined;
+    }
+    const freed = formatBytes(results.reduce((total, result) => total + result.freedBytes, 0));
+    const kept = results.reduce((total, result) => total + result.kept, 0);
+    const failed = results.reduce((total, result) => total + result.failed, 0);
+    const details = [
+        ...(kept === 0 ? [] : [t(`sandbox.sandboxStorageCard.keptItems`, { count: kept }, kept)]),
+        ...(failed === 0 ? [] : [t(`sandbox.sandboxStorageCard.failedItems`, { count: failed }, failed)]),
+    ];
+    const title =
+        results.length === 1
+            ? t(`sandbox.sandboxStorageCard.freed`, { bytes: freed, category: storageCategoryLabel(first.category) })
+            : t(`sandbox.sandboxStorageCard.freedMany`, { bytes: freed, count: results.length }, results.length);
+    const tone = failed === 0 ? `info` : `warning`;
+    return details.length === 0 ? { tone, title } : { tone, title, detail: details.join(` `) };
 };

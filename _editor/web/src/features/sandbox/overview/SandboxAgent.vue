@@ -15,7 +15,6 @@ import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.v
 import AgentCommitAuthor from "../agent-settings/commits/AgentCommitAuthor.vue";
 import AgentToolLoading from "../agent-settings/behaviour/AgentToolLoading.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
-import AgentDiskSpace from "../agent-settings/behaviour/AgentDiskSpace.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/memory/AgentMemory.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
@@ -180,8 +179,6 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="here(page.sandboxSettings(`retention`))" :label="t(`sandbox.sandboxNav.retention`)" />
                 <!-- After the work that is committed, whose name those commits carry; below the link, which belongs to the archive row. -->
                 <AgentCommitAuthor />
-                <!-- What finished builds keep on disk, after what finished conversations keep. -->
-                <AgentDiskSpace />
                 <AgentChangelog />
                 <AgentRecovery />
                 <!-- Beside the automation failure limit above (in its Advanced view), which is the other setting that only

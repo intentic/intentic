@@ -24,6 +24,9 @@ import { queryClient } from "../../lib/queryPersistence";
 import { navigation } from "../../workbench/navigation/navigation";
 import { SKILL_SIDE_VIEW, SkillSideInputSchema } from "../../features/sandbox/agent-settings/skills/skillSide";
 import { MEMORY_SIDE_VIEW, memoryFolderOf, MemorySideInputSchema } from "../../features/sandbox/agent-settings/memory/memorySide";
+import { SMALLER, STORAGE_SIDE_VIEW, StorageSideInputSchema } from "../../features/sandbox/overview/storage/storageSide";
+import { storageCategoryLabel } from "../../features/sandbox/overview/storage/storageCategories";
+import { STORAGE_ANCHOR } from "../../features/sandbox/overview/storage/storageAnchor";
 import { here, isPage, page } from "../../lib/routes/links";
 import { screenRoute, selectedKey } from "../../models/sandbox/devices/deviceLinks";
 import { SCREEN_SIDE_VIEW, ScreenAtSchema } from "../../models/sandbox/devices/remote/screenPlaces";
@@ -139,6 +142,27 @@ const registerMemorySideView = (): Disposable =>
         component: async () => (await import(`./SideMemory.vue`)).default,
     });
 
+// One category of the Disk card's map (opened from Settings ▸ Overview ▸ Disk), beside whatever section is open, and back
+// to the card by "Open in Overview".
+const registerStorageSideView = (): Disposable =>
+    registerSideView({
+        id: STORAGE_SIDE_VIEW,
+        owner: `builtin`,
+        get label() {
+            return t(`sandbox.sandboxStorageCard.heading`);
+        },
+        describe: (input) => {
+            const category = StorageSideInputSchema.safeParse(input).data?.category;
+            const title = category === undefined ? `` : category === SMALLER ? t(`sandbox.storagePage.smaller`) : storageCategoryLabel(category);
+            return { title, icon: `database` };
+        },
+        home: () => ({
+            label: t(`sandbox.sandboxNav.overview`),
+            open: () => void navigation().push(here(page.sandboxSettings(undefined, { hash: STORAGE_ANCHOR }))),
+        }),
+        component: async () => (await import(`./SideStorage.vue`)).default,
+    });
+
 // The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
 // chat). Each names its home, the section its thing belongs to, so a peek can be moved there whole.
 
@@ -226,5 +250,5 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         lent: () => browsersSlot.value !== null,
     });
 
-    return [file, browsers, registerScreenSideView(), registerSkillSideView(), registerMemorySideView()];
+    return [file, browsers, registerScreenSideView(), registerSkillSideView(), registerMemorySideView(), registerStorageSideView()];
 };
