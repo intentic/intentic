@@ -34,4 +34,5 @@
 // (@intentic/extension-api/wire) names the bare package and the subpaths an extension may import, and the lint and
 // `intentic-kit-check` refuse any other. Additive. The recorded surface grows `wireExports`: each allowed subpath's export
 // names and a digest of its zod schemas, so a schema an extension parses cannot change without a new entry.
-export const extensionApiVersion = "2.44.0";
+// 2.45.0 records app-routes' `returnPath`, which validates a sign-in destination as a path on the editor's origin.
+export const extensionApiVersion = "2.45.0";
