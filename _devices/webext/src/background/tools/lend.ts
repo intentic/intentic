@@ -1,8 +1,9 @@
 import { type WebExtCookie, webextLendUrl } from "@intentic/sandbox-contract/webext";
 import { isAgentWindow, showTab } from "../agent-window.js";
 import { askPerson } from "../asking.js";
-import { assertScope, RefusedError, siteOf } from "../policy.js";
+import { assertScope, RefusedError } from "../policy.js";
 import { type SandboxKey, store } from "../store.js";
+import { siteCookies, writableFor } from "./site-cookies.js";
 import { targetTab } from "./tab-access.js";
 
 // Borrows a sandbox session into this browser (session.ts's hand-over, reversed), for logins impossible to drive
@@ -12,13 +13,7 @@ import { targetTab } from "./tab-access.js";
 // - an in-page confirmation every time, regardless of the `confirm` setting
 // - cookies return over this extension's own HTTPS request, never the socket; the agent only sees a count and a site
 //   name
-
-// The registrable-ish domain: last two labels, or the host itself with fewer. Same rule session.ts uses for the
-// hand-over, so both directions agree on what "this site" means.
-const cookieDomain = (host: string): string => {
-    const labels = host.split(".");
-    return labels.length <= 2 ? host : labels.slice(-2).join(".");
-};
+// And one of its own: only a cookie for the site itself is written (site-cookies.ts), whatever the sandbox sends.
 
 // Writes one cookie into this browser. `chrome.cookies.set` takes a URL, not a domain; the leading dot (Chrome's
 // "and subdomains" marker) picks host-only vs. subdomain-covering when rebuilding it.
@@ -53,23 +48,25 @@ export const lendSite = async (from: SandboxKey, account: string, tabId?: number
     if (sandbox === undefined) {
         throw new RefusedError(`This browser is not paired with a sandbox any more.`);
     }
-    const domain = cookieDomain(new URL(tab.url).hostname);
+    // The tab's host, as session.ts's hand-over takes it, so both directions agree on what "this site" is
+    // (site-cookies.ts).
+    const host = new URL(tab.url).hostname;
 
     const agreed = await askPerson(
         from,
         tab,
-        `Sign this browser in to ${domain} as the sandbox account "${account}"? It will replace your current ${domain} sign-in here until you sign out.`,
+        `Sign this browser in to ${host} as the sandbox account "${account}"? It will replace your current ${host} sign-in here until you sign out.`,
         120_000,
         // allow(silent-catch): a page that went away before it could ask is no agreement, and is refused as one
     ).catch(() => false);
     if (!agreed) {
-        throw new RefusedError(`They did not agree to borrow the ${domain} session. Leave it: work the site from the sandbox's own browser instead.`);
+        throw new RefusedError(`They did not agree to borrow the ${host} session. Leave it: work the site from the sandbox's own browser instead.`);
     }
 
     const response = await fetch(webextLendUrl(sandbox.url), {
         method: "POST",
         headers: { authorization: `Bearer ${sandbox.token}`, "content-type": "application/json" },
-        body: JSON.stringify({ account, domain }),
+        body: JSON.stringify({ account, domain: host }),
     });
     const answer = (await response.json().catch(() => ({}))) as { message?: string; cookies?: WebExtCookie[] };
     if (!response.ok || answer.cookies === undefined) {
@@ -79,9 +76,18 @@ export const lendSite = async (from: SandboxKey, account: string, tabId?: number
         throw new RefusedError(answer.message ?? `The sandbox would not lend that session (${response.status}).`);
     }
 
-    const written = (await Promise.all(answer.cookies.map(writeCookie))).filter(Boolean).length;
+    // Only cookies for this host, or for a domain its own cookies here already use: the sandbox's answer is not trusted
+    // to say where they go.
+    const fits = writableFor(host, await siteCookies(tab.url));
+    const kept = answer.cookies.filter(fits);
+    if (kept.length === 0) {
+        throw new RefusedError(
+            `None of that session's cookies are for ${host} itself or a domain its cookies here use, so nothing changed in this browser. Have them open ${host} here once, then lend again.`,
+        );
+    }
+    const written = (await Promise.all(kept.map(writeCookie))).filter(Boolean).length;
     if (written === 0) {
-        throw new RefusedError(`Chrome refused every cookie of that ${domain} session, so nothing changed in this browser.`);
+        throw new RefusedError(`Chrome refused every cookie of that ${host} session, so nothing changed in this browser.`);
     }
     // Reloaded, since an already-open page still shows the old session; without this, the person sees a stale page
     // while being told it worked.
@@ -91,8 +97,10 @@ export const lendSite = async (from: SandboxKey, account: string, tabId?: number
     // allow(silent-catch): a tab the person closed meanwhile is simply not brought forward
     const reloaded = await chrome.tabs.get(tab.id).catch(() => undefined);
     const brought = (await isAgentWindow(reloaded?.windowId, from)) && (await showTab({ tabId: tab.id }));
-    const refused = answer.cookies.length - written;
-    const partial = refused === 0 ? "" : ` Chrome refused ${refused} of its ${answer.cookies.length} cookies, so if the page does not show the account signed in, that is why.`;
+    const refused = kept.length - written;
+    const dropped = answer.cookies.length - kept.length;
+    const partial = refused === 0 ? "" : ` Chrome refused ${refused} of its ${kept.length} cookies, so if the page does not show the account signed in, that is why.`;
+    const elsewhere = dropped === 0 ? "" : ` ${dropped} of its cookies were for other sites and were left out.`;
     const where = brought ? ` The page is now in front of them, in your window.` : ``;
-    return `${siteOf(domain)} is now signed in here as "${account}".${partial}${where} Finish the step in this browser, then hand the session back with connect_site so the sandbox has the refreshed one.`;
+    return `${host} is now signed in here as "${account}".${partial}${elsewhere}${where} Finish the step in this browser, then hand the session back with connect_site so the sandbox has the refreshed one.`;
 };

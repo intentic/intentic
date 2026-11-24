@@ -340,8 +340,8 @@ const releaseOne = async (state: LinkState, { machine, secret, lane, detail, con
     } catch {
         return refused("bad-grant", `What the keyring on ${machine} sent for ${secret} did not open with this sandbox's key, so it was not used.`);
     }
-    // Kept to mask from here on, never to answer a second use (released-values in keyring-stores.ts).
-    state.deps.released.add(secret, value);
+    // Kept to mask while its use prints, never to answer a second use (released-values in keyring-stores.ts).
+    state.deps.released.add(secret, value, lane);
     return { ok: true, value, asked: answer.asked };
 };
 

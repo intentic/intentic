@@ -46,10 +46,12 @@ test("Chrome's grant of the sandbox's origin redeems a pasted code, with the pop
 
 test("the offer a sandbox's page parked is what a Connect with no code arms, and Chrome already holding the site leaves it to the popup", async () => {
     const connect = flow();
-    await store.setInbox({ url: SANDBOX, token: "pair-2" });
+    await store.setInbox({ url: SANDBOX, token: "pair-2", from: "https://app.intentic.dev" });
+    expect((await store.inbox())?.from).toBe("https://app.intentic.dev");
     await connect.arm(undefined, 1_000);
     // No dialog, so no grant: the popup is still open and finishes it.
     expect(await connect.finish(SANDBOX, 1_500)).toEqual({ ok: true, message: "Connected." });
+    // The page that offered it was the popup's to show; the sandbox kept is its address and token alone.
     expect(redeemed).toEqual([{ url: SANDBOX, token: "pair-2" }]);
 });
 

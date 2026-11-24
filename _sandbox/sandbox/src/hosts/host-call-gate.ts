@@ -37,13 +37,25 @@ const adminOf = (toolCall: DeviceToolCall): AdminAsk | undefined => {
 const granted = async (services: Services, call: RunCall | undefined, admin: AdminAsk | undefined): Promise<{ readonly forward: RpcMessage } | undefined> =>
     admin === undefined || call === undefined ? undefined : { forward: await withAdminGrant(services, call) };
 
+// A tools/call the device runs: its MCP server answers every one that carries an id, null included, and ignores one that
+// carries none (peer-mcp-server.ts). (2026-11-24) Only those can be refused, and every one of them must be judged: a call
+// this gate could not read was once forwarded unjudged, so `slug: 0` beside a command skipped the judge, the card and the
+// restart guard together.
+const runsOnDevice = (payload: unknown): boolean =>
+    typeof payload === "object" && payload !== null && !Array.isArray(payload) && "id" in payload && payload.id !== undefined && "method" in payload && payload.method === "tools/call";
+
+const UNREADABLE =
+    "Refused: this call could not be read (a field is missing or of a type no device tool takes), so it was not judged and nothing ran. " +
+    "Make it again with the arguments the tool's schema names, each of the type it gives.";
+
 export const hostCallGate =
     (services: Services, guards: HostGuardDeps, judges: HostJudges = JUDGES): PeerCallGate =>
     async (payload, call) => {
-        // A notification, or anything that is not a tools/call with an id, has nowhere to send a refusal: forwarded.
+        // A notification, or any message other than a tools/call, runs nothing on the device and has nowhere to send a
+        // refusal: forwarded. A tools/call with an id that does not parse is refused, never forwarded unjudged.
         const parsed = DeviceToolCallSchema.safeParse(payload);
         if (!parsed.success) {
-            return undefined;
+            return runsOnDevice(payload) ? { refusal: UNREADABLE } : undefined;
         }
         const toolCall = parsed.data;
         const program = programOf(toolCall);

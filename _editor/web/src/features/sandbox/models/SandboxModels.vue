@@ -1,24 +1,20 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
-import type { ProviderKey } from "@intentic/sandbox-contract/state/arrival";
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { lessMotion } from "@intentic/ui/motion";
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
-import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
 import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
-import { useOperation } from "../../../workbench/operations/operations";
 import { endpointProviders, keyedBeside, runnableReadFailure } from "../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
@@ -35,13 +31,13 @@ import {
     arrivalTile,
     foundSignIns,
     isProviderTile,
+    KEY_FILES_READ,
     KEY_SOURCE_LABELS,
     type LandedCard,
     landedLine,
     linkArrival,
     LOCAL_TILE,
     MODEL_TILES,
-    offeredKeys,
     type TileKey,
     tileCount,
     tileLine,
@@ -49,6 +45,7 @@ import {
 } from "./providerGrid";
 import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
+import { useFoundKeys } from "./useFoundKeys";
 import { useModelSources } from "./useModelSources";
 import { here, page } from "../../../lib/routes/links";
 
@@ -384,58 +381,16 @@ const startChatting = async (): Promise<void> => {
 const found = computed(() => foundToOffer(route.query[`found`]));
 const foundRows = computed(() => foundSignIns(found.value, providerReady).filter((provider) => mayConnect(provider)));
 
-// And the API keys the owner's devices hold (the daemon's GET /arrivals/keys, migrations/provider-keys.ts): copied,
-// unlike a sign-in, since a key is not bound to the install that holds it. Read once on open, and only by a tier that
-// may connect things; a device asleep, or none at all, is an empty list.
-const keys = ref<readonly ProviderKey[]>([]);
-const addedHere = ref<ReadonlySet<string>>(new Set());
-const keyRows = computed(() => offeredKeys(keys.value, addedHere.value));
-const readKeys = async (): Promise<void> => {
-    // allow(silent-catch): a list that could not be read offers nothing, which is what the section shows for none.
-    keys.value = (await sandboxRaw(`GET /arrivals/keys`).catch(() => ({ keys: [] }))).keys;
-};
-// Copying a key in is kept in the operations ledger rather than here: it writes the key and the endpoint and re-reads the
-// connections whether or not this page stays open, and coming back mid-copy has to show it under way, or why it failed.
-// One at a time, tagged with the key it copies; its value is the endpoint the key became.
-const keyCopy = useOperation<AgentProvider | undefined>(`models/keys/add`);
-const adding = computed(() => (keyCopy.busy.value ? keyCopy.operation.value?.tag : undefined));
-const keyNotice = keyCopy.failure;
-const addKey = async (key: ProviderKey): Promise<void> => {
-    if (adding.value !== undefined) {
-        return;
-    }
-    const ended = await keyCopy.run({
-        what: t(`connect.connect.foundKeyAdding`, { provider: key.label }),
-        tag: key.id,
-        quiet: true,
-        failed: t(`connect.connect.foundKeyFailed`),
-        task: async () => {
-            const applied = await sandboxRaw(`POST /arrivals/keys/apply`, { input: { ids: [key.id] } });
-            const failure = applied.failed[0];
-            if (failure !== undefined) {
-                throw new Error(failure.error);
-            }
-            // The picker reads endpoints off the connection list, which has never heard of this one.
-            await refreshConnections();
-            const capability = applied.added[0]?.capability;
-            return capability === undefined ? undefined : endpointProvider(capability);
-        },
-    });
-    if (ended?.state !== `done`) {
-        return;
-    }
-    // The page's own answer to the copy: the row turns to Added, and the endpoint it became is opened and offered, in the
-    // card of the sign-in a vendor's key is the alternative to, else under Local models with the servers.
-    addedHere.value = new Set([...addedHere.value, key.id]);
-    keys.value = keys.value.map((entry) => (entry.id === key.id ? { ...entry, added: true } : entry));
-    keyCopy.dismiss();
-    if (ended.value !== undefined) {
-        keyEndpointLabels.set(ended.value, t(`connect.connect.foundKeyTitle`, { provider: key.label }));
-        landed.value = ended.value;
+// And the API keys the owner's devices hold, read only when the owner presses Look (useFoundKeys.ts). A copied key's
+// endpoint is opened and offered, in the card of the sign-in a vendor's key is the alternative to, else under Local models.
+const { keyRows, keyLook, readKeys, adding, keyNotice, addKey } = useFoundKeys((key, endpoint) => {
+    if (endpoint !== undefined) {
+        keyEndpointLabels.set(endpoint, t(`connect.connect.foundKeyTitle`, { provider: key.label }));
+        landed.value = endpoint;
         arrival.value = undefined;
-        selected.value = tileOf(ended.value, keyedBeside) ?? LOCAL_TILE;
+        selected.value = tileOf(endpoint, keyedBeside) ?? LOCAL_TILE;
     }
-};
+});
 
 // A key pasted beside a provider's sign-in (keys/ApiKeyOption.vue) lands as a row of the card it was pasted in, said there
 // once the connection list names it (landedFor).
@@ -463,9 +418,6 @@ onMounted(() => {
         void loadUsage();
     }
     settleArrival();
-    if (canShip.value) {
-        void readKeys();
-    }
 });
 watch([accessKnown, () => route.query[`provider`]], settleArrival);
 </script>
@@ -496,7 +448,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         />
 
         <!-- What this computer already holds: the first thing to do when there is any of it, one press each. -->
-        <RowGroup v-if="foundRows.length > 0 || keyRows.length > 0" :label="t(`connect.connect.foundTitle`)">
+        <RowGroup v-if="foundRows.length > 0 || keyRows.length > 0 || canShip" :label="t(`connect.connect.foundTitle`)">
             <Row
                 v-for="provider in foundRows"
                 :key="provider"
@@ -538,6 +490,24 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                         :loading="adding === key.id"
                         :disabled="adding !== undefined"
                         @click="addKey(key)"
+                    />
+                </template>
+            </Row>
+            <!-- The owner's own press: credential files on their computers are read for it, never because the page opened. -->
+            <Row
+                v-if="canShip"
+                icon="search"
+                :title="keyLook === `looked` && keyRows.length === 0 ? t(`connect.connect.foundKeysNone`) : t(`connect.connect.foundKeysTitle`)"
+                :description="t(`connect.connect.foundKeysReads`, { files: KEY_FILES_READ })"
+            >
+                <template #control>
+                    <Button
+                        tier="boring"
+                        size="small"
+                        :label="keyLook === `looked` ? t(`connect.connect.foundKeysLookAgain`) : t(`connect.connect.foundKeysLook`)"
+                        :loading="keyLook === `looking`"
+                        :disabled="keyLook === `looking`"
+                        @click="readKeys"
                     />
                 </template>
             </Row>

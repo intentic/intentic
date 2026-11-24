@@ -5,7 +5,9 @@
 //! reachability must not depend on the platform being up, and a 404 that is not the record, since something in front of
 //! the api answers 404 too (a misrouted hostname, a placeholder page) and one such answer used to close every tunnel the
 //! edge held with `DELETED_CODE`, each netd then waiting an hour before it dialled again (2026-11-09). A failure is never
-//! kept. The platform answers 404 for a deletion record alone, and 200 for an id it has no record of either way, so a
+//! kept, and never undoes a deletion this edge already believed: only an answer that the sandbox exists does (2026-11-24;
+//! a grant has no expiry, so a deleted sandbox's grant otherwise reattached whenever the platform was unreachable). The
+//! platform answers 404 for a deletion record alone, and 200 for an id it has no record of either way, so a
 //! platform reading a database that forgot a sandbox does not take it off the edge (api app.ts, 2026-10-02). A success's
 //! body (the lane it names) is not read: every sandbox is reached the same way, down the tunnel it dials, so existence
 //! is all that decides.
@@ -131,6 +133,10 @@ impl Revocation {
         if self.base.is_empty() {
             return Standing::Exists;
         }
+        let believed = matches!(
+            self.kept().get(id),
+            Some(Kept::Answer { exists: false, .. })
+        );
         let confirms = match self.kept().get(id).copied() {
             Some(Kept::Answer { exists, at }) if at.elapsed() < self.keep_for => {
                 return if exists {
@@ -165,6 +171,9 @@ impl Revocation {
             }
         };
         let (standing, kept) = match said {
+            // A deletion already believed stays believed: grants never expire, so a deleted sandbox's grant would
+            // otherwise reattach for as long as the platform is down. Only the platform saying it exists undoes one.
+            Said::Nothing if believed => return Standing::Deleted,
             // Neither kept nor acted on, and a doubt stands as it was.
             Said::Nothing => return Standing::Exists,
             Said::Exists => (

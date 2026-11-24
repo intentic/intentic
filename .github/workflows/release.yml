@@ -25,19 +25,28 @@ permissions:
   contents: read
   packages: read
 
+# NOTHING A PULL REQUEST'S JOB CAN WRITE IS READ HERE (2026-11-24). Every job below on the fleet mounts the named docker
+# volume `intentic-release-cache` at /ci-cache instead of the host's /ci-cache, so the paths below are the same and the
+# stores are this workflow's own: ci.yml's pull-request jobs mount the host directory read-write, and a pnpm store, a
+# turbo cache or a cargo registry one of them wrote would otherwise be built into what this workflow signs and ships.
+# ci.yml's `images` and `images-platform` mount the same volume, for the same reason. Each job also starts by emptying
+# its retained workspace (.git included, whose hooks and config git runs) and $HOME, which a branch's job on the same
+# runner writes too. Docker creates the volume on first use, so the first release on a host builds cold. What this
+# cannot stop is a pull-request job that holds the docker socket (preflight, e2e-platform and the desktop checks do),
+# which can reach any volume: only release runners no pull request lands on close that (docs/ops/ci-runner.md).
+# Rejected: forcing every release build cold (TURBO_FORCE, job-local cargo and pnpm stores), which buys the same
+# isolation for twenty-odd minutes and a 1.1 GB MSVC download on every release.
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
   PNPM_STORE: /ci-cache/pnpm-store
   PNPM_METADATA: /ci-cache/pnpm-metadata
   TEST_TIMINGS_DIR: /ci-cache/test-timings
   TURBO_CACHE_DIR: /ci-cache/turbo
-  # A turbo remote cache, when the repository names one: TURBO_API and TURBO_TEAM
-  # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone. Never point
-  # them at _tools/turbo-cache's server: it also serves what sandboxes wrote, which CI may take only through that
-  # directory's import.mjs, the step that checks each entry against CI's own dry run.
-  TURBO_API: ${{ vars.TURBO_API }}
-  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  # No turbo remote cache, deliberately empty (turbo reads empty as unset): ci.yml's pull-request jobs hold the same
+  # TURBO_TOKEN and can write any entry a release would replay.
+  TURBO_API: ""
+  TURBO_TEAM: ""
+  TURBO_TOKEN: ""
   TURBO_REMOTE_CACHE_TIMEOUT: "10"
   TURBO_REMOTE_CACHE_UPLOAD_TIMEOUT: "30"
   REGISTRIES: ghcr.io/intentic
@@ -50,7 +59,7 @@ jobs:
     container:
       image: ghcr.io/intentic/ci-base:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -64,6 +73,9 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       # ONE OF THE TWO CHECKOUTS IN THIS REPOSITORY THAT KEEPS ITS CREDENTIAL. Every other one sets
       # `persist-credentials: false` — the token checkout writes into .git/config outlives the job on a
       # workspace six runner processes share (docs/ops/ci-runner.md, "The token a checkout leaves behind"). These
@@ -127,7 +139,7 @@ jobs:
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -143,7 +155,7 @@ jobs:
       # linux-build's directory, where these builds ran until they moved here, so its cache is warm for them. Never
       # held by both at once: linux-build starts only after this job has finished.
       CARGO_TARGET_DIR: /ci-cache/desktop-target
-      # For the windows-x64 target (cargo-xwin): the ~1.1 GB MSVC splat cache, shared.
+      # For the windows-x64 target (cargo-xwin): the ~1.1 GB MSVC splat cache, shared across the release volume.
       XWIN_CACHE_DIR: /ci-cache/xwin
       # Authenticode for ic-windows-amd64.exe, which build-ic.sh signs: the shims download it like an installer, and
       # the Windows installer carries it. Unset, the build runs and says so (sign-windows.sh).
@@ -157,6 +169,9 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -191,7 +206,7 @@ jobs:
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -204,6 +219,9 @@ jobs:
       CARGO_HOME: /ci-cache/cargo
       CARGO_TARGET_DIR: /ci-cache/ic-more-target
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -226,7 +244,7 @@ jobs:
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -262,6 +280,9 @@ jobs:
       # or nightly build gets no key, so the artifacts nobody installs report nothing.
       POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -341,10 +362,10 @@ jobs:
     runs-on: [self-hosted, intentic]
     container:
       # ci-base, same as ci.yml's `images` job: prepare-image-trees.sh compiles the payload job-side off the
-      # warm /ci-cache stores, and the Dockerfiles are pure COPYs.
+      # release volume's warm stores, and the Dockerfiles are pure COPYs.
       image: ghcr.io/intentic/ci-base:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
         - /var/run/docker.sock:/var/run/docker.sock
       credentials:
         username: ${{ github.actor }}
@@ -360,6 +381,9 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -400,7 +424,7 @@ jobs:
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
         # verify-desktop-install.sh runs the smoke container through the host daemon.
         - /var/run/docker.sock:/var/run/docker.sock
       credentials:
@@ -419,7 +443,8 @@ jobs:
       # cache carries straight over; still its own directory for the lock-and-fingerprint reasons ci.yml's
       # desktop jobs spell out.
       CARGO_TARGET_DIR: /ci-cache/desktop-target
-      # For the Windows launcher's build and the Explorer menu's DLL (cargo-xwin) — the ~1.1 GB MSVC splat cache, shared.
+      # For the Windows launcher's build and the Explorer menu's DLL (cargo-xwin) — the ~1.1 GB MSVC splat cache, shared
+      # across the release volume.
       XWIN_CACHE_DIR: /ci-cache/xwin
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       # AUTHENTICODE, which is a different thing from the key above. That one is minisign and proves an update
@@ -441,6 +466,9 @@ jobs:
       # Baked into the launcher UI at build time — released installers only, same as windows-build.
       POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -449,7 +477,8 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       # Build BEFORE stamping (release-prepare.sh's old rule #1, now living here): versions sit only in
       # package.json, but package.json is a turbo hash input — stamping first invalidates the whole closure
-      # and forces a rebuild of what verify-core just built. Building first replays verify's cache instead.
+      # and forces a rebuild of every package. Building first replays what the release volume's turbo cache holds
+      # from earlier releases for every package that has not changed since (never verify's cache: header above).
       - name: Build the published closure
         shell: bash
         run: |
@@ -538,7 +567,7 @@ jobs:
       # complete release set, and the 7z/rpm tooling that reads the installers back is baked into this image.
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
-        - /ci-cache:/ci-cache
+        - intentic-release-cache:/ci-cache
         - /var/run/docker.sock:/var/run/docker.sock
       credentials:
         username: ${{ github.actor }}
@@ -592,6 +621,9 @@ jobs:
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:
+      # Nothing a pull request's job left on this runner: the workspace, .git included, and $HOME (header above).
+      - name: Start from an empty workspace and home
+        run: find "$GITHUB_WORKSPACE" "$HOME" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       # The other checkout that keeps its credential — see `plan` above. This is the job that actually pushes
       # the tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

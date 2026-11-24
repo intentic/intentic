@@ -7,6 +7,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { pidFileBody } from "@intentic/local-agent";
 import { WATCHER_STALL_MS } from "@intentic/sandbox-contract/schemas/devices";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
+import { localDaemonPort } from "@intentic/sandbox-run";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, stubGlobal, waitFor } from "@intentic/testing/bun";
 import type { MirroredPort, Pairing, SkippedPort } from "../config.js";
@@ -24,6 +25,7 @@ const {
     fetchWorkspacePorts,
     handOver,
     markPrepared,
+    mirrorable,
     mirrorsByDefault,
     othersHolding,
     pollBackoffMs,
@@ -851,5 +853,14 @@ describe("mirrorsByDefault", () => {
             mirrorsByDefault({ owner: { ...owner, jobId: "j1", label: "Scratch server" } }),
             mirrorsByDefault({ owner, job: { ...owner, jobId: "j1", label: "Dev server" } }),
         ]).toEqual([true, false, false, true]);
+    });
+});
+
+// The machine agent dials a sandbox's daemon at its band port: a sandbox listening on another's would take its traffic.
+describe("mirrorable", () => {
+    it("leaves out every port of the local-daemon band, derived from the band's own edges", () => {
+        const first = localDaemonPort("000000000000");
+        const last = localDaemonPort("000f9f000000");
+        expect([first - 1, first, last, last + 1, 5173].map((port) => mirrorable({ port }))).toEqual([true, false, false, true, true]);
     });
 });

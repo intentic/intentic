@@ -10,7 +10,7 @@ declare namespace chrome {
         const onStartup: { addListener: (callback: () => void) => void };
         const onMessage: {
             addListener: (
-                callback: (message: unknown, sender: { tab?: { id?: number }; url?: string }, respond: (answer: unknown) => void) => boolean | void,
+                callback: (message: unknown, sender: { tab?: { id?: number }; url?: string; origin?: string }, respond: (answer: unknown) => void) => boolean | void,
             ) => void;
         };
         function sendMessage(message: unknown): Promise<unknown>;
@@ -55,6 +55,8 @@ declare namespace chrome {
             get(keys: string[] | null): Promise<Record<string, unknown>>;
             set(items: Record<string, unknown>): Promise<void>;
             remove(keys: string[]): Promise<void>;
+            // Chrome 102 for the session area; absent in Firefox, so the worker feature-detects it (main.ts).
+            setAccessLevel?(details: { accessLevel: "TRUSTED_CONTEXTS" | "TRUSTED_AND_UNTRUSTED_CONTEXTS" }): Promise<void>;
         }
         const local: Area;
         // Cleared when the browser quits: where a window id is kept, since ids start over in the next run.

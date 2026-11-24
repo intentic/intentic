@@ -1,13 +1,25 @@
+import { randomBytes } from "node:crypto";
 import { anySignal } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { redeemWhileWarming } from "@intentic/sandbox-contract/pairing-redeem";
+import {
+    credentialDigest,
+    PROOF_CHALLENGE_PARAM,
+    PROOF_KEY_PARAM,
+    proofKeyOf,
+    provesLoopback,
+} from "@intentic/sandbox-contract/protocol/doors/loopback-proof";
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
+import { z } from "zod";
 
 // Resolves which address reaches a sandbox's daemon: loopback when the container publishes one, else the public URL.
-// Shared by both halves so they can't disagree on reachability. A candidate must prove its identity via /health before
-// this agent trusts it with a token; loopback ranks first here, the opposite of the browser's own ordering.
+// Shared by both halves so they can't disagree on reachability. Loopback ranks first here, the opposite of the
+// browser's own ordering, and is taken only from a daemon that proves it holds the digest of the very credential this
+// agent is about to send it (2026-11-24, sandbox-contract protocol/doors/loopback-proof.ts). Until then any listener
+// on the derived port that echoed the sandbox id in /health was handed the link token over plain ws: another account
+// or container on this machine could bind the port, take the token, and push itself a grant with every switch on.
 
 // Loopback answers in sub-millisecond time; past this it's a hung socket, cheaper to abandon than to keep racing the
 // edge.
@@ -35,17 +47,26 @@ export const candidateBases = (sandboxUrl: string): readonly string[] => {
     return local === floor ? [floor] : [local, floor];
 };
 
-// Every failure (nothing listening, wrong daemon, mid-boot, hung socket, bad body) collapses to false: they all mean
-// the same thing, try the next address.
-export const probeDaemonBase = async (base: string, expectedId: string, fetchImpl: FetchImpl = fetch): Promise<boolean> => {
+// The part of /health's answer a probe reads, from a daemon of any age: either field may be missing.
+const ProbeAnswerSchema = z.object({ sandboxId: z.string().optional().catch(undefined), proof: z.string().optional().catch(undefined) });
+
+// Whether `base` is this sandbox's daemon, proven against `token`, the credential about to be sent there: a fresh
+// challenge each time, so an answer seen once is worth nothing again. Every failure (nothing listening, wrong daemon,
+// a daemon from before the proof, mid-boot, hung socket, bad body) collapses to false: they all mean the same thing,
+// try the next address.
+export const probeDaemonBase = async (base: string, expectedId: string, token: string, fetchImpl: FetchImpl = fetch): Promise<boolean> => {
+    const digest = credentialDigest(token);
+    const challenge = randomBytes(32).toString("hex");
+    const query = new URLSearchParams({ [PROOF_CHALLENGE_PARAM]: challenge, [PROOF_KEY_PARAM]: proofKeyOf(digest) });
     try {
-        const response = await fetchImpl(`${base}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        const response = await fetchImpl(`${base}/health?${query.toString()}`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
         if (!response.ok) {
             return false;
         }
-        const body = (await response.json()) as { sandboxId?: unknown };
-        return body.sandboxId === expectedId;
+        const answer = ProbeAnswerSchema.safeParse(await response.json());
+        return answer.success && answer.data.sandboxId === expectedId && provesLoopback(answer.data.proof ?? "", digest, expectedId, challenge);
     } catch {
+        // allow(silent-catch): an address that cannot be asked is one that is not taken, which is the answer
         return false;
     }
 };
@@ -57,9 +78,10 @@ export interface DaemonBase {
     readonly local: boolean;
 }
 
-// First candidate that answers as the sandbox meant, floor last and taken on trust (never probed); every probe failure
-// is absorbed, so this cannot reject.
-export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: FetchImpl = fetch): Promise<DaemonBase> => {
+// First candidate that proves itself the sandbox's daemon for `token`, the credential the caller is about to send it;
+// the floor last and taken on trust (never probed). With no token there is nothing to prove with, so the answer is the
+// floor. Every probe failure is absorbed, so this cannot reject.
+export const resolveDaemonBase = async (sandboxUrl: string, token: string | undefined, fetchImpl: FetchImpl = fetch): Promise<DaemonBase> => {
     const candidates = candidateBases(sandboxUrl);
     const expected = daemonIdOf(sandboxUrl);
     for (const [index, candidate] of candidates.entries()) {
@@ -67,7 +89,7 @@ export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: FetchImpl
             return { base: candidate, local: false }; // The floor: the registry's own answer, taken on trust.
         }
         // Candidate order is the fallback order.
-        if (expected !== undefined && (await probeDaemonBase(candidate, expected, fetchImpl))) {
+        if (expected !== undefined && token !== undefined && (await probeDaemonBase(candidate, expected, token, fetchImpl))) {
             return { base: candidate, local: true };
         }
     }
@@ -94,8 +116,9 @@ export const postWhileWarming = async (sandboxUrl: string, path: string, init: R
     const { doing, expired, say = () => undefined, attempts = 10, delayMs = 3000 } = ask;
     const outcome = await redeemWhileWarming(
         async (_attempt, signal) => {
-            // Resolved per attempt, since loopback may only appear partway through the retries.
-            const { base } = await resolveDaemonBase(sandboxUrl);
+            // Always the public address: a pairing token is not yet anything a daemon could prove it holds, and one a
+            // stranger on the loopback port took would enroll the stranger.
+            const { base } = await resolveDaemonBase(sandboxUrl, undefined);
             return fetch(`${base}${path}`, { ...init, method: "POST", signal: anySignal(signal, init.signal ?? undefined) });
         },
         {
@@ -124,11 +147,13 @@ export const postWhileWarming = async (sandboxUrl: string, path: string, init: R
 // How often a fallback re-probes; a loopback verdict is re-checked only when the ports poll notices failure.
 export const PROMOTION_INTERVAL_MS = 60_000;
 
-// The two fields a verdict is keyed and resolved by; structural rather than the sync half's Pairing, so this file owes
-// it nothing.
+// The fields a verdict is keyed and resolved by; structural rather than the sync half's Pairing, so this file owes it
+// nothing. `syncToken` is what the sync half sends the daemon, so it is what a loopback daemon proves it holds; a
+// pairing without one is dialled at its public address.
 export interface DaemonTarget {
     readonly sandboxId: string;
     readonly sandboxUrl: string;
+    readonly syncToken?: string | undefined;
 }
 
 interface Verdict extends DaemonBase {
@@ -155,7 +180,7 @@ export const createDaemonBases = (log: Log, fetchImpl: FetchImpl = fetch, now: (
             if (kept !== undefined && !kept.stale && (kept.local || at - kept.at < PROMOTION_INTERVAL_MS)) {
                 return kept.base;
             }
-            const verdict = await resolveDaemonBase(pairing.sandboxUrl, fetchImpl);
+            const verdict = await resolveDaemonBase(pairing.sandboxUrl, pairing.syncToken, fetchImpl);
             held.set(pairing.sandboxId, { ...verdict, at, stale: false });
             // Said only when the answer moved; an always-public pairing says nothing, the ordinary case.
             if (kept !== undefined && kept.base === verdict.base) {

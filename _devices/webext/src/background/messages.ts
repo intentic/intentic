@@ -34,8 +34,6 @@ export type PopupCommand =
     // Forgets one sandbox; the others stay connected, and sites stay granted, since that's the person's decision about
     // this extension, not that sandbox.
     | { readonly type: "unpair"; readonly sandbox: SandboxKey }
-    // A sandbox's own page offered a pairing (content/pair-bridge.ts); parked, not redeemed.
-    | { readonly type: "offer"; readonly code: string }
     // The person turned a parked pairing down, which is also what clears the badge it lit.
     | { readonly type: "dismiss-offer" }
     | { readonly type: "passwords-enable" }
@@ -126,7 +124,7 @@ export interface PopupState {
     // A pairing waiting to be accepted, offered by a sandbox page the person had open; `paired` when that sandbox is
     // already connected and this would only renew it; `failed` when pressing Connect on it did not connect, saying why.
     readonly offered:
-        | { readonly url: SandboxKey; readonly name: string; readonly paired: boolean; readonly failed: string | undefined }
+        | { readonly url: SandboxKey; readonly name: string; readonly from?: string | undefined; readonly paired: boolean; readonly failed: string | undefined }
         | undefined;
     readonly paused: boolean;
     readonly log: readonly ActivityEntry[];

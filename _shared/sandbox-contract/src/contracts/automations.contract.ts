@@ -88,6 +88,8 @@ export const automationsContract = {
             description:
                 "Mints a new credential for the door this automation opens and retires the old one at once. Every caller has to be handed the new URL; that is the point. Refused for an automation with no door.",
         })
+        // Answers the door's new credential: never a panel process's.
+        .meta({ panel: false })
         .input(AutomationIdParamSchema)
         .output(DoorTokenSchema),
     // Skips only the approval gate, since pressing this button is the owner's approval.

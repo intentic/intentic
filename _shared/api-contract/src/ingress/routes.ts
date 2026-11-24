@@ -48,7 +48,7 @@ import {
     WalletSignBodySchema,
     WakeAlarmBodySchema,
 } from "./ingress-schemas.js";
-import { PoolSignalBodySchema, PoolSignalsBodySchema, PoolSignalsSchema } from "./pool-signal-schemas.js";
+import { PoolSignalBodySchema, PoolSignalKeySchema, PoolSignalsBodySchema, PoolSignalsSchema } from "./pool-signal-schemas.js";
 
 /* Shared root-level machine routes, registered by ingress.ts and called through platform-client.ts; preserve legacy paths and error/status formats.
  * A table supports header auth, forms, plain text and byte passthrough without changing older callers to oRPC's /rpc or error envelope.
@@ -203,8 +203,9 @@ export const PLATFORM_INGRESS = {
     },
 
     // Run-outs shared across sandboxes: a provider account's pool ran out here, and the run-outs the owner's other
-    // sandboxes saw on the accounts this one holds, each account named by a hash only. A platform from before these
-    // answers 404, which the daemon reads as no signals.
+    // sandboxes saw on the accounts this one holds, each account named by a hash keyed per owner (`poolSignalKey`)
+    // only. A platform from before these answers 404, which the daemon reads as no key and no signals.
+    poolSignalKey: { method: "POST", path: "/pool-signals/key", auth: "connect", body: "json", answer: "json", output: PoolSignalKeySchema },
     poolSignal: {
         method: "POST",
         path: "/pool-signals/report",

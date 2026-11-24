@@ -84,13 +84,17 @@ describe(`me.setPreferences`, () => {
 
     it(`starts an account that kept nothing from an empty set`, async () => {
         const { prisma } = world(null);
-        expect(await call(meRoutes.setPreferences, { values: { "ui-motion": `off` } }, { context: as(prisma) })).toEqual({ values: { "ui-motion": `off` } });
+        expect(await call(meRoutes.setPreferences, { values: { "ui-motion": `off` } }, { context: as(prisma) })).toEqual({
+            values: { "ui-motion": `off` },
+        });
     });
 
     it(`refuses a patch that would pass the cap whole, and still takes one that replaces at it`, async () => {
         const full = Object.fromEntries(Array.from({ length: ACCOUNT_PREFERENCES_MAX }, (_, n) => [`ui-pref-${n}`, `${n}`]));
         const { prisma, rows } = world(full);
-        await expect(call(meRoutes.setPreferences, { values: { "ui-one-more": `x`, "ui-pref-0": `changed` } }, { context: as(prisma) })).rejects.toMatchObject({
+        await expect(
+            call(meRoutes.setPreferences, { values: { "ui-one-more": `x`, "ui-pref-0": `changed` } }, { context: as(prisma) }),
+        ).rejects.toMatchObject({
             code: `BAD_REQUEST`,
         });
         expect(rows.get(`user-1`)?.preferences).toEqual(full);
@@ -101,7 +105,9 @@ describe(`me.setPreferences`, () => {
 
     it(`refuses a name the editor would never store, and anybody not signed in`, async () => {
         const { prisma } = world();
-        await expect(call(meRoutes.setPreferences, { values: { "Not a name": `x` } }, { context: as(prisma) })).rejects.toMatchObject({ code: `BAD_REQUEST` });
+        await expect(call(meRoutes.setPreferences, { values: { "Not a name": `x` } }, { context: as(prisma) })).rejects.toMatchObject({
+            code: `BAD_REQUEST`,
+        });
         await expect(call(meRoutes.setPreferences, { values: { "ui-skin": `none` } }, { context: as(prisma, null) })).rejects.toMatchObject({
             code: `UNAUTHORIZED`,
         });
@@ -131,5 +137,93 @@ describe(`me.get`, () => {
         expect(JSON.stringify(owner)).not.toContain(`tester.dev`);
         expect((await call(meRoutes.get, undefined, { context: signedIn(`qa@team.example`, lists) }))?.internal).toBe(true);
         expect((await call(meRoutes.get, undefined, { context: signedIn(`someone@else.example`, lists) }))?.internal).toBe(false);
+    });
+});
+
+// A query's columns as Prisma takes them: a column, or a relation with columns of its own.
+type Select = { readonly [column: string]: true | { readonly select?: Select } };
+
+describe(`me.export`, () => {
+    // Every query the export makes, by table, answered empty: what is asked for, and keyed to whom, is the assertion.
+    const recording = () => {
+        const calls: { table: string; where: unknown; select: Select | undefined }[] = [];
+        const delegate = (table: string) =>
+            new Proxy(
+                {},
+                {
+                    get: (_delegate, method: string) => async (args: { where?: unknown; select?: Select }) => {
+                        calls.push({ table, where: args.where, select: args.select });
+                        return method === `findUnique` ? null : [];
+                    },
+                },
+            );
+        return { calls, prisma: stand<PrismaClient>(new Proxy({}, { get: (_prisma, table: string) => delegate(table) })) };
+    };
+    const selected = (select: Select | undefined): string[] =>
+        Object.entries(select ?? {}).flatMap(([name, value]) => [name, ...(value === true ? [] : selected(value.select))]);
+
+    it(`answers every section, each read by the caller's id or their address as stored, lowercased`, async () => {
+        const { calls, prisma } = recording();
+        const context = stand<OrpcContext>({ prisma, user: { id: `user-1`, email: `One@X.test`, name: `One`, image: null, emailVerified: true } });
+        const answer = await call(meRoutes.export, undefined, { context });
+        expect(Object.keys(answer).toSorted()).toEqual(
+            [
+                `user`,
+                `terms`,
+                `hostedSuspended`,
+                `preferences`,
+                `sessions`,
+                `accounts`,
+                `sandboxes`,
+                `memberships`,
+                `invitesSent`,
+                `organisations`,
+                `hostedPlan`,
+                `hostedUsage`,
+                `hostedProvisions`,
+                `hostedStrikes`,
+                `builds`,
+                `migrations`,
+                `outOfMemory`,
+                `trash`,
+                `trialUsage`,
+                `repairUsage`,
+                `apiTokens`,
+                `wallets`,
+                `walletPayments`,
+                `pushDevices`,
+                `projectClaims`,
+            ].toSorted(),
+        );
+        expect(answer[`terms`]).toEqual({ acceptedAt: null, version: null });
+        const keyedTo = new Set([`{"id":"user-1"}`, `{"userId":"user-1"}`, `{"ownerId":"user-1"}`, `{"email":"one@x.test"}`]);
+        const ownedThrough = new Set([`{"sandbox":{"ownerId":"user-1"}}`, `{"machine":{"sandbox":{"ownerId":"user-1"}}}`]);
+        expect(calls.filter((made) => !keyedTo.has(JSON.stringify(made.where)) && !ownedThrough.has(JSON.stringify(made.where)))).toEqual([]);
+        // One query per section read from the database, and one for the account row the terms and standing come from.
+        expect(calls).toHaveLength(22);
+    });
+
+    it(`selects no credential: no token, digest, code, payload or secret of any kind`, async () => {
+        const { calls, prisma } = recording();
+        const context = stand<OrpcContext>({ prisma, user: { id: `user-1`, email: `one@x.test`, name: `One`, image: null, emailVerified: true } });
+        await call(meRoutes.export, undefined, { context });
+        const columns = new Set(calls.flatMap((made) => selected(made.select)));
+        const credentials = [
+            `token`,
+            `tokenDigest`,
+            `setupCode`,
+            `fixCode`,
+            `setupPayload`,
+            `hash`,
+            `secretHash`,
+            `inviteToken`,
+            `accessToken`,
+            `refreshToken`,
+            `idToken`,
+            `password`,
+        ];
+        expect(credentials.filter((column) => columns.has(column))).toEqual([]);
+        // Every query names its columns: a missing select would read the whole row, credentials included.
+        expect(calls.filter((made) => made.select === undefined)).toEqual([]);
     });
 });

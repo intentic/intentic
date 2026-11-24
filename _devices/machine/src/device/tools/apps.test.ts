@@ -58,7 +58,7 @@ test("the clipboard splits the same way: reading looks, writing changes", async 
     const fake = fakeDesktop();
     fake.clipboard = "copied earlier";
     await expect(readClipboard(fake.desktop, grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
-    expect(await readClipboard(fake.desktop, grantWith("agent"))).toBe("copied earlier");
+    expect(await readClipboard(fake.desktop, grantWith("agent"))).toBe("The clipboard holds 14 characters. Its content is never read back.");
 
     await expect(writeClipboard(fake.desktop, "new", grantWith("agent", { control: "off" }), indicator())).rejects.toThrow(ScopeError);
     await writeClipboard(fake.desktop, "new", grantWith("agent"), indicator());
@@ -73,6 +73,15 @@ test("writing the clipboard reports a length, never the text", async () => {
     expect(said).not.toContain("hunter2");
 });
 
+// What the owner copied is as likely to be a password as what an agent puts there, and a read lands in a transcript.
+test("reading the clipboard reports a length, never the text", async () => {
+    const fake = fakeDesktop();
+    fake.clipboard = "hunter2";
+    const said = await readClipboard(fake.desktop, grantWith("agent"));
+    expect(said).toBe("The clipboard holds 7 characters. Its content is never read back.");
+    expect(said).not.toContain("hunter2");
+});
+
 test("an empty clipboard says so rather than answering with nothing", async () => {
     const fake = fakeDesktop();
     expect(await readClipboard(fake.desktop, grantWith("agent"))).toMatch(/empty/);
@@ -81,6 +90,21 @@ test("an empty clipboard says so rather than answering with nothing", async () =
 test("focus refuses an empty id with the sentence that says where ids come from", async () => {
     const fake = fakeDesktop();
     await expect(focusWindow(fake.desktop, "", grantWith("agent"), indicator())).rejects.toThrow(/window list/);
+});
+
+// Windows put the id into a PowerShell string where `$(…)` runs, and sway reads `;` as a second command: only the
+// spellings the window lists hand out reach a backend.
+test("focus refuses an id no window list hands out before the desktop sees it", async () => {
+    const fake = fakeDesktop();
+    for (const id of [`1$(Start-Process calc)`, `"; calc; "`, `5] exec xterm; [con_id=5`, `0x1 windowkill`, `1:2:3`, `--help`]) {
+        await expect(focusWindow(fake.desktop, id, grantWith("agent"), indicator())).rejects.toThrow(`"${id}" is not a window id`);
+    }
+    expect(fake.calls).toEqual([]);
+    // Every spelling a lister hands out: an HWND or a sway container, wmctrl's hex, cua-driver's pid and window.
+    for (const id of [`132456`, `0x04600007`, `4242:17`]) {
+        await focusWindow(fake.desktop, id, grantWith("agent"), indicator());
+    }
+    expect(fake.calls).toEqual([`focus 132456`, `focus 0x04600007`, `focus 4242:17`]);
 });
 
 // The rendering is what the model reads to choose a window, so it carries the id it must pass back, the app

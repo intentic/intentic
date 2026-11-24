@@ -46,7 +46,7 @@ const LEGACY_SCOPES = "scopes";
 const LEGACY_PENDING = "pending";
 
 const KeptApprovalSchema = object({ tabId: number(), url: string(), what: string(), at: number() });
-const ArmedSchema = object({ url: string(), token: string(), name: string().optional(), at: number() });
+const ArmedSchema = object({ url: string(), token: string(), name: string().optional(), from: string().optional(), at: number() });
 const ConnectFailureSchema = object({ url: string(), error: string() });
 const SiteChoiceSchema = object({ origin: string(), mode: zEnum(["read", "act"]), at: number() });
 const WindowIdSchema = number().int();
@@ -66,6 +66,17 @@ export interface PairedSandbox {
     // their host instead (sandboxName).
     readonly name?: string;
 }
+
+// A pairing waiting in the popup. `from` is the page that offered it (main.ts, from Chrome's own word on the sender),
+// shown beside the name, which the page chose; absent for a pasted code.
+export interface OfferedPairing extends PairedSandbox {
+    readonly from?: string;
+}
+
+const OfferedFromSchema = object({ from: string() });
+
+const offeredOf = (pairing: PairedSandbox | undefined, from: string | undefined): OfferedPairing | undefined =>
+    pairing !== undefined && from !== undefined ? { ...pairing, from } : pairing;
 
 // What the popup and the activity list call a sandbox.
 export const sandboxName = (sandbox: Pick<PairedSandbox, "url" | "name">): string => {
@@ -152,7 +163,7 @@ export const CHOICE_HOLD_MS = 5 * 60_000;
 
 // A Connect the person pressed, held for Chrome's grant of that sandbox's origin (connecting.ts), for as long as a pick
 // waits for its grant and for the same reason.
-export interface ArmedPairing extends PairedSandbox {
+export interface ArmedPairing extends OfferedPairing {
     readonly at: number;
 }
 
@@ -345,14 +356,15 @@ export const store = {
 
     // A pairing code the sandbox's page handed over, waiting for the popup to finish it: redeeming needs a host
     // permission, which Chrome only grants from a user gesture, so a page can't connect the browser on its own.
-    inbox: async (): Promise<PairedSandbox | undefined> => await read<PairedSandbox | undefined>(KEY_INBOX, undefined, pairedOf),
-    setInbox: async (pairing: PairedSandbox | undefined): Promise<void> =>
+    inbox: async (): Promise<OfferedPairing | undefined> =>
+        await read<OfferedPairing | undefined>(KEY_INBOX, undefined, (raw) => offeredOf(pairedOf(raw), OfferedFromSchema.safeParse(raw).data?.from)),
+    setInbox: async (pairing: OfferedPairing | undefined): Promise<void> =>
         pairing === undefined ? await chrome.storage.local.remove([KEY_INBOX]) : await chrome.storage.local.set({ [KEY_INBOX]: pairing }),
     // The pairing the person just pressed Connect on, waiting for Chrome's grant of its origin.
     armed: async (): Promise<ArmedPairing | undefined> =>
         await read<ArmedPairing | undefined>(KEY_CONNECTING, undefined, (raw) => {
             const parsed = ArmedSchema.safeParse(raw);
-            const pairing = parsed.success ? pairedOf(parsed.data) : undefined;
+            const pairing = parsed.success ? offeredOf(pairedOf(parsed.data), parsed.data.from) : undefined;
             return parsed.success && pairing !== undefined ? { ...pairing, at: parsed.data.at } : undefined;
         }),
     setArmed: async (armed: ArmedPairing | undefined): Promise<void> =>

@@ -326,7 +326,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     programTool({
         name: "clipboard",
         description:
-            "Read or replace this device's clipboard: the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
+            "Replace this device's clipboard (write): the reliable way to put text into an application, pasted with ctrl+v. A read answers only how many characters the clipboard holds, never what they are, since it so often holds a password the owner just copied: read text off a screenshot or a file instead. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
         // A write replaces what the owner had copied, which nothing else keeps.
         effect: "destructive",
         // `text` is required by the write and meaningless to the read, so it rides as a rule on the object rather than

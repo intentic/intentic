@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { credentialDigest, loopbackProof, PROOF_CHALLENGE_PARAM, proofKeyOf } from "@intentic/sandbox-contract/protocol/doors/loopback-proof";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import {
     candidateBases,
@@ -16,7 +17,9 @@ import {
 
 // The URL's leading label is the daemon's 12-hex id, deriving the port to dial and the id /health answers.
 const ID = `0738cd6b5027`;
-const pairing: DaemonTarget = { sandboxId: `sandbox-${ID}-example-dev`, sandboxUrl: `https://sandbox-${ID}.example.dev` };
+// The credential the caller is about to send, whose digest the real daemon keeps and a stranger on the port does not.
+const TOKEN = `ist_sync-token`;
+const pairing: DaemonTarget = { sandboxId: `sandbox-${ID}-example-dev`, sandboxUrl: `https://sandbox-${ID}.example.dev`, syncToken: TOKEN };
 // Derived, not transcribed: the port is @intentic/sandbox-run's contract to decide.
 const LOCAL = `http://127.0.0.1:${localDaemonPort(ID)}`;
 const PUBLIC = pairing.sandboxUrl;
@@ -34,22 +37,34 @@ afterEach(async () => {
 });
 
 // A daemon on a port, answering /health like the real one. `answersAs` sets which sandbox id it claims (not always the
-// one asked about); `hang` accepts and never replies, unlike a dead port which refuses instantly.
-const daemonOn = async (port: number, { answersAs, hang = false }: { answersAs?: string; hang?: boolean }): Promise<void> => {
+// one asked about); `holds` is the credential whose digest it keeps, so it can answer a challenge for that one alone
+// (none: a daemon from before the proof, or a stranger echoing the id); `hang` accepts and never replies, unlike a
+// dead port which refuses instantly.
+const daemonOn = async (port: number, { answersAs, holds, hang = false }: { answersAs?: string; holds?: string; hang?: boolean }): Promise<void> => {
     const server = createServer((request, response) => {
         if (hang) {
             return; // connection accepted, answer never sent
         }
-        if (request.url !== `/health`) {
+        const url = new URL(request.url ?? `/`, `http://127.0.0.1`);
+        if (url.pathname !== `/health`) {
             response.writeHead(404).end();
             return;
         }
+        const challenge = url.searchParams.get(PROOF_CHALLENGE_PARAM) ?? ``;
+        const digest = holds === undefined ? undefined : credentialDigest(holds);
         response.writeHead(200, { "content-type": "application/json" });
+        if (digest !== undefined && url.searchParams.get(`proofKey`) === proofKeyOf(digest) && answersAs !== undefined) {
+            response.end(JSON.stringify({ ok: true, sandboxId: answersAs, proof: loopbackProof(digest, answersAs, challenge) }));
+            return;
+        }
         response.end(JSON.stringify({ ok: true, sandboxId: answersAs }));
     });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(port, `127.0.0.1`, resolve));
 };
+
+// An asked URL without its challenge, which is fresh every time.
+const withoutQuery = (url: string): string => `${new URL(url).origin}${new URL(url).pathname}`;
 
 // Real fetch that records every URL asked, to prove what was NOT probed.
 const countingFetch = (): { readonly impl: FetchImpl; readonly asked: string[] } => {
@@ -100,27 +115,48 @@ describe(`candidateBases`, () => {
 });
 
 describe(`resolveDaemonBase`, () => {
-    it(`adopts the loopback daemon that names the sandbox we asked about`, async () => {
+    it(`adopts the loopback daemon that proves it holds the credential about to be sent`, async () => {
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: LOCAL, local: true });
+    });
+
+    // Anything on the port can echo the id, which /health hands every caller: another account's listener took the link
+    // token this way, so the id alone wins nothing.
+    it(`refuses a listener that names the sandbox but cannot prove it`, async () => {
         await daemonOn(localDaemonPort(ID), { answersAs: ID });
-        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: LOCAL, local: true });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: PUBLIC, local: false });
+    });
+
+    // A real daemon of this sandbox that issued some other credential proves nothing about this one.
+    it(`refuses a daemon that holds a different credential`, async () => {
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: `ist_someone-else` });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: PUBLIC, local: false });
+    });
+
+    // With nothing to prove with (a pairing token, not yet anything a daemon keeps), the loopback is not even asked.
+    it(`takes the public address, unasked, when there is no credential to prove`, async () => {
+        const { impl, asked } = countingFetch();
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
+        expect(await resolveDaemonBase(PUBLIC, undefined, impl)).toEqual({ base: PUBLIC, local: false });
+        expect(asked).toEqual([]);
     });
 
     // A port isn't a sandbox: an unrelated daemon holding it must lose to the public URL, or its enrollment token goes
     // to a stranger.
     it(`refuses a daemon that answers as a DIFFERENT sandbox`, async () => {
-        await daemonOn(localDaemonPort(ID), { answersAs: `bce57bb9fe3b` });
-        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
+        await daemonOn(localDaemonPort(ID), { answersAs: `bce57bb9fe3b`, holds: TOKEN });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: PUBLIC, local: false });
     });
 
     // A daemon with no id to claim (no connect token) is equally unprovable; the claim is omitted, not sent as
     // `undefined`.
     it(`refuses a daemon that names no sandbox`, async () => {
-        await daemonOn(localDaemonPort(ID), {});
-        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
+        await daemonOn(localDaemonPort(ID), { holds: TOKEN });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: PUBLIC, local: false });
     });
 
     it(`falls back to the public address when nothing is listening`, async () => {
-        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: PUBLIC, local: false });
     });
 
     // An accepting-but-silent daemon is the one failure a refused port misses, and the costliest since the agent is
@@ -129,7 +165,7 @@ describe(`resolveDaemonBase`, () => {
         await daemonOn(localDaemonPort(ID), { hang: true });
         const started = Date.now();
 
-        expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
+        expect(await resolveDaemonBase(PUBLIC, TOKEN)).toEqual({ base: PUBLIC, local: false });
 
         // Asserted well clear of the 1.5s budget: a hang detector, not a latency measurement.
         expect(Date.now() - started).toBeLessThan(10_000);
@@ -139,14 +175,29 @@ describe(`resolveDaemonBase`, () => {
     // choosing between it and nothing.
     it(`asks the shortcut and never the public address`, async () => {
         const { impl, asked } = countingFetch();
-        await daemonOn(localDaemonPort(ID), { answersAs: ID });
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
 
-        await resolveDaemonBase(PUBLIC, impl);
-        expect(asked).toEqual([`${LOCAL}/health`]);
+        await resolveDaemonBase(PUBLIC, TOKEN, impl);
+        expect(asked.map(withoutQuery)).toEqual([`${LOCAL}/health`]);
 
         // With no shortcut to try, nothing is asked at all.
-        await resolveDaemonBase(`https://myshop.example.com`, impl);
-        expect(asked).toEqual([`${LOCAL}/health`]);
+        await resolveDaemonBase(`https://myshop.example.com`, TOKEN, impl);
+        expect(asked.map(withoutQuery)).toEqual([`${LOCAL}/health`]);
+    });
+
+    // Each probe its own challenge, so an answer a stranger saw once cannot be played back to a later one.
+    it(`sends a fresh challenge every time, and names the credential only by its key`, async () => {
+        const { impl, asked } = countingFetch();
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
+
+        await resolveDaemonBase(PUBLIC, TOKEN, impl);
+        await resolveDaemonBase(PUBLIC, TOKEN, impl);
+        const [first, second] = asked.map((url) => new URL(url).searchParams);
+        expect(first?.get(PROOF_CHALLENGE_PARAM)).toMatch(/^[0-9a-f]{64}$/);
+        expect(first?.get(PROOF_CHALLENGE_PARAM)).not.toBe(second?.get(PROOF_CHALLENGE_PARAM));
+        expect(first?.get(`proofKey`)).toBe(proofKeyOf(credentialDigest(TOKEN)));
+        expect(asked.join(`\n`)).not.toContain(TOKEN);
+        expect(asked.join(`\n`)).not.toContain(credentialDigest(TOKEN));
     });
 });
 
@@ -162,7 +213,7 @@ describe(`createDaemonBases`, () => {
 
     it(`resolves a loopback verdict once and then holds it: the best address there is, nothing to re-ask`, async () => {
         const { impl, asked } = countingFetch();
-        await daemonOn(localDaemonPort(ID), { answersAs: ID });
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
         // Far past the promotion interval, to show the verdict itself settles this, not the clock.
         let clock = 0;
         const bases = createDaemonBases(log, impl, () => clock);
@@ -200,7 +251,7 @@ describe(`createDaemonBases`, () => {
 
         expect(await bases.resolve(pairing)).toBe(PUBLIC);
 
-        await daemonOn(localDaemonPort(ID), { answersAs: ID });
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
         clock = PROMOTION_INTERVAL_MS;
 
         expect(await bases.resolve(pairing)).toBe(LOCAL);
@@ -212,7 +263,7 @@ describe(`createDaemonBases`, () => {
     // working address.
     it(`demotes to the public address when a loopback base stops answering`, async () => {
         const { impl } = countingFetch();
-        await daemonOn(localDaemonPort(ID), { answersAs: ID });
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
         let clock = 0;
         const bases = createDaemonBases(log, impl, () => clock);
         expect(await bases.resolve(pairing)).toBe(LOCAL);
@@ -249,7 +300,7 @@ describe(`createDaemonBases`, () => {
     // One verdict per sandbox: a fleet resolves independently, so one dead container says nothing about another's.
     it(`keeps a verdict per sandbox`, async () => {
         const { impl } = countingFetch();
-        await daemonOn(localDaemonPort(ID), { answersAs: ID });
+        await daemonOn(localDaemonPort(ID), { answersAs: ID, holds: TOKEN });
         const other: DaemonTarget = { sandboxId: `sandbox-bce57bb9fe3b-example-dev`, sandboxUrl: `https://sandbox-bce57bb9fe3b.example.dev` };
         const bases = createDaemonBases(log, impl, () => 0);
 

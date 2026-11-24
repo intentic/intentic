@@ -1867,6 +1867,7 @@ dependencies = [
  "futures-util",
  "glib",
  "gtk",
+ "iana-time-zone",
  "intentic-bounded",
  "intentic-docker-host",
  "intentic-sway-ipc",

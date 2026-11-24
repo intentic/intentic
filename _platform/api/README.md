@@ -59,6 +59,17 @@ flowchart LR
   carries the same header naming the account it answered as, so a page drops an answer meant for someone else.
   Sign-ins, the session check and the switch itself are exempt. A sixth sign-in still signs in, but it is listed
   nowhere, so the editor stops offering "Add another account" at five.
+- A cookie-bearing write is served only from the editor's origin (`WEB_ORIGIN`) or the API's own (`src/http/cross-site-guard.ts`).
+  The session cookie is `SameSite=Lax`, but every sandbox page lives under the ingress zone (`*.sbx.intentic.dev`), the
+  same site as the API, so a sandbox's page could otherwise post to `/rpc` or `/api/repair/turn` with the reader's cookie
+  attached. The guard reads `Origin`, or `Sec-Fetch-Site` when there is no Origin, and refuses with 403 `FORBIDDEN`. A
+  request with neither header passes: that is the desktop app or the mobile core sending the cookie itself. It leaves
+  out Better Auth's `/api/auth/**` (its own origin check refuses a cookie-bearing write from outside `trustedOrigins`),
+  every `PLATFORM_INGRESS` route (authorized by a token, code or key the request carries) and Stripe's webhook. The
+  cookie itself is host-only (no `Domain`), named `__Secure-better-auth.session_token`. (2026-11-24) `__Host-` was
+  considered and not taken: Better Auth can be made to emit it, but the mobile core matches the `__Secure-` name exactly,
+  so it waits for a client release that accepts both. Listing `sbx.intentic.dev` on the Public Suffix List would make
+  every sandbox its own site, which is the lasting fix for both the cookie and the guard.
 - `sandbox.identityAssertion` mints the platform's identity assertion: its signed word that the caller controls their
   address, for one sandbox they own or accepted an invitation to, valid for two minutes
   ([identity-assertion.ts](../../_shared/sandbox-contract/src/policy/identity-assertion.ts),
@@ -332,6 +343,14 @@ flowchart LR
   Running it again after a partial failure is safe: the queues are upserts, and the standing is moved, not copied.
   If the account owns an organisation-bound sandbox, it refuses before any erasure work, after taking the sandbox
   locks. A database trigger also refuses a later account cascade while a bound sandbox remains.
+  Rows keyed by the address go with it in the same transaction: its grants and pending invites to other people's
+  sandboxes (`SandboxMember`) and its organisation seats (`OrgMember`). Each organisation the address sits in is locked
+  before any sandbox, the order a bind takes them in. An organisation left with nobody is deleted. One that keeps its
+  sandboxes to its people (`membersOnly`) moves to a new policy edition, so bound daemons drop the person on their next
+  fetch. The erase refuses while the account is the only admin of an organisation other people are still in, the same
+  rule an admin's own removal meets. (2026-11-24) Before this, a later account on the same address inherited them all.
+  What the daemons' own rosters hold is theirs to change. The wallet's custody account is not closed with it: no close
+  call to the custody service exists yet, so the wallet row cascades and the custody side keeps its key.
 - A deleted account's hosted standing outlives it (`sandbox/hosted/abuse/carried-standing.ts`): the suspension, the
   abuse watch's strike count and the month's free minutes, keyed by HMAC-SHA256 of the Google subject and, beside it,
   of the canonical email (lowercased, a `+tag` dropped, and for Gmail the dots dropped), both under a key derived from
@@ -342,7 +361,14 @@ flowchart LR
   `BETTER_AUTH_SECRET` orphans every record. (2026-09-29: derived rather than a new env var, so no deployment has to
   carry one more secret. A dedicated key would survive a session-secret rotation, at the cost of one more thing to set.)
 - `src/config.ts` is the one config schema; each field is an env var in SCREAMING_SNAKE. A lane whose credential is
-  unset (Stripe, APNs, FCM, trial keys, Fly) is switched off rather than failing the boot.
+  unset (Stripe, APNs, FCM, trial keys, Fly) is switched off rather than failing the boot. `SECRETS_KEY` is the
+  exception: with `NODE_ENV=production` (the image's) and no key, the boot refuses, since every OAuth token, connect
+  token and setup payload would be written in plaintext (`src/crypto.ts`). Development still boots without it, with a
+  warning. (2026-11-24) It used to warn in production too.
+- The GDPR export (`me.export`, `src/me/data-export.ts`) answers every row about the caller, by account or by address:
+  sandboxes with their reports, memberships, invites and organisation seats, the hosted lane with builds, migrations and
+  out-of-memory kills, trash, trial and Repair usage, API token metadata, wallets and payments, push devices and project
+  claims. Credentials (tokens, digests, codes, payloads, secrets) stay out, and every query names its columns.
 - Bun runs the TypeScript source; there is no build. The image applies migrations and then refuses to start if the
   database differs from `schema.prisma` ([Dockerfile](Dockerfile)).
 - Before it applies a migration, the boot dumps the database (`src/migration-backup.ts`): when `prisma migrate status`
@@ -370,7 +396,7 @@ flowchart LR
 | `src/me` | The caller's profile, their look and reading preferences kept with the account (`/me/preferences`), and the GDPR data export |
 | `src/tokens` | Account-level API tokens |
 | `src/projects` | Account-level report routing ([account-routing.md](../../docs/architecture/account-routing.md)): which of an owner's sandboxes claims which project (`/rpc` `projects.*`, owner only), and the directory a sandbox asks (`/projects/resolve`, connect token) for the claiming sandbox's address and a signed pass, which says when the two sandboxes are not in the same organisation. `/projects/route` (`route-resolve.ts`) answers the same for routing as a person: a pass for one scope (report, drop, read, task) to a sandbox the named person reaches, whoever owns it. A notary, never a mailbox: report content goes daemon to daemon |
-| `src/pool-signals` | Run-outs shared across sandboxes ([account-routing.md](../../docs/architecture/account-routing.md)): the latest run-out of each AI subscription pool, the account named only by a hash of the provider's own ids for it (`/pool-signals/report`, `/pool-signals/read`, connect token). A sandbox reads only the fingerprints it names, never its own reports; rows go after eight days |
+| `src/pool-signals` | Run-outs shared across one owner's sandboxes ([account-routing.md](../../docs/architecture/account-routing.md)): the latest run-out of each AI subscription pool, the account named only by an HMAC of the provider's own ids under the owner's key (`/pool-signals/key`, `/pool-signals/report`, `/pool-signals/read`, connect token). Every row is the reporting sandbox's owner's; a sandbox reads only its owner's rows for the fingerprints it names, never its own reports; rows go after eight days |
 | `src/push-relay` | Push relay for native installs: APNs for the iPhone app, FCM for the Android editor and Intentic Device apps, never carrying a notification's words to Android |
 | `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential. Metered per model call (`TRIAL_DAILY_MESSAGES`, default 12 a day); a turn the daemon opens with a call left may finish on up to `TRIAL_GRACE_STEPS` more (default 25 a day, `POST /trial/turn`) |
 | `src/wallet` | Agent wallet: payments signed by a custody provider under per-member caps |

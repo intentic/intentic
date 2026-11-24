@@ -10,6 +10,7 @@ import type { Services } from "../../composition.js";
 import type { DoorServices } from "../device-door.routes.js";
 import { createDeviceFileRoutes } from "../device-files.routes.js";
 import type { HostClient } from "../host-peer.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // The `devices copy` door with a fake computer behind it: a copy onto it reaches the machine as the agent's bytes in
 // order, a chunk of the contract's size per call, then one commit; a copy off it streams the machine's chunks back and
@@ -84,7 +85,7 @@ const fake = (over: Over = {}): Fake => {
 };
 
 const bytes = Buffer.alloc(FILE_COPY_CHUNK_BYTES * 2 + 17, 7);
-const headers = { "x-intentic-conversation": "conv-a" };
+const headers = provenTurnHeaders("conv-a");
 const putQuery = (extra = "") => `?path=${encodeURIComponent("C:\\Users\\me")}&name=tool.bin&kind=file&size=${bytes.byteLength}&sha256=${sha(bytes)}${extra}`;
 const put = (app: Hono<AppEnv>, extra = "", body: Buffer | undefined = bytes) => {
     const init: RequestInit = { method: "POST", headers };

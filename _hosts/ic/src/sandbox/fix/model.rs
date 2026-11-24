@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 
+use crate::scrub::scrub;
 use crate::util::plural;
 
 /* WHAT `ic sandbox fix` FOUND AND WHO CAN CLOSE IT, pure. The engine around it (mod.rs) gathers facts and applies
@@ -579,7 +580,9 @@ const ENV_MAX: usize = 80;
 const CHECKS_MAX: usize = 24;
 
 /// The report as the contract's `HostReportInputSchema` reads it, field for field. Problem, remedy and fix ride on a
-/// warn or a fail only; `outcome` on `done` only. Pure.
+/// warn or a fail only; `outcome` on `done` only. The free text is scrubbed of this machine's private details before
+/// it is clipped (scrub.rs): the platform shows it to its admins, and `--json`'s reader hands it to Repair's model.
+/// Pure but for the machine's own names, read once.
 pub fn wire(report: &Report<'_>) -> Value {
     let checks: Vec<Value> = report
         .checks
@@ -593,10 +596,10 @@ pub fn wire(report: &Report<'_>) -> Value {
             });
             if matches!(check.state, State::Warn | State::Fail) {
                 if let Some(problem) = &check.problem {
-                    row["problem"] = json!(clip(problem, TEXT_MAX));
+                    row["problem"] = json!(clip(&scrub(problem), TEXT_MAX));
                 }
                 if let Some(remedy) = &check.remedy {
-                    row["remedy"] = json!(clip(remedy, TEXT_MAX));
+                    row["remedy"] = json!(clip(&scrub(remedy), TEXT_MAX));
                 }
                 if let Some(who) = check.who() {
                     row["fix"] = json!(who.wire());
@@ -613,7 +616,7 @@ pub fn wire(report: &Report<'_>) -> Value {
         "checks": checks,
     });
     if let Some(doing) = report.doing.filter(|doing| !doing.is_empty()) {
-        body["doing"] = json!(clip(doing, DOING_MAX));
+        body["doing"] = json!(clip(&scrub(doing), DOING_MAX));
     }
     if let Some(env) = report.env.filter(|env| !env.is_empty()) {
         body["env"] = json!(clip(env, ENV_MAX));
@@ -825,6 +828,41 @@ mod tests {
                     { "id": "daemon", "label": "Daemon health", "state": "skip" }
                 ]
             })
+        );
+    }
+
+    /// The free text leaves without credentials or addresses; the fields ic names itself are left as they are.
+    #[test]
+    fn the_reports_free_text_is_scrubbed_before_it_is_clipped() {
+        let checks = vec![Check::fail(
+            CONTAINER,
+            "docker said: unauthorized: Bearer abcdefgh1234 from 203.0.113.7",
+            "log in again as a@example.com",
+            Fix::Do(Repair::Start),
+        )];
+        let body = wire(&Report {
+            source: Source::Agent,
+            machine: "m",
+            os: "linux",
+            env: None,
+            stage: Stage::Fixing,
+            doing: Some("Pulling with CONNECT_TOKEN=abc"),
+            outcome: None,
+            checks: &checks,
+            asleep: false,
+            waking: false,
+        });
+        assert_eq!(
+            body["checks"][0]["problem"],
+            json!("docker said: unauthorized: Bearer <redacted> from <ip>")
+        );
+        assert_eq!(
+            body["checks"][0]["remedy"],
+            json!("log in again as <email>")
+        );
+        assert_eq!(
+            body["doing"],
+            json!("Pulling with CONNECT_TOKEN=<redacted>")
         );
     }
 

@@ -64,6 +64,22 @@ test("each device-held name carries its keyring's hosts as a host guard that is 
     expect(await device.guards()).toEqual([{ subject: "VPN_PASSWORD", kind: "secret", guard: true, hosts: ["vpn.example.com", "*.corp.example.com"], source: "keyring" }]);
 });
 
+// A copy resolves from the copy kept here rather than by asking its computer, and its row shows the keyring's list:
+// that list is the one its every use is held to.
+test("a copy carries its keyring's hosts as a host guard too, and one with no hosts carries none", async () => {
+    const rog = fakeKeyring([VPN, pointerOf("COPIED", { mode: "copy", hosts: ["api.example.com"] }), pointerOf("LOOSE", { mode: "copy" })]);
+    const registry: NamedSecret[] = [
+        { name: "COPIED", value: "copied-value-here", source: "copy" },
+        { name: "LOOSE", value: "another-copied-value", source: "copy" },
+    ];
+    const { device, link } = setup({ rog }, registry);
+    await link.refresh();
+    expect(await device.guards()).toEqual([
+        { subject: "VPN_PASSWORD", kind: "secret", guard: true, hosts: ["vpn.example.com", "*.corp.example.com"], source: "keyring" },
+        { subject: "COPIED", kind: "secret", guard: true, hosts: ["api.example.com"], source: "keyring" },
+    ]);
+});
+
 test("a fetch asks the computer for one value, and a refusal says where it is kept and what to do", async () => {
     const rog = fakeKeyring([VPN]);
     const { device, link, keys } = setup({ rog });

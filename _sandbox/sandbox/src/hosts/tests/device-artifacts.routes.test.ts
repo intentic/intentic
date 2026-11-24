@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { createDeviceArtifactRoutes } from "../device-artifacts.routes.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // The `devices push` door with a fake computer behind it: what reaches the machine is the agent's bytes in order, in
 // chunks of the contract's size, then one commit; and nothing is sent to a computer the turn does not reach, one that is
@@ -49,7 +50,7 @@ const query = (extra = "") => `?name=intentic-desktop&kind=file&file=intentic-de
 const push = (app: Hono<AppEnv>, device = "rog", extra = "", body: Buffer | undefined = bytes) =>
     app.request(`/devices/${device}/artifacts${query(extra)}`, {
         method: "POST",
-        headers: { "x-intentic-conversation": "conv-a" },
+        headers: provenTurnHeaders("conv-a"),
         ...(body === undefined ? {} : { body: new Uint8Array(body) }),
     });
 

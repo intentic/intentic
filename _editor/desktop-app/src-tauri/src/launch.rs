@@ -690,24 +690,83 @@ const POSTHOG_HOST: &str = match option_env!("POSTHOG_HOST") {
     None => "https://us.i.posthog.com",
 };
 
-/// On unless this install was switched off. Settings, Data in the workspace window is the one switch
-/// (web/src/app/analyticsConsent.ts), and it writes the choice here through `intentic://analytics`; no file means
-/// nobody has switched it off. Without a config dir there is nowhere to keep a refusal, so nothing is sent.
-pub fn analytics_allowed() -> bool {
-    config_dir().is_some_and(
-        |dir| match std::fs::read_to_string(dir.join("analytics-consent")) {
-            Ok(choice) => choice != "deny",
-            Err(_) => true,
-        },
-    )
+/* WHO IS ASKED FIRST (2026-11-24): the web's rule (web/src/app/analyticsConsent.ts `asksFirstIn`). An install nobody
+ * has asked sends nothing where a browser in the same time zone would ask first, and nothing where the system does not
+ * say its zone. It used to read no answer as yes everywhere, so a European install the workspace never asked still
+ * sent its launches, crashes and setup steps. */
+
+/// Zones of the EEA, the UK and Switzerland that do not start with `Europe/`. The same list as the web's
+/// `EUROPEAN_OUTLIERS` (web/src/app/analyticsConsent.ts), which a test here holds it to: a change is made in both.
+const EUROPEAN_OUTLIERS: [&str; 13] = [
+    "Asia/Nicosia",
+    "Asia/Famagusta",
+    "Atlantic/Azores",
+    "Atlantic/Canary",
+    "Atlantic/Faroe",
+    "Atlantic/Madeira",
+    "Atlantic/Reykjavik",
+    "Arctic/Longyearbyen",
+    "America/Cayenne",
+    "America/Guadeloupe",
+    "America/Martinique",
+    "Indian/Mayotte",
+    "Indian/Reunion",
+];
+
+/// Pure: whether an install with no stored answer may send from this IANA time zone: only from a known zone outside
+/// the EEA, the UK and Switzerland. No zone is asked first, as the web treats it.
+pub fn allowed_unasked(zone: Option<&str>) -> bool {
+    zone.filter(|zone| !zone.is_empty())
+        .is_some_and(|zone| !zone.starts_with("Europe/") && !EUROPEAN_OUTLIERS.contains(&zone))
 }
 
+/// Pure: the answer for what the consent file holds (none without a file) in this zone. A stored `allow` or `deny`
+/// is the person's own and decides; anything else is no answer, and the zone decides.
+pub fn consent_from(stored: Option<&str>, zone: Option<&str>) -> bool {
+    match stored.map(str::trim) {
+        Some("allow") => true,
+        Some("deny") => false,
+        _ => allowed_unasked(zone),
+    }
+}
+
+/// The system's IANA time zone, read once per process; none where the system does not say.
+fn system_zone() -> Option<&'static str> {
+    static ZONE: OnceLock<Option<String>> = OnceLock::new();
+    ZONE.get_or_init(|| iana_time_zone::get_timezone().ok())
+        .as_deref()
+}
+
+/// Whether this install may send. Settings, Data in the workspace window is the one switch
+/// (web/src/app/analyticsConsent.ts), and it writes the choice here through `intentic://analytics`; with no file the
+/// system's time zone decides ([`allowed_unasked`]). Without a config dir there is nowhere to keep an answer, so
+/// nothing is sent. The launcher's `analyticsAllowed` (commands.rs `desktop_info`) is this answer too.
+pub fn analytics_allowed() -> bool {
+    config_dir().is_some_and(|dir| {
+        let stored = std::fs::read_to_string(dir.join("analytics-consent")).ok();
+        consent_from(stored.as_deref(), system_zone())
+    })
+}
+
+/// A queue this install may not send is thrown away rather than kept for a later yes: [`keep_report`] queues nothing
+/// while it may not send, so what is left came from a build that read no answer as yes, or from a time zone that
+/// allowed it. Either way it was gathered without an answer that holds now.
+fn drop_unsendable(dir: &Path) {
+    let _guard = REPORTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _ = std::fs::remove_file(reports_path(dir));
+}
+
+/// Keep the workspace's answer. A refusal drops the queue; so does a yes given while this install could not send, since
+/// whatever is queued then was not gathered under it ([`drop_unsendable`]).
 pub fn set_analytics_consent(choice: &str) {
     if let Some(dir) = config_dir() {
+        let could_send = analytics_allowed();
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("analytics-consent"), choice);
-        if choice != "allow" {
-            let _ = std::fs::remove_file(reports_path(&dir));
+        if choice != "allow" || !could_send {
+            drop_unsendable(&dir);
         }
     }
 }
@@ -750,12 +809,13 @@ fn internal_marked(dir: Option<&Path>, said: Option<&std::ffi::OsStr>) -> bool {
 /// Send what earlier launches left, off the launch's thread. A report is removed once PostHog took it; one that
 /// could not be sent stays for the next launch.
 pub fn send_reports(app: &AppHandle) {
-    if !analytics_allowed() {
-        return;
-    }
     let Some(dir) = config_dir() else {
         return;
     };
+    if !analytics_allowed() {
+        drop_unsendable(&dir);
+        return;
+    }
     let path = reports_path(&dir);
     let reports: Vec<Report> = crate::state::read_json(&path).unwrap_or_default();
     if reports.is_empty() {
@@ -1593,5 +1653,60 @@ mod tests {
         assert!(written.contains("\"stage\":\"window\""), "{written}");
         let back: Marker = serde_json::from_str(&written).unwrap();
         assert_eq!(back, marker(Stage::Window));
+    }
+
+    // An install nobody has asked sends only where a browser in the same zone is not asked first (the web's
+    // analyticsConsent.ts), and never where the system does not say its zone.
+    #[test]
+    fn an_install_nobody_asked_sends_only_from_a_known_zone_outside_europe() {
+        for zone in [
+            "Europe/Warsaw",
+            "Europe/London",
+            "Europe/Zurich",
+            "Asia/Nicosia",
+            "Atlantic/Canary",
+            "Indian/Reunion",
+            "America/Cayenne",
+        ] {
+            assert!(!allowed_unasked(Some(zone)), "{zone} is asked first");
+        }
+        for zone in ["America/New_York", "Asia/Tokyo", "UTC", "Australia/Sydney"] {
+            assert!(allowed_unasked(Some(zone)), "{zone} is not asked first");
+        }
+        assert!(!allowed_unasked(None), "no zone to read is asked first");
+        assert!(!allowed_unasked(Some("")), "an empty zone is no zone");
+    }
+
+    // The person's own answer decides wherever the install is; only with none does the zone.
+    #[test]
+    fn a_stored_answer_outranks_the_zone() {
+        assert!(consent_from(Some("allow"), Some("Europe/Berlin")));
+        assert!(consent_from(Some("allow\n"), None));
+        assert!(!consent_from(Some("deny"), Some("America/Chicago")));
+        assert!(!consent_from(None, Some("Europe/Berlin")));
+        assert!(!consent_from(None, None));
+        assert!(consent_from(None, Some("America/Chicago")));
+        assert!(
+            !consent_from(Some("maybe"), Some("Europe/Berlin")),
+            "an unknown answer is no answer"
+        );
+    }
+
+    // The outliers are the web's list, read from the web's own source, so the two rules cannot drift apart.
+    #[test]
+    fn the_outliers_are_the_webs() {
+        let source = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/app/analyticsConsent.ts"),
+        )
+        .expect("the web's analyticsConsent.ts is beside this app");
+        let (_, list) = source
+            .split_once("const EUROPEAN_OUTLIERS = new Set([")
+            .expect("the web names its outliers");
+        let (list, _) = list.split_once("]);").expect("the web's list ends");
+        let mut web: Vec<&str> = list.split('`').skip(1).step_by(2).collect();
+        let mut here = EUROPEAN_OUTLIERS.to_vec();
+        web.sort_unstable();
+        here.sort_unstable();
+        assert_eq!(here, web);
     }
 }

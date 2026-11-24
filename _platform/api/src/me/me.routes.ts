@@ -2,6 +2,7 @@ import { ACCOUNT_PREFERENCES_MAX, apiContract } from "@intentic/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";
+import { dataExportOf } from "./data-export.js";
 import { isInternalAccount } from "./internal-accounts.js";
 import { hasGoogleAccount, signInMethodsOf, signInOptionsOf } from "../sign-in.js";
 import { patchedPreferences, storedPreferences } from "./preferences.js";
@@ -45,61 +46,6 @@ export const meRoutes = {
         });
         return { values };
     }),
-    // GDPR data export: every personal-data row the platform holds for the caller, as downloadable JSON.
-    // Credentials are deliberately excluded, session tokens, OAuth tokens, sandbox connect tokens and
-    // setup payloads are secrets, not personal data.
-    export: os.me.export.handler(async ({ context }) => {
-        const user = requireUser(context);
-        const [sessions, accounts, sandboxes, memberships, invitesSent, hostedPlan, hostedUsage, hostedProvisions, hostedStrikes, standing] = await Promise.all([
-            context.prisma.session.findMany({
-                where: { userId: user.id },
-                select: { createdAt: true, expiresAt: true, ipAddress: true, userAgent: true },
-            }),
-            context.prisma.account.findMany({
-                where: { userId: user.id },
-                select: { providerId: true, accountId: true, scope: true, createdAt: true },
-            }),
-            context.prisma.sandbox.findMany({
-                where: { ownerId: user.id },
-                select: { id: true, name: true, image: true, daemonUrl: true, createdAt: true },
-            }),
-            context.prisma.sandboxMember.findMany({ where: { email: user.email.toLowerCase() }, select: { sandboxId: true, createdAt: true } }),
-            context.prisma.sandboxMember.findMany({
-                where: { sandbox: { ownerId: user.id } },
-                select: { sandboxId: true, email: true, createdAt: true },
-            }),
-            // The hosted plan's mirror row and the hosted lane's awake-hour meter, the two per-account rows the
-            // platform keeps beyond identity.
-            context.prisma.hostedPlan.findUnique({
-                where: { userId: user.id },
-                select: { status: true, currentPeriodEnd: true, createdAt: true },
-            }),
-            // By owner rather than through the sandbox: a released machine's minutes stay on the account, keyed by no
-            // sandbox, and they are the caller's all the same.
-            context.prisma.hostedUsage.findMany({ where: { ownerId: user.id }, select: { month: true, tier: true, minutes: true } }),
-            // The address each hosted machine was asked for from, and the abuse watch's verdicts: both about the
-            // subject, both kept only as long as they are counted (retention.ts).
-            context.prisma.hostedProvision.findMany({ where: { userId: user.id }, select: { ip: true, domain: true, appName: true, createdAt: true } }),
-            context.prisma.hostedStrike.findMany({
-                where: { userId: user.id },
-                select: { appName: true, kind: true, measure: true, windowMinutes: true, action: true, createdAt: true },
-            }),
-            context.prisma.user.findUnique({ where: { id: user.id }, select: { hostedSuspendedAt: true, hostedSuspendedReason: true, preferences: true } }),
-        ]);
-        return {
-            user,
-            sessions,
-            accounts,
-            sandboxes,
-            memberships,
-            invitesSent,
-            hostedPlan,
-            hostedUsage,
-            hostedProvisions,
-            hostedStrikes,
-            hostedSuspended: standing?.hostedSuspendedAt ? { at: standing.hostedSuspendedAt, reason: standing.hostedSuspendedReason } : null,
-            // The look and reading preferences kept with the account (preferences.ts).
-            preferences: storedPreferences(standing?.preferences),
-        };
-    }),
+    // GDPR data export: every row the platform holds about the caller, credentials left out (data-export.ts).
+    export: os.me.export.handler(async ({ context }) => dataExportOf(context.prisma, requireUser(context))),
 };

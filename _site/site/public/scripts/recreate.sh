@@ -317,7 +317,7 @@ ic_from_checkout() {
 # checked against the release's SHA256SUMS before anything runs it (a mismatch is deleted unrun, and the ic already
 # installed stays), then probed by running it before it replaces anything: a 200 can be a captive portal's login page
 # or an empty body. IC_SKIP_CHECKSUM=1 installs it unchecked where the check cannot be made at all (no sha256sum or
-# shasum, no SHA256SUMS beside IC_URL); it never lets a mismatch through.
+# shasum, no SHA256SUMS beside IC_URL, or one that lists no ic); it never lets a mismatch through.
 ic_fetch() {
     IC="${IC:-${IC_BIN:-}}"
     [ -z "$IC" ] || return 0
@@ -385,24 +385,23 @@ ic_fetch() {
             ic_fix="run the same command again; IC_SKIP_CHECKSUM=1 installs ic unchecked from a server that publishes no SHA256SUMS."
             return 1
         fi
-        # The sum listed for the asset; "unlisted" when the file names other ic builds but not this one; nothing when it
-        # names no ic at all, which is a release from before its SHA256SUMS covered ic (only the desktop installers).
+        # The sum listed for the asset; nothing when it is not listed. A file that names no ic at all is a release from
+        # before its SHA256SUMS covered ic (2026-10-16), or a sums file somebody else wrote: either way nothing vouches
+        # for the download, so it is refused like a mismatch unless IC_SKIP_CHECKSUM=1 (2026-11-24). Installing it with a
+        # note was rejected: a sums file that left ic out was all it took to install an unchecked binary.
         ic_sum_want="$(printf '%s\n' "$ic_sums" | awk -v asset="$2" '
             { name = $2; sub(/^\*/, "", name); sub(/^\.\//, "", name) }
             name == asset { want = tolower($1) }
-            name ~ /^ic-/ { listed = 1 }
-            END { if (want != "") print want; else if (listed) print "unlisted" }')"
-        case "$ic_sum_want" in
-            "")
-                kit_say "this release's SHA256SUMS predates checksums for ic, so the download is not checked."
+            END { print want }')"
+        if [ -z "$ic_sum_want" ]; then
+            if [ "${IC_SKIP_CHECKSUM:-}" = 1 ]; then
+                kit_warn "the release's SHA256SUMS lists no $2, so ic is installed unchecked (IC_SKIP_CHECKSUM=1)."
                 return 0
-                ;;
-            unlisted)
-                ic_why="the release's SHA256SUMS lists no $2, so the download cannot be checked."
-                ic_fix="run the same command again; if it says the same, report it: the release is missing a checksum."
-                return 1
-                ;;
-        esac
+            fi
+            ic_why="the release's SHA256SUMS lists no $2, so the download cannot be checked."
+            ic_fix="run the same command again; if it says the same, report it: the release is missing a checksum. IC_SKIP_CHECKSUM=1 installs ic unchecked from a release older than its checksums."
+            return 1
+        fi
         [ "$ic_sum_got" = "$ic_sum_want" ] && return 0
         ic_why="the downloaded ic is not the one the release published (SHA-256 $ic_sum_got, its SHA256SUMS says $ic_sum_want), so it was deleted without being run."
         ic_fix="run the same command again; if it fails the same way, something between this device and ${ic_host%%/*} is altering the download."

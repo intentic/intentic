@@ -1,6 +1,6 @@
 //! Asking the platform whether a sandbox exists, against a real platform: only its own deletion record refuses, and only
-//! once said twice; every failure, and every other 404, answers that it exists, and an answer is kept for its time while
-//! a failure never is.
+//! once said twice; every failure, and every other 404, answers that it exists unless a deletion was already believed,
+//! and an answer is kept for its time while a failure never is.
 
 mod support;
 
@@ -136,6 +136,33 @@ async fn an_answer_that_it_exists_clears_the_doubt_and_a_failure_does_not() {
     assert_eq!(revocation.standing(SANDBOX_ID).await, Standing::Exists);
     platform.answer(SANDBOX_ID, 404, DELETION_RECORD);
     assert_eq!(revocation.standing(SANDBOX_ID).await, Standing::Deleted);
+}
+
+// A grant never expires, so a believed deletion must outlast the platform being down; only an answer that the sandbox
+// exists (it was set up again on the same token) lets it back.
+#[tokio::test]
+async fn a_believed_deletion_outlasts_a_failure_and_yields_only_to_an_answer_that_it_exists() {
+    let platform = platform(answering(404, DELETION_RECORD)).await;
+    let revocation =
+        Revocation::keeping(&platform.url, Duration::ZERO).confirming_after(Duration::ZERO);
+    assert_eq!(revocation.standing(SANDBOX_ID).await, Standing::Doubted);
+    assert_eq!(revocation.standing(SANDBOX_ID).await, Standing::Deleted);
+    for (status, body) in [
+        (503, "later"),
+        (502, "<html>Bad Gateway</html>"),
+        (404, "<html>Not Found</html>"),
+    ] {
+        platform.answer(SANDBOX_ID, status, body);
+        assert_eq!(
+            revocation.standing(SANDBOX_ID).await,
+            Standing::Deleted,
+            "{status} {body}"
+        );
+    }
+    platform.answer(SANDBOX_ID, 200, r#"{"ok":true,"lane":"tunnel"}"#);
+    assert_eq!(revocation.standing(SANDBOX_ID).await, Standing::Exists);
+    platform.answer(SANDBOX_ID, 503, "later");
+    assert_eq!(revocation.standing(SANDBOX_ID).await, Standing::Exists);
 }
 
 #[tokio::test]

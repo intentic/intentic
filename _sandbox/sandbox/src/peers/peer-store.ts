@@ -53,6 +53,8 @@ export interface PeerStore<Extra> {
     readonly amend: (id: string, patch: Partial<Extra>) => Promise<void>;
     // Drop a peer's enrollment; its next connect is refused and its live socket is closed by the caller.
     readonly revoke: (id: string) => Promise<boolean>;
+    // A machine agent's loopback challenge answered for the enrollment its key names (Enrollments `prove`).
+    readonly prove: (key: string, sandboxId: string, challenge: string) => Promise<string | undefined>;
 }
 
 export const filePeerStore = <Shape extends z.ZodRawShape>(
@@ -91,5 +93,6 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
         revokeCard: records.revokeCard,
         amend: records.amend,
         revoke: records.revoke,
+        prove: records.prove,
     };
 };

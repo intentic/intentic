@@ -8,7 +8,7 @@ import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
 import { deviceSessions } from "./device-sessions/device-sessions.js";
-import { eraseAccount, OwnsOrganisationSandboxes } from "./account-erase.js";
+import { eraseAccount, ErasureRefused } from "./account-erase.js";
 import {
     type CodeAllowances,
     emailSignInEnabled,
@@ -97,9 +97,10 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
             deleteUser: {
                 enabled: true,
                 beforeDelete: async (user) => {
-                    // An account that owns an organisation's sandboxes is not erased until its admin releases them.
+                    // An account that owns an organisation's sandboxes, or is the last admin of one with other people in it,
+                    // is not erased until that is settled (account-erase.ts).
                     await eraseAccount(prisma, config, logger, user.id).catch((error: Error) => {
-                        if (error instanceof OwnsOrganisationSandboxes) {
+                        if (error instanceof ErasureRefused) {
                             throw new APIError(`FORBIDDEN`, { message: error.message });
                         }
                         throw error;

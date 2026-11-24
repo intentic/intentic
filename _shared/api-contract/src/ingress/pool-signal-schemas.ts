@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 /* Run-outs shared across sandboxes (docs/architecture/account-routing.md): one sandbox says a provider account's pool
-   ran out, the owner's other sandboxes signed in to the same account hear it. The account is named only by a hash of
-   the provider's own account id (`fingerprint`), never the id or a credential, and no usage reading travels. */
+   ran out, its owner's other sandboxes signed in to the same account hear it. The account is named only by a keyed hash
+   of the provider's own account ids (`fingerprint`), never the ids or a credential, and no usage reading travels. */
 
-// sha256 hex of `provider \0 id(s)`, as the daemon's pool-fingerprint.ts makes it.
+// HMAC-SHA256 hex of `provider \0 id(s)` under the owner's pool key, as the daemon's pool-signals.ts makes it.
 const PoolFingerprintSchema = z.string().regex(/^[0-9a-f]{64}$/);
 export const PoolSignalSchema = z.object({
     fingerprint: PoolFingerprintSchema,
@@ -24,3 +24,7 @@ export const POOL_SIGNALS_MAX_FINGERPRINTS = 32;
 export const PoolSignalsBodySchema = z.object({ fingerprints: z.array(PoolFingerprintSchema).max(POOL_SIGNALS_MAX_FINGERPRINTS) });
 export const PoolSignalsSchema = z.object({ signals: z.array(PoolSignalSchema) });
 export type PoolSignals = z.infer<typeof PoolSignalsSchema>;
+// `POST /pool-signals/key` (2026-11-24): the key the calling sandbox's owner's fingerprints are made under, 32 bytes in
+// hex, the same for every sandbox of one owner and unrelated between owners.
+export const PoolSignalKeySchema = z.object({ key: z.string().regex(/^[0-9a-f]{64}$/) });
+export type PoolSignalKey = z.infer<typeof PoolSignalKeySchema>;

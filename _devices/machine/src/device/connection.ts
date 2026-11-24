@@ -18,7 +18,9 @@ import { createHostRouter } from "./router.js";
 // The two things between this agent and the network, injectable together: where the daemon is, and the socket
 // that answer is handed to. Production wires the real resolver and the runtime's own WebSocket.
 export interface Dial {
-    readonly resolveBase: (sandboxUrl: string) => Promise<DaemonBase>;
+    // `token` is the link token the hello is about to carry: a loopback daemon is dialled only once it proves it holds
+    // that token's digest (../daemon-base.ts).
+    readonly resolveBase: (sandboxUrl: string, token: string) => Promise<DaemonBase>;
     readonly socket: (url: string) => WebSocket;
     // Whether the platform's edge says this sandbox no longer exists (`probeEdge`); absent in a test that never asks.
     readonly gone?: (sandboxUrl: string) => Promise<boolean>;
@@ -101,8 +103,8 @@ export const goneLinkStep = (goneSince: number, now: number, stillGone: boolean)
 // stopped being the likely reading.
 export const probesFirst = (attempt: number): boolean => attempt > GONE_PROBE_AFTER_ATTEMPTS;
 
-// The links this process has reached over this machine's loopback, by sandbox URL: a daemon that answered /health there
-// as this sandbox runs on this machine. Kept for the process's life, since the keeper (sandbox-rounds/keeper.ts) needs it
+// The links this process has reached over this machine's loopback, by sandbox URL: a daemon that proved itself this
+// sandbox's there runs on this machine. Kept for the process's life, since the keeper (sandbox-rounds/keeper.ts) needs it
 // most once that address has stopped answering.
 const loopbackUrls = new Set<string>();
 export const reachedOverLoopback: ReadonlySet<string> = loopbackUrls;
@@ -213,7 +215,7 @@ export const connect = (
             if (!(await gone.beforeDial(signal))) {
                 return undefined;
             }
-            const { base, local } = await dial.resolveBase(config.sandboxUrl);
+            const { base, local } = await dial.resolveBase(config.sandboxUrl, config.token);
             if (signal.aborted) {
                 return undefined;
             }

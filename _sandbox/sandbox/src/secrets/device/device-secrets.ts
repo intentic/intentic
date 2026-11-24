@@ -69,8 +69,8 @@ export interface DeviceSecretsService {
     readonly held: () => Promise<readonly DevicePointer[]>;
     // The pointers the Secrets view lists: one per name the sandbox's own stores do not hold, `copy` ones included.
     readonly listed: () => Promise<readonly DevicePointer[]>;
-    // Each held name's keyring hosts as a host guard that is on: read by the host-guard gate before the owner's own, so a
-    // device-held value goes unasked only where its keyring says.
+    // Each held name's keyring hosts as a host guard that is on, and each copy's where its keyring lists any: read by the
+    // host-guard gate before the owner's own, so a keyring's value goes unasked only where its keyring says.
     readonly guards: () => Promise<readonly SecretHostGuard[]>;
     // One value for one use, asked of its computer now, or the refusal an agent reads.
     readonly fetch: (use: DeviceUse) => Promise<{ readonly value: string } | { readonly refusal: string }>;
@@ -104,6 +104,35 @@ const NEXT_STEP: ReadonlyMap<KeyringRefusalCode, string> = new Map<KeyringRefusa
 export const keyringNextStep = (code: KeyringRefusalCode): string =>
     NEXT_STEP.get(code) ?? "It was not used: carry on without it, and say what you left undone.";
 
+// The pointers a reference resolves through: one per name, none a store here answers to (a copy's included).
+const heldOf = (registry: readonly NamedSecret[], pointers: readonly DevicePointer[]): readonly DevicePointer[] => {
+    const resolvable = new Set(registry.filter((secret) => secret.source !== "device").map((secret) => secret.name));
+    return onePerName(pointers.filter((entry) => !resolvable.has(entry.pointer.name)));
+};
+
+// The pointers the Secrets view lists: one per name the sandbox's own stores do not hold, `copy` ones included.
+const listedOf = (registry: readonly NamedSecret[], pointers: readonly DevicePointer[]): readonly DevicePointer[] => {
+    const ours = new Set(registry.filter(sandboxHeld).map((secret) => secret.name));
+    return onePerName(pointers.filter((entry) => !ours.has(entry.pointer.name)));
+};
+
+// The keyring's own list, changed on that computer and never here; a host the sandbox's patterns refuse is left off,
+// which only asks more often. Every held name carries one. (2026-11-24) A `copy` resolves from the copy kept here, so it
+// is not among the held, and the list its row shows (deviceInventoryEntry) went unenforced: it is read here too, where
+// it has one.
+const keyringGuards = (registry: readonly NamedSecret[], pointers: readonly DevicePointer[]): readonly SecretHostGuard[] => {
+    const fetched = heldOf(registry, pointers);
+    const asked = new Set(fetched.map((entry) => entry.pointer.name));
+    const copies = listedOf(registry, pointers).filter(({ pointer }) => !asked.has(pointer.name) && pointer.mode === "copy" && pointer.hosts.length > 0);
+    return [...fetched, ...copies].map(({ pointer }) => ({
+        subject: pointer.name,
+        kind: "secret",
+        guard: true,
+        hosts: pointer.hosts.flatMap((host) => normalizeHostPattern(host) ?? []).slice(0, SECRET_HOSTS_MAX),
+        source: "keyring",
+    }));
+};
+
 export const createDeviceSecrets = (deps: DeviceSecretsDeps): DeviceSecretsService => {
     // Names a sandbox store and a keyring both answer to, said in the log the first time only.
     const shadowed = new Set<string>();
@@ -120,27 +149,19 @@ export const createDeviceSecrets = (deps: DeviceSecretsDeps): DeviceSecretsServi
     };
     const held = async (): Promise<readonly DevicePointer[]> => {
         const { registry, pointers } = await read();
-        const resolvable = new Set(registry.filter((secret) => secret.source !== "device").map((secret) => secret.name));
-        return onePerName(pointers.filter((entry) => !resolvable.has(entry.pointer.name)));
+        return heldOf(registry, pointers);
     };
     const listed = async (): Promise<readonly DevicePointer[]> => {
         const { registry, pointers } = await read();
-        const ours = new Set(registry.filter(sandboxHeld).map((secret) => secret.name));
-        return onePerName(pointers.filter((entry) => !ours.has(entry.pointer.name)));
+        return listedOf(registry, pointers);
     };
     return {
         held,
         listed,
-        // The keyring's own list, changed on that computer and never here; a host the sandbox's patterns refuse is left
-        // off, which only asks more often.
-        guards: async () =>
-            (await held()).map(({ pointer }) => ({
-                subject: pointer.name,
-                kind: "secret" as const,
-                guard: true,
-                hosts: pointer.hosts.flatMap((host) => normalizeHostPattern(host) ?? []).slice(0, SECRET_HOSTS_MAX),
-                source: "keyring" as const,
-            })),
+        guards: async () => {
+            const { registry, pointers } = await read();
+            return keyringGuards(registry, pointers);
+        },
         fetch: async ({ name, lane, detail, conversationId, signal }) => {
             const entry = (await held()).find((candidate) => candidate.pointer.name === name);
             if (entry === undefined) {

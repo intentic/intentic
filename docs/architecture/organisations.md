@@ -40,6 +40,7 @@ The routes are `org.*` in [`api-contract/organisations.ts`](../../_shared/api-co
 | Release a sandbox (unbind) | Admins. If the owner could unbind alone, every lock would be optional. |
 | Delete a bound sandbox | Nobody until an admin releases it. `sandbox.delete` answers `CONFLICT`, because a deleted sandbox restored from the trash comes back personal, which would be a way out of every lock. |
 | Erase an account that owns a bound sandbox | Nobody until an admin releases it, the owner and the platform's operators alike ([`account-erase.ts`](../../_platform/api/src/account-erase.ts) `OwnsOrganisationSandboxes`). Erasing deletes the account's sandboxes with no recovery window and destroys their hosted apps at once. |
+| Erase an account that is an organisation's only admin | Nobody while other people are in it, the same rule as removing the last admin (`LastOrganisationAdmin`). Otherwise the erase takes the address's seats, grants and pending invites with it, deletes an organisation it leaves empty, and moves a `membersOnly` organisation to a new policy version. |
 
 A caller who is not in an organisation gets the same `NOT_FOUND` as for one that does not exist, so an id reveals nothing.
 

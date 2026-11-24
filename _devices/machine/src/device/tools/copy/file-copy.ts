@@ -15,7 +15,7 @@ import {
     FILE_COPY_MAX_BYTES,
     FILE_COPY_TAR_TIMEOUT_MS,
 } from "@intentic/sandbox-contract/schemas/device-files";
-import { assertPath, assertScope } from "../../policy.js";
+import { assertHoldsNoProtected, assertPath, assertScope } from "../../policy.js";
 
 // A FILE OR A FOLDER COPIED TO OR FROM A PATH THE SANDBOX NAMES (schemas/device-files.ts, `devices copy`). 2026-11-17, the
 // shinobi-society audit: agents moved tarballs and binaries with `docker cp` through run_command, which only worked where
@@ -137,6 +137,10 @@ const putOpen = async (op: Extract<CopyFile, { op: "put-open" }>, scopes: Device
     const there = await statOf(target);
     if (there !== undefined) {
         refuseTaken(op, target, there);
+        // A folder copied onto one that exists merges into it, so whatever it carries lands in any protected place there.
+        if (op.kind === "tar") {
+            await assertHoldsNoProtected(target, op.path, scopes, "copy a folder onto");
+        }
     }
     if (op.probe === true) {
         return { path: target };
@@ -262,6 +266,10 @@ const getOpen = async (op: Extract<CopyFile, { op: "get-open" }>, scopes: Device
     }
     if (info.isFile() && info.size > FILE_COPY_MAX_BYTES) {
         throw tooBig(op.path, info.size);
+    }
+    // A folder is packed whole, so a protected place inside it would leave with it (../../protected-places.ts).
+    if (info.isDirectory()) {
+        await assertHoldsNoProtected(target, op.path, scopes, "copy from");
     }
     const packed = info.isDirectory() ? await pack(target, op.path, op.copy) : undefined;
     const size = packed === undefined ? info.size : (await stat(packed)).size;

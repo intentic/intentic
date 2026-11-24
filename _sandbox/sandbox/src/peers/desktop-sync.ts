@@ -7,7 +7,7 @@ import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract/sch
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
-import { type Burns, burnsAt, type Presented, syncPairConsumedDocument } from "./enrollment.js";
+import { answerChallenge, type Burns, burnsAt, type Presented, syncPairConsumedDocument } from "./enrollment.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, ManifestUnreadableError } from "../store/json-file.js";
 import { openEntries } from "../store/open-document.js";
@@ -243,6 +243,10 @@ export const verifySyncToken = async (historyRoot: string, presented: string, ch
     }
     return { kind: "enrolled", id: matched.machine, card: matched.machine };
 };
+
+// A machine agent's loopback challenge answered for the sync enrollment its key names (enrollment.ts `answerChallenge`).
+export const proveSyncHolder = async (historyRoot: string, key: string, sandboxId: string, challenge: string): Promise<string | undefined> =>
+    answerChallenge((await readEnrollments(historyRoot)).map((entry) => entry.tokenDigest), key, sandboxId, challenge);
 
 // Whether any machine is enrolled; the UI's desktop sync/mirror active signal.
 export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (await readEnrollments(historyRoot)).length > 0;

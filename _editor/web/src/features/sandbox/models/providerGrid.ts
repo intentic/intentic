@@ -142,6 +142,17 @@ export const foundSignIns = (found: readonly AgentProvider[], ready: (provider: 
 export const offeredKeys = (keys: readonly ProviderKey[], addedHere: ReadonlySet<string>): readonly ProviderKey[] =>
     keys.filter((key) => key.applicable && (!key.added || addedHere.has(key.id)));
 
+// The files a look for API keys reads on each connected computer, as the row under its button names them: the daemon's
+// KEY_FILES and OpenClaw's per-agent profiles (migrations/provider-keys.ts), paths the same in every language.
+export const KEY_FILES_READ = [
+    `~/.codex/auth.json`,
+    `~/.gemini/.env`,
+    `~/.hermes/.env`,
+    `~/.hermes/auth.json`,
+    `~/.local/share/opencode/auth.json`,
+    `~/.openclaw/agents/*/agent/auth-profiles.json`,
+].join(`, `);
+
 // The tool a found API key was read from, by its own name: product names, the same in every language.
 export const KEY_SOURCE_LABELS = {
     hermes: `Hermes`,

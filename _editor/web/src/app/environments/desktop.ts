@@ -6,7 +6,6 @@
 
 import { isTypingTarget } from "@intentic/ui/event-target";
 import { noteReload } from "@intentic/ui/reload-reason";
-import { z } from "zod";
 import { inAppPath } from "./inAppPath";
 import { type DesktopRosterAccount, type DesktopRosterEntry, desktopRosterLink } from "./desktopRoster";
 
@@ -51,21 +50,17 @@ interface DesktopWebview {
 declare global {
     interface Window {
         __INTENTIC_DESKTOP__?: DesktopWebview;
-        /* One random string per launch of the desktop app, injected into every webview it opens (windows.rs). */
+        /* One random string per launch of the desktop app, injected into every webview it opens (windows.rs). The page
+         * never sends it to analytics (analytics.ts). */
         __INTENTIC_LAUNCH_ID__?: string;
     }
 }
 
-// What the app tells the page about itself: version, a per-install random id (the only thread joining this
-// window's analytics events to the app's own, since they're separate webviews), and the update already
+// What the app tells the page about itself: version, a per-install random id (which the page never sends to analytics,
+// so an account signed in here is never joined to the app's own events: analytics.ts), and the update already
 // downloaded. `update` arrives twice, here and via the event below, for the two orderings of page-load vs.
 // download-finish.
 export const desktopApp = (): DesktopWebview | undefined => window.__INTENTIC_DESKTOP__;
-
-// Which run of the desktop app this window belongs to: the same across its windows and page loads, new on each relaunch.
-// Analytics tags every event with it, since the person and session ids deliberately outlive a relaunch (analytics.ts).
-const LaunchIdSchema = z.string().min(1).optional().catch(undefined);
-export const desktopLaunchId = (): string | undefined => LaunchIdSchema.parse(window.__INTENTIC_LAUNCH_ID__);
 
 export const desktopVersion = (): string | undefined => desktopApp()?.version;
 

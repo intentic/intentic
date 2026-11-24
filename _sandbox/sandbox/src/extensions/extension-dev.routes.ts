@@ -5,6 +5,7 @@ import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { provenTurnOrRefuse } from "../auth/scope/proven-turn.js";
 import { opt } from "../opt.js";
 import { pathExists } from "@intentic/base/fs";
 import { checkDevCheckout, devSummaryOf, forgetExtensionDev, readExtensionDev, touchExtensionDev, writeExtensionDev } from "../capabilities/extension-inventory/extension-dev.js";
@@ -12,10 +13,31 @@ import { callerConversation, devTargetOf, resolveDevPath, sourceCheckoutOf } fro
 import { followExtensionDirs, reconcileListenerProcesses } from "./extension-processes.js";
 import { extensionInventory, type InstalledExtension, installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 
+// The conversation a verb comes from, believed only with its turn's proof (auth/scope/proven-turn.ts): a bare name could
+// point another conversation's checkout at a tree of its choosing, or take its build over.
+const callerOf = (context: OrpcContext): string | undefined => callerConversation(provenTurnOrRefuse(context.headers));
+
+// A call naming no conversation that a person makes (the owner's Extensions tab), as opposed to an agent's shell that
+// unset its stamp. (2026-11-24) The latter was read as the former, and passed every holder.
+const personAsks = (context: OrpcContext, signsIn: boolean): boolean =>
+    context.identity !== undefined || (!signsIn && context.headers.get("x-intentic-agent") === null);
+
+// One install has one dev checkout, so a conversation that pointed it somewhere keeps it: another conversation's
+// replace, reload or clear is refused, naming the holder, instead of silently taking over its build. A person's call
+// naming no conversation is never refused, and a checkout that is gone holds nothing.
+const refuseOtherHolder = async (root: string, signsIn: boolean, id: string, context: OrpcContext): Promise<void> => {
+    const caller = callerOf(context);
+    const pointer = (await readExtensionDev(root))[id];
+    if ((caller === undefined && personAsks(context, signsIn)) || pointer?.setBy === undefined || pointer.setBy === caller || !(await pathExists(pointer.path))) {
+        return;
+    }
+    throw new ORPCError("PRECONDITION_FAILED", {
+        message: `it already runs from a checkout conversation ${pointer.setBy} set (${pointer.path}); only that conversation can change it, or the owner from the Extensions tab`,
+    });
+};
+
 // Dev mode's verbs (extension-dev.ts says what it is): the agent's `extension` CLI drives all four on the agent token,
 // the Extensions tab's way back calls devClear. Spread into the extensions routes, whose contract they belong to.
-
-const CONVERSATION_HEADER = "x-intentic-conversation";
 
 export const createExtensionDevRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
@@ -48,18 +70,6 @@ export const createExtensionDevRoutes = (services: Services) => {
         }
         return { id: extension.id, name: extensionIdOf(extension.manifest), dev };
     };
-    // One install has one dev checkout, so a conversation that pointed it somewhere keeps it: another conversation's
-    // replace, reload or clear is refused, naming the holder, instead of silently taking over its build. A call naming no
-    // conversation (the owner's Extensions tab) is never refused, and a checkout that is gone holds nothing.
-    const refuseOtherHolder = async (id: string, caller: string | undefined): Promise<void> => {
-        const pointer = (await readExtensionDev(root))[id];
-        if (caller === undefined || pointer?.setBy === undefined || pointer.setBy === caller || !(await pathExists(pointer.path))) {
-            return;
-        }
-        throw new ORPCError("PRECONDITION_FAILED", {
-            message: `it already runs from a checkout conversation ${pointer.setBy} set (${pointer.path}); only that conversation can change it, or the owner from the Extensions tab`,
-        });
-    };
     // The checkout a set means: the one named, read against the caller's own copy of the workspace, or the one cloned
     // from the address it was installed from.
     const checkoutFor = async (
@@ -84,7 +94,7 @@ export const createExtensionDevRoutes = (services: Services) => {
 
     return {
         devList: i.devList.handler(async ({ context }) => {
-            const conversation = callerConversation(context.headers.get(CONVERSATION_HEADER));
+            const conversation = callerOf(context);
             const capabilities = await services.capabilities.list();
             const extensions = [];
             for (const extension of (await extensionInventory(services)).extensions) {
@@ -112,8 +122,8 @@ export const createExtensionDevRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: `no installed extension is called "${input.id}"` });
             }
             const configPath = capability.config.path;
-            const conversation = callerConversation(context.headers.get(CONVERSATION_HEADER));
-            await refuseOtherHolder(extension.id, conversation);
+            const conversation = callerOf(context);
+            await refuseOtherHolder(root, services.auth !== undefined, extension.id, context);
             const path = await checkoutFor(extension, capability.config.url, input.path, conversation, configPath);
             const pinned = await readExtensionManifest(extensionRootOf(extensionDir(root, extension.id), configPath));
             if (pinned === undefined) {
@@ -134,7 +144,7 @@ export const createExtensionDevRoutes = (services: Services) => {
         }),
         devClear: i.devClear.handler(async ({ input, context }) => {
             const extension = await targetOf(input.id);
-            await refuseOtherHolder(extension.id, callerConversation(context.headers.get(CONVERSATION_HEADER)));
+            await refuseOtherHolder(root, services.auth !== undefined, extension.id, context);
             const cleared = await forgetExtensionDev(root, extension.id);
             if (cleared) {
                 await rewire(extension.id, false);
@@ -146,7 +156,7 @@ export const createExtensionDevRoutes = (services: Services) => {
         // tells an open app its list changed.
         devReload: i.devReload.handler(async ({ input, context }) => {
             const extension = await targetOf(input.id);
-            await refuseOtherHolder(extension.id, callerConversation(context.headers.get(CONVERSATION_HEADER)));
+            await refuseOtherHolder(root, services.auth !== undefined, extension.id, context);
             if (extension.dev === undefined) {
                 throw new ORPCError("PRECONDITION_FAILED", {
                     message: `${extensionIdOf(extension.manifest)} runs its pinned version, not a source checkout, so there is nothing to reload`,

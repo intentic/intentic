@@ -1,4 +1,4 @@
-import { type Desktop, DesktopError, type Frame, type FrameLog, frameName, toImage, viewFrame, type WindowInfo } from "@intentic/desktop-automation";
+import { type Desktop, DesktopError, type Frame, type FrameLog, frameName, isWindowId, toImage, viewFrame, type WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope, ScopeError } from "../policy.js";
@@ -40,6 +40,11 @@ export const focusWindow = async (screen: Desktop, id: string, scopes: DeviceSco
     if (id === "") {
         throw new DesktopError(`"id" is required: take a window list first and pass the id in brackets.`);
     }
+    // Only an id a window list hands out reaches a backend, each of which puts it into a command (desktop-automation's
+    // `isWindowId`).
+    if (!isWindowId(id)) {
+        throw new DesktopError(`"${id}" is not a window id: take a window list first and pass the id in brackets.`);
+    }
     // Focus decides where the person's own typing lands, so it is input like a click: shown, and held by a local pause.
     await indicator.control(calling.getStore());
     await screen.focusWindow(id);
@@ -65,11 +70,11 @@ export const openTarget = async (screen: Desktop, target: string, scopes: Device
 };
 
 // Length, not content: a clipboard routinely holds a password the user copied a minute ago, and this string
-// travels back into a transcript.
+// travels back into a transcript. (2026-11-24: the comment said so while the code returned the whole text.)
 export const readClipboard = async (screen: Desktop, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "screen");
     const text = await screen.readClipboard();
-    return text === "" ? "The clipboard is empty." : text;
+    return text === "" ? "The clipboard is empty." : `The clipboard holds ${text.length} character${text.length === 1 ? "" : "s"}. Its content is never read back.`;
 };
 
 export const writeClipboard = async (screen: Desktop, text: string, scopes: DeviceScopes, indicator: Indicator = machineIndicator()): Promise<string> => {

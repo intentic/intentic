@@ -33,7 +33,8 @@ export const connecting = (pairWith: (pairing: PairedSandbox) => Promise<Connect
             const armed = await store.armed();
             if (armed !== undefined && sandboxKey(armed.url) === key && now - armed.at < CHOICE_HOLD_MS) {
                 await store.setArmed(undefined);
-                const { at: _at, ...pairing } = armed;
+                // The page that offered it is the popup's to show, not part of the sandbox kept.
+                const { at: _at, from: _from, ...pairing } = armed;
                 const result = await pairWith(pairing);
                 await store.setConnectFailed(result.ok ? undefined : { url: key, error: result.message });
                 return result;

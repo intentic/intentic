@@ -249,9 +249,10 @@ export const cuaKey = (combo: string) => {
 // A window id here is the driver's pid and window id together: every window tool asks for both.
 const windowKey = (pid: number, windowId: number): string => `${pid}:${windowId}`;
 
+// Exactly `<pid>:<window>`, digits only: a split on ":" read `1:2:anything` as window 2 of process 1.
 const windowArgs = (id: string) => {
-    const [pid, windowId] = id.split(":").map(Number);
-    if (pid === undefined || windowId === undefined || !Number.isInteger(pid) || !Number.isInteger(windowId)) {
+    const [, pid, windowId] = (/^(\d{1,10}):(\d{1,20})$/.exec(id) ?? []).map(Number);
+    if (pid === undefined || windowId === undefined || !Number.isSafeInteger(pid) || !Number.isSafeInteger(windowId)) {
         throw new DesktopError(`"${id}" is not a window id from this device's window list.`);
     }
     return { pid, window_id: windowId };

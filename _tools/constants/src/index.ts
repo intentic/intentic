@@ -62,7 +62,7 @@ export const MEMORY_MAX_CHARS = 20_000;
 export const HOST_STATE_ROOT = "/opt/intentic";
 
 // Clickwrap version stamped at sign-up; bump on any material change to the terms or privacy policy.
-export const LEGAL_VERSION = "2026-10-15";
+export const LEGAL_VERSION = "2026-11-24";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
 // Legal-entity identification EU e-commerce law requires published on the site. ADDRESS and TAX_ID are deliberately

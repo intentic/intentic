@@ -53,7 +53,7 @@ export const RAW_ROUTES = {
     "POST /workspace/upload-diff": {},
     "POST /workspace/upload-archive": { lane: "bulk" },
     // Minting is cheap: each WebSocket upgrade floors its own redemption.
-    "POST /system/ws-ticket": { beforeBoot: true, floor: "collaborator", control: "never" },
+    "POST /system/ws-ticket": { beforeBoot: true, floor: "collaborator", panel: false, control: "never" },
     // A WebSocket upgrade carries no Authorization header; the terminal, both browser wires and the desktop's check a
     // query ticket.
     "GET /system/terminal": { auth: "door", beforeBoot: true, control: "never", netd: true },
@@ -97,19 +97,19 @@ export const RAW_ROUTES = {
     // The roster is for whoever runs people and access (Full access, or the People & access right) to read and change;
     // giving up one's own grant is every tier's. Reading it is floored here as well as in its handler (members.routes.ts),
     // so the editor knows before asking; what someone below Full access may change is the handler's (peopleChangeRefusal).
-    "GET /members": { floor: "maintainer", right: "people", control: "never" },
-    "POST /members": { right: "people", control: "never" },
-    "DELETE /members": { right: "people", control: "never" },
+    "GET /members": { floor: "maintainer", right: "people", panel: false, control: "never" },
+    "POST /members": { right: "people", panel: false, control: "never" },
+    "DELETE /members": { right: "people", panel: false, control: "never" },
     "DELETE /members/self": { floor: "viewer", guest: true, control: "never" },
     // What one's own grant allows, read by the editor to offer only what will be taken.
     "GET /members/self": { floor: "viewer", guest: true, control: "never" },
     // Asking for more access is every member's, a guest's included, from wherever they were refused; reading and
     // dismissing the requests is for whoever runs people and access, beside the roster they are answered on.
     "POST /members/requests": { floor: "viewer", guest: true, control: "never" },
-    "GET /members/requests": { floor: "maintainer", right: "people", control: "never" },
-    "DELETE /members/requests": { right: "people", control: "never" },
+    "GET /members/requests": { floor: "maintainer", right: "people", panel: false, control: "never" },
+    "DELETE /members/requests": { right: "people", panel: false, control: "never" },
     // The owner's Reconnect: register with the platform now, having it adopt the sandbox first when it holds no record.
-    "POST /platform/relink": { floor: "owner", control: "never" },
+    "POST /platform/relink": { floor: "owner", panel: false, control: "never" },
     "GET /environment": {},
     "GET /environment/contents": {},
     "POST /environment/approve": {},
@@ -124,10 +124,11 @@ export const RAW_ROUTES = {
     "POST /engines/channel": {},
     "POST /engines/update": {},
     "POST /engines/revert": {},
+    // An export can carry every vault (the owner's choice), and its ticket is the download's credential: never a panel's.
     "GET /bundles": { floor: "maintainer", control: "never" },
-    "POST /bundles": { control: "never" },
+    "POST /bundles": { panel: false, control: "never" },
     "DELETE /bundles": { control: "never" },
-    "POST /bundles/ticket": { control: "never" },
+    "POST /bundles/ticket": { panel: false, control: "never" },
     // Navigated to by the browser, so no header: its ticket is checked in the handler.
     "GET /bundles/download": { auth: "door", control: "never", lane: "bulk" },
     "GET /definition": {},
@@ -138,9 +139,10 @@ export const RAW_ROUTES = {
     "GET /arrivals/hosts": {},
     "POST /arrivals/scan": {},
     "POST /arrivals/apply": {},
-    // Model API keys on the owner's devices, and turning the picked ones into model endpoints.
-    "GET /arrivals/keys": {},
-    "POST /arrivals/keys/apply": {},
+    // Model API keys on the owner's devices, and turning the picked ones into model endpoints: each reads credential
+    // files off the owner's computers, so never a panel process's.
+    "GET /arrivals/keys": { panel: false },
+    "POST /arrivals/keys/apply": { panel: false },
     "DELETE /arrivals": {},
     "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.
@@ -238,27 +240,27 @@ export const RAW_ROUTES = {
     // a sign-in this daemon started, and worth nothing without the PKCE verifier only the daemon holds.
     "GET /oauth/mcp/callback": { auth: "door", control: "never" },
     // Below maintainer a pairing is capped to port-mirror, so a collaborator may mint a preview tunnel.
-    "POST /system/sync/pair": { floor: "collaborator", control: "never" },
+    "POST /system/sync/pair": { floor: "collaborator", panel: false, control: "never" },
     // A copy-paste command's short code, redeemed by the install script it was handed to: a device's first contact,
     // gated by the code itself and a limit on failed attempts (peers/redeem-codes.ts).
     "POST /system/redeem/{code}": { auth: "door", control: "never" },
     // The peer doors: a device, browser or runner redeems its pairing at `enroll` and dials `connect` with the token.
-    "POST /system/hosts/pair": { control: "never" },
+    "POST /system/hosts/pair": { panel: false, control: "never" },
     "POST /system/hosts/enroll": { auth: "door", control: "never" },
     "GET /system/hosts": { control: "never" },
-    "DELETE /system/hosts/{id}": { control: "never" },
+    "DELETE /system/hosts/{id}": { panel: false, control: "never" },
     // A peer's socket reconnects on its own backoff, so it answers before boot.
     "GET /system/hosts/connect": { auth: "door", beforeBoot: true, control: "never" },
     "POST /system/hosts/keyring-changed": { auth: "door", control: "never" },
-    "POST /system/webext/pair": { control: "never" },
+    "POST /system/webext/pair": { panel: false, control: "never" },
     "POST /system/webext/enroll": { auth: "door", control: "never" },
     "GET /system/webext": { control: "never" },
-    "DELETE /system/webext/{id}": { control: "never" },
+    "DELETE /system/webext/{id}": { panel: false, control: "never" },
     "GET /system/webext/connect": { auth: "door", beforeBoot: true, control: "never" },
-    "POST /system/phones/pair": { control: "never" },
+    "POST /system/phones/pair": { panel: false, control: "never" },
     "POST /system/phones/enroll": { auth: "door", control: "never" },
     "GET /system/phones": { control: "never" },
-    "DELETE /system/phones/{id}": { control: "never" },
+    "DELETE /system/phones/{id}": { panel: false, control: "never" },
     "GET /system/phones/connect": { auth: "door", beforeBoot: true, control: "never" },
     // The editor hands over the push-relay channel it registered for a phone, so the sandbox can wake it.
     "POST /system/phones/{id}/wake": { control: "never" },
@@ -267,10 +269,10 @@ export const RAW_ROUTES = {
     "POST /system/phones/passwords/pair": { auth: "door", control: "never" },
     "POST /system/phones/passwords/capture": { auth: "door", control: "never" },
     "POST /system/phones/passwords/fill": { auth: "door", control: "never" },
-    "POST /system/runners/pair": { control: "never" },
+    "POST /system/runners/pair": { panel: false, control: "never" },
     "POST /system/runners/enroll": { auth: "door", control: "never" },
     "GET /system/runners": { control: "never" },
-    "DELETE /system/runners/{id}": { control: "never" },
+    "DELETE /system/runners/{id}": { panel: false, control: "never" },
     "GET /system/runners/connect": { auth: "door", beforeBoot: true, control: "never" },
     // Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
     // extension cards' endpoints), by server name: the handler checks the conversation's mount bearer the turn's tool
@@ -324,10 +326,10 @@ export const RAW_ROUTES = {
     // Inbound links: another of the owner's sandboxes handing this one tasks (schemas/links.ts). Minted, re-termed and
     // revoked by the owner alone, checked in the handler like a control token; a waiting task is the owner's to allow.
     "GET /system/links": { control: "never" },
-    "POST /system/links": { control: "never" },
-    "POST /system/links/{id}": { control: "never" },
-    "DELETE /system/links/{id}": { control: "never" },
-    "POST /system/links/{id}/requests/{request}": { control: "never" },
+    "POST /system/links": { panel: false, control: "never" },
+    "POST /system/links/{id}": { panel: false, control: "never" },
+    "DELETE /system/links/{id}": { panel: false, control: "never" },
+    "POST /system/links/{id}/requests/{request}": { panel: false, control: "never" },
     // Account-level report routing: another sandbox on the owner's account reporting a problem about a project this one
     // claims. Checked in the handler against a pass the platform signed (policy/sandbox-pass.ts); it only ever records
     // into the issues inbox, and wakes an agent only as the inbox's own escalation rule says.
@@ -352,10 +354,10 @@ export const RAW_ROUTES = {
     // handler lets a maintainer list and revoke anyone's. The asking side: the same person, signed in here, keeps the
     // secret they minted over there, and anyone reads what is held, never a secret. No agent and no control token reaches
     // any of them: a pairing is the person's own word.
-    "POST /account/pairings": { floor: "viewer", control: "never" },
-    "GET /account/pairings": { floor: "viewer", control: "never" },
-    "DELETE /account/pairings/{from}": { floor: "viewer", control: "never" },
-    "POST /account/routes/secret": { floor: "viewer", control: "never" },
+    "POST /account/pairings": { floor: "viewer", panel: false, control: "never" },
+    "GET /account/pairings": { floor: "viewer", panel: false, control: "never" },
+    "DELETE /account/pairings/{from}": { floor: "viewer", panel: false, control: "never" },
+    "POST /account/routes/secret": { floor: "viewer", panel: false, control: "never" },
     "GET /account/routes": { floor: "viewer", control: "never" },
     // Routing as a person, a drop (schemas/account-routes.ts): another sandbox the person is in handing a note and files
     // into this one's inbox, admitted in the handler by a drop pass beside the person's pairing (admit-route.ts); it starts
@@ -399,24 +401,24 @@ export const RAW_ROUTES = {
     "POST /link/operate/exec/{id}/stop": { auth: "door", control: "never" },
     "POST /link/operate/read": { auth: "door", control: "never" },
     "POST /link/operate/write": { auth: "door", control: "never" },
-    "POST /system/control/tokens": { control: "never" },
-    "GET /system/control/tokens": { floor: "maintainer", control: "never" },
-    "DELETE /system/control/tokens/{id}": { control: "never" },
+    "POST /system/control/tokens": { panel: false, control: "never" },
+    "GET /system/control/tokens": { floor: "maintainer", panel: false, control: "never" },
+    "DELETE /system/control/tokens/{id}": { panel: false, control: "never" },
     // One's own passkeys are identity, like staying signed in; the policy and recovery codes are the owner's own door, so
     // they stay ownership's whoever else runs the sandbox.
-    "GET /system/passkeys": { guest: true, control: "never" },
-    "POST /system/passkeys/register/options": { floor: "viewer", guest: true, enrolment: true, control: "never" },
-    "POST /system/passkeys/register": { floor: "viewer", guest: true, enrolment: true, control: "never" },
+    "GET /system/passkeys": { guest: true, panel: false, control: "never" },
+    "POST /system/passkeys/register/options": { floor: "viewer", guest: true, enrolment: true, panel: false, control: "never" },
+    "POST /system/passkeys/register": { floor: "viewer", guest: true, enrolment: true, panel: false, control: "never" },
     // The assertion has no bearer yet, since it is how one is minted.
     "POST /system/passkeys/assert/options": { auth: "door", beforeBoot: true, control: "never" },
     "POST /system/passkeys/assert": { auth: "door", beforeBoot: true, control: "never" },
-    "POST /system/passkeys/policy": { floor: "owner", control: "never" },
-    "POST /system/passkeys/recovery": { floor: "owner", control: "never" },
+    "POST /system/passkeys/policy": { floor: "owner", panel: false, control: "never" },
+    "POST /system/passkeys/recovery": { floor: "owner", panel: false, control: "never" },
     // One's own passkey; the handler holds another member's to whoever runs people and access, and the owner's to the owner.
-    "DELETE /system/passkeys/{id}": { floor: "viewer", guest: true, control: "never" },
+    "DELETE /system/passkeys/{id}": { floor: "viewer", guest: true, panel: false, control: "never" },
     // Checks its own bearer, since the require-passkey policy would otherwise hold out the owner it exists for.
     "POST /system/session/recover": { auth: "door", beforeBoot: true, control: "never" },
-    "POST /system/sessions/revoke": { control: "never" },
+    "POST /system/sessions/revoke": { panel: false, control: "never" },
     // Stays repeatable after a partial attempt; the handler does its own owner check.
     "POST /system/access/disable": { auth: "door", control: "never" },
     // The desktop-sync agent: redeems a one-time pairing, and later revokes with its own token.
@@ -429,7 +431,7 @@ export const RAW_ROUTES = {
     "GET /system/sync/changes": { sync: "pipe", control: "never", stream: true },
     "DELETE /system/authorized-key": { auth: "door", control: "never" },
     // The owner revoking one machine is no door: it goes through the session middleware.
-    "DELETE /system/authorized-key/{machine}": { control: "never" },
+    "DELETE /system/authorized-key/{machine}": { panel: false, control: "never" },
 } as const satisfies Readonly<Record<`${"GET" | "POST" | "PUT" | "DELETE" | "ALL"} /${string}`, RouteMeta>>;
 
 export type RawRouteKey = keyof typeof RAW_ROUTES;

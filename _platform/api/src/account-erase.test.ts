@@ -277,6 +277,61 @@ describe(`an account that owns an organisation's sandbox`, () => {
     });
 });
 
+describe(`what the account's address holds`, () => {
+    // The erased address sits in three organisations, holds a grant to somebody else's sandbox, and has one beside it.
+    const seated = () => {
+        const store = seededStore();
+        store.rows.orgs.push(
+            { id: `o-alone`, name: `Solo`, policy: {}, policyVersion: 1 },
+            { id: `o-people`, name: `People`, policy: { membersOnly: true }, policyVersion: 3 },
+            { id: `o-team`, name: `Team`, policy: {}, policyVersion: 1 },
+        );
+        store.rows.seats.push(
+            { orgId: `o-alone`, email: `gone@example.test`, role: `admin` },
+            { orgId: `o-people`, email: `gone@example.test`, role: `member` },
+            { orgId: `o-people`, email: `stays@example.test`, role: `admin` },
+            { orgId: `o-team`, email: `gone@example.test`, role: `admin` },
+            { orgId: `o-team`, email: `colleague@example.test`, role: `admin` },
+        );
+        store.rows.members.push({ sandboxId: `s2`, email: `gone@example.test` }, { sandboxId: `s2`, email: `friend@example.test` });
+        return store;
+    };
+
+    it(`goes with the account: seats, grants and invites, an organisation left empty, and a new edition where it kept people`, async () => {
+        const store = seated();
+        flyWith();
+        await eraseAccount(store.prisma, config, logger, `u1`, { gateway: stripeWith().gateway, now: NOW });
+        expect(store.rows.seats).toEqual([
+            { orgId: `o-people`, email: `stays@example.test`, role: `admin` },
+            { orgId: `o-team`, email: `colleague@example.test`, role: `admin` },
+        ]);
+        expect(store.rows.orgs).toEqual([
+            { id: `o-people`, name: `People`, policy: { membersOnly: true }, policyVersion: 4 },
+            { id: `o-team`, name: `Team`, policy: {}, policyVersion: 1 },
+        ]);
+        expect(store.rows.members).toEqual([{ sandboxId: `s2`, email: `friend@example.test` }]);
+        // Every organisation the address sits in is locked before any sandbox, the order a bind takes them in.
+        expect(store.locked).toEqual([`o-alone`, `o-people`, `o-team`, `s1`]);
+    });
+
+    it(`is refused whole while the account is the only admin of an organisation others are in`, async () => {
+        const store = seated();
+        store.rows.seats.splice(4, 1, { orgId: `o-team`, email: `colleague@example.test`, role: `member` });
+        const fly = flyWith();
+        const result = await deleteUserAccount(store.prisma, config, logger, `u1`, stripeWith().gateway);
+        expect(result).toEqual({
+            ok: false,
+            message: `this account is the only admin of Team; make another member an admin before the account can be deleted`,
+        });
+        expect(store.rows.users.map((user) => user.id)).toEqual([`u1`, `u2`]);
+        expect(store.rows.seats).toHaveLength(5);
+        expect(store.rows.orgs.map((org) => org.id)).toEqual([`o-alone`, `o-people`, `o-team`]);
+        expect(store.rows.members).toHaveLength(2);
+        expect([...fly.apps].toSorted()).toEqual(Object.values(APPS).toSorted());
+        expect(store.rows.erasures).toEqual([]);
+    });
+});
+
 describe(`signing in again after an erase`, () => {
     // The erased account comes back as u3 with the same Google subject; u4 is somebody else.
     const returned = async () => {

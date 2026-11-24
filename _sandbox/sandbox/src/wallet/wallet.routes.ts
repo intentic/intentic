@@ -8,17 +8,46 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { answerResponse, cliBody } from "../http/cli-answer.js";
 import { conversationTainted } from "../guard/turn-taint.js";
-import { gatedPaidFetch } from "./payment-offer.js";
+import { gatedPaidFetch, type PaidFetchRequest } from "./payment-offer.js";
 import { relayWalletSign } from "./wallet-signer.js";
 import { spentTodayAtomic } from "./wallet-ledger.js";
 import { usdcBalance } from "./x402.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { turnClaimOf, unprovenTurnWords } from "../seams/workload-stamp.js";
 
 /* Wallet routes are scoped to the agent token. */
 
 const walletEntry = async (services: Services): Promise<WalletConfig | undefined> => {
     const entry = (await services.capabilities.list()).find((capability) => capability.kind === "wallet");
     return entry?.kind === "wallet" ? entry.config : undefined;
+};
+
+// The body as cliBody parsed it: still the CLI's words, every field read and checked below.
+type CliBody = Exclude<Awaited<ReturnType<typeof cliBody>>, Response>;
+
+// What a CLI's `fetch` asks for, its optional fields read loosely (one of the wrong type is one not given), or the
+// refusal to answer with. The conversation the card goes to and whose taint is read is believed only with its turn's
+// proof: a name without it is refused rather than spend as that conversation, and naming none asks the owner
+// (payment-offer.ts).
+const paidFetchRequestOf = (c: Context<AppEnv>, body: CliBody): PaidFetchRequest | Response => {
+    const { url, method, body: payload, contentType, maxUsd, why } = body;
+    if (typeof url !== "string" || url === "") {
+        return c.json({ error: { type: "invalid_request", message: "`url` names the endpoint to fetch (and pay, if it asks)" } }, 400);
+    }
+    const claim = turnClaimOf((name) => c.req.header(name));
+    if (claim.kind === "unproven") {
+        return c.json({ error: { type: "unproven", message: unprovenTurnWords(claim.named) } }, 403);
+    }
+    return {
+        url,
+        method: typeof method === "string" && method !== "" ? method.toUpperCase() : "GET",
+        body: typeof payload === "string" ? payload : undefined,
+        contentType: typeof contentType === "string" ? contentType : undefined,
+        maxUsd: typeof maxUsd === "string" && maxUsd !== "" ? maxUsd : undefined,
+        why: typeof why === "string" && why !== "" ? why : undefined,
+        conversationId: claim.kind === "proven" ? claim.conversationId : undefined,
+        signal: c.req.raw.signal,
+    };
 };
 
 const createWalletRoutes = (services: Services) => ({
@@ -58,9 +87,9 @@ const createWalletRoutes = (services: Services) => ({
         if (body instanceof Response) {
             return body;
         }
-        const { url, method, body: payload, contentType, maxUsd, why } = body;
-        if (typeof url !== "string" || url === "") {
-            return c.json({ error: { type: "invalid_request", message: "`url` names the endpoint to fetch (and pay, if it asks)" } }, 400);
+        const asked = paidFetchRequestOf(c, body);
+        if (asked instanceof Response) {
+            return asked;
         }
         const answer = await gatedPaidFetch(
             {
@@ -73,16 +102,7 @@ const createWalletRoutes = (services: Services) => ({
                 // Only where people sign in: a loopback daemon's replies carry nobody, and its one person answers.
                 ...(services.auth !== undefined ? { ownerEmail: services.ownerEmail } : {}),
             },
-            {
-                url,
-                method: typeof method === "string" && method !== "" ? method.toUpperCase() : "GET",
-                body: typeof payload === "string" ? payload : undefined,
-                contentType: typeof contentType === "string" ? contentType : undefined,
-                maxUsd: typeof maxUsd === "string" && maxUsd !== "" ? maxUsd : undefined,
-                why: typeof why === "string" && why !== "" ? why : undefined,
-                conversationId: c.req.header("x-intentic-conversation"),
-                signal: c.req.raw.signal,
-            },
+            asked,
         );
         // The receipt facts ride headers so the CLI can print data on stdout and the receipt on stderr.
         return answerResponse(c, answer, {

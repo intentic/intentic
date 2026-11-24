@@ -443,6 +443,9 @@ export const DaemonHealthSchema = z.object({
     // Which proofs this daemon takes to open a session, read before any sign-in since the route list arrives only after
     // one. Absent on a daemon from before email sign-in: Google, and the owner ticket on a hosted machine.
     signIn: z.object({ proofs: z.array(ProofMethodSchema) }).optional(),
+    // The answer to a machine agent's challenge (`?proof=&proofKey=`), present only on the loopback port and only for a
+    // credential this daemon issued: what tells the real daemon from another listener there (protocol/doors/loopback-proof.ts).
+    proof: z.string().optional(),
 });
 export type DaemonHealth = z.infer<typeof DaemonHealthSchema>;
 

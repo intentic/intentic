@@ -146,10 +146,10 @@ export const machineAnswers =
 
 /* AN ACCOUNT'S ROWS, HELD IN MEMORY, for the erase path (account-erase.ts) and every read of hosted standing: the user
  * and its Google account, sandboxes with their machines, trash, provisions, the cleanup queue, the plan and the Stripe
- * queue, strikes, usage and carried standing records. Each delegate answers the `where` shapes the platform writes
- * (equality, null, `in`, `not: null`, `lt`, `lte`, `gte`, and a machine's `sandbox: { ownerId }`), returns whole rows
- * whatever the `select`, and cascades a user's or sandbox's delete the way the schema does. `locked` records every
- * sandbox row lock taken, in order. */
+ * queue, strikes, usage and carried standing records, and the organisations, seats and sandbox grants its address holds.
+ * Each delegate answers the `where` shapes the platform writes (equality, null, `in`, `not: null`, `lt`, `lte`, `gte`,
+ * and a machine's `sandbox: { ownerId }`), returns whole rows whatever the `select`, and cascades a user's or sandbox's
+ * delete the way the schema does. `locked` records every row lock taken (a sandbox's, an organisation's), in order. */
 type Scalar = string | number | boolean | Date | null;
 
 interface Operators {
@@ -203,6 +203,10 @@ export type FakeAccountRows = {
         month: string | null;
         freeMinutes: number;
     }[];
+    // Keyed by an address rather than an account: organisations and their seats, and grants or invites to sandboxes.
+    orgs: { id: string; name: string; policy: { membersOnly?: boolean }; policyVersion: number }[];
+    seats: { orgId: string; email: string; role: string }[];
+    members: { sandboxId: string; email: string }[];
 };
 
 // Dates by instant, everything else as text: the months (`YYYY-MM`) and ids the platform compares sort that way.
@@ -275,6 +279,7 @@ const dropSandboxes = (rows: FakeAccountRows, where: Where | undefined): number 
     const doomed = new Set(rows.sandboxes.filter((sandbox) => rowMatches(sandbox, where)).map((sandbox) => sandbox.id));
     dropWhere(rows.sandboxes, { id: { in: [...doomed] } });
     dropWhere(rows.machines, { sandboxId: { in: [...doomed] } });
+    dropWhere(rows.members, { sandboxId: { in: [...doomed] } });
     for (const usage of rows.usage) {
         if (usage.sandboxId !== null && doomed.has(usage.sandboxId)) {
             usage.sandboxId = null;
@@ -343,6 +348,31 @@ const machineDelegate = (rows: FakeAccountRows) => ({
     ),
 });
 
+// An organisation read by id, its edition moved by an increment, and its delete taking its seats and leaving its
+// sandboxes personal, as the schema's cascade and SetNull do.
+const organisationDelegate = (rows: FakeAccountRows) => ({
+    findUnique: jest.fn(async ({ where }: { where: { id: string } }) => rows.orgs.find((org) => org.id === where.id) ?? null),
+    update: jest.fn(async ({ where, data }: { where: { id: string }; data: { policyVersion: { increment: number } } }) => {
+        const org = rows.orgs.find((candidate) => candidate.id === where.id);
+        if (org === undefined) {
+            throw new Error(`no organisation ${where.id}`);
+        }
+        org.policyVersion += data.policyVersion.increment;
+        return org;
+    }),
+    deleteMany: jest.fn(async ({ where }: { where: { id: { in: readonly string[] } } }) => {
+        const doomed = rows.orgs.filter((org) => where.id.in.includes(org.id));
+        for (const org of doomed) {
+            rows.orgs.splice(rows.orgs.indexOf(org), 1);
+            dropWhere(rows.seats, { orgId: org.id });
+            for (const sandbox of rows.sandboxes.filter((candidate) => candidate.orgId === org.id)) {
+                sandbox.orgId = null;
+            }
+        }
+        return { count: doomed.length };
+    }),
+});
+
 const EMPTY_ROWS = (): FakeAccountRows => ({
     users: [],
     accounts: [],
@@ -356,6 +386,9 @@ const EMPTY_ROWS = (): FakeAccountRows => ({
     strikes: [],
     usage: [],
     standing: [],
+    orgs: [],
+    seats: [],
+    members: [],
 });
 
 export const fakeAccountStore = (seed: Partial<FakeAccountRows> = {}) => {
@@ -384,6 +417,9 @@ export const fakeAccountStore = (seed: Partial<FakeAccountRows> = {}) => {
             ...table(rows.usage, `sandboxId`, (create) => ({ ownerId: ``, sandboxId: null, month: ``, tier: ``, minutes: 0, ...create })),
             groupBy: jest.fn(async ({ where }: { where?: Where }) => usageGroups(rows, where)),
         },
+        orgMember: table(rows.seats, `email`, (create) => ({ orgId: ``, email: ``, role: `member`, ...create })),
+        organisation: organisationDelegate(rows),
+        sandboxMember: table(rows.members, `email`, (create) => ({ sandboxId: ``, email: ``, ...create })),
         hostedStanding: table(rows.standing, `subjectHash`, (create) => ({
             subjectHash: ``,
             suspendedAt: null,

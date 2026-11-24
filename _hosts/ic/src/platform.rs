@@ -312,13 +312,16 @@ impl Reporter {
             return;
         };
         // The platform's schema caps each field at 2000 chars and rejects the WHOLE report past it — and a
-        // flow failure can carry a docker log tail. A clipped reason on the wizard beats none at all.
+        // flow failure can carry a docker log tail. A clipped reason on the wizard beats none at all. The text is
+        // scrubbed first (scrub.rs): the platform keeps it beside the owner's address, and a cut must not leave half
+        // a token that the scrub would have recognised whole.
+        let scrubbed = |text: &str| crate::scrub::scrub_known(text, &[code]);
         let failed: Vec<crate::checks::WireFailure> = failed
             .into_iter()
             .map(|failure| crate::checks::WireFailure {
                 check: clip(failure.check, 120),
-                problem: clip(failure.problem, 2000),
-                remedy: clip(failure.remedy, 2000),
+                problem: clip(scrubbed(&failure.problem), 2000),
+                remedy: clip(scrubbed(&failure.remedy), 2000),
             })
             .collect();
         let body = serde_json::json!({ "code": code, "stage": stage, "failed": failed });
@@ -413,6 +416,8 @@ mod tests {
         let url = format!("http://{}", listener.local_addr().unwrap());
         let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let into = std::sync::Arc::clone(&heard);
+        let problems = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let problems_into = std::sync::Arc::clone(&problems);
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let mut reader = BufReader::new(stream);
@@ -430,6 +435,9 @@ mod tests {
                 let _ = reader.read_exact(&mut body);
                 let report: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
                 let failed = report["failed"].as_array().map_or(0, Vec::len);
+                if let Some(problem) = report["failed"][0]["problem"].as_str() {
+                    problems_into.lock().unwrap().push(problem.to_string());
+                }
                 into.lock().unwrap().push(format!(
                     "{}:{failed}",
                     report["stage"].as_str().unwrap_or("")
@@ -439,10 +447,10 @@ mod tests {
                 );
             }
         });
-        let reporter = Reporter::new(&url, Some("code".to_string()));
+        let reporter = Reporter::new(&url, Some("AbC123xyZ90".to_string()));
         reporter.stage("pulling-image");
         reporter.stage("starting-sandbox");
-        reporter.failure("it stopped");
+        reporter.failure("it stopped: claim AbC123xyZ90 with Bearer abcdefgh1234 from 203.0.113.7");
         drop(reporter);
         assert_eq!(
             *heard.lock().unwrap(),
@@ -451,6 +459,11 @@ mod tests {
                 "starting-sandbox:0",
                 "starting-sandbox:1"
             ]
+        );
+        // What failed leaves without the setup code, a credential or an address (scrub.rs).
+        assert_eq!(
+            *problems.lock().unwrap(),
+            ["it stopped: claim <redacted> with Bearer <redacted> from <ip>"]
         );
         // Without a code nothing is reported, and nothing is waited for.
         let quiet = Reporter::new(&url, None);

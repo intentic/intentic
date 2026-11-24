@@ -45,7 +45,13 @@ export const storeRefreshTokenAsAgent = async (write: RefreshTokenWrite, options
         method: request.method,
         redirect: "error",
         signal: AbortSignal.timeout(30_000),
-        headers: { "content-type": "application/json", "x-intentic-agent": token, "x-intentic-conversation": env["INTENTIC_TURN_OWNER"] ?? "" },
+        // The turn's conversation with the proof the daemon believes it by (its seams/workload-stamp.ts), as every agent CLI sends them.
+        headers: {
+            "content-type": "application/json",
+            "x-intentic-agent": token,
+            "x-intentic-conversation": env["INTENTIC_TURN_OWNER"] ?? "",
+            "x-intentic-turn-proof": env["INTENTIC_TURN_PROOF"] ?? "",
+        },
         body: JSON.stringify({ binding: write.binding, previous: write.previous, refreshToken: write.refreshToken, login: write.login === true }),
     });
     if (response.status === CONFLICT && write.previous !== "" && write.login !== true) {

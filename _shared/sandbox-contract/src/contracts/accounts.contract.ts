@@ -32,6 +32,8 @@ export const accountsContract = {
             description:
                 "Hands back the page to sign in on, and the code it will ask for where there is one. The sandbox holds the proof and finishes what it can itself: a device sign-in lands in the account list on its own, a paste or a redirect needs one thing brought back to the finishing call.",
         })
+        // Hands back a sign-in code, and the account it lands is what turns run on: never a panel process's.
+        .meta({ panel: false })
         .input(NativeProviderParamSchema.extend(LoginRequestSchema.shape))
         .output(LoginStartSchema),
     complete: ownAccountRoute
@@ -42,6 +44,7 @@ export const accountsContract = {
             description:
                 "Takes the code the page showed, or the address a redirect landed on, and finishes the attempt. Answers with the account where the exchange ends here; otherwise the sandbox still has a mint to do and the row appears in the account list.",
         })
+        .meta({ panel: false })
         .input(NativeProviderParamSchema.extend(LoginCompleteSchema.shape))
         .output(LoginCompletedSchema),
     status: procedure

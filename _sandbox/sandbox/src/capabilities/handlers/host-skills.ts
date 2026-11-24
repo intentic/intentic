@@ -228,9 +228,10 @@ screenshot     { display: 2 }                         â†’ Screenshot qv-4: 1456Ã
 device         { action: "left_click", coordinate: [420, 318], frame: "qv-4" }
 \`\`\`
 
-Getting text OUT of an application is usually easier through the clipboard than by reading pixels: select it
-(\`device\` with \`ctrl+a\` or a drag), copy it (\`ctrl+c\`), then \`clipboard { action: "read" }\`. That gives you
-the real characters instead of your best guess at what the screenshot said.
+Getting text OUT of an application: \`ui_elements\` gives a control's real name and value instead of your best guess
+at what the screenshot said. \`clipboard { action: "read" }\` answers only how many characters the clipboard holds,
+never the text, since it so often holds a password the owner copied; putting text IN with \`clipboard { action:
+"write" }\` and \`ctrl+v\` works as ever.
 
 \`\`\`
 device { action: "left_click", coordinate: [840, 512] }

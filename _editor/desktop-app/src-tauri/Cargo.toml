@@ -42,6 +42,10 @@ url = "2.5.8"
 # The sign-in handoff's nonce (auth.rs). Tauri already pulls uuid in transitively; naming it here is what makes
 # "the state a handoff must echo" something this crate generates rather than something it improvises.
 uuid = { version = "1.28.0", features = ["v4"] }
+# The system's IANA time zone, which decides whether an install nobody has asked may send analytics (launch.rs
+# `allowed_unasked`, the web's rule). Already in the graph at this version through chrono, so this names what is
+# compiled rather than adding to it.
+iana-time-zone = "0.1.65"
 base64 = "0.23.1"
 sha2 = "0.11.1"
 # The update schedule's only need: a sleep that yields rather than one that holds a thread. Tauri's async

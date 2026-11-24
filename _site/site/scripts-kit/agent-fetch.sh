@@ -1,7 +1,8 @@
 # ---- bootstrap the agent binary (identical in device.sh and sync.sh) ----
 # Bootstrap only if the installed agent cannot run the handover's help; version alone does not prove route/flag compatibility.
 # Pin downloads to the tag resolved by releases/latest so interrupted transfers cannot splice releases.
-# Run version before installing the binary to reject broken downloads. Inputs: ROUTE, SPEAKS, os, arch; output: BIN.
+# Check the download against the release's SHA256SUMS before it first runs, then run version before installing it to
+# reject broken downloads. Inputs: ROUTE, SPEAKS, os, arch; output: BIN.
 
 agent_version() {
     # The subshell keeps the SHELL's own "Bus error" for a truncated binary off the screen.
@@ -20,6 +21,47 @@ agent_speaks() {
             *) return 1 ;;
         esac
     done
+}
+
+# agent_sha256 <file>: its SHA-256 in hex, by sha256sum (Linux) or shasum (macOS); nothing when neither is installed.
+agent_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+    fi
+}
+
+# agent_checked <file> <asset> <sums url>: the file is the asset the release published, by its SHA256SUMS line. Otherwise
+# sets agent_why and agent_fix and fails, and so does every way the check cannot be made: a binary this script runs next
+# is never taken on trust (2026-11-24). The release also signs SHA256SUMS (SHA256SUMS.sig, minisign); checking it here
+# would need minisign on the device, so the sums come from the same https origin as the binary and the signature is left
+# to the agent, which checks it before it replaces itself.
+agent_checked() {
+    agent_sum_got="$(agent_sha256 "$1" || true)"
+    if [ -z "$agent_sum_got" ]; then
+        agent_why="neither sha256sum nor shasum is installed, so the download cannot be checked against the release's SHA256SUMS."
+        agent_fix="install either one, then run the same command again."
+        return 1
+    fi
+    agent_fix="run the same command again; if it fails the same way, something between this device and github.com is altering the download."
+    agent_sums="$(curl -fsL --max-time 30 "$3" 2>/dev/null || true)"
+    if [ -z "$agent_sums" ]; then
+        agent_why="the release's SHA256SUMS did not download, so intentic-machine cannot be checked against it."
+        agent_fix="check the network, then run the same command again."
+        return 1
+    fi
+    agent_sum_want="$(printf '%s\n' "$agent_sums" | awk -v asset="$2" '
+        { name = $2; sub(/^\*/, "", name); sub(/^\.\//, "", name) }
+        name == asset { want = tolower($1) }
+        END { print want }')"
+    if [ -z "$agent_sum_want" ]; then
+        agent_why="the release's SHA256SUMS lists no $2, so the download cannot be checked."
+        return 1
+    fi
+    [ "$agent_sum_got" = "$agent_sum_want" ] && return 0
+    agent_why="the downloaded intentic-machine is not the one the release published (SHA-256 $agent_sum_got, its SHA256SUMS says $agent_sum_want), so it was deleted without being run."
+    return 1
 }
 
 agent_fetch() {
@@ -45,11 +87,14 @@ agent_fetch() {
         case "$latest" in
             */tag/v[0-9]*) published="${latest##*/tag/v}" ;;
         esac
+        asset="intentic-machine-${os}-${arch}"
         if [ -n "$published" ]; then
-            url="${releases}/download/v${published}/intentic-machine-${os}-${arch}"
+            url="${releases}/download/v${published}/${asset}"
+            sums="${releases}/download/v${published}/SHA256SUMS"
             part="${dest}.part-${published}"
         else
-            url="${releases}/latest/download/intentic-machine-${os}-${arch}"
+            url="${releases}/latest/download/${asset}"
+            sums="${releases}/latest/download/SHA256SUMS"
             part="${dest}.part"
         fi
         # A partial from another release is bytes that can never be finished; this release's, either kind, is resumed.
@@ -96,6 +141,12 @@ agent_fetch() {
                 ;;
         esac
         kit_resume
+        # Checked before it is first run (the probe below runs it). A partial that fails is deleted, so the next run
+        # downloads it whole instead of resuming bytes that can never match.
+        if ! agent_checked "$part" "$asset" "$sums"; then
+            rm -f "$part"
+            kit_stop "intentic-machine could not be installed." "$agent_why" "$agent_fix"
+        fi
         chmod +x "$part"
         case "$(agent_version "$part")" in
             [0-9]*.[0-9]*.[0-9]*) ;;

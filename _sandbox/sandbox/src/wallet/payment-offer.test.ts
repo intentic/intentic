@@ -350,6 +350,24 @@ it("suspends the auto-approve band on a turn that has read outside content", asy
     expect(frames[0]).toMatchObject({ kind: "payment_offer" });
 });
 
+// Every turn presents the same agent token: one that dropped its stamp, or a process its finished turn left behind,
+// must not spend inside a band its turn's taint would have suspended.
+it("suspends the auto-approve band on a payment no live turn vouches for", async () => {
+    const band = async () => wallet({ autoApproveUnderUsd: "0.25" });
+    const unnamed = fake({ wallet: band });
+    const pending = gatedPaidFetch(unnamed.deps, asked({ conversationId: undefined }));
+    await answerCard(unnamed.frames, true);
+    expect((await pending).status).toBe(200);
+    expect(unnamed.frames[0]).toMatchObject({ kind: "payment_offer" });
+    expect(unnamed.signed).toHaveLength(1);
+    // A conversation with no live turn has nowhere to ask, so nothing is spent at all.
+    const ended = fake({ wallet: band, liveRun: () => undefined });
+    const answer = await gatedPaidFetch(ended.deps, asked({ conversationId: "conv-1" }));
+    expect(answer.status).toBe(409);
+    expect(answer.body).toContain("needs a live conversation");
+    expect(ended.signed).toEqual([]);
+});
+
 it("still cards a payment inside the band when the host is not on the allow list", async () => {
     const { deps, frames } = fake({ wallet: async () => wallet({ autoApproveUnderUsd: "0.25", allow: "trusted.example" }) });
     const pending = gatedPaidFetch(deps, asked());

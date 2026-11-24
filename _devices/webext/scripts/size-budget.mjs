@@ -25,8 +25,12 @@ const BUDGETS = {
     // and the answers it words (answers.ts). The ceiling again leaves 3.5 kB.
     // 2026-11-14: 347.1 kB (up 1.6 kB) once the ChatGPT kit moved into @intentic/site-kits behind a host interface
     // (kits/chatgpt/chrome-host.ts), so the sandbox's own browser can run it too; the ceiling now leaves 1.9 kB.
-    "background.js": 349_000,
-    // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
+    // 2026-11-24: 349.7 kB (up 1.9 kB from main's 347.8) for the security fixes: a site's own cookies in both session
+    // directions (tools/site-cookies.ts), offers taken only from the editor's origin (content/app-origins.ts), the
+    // secret-field rule in page reads, and storage narrowed to trusted contexts. The ceiling leaves 1.8 kB.
+    "background.js": 351_500,
+    // Injected into the editor's pages (app.intentic.dev), so it stays a few constants and a listener. 374 bytes before
+    // 2026-11-24, when it gained the app-origin check.
     "pair-bridge.js": 4_000,
     // The popup's own script; it holds no schema surface. 20.6 kB on 2026-10-28, up from 16.9 kB, for the Sandboxes
     // section that lists every paired sandbox and pairs another (sandboxes-section.ts).

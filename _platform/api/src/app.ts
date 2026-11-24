@@ -8,6 +8,7 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
+import { crossSiteGuard } from "./http/cross-site-guard.js";
 import { adminUpstreamRoutes } from "./admin/admin-upstream.routes.js";
 import { localHostname } from "@intentic/sandbox-contract/ids/hostnames";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
@@ -112,7 +113,6 @@ type BuiltApp = { app: Hono<AppEnv>; auth: Auth };
 // in production; suites use a process-local one.
 export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, wakeSignals: WakeSignals = localWakeSignals()): BuiltApp => {
     const auth = createAuth(config, prisma, logger);
-
     const app = new Hono<AppEnv>();
 
     // Outermost: the OTel server span, registered first so the request logger and oRPC handlers run inside it.
@@ -151,7 +151,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
             exposeHeaders: [ACCOUNT_HEADER],
         }),
     );
-    app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }));
+    app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }), crossSiteGuard<AppEnv>(config));
 
     /* HOW MUCH BODY A REQUEST MAY CARRY, decided before any route reads one. */
     app.use(`*`, (c, next) =>

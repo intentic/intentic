@@ -20,6 +20,7 @@ import { testConfig } from "../env.config.testing.js";
 import { removeWorkspacePath } from "../workspace/files/workspace-files.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { provenTurnHeaders } from "../seams/workload-stamp.testing.js";
 import { readExtensionDev, worktreesRootOf } from "../capabilities/extension-inventory/extension-dev.js";
 
 // Dev mode over the daemon's HTTP surface, the way the `extension` CLI and the Extensions tab drive it: the checkout is
@@ -89,13 +90,13 @@ const liveProcesses = (seed: Record<string, string>) => {
     return Object.assign(processes, { started, stopped });
 };
 
-// A client whose calls arrive from one conversation's shell, as the CLI sends them.
+// A client whose calls arrive from one conversation's shell, as the CLI sends them: its name, and its turn's proof.
 const clientAs = (app: Hono<AppEnv>, conversation: string): ContractRouterClient<typeof sandboxContract> =>
     createORPCClient(
         new OpenAPILink(sandboxContract, {
             url: "http://sandbox",
             fetch: async (request) =>
-                app.request(new Request(request, { headers: { ...Object.fromEntries(request.headers), "x-intentic-conversation": conversation } })),
+                app.request(new Request(request, { headers: { ...Object.fromEntries(request.headers), ...provenTurnHeaders(conversation) } })),
         }),
     );
 

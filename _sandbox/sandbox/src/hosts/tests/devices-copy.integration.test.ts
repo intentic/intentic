@@ -17,6 +17,7 @@ import type { Services } from "../../composition.js";
 import type { DoorServices } from "../device-door.routes.js";
 import { createDeviceFileRoutes } from "../device-files.routes.js";
 import type { HostClient } from "../host-peer.js";
+import { turnProof } from "../../seams/workload-stamp.js";
 
 // THE `devices copy` COMMAND (bin/devices) through the real door (device-files.routes.ts), to a computer kept in memory:
 // a file or a folder goes onto it and comes back off it byte for byte, the computer is asked before a byte is sent, a
@@ -139,6 +140,7 @@ const devices = (...args: string[]): Promise<{ code: number; out: string }> =>
                 SANDBOX_PORT: String(running?.port ?? 0),
                 INTENTIC_AGENT_TOKEN_PATH: join(work, ".token"),
                 INTENTIC_TURN_OWNER: "conv-a",
+                INTENTIC_TURN_PROOF: turnProof("conv-a"),
             },
             stdio: ["ignore", "pipe", "pipe"],
         });

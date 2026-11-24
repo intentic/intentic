@@ -538,6 +538,10 @@ flowchart LR
   progress to the platform's host report, which the page mirrors. The platform never sends it anything. A finished
   report also carries the machine agent's last upkeep pass (`~/.intentic/machine/upkeep.json`, summed, with the agent's
   version), so the platform can tell whether a release brought machines to the current shape (2026-10-05).
+  The free text of this report and of a setup report (`/setup/report`: a docker log tail, a path, a command) leaves
+  scrubbed (`scrub.rs`): this user's home as `~`, other homes' names, the user and host names, email and IP
+  addresses (loopback kept), and anything credential-shaped, since the platform shows it to its admins beside the
+  owner's address (2026-11-24). `machine` still names the reporter.
   `ic sandbox doctor` is the same engine, read-only. It also says what would hold a runaway in each sandbox
   (`containment.rs`, warnings at worst, printed under the rows and carried as `containment` beside the report in its
   `--json`): no swap bound at the container or its work, an engine reporting no swap-limit support, the machine's swap

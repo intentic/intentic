@@ -5,6 +5,7 @@ import type { Log } from "@intentic/local-agent";
 import { type DeviceReport, type PortSkipReason, WATCHER_STALL_MS } from "@intentic/sandbox-contract/schemas/devices";
 import { type BridgeHead, SyncPortsListSchema } from "@intentic/sandbox-contract/schemas/bridge-heads";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
+import { isLocalDaemonPort } from "@intentic/sandbox-run";
 import {
     type MirroredPort,
     type Pairing,
@@ -148,6 +149,12 @@ export const fetchWorkspacePorts = async (base: string, syncToken: string): Prom
 // localhost in place of the server he meant to reach. Left out of the wanted set altogether, so it is neither
 // mirrored nor reported as skipped: the sandbox's ports list says whose it is.
 export const mirrorsByDefault = (port: Pick<PortSummary, "owner" | "job">): boolean => port.owner === undefined || port.job !== undefined;
+
+// (2026-11-24) A PORT IN THE LOCAL-DAEMON BAND IS NEVER MIRRORED, asked for or not. This agent dials a sandbox's daemon
+// at 127.0.0.1:<its band port> (daemon-base.ts), so a sandbox listening on another sandbox's band port would have this
+// machine's localhost send that sandbox's traffic, its credentials' first frames included, to the wrong sandbox. The
+// daemon-base proof refuses such a listener anyway; leaving the band alone keeps the port free for the daemon it is for.
+export const mirrorable = (port: Pick<PortSummary, "port">): boolean => !isLocalDaemonPort(port.port);
 
 // Whether the local port is free; called only after terminating this pairing's own prior forward and ruling out
 // other pairings, so a conflict is genuinely foreign. One instant's answer: a holder in the middle of a restart reads
@@ -492,7 +499,7 @@ const servePairing = async (
     }
     const ignored = new Set(pairing.ignoredPorts ?? []);
     const included = new Set(pairing.includedPorts ?? []);
-    const wanted = ports.filter((port) => mirrorsByDefault(port) || included.has(port.port));
+    const wanted = ports.filter((port) => mirrorable(port) && (mirrorsByDefault(port) || included.has(port.port)));
     const holds = await holdsFor(holders, pairing);
     const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, wanted, claimedBy, ignored, holds, log);
     // Named off every sibling's forwards, not only those of the pairings this tick has passed (`recordedForwards`).

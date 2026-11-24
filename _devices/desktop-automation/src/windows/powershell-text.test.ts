@@ -1,7 +1,8 @@
-import { clipboardScript, launchScript } from "./apps-windows.js";
+import { clipboardScript, launchScript, windowHandle } from "./apps-windows.js";
 import { actScript } from "./elements-windows.js";
 import { typeScript } from "./input-windows.js";
 import { psText } from "./powershell.js";
+import { DesktopError } from "../types.js";
 
 /* The command lines the Windows backend hands powershell.exe, with text an agent chose in them. PowerShell reads ‘ ’ ‚ ‛
    as single quotes as well as ', and `$(...)` and backticks inside double quotes, so any text interpolated into a
@@ -60,4 +61,13 @@ test("psText round-trips text holding every kind of single quote, and the line h
     expect(line).not.toMatch(/[‘’‚‛]/);
     const literal = /FromBase64String\('([A-Za-z0-9+/=]*)'\)/.exec(line)?.[1] ?? "";
     expect(Buffer.from(literal, "base64").toString("utf8")).toBe(text);
+});
+
+// Focus once put the id in as `[int64]"<id>"`: a double-quoted string, where `$(…)` runs. It goes in as a number now.
+test("a window id reaches the focus script as digits, and anything else is refused before a script is built", () => {
+    expect(windowHandle("132456")).toBe("132456");
+    expect(windowHandle("-2147221222")).toBe("-2147221222");
+    for (const id of ["1$(Start-Process calc)", '1"; Start-Process calc; "', "0x1A", "1e3", " 12", "12 ", "", "99999999999999999999"]) {
+        expect(() => windowHandle(id)).toThrow(DesktopError);
+    }
 });

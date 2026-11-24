@@ -121,7 +121,8 @@ flowchart LR
   instead: the sandbox holds a pointer to each entry shared with it (`secrets/device/`), resolves a `{{secret:NAME}}`
   reference to it like any stored name, and asks that computer for a value one use at a time, after the gates and the
   host guard, with a grant signed by its own keyring keys (public halves served at `GET /keyring/keys`). A released
-  value is kept only to mask, so every use asks again; an entry shared in `copy` mode is kept here as an ordinary secret.
+  value is kept only to mask, and only for ten minutes, so every use asks again; an entry shared in `copy` mode is kept
+  here as an ordinary secret, held to the host list its keyring gives it like a pointer is.
 - An agent can ask by need instead of by name (`secrets/device/keyring-needs.ts`, `POST /secrets/want`, the `secrets
   want` CLI, `type_secret` with `for`): the need goes over the device link's `keyringNeed` to each online computer
   whose keyring is set up, most recently answered first. The first yes wins and that computer's shares are read at
@@ -183,6 +184,12 @@ flowchart LR
   that the audit tick records and deletes. The platform's own id for the sandbox's row, which its announce answers,
   is kept in `/history/platform-row.json` for the same reader (`store/platform-row.ts`), and so is the sandbox's name
   and logo in `/history/presentation.json` (below).
+- (2026-11-24) **A machine agent asks for proof before it sends a credential to the loopback port.** `GET /health`
+  with `?proof=<challenge>&proofKey=<key>` answers `proof`, an HMAC of this sandbox's id and the challenge keyed with
+  the digest an enrollment keeps (a host link's, `peers/enrollment.ts` `answerChallenge`, or a sync pairing's,
+  `proveSyncHolder`), only on a request netd marked as arriving on the loopback port, so a stranger holding the port
+  cannot borrow the answer through the tunnel (`system/boot/health.routes.ts`, the shared half in sandbox-contract's
+  `protocol/doors/loopback-proof.ts`). Before it, any listener that echoed the id was handed the link token.
 - On the loopback port, and only there, CORS also admits the desktop app's bundled page (`tauri://localhost`,
   `http://tauri.localhost`): netd marks a request that arrived on that port (`x-intentic-listener: loopback`, stripped
   from anything arriving from outside), so no sandbox needs recreating with a wider `WEB_ORIGIN`
@@ -681,7 +688,9 @@ flowchart LR
   nothing about a turn or a shell changes.
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
-  The panel token that repo operator panels hold reaches no route that returns a stored secret. A listener provider
+  The panel token that repo operator panels hold reaches no route that returns a stored secret, a code, a session or a
+  sign-in, or administers the sandbox for its owner (`panel: false`: the people on it, connections, tokens, links and
+  pairings, passkeys, secrets, the settings and safety policy that hold the agent back). A listener provider
   belongs to one extension (`extensions/listener/listener-state.ts`: the declarer owning the provider's card, else the first
   installed); a second declaration is refused at load and named on its Extensions row, and the listener routes answer
   the owner alone.

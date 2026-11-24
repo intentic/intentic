@@ -140,6 +140,17 @@ export const windowsSession = async (): Promise<SessionState> => {
 
 export const launchScript = (target: string): string => `Start-Process -FilePath ${psText(target)};`;
 
+// A window id as the focus script carries it: parsed to a number here, so the script holds digits whatever the caller
+// passed. It once went in as `[int64]"<id>"`, a double-quoted string, where `$(…)` runs whatever it holds. An HWND is a
+// 32-bit value sign-extended into a pointer, well inside a double's exact integers.
+export const windowHandle = (id: string): string => {
+    const handle = /^-?\d{1,19}$/.test(id) ? Number(id) : Number.NaN;
+    if (!Number.isSafeInteger(handle)) {
+        throw new DesktopError(`"${id}" is not a window id from this device's window list.`);
+    }
+    return String(handle);
+};
+
 // Text travels as base64 (powershell.ts), which avoids a temp file and has no quote to get out of.
 export const clipboardScript = (text: string): string => `Set-Clipboard -Value ${psText(text)};`;
 
@@ -152,7 +163,7 @@ export const windowsApps = {
     // the window that kept it — "something is holding the foreground" is a guess this can just look up.
     focusWindow: async (id: string): Promise<void> => {
         const settled = await powershell(
-            `$h = [IntPtr]::new([int64]${JSON.stringify(id)});
+            `$h = [IntPtr]::new([int64](${windowHandle(id)}));
              if ([IntenticWin]::IsIconic($h)) { [void][IntenticWin]::ShowWindow($h, ${SW_RESTORE}) };
              [uint32]$lock = 0;
              $armed = [IntenticWin]::ReadSetting(${SPI_GET_FOREGROUND_LOCK_TIMEOUT}, 0, [ref]$lock, 0);

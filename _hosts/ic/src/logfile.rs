@@ -75,7 +75,7 @@ fn redact_env_assignment(value: &str) -> String {
     }
 }
 
-fn sensitive_env_name(name: &str) -> bool {
+pub(crate) fn sensitive_env_name(name: &str) -> bool {
     let name = name.to_ascii_uppercase();
     name == "OWNER_EMAIL"
         || name == "SANDBOX_GRANT"

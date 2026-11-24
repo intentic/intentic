@@ -1,5 +1,6 @@
 import {
     focusRefusal,
+    isWindowId,
     looksLikeUrl,
     parseDisplaysJson,
     parseElementTreeJson,
@@ -246,4 +247,15 @@ test("a window's exact place comes from xwininfo where wmctrl counted the frame 
     expect(tree.get(0x40002a)).toEqual({ x: -9, y: 393, width: 14, height: 26 });
     const [listed] = parseWmctrl("0x00400024  0 0      606  407  71   68   xmessage.Xmessage     host xmessage");
     expect(listed === undefined ? undefined : withAbsoluteBounds([listed], tree)[0]?.bounds).toEqual({ x: 605, y: 389, width: 71, height: 68 });
+});
+
+// Every backend puts a window id into a command (a PowerShell script, a sway command line, xdotool's arguments), so only
+// the spellings the listers hand out pass: an HWND or a sway container (decimal), wmctrl's hex, cua-driver's pid:window.
+test("a window id is one of the spellings the window lists hand out, and nothing else", () => {
+    for (const id of ["132456", "-2147221222", "0x04600007", "0X04600007", "4242:17"]) {
+        expect(isWindowId(id)).toBe(true);
+    }
+    for (const id of ["", "1$(calc)", "5] exec xterm; [con_id=5", "0x1 windowkill", "1:2:3", "--sync", "0x", "1.5", " 7", "7\n"]) {
+        expect(isWindowId(id)).toBe(false);
+    }
 });

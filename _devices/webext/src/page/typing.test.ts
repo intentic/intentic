@@ -176,6 +176,11 @@ test("a page that reformats what was typed says what the field now reads, and a 
     const password = await fill("e1", "secret");
     expect(password.ok).toBe(true);
     expect(JSON.stringify(password)).not.toContain("SECRET");
+    // Nor once a show-password button made it a text input.
+    document.getElementById("pw")?.setAttribute("type", "text");
+    const shown = await fill("e1", "secret");
+    expect(shown).toMatchObject({ ok: true, note: `the page changed what the field holds` });
+    expect(JSON.stringify(shown)).not.toContain("SECRET");
 });
 
 test("a rich editor that ignores its DOM being written takes the text through beforeinput, and its Send wakes up", async () => {

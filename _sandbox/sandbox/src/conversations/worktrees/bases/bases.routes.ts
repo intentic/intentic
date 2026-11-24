@@ -1,13 +1,14 @@
 import { basesContract } from "@intentic/sandbox-contract/contracts/bases.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../../app-env.js";
+import { provenTurnOrRefuse } from "../../../auth/scope/proven-turn.js";
 import { BaseRefused, type BaseCheckouts, SHELL_HOLDER } from "./base-checkouts.js";
 
 // The base door (base-checkouts.ts): the `base` CLI on the agent token, naming its conversation by the header every
 // agent CLI sends (platform/leftovers.ts workloadStamp, INTENTIC_TURN_OWNER). That name is only who holds the base: a
-// base is a checkout of a commit everyone may read, so a wrong name keeps one alive longer and lends nothing.
-
-const CONVERSATION_HEADER = "x-intentic-conversation";
+// base is a checkout of a commit everyone may read, so a wrong name keeps one alive longer and lends nothing. Believed
+// only with its turn's proof all the same (2026-11-24): a bare name could let go of another conversation's bases. A shell
+// naming none holds as the shell, which lets go of nobody else's.
 
 // A refusal the bases worded, as the route's answer; anything else is a fault and goes through as one.
 const answered = async <T>(work: Promise<T>): Promise<T> => {
@@ -24,8 +25,7 @@ const answered = async <T>(work: Promise<T>): Promise<T> => {
 export const createBasesRoutes = (bases: BaseCheckouts) => {
     const i = implement(basesContract).$context<OrpcContext>();
     const holderOf = (context: OrpcContext): string => {
-        const named = context.headers.get(CONVERSATION_HEADER) ?? "";
-        return named === "" ? SHELL_HOLDER : named;
+        return provenTurnOrRefuse(context.headers) ?? SHELL_HOLDER;
     };
     return {
         ensure: i.ensure.handler(({ input, context }) => answered(bases.ensure(input, holderOf(context)))),

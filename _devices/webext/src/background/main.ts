@@ -1,5 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import { parseWebextPairingCode } from "@intentic/sandbox-contract/webext";
+// Named imports, as in store.ts: the `z` namespace would keep zod's locales in the bundle.
+import { literal, object, string } from "zod";
+import { isAppOrigin, senderOrigin } from "../content/app-origins.js";
 import { agentWindow, forgetClosedWindow, rememberBounds, showTab } from "./agent-window.js";
 import { answerAsking, clearStaleAsking } from "./asking.js";
 import { redeemPairing } from "./enroll.js";
@@ -35,7 +38,19 @@ import { answerScriptRequest, personAutoUpdate, personRemove, personToggle } fro
 // restart, network change).
 const ALARM = "intentic-link";
 
+// Keeps the paired sandboxes' tokens out of reach of any content script: none of this extension's reads storage, so
+// only its own pages and this worker need it. Absent in Firefox, and a Chrome whose local area cannot be narrowed
+// refuses the call; either way storage stays as the browser keeps it by default.
+const trustedStorageOnly = async (): Promise<void> => {
+    try {
+        await chrome.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" });
+    } catch (error) {
+        console.warn("intentic: this browser kept storage open to content scripts", error);
+    }
+};
+
 const wake = (): void => {
+    void trustedStorageOnly();
     chrome.alarms.create(ALARM, { periodInMinutes: 1 });
     // A build from before several sandboxes could be paired kept its one in other keys: moved first, so the first dial
     // finds it.
@@ -118,6 +133,7 @@ const readState = async (): Promise<PopupState> => {
                 : {
                       url: sandboxKey(offered.url),
                       name: sandboxName(offered),
+                      from: offered.from,
                       paired: sandboxes.some((sandbox) => sandbox.url === sandboxKey(offered.url)),
                       failed: failed?.url === sandboxKey(offered.url) ? failed.error : undefined,
                   },
@@ -214,9 +230,27 @@ const enablePasswords = async (): Promise<{ ok: boolean; message?: string }> => 
     return enabled;
 };
 
+// The one message a tab may send: the pairing bridge's offer (content/pair-bridge.ts), never a popup command.
+const OfferSchema = object({ type: literal("offer"), code: string() });
+
+// From an editor page (content/pair-bridge.ts), at the origin Chrome says it came from; parked, not redeemed, since
+// enrolling needs a host permission a page can't get without a click. Parked beside any sandbox already paired: this
+// is how a second one is added. The origin goes with it, for the popup to show beside the name the page chose.
+const parkOffer = async (code: string, from: string): Promise<{ ok: boolean }> => {
+    const pairing = parseWebextPairingCode(code);
+    if (pairing === undefined) {
+        return { ok: false };
+    }
+    await store.setInbox({ ...pairing, from });
+    await refreshBadge();
+    // The person just clicked Connect in their sandbox; the popup is the next step, so it comes to them.
+    await openPanel(true);
+    return { ok: true };
+};
+
 // Connecting and disconnecting sandboxes, apart from the commands about this browser itself.
-type PairingCommand = Extract<PopupCommand, { readonly type: "connect" | "connect-finish" | "offer" | "dismiss-offer" | "unpair" }>;
-const PAIRING_COMMANDS: ReadonlySet<PopupCommand["type"]> = new Set(["connect", "connect-finish", "offer", "dismiss-offer", "unpair"]);
+type PairingCommand = Extract<PopupCommand, { readonly type: "connect" | "connect-finish" | "dismiss-offer" | "unpair" }>;
+const PAIRING_COMMANDS: ReadonlySet<PopupCommand["type"]> = new Set(["connect", "connect-finish", "dismiss-offer", "unpair"]);
 const isPairing = (command: PopupCommand): command is PairingCommand => PAIRING_COMMANDS.has(command.type);
 
 const handlePairing = async (command: PairingCommand): Promise<unknown> => {
@@ -232,19 +266,6 @@ const handlePairing = async (command: PairingCommand): Promise<unknown> => {
             await store.setConnectFailed(undefined);
             await refreshBadge();
             return { ok: true };
-        case "offer": {
-            // From a sandbox's own page; parked, not redeemed, since enrolling needs a host permission a page can't
-            // get without a click. Parked beside any sandbox already paired: this is how a second one is added.
-            const pairing = parseWebextPairingCode(command.code);
-            if (pairing === undefined) {
-                return { ok: false };
-            }
-            await store.setInbox(pairing);
-            await refreshBadge();
-            // The person just clicked Connect in their sandbox; the popup is the next step, so it comes to them.
-            await openPanel(true);
-            return { ok: true };
-        }
     }
 };
 
@@ -368,9 +389,21 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         return true;
     }
     // Passwords' content script runs on every site, so a command from a tab is only ever the pairing bridge's offer on
-    // the sandbox's own page; every other command is the popup's, from this extension's own page.
-    // SAFETY: only the `type` field is read, and anything that is not the string "offer" is refused.
-    if (sender.tab !== undefined && (message as { type?: unknown }).type !== "offer") {
+    // the editor's own page; every other command is the popup's, from this extension's own page. An offer is taken
+    // only from a tab on an app origin, by Chrome's account of the sender rather than anything the message says.
+    const offer = OfferSchema.safeParse(message);
+    if (offer.success) {
+        const from = senderOrigin(sender);
+        if (sender.tab === undefined || !isAppOrigin(from)) {
+            respond({ ok: false, message: "Only an Intentic page can offer a pairing." });
+            return false;
+        }
+        void parkOffer(offer.data.code, from)
+            .then(respond)
+            .catch((error) => respond({ ok: false, message: errorMessage(error) }));
+        return true;
+    }
+    if (sender.tab !== undefined) {
         respond({ ok: false, message: "That is the popup's to ask." });
         return false;
     }

@@ -37,8 +37,14 @@ flowchart LR
 - A question the agent waits on ([`asking.ts`](src/background/asking.ts)) is asked on its page and on the icon at once:
   the badge lights, the popup opens by itself (unless turned off) and can answer it, and the agent's window flashes in
   the taskbar without taking focus. Whichever answers first wins, and the panel on the page is taken down.
-- Pairing: the sandbox page posts a code, `pair-bridge.js` (the only content script, on intentic.dev pages) hands it
-  to the worker, and the person finishes it with a click in the popup, which redeems it at `/system/webext/enroll`.
+- Pairing: the editor's page posts a code, `pair-bridge.js` (the only content script, on `https://app.intentic.dev`
+  alone, [`app-origins.ts`](src/content/app-origins.ts)) hands it to the worker, and the person finishes it with a click
+  in the popup, which redeems it at `/system/webext/enroll`. The bridge relays only what that window posted to itself,
+  and the worker takes an offer only from a tab Chrome says is on that origin. The popup shows the sandbox's address and
+  the page that offered it beside the name, which the page chose. Until 2026-11-24 the bridge ran on every
+  `*.intentic.dev` page, sandbox-published `*.sbx.intentic.dev` pages included, so anyone's page could offer this
+  browser to their own sandbox. A self-hosted platform's editor is on its operator's domain, which the manifest cannot
+  name, so there the person pastes the code the Connect dialog shows into the popup.
   Chrome closes the popup when its own permission dialog opens, so the click hands the pairing to the worker first
   and the worker redeems it once Chrome grants the sandbox's origin (`connecting.ts`): one Connect, one Allow.
   The token it gets back is the only secret the extension stores. The code carries the sandbox's name, which the popup
@@ -75,7 +81,15 @@ flowchart LR
   with key, code, keyCode and which, and submits the form only for an `<input>` whose Enter no handler took, as a
   browser does, so a composer that sends on Enter is not sent twice.
 - `connect_site` hands a site's session to the sandbox and `lend_site` borrows one back; both need the sessions
-  switch and a confirmation in the page every time.
+  switch and a confirmation in the page every time. The site is the tab's host
+  ([`site-cookies.ts`](src/background/tools/site-cookies.ts)): what goes is what Chrome sends that host (its own
+  cookies, on any path, and its parent domains'), and a lent cookie is written only for that host or a domain its own
+  cookies here already use. Until 2026-11-24 both took the host's last two labels, which for `bbc.co.uk` meant every
+  `*.co.uk` cookie and for `foo.github.io` every other github.io site's.
+- A page read never reports a secret field's value, nor names the field by it: a password input whatever role the page
+  gives it, any field the document has shown as one (a site's "show password" button makes it a text input still
+  holding the password; [`driver.ts`](src/page/driver.ts) remembers it for the life of the document), and any field
+  whose autocomplete says it holds a password or a one-time code. `fill`'s read-back follows the same rule.
 - `type_ticket` types a stored secret into the field in focus for the sandbox's own `type_secret`, and the agent's
   mount of the browser never lists it. The call carries a one-time ticket only; the extension collects the value at
   `/system/webext/secret` with the page's address, the sandbox's guard judges that host, and the value goes into the
@@ -192,7 +206,8 @@ flowchart LR
   - A kit's in-page helpers refuse to install on any host but the kit's own, so a tab redirected mid-call (a sign-in
     page) is never read.
 - Chrome kills an idle MV3 worker, so the worker holds no state: everything lives in `chrome.storage.local`, and an
-  alarm redials a dropped link.
+  alarm redials a dropped link. No content script reads storage, so the worker narrows it to the extension's own
+  pages at every start (`setAccessLevel`), where the browser offers that; Firefox does not.
 - **Passwords (optional):** a separate "Turn on" in the popup asks once for `nativeMessaging` and all-site access.
   That grant is only for remembering and filling passwords via the desktop app's native host (`dev.intentic.keyring`);
   the agent still needs its own per-site allow in the list below. While on, a content script captures sign-ins on

@@ -50,6 +50,10 @@ The repository is public and the runners hold release credentials, a shared cach
 - The repository setting that requires approval for all outside contributors covers a fork that edits the workflow file itself.
 - To run CI on an outside contribution, read the diff, push the branch here and open the pull request from it.
 
+## What a release reads
+
+A branch's pull request runs on the same runners as the release, with `/ci-cache` mounted read-write, so a pnpm store, turbo cache, cargo registry or retained workspace it wrote would be built into what the release signs. `release.yml`'s fleet jobs and `ci.yml`'s `images` and `images-platform` mount the docker volume `intentic-release-cache` at `/ci-cache` instead (Docker creates it on first use, so the first release on a host builds cold), read no turbo remote cache, and start by emptying their workspace and `$HOME`. That closes the path for pull-request code without the docker socket. A pull-request job that holds the socket (`preflight`, `e2e-platform`, the desktop checks) can still reach any volume and the host; closing that takes release runners no pull request lands on (their own labels, or a runner group allowed only main's workflows).
+
 ## The token a checkout leaves behind
 
 Workspaces persist between jobs, so a token written into `.git/config` outlives its job. Every checkout sets `persist-credentials: false` except the two in `release.yml` that run semantic-release; zizmor's `artipacked` rule fails any other.
@@ -75,6 +79,7 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 | `/ci-cache/onboarding-docker` | the janitor, above 30 GB |
 | `/ci-cache/pnpm-store`, `/ci-cache/cargo` | the janitor, above 20 GB |
 | any other `/ci-cache` entry (`xwin`, `ms-playwright`, ...) | the janitor, above 15 GB |
+| docker volume `intentic-release-cache` (the release's `/ci-cache`) | its turbo and pnpm metadata by `pnpm-setup`'s age sweep; nothing else yet, so `docker volume rm intentic-release-cache` on an idle host when it grows |
 | buildx builder `intentic-cache` | age sweep in `publish-images.sh`; the janitor keeps 25 GB |
 | dangling images | `docker image prune` in `nightly.yml` |
 | a drill's throwaway Docker host (`lib/dind-host.sh`) and its anonymous `/var/lib/docker` volume, 8 GB each | the drill's own trap, `docker rm -fv`; the hourly guard removes any anonymous volume left unused |

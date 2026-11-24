@@ -301,6 +301,10 @@ const LOCAL_PORT_SPAN = 4000;
 // Deterministic, so a recreate lands on the same port and the browser can derive it without being told.
 export const localDaemonPort = (sandboxId: string): number => LOCAL_PORT_BASE + (Number.parseInt(sandboxId.slice(0, 6), 16) % LOCAL_PORT_SPAN);
 
+// Whether a host port is one of that band's, which nothing but a sandbox's own loopback listener should hold: the device
+// agent dials a sandbox there (_devices/machine/src/daemon-base.ts), and never mirrors a sandbox's port onto one.
+export const isLocalDaemonPort = (port: number): boolean => port >= LOCAL_PORT_BASE && port < LOCAL_PORT_BASE + LOCAL_PORT_SPAN;
+
 // The plain address that port answers on; its certified sibling is composed where it's dialled (the editor's
 // endpoint.ts), which alone needs both this port and the loopback hostname from sandbox-contract.
 export const localDaemonUrlInsecure = (sandboxId: string): string => `http://127.0.0.1:${localDaemonPort(sandboxId)}`;

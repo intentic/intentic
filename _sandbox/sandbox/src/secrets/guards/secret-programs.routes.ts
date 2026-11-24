@@ -3,6 +3,7 @@ import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.co
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { holdsRightBearer } from "../../auth/owner-gates.js";
+import { provenTurnOrRefuse } from "../../auth/scope/proven-turn.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { sandboxHeld } from "../device/device-secrets.js";
@@ -47,7 +48,8 @@ export const createSecretProgramRoutes = (services: SecretProgramRoutesDeps) => 
             subject: change.subject,
             from: change.from,
             to: change.to,
-            conversationId: change.conversationId ?? context.headers.get("x-intentic-conversation") ?? undefined,
+            // The card goes to the turn that proves it asks; a name without its proof is refused, never carded.
+            conversationId: provenTurnOrRefuse(context.headers, change.conversationId),
             signal: signal ?? new AbortController().signal,
         });
         if ("refusal" in verdict) {

@@ -38,7 +38,10 @@ export interface RouteMeta {
     readonly agent?: true;
     // The desktop-sync token reaches it; a `poll` refreshes the machine's heartbeat, the held-open `pipe` does not.
     readonly sync?: "poll" | "pipe";
-    // Withheld from the panel token, which reaches every other route: it puts a stored credential in motion.
+    // Withheld from the panel token, which reaches every other route: it puts a stored credential in motion, or it
+    // administers the sandbox for its owner (the people on it, tokens and links minted, computers paired, passkeys and
+    // sessions, secrets and the settings that hold the agent back). (2026-11-24) The token is handed to every
+    // repo-defined process, which an agent can start: such a route reached by it was the owner's, by anyone's hand.
     readonly panel?: false;
     readonly control?: ControlReach;
     // A transfer: announced to the edge through netd (tunnel-bulk.ts), which sends it down the tunnel's bulk socket,

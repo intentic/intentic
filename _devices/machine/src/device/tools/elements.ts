@@ -6,6 +6,7 @@ import {
     type ElementRefs,
     frameName,
     type FrameLog,
+    isWindowId,
     toImage,
     type UiElement,
     viewFrame,
@@ -66,6 +67,10 @@ export const listElements = async (
     log: FrameLog,
 ): Promise<string> => {
     assertScope(scopes, "screen");
+    // Held to the window lists' own spellings before a backend puts it into a command, as focus_window's is (apps.ts).
+    if (input.window !== undefined && !isWindowId(input.window)) {
+        throw new DesktopError(`"${input.window}" is not a window id: take a window list first and pass the id in brackets.`);
+    }
     const tree = await screen.elements(input.window);
     const query = input.query?.trim() ?? "";
     const chosen = tree.elements.filter((element) => (query === "" ? operable(element) : matches(element, query)));

@@ -4,8 +4,11 @@ import { listen } from "@tauri-apps/api/event";
 import { within } from "@intentic/base/async";
 
 // Reports desktop-only events (install, update, environment) via hand-rolled POST rather than the PostHog SDK.
-// Distinct id is the install id (state.rs), shared with the SPA's own window. The build-time key is unset in
-// dev/local builds, which disables this.
+// Distinct id is the install id (state.rs), the Rust launch reporter's too. The workspace window never sends it and
+// never aliases it (the web's analytics.ts), so these events stay with a nameless install, never a signed-in account.
+// Sent only while `analyticsAllowed` (launch.rs `analytics_allowed`, the web's rule for who is asked first) or the
+// workspace's consent event says so; nothing is held back to send later. The build-time key is unset in dev/local
+// builds, which disables this.
 declare const __POSTHOG_KEY__: string;
 declare const __POSTHOG_HOST__: string;
 

@@ -3,11 +3,14 @@ import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Caller } from "../auth/auth.js";
 import { opt } from "../opt.js";
+import { provenTurnOrRefuse } from "../auth/scope/proven-turn.js";
 import { NeedRefusal, type Needs } from "./needs.js";
 import { isOwnerRevoke, revokeGrant, standingGrants, type StandingGrantsDeps } from "./standing-grants.js";
 
 // The needs door (docs/architecture/needs.md): the agent's CLIs raise and withdraw on the agent token, naming their
-// conversation by the header every agent CLI sends; a person lists and answers what they may see of the fleet.
+// conversation by the header every agent CLI sends, believed only with its turn's proof (auth/scope/proven-turn.ts); a
+// person lists and answers what they may see of the fleet. (2026-11-24) A shell naming no conversation still raises one
+// in the one live turn, which only puts a question to a person, but no longer lists, withdraws or closes that turn's.
 
 export interface NeedsRoutesDeps {
     readonly needs: Needs;
@@ -19,9 +22,6 @@ export interface NeedsRoutesDeps {
     // need as `Answerer.maintainer` for a kind that asks (host-power): the route's floor admits machine credentials too.
     readonly maintains: (headers: Headers) => Promise<boolean>;
 }
-
-// The header an agent CLI names its conversation by (platform/leftovers.ts workloadStamp, INTENTIC_TURN_OWNER).
-const CONVERSATION_HEADER = "x-intentic-conversation";
 
 const STATUS: Readonly<Record<NeedRefusal["code"], "NOT_FOUND" | "FORBIDDEN" | "CONFLICT" | "BAD_REQUEST">> = {
     not_found: "NOT_FOUND",
@@ -45,7 +45,15 @@ const answered = async <T>(work: Promise<T>): Promise<T> => {
 
 export const createNeedsRoutes = ({ needs, grants, visible, maintains }: NeedsRoutesDeps) => {
     const i = implement(needsContract).$context<OrpcContext>();
-    const conversationOf = (context: OrpcContext): string | undefined => context.headers.get(CONVERSATION_HEADER) ?? undefined;
+    const conversationOf = (context: OrpcContext): string | undefined => provenTurnOrRefuse(context.headers);
+    // Another conversation's needs are not a stamp-less shell's to read or take back, the one live turn's included.
+    const owningTurn = (context: OrpcContext): string => {
+        const conversationId = conversationOf(context);
+        if (conversationId === undefined) {
+            throw new ORPCError("FORBIDDEN", { message: "This shell names no conversation (INTENTIC_TURN_OWNER is unset): run it from the turn's own shell." });
+        }
+        return conversationId;
+    };
     // A need of a conversation the caller cannot see reads as no need at all, as that conversation does.
     const seen = async (id: string, context: OrpcContext): Promise<void> => {
         const need = await needs.get(id);
@@ -60,13 +68,13 @@ export const createNeedsRoutes = ({ needs, grants, visible, maintains }: NeedsRo
         // The header is the caller's to write: a member reads only the needs of a conversation they may see.
         mine: i.mine.handler(async ({ context }) => {
             const conversationId = conversationOf(context);
-            if (context.identity !== undefined && (conversationId === undefined || !visible(context.identity, conversationId))) {
+            if (conversationId === undefined || (context.identity !== undefined && !visible(context.identity, conversationId))) {
                 return { needs: [] };
             }
             return { needs: [...(await needs.mine(conversationId))] };
         }),
-        withdraw: i.withdraw.handler(({ input, context }) => answered(needs.withdraw(input.id, conversationOf(context)))),
-        done: i.done.handler(({ input, context }) => answered(needs.done(input.id, conversationOf(context), input.how))),
+        withdraw: i.withdraw.handler(({ input, context }) => answered(needs.withdraw(input.id, owningTurn(context)))),
+        done: i.done.handler(({ input, context }) => answered(needs.done(input.id, owningTurn(context), input.how))),
         list: i.list.handler(async ({ input, context }) => ({
             needs: (await needs.list(input)).filter((need) => visible(context.identity, need.conversationId)),
         })),

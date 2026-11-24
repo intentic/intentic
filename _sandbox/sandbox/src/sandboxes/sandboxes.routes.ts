@@ -17,6 +17,7 @@ import { soleLiveConversation, turnRunOf } from "../conversations/actor/conversa
 import { type TurnStanding, turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { holdDepsOf } from "../guard/held-asks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { turnClaimOf, unprovenTurnWords } from "../seams/workload-stamp.js";
 
 /* The `sandboxes` CLI's four routes, scoped to the agent token like the wallet's and the capability ask's. */
 
@@ -48,13 +49,19 @@ export const fleetWithheld = (fleetId: string | undefined, standing: Pick<TurnSt
         : `This conversation's turn was not given the "${fleetId}" card: its role leaves the sandbox shelf shut, or the people it ` +
           "works for were not given the owner's account. Nothing was listed or created; carry on without it and say what you left undone.";
 
-const withheldFrom = async (services: Services, c: Context<AppEnv>): Promise<Response | undefined> => {
+// The turn a call comes from, when it proves which (seams/workload-stamp.ts): the one its cards are raised in. A name
+// without its proof is refused (2026-11-24): believed, it put another conversation's card, and its withholding, in play.
+// A shell naming none is held to the one live turn's withholding, as an agent that unset its stamp would be.
+const callerTurn = async (services: Services, c: Context<AppEnv>): Promise<{ readonly refused: Response } | { readonly conversationId: string | undefined }> => {
+    const claim = turnClaimOf((name) => c.req.header(name));
+    if (claim.kind === "unproven") {
+        return { refused: c.json({ error: { type: "unproven", message: unprovenTurnWords(claim.named) } }, 403) };
+    }
+    const conversationId = claim.kind === "proven" ? claim.conversationId : undefined;
+    const held = conversationId ?? soleLiveConversation(services.conversations);
     const fleet = (await services.capabilities.list()).find((capability) => capability.kind === "fleet");
-    const named = c.req.header("x-intentic-conversation");
-    const conversationId = named !== undefined && named !== "" ? named : soleLiveConversation(services.conversations);
-    const standing = conversationId === undefined ? undefined : turnStandingOf(services.conversations, conversationId);
-    const refused = fleetWithheld(fleet?.id, standing);
-    return refused === undefined ? undefined : c.json({ error: { type: "withheld", message: refused } }, 403);
+    const refused = fleetWithheld(fleet?.id, held === undefined ? undefined : turnStandingOf(services.conversations, held));
+    return refused === undefined ? { conversationId } : { refused: c.json({ error: { type: "withheld", message: refused } }, 403) };
 };
 
 // What the move gate stands on, from this daemon: the readings already held, the card switches, its own slug, and the
@@ -108,12 +115,13 @@ const createSandboxesRoutes = (services: Services) => {
     };
     return {
         list: async (c: Context<AppEnv>): Promise<Response> => {
-            return (await withheldFrom(services, c)) ?? answerResponse(c, await listFleet(deps));
+            const turn = await callerTurn(services, c);
+            return "refused" in turn ? turn.refused : answerResponse(c, await listFleet(deps));
         },
         create: async (c: Context<AppEnv>): Promise<Response> => {
-            const withheld = await withheldFrom(services, c);
-            if (withheld !== undefined) {
-                return withheld;
+            const turn = await callerTurn(services, c);
+            if ("refused" in turn) {
+                return turn.refused;
             }
             const body = await cliBody(c, "create", '{"name":"…"}');
             if (body instanceof Response) {
@@ -129,15 +137,15 @@ const createSandboxesRoutes = (services: Services) => {
                 on: filled(on),
                 definition: filled(definition),
                 why: filled(why),
-                conversationId: c.req.header("x-intentic-conversation"),
+                conversationId: turn.conversationId,
                 signal: c.req.raw.signal,
             });
             return answerResponse(c, answer);
         },
         move: async (c: Context<AppEnv>): Promise<Response> => {
-            const withheld = await withheldFrom(services, c);
-            if (withheld !== undefined) {
-                return withheld;
+            const turn = await callerTurn(services, c);
+            if ("refused" in turn) {
+                return turn.refused;
             }
             const body = await cliBody(c, "move", '{"name":"…","to":"…"}');
             if (body instanceof Response) {
@@ -157,7 +165,7 @@ const createSandboxesRoutes = (services: Services) => {
                 to,
                 manager,
                 why,
-                conversationId: c.req.header("x-intentic-conversation"),
+                conversationId: turn.conversationId,
                 signal: c.req.raw.signal,
             });
             if ("status" in approved) {
@@ -166,9 +174,9 @@ const createSandboxesRoutes = (services: Services) => {
             return streamedMove((onProgress) => runMove(gate, approved.route, { id: approved.id, plan: approved.plan, manager }, onProgress));
         },
         remove: async (c: Context<AppEnv>): Promise<Response> => {
-            const withheld = await withheldFrom(services, c);
-            if (withheld !== undefined) {
-                return withheld;
+            const turn = await callerTurn(services, c);
+            if ("refused" in turn) {
+                return turn.refused;
             }
             const body = await cliBody(c, "remove", '{"name":"…"}');
             if (body instanceof Response) {
@@ -182,7 +190,7 @@ const createSandboxesRoutes = (services: Services) => {
             const answer = await removeSandboxThroughFleet(deps, {
                 name: asked,
                 why: filled(why),
-                conversationId: c.req.header("x-intentic-conversation"),
+                conversationId: turn.conversationId,
                 signal: c.req.raw.signal,
             });
             return answerResponse(c, answer);

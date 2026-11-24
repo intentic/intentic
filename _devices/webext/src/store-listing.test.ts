@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { APP_ORIGINS } from "./content/app-origins.js";
 
 // THE STORE REFUSES A PERMISSION NOBODY JUSTIFIED. The Chrome Web Store accepts the upload and then answers the publish
 // with a 400, "does not meet the requirements", until the dashboard has a sentence for every permission the manifest
@@ -12,7 +13,7 @@ interface Manifest {
     readonly optional_permissions?: readonly string[];
     readonly optional_host_permissions?: readonly string[];
     readonly host_permissions?: readonly string[];
-    readonly content_scripts?: readonly { readonly matches: readonly string[] }[];
+    readonly content_scripts?: readonly { readonly matches: readonly string[]; readonly js?: readonly string[] }[];
 }
 
 // SAFETY: the extension's own manifest, which Chrome itself validates at load; only these keys are read, each as optional.
@@ -48,4 +49,11 @@ test("every content script's sites have a justification", () => {
     for (const pattern of (manifest.content_scripts ?? []).flatMap((script) => script.matches)) {
         expect(rowFor(`\`${pattern}\``)?.[0]).toContain(`Content script`);
     }
+});
+
+// Sandboxes publish pages on `*.sbx.intentic.dev`: the pairing bridge runs on the editor's own origins and nowhere else
+// (content/app-origins.ts).
+test("the pairing bridge is declared on the editor's own origins and nowhere else", () => {
+    const bridge = manifest.content_scripts?.find((script) => script.js?.includes("pair-bridge.js") === true);
+    expect(bridge?.matches).toEqual(APP_ORIGINS.map((origin) => `${origin}/*`));
 });

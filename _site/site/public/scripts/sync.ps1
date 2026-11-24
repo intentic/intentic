@@ -539,8 +539,9 @@ function Invoke-IntenticRedeem {
 #
 # The download is pinned to the tag `releases/latest` resolves to right now (one HEAD, no body, no API rate
 # limit), so an interrupted transfer resumes against the exact release it started from, never a splice of
-# two. What lands is probed by running it - `version` answering is the only proof the file is a working agent
-# rather than 95 MB of captive-portal login page - and only a probed binary is moved into place.
+# two. What lands is checked against the release's SHA256SUMS before anything runs it, then probed by running it -
+# `version` answering is the only proof the file is a working agent rather than 95 MB of captive-portal login page -
+# and only a checked, probed binary is moved into place.
 
 function Get-IntenticAgentVersion {
     param([string]$Path)
@@ -834,6 +835,54 @@ function Stop-IntenticAgentRefused {
     Stop-Intentic "$title." $problem $remedy
 }
 
+# THE RELEASE'S OWN SHA-256 FOR THE AGENT, read from the SHA256SUMS beside it before the download starts (2026-11-24).
+# The download is checked against it before anything runs it, and every way the check cannot be made stops the install:
+# a binary this script runs next is never taken on trust. The release also signs SHA256SUMS (SHA256SUMS.sig, minisign);
+# Windows has no minisign, so the sums come from the same https origin as the binary and the signature is left to the
+# agent, which checks it before it replaces itself.
+function Get-IntenticAgentSum {
+    param([string]$Sums, [string]$Asset)
+    $text = ''
+    try {
+        $ask = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Sums)
+        $ask.UserAgent = 'intentic-installer'
+        $ask.Timeout = 30000
+        $answer = $ask.GetResponse()
+        try {
+            $reader = New-Object System.IO.StreamReader($answer.GetResponseStream())
+            $text = $reader.ReadToEnd()
+            $reader.Close()
+        } finally {
+            $answer.Close()
+        }
+    } catch {
+        Stop-Intentic 'intentic-machine could not be installed.' "the release's SHA256SUMS did not download ($($_.Exception.Message)), so intentic-machine cannot be checked against it." 'check the network, then run the same command again.'
+    }
+    foreach ($line in ($text -split "`n")) {
+        if ($line -match '^([0-9a-fA-F]{64}) [ *](?:\./)?(\S+)\s*$' -and $Matches[2] -eq $Asset) { return $Matches[1].ToLowerInvariant() }
+    }
+    Stop-Intentic 'intentic-machine could not be installed.' "the release's SHA256SUMS lists no $Asset, so the download cannot be checked." 'run the same command again; if it says the same, report it: the release is missing a checksum.'
+}
+
+# The file's SHA-256 in lowercase hex, or '' when it cannot be read. Get-FileHash is Windows PowerShell 4 and later;
+# .NET's own SHA256 answers the same where it is missing.
+function Get-IntenticFileSha256 {
+    param([string]$Path)
+    try {
+        if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+            return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path -ErrorAction Stop).Hash.ToLowerInvariant()
+        }
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($stream)) -replace '-', '').ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } catch {
+        return ''
+    }
+}
+
 # Put a first agent at $Dest. Everything past this - keeping it current, PATH, the launcher stub - is the
 # agent's own `setup`.
 function Install-IntenticAgent {
@@ -853,13 +902,17 @@ function Install-IntenticAgent {
     #
     # The agent's own `upgrade` stages without the suffix and is fine: it probes with spawn, and CreateProcess
     # loads a PE by its bytes. This block is the one that has to ask a shell.
+    $asset = "intentic-machine-windows-$Arch.exe"
     if ($published) {
-        $url = "$releases/download/v$published/intentic-machine-windows-$Arch.exe"
+        $url = "$releases/download/v$published/$asset"
+        $sums = "$releases/download/v$published/SHA256SUMS"
         $part = "$Dest.part-$published.exe"
     } else {
-        $url = "$releases/latest/download/intentic-machine-windows-$Arch.exe"
+        $url = "$releases/latest/download/$asset"
+        $sums = "$releases/latest/download/SHA256SUMS"
         $part = "$Dest.part.exe"
     }
+    $want = Get-IntenticAgentSum -Sums $sums -Asset $asset
     # A partial from another release is bytes that can never be finished.
     $leaf = Split-Path $Dest -Leaf
     Get-ChildItem -Path (Split-Path $Dest) -Filter "$leaf.part*" -ErrorAction SilentlyContinue |
@@ -889,13 +942,26 @@ function Install-IntenticAgent {
         if (-not $fetched) {
             Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($why); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
         }
-        # A partial the other end calls finished is used when the probe below passes it. One that does not pass is
-        # bytes no resume can mend (the 416 would come back on every run), so it is dropped and fetched again, once.
-        if ($whole -and $attempt -eq 1 -and -not (Get-IntenticAgentVersion -Path $part)) {
+        # A partial the other end calls finished is used when its checksum passes. One that does not is bytes no resume
+        # can mend (the 416 would come back on every run), so it is dropped and fetched again, once.
+        if ($whole -and $attempt -eq 1 -and (Get-IntenticFileSha256 -Path $part) -ne $want) {
             Remove-Item -Force -ErrorAction SilentlyContinue $part
             continue
         }
         break
+    }
+    # Checked before it is first run (the probe below runs it). A file that fails is deleted, so the next run downloads
+    # it whole instead of resuming bytes that can never match.
+    $got = Get-IntenticFileSha256 -Path $part
+    if ($got -ne $want) {
+        if (-not (Test-Path -LiteralPath $part)) { Stop-IntenticAgentRefused -Dest $Dest -Part $part -Version $published -How 'removed' }
+        $why = if ($got) {
+            "the downloaded intentic-machine is not the one the release published (SHA-256 $got, its SHA256SUMS says $want), so it was deleted without being run."
+        } else {
+            "the download could not be read to check it against the release's SHA256SUMS, so it was deleted without being run."
+        }
+        Remove-Item -Force -ErrorAction SilentlyContinue $part
+        Stop-Intentic 'intentic-machine could not be installed.' $why 'run the same command again; if it fails the same way, something between this PC and github.com is altering the download.'
     }
     if (-not (Get-IntenticAgentVersion -Path $part)) {
         # Gone between landing and its probe: taken into quarantine, which no network check would ever explain.

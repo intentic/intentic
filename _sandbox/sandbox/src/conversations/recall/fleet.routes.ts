@@ -5,12 +5,12 @@ import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
-import { soleLiveConversation } from "../actor/conversation-holdings.js";
 import { messageConversation } from "./fleet-message.js";
 import { type ResumeAsk, resumeConversation } from "./fleet-resume.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { turnClaimOf, unprovenTurnWords } from "../../seams/workload-stamp.js";
 import { createFleetReads, readableHandle } from "./fleet-reads.js";
 import { recordedPromptReader } from "../../agent/prompt/prompt-disclosure.js";
 import { relayFleetRead } from "../../links/link-records-relay.js";
@@ -60,10 +60,15 @@ const bodyOf = async <T>(c: Context<AppEnv>, schema: z.ZodType<T>): Promise<T | 
     return parsed.success ? parsed.data : undefined;
 };
 
-// Who is writing: the turn's own stamp, else the one turn in flight (the attribution the children routes use).
-const callerOf = (services: Services, c: Context<AppEnv>): string | undefined => {
-    const from = c.req.header("x-intentic-conversation") ?? soleLiveConversation(services.conversations);
-    return from === "" ? undefined : from;
+// Who is writing: the turn's own stamp, believed only with its proof (seams/workload-stamp.ts), else nobody. (2026-11-24)
+// A bare name, or the one turn in flight read for a shell naming none, once let a sender pass as the target's own parent
+// or sibling, whose words taint nothing (fleet-message.ts messageTaint). A name without its proof is refused.
+const callerOf = (c: Context<AppEnv>): { readonly from: string | undefined } | { readonly refused: Response } => {
+    const claim = turnClaimOf((name) => c.req.header(name));
+    if (claim.kind === "unproven") {
+        return { refused: c.json({ ok: false, message: `Refused: ${unprovenTurnWords(claim.named)}.` }, 403) };
+    }
+    return { from: claim.kind === "proven" ? claim.conversationId : undefined };
 };
 
 // A refused write as the CLI reads it, with the conversations an ambiguous handle matched when there were some.
@@ -89,8 +94,12 @@ const resumeRoute =
                 400,
             );
         }
+        const caller = callerOf(c);
+        if ("refused" in caller) {
+            return caller.refused;
+        }
         const { to, ...ask } = body;
-        const outcome = await resumeConversation(services, callerOf(services, c), to, ask satisfies ResumeAsk);
+        const outcome = await resumeConversation(services, caller.from, to, ask satisfies ResumeAsk);
         return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
     };
 
@@ -124,13 +133,17 @@ const createFleetRoutes = (services: Services) => ({
                 400,
             );
         }
+        const caller = callerOf(c);
+        if ("refused" in caller) {
+            return caller.refused;
+        }
         const wait =
             body.wait === true ? { timeoutMs: Math.round((body.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000), signal: c.req.raw.signal } : undefined;
         // Words in front of a conversation this turn may not read would read its reply back (`--wait`): as no conversation.
         if (readableHandle(await resolveFleetHandle(services, body.to), await turnReader(services, c)).kind === "unknown") {
             return c.json(refusalBody(`No conversation answers to \`${body.to}\`. Search for one with \`agents find "<text>"\`.`, undefined), 404);
         }
-        const outcome = await messageConversation(services, callerOf(services, c), body.to, body.message, undefined, wait);
+        const outcome = await messageConversation(services, caller.from, body.to, body.message, undefined, wait);
         return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
     },
 });

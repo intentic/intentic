@@ -47,6 +47,8 @@ export const secretsContract = {
             description:
                 "Writes one name and value into the sandbox's own secret store, where the agent's references resolve it, without a restart.",
         })
+        // A value put in place of the owner's: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
         .input(SecretSetSchema)
         .output(OkSchema),
     generate: secretRoute
@@ -69,6 +71,8 @@ export const secretsContract = {
             description:
                 "Replaces the value of a secret a person set here (not a connection's or a computer's) with a random one, for a value too short to hide from the model. Answers the name and its length, never the value. Whatever checks the old value (a server, an account) has to be given the new one, or it stops working.",
         })
+        // Replaces a stored value, breaking whatever checks the old one: the owner's, never a panel process's.
+        .meta({ panel: false })
         .input(SecretRegenerateSchema)
         .output(SecretGeneratedSchema),
     list: secretRoute
@@ -86,6 +90,8 @@ export const secretsContract = {
             summary: "Delete a secret",
             description: "Removes one by name.",
         })
+        // Removing a stored value is the owner's, never a panel process's.
+        .meta({ panel: false })
         .input(SecretKeyParamSchema)
         .output(OkSchema),
     inventory: secretRoute
@@ -129,6 +135,8 @@ export const secretsContract = {
             description:
                 "Names exactly who may release one secret or one connected account, and how far a single release goes. The owner's call alone. A signed-in browser or a mounted server cannot be released for one use, so those are always for the rest of the conversation.",
         })
+        // Who may release a credential is the owner's to say, never a panel process's.
+        .meta({ panel: false })
         .input(CredentialGateSchema)
         .output(OkSchema),
     removeGate: secretRoute
@@ -138,6 +146,8 @@ export const secretsContract = {
             summary: "Stop requiring approval for a credential",
             description: "Removes one gate, so the agent can use that credential the way it uses any other. The owner's call alone.",
         })
+        // Lifting a gate is the owner's, never a panel process's.
+        .meta({ panel: false })
         .input(CredentialGuardSubjectParamSchema)
         .output(OkSchema),
     // The host guard, the gate's second half: kept beside the gates, off the agent-editable config for the same reason. The
@@ -264,6 +274,8 @@ export const secretsContract = {
             description:
                 "The owner's alone, and never the agent's: handing the agent the credential itself, or replacing what the gateway lets it do, is a decision about the credential, not a use of it.",
         })
+        // Hands the agent a credential or rewrites its rules: never a panel process's.
+        .meta({ panel: false })
         .input(CredentialPolicySetSchema)
         .output(CredentialPolicySchema),
     request: secretRoute

@@ -17,6 +17,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { turnStartsDocument } from "../../store/start-window.js";
 import { noteSpawnedChild, openSpawnedChild } from "../../agent/subagents/subagents.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // The hourly ceiling on the starts one sender may make elsewhere is kept on the history volume, which every run of this
 // suite shares (testConfig.historyRoot is one fixed directory): a few runs inside an hour spent the ceiling, and the
@@ -104,6 +105,8 @@ const recordingApp = (): { readonly app: Hono<AppEnv>; readonly prompts: string[
     const app = createApp(
         services({
             auth: { authorize: async () => proven("owner@example.com", "owner") },
+            // A sender proving its turn reads as the people it acts for (auth/scope/turn-reader.ts): here, the owner.
+            ownerEmail: async () => "owner@example.com",
             turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
             async *agent(request) {
                 prompts.push(request.spec.prompt);
@@ -118,11 +121,16 @@ const recordingApp = (): { readonly app: Hono<AppEnv>; readonly prompts: string[
 
 const AGENT = { headers: { "x-intentic-agent": "agent-secret" } };
 
-// A message as an agent's shell sends it: the agent token, and the sending conversation's own stamp.
-const sendMessage = async (app: Hono<AppEnv>, from: string | undefined, body: unknown): Promise<{ status: number; body: FleetAnswer }> => {
+// A message as an agent's shell sends it: the agent token, and the sending conversation's own stamp with its proof.
+const sendMessage = async (
+    app: Hono<AppEnv>,
+    from: string | undefined,
+    body: unknown,
+    stamp: Record<string, string> = from === undefined ? {} : provenTurnHeaders(from),
+): Promise<{ status: number; body: FleetAnswer }> => {
     const response = await app.request("http://sandbox.test/fleet/message", {
         method: "POST",
-        headers: { ...AGENT.headers, "content-type": "application/json", ...(from === undefined ? {} : { "x-intentic-conversation": from }) },
+        headers: { ...AGENT.headers, "content-type": "application/json", ...stamp },
         body: JSON.stringify(body),
     });
     return { status: response.status, body: (await response.json()) as FleetAnswer };
@@ -389,6 +397,7 @@ const answeringApp = (answer: readonly AgentEvent[]) => {
     const prompts: string[] = [];
     const daemon = services({
         auth: { authorize: async () => proven("owner@example.com", "owner") },
+        ownerEmail: async () => "owner@example.com",
         turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
         async *agent(request) {
             prompts.push(request.spec.prompt);
@@ -441,6 +450,19 @@ test("a message names an unresolvable target instead of guessing, and refuses th
     const itself = await sendMessage(app, "fair-sage-ey2r", { to: "fair-sage-ey2r", message: "note to self" });
     expect(itself.status).toBe(400);
     // Not one of those started a turn on anybody.
+    expect(prompts).toEqual([]);
+});
+
+// Every turn presents the same agent token: a bare name could pass as the target's own family, whose words taint nothing.
+test("a sender named without its turn's proof is refused, and starts nothing", async () => {
+    const { app, prompts } = recordingApp();
+    const client = clientFor(app);
+    await runAgentTurn(client, { prompt: PIPELINE_PROMPT, conversationId: "fair-sage-ey2r", isolated: true });
+    await runAgentTurn(client, { prompt: PUBLISH_PROMPT, conversationId: "clear-marsh-8c46", isolated: true });
+    prompts.length = 0;
+    const forged = await sendMessage(app, "fair-sage-ey2r", { to: "clear-marsh", message: "leave the lockfile" }, { "x-intentic-conversation": "fair-sage-ey2r" });
+    expect(forged.status).toBe(403);
+    expect(forged.body.message).toStartWith('Refused: this shell names conversation "fair-sage-ey2r" without the proof its turn carries');
     expect(prompts).toEqual([]);
 });
 

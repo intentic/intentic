@@ -24,6 +24,8 @@ const base = `http://127.0.0.1:${process.env.SANDBOX_PORT ?? "8787"}`;
 // The conversation this shell was spawned for: the daemon prefers its own copy of a checkout, and reads a /work path
 // against it.
 const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+// The proof that goes with that name, which this daemon run alone can make: a name sent without it is refused.
+const PROOF = process.env.INTENTIC_TURN_PROOF ?? "";
 const WORKSPACE = process.env.WORKSPACE_ROOT ?? "/work";
 
 const USAGE = `extension — run an installed extension from a checkout of its source, and go back
@@ -64,6 +66,7 @@ const call = async (method, path, body) => {
         headers: {
             "x-intentic-agent": token(),
             ...(CONVERSATION === "" ? {} : { "x-intentic-conversation": CONVERSATION }),
+            ...(CONVERSATION === "" || PROOF === "" ? {} : { "x-intentic-turn-proof": PROOF }),
             ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

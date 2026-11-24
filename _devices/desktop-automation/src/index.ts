@@ -13,7 +13,7 @@ export { windowsSession } from "./windows/apps-windows.js";
 export { PS_UTF8_OUTPUT, psText } from "./windows/powershell.js";
 export { CuaClient, cuaDesktop, cuaDriverCandidates, cuaKey, findCuaDriver, parseCuaElements, parseCuaWindows } from "./cua.js";
 export { parseChord, windowsChord, wtypeArgs, xdotoolChord, type Chord, type Modifier } from "./keys.js";
-export { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
+export { focusRefusal, isWindowId, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
 export { capture, displays, frame, hasGraphicalSession, isWayland, pngSize } from "./screen.js";
 export { crop, decodePng, downscale, encodePng, type Pixels } from "./png.js";
 export {

@@ -8,6 +8,7 @@ import { insideRel } from "@intentic/base/contained";
 import { isIsolated } from "../../conversations/registry/agents-store.js";
 import { ROOT_REPO } from "../../workspace/layout/repo-discovery.js";
 import { bodyOf, callerName, type DoorServices, RUN_VIEW, refusalFor } from "../device-door.routes.js";
+import { turnClaimOf, unprovenTurnWords } from "../../seams/workload-stamp.js";
 
 // WHAT A PROGRAM STARTED ON ONE OF THE OWNER'S COMPUTERS IS DOING, AND ITS STOP, from a shell (`devices stop`, and
 // `devices run` following its program and stopping it on Ctrl+C). Held to the same rule as the rest of the `devices`
@@ -65,9 +66,13 @@ const RENEW_EVERY_MS = 20_000;
 
 // The repository a build holds, or why it holds none: an isolated conversation builds in its own checkout, which no land
 // writes into, and a folder outside the workspace is nobody's land target.
+// A conversation named without its proof is not taken at its word: it could be an isolated one claiming another's tree.
 const heldRepoOf = (services: RunDoorServices, c: Context<AppEnv>, build: z.infer<typeof BuildSchema>): { repo: string } | { why: string } => {
-    const named = c.req.header("x-intentic-conversation");
-    const entry = named === undefined || named === "" || callerName(c) === RUN_VIEW ? undefined : services.agents.entry(named);
+    const claim = callerName(c) === RUN_VIEW ? undefined : turnClaimOf((name) => c.req.header(name));
+    if (claim?.kind === "unproven") {
+        return { why: unprovenTurnWords(claim.named) };
+    }
+    const entry = claim?.kind === "proven" ? services.agents.entry(claim.conversationId) : undefined;
     if (entry !== undefined && isIsolated(entry)) {
         return { why: "this conversation builds in its own checkout, which nothing lands into" };
     }

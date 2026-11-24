@@ -37,7 +37,13 @@ export const mintPlatformAccessAsAgent = async (id: string, options: AgentStoreO
         method: request.method,
         redirect: "error",
         signal: AbortSignal.timeout(45_000),
-        headers: { "content-type": "application/json", "x-intentic-agent": token, "x-intentic-conversation": env["INTENTIC_TURN_OWNER"] ?? "" },
+        // The turn's conversation with the proof the daemon believes it by (its seams/workload-stamp.ts), as every agent CLI sends them.
+        headers: {
+            "content-type": "application/json",
+            "x-intentic-agent": token,
+            "x-intentic-conversation": env["INTENTIC_TURN_OWNER"] ?? "",
+            "x-intentic-turn-proof": env["INTENTIC_TURN_PROOF"] ?? "",
+        },
         body: JSON.stringify({}),
     });
     // allow(silent-catch): an unreadable answer is judged by its status alone.

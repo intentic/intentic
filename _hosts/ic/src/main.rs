@@ -49,6 +49,7 @@ mod prepare;
 mod record;
 mod runner;
 mod sandbox;
+mod scrub;
 mod serve;
 mod shape;
 mod tty;

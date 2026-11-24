@@ -16,6 +16,19 @@ const CLIP_INSTALL_WAYLAND = "sudo apt install wl-clipboard";
 
 const swayRunning = (): boolean => environment()["SWAYSOCK"] !== undefined || environment()["I3SOCK"] !== undefined;
 
+// A window id as each lister spells it, checked before it reaches a command (parse.ts `isWindowId`). swaymsg reads its
+// arguments as sway commands, where `;` or `,` starts another one and `exec` runs a program, so a sway container id is
+// decimal digits and nothing more; an X window id is wmctrl's hex or xdotool's decimal.
+const SWAY_CONTAINER = /^\d{1,20}$/;
+const X_WINDOW = /^(?:\d{1,20}|0x[0-9a-f]{1,16})$/i;
+
+const checkedId = (id: string, spelling: RegExp): string => {
+    if (!spelling.test(id)) {
+        throw new DesktopError(`"${id}" is not a window id from this device's window list.`);
+    }
+    return id;
+};
+
 export const linuxApps = {
     windows: async (): Promise<WindowInfo[]> => {
         if (isWayland()) {
@@ -38,7 +51,7 @@ export const linuxApps = {
     focusWindow: async (id: string): Promise<void> => {
         if (isWayland()) {
             if (swayRunning() && (await has("swaymsg"))) {
-                await run("swaymsg", [`[con_id=${id}]`, "focus"]);
+                await run("swaymsg", [`[con_id=${checkedId(id, SWAY_CONTAINER)}]`, "focus"]);
                 return;
             }
             throw new DesktopError(
@@ -46,7 +59,7 @@ export const linuxApps = {
             );
         }
         // windowactivate, not windowfocus: it also raises the window and switches desktop, matching "bring it up".
-        await run("xdotool", ["windowactivate", "--sync", id], XDOTOOL_INSTALL);
+        await run("xdotool", ["windowactivate", "--sync", checkedId(id, X_WINDOW)], XDOTOOL_INSTALL);
     },
 
     // A URL or existing file goes to xdg-open; anything else is a program to start, decided by looking rather than

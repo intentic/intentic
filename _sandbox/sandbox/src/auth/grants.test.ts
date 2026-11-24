@@ -201,6 +201,37 @@ test("the panel grant reaches the daemon broadly but never a route that returns 
     ] as const) {
         expect(`${method} ${path} ${await verdict(panel, "panel", method, path)}`).toBe(`${method} ${path} out-of-scope`);
     }
+    // And the owner's administration, which a process the agent can start must not do for it: the people on the
+    // sandbox, minting a token or a link, pairing a computer, the owner's sign-in, and what holds the agent back.
+    for (const [method, path] of [
+        ["GET", "/members"],
+        ["POST", "/members"],
+        ["DELETE", "/members"],
+        ["POST", "/system/control/tokens"],
+        ["POST", "/system/links"],
+        ["POST", "/system/hosts/pair"],
+        ["POST", "/system/runners/pair"],
+        ["POST", "/system/passkeys/policy"],
+        ["POST", "/settings"],
+        ["POST", "/safety/policy"],
+        ["POST", "/secrets"],
+        ["DELETE", "/secrets/github-token"],
+        ["PUT", "/secrets/policy/github"],
+        // And what hands back a code or a credential, or puts one in: a one-time code, a connection, a sign-in, a door's
+        // new token, a session, a socket ticket, an export that can carry every vault.
+        ["GET", "/capabilities/npm/otp"],
+        ["POST", "/capabilities"],
+        ["DELETE", "/capabilities/npm"],
+        ["POST", "/accounts/claude/login/start"],
+        ["POST", "/accounts/claude/login/complete"],
+        ["POST", "/automations/nightly/rotate-token"],
+        ["POST", "/system/session"],
+        ["POST", "/system/ws-ticket"],
+        ["POST", "/bundles"],
+        ["POST", "/bundles/ticket"],
+    ] as const) {
+        expect(`${method} ${path} ${await verdict(panel, "panel", method, path)}`).toBe(`${method} ${path} out-of-scope`);
+    }
     // And the carve-out stays narrow: a connection named "probe" is not the probe route.
     expect(await verdict(panel, "panel", "GET", "/capabilities/probe/status")).toBe("ok");
     // A wrong secret on an in-scope route is 401, never a fall-through to the bearer check behind it.

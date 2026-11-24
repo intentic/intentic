@@ -24,6 +24,8 @@ export const safetyContract = {
             description:
                 "Replaces the document whole. Nothing in it can widen what the sandbox is structurally allowed to do: it decides which of the things an agent may already do are worth interrupting you about.",
         })
+        // The policy the command judge reads: never a panel process's to rewrite.
+        .meta({ panel: false })
         .input(z.object({ text: z.string().describe("The policy, as you want it written.") }))
         .output(OkSchema),
     // Verdicts teach the owner which policy line to add next; answers why you weren't asked about something.

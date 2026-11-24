@@ -30,19 +30,20 @@ import type { HostGuardDeps } from "./host-guard-deps.js";
 const CALL_BUDGET_MS = 45_000;
 
 // The one MCP message this gate reads: a tools/call naming a device tool, and of its arguments only the fields that say
-// which sandbox and which op. The rest is the machine's to validate; a notification or anything else does not parse, and
-// is forwarded as the command gate forwards it.
+// which sandbox and which op. The rest is the machine's to validate. Every field is read loosely, a wrong type as absent:
+// the device refuses such a call against its own schema, while a failed parse here refuses the call unjudged
+// (host-call-gate.ts), which a stray type would turn into a refusal of a call the device could have run.
 export const DeviceToolCallSchema = z.object({
-    id: z.union([z.string(), z.number()]),
+    id: z.union([z.string(), z.number(), z.null()]),
     method: z.literal("tools/call"),
     params: z.object({
         name: z.string(),
         arguments: ProgramArgumentsSchema.extend({
-            slug: z.string().optional(),
-            op: z.string().optional(),
-            when: z.string().optional(),
+            slug: z.string().optional().catch(undefined),
+            op: z.string().optional().catch(undefined),
+            when: z.string().optional().catch(undefined),
             // os_rollback's: whether it reboots into the previous deployment now.
-            apply: z.boolean().optional(),
+            apply: z.boolean().optional().catch(undefined),
             // run_command's: run it as administrator (host-command-guard.ts asks the owner every time), and why. Read
             // loosely: a non-boolean `admin` is the machine's to refuse, never a reason to forward the call unjudged.
             admin: z.unknown().optional(),

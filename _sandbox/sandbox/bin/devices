@@ -48,6 +48,8 @@ const COMMAND = "devices";
 const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
 const PORT = process.env.SANDBOX_PORT ?? "8787";
 const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+// The proof that goes with that name, which this daemon run alone can make: a name sent without it is refused.
+const PROOF = process.env.INTENTIC_TURN_PROOF ?? "";
 // Set by the editor's "Run on <device>" in the terminal it opens (hosts/runs/runs.routes.ts): what lets that run act on its
 // one computer.
 const RUN_GRANT = process.env.INTENTIC_RUN_GRANT ?? "";
@@ -175,6 +177,10 @@ const call = (method, path, body) =>
         req.setHeader("x-intentic-agent", token());
         if (CONVERSATION !== "") {
             req.setHeader("x-intentic-conversation", CONVERSATION);
+            // The daemon believes the name only with its proof (seams/workload-stamp.ts TURN_PROOF_ENV).
+            if (PROOF !== "") {
+                req.setHeader("x-intentic-turn-proof", PROOF);
+            }
         }
         if (RUN_GRANT !== "") {
             req.setHeader("x-intentic-run-grant", RUN_GRANT);
@@ -411,6 +417,10 @@ const download = (route, part) =>
         req.setHeader("x-intentic-agent", token());
         if (CONVERSATION !== "") {
             req.setHeader("x-intentic-conversation", CONVERSATION);
+            // The daemon believes the name only with its proof (seams/workload-stamp.ts TURN_PROOF_ENV).
+            if (PROOF !== "") {
+                req.setHeader("x-intentic-turn-proof", PROOF);
+            }
         }
         if (RUN_GRANT !== "") {
             req.setHeader("x-intentic-run-grant", RUN_GRANT);

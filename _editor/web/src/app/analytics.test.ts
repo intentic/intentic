@@ -59,7 +59,7 @@ describe(`initAnalytics`, () => {
 
     it(`identifies on session resolve and resets on sign-out`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
-        // Proxied `api_host` keeps replay alive past an ad blocker; `sessionStorage` keeps one visit as one recording
+        // Proxied `api_host` keeps the page talking to its own origin; `sessionStorage` keeps one visit as one recording
         // across reloads.
         expect(posthog.init).toHaveBeenCalledWith(
             `phc_test`,
@@ -68,7 +68,7 @@ describe(`initAnalytics`, () => {
 
         user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
-        expect(posthog.identify).toHaveBeenCalledWith(`u1`, { email: `a@b.c`, name: `A`, internal_account: false });
+        expect(posthog.identify).toHaveBeenCalledWith(`u1`, { internal_account: false });
 
         user.value = null;
         await nextTick();
@@ -177,40 +177,43 @@ describe(`initAnalytics`, () => {
         expect(mocked(app.init).mock.calls.at(-1)![1]).toMatchObject({ persistence: `sessionStorage` });
     });
 
-    it(`tells one run of the desktop app from the next by the launch id its webview carries`, async () => {
-        const { posthog } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null }, `launch-7`);
-        expect(posthog.register).toHaveBeenCalledWith({ desktop_launch_id: `launch-7` });
-
-        jest.clearAllMocks();
-        const { posthog: without } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
-        expect(without.register).not.toHaveBeenCalledWith(expect.objectContaining({ desktop_launch_id: expect.anything() }));
-    });
-
     // Without a client tag, the desktop app (which loads this SPA) and a browser tab look like the same row, broken
-    // down by user agent instead. The install id joins this to what the app's own screens report.
+    // down by user agent instead.
     it(`tags every event with the client, and names the app when it is running inside one`, async () => {
         const { posthog: browser } = await bootAnalytics(`phc_test`);
         expect(browser.register).toHaveBeenCalledWith({ client: `browser` });
 
         const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
-        expect(app.register).toHaveBeenCalledWith({ client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` });
+        expect(app.register).toHaveBeenCalledWith({ client: `desktop`, desktop_version: `1.15.1` });
     });
 
-    // The app's own screens report under its install id: folded into the account signed in here, its events land on the
-    // same person. A browser tab has no install to fold in.
-    it(`folds the desktop app's install into the account that signs in inside it, and only there`, async () => {
-        const { posthog: browser } = await bootAnalytics(`phc_test`);
-        user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
-        await nextTick();
-        expect(browser.alias).not.toHaveBeenCalled();
-
-        user.value = null;
-        await nextTick();
-        jest.clearAllMocks();
-        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
+    // The app's own events go under its random install id (the desktop app's analytics.ts and launch.rs). Nothing the
+    // page sends names that install or its launch, and nothing folds it into the account, so PostHog can never join a
+    // device's install, launch and crash history to a signed-in person.
+    it(`never joins the desktop app's install or launch to the account that signs in inside it`, async () => {
+        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null }, `launch-7`);
         user.value = { id: `u2`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
-        expect(app.alias).toHaveBeenCalledWith(`install-abc`);
+
+        expect(app.alias).not.toHaveBeenCalled();
+        expect(app.identify).toHaveBeenLastCalledWith(`u2`, { internal_account: false });
+        const registered = mocked(app.register).mock.calls.flatMap(([properties]) => Object.entries(properties));
+        const said = new Set(registered.map(([key, value]) => `${key}=${String(value)}`));
+        expect([...said].filter((entry) => entry.includes(`install`) || entry.includes(`launch`))).toEqual([]);
+        user.value = null;
+        await nextTick();
+    });
+
+    // The person is the account id, and nothing that names them: their email and name stay with the platform.
+    it(`identifies the account by its id alone, never its email or name`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        user.value = { id: `u-plain`, email: `someone@example.com`, name: `Someone`, image: null };
+        await nextTick();
+
+        const sent = JSON.stringify(mocked(posthog.identify).mock.calls);
+        expect([sent.includes(`someone@example.com`), sent.includes(`Someone`)]).toEqual([false, false]);
+        user.value = null;
+        await nextTick();
     });
 
     // `reset()` empties the store super properties live in, so without re-registering, every event after a sign-out
@@ -228,9 +231,7 @@ describe(`initAnalytics`, () => {
         await nextTick();
 
         expect(mocked(posthog.register).mock.calls.length).toBeGreaterThan(said);
-        expect(mocked(posthog.register).mock.calls.at(-1)).toEqual([
-            { client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` },
-        ]);
+        expect(mocked(posthog.register).mock.calls.at(-1)).toEqual([{ client: `desktop`, desktop_version: `1.15.1` }]);
     });
 
     // The team's own test machines are told from real users' by this mark, whatever network they report from: the
@@ -271,7 +272,7 @@ describe(`initAnalytics`, () => {
         user.value = { id: `u-team`, email: `owner@intentic.test`, name: `O`, image: null, internal: true };
         await nextTick();
         expect(posthog.register).toHaveBeenCalledWith({ internal: true });
-        expect(posthog.identify).toHaveBeenLastCalledWith(`u-team`, { email: `owner@intentic.test`, name: `O`, internal_account: true });
+        expect(posthog.identify).toHaveBeenLastCalledWith(`u-team`, { internal_account: true });
 
         jest.clearAllMocks();
         user.value = null;
@@ -280,25 +281,17 @@ describe(`initAnalytics`, () => {
         await nextTick();
         expect(posthog.register).not.toHaveBeenCalledWith({ internal: true });
         expect(posthog.unregister).toHaveBeenCalledWith(`internal`);
-        expect(posthog.identify).toHaveBeenLastCalledWith(`u-person`, { email: `person@example.com`, name: `P`, internal_account: false });
+        expect(posthog.identify).toHaveBeenLastCalledWith(`u-person`, { internal_account: false });
         user.value = null;
         await nextTick();
     });
 
-    // EasyPrivacy blocks bare `/posthog-recorder.js` and `/dead-clicks-autocapture.js` on any host, so proxying alone
-    // still loses replay to Brave/uBlock; the `sdk.` prefix misses those rules, and nginx.conf strips it back off.
-    it(`prefixes SDK script filenames so filename-anchored blocker rules miss them`, async () => {
+    // A content blocker that names PostHog's own script files gets to block them: the SDK loads them under their own
+    // names, with no renaming hook for a blocker rule to miss.
+    it(`loads the SDK's scripts under their own names`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
-        const { prepare_external_dependency_script: prepare } = mocked(posthog.init).mock.calls[0]![1]!;
-
-        const rewrite = (src: string) => {
-            const script = { src } as HTMLScriptElement;
-            return prepare!(script)?.src;
-        };
-        expect(rewrite(`https://app.intentic.dev/wire/static/posthog-recorder.js?v=1.398.2`)).toBe(
-            `https://app.intentic.dev/wire/static/sdk.posthog-recorder.js?v=1.398.2`,
-        );
-        expect(rewrite(`https://app.intentic.dev/wire/array/phc_test/config.js`)).toBe(`https://app.intentic.dev/wire/array/phc_test/sdk.config.js`);
+        const config = mocked(posthog.init).mock.calls[0]![1]!;
+        expect(Object.keys(config)).not.toContain(`prepare_external_dependency_script`);
     });
 });
 

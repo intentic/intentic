@@ -10,6 +10,7 @@ import { effectiveHostGuards } from "./host-guards.js";
 import { createSecretHostRoutes, type SecretHostRoutesDeps } from "./secret-hosts.routes.js";
 import { fakeDevices, fakeKeyring, type FakeKeyring, pointerOf } from "../device/keyring.testing.js";
 import { secretsSliceFake } from "../secrets-slice.testing.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // Who may change a secret's host guard turns on the change, not a role: turning it on or taking hosts off it is open to
 // every caller the route admits; turning it off or adding a host is the owner's, asked for on a card when the agent's
@@ -53,7 +54,7 @@ const setup = (options: {
 
 const signedIn: OrpcContext = { headers: new Headers(), method: "PUT", url: "/secrets/hosts/GITHUB_TOKEN" };
 // The agent's CLI: the per-boot token the grant middleware already checked, and the conversation its shell belongs to.
-const agentCli: OrpcContext = { ...signedIn, headers: new Headers({ "x-intentic-agent": "agent-token", "x-intentic-conversation": "conv-7" }) };
+const agentCli: OrpcContext = { ...signedIn, headers: new Headers({ "x-intentic-agent": "agent-token", ...provenTurnHeaders("conv-7") }) };
 
 const GITHUB_ON = { subject: "GITHUB_TOKEN", kind: "secret" as const, guard: true, hosts: ["api.github.com"] };
 
@@ -114,6 +115,17 @@ test("a loosening from the agent's CLI asks the owner in its conversation, and i
         await errorCode(call(declined.routes.setHosts, { subject: "GITHUB_TOKEN", guard: false, hosts: ["api.github.com"] }, { context: agentCli })),
     ).toBe("FORBIDDEN");
     expect(await declined.slice.secretHostGuards.list()).toEqual([GITHUB_ON]);
+
+    // Every turn presents the same agent token: a conversation named without its proof, in the header or the body, has
+    // its card raised nowhere and the guard left as it was.
+    const forged = setup({ owner: false, widen: { approvedBy: "owner@example.com" } });
+    await forged.slice.secretHostGuards.set(GITHUB_ON);
+    const bare: OrpcContext = { ...signedIn, headers: new Headers({ "x-intentic-agent": "agent-token", "x-intentic-conversation": "conv-7" }) };
+    const loosen = { subject: "GITHUB_TOKEN", guard: false, hosts: ["api.github.com"] };
+    expect(await errorCode(call(forged.routes.setHosts, loosen, { context: bare }))).toBe("FORBIDDEN");
+    expect(await errorCode(call(forged.routes.setHosts, { ...loosen, conversationId: "conv-other" }, { context: agentCli }))).toBe("FORBIDDEN");
+    expect(forged.widened).toEqual([]);
+    expect(await forged.slice.secretHostGuards.list()).toEqual([GITHUB_ON]);
 });
 
 test("the owner turns a guard off and back on without a card, and the list is kept between", async () => {

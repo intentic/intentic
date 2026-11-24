@@ -4,7 +4,6 @@ import { AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@in
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
 import { type ChildLookups, waitForWork, workWaitAnswer } from "./waiting/work-wait.js";
-import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { childLandingWords } from "../../conversations/land/child-lands.js";
@@ -15,17 +14,29 @@ import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 import { markSpentByHand, unmarkSpentByHand } from "../../usage/spent-by-hand.js";
 import { opt } from "../../opt.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { turnClaimOf, unprovenTurnWords } from "../../seams/workload-stamp.js";
 import { worktreeOf } from "../../conversations/registry/agents-store.js";
 import { parseJsonOr } from "@intentic/base/json";
 
 // The `agents` CLI's shell door onto the child-agent service, using the same engine as the in-process tool calls.
 // Scoped to the agent token; the real gate is the arming planTurn already recorded (children.ts armSupervisor), not the
-// token. Conversation comes from `x-intentic-conversation`, else the sole live turn.
+// token. Conversation comes from `x-intentic-conversation`, believed only with its turn's proof (seams/workload-stamp.ts):
+// every turn presents the same agent token, so a bare name once let one conversation spawn, steer and cancel as another.
+// (2026-11-24) A shell naming none is no longer read as the sole live turn: an agent that unset its stamp makes the same
+// call, and could have been read as another conversation's turn once its own had ended.
 
-const conversationOf = (services: Pick<Services, "conversations">, c: Context<AppEnv>): string | undefined => {
-    const named = c.req.header("x-intentic-conversation");
-    return named !== undefined && named !== "" ? named : soleLiveConversation(services.conversations);
+const conversationOf = (c: Context<AppEnv>): string | undefined => {
+    const claim = turnClaimOf((name) => c.req.header(name));
+    return claim.kind === "proven" ? claim.conversationId : undefined;
 };
+
+// A name without its proof is refused before any handler reads it, in one place for every route of the door.
+const provenOrNone =
+    (route: (c: Context<AppEnv>) => Promise<Response>) =>
+    async (c: Context<AppEnv>): Promise<Response> => {
+        const claim = turnClaimOf((name) => c.req.header(name));
+        return claim.kind === "unproven" ? c.json({ ok: false, message: `Refused: ${unprovenTurnWords(claim.named)}.` }, 403) : await route(c);
+    };
 
 const SpawnBodySchema = z.object({
     prompt: z.string().min(1),
@@ -132,9 +143,9 @@ const childLookupsOf = (services: Services): ChildLookups => ({
 const heldWorkRoute =
     (services: Services, door: "merge" | "settle") =>
     async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
         const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
@@ -152,9 +163,9 @@ const heldWorkRoute =
 const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation to file the child under: this shell carries no turn stamp and nothing is live." }, 400);
+            return c.json({ ok: false, message: "No conversation to file the child under: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
         const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
@@ -215,9 +226,9 @@ const createChildrenRoutes = (services: Services) => ({
     },
     /** POST /children/wait — long-poll on this conversation's children and background commands. */
     wait: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ outcome: "unknown-target", note: "No conversation: this shell carries no turn stamp and nothing is live." });
+            return c.json({ outcome: "unknown-target", note: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." });
         }
         const parsed = WaitBodySchema.safeParse(waitBody(await c.req.text()));
         if (!parsed.success) {
@@ -236,9 +247,9 @@ const createChildrenRoutes = (services: Services) => ({
     },
     /** POST /children/send — steer a working child, or run a follow-up turn on a settled one. */
     send: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
         const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
@@ -253,9 +264,9 @@ const createChildrenRoutes = (services: Services) => ({
     },
     /** POST /children/cancel — stop a child's running turn, its pending start, or the re-run the sandbox booked for it. */
     cancel: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
         const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
@@ -275,9 +286,9 @@ const createChildrenRoutes = (services: Services) => ({
     settle: heldWorkRoute(services, "settle"),
     /** POST /children/answer — settle a child's question; consent cards refuse, they are the owner's. */
     answer: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
         const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
@@ -301,9 +312,9 @@ const createChildrenRoutes = (services: Services) => ({
     },
     /** POST /children/delegate — hand a task to another sandbox: over a link card, or (`via: "person"`) as the person it acts for. */
     delegate: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation to file the task under: this shell carries no turn stamp and nothing is live." }, 400);
+            return c.json({ ok: false, message: "No conversation to file the task under: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
         const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
@@ -320,7 +331,7 @@ const createChildrenRoutes = (services: Services) => ({
     },
     /** GET /children/links — the linked sandboxes this conversation's turn may hand work to, and whether each answers. */
     links: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         const supervisor = conversationId === undefined ? undefined : supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
             return c.json({ ok: false, message: "This conversation may not hand work on: no turn with full agency has run on it." }, 403);
@@ -329,7 +340,7 @@ const createChildrenRoutes = (services: Services) => ({
     },
     /** GET /children — this conversation's children, every kind, live first. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
+        const conversationId = conversationOf(c);
         // The header is the caller's to write: a member reads only the children of a conversation they may read.
         const reads = await turnReader(services, c);
         const sessions =
@@ -347,19 +358,19 @@ const createChildrenRoutes = (services: Services) => ({
 export const childrenRawRoutes = defineRawRoutes((services: Services) => {
     const childrenRoutes = createChildrenRoutes(services);
     return {
-        "POST /children/spawn": childrenRoutes.spawn,
+        "POST /children/spawn": provenOrNone(childrenRoutes.spawn),
         // What a child could be started on now, with each model's remaining allowance.
-        "GET /children/providers": childrenRoutes.providers,
-        "POST /children/providers/spent": childrenRoutes.markSpent,
-        "POST /children/wait": childrenRoutes.wait,
-        "POST /children/send": childrenRoutes.send,
-        "POST /children/answer": childrenRoutes.answer,
-        "POST /children/cancel": childrenRoutes.cancel,
-        "POST /children/merge": childrenRoutes.merge,
-        "POST /children/settle": childrenRoutes.settle,
+        "GET /children/providers": provenOrNone(childrenRoutes.providers),
+        "POST /children/providers/spent": provenOrNone(childrenRoutes.markSpent),
+        "POST /children/wait": provenOrNone(childrenRoutes.wait),
+        "POST /children/send": provenOrNone(childrenRoutes.send),
+        "POST /children/answer": provenOrNone(childrenRoutes.answer),
+        "POST /children/cancel": provenOrNone(childrenRoutes.cancel),
+        "POST /children/merge": provenOrNone(childrenRoutes.merge),
+        "POST /children/settle": provenOrNone(childrenRoutes.settle),
         // A task handed to another of the owner's sandboxes over a link card, and which ones this turn may hand work to.
-        "POST /children/delegate": childrenRoutes.delegate,
-        "GET /children/links": childrenRoutes.links,
-        "GET /children": childrenRoutes.list,
+        "POST /children/delegate": provenOrNone(childrenRoutes.delegate),
+        "GET /children/links": provenOrNone(childrenRoutes.links),
+        "GET /children": provenOrNone(childrenRoutes.list),
     };
 });

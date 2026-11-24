@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { PoolSignal } from "@intentic/api-contract/ingress";
@@ -6,15 +7,20 @@ import type { Logger } from "pino";
 import { ingressServer } from "../ingress.js";
 
 /* RUN-OUTS SHARED ACROSS SANDBOXES (docs/architecture/account-routing.md). A daemon whose turn was refused for a spent
- * allowance says so here, naming the provider account only by a fingerprint it made from the provider's own account id
- * (a sha256, never the id, never a credential); the owner's other sandboxes signed in to the same account ask for the
- * fingerprints they hold and file what they hear in their refusal ledger. No usage reading travels.
+ * allowance says so here, naming the provider account only by a fingerprint it made from the provider's own account ids
+ * (an HMAC under its owner's key, `poolSignalKey` below; never the id, never a credential); the owner's other sandboxes
+ * signed in to the same account ask for the fingerprints they hold and file what they hear in their refusal ledger. No
+ * usage reading travels.
  *
- * Reads are bounded by the fingerprint, not by the owner (2026-11-24): the hash is made from ids only a holder of the
- * account's token reads (Claude's account and organisation uuids, Codex's account and user ids), so asking for one is
- * already holding the account, and a run-out is what that holder would meet on its next turn anyway. Bounding by owner
- * as well would keep one row per account per owner, and drop the run-out an account shared by two owners' sandboxes
- * (a seat a member brought into the owner's sandbox) is most useful for. */
+ * Every signal is its reporting sandbox's owner's, and a read answers only that owner's rows (2026-11-24). Keyed by the
+ * fingerprint alone, with one unsalted sha256 for every owner, the table tied together the Intentic accounts whose
+ * sandboxes held one provider seat, and a hash over a Google email could be confirmed by guessing the address. The
+ * per-owner key makes one seat held by two owners two unrelated values, and the owner bound makes sure neither owner's
+ * sandboxes are ever answered the other's. A run-out a member's own seat met in the owner's sandbox and in the member's
+ * is no longer heard across the two: each side learns it at its own next refusal, as it did before signals existed. A
+ * daemon from before the key still reports a bare sha256, which the platform cannot tell apart: it is kept and read
+ * inside its owner's rows like any other, so no owner is answered another's, and holds the unkeyed value only until
+ * that daemon updates. */
 
 type PoolSignalsEnv = { Variables: { logger: Logger } };
 
@@ -48,9 +54,28 @@ export const poolSignalsHttpRoutes = ({ prisma, now = () => new Date() }: PoolSi
     const app = new Hono<PoolSignalsEnv>();
     const ingress = ingressServer(app, `/pool-signals`);
 
-    // 404, not 401, for an unknown token, as the wallet's and the projects' doors answer.
+    // The calling sandbox and the owner its signals belong to; null for an unknown token, answered 404, not 401, as the
+    // wallet's and the projects' doors answer. Every sandbox row names its owner, so a caller found is one whose owner is.
     const callerOf = async (token: string | undefined) =>
-        token === undefined ? null : await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) }, select: { id: true } });
+        token === undefined
+            ? null
+            : await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) }, select: { id: true, ownerId: true } });
+
+    // The owner's key, minted by whichever of its sandboxes asks first. Two asking at once both mint: the insert that
+    // loses is dropped, and both read the one that won.
+    const keyOf = async (ownerId: string): Promise<string> => {
+        const held = await prisma.providerPoolKey.findUnique({ where: { ownerId }, select: { key: true } });
+        if (held !== null) {
+            return held.key;
+        }
+        await prisma.providerPoolKey.createMany({ data: [{ ownerId, key: randomBytes(32).toString(`hex`) }], skipDuplicates: true });
+        return (await prisma.providerPoolKey.findUniqueOrThrow({ where: { ownerId }, select: { key: true } })).key;
+    };
+
+    ingress(`poolSignalKey`, async (_c, kit) => {
+        const caller = await callerOf(kit.connectToken);
+        return caller === null ? kit.refuse(404, `unknown sandbox`) : kit.answer({ key: await keyOf(caller.ownerId) });
+    });
 
     ingress(`poolSignal`, async (_c, kit) => {
         const caller = await callerOf(kit.connectToken);
@@ -62,16 +87,16 @@ export const poolSignalsHttpRoutes = ({ prisma, now = () => new Date() }: PoolSi
         if (body === undefined || body.ranOutAt > at.getTime() + CLOCK_SKEW_MS) {
             return kit.refuse(400, `name a fingerprint, a pool, and when it ran out (epoch ms, not in the future)`);
         }
-        const key = { fingerprint: body.fingerprint, pool: body.pool };
-        const held = await prisma.providerPoolSignal.findUnique({ where: { fingerprint_pool: key }, select: { ranOutAt: true } });
-        // The latest run-out per account and pool: a slower sandbox's report of an older one keeps the newer on file.
+        const key = { ownerId: caller.ownerId, fingerprint: body.fingerprint, pool: body.pool };
+        const held = await prisma.providerPoolSignal.findUnique({ where: { ownerId_fingerprint_pool: key }, select: { ranOutAt: true } });
+        // The latest run-out per owner, account and pool: a slower sandbox's report of an older one keeps the newer on file.
         if (held === null || held.ranOutAt.getTime() <= body.ranOutAt) {
             const fields = {
                 ranOutAt: new Date(body.ranOutAt),
                 resetsAt: body.resetsAt === undefined ? null : new Date(body.resetsAt * 1000),
                 sandboxId: caller.id,
             };
-            await prisma.providerPoolSignal.upsert({ where: { fingerprint_pool: key }, create: { ...key, ...fields }, update: fields });
+            await prisma.providerPoolSignal.upsert({ where: { ownerId_fingerprint_pool: key }, create: { ...key, ...fields }, update: fields });
         }
         // Pruned as written: one indexed delete, and a table nobody writes holds nothing anybody reads.
         await prisma.providerPoolSignal.deleteMany({ where: { updatedAt: { lt: new Date(at.getTime() - POOL_SIGNAL_KEEP_MS) } } });
@@ -85,7 +110,7 @@ export const poolSignalsHttpRoutes = ({ prisma, now = () => new Date() }: PoolSi
         }
         const body = await kit.body();
         if (body === undefined) {
-            return kit.refuse(400, `name at most 32 fingerprints, each a sha256 in hex`);
+            return kit.refuse(400, `name at most 32 fingerprints, each 64 hex characters`);
         }
         if (body.fingerprints.length === 0) {
             return kit.answer({ signals: [] });
@@ -93,6 +118,8 @@ export const poolSignalsHttpRoutes = ({ prisma, now = () => new Date() }: PoolSi
         const at = now();
         const rows = await prisma.providerPoolSignal.findMany({
             where: {
+                // The caller's owner's own, and never another owner's, whatever fingerprints it names.
+                ownerId: caller.ownerId,
                 fingerprint: { in: body.fingerprints },
                 // The caller heard its own refusal first-hand.
                 sandboxId: { not: caller.id },

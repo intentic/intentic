@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { parseDisplaysJson, parseSwayOutputs, parseXrandrMonitors } from "./parse.js";
 import { environment, has, run } from "./run.js";
 import { DesktopError, type DisplayInfo, type Rect, type ScreenFrame } from "./types.js";
-import { PS_UTF8_OUTPUT } from "./windows/powershell.js";
+import { PS_UTF8_OUTPUT, psText } from "./windows/powershell.js";
 import { WINDOWS_DPI_AWARE } from "./windows/windows-dpi.js";
 import { nativeCapture, nativeFrame } from "./windows/native-capture.js";
 
@@ -36,7 +36,8 @@ const WINDOWS_CAPTURE = (out: string, region: Rect | undefined): string =>
         "$bmp = New-Object System.Drawing.Bitmap $w, $h;",
         "$g = [System.Drawing.Graphics]::FromImage($bmp);",
         "$g.CopyFromScreen($x, $y, 0, 0, $bmp.Size);",
-        `$bmp.Save('${out}', [System.Drawing.Imaging.ImageFormat]::Png);`,
+        // As data (powershell.ts): the temp folder is under the account's own name, and O'Brien's has a quote in it.
+        `$bmp.Save(${psText(out)}, [System.Drawing.Imaging.ImageFormat]::Png);`,
         "$g.Dispose(); $bmp.Dispose();",
     ].join(" ");
 

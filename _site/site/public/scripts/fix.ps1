@@ -559,10 +559,11 @@ function Test-IntenticIc([string]$Path) {
 }
 
 # Get-IntenticChecksumRefusal: why the file at $Path is not the asset $Asset the release at $Base published, by the
-# SHA256SUMS beside it (@{ Why; Fix }), or $null when it is. A release from before its SHA256SUMS covered ic lists no
-# ic-* asset at all, and has nothing to check against. IC_SKIP_CHECKSUM=1 installs ic unchecked from a server that
-# publishes no SHA256SUMS; it never lets a mismatch through. The release also signs SHA256SUMS (minisign); that
-# signature is the machine agent's to check, before it replaces ic or itself.
+# SHA256SUMS beside it (@{ Why; Fix }), or $null when it is. A sums file that does not list $Asset (a release from
+# before its SHA256SUMS covered ic, 2026-10-16) vouches for nothing and is refused (2026-11-24). IC_SKIP_CHECKSUM=1
+# installs ic unchecked from a server that publishes no SHA256SUMS or one that lists no ic; it never lets a mismatch
+# through. The release also signs SHA256SUMS (minisign); that signature is the machine agent's to check, before it
+# replaces ic or itself.
 function Get-IntenticChecksumRefusal([string]$Path, [string]$Asset, [string]$Base) {
     $SumsHost = ([uri]$Base).Host
     $SumsFile = "$Path.SHA256SUMS"
@@ -582,19 +583,15 @@ function Get-IntenticChecksumRefusal([string]$Path, [string]$Asset, [string]$Bas
         return @{ Why = "$SumsHost served ic but not the SHA256SUMS to check it against."; Fix = 'run the same command again; IC_SKIP_CHECKSUM=1 installs ic unchecked from a server that publishes no SHA256SUMS.' }
     }
     $Want = ''
-    $Listed = $false
     foreach ($Line in $Sums) {
-        if ($Line -match '^([0-9a-fA-F]{64}) [ *](?:\./)?(\S+)\s*$') {
-            if ($Matches[2] -eq $Asset) { $Want = $Matches[1].ToLowerInvariant() }
-            if ($Matches[2] -like 'ic-*') { $Listed = $true }
-        }
+        if ($Line -match '^([0-9a-fA-F]{64}) [ *](?:\./)?(\S+)\s*$' -and $Matches[2] -eq $Asset) { $Want = $Matches[1].ToLowerInvariant() }
     }
     if (-not $Want) {
-        if (-not $Listed) {
-            Write-IntenticSay "this release's SHA256SUMS predates checksums for ic, so the download is not checked."
+        if ($env:IC_SKIP_CHECKSUM -eq '1') {
+            Write-IntenticWarn "the release's SHA256SUMS lists no $Asset, so ic is installed unchecked (IC_SKIP_CHECKSUM=1)."
             return $null
         }
-        return @{ Why = "the release's SHA256SUMS lists no $Asset, so the download cannot be checked."; Fix = 'run the same command again; if it says the same, report it: the release is missing a checksum.' }
+        return @{ Why = "the release's SHA256SUMS lists no $Asset, so the download cannot be checked."; Fix = 'run the same command again; if it says the same, report it: the release is missing a checksum. IC_SKIP_CHECKSUM=1 installs ic unchecked from a release older than its checksums.' }
     }
     # Get-FileHash is Windows PowerShell 4 and later; .NET's own SHA256 answers the same where it is missing.
     $Got = ''

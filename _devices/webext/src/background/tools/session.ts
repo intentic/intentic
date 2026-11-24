@@ -1,7 +1,8 @@
 import { type WebExtCookie, webextSessionUrl } from "@intentic/sandbox-contract/webext";
 import { askPerson } from "../asking.js";
-import { assertScope, RefusedError, siteOf } from "../policy.js";
+import { assertScope, RefusedError } from "../policy.js";
 import { type SandboxKey, store } from "../store.js";
+import { siteCookies } from "./site-cookies.js";
 import { targetTab } from "./tab-access.js";
 
 // Hands a site's session to the sandbox: the only place a credential leaves this browser. Gated by the cookies
@@ -13,13 +14,6 @@ import { targetTab } from "./tab-access.js";
 const sameSite = (value: chrome.cookies.Cookie["sameSite"]): WebExtCookie["sameSite"] =>
     value === "strict" ? "Strict" : value === "no_restriction" ? "None" : "Lax";
 
-// Registrable-ish domain: last two labels, or the host itself if shorter. Not a public-suffix list; worst case
-// (co.uk) reads a few extra cookies from an already-signed-in site.
-const cookieDomain = (host: string): string => {
-    const labels = host.split(".");
-    return labels.length <= 2 ? host : labels.slice(-2).join(".");
-};
-
 export const connectSite = async (from: SandboxKey, account: string, tabId?: number): Promise<string> => {
     const scopes = await store.scopes(from);
     assertScope(scopes, "cookies");
@@ -29,23 +23,23 @@ export const connectSite = async (from: SandboxKey, account: string, tabId?: num
     if (sandbox === undefined) {
         throw new RefusedError(`This browser is not paired with a sandbox any more.`);
     }
+    // The site is the tab's host: what goes is what this browser sends it (site-cookies.ts), never a neighbour's.
     const host = new URL(tab.url).hostname;
-    const domain = cookieDomain(host);
 
     const agreed = await askPerson(
         from,
         tab,
-        `Hand your ${domain} sign-in to the sandbox account "${account}"? It will then be able to use ${domain} as you, without this browser open.`,
+        `Hand your ${host} sign-in to the sandbox account "${account}"? It will then be able to use ${host} as you, without this browser open.`,
         120_000,
         // allow(silent-catch): a page that went away before it could ask is no agreement, and is refused as one
     ).catch(() => false);
     if (!agreed) {
-        throw new RefusedError(`They did not agree to hand over the ${domain} session. Leave it: the work can be done here, in their browser.`);
+        throw new RefusedError(`They did not agree to hand over the ${host} session. Leave it: the work can be done here, in their browser.`);
     }
 
-    const jar = await chrome.cookies.getAll({ domain });
+    const jar = await siteCookies(tab.url);
     if (jar.length === 0) {
-        throw new RefusedError(`There is no ${domain} session in this browser to hand over.`);
+        throw new RefusedError(`There is no ${host} session in this browser to hand over.`);
     }
     // expires is omitted, not set to undefined: Chromium treats those two differently for a session cookie.
     const cookies: WebExtCookie[] = jar.slice(0, 300).map((cookie) => {
@@ -67,12 +61,12 @@ export const connectSite = async (from: SandboxKey, account: string, tabId?: num
     const response = await fetch(webextSessionUrl(sandbox.url), {
         method: "POST",
         headers: { authorization: `Bearer ${sandbox.token}`, "content-type": "application/json" },
-        body: JSON.stringify({ account, origin: domain, cookies }),
+        body: JSON.stringify({ account, origin: host, cookies }),
     });
     const answer = (await response.json().catch(() => ({}))) as { message?: string };
     if (!response.ok) {
         // Prefers the daemon's own message, which names the fixable problem.
         throw new RefusedError(answer.message ?? `The sandbox refused the session (${response.status}).`);
     }
-    return answer.message ?? `Handed the ${siteOf(domain)} session to "${account}".`;
+    return answer.message ?? `Handed the ${host} session to "${account}".`;
 };

@@ -1199,7 +1199,9 @@ Open it from the tray (**Repair Intentic…**), the workspace recovery panel (**
 
 ## Product analytics
 
-`POSTHOG_KEY` enables reporting in a release build. `POSTHOG_HOST` selects the capture origin for both the webview and Rust launch reporter; it defaults to `https://us.i.posthog.com` and can be set to `https://eu.i.posthog.com`. The app records events only after the editor's Data & privacy consent is allowed.
+`POSTHOG_KEY` enables reporting in a release build. `POSTHOG_HOST` selects the capture origin for both the webview and Rust launch reporter; it defaults to `https://us.i.posthog.com` and can be set to `https://eu.i.posthog.com`. The workspace's Data & privacy answer decides, kept in the config folder's `analytics-consent` through `intentic://analytics`. With no answer stored, the web's rule for who is asked first decides (`launch.rs` `allowed_unasked`, the web's `analyticsConsent.ts`): the app sends only when the system's IANA time zone is known and outside the EEA, the UK and Switzerland. The launcher's `analyticsAllowed` is the same answer. Nothing is queued while it may not send, and a queue found then is deleted rather than sent after a later yes.
+Its events go under the install's random id. The workspace window never sends that id or the launch id, and never aliases it to the signed-in account (the web's `analytics.ts`), so an install's events are never joined to a person.
+_2026-11-24: no answer used to read as yes everywhere, so a European install the workspace never asked sent its launches, crashes and setup steps._
 
 **The team's own installs** send `internal: true` on every event: the Rust launch reports (`launch.rs` `event_body`),
 this app's own screens (`src/analytics.ts`), and the workspace page, which the app tells through `internal` on
@@ -1224,7 +1226,7 @@ PostHog stay as a second net._
 
 Rust queues `desktop_launched` for every process start, including launches into Workspace or only the tray.
 It records the opened face, a new `launch_id` and the previous run's `previous_exit_reason`.
-Every webview gets the same string as `window.__INTENTIC_LAUNCH_ID__`. Crash reports retain the panic's own
+Every webview gets the same string as `window.__INTENTIC_LAUNCH_ID__`, which the workspace's analytics do not send. Crash reports retain the panic's own
 RFC3339 event timestamp, `at_exit` and `exit_cause` (`quit`, `restart`, `update`, `session-end`, `unknown`).
 Older launch markers and queued reports remain readable. Consent still applies to this queue.
 

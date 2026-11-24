@@ -124,8 +124,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/webext/src/page/driver.ts#collectPage#lines": {
-        "count": 135,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 144,
+        "why": "the secret-field rule (2026-11-24) must sit inside the function executeScript serializes; a second injection per snapshot was the alternative"
     },
     "_devices/webext/src/page/driver.ts#roleOf#cognitive": {
         "count": 34,

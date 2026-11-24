@@ -55,6 +55,7 @@ export interface PaidFetchRequest {
     // The agent's own ceiling for this call; narrows the owner's bound, never raises it.
     readonly maxUsd: string | undefined;
     readonly why: string | undefined;
+    // The turn asking, as it proved itself (seams/workload-stamp.ts); undefined is a payment no turn vouches for.
     readonly conversationId: string | undefined;
     readonly signal: AbortSignal;
 }
@@ -187,6 +188,15 @@ const ownersApproval = async (
         return refusalAnswer(403, "declined", "The owner skipped this payment: nothing was spent. Continue without it.");
     }
     return answered;
+};
+
+// Whether the auto-approve band is off for this payment: its turn is tainted, or no live turn vouches for it.
+// (2026-11-24) No conversation named counts as unvouched (every turn presents the same agent token, so one that dropped
+// its stamp was spending inside the band its taint had suspended), and so does one with no live turn (a reserved owner,
+// a process its finished turn left behind).
+const unvouchedOrTainted = (deps: PaymentGateDeps, conversationId: string | undefined): boolean => {
+    const vouching = conversationId === undefined ? undefined : cardRun(deps, conversationId);
+    return vouching === undefined || vouching.conversationId !== conversationId || deps.tainted(vouching.conversationId);
 };
 
 export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRequest): Promise<PaidAnswer> => {
@@ -335,9 +345,9 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     // Inside the auto-approve band (and the allow list, if any), the owner's standing delegation covers the spend and
     // no card goes up; otherwise it parks on a card, and no live conversation means no card can go up at all.
     // The band is suspended on a tainted turn (outside content replaces the agent's own judgment): the payment still
-    // happens, it just asks first.
+    // happens, it just asks first. So is one no live turn vouches for (`unvouchedOrTainted`).
     const allow = hostListOf(config.allow);
-    const tainted = request.conversationId !== undefined && deps.tainted(request.conversationId);
+    const tainted = unvouchedOrTainted(deps, request.conversationId);
     const auto =
         !tainted &&
         listedHost !== undefined &&

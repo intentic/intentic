@@ -1,6 +1,7 @@
 import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
+import { provenTurnOrRefuse } from "../../auth/scope/proven-turn.js";
 import { noteAudit } from "../../audit/audit-http.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
@@ -21,8 +22,8 @@ export const createWantRoutes = (services: WantRoutesDeps) => {
                 origin: input.origin,
                 ...opt("username", input.username),
                 detail: input.why,
-                // Body field first, else the header every agent CLI sends.
-                ...opt("conversationId", input.conversationId ?? context.headers.get("x-intentic-conversation") ?? undefined),
+                // The turn the header proves; a body naming another, or a name without its proof, is refused.
+                ...opt("conversationId", provenTurnOrRefuse(context.headers, input.conversationId)),
                 ...opt("signal", signal),
             });
         }),

@@ -40,6 +40,66 @@ test("the walk answers in the same language the CDP driver speaks", () => {
     expect(rendered).not.toContain(`hunter2`);
 });
 
+// A password reaches the agent by none of the routes a page offers: a role it gives the field, a "show password" button
+// that makes it a text input, a field that says it holds one only in its autocomplete, or a value read as a name.
+const valuesIn = (): string => JSON.stringify(collectPage().elements);
+
+test("a password input's own role does not make it a textbox with a value", () => {
+    document.body.innerHTML = `<input type="password" role="textbox" aria-label="Password" value="hunter2" />`;
+    expect(collectPage().elements).toEqual([{ ref: "e0", role: "password", name: "Password", value: undefined, size: undefined }]);
+});
+
+test("a password field a show-password button turned into text stays secret for as long as the page does", () => {
+    document.body.innerHTML = `<input id="pw" type="password" aria-label="Password" value="hunter2" /><button>Show</button>`;
+    collectPage();
+    // What a site's own button does; the field is the same element, now plain text.
+    document.getElementById("pw")?.setAttribute("type", "text");
+    expect(valuesIn()).not.toContain("hunter2");
+    expect(collectPage().elements[0]).toMatchObject({ name: "Password", value: undefined });
+});
+
+test("a field whose autocomplete says it holds a password or a one-time code reports no value", () => {
+    document.body.innerHTML = `
+        <input aria-label="Current" autocomplete="current-password" value="hunter2" />
+        <input aria-label="New" autocomplete="NEW-PASSWORD" value="hunter3" />
+        <input aria-label="Code" autocomplete="one-time-code" value="481516" />
+        <input aria-label="Search" value="unpaid" />`;
+    const page = collectPage();
+    expect(page.elements.map((element) => [element.name, element.value])).toEqual([
+        ["Current", undefined],
+        ["New", undefined],
+        ["Code", undefined],
+        ["Search", "unpaid"],
+    ]);
+});
+
+test("a card number and its security code report no value, while the name on the card still does", () => {
+    document.body.innerHTML = `
+        <input aria-label="Card number" autocomplete="cc-number" value="4242424242424242" />
+        <input aria-label="CVC" autocomplete="billing cc-csc" value="123" />
+        <input aria-label="Name on card" autocomplete="cc-name" value="Ada Lovelace" />`;
+    expect(collectPage().elements.map((element) => [element.name, element.value])).toEqual([
+        ["Card number", undefined],
+        ["CVC", undefined],
+        ["Name on card", "Ada Lovelace"],
+    ]);
+});
+
+test("a password field with no label is not named by its value", () => {
+    document.body.innerHTML = `<input type="password" value="hunter2" /><input type="text" autocomplete="one-time-code" value="481516" />`;
+    expect(valuesIn()).not.toContain("hunter2");
+    expect(valuesIn()).not.toContain("481516");
+    expect(collectPage().elements.map((element) => element.role)).toEqual(["password", "textbox"]);
+});
+
+test("a form whose password field was turned into text is still asked about", () => {
+    document.body.innerHTML = `<form><input id="pw" type="password" /><button>Continue</button></form>`;
+    collectPage();
+    document.getElementById("pw")?.setAttribute("type", "text");
+    collectPage();
+    expect(describeRef("e1").sensitive).toBe(true);
+});
+
 test("elements inside a shadow root are found, because that is where half the web keeps its buttons", () => {
     const host = document.createElement("div");
     document.body.append(host);

@@ -48,8 +48,8 @@ flowchart LR
   `summarizeStats`, so the two cannot disagree.
 - Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists, all in the auth
   root: `sandbox-secrets.json`, the capability vault, `keyring-copies.json` (entries a keyring on the owner's computer shares in `copy` mode) and
-  `keyring-released.json` (values a keyring released for one use, which the daemon writes only so they mask here and
-  empties when it starts). Outside a sandbox that list is empty and only the credential-shaped patterns redact. The daemon's tool-result
+  `keyring-released.json` (values a keyring released for one use into a shell or a script, which the daemon writes only
+  so they mask here, drops ten minutes after each release, and empties when it starts). Outside a sandbox that list is empty and only the credential-shaped patterns redact. The daemon's tool-result
   masking imports `SECRET_STORES`, `surfaceForms`, `secretReference` and `SECRET_VALUE_MIN` from here, so the two lanes
   read the same stores and mask the same forms of a value to the same reference.
 - A value shorter than `SECRET_VALUE_MIN` (12) masks only where its context names a secret

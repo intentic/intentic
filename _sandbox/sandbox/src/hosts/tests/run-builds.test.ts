@@ -5,6 +5,7 @@ import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { createRunBuilds, MAX_HOLD_MS, RENEW_LAPSE_MS, waitingLine } from "../runs/run-builds.js";
 import { deviceRunRawRoutes, stopperName } from "../runs/device-runs.routes.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // While a run builds in the owner's tree, lands into that repository wait; a hold that is not renewed, or that outlives
 // any build, lets them go by itself.
@@ -82,9 +83,9 @@ test("a build holds the repository of the owner's tree it stands in, and an isol
             held: boolean;
         };
     const build = { target: "server", device: "rog" };
-    expect(await hold({ ...build, dir: `${WORKSPACE_ROOT}/game` }, { "x-intentic-conversation": "iso" })).toEqual({ held: false, why: expect.stringContaining("own checkout") });
+    expect(await hold({ ...build, dir: `${WORKSPACE_ROOT}/game` }, provenTurnHeaders("iso"))).toEqual({ held: false, why: expect.stringContaining("own checkout") });
     expect(await hold({ ...build, dir: "/elsewhere" }, {})).toEqual({ held: false, why: "/elsewhere is outside the workspace" });
-    expect(await hold({ ...build, dir: WORKSPACE_ROOT }, { "x-intentic-conversation": "home" })).toMatchObject({ held: true, repo: "root" });
+    expect(await hold({ ...build, dir: WORKSPACE_ROOT }, provenTurnHeaders("home"))).toMatchObject({ held: true, repo: "root" });
     // The editor's run names its repository, and a grant is never an isolated conversation's.
     expect(await hold({ ...build, dir: `${WORKSPACE_ROOT}/game/sub`, repo: "game" }, { "x-intentic-run-grant": "g", "x-intentic-conversation": "iso" })).toMatchObject({
         held: true,

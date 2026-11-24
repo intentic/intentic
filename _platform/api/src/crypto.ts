@@ -5,8 +5,16 @@ import type { Config } from "./config.js";
 // Account, the sandbox connect token, setup payloads). AES-256-GCM; the effective key is the SHA-256 of
 // SECRETS_KEY, so any sufficiently random string works as key material. Wire format:
 // enc1:<iv>:<auth tag>:<ciphertext>, all base64url. SECRETS_KEY unset → values pass through as plaintext
-// so unconfigured dev still boots (main.ts warns, matching the Google soft-warn pattern).
+// so unconfigured dev still boots (main.ts warns); production refuses to start without it (secretsKeyRefusal).
 const PREFIX = `enc1:`;
+
+// Why this process must not serve, or undefined when it may: production with no SECRETS_KEY would write every OAuth
+// token, connect token and setup payload in plaintext. Production is NODE_ENV, as sign-in.ts and the log format read it.
+// (2026-11-24) It was a warning alone, which a deploy that lost the variable would have logged and carried on past.
+export const secretsKeyRefusal = (config: Pick<Config, "secrets">, env: NodeJS.ProcessEnv = process.env): string | undefined =>
+    config.secrets.key === `` && env[`NODE_ENV`] === `production`
+        ? `SECRETS_KEY is unset in production: refusing to start rather than store OAuth and sandbox tokens in plaintext`
+        : undefined;
 
 const keyOf = (config: Config): Buffer | undefined =>
     config.secrets.key === `` ? undefined : createHash(`sha256`).update(config.secrets.key).digest();

@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { agentHome } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { assertPath, assertScope } from "../policy.js";
+import { assertHoldsNoProtected, assertPath, assertScope } from "../policy.js";
 
 // Files on somebody's device. Reads are bounded by the roots; writes need the roots AND the write switch, off by
 // default, and changing a file that exists needs the revision a read answered with. There is no delete tool:
@@ -277,7 +277,10 @@ const trashDir = (): string => join(agentHome("machine").dir, "trash");
 export const trashFile = async (path: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "write");
     const target = await assertPath(path, scopes, "trash", { link: "itself" });
-    await lstat(target);
+    // A folder goes whole, and with it any protected place inside it, to a trash this agent cannot read back.
+    if ((await lstat(target)).isDirectory()) {
+        await assertHoldsNoProtected(target, path, scopes, "trash");
+    }
     // Timestamped folder per removal, so two files of the same name never collide and the order of events is
     // readable straight from the directory listing.
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");

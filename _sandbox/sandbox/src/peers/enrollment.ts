@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { derivedMachineId, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
+import { loopbackProof, proofKeyOf } from "@intentic/sandbox-contract/protocol/doors/loopback-proof";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
@@ -264,6 +265,9 @@ export interface Enrollments<X extends object> {
     // Throws ManifestUnreadableError when the manifest exists and this build cannot read it: for a caller about to spend
     // something it cannot get back (a pairing) on a write that would then be refused.
     readonly requireReadable: () => Promise<void>;
+    // A machine agent's loopback challenge answered for the enrollment `key` names, or undefined when none does
+    // (sandbox-contract protocol/doors/loopback-proof.ts): the proof is keyed with the digest, which never leaves here.
+    readonly prove: (key: string, sandboxId: string, challenge: string) => Promise<string | undefined>;
 }
 
 // Each door's enrollments file, one family: a top-level key of its own, and each entry the digest plus whatever the door
@@ -335,6 +339,13 @@ export const runnerEnrollmentsDocument = defineDocument({
 // Any door's enrollments document.
 export type EnrollmentsDocument = DocumentSpec<z.ZodObject, readonly Conversion[], readonly string[], "object", false>;
 
+// A machine agent's loopback challenge answered with the digest its key names, among a door's records; undefined when
+// none is named so. Shared by every door that keeps `sha256(token)` (desktop-sync.ts keeps it as `tokenDigest`).
+export const answerChallenge = (digests: readonly string[], key: string, sandboxId: string, challenge: string): string | undefined => {
+    const digest = digests.find((held) => tokenEquals(proofKeyOf(held), key));
+    return digest === undefined ? undefined : loopbackProof(digest, sandboxId, challenge);
+};
+
 export const enrollments = <Shape extends z.ZodRawShape>(args: {
     // The door's document (its schema, built by the family above, is the one read with) and the file it opens, on
     // /history or a test's own; each door keeps its own name and top-level key, so this consolidates the mechanic, not
@@ -367,7 +378,6 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
         mode: 0o600,
         onUnreadable: "refuse",
     });
-
     const read = async (): Promise<Entry[]> => (await file.read())[args.key] ?? [];
     // A record without its digest and date: what a door's own rule and a reader get to see.
     const bare = (held: Entry): { readonly id: string } & X => {
@@ -471,5 +481,6 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
             return revoked;
         },
         requireReadable,
+        prove: async (key, sandboxId, challenge) => answerChallenge((await read()).map((entry) => entry.hash), key, sandboxId, challenge),
     };
 };

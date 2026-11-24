@@ -1,8 +1,10 @@
+import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { createRunGrants } from "../device-door.js";
 import { deviceDoorRawRoutes, type DeviceDoorServices, refusalFor, type DoorServices } from "../device-door.routes.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // Who may act on one of the owner's computers from a shell: an agent whose live turn mounts that computer, or a run the
 // owner started from the editor, for its one computer, while it lasts.
@@ -41,9 +43,24 @@ const ask = async (door: DoorServices, device: string, headers: Record<string, s
 
 test("an agent's shell reaches only the computers its own live turn mounts", async () => {
     const door = services();
-    expect((await ask(door, "rog", { "x-intentic-conversation": "conv-a" })).status).toBe(200);
-    expect(await ask(door, "omen", { "x-intentic-conversation": "conv-a" })).toMatchObject({ status: 403, error: expect.stringContaining(`"omen"`) });
-    expect((await ask(door, "rog", { "x-intentic-conversation": "conv-b" })).status).toBe(403);
+    expect((await ask(door, "rog", provenTurnHeaders("conv-a"))).status).toBe(200);
+    expect(await ask(door, "omen", provenTurnHeaders("conv-a"))).toMatchObject({ status: 403, error: expect.stringContaining(`"omen"`) });
+    expect((await ask(door, "rog", provenTurnHeaders("conv-b"))).status).toBe(403);
+});
+
+// Every turn presents the same agent token, so the name alone once let conv-b act as conv-a, which mounts rog.
+test("a conversation named without its turn's proof is refused, even one that mounts the computer", async () => {
+    const door = services();
+    const refusal = { status: 403, error: expect.stringContaining('names conversation "conv-a" without the proof its turn carries') };
+    expect(await ask(door, "rog", { "x-intentic-conversation": "conv-a" })).toEqual(refusal);
+    expect(await ask(door, "rog", { "x-intentic-conversation": "conv-a", "x-intentic-turn-proof": provenTurnHeaders("conv-b")["x-intentic-turn-proof"] })).toEqual(refusal);
+});
+
+// An agent that unset its stamp makes the same call as a shell naming none; the one live turn is not read into it.
+test("a shell naming no conversation is refused without asking which turns are live", async () => {
+    // Any read of the live turns throws, naming what it reached for.
+    const door: DoorServices = { ...services(), conversations: unstubbed<Services["conversations"]>("conversations", {}) };
+    expect(await ask(door, "rog", {})).toEqual({ status: 400, error: "no conversation named: run this from an agent's shell, or from a run started in the editor" });
 });
 
 test("a run from the editor reaches its own computer by its grant, and a grant decides alone when it is sent", async () => {
@@ -73,7 +90,7 @@ test("a computer's facts reach an agent's shell by the same rule, only the part 
     const app = new Hono<AppEnv>();
     app.get("/devices/:name/facts", deviceDoorRawRoutes(door)["GET /devices/{name}/facts"]);
     const asked = async (device: string): Promise<{ status: number; body: unknown }> => {
-        const response = await app.request(`/devices/${device}/facts`, { headers: { "x-intentic-conversation": "conv-a" } });
+        const response = await app.request(`/devices/${device}/facts`, { headers: provenTurnHeaders("conv-a") });
         return { status: response.status, body: await response.json() };
     };
     expect(await asked("rog")).toEqual({

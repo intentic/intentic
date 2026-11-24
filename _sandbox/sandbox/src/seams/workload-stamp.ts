@@ -12,7 +12,9 @@ export const WORKLOAD_ENV = "INTENTIC_TURN_OWNER";
 // every turn's CLIs present the same per-boot agent token, so on its own `x-intentic-conversation` proves nothing: a turn
 // could name another conversation and read as it. Beside the name every workload gets an HMAC of it under a key this
 // daemon run holds only in memory (never in an environment a child inherits), and the routes that read a conversation's
-// words for a turn (auth/scope/turn-reader.ts) believe a name only with its proof. A jailed turn
+// words for a turn (auth/scope/turn-reader.ts) believe a name only with its proof. (2026-11-24) So do the doors that act
+// for the turn they are told of (turnClaimOf): the `devices` door, the `agents` CLI's children and fleet writes, and the
+// `sandboxes` CLI's routes, which refuse a name without its proof rather than act as that conversation. A jailed turn
 // (conversations/worktrees/turn-sandbox.ts) has a private /proc, so another turn cannot read the proof out of its
 // environment; an unjailed one runs as root and could, which is why private conversations put every turn in the jail.
 export const TURN_PROOF_ENV = "INTENTIC_TURN_PROOF";
@@ -28,6 +30,46 @@ export const provesOwner = (owner: string, proof: string | undefined): boolean =
     }
     return timingSafeEqual(Buffer.from(turnProof(owner), "utf8"), Buffer.from(proof, "utf8"));
 };
+
+// The two headers an agent's CLI names its turn in: the conversation (its INTENTIC_TURN_OWNER) and the proof of it.
+export const CONVERSATION_HEADER = "x-intentic-conversation";
+export const TURN_PROOF_HEADER = "x-intentic-turn-proof";
+
+/** What a request says of the turn it comes from: nothing, a conversation with this run's proof, or one named without it. */
+export type TurnClaim =
+    | { readonly kind: "none" }
+    | { readonly kind: "proven"; readonly conversationId: string }
+    | { readonly kind: "unproven"; readonly named: string };
+
+/** The turn a request claims, read against its proof (`header` is the request's own header reader). */
+export const turnClaimOf = (header: (name: string) => string | undefined): TurnClaim => {
+    const named = header(CONVERSATION_HEADER);
+    if (named === undefined || named === "") {
+        return { kind: "none" };
+    }
+    return provesOwner(named, header(TURN_PROOF_HEADER)) ? { kind: "proven", conversationId: named } : { kind: "unproven", named };
+};
+
+/**
+ * The conversation a call acts for: the one its header proves, or none when it names none. A name without its proof, in
+ * the header or in the body beside it (`named`, believed only when it is the proven one), is the refusal instead.
+ */
+export const provenTurnOf = (
+    header: (name: string) => string | undefined,
+    named?: string,
+): { readonly conversationId: string | undefined } | { readonly refusal: string } => {
+    const claim = turnClaimOf(header);
+    if (claim.kind === "unproven") {
+        return { refusal: unprovenTurnWords(claim.named) };
+    }
+    const proven = claim.kind === "proven" ? claim.conversationId : undefined;
+    return named !== undefined && named !== "" && named !== proven ? { refusal: unprovenTurnWords(named) } : { conversationId: proven };
+};
+
+/** What a door answers a conversation named without its proof with, in the one wording every door uses. */
+export const unprovenTurnWords = (named: string): string =>
+    `this shell names conversation "${named}" without the proof its turn carries (${TURN_PROOF_ENV}), so the name is not believed: ` +
+    "run it from that turn's own shell, which carries both";
 
 // Env to spread into a spawned workload's environment; owner is a conversation id or one of the two reserved names
 // below. The proof rides with it, so whatever carries the stamp carries the proof.

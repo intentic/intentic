@@ -49,6 +49,8 @@ model User {
     pushDevices      PushDevice[]
     apiTokens        ApiToken[]
     projectClaims    ProjectClaim[]
+    poolSignals      ProviderPoolSignal[]
+    poolKey          ProviderPoolKey?
 
     @@map("user")
 }
@@ -328,7 +330,7 @@ model Sandbox {
     members            SandboxMember[]
     // The projects this sandbox answers for on its owner's account (ProjectClaim below).
     projectClaims      ProjectClaim[]
-    // The run-outs this sandbox reported for a provider account it shares with the owner's other sandboxes.
+    // The run-outs this sandbox reported for a provider account it shares with its owner's other sandboxes.
     poolSignals        ProviderPoolSignal[]
     // The organisation whose policy this sandbox is held to (Organisation below); null is a personal sandbox, which
     // is every sandbox until an admin of an organisation who owns it binds it. Set null if the organisation goes, so
@@ -1094,23 +1096,40 @@ model ProjectClaim {
 }
 
 // A provider account's pool that ran out in one sandbox, for the owner's other sandboxes signed in to the same account
-// (api pool-signals/, docs/architecture/account-routing.md). The account is named only by `fingerprint`, a sha256 the
-// daemon makes from the provider's own account id: the platform learns that two sandboxes share an account, and when
-// it ran out, never which account or any credential. The latest per account and pool; kept eight days (a week, the
+// (api pool-signals/, docs/architecture/account-routing.md). The account is named only by `fingerprint`, an HMAC the
+// daemon makes from the provider's own account ids under its owner's ProviderPoolKey: the platform learns that two of
+// one owner's sandboxes share an account, and when it ran out, never which account or any credential, and the same
+// account held by two owners hashes to two unrelated values. Every row is its reporting sandbox's owner's, read only by
+// that owner's other sandboxes (2026-11-24). The latest per owner, account and pool; kept eight days (a week, the
 // longest pool any provider sells, and a day of slack), pruned as signals are written.
 model ProviderPoolSignal {
     id          String    @id @default(cuid())
+    ownerId     String
+    owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
     fingerprint String
     pool        String
     ranOutAt    DateTime
     resetsAt    DateTime?
-    // The sandbox that reported it, which a reader skips (it heard its own refusal) and whose owner bounds who reads it.
+    // The sandbox that reported it, which a reader skips: it heard its own refusal.
     sandboxId   String
     sandbox     Sandbox   @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
     updatedAt   DateTime  @updatedAt
 
-    @@unique([fingerprint, pool])
+    @@unique([ownerId, fingerprint, pool])
     @@index([sandboxId])
     @@index([updatedAt])
     @@map("provider_pool_signal")
+}
+
+// The key one owner's sandboxes make their pool fingerprints under (api pool-signals/): 32 random bytes in hex, minted
+// the first time any of the owner's sandboxes asks and never rotated, so every sandbox of one owner names a shared
+// account alike and two owners never do. Its own table, not a column of `user`, so it never travels with a session's
+// user. Goes with the account.
+model ProviderPoolKey {
+    ownerId   String   @id
+    owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+    key       String
+    createdAt DateTime @default(now())
+
+    @@map("provider_pool_key")
 }

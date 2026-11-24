@@ -248,11 +248,25 @@ const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessR
     return c.json(self);
 };
 
-// Who is changing the roster, as peopleChangeRefusal reads them. A request the sandbox cannot name (loopback, a panel)
-// is the owner's own tool; the gate in front already refused every machine credential.
-const managerOf = (c: Context<AppEnv>): Parameters<typeof peopleChangeRefusal>[0] => {
+// Who is changing the roster, as peopleChangeRefusal reads them: the person the request named, or on a daemon nobody
+// signs in to, the one person at it. (2026-11-24) A request a machine credential admitted names nobody, and was read as
+// the owner: a member given People & access who sent the panel token beside their own bearer (any repo process holds
+// it) passed the right check as themselves and changed the roster as the owner. Undefined refuses it.
+const managerOf = (services: MembersRoutesDeps, c: Context<AppEnv>): Parameters<typeof peopleChangeRefusal>[0] | undefined => {
     const identity = c.get("identity");
-    return identity === undefined ? { email: "", tier: "owner" } : { email: identity.email, tier: identity.tier, manages: identity.manages };
+    if (identity !== undefined) {
+        return { email: identity.email, tier: identity.tier, manages: identity.manages };
+    }
+    return services.auth === undefined ? { email: "", tier: "owner" } : undefined;
+};
+
+const NAMELESS_CHANGE = "A change to the people on this sandbox is a signed-in person's own: this request names nobody.";
+
+// Why this request may not make `change`, or undefined when it may: peopleChangeRefusal's answer for the person it
+// names, and a refusal of its own for a request that names nobody (`managerOf`).
+const changeRefusal = (services: MembersRoutesDeps, c: Context<AppEnv>, change: Parameters<typeof peopleChangeRefusal>[1]): string | undefined => {
+    const manager = managerOf(services, c);
+    return manager === undefined ? NAMELESS_CHANGE : peopleChangeRefusal(manager, change);
 };
 
 // A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
@@ -298,7 +312,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         }
         return unavailableIfUnreadable(c, async () => {
             const before = (await services.members.list()).find((member) => member.email === grant.email.toLowerCase());
-            const bounded = peopleChangeRefusal(managerOf(c), { email: grant.email, before, after: { tier: grant.tier, manages: grant.manages } });
+            const bounded = changeRefusal(services, c, { email: grant.email, before, after: { tier: grant.tier, manages: grant.manages } });
             if (bounded !== undefined) {
                 return c.json({ error: bounded }, 403);
             }
@@ -324,7 +338,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         }
         return unavailableIfUnreadable(c, async () => {
             const before = (await services.members.list()).find((member) => member.email === email);
-            const bounded = peopleChangeRefusal(managerOf(c), { email, before });
+            const bounded = changeRefusal(services, c, { email, before });
             if (bounded !== undefined) {
                 return c.json({ error: bounded }, 403);
             }

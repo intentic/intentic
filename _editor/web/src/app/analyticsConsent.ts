@@ -12,11 +12,17 @@ import { environment } from "./environments/environment";
 // it needs no request before the first screen, it works on a self-hosted platform with no Cloudflare in front, and it
 // errs towards asking (a European zone outside the EEA is asked too), which is the safe side. Chosen over asking
 // everyone, which would have cost the analytics of every visitor no law asks us to ask.
+//
+// A BROWSER THAT SAYS NO BEFOREHAND (2026-11-24). Global Privacy Control (`navigator.globalPrivacyControl`) or Do Not
+// Track (`navigator.doNotTrack === "1"`) with nothing stored reads as `deny`, wherever the browser is: no question, and
+// nothing recorded. Only an `allow` stored by switching analytics on under Settings, Data outranks it, since that is the
+// person's own answer for this site.
 const KEY = deviceKey(`intentic-product-analytics-consent`);
 export type AnalyticsChoice = `allow` | `deny` | `unasked`;
 
 // Zones of the EEA, the UK and Switzerland that do not start with `Europe/`: Cyprus is `Asia/Nicosia`, the Atlantic
-// islands and the outermost regions of France, Portugal and Spain have zones of their own.
+// islands and the outermost regions of France, Portugal and Spain have zones of their own. The desktop app's native
+// reporter keeps the same list (launch.rs `EUROPEAN_OUTLIERS`), so a change here is made there too.
 const EUROPEAN_OUTLIERS = new Set([
     `Asia/Nicosia`,
     `Asia/Famagusta`,
@@ -46,10 +52,23 @@ const browserTimeZone = (): string | undefined => {
     }
 };
 
-// No time zone to read is asked too: the same safe side as a European one.
-const asksFirstHere = (): boolean => {
-    const zone = browserTimeZone();
-    return zone === undefined || asksFirstIn(zone);
+// What the browser itself says about being tracked, read where it says it (absent in a webview and in node).
+interface TrackingSignals {
+    readonly globalPrivacyControl?: unknown;
+    readonly doNotTrack?: unknown;
+}
+
+/** Whether a browser sending these signals has asked not to be tracked: Global Privacy Control on, or Do Not Track `1`. */
+export const refusesTracking = (signals: TrackingSignals | undefined): boolean =>
+    signals?.globalPrivacyControl === true || signals?.doNotTrack === `1`;
+
+/** What a browser with no stored choice reads as: `deny` when it refuses tracking, else asked first in the EEA, the UK,
+ * Switzerland or with no zone to read (the same safe side as a European one), and `allow` everywhere else. */
+export const choiceWithNothingStored = (timeZone: string | undefined, refuses: boolean): AnalyticsChoice => {
+    if (refuses) {
+        return `deny`;
+    }
+    return timeZone === undefined || asksFirstIn(timeZone) ? `unasked` : `allow`;
 };
 
 const stored = (): AnalyticsChoice => {
@@ -57,7 +76,8 @@ const stored = (): AnalyticsChoice => {
     if (value === `deny` || value === `allow`) {
         return value;
     }
-    return asksFirstHere() ? `unasked` : `allow`;
+    const signals: TrackingSignals | undefined = globalThis.navigator;
+    return choiceWithNothingStored(browserTimeZone(), refusesTracking(signals));
 };
 
 // allow(module-state): this browser's analytics setting (device scope), the same whichever sandbox is open

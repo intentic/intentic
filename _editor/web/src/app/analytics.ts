@@ -4,13 +4,14 @@ import { type Ref, watch } from "vue";
 import { takeReloadReason } from "@intentic/ui/reload-reason";
 import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { analyticsAvailable, analyticsChoice, internalHere, noteInternalSwitch } from "./analyticsConsent";
-import { desktopApp, desktopLaunchId } from "./environments/desktop";
+import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
 import { replayPrivacy } from "./replayPrivacy";
 
 // PostHog capture/replay/pageviews/track load at first idle via /wire; queue early milestones only while capture is allowed.
-// Tab-scoped ids end with the tab/relaunch; identify joins account runs and desktop_launch_id joins native launch events.
+// Tab-scoped ids end with the tab/relaunch; identify names the person by account id alone (no email, no name). No event
+// carries the desktop app's install or launch id, so PostHog never joins an install's own events to an account.
 // Consent is opt-in in EEA/UK/Switzerland, opt-out elsewhere; browser and sandbox switches can withhold capture.
 // replayPrivacy/replayText/eventPrivacy strip workspace data. Capture changes must update LEGAL_VERSION, policy and sub-processors in legal.ts.
 let enabled = false;
@@ -92,10 +93,11 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
     await waitForAllow();
     const { posthog } = await import(`posthog-js`);
     posthog.init(posthogKey, {
+        // Our own origin's `/wire/` (nginx.conf): the page sends analytics to its own host, and nginx drops this
+        // origin's cookies before anything reaches PostHog.
         api_host: posthogHost,
         // Proxying makes `api_host` a host posthog-js can't map to a cloud region, so `ui_host` must be named outright
-        // or
-        // replay deep-links won't resolve.
+        // or replay deep-links won't resolve.
         // POSTHOG_UI_HOST names an EU project's (https://eu.posthog.com); a literal `$…` is a container that had none.
         ui_host: posthogUiHost === undefined || posthogUiHost.startsWith(`$`) ? `https://us.posthog.com` : posthogUiHost,
         opt_out_capturing_by_default: true,
@@ -104,15 +106,6 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
         persistence: `sessionStorage`,
         ...replayPrivacy(redactAddress, { touch: touchScreen() }),
         before_send: (event) => (allowed ? eventPrivacy(redactAddress)(stampLoadReason(event)) : null),
-        // Serving the SDK from our own origin isn't enough: blocker lists also match a bare filename on any host
-        // (posthog-recorder.js, dead-clicks-autocapture.js). Prefixing every SDK script, not just those two, breaks the
-        // match; nginx.conf strips the prefix back off.
-        prepare_external_dependency_script: (script) => {
-            const url = new URL(script.src);
-            url.pathname = url.pathname.replace(/[^/]+$/, (file) => `sdk.${file}`);
-            script.src = url.toString();
-            return script;
-        },
     });
 
     client = posthog;
@@ -172,13 +165,12 @@ const stampLoadReason = (event: CaptureResult | null): CaptureResult | null => {
 };
 
 // Which client sent this event, as a super property (not a per-call field) so it also tags autocapture and
-// pageviews. The install id joins this to what the app's own screens report (desktop.ts).
+// pageviews. In the desktop app that is the app and its version only: never its install id or launch id, which name
+// the install's own events (the desktop app's analytics.ts and launch.rs), so an account signed in here is never
+// joined to them.
 const registerClient = (posthog: PostHog, current?: User | null): void => {
     const app = desktopApp();
-    const launchId = desktopLaunchId();
-    posthog.register(
-        app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId, ...landingCampaign },
-    );
+    posthog.register(app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, ...landingCampaign });
     // The team's own install or browser (analyticsConsent.ts), or the team's own account (the platform's `User.internal`,
     // api internal-accounts.ts), on every event so its machines and its people filter out. Taken back off when another
     // account signs in on an unmarked browser, so one session never tags a real person's events as the team's.
@@ -187,25 +179,6 @@ const registerClient = (posthog: PostHog, current?: User | null): void => {
     } else {
         posthog.unregister(`internal`);
     }
-    // The same id the app's own launch events carry (launch.rs), so a run's window joins what the app said about it.
-    if (launchId !== undefined) {
-        posthog.register({ desktop_launch_id: launchId });
-    }
-};
-
-// THE APP'S OWN EVENTS ON THIS PERSON. The desktop app's screens report under its install id (desktop-app's
-// analytics.ts), which on its own is a nameless person beside this one: its install, Docker and requirement events never
-// showed on the account's timeline. An alias folds that id into the account signed in here. Nothing new leaves: every
-// event from the app's window already carries the install id (`registerClient`). PostHog only merges an id that belongs
-// to no identified person yet, so a second account signed in on the same install keeps its own, and the first the app's.
-let linked: string | undefined;
-const linkInstall = (posthog: PostHog, userId: string): void => {
-    const installId = desktopApp()?.installId;
-    if (installId === undefined || installId === `` || installId === userId || linked === `${userId}|${installId}`) {
-        return;
-    }
-    linked = `${userId}|${installId}`;
-    posthog.alias(installId);
 };
 
 // PostHog's session id, the key its replay is found by, from the SDK itself: undefined where analytics is off or until
@@ -261,14 +234,14 @@ const identify = (posthog: PostHog, current: User): void => {
         posthog.reset();
     }
     registerClient(posthog, current);
-    // The person carries the account's own answer too, so a person-level filter needs no event to read it from.
-    const person = { email: current.email, name: current.name, internal_account: current.internal === true };
+    // The person is the account id and nothing that names them: no email, no name. It carries the account's own answer
+    // to `internal` too, so a person-level filter needs no event to read it from.
+    const person = { internal_account: current.internal === true };
     if (Object.keys(landingCampaign).length === 0) {
         posthog.identify(current.id, person);
     } else {
         posthog.identify(current.id, person, firstTouch());
     }
-    linkInstall(posthog, current.id);
     noteSignUp(current);
 };
 

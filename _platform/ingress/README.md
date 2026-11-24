@@ -26,7 +26,11 @@ flowchart LR
   the same container started again after a crash or a recreate, and refusing it would leave the sandbox unreachable
   for the refusal's backoff. A netd naming no instance (older than this) keeps newest-wins either way, for the roll.
   Before this, two containers holding one grant took the tunnel from each other every minute.
-- Holds only the platform's Ed25519 public key, so it verifies grants and can never mint one. Revocation is a
+- Holds only the platform's Ed25519 public key, so it verifies grants and can never mint one. A grant (`{sub, iat}`)
+  never expires, and `iat` is not checked (2026-11-24): a sandbox set up with `ic` keeps the grant its setup code
+  carried for its container's life, and a hosted machine's is re-minted only when its key or id is wrong
+  (`tunnelEnvCurrent` in the api), so a maximum age would cut off every long-lived sandbox until a refresh path
+  exists. Revocation is a
   cached, fail-open `GET /api/reachability/<id>` to the api, at registration, on a miss, and for every held sandbox
   as its minute-long cached answer expires (eight at a time). Only the api's own deletion record counts as a deletion:
   a 404 whose body is JSON saying `"deleted": true`, or the api's refusal for a deleted sandbox,
@@ -38,7 +42,9 @@ flowchart LR
   confirms it. The held-sandbox pass waits those 30 s and asks again on the spot; a registration or a miss confirms at
   its next lookup. A confirmed deletion closes every tunnel with code 4010, and its netd stops dialling for an hour; a
   redial is refused 403 with the `unknown-sandbox` verdict (2026-10-05: a deleted sandbox stayed reachable until its
-  netd redialled), and once a deletion was believed, the record again refuses at once. A first record that 10 minutes
+  netd redialled), and once a deletion was believed, the record again refuses at once, and so does a failed lookup:
+  only the api answering that the sandbox exists undoes a believed deletion (2026-11-24: a grant never expires, so a
+  deleted sandbox's grant reattached whenever the api was unreachable). A first record that 10 minutes
   do not confirm is forgotten. 2026-11-09: any 404 used to be a deletion, so one from something in front of the api (a
   misrouted hostname, a placeholder page) would have closed every tunnel the edge held and silenced each netd for an
   hour. 30 s rather than 10 s because a rolling api restart or a hostname route change outlasts 10 s, and a deletion

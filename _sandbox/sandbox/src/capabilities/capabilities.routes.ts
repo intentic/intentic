@@ -11,6 +11,7 @@ import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import { listenerIn } from "../auth/proofs/listener.js";
 import { callingExtension } from "../auth/grants.js";
+import { provenTurnOrRefuse } from "../auth/scope/proven-turn.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
@@ -518,14 +519,19 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            // conversationId comes from the INTENTIC_TURN_OWNER header; absent means a detached shell, refused rather
-            // than guessed.
+            // conversationId comes from the INTENTIC_TURN_OWNER header, believed only with its turn's proof. (2026-11-24)
+            // An agent's shell naming none is refused rather than guessed: no conversation reads as reaching everything
+            // (credential-reach.ts), which would mint a code past the reach of the people its turn acts for.
+            const conversationId = provenTurnOrRefuse(context.headers);
+            if (conversationId === undefined && context.headers.get("x-intentic-agent") !== null) {
+                throw new ORPCError("FORBIDDEN", { message: "Refused: this shell names no conversation (INTENTIC_TURN_OWNER is unset), so no code was made. Run it from the turn's own shell." });
+            }
             const verdict = await services.credentialGate.check({
                 subject: input.id,
                 kind: "capability",
                 lane: "otp",
                 detail: `a one-time code for ${input.id}`,
-                conversationId: context.headers.get("x-intentic-conversation") ?? undefined,
+                conversationId,
                 signal: signal ?? new AbortController().signal,
             });
             if (!verdict.allow) {

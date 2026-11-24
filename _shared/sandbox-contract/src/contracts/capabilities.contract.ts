@@ -54,6 +54,8 @@ export const capabilitiesContract = {
             description:
                 "Writes a connection and streams the work of applying it, because some kinds provision real infrastructure and take a while. Sending an id that already exists edits that connection: this is the edit as well as the create. Since a caller is never shown stored credentials, it marks the ones it is leaving alone and the daemon fills them in, which is the only way to change one setting without retyping a key.",
         })
+        // Puts a credential in, or points a kept one somewhere new: the owner's, never a panel process's.
+        .meta({ panel: false })
         .input(CapabilitySchema)
         .output(streamOf(IntenticLineSchema)),
     // A credential the caller is keeping arrives as VAULTED here too, so an edit can be tested without retyping a key.
@@ -160,6 +162,8 @@ export const capabilitiesContract = {
             description:
                 "Tears a connection down. The kinds that own real infrastructure refuse, because deleting those would be losing data rather than losing a connection.",
         })
+        // Takes the owner's connection and its credential away: never a panel process's.
+        .meta({ panel: false })
         .input(CapabilityIdParamSchema)
         .output(OkSchema),
     rename: capabilityRoute
@@ -283,8 +287,9 @@ export const capabilitiesContract = {
             description:
                 "Generates a single two-factor code from a stored seed. The one credential-adjacent read an agent is allowed, and it is safe because a code expires in seconds and never reveals the seed, so an agent can answer a prompt without ever holding the factor.",
         })
-        // The `otp` CLI mints a code on the agent token; it never reads the seed behind it.
-        .meta({ agent: true })
+        // The `otp` CLI mints a code on the agent token; it never reads the seed behind it. A code is a credential, so
+        // never the panel token's.
+        .meta({ agent: true, panel: false })
         .input(CapabilityIdParamSchema)
         .output(CapabilityOtpSchema),
 };

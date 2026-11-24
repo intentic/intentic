@@ -93,7 +93,7 @@ for (const [installed, pin] of [
 // A download that fails, or arrives and cannot be put in place, says which (intentic#49): the network's failure in curl's
 // own words, a write this device refused as a write, never "did not answer" for both. No ic is installed, so each run
 // ends in the stop, whose three lines the stand-in kit_stop prints.
-const stopOf = (stubs) => {
+const stopOf = (stubs, env = { IC_SKIP_CHECKSUM: "1" }) => {
     const homeDir = mkdtempSync(join(tmpdir(), "intentic-ic-fetch-stop-"));
     try {
         const bin = join(homeDir, "bin");
@@ -121,7 +121,7 @@ const stopOf = (stubs) => {
             {
                 encoding: "utf8",
                 timeout: 20_000,
-                env: { ...process.env, HOME: homeDir, PATH: `${bin}:${process.env.PATH}`, IC: "", IC_BIN: "", IC_VERSION: "", IC_URL: "https://unused.invalid", IC_SKIP_CHECKSUM: "1", INTENTIC_IC_PATH: "" },
+                env: { ...process.env, HOME: homeDir, PATH: `${bin}:${process.env.PATH}`, IC: "", IC_BIN: "", IC_VERSION: "", IC_URL: "https://unused.invalid", IC_SKIP_CHECKSUM: "", INTENTIC_IC_PATH: "", ...env },
             },
         );
         assert.equal(result.status, 1, result.stdout);
@@ -151,4 +151,17 @@ test("a download that cannot be moved into place stops with mv's words, not a ba
     const { lines, dest } = stopOf({ curl: curlDelivers, mv: "printf 'mv: cannot move: Permission denied\\n' >&2; exit 1" });
     assert.equal(lines[0], "ic could not be installed, and no copy is installed.");
     assert.equal(lines[1], `could not write ${dest}: mv: cannot move: Permission denied.`);
+});
+
+// A SHA256SUMS that lists no ic at all (a release from before its sums covered ic, or a file somebody else wrote) vouches
+// for nothing: the download is refused unrun, as a mismatch is, unless IC_SKIP_CHECKSUM=1 says to take it unchecked.
+const curlUnlisted = `out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; http*) url="$1" ;; esac; shift; done
+case "$url" in *.gz) exit 22 ;; *SHA256SUMS) printf '%064d  ./Intentic_9.9.9_amd64.deb\\n' 0; exit 0 ;; esac
+printf '#!/bin/sh\\nprintf "ic 9.9.9\\\\n"\\n' > "$out"`;
+
+test("a SHA256SUMS that lists no ic refuses the download", () => {
+    const asset = `ic-linux-${process.arch === "x64" ? "amd64" : "arm64"}`;
+    const { lines } = stopOf({ curl: curlUnlisted }, {});
+    assert.equal(lines[0], "ic was downloaded but not installed, and no copy is installed.");
+    assert.equal(lines[1], `the release's SHA256SUMS lists no ${asset}, so the download cannot be checked.`);
 });

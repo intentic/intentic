@@ -7,7 +7,7 @@ import { ORPCError } from "@orpc/server";
 import { type DaemonBase, resolveDaemonBase } from "../../daemon-base.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { audit } from "../audit.js";
-import type { HostLink } from "../config.js";
+import { type HostLink, readLinks } from "../config.js";
 import { machineIndicator, onPauseChanged, type PersonKind, type PersonOnScreen, readPausedAt } from "../indicator.js";
 import { SWITCH_LABELS } from "../policy.js";
 import { runningBeforeSignIn } from "../session.js";
@@ -420,7 +420,9 @@ export const createRemote = (seams: RemoteSeams, log: Log): Remote => {
 
 const realSeams = (): RemoteSeams => ({
     binary: async (log) => await resolveRemoted(MACHINE_VERSION, realRemotedIo(log)),
-    resolveBase: resolveDaemonBase,
+    // Proven with the link's own token, the credential the device holds for that sandbox (../../daemon-base.ts): an
+    // uplink token remoted carries to a stranger on the loopback port would be a person's session handed to it.
+    resolveBase: async (sandboxUrl) => await resolveDaemonBase(sandboxUrl, (await readLinks()).find((link) => link.sandboxUrl === sandboxUrl)?.token),
     spawn: spawnRemoted,
     paused: async () => (await readPausedAt()) !== undefined,
     // Before anyone signs in there is no screen to put a notice on (session.ts); terminals work there all the same.

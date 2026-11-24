@@ -168,7 +168,8 @@ export const systemContract = {
                 "Exchanges a verified sign-in, or a session that has not expired yet, for a fresh session the daemon minted. That session is the credential every other call carries, and calling this again with a live one renews it.",
         })
         // Staying signed in and on the roster is identity, not power, and needs nothing the boot chain builds.
-        .meta({ beforeBoot: true, floor: "viewer", guest: true })
+        // The session it answers is a credential: never a panel process's.
+        .meta({ beforeBoot: true, floor: "viewer", guest: true, panel: false })
         .output(DaemonSessionSchema),
     events: procedure
         .route({

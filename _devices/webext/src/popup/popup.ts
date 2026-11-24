@@ -181,6 +181,13 @@ const offerReason = (state: PopupState, offered: NonNullable<PopupState["offered
         : `It joins ${listed(others)}: its agent works on the same sites you allow here, under the switches on its own card, in a window of its own.`;
 };
 
+// Where an offer comes from, beside the name, which is the offering page's own word: the sandbox's address, and the page
+// that offered it when one did (a pasted code has none), both as Chrome reported them.
+const offerSource = (offered: NonNullable<PopupState["offered"]>): string => {
+    const sandbox = new URL(offered.url).host;
+    return offered.from === undefined ? sandbox : `${sandbox}, offered by ${offered.from.replace(/^https?:\/\//, "")}`;
+};
+
 const offerCard = (state: PopupState, offered: NonNullable<PopupState["offered"]>): HTMLElement => {
     // Why pressing Connect did not connect, when the worker finished it after Chrome's dialog had closed the popup.
     const error = h("div", { class: "error" });
@@ -190,6 +197,7 @@ const offerCard = (state: PopupState, offered: NonNullable<PopupState["offered"]
         { class: "card ask" },
         h("div", { class: "eyebrow" }, h("span", { text: offered.paired ? "Your sandbox wants to connect again" : "A sandbox wants to connect" })),
         h("div", { class: "title" }, favicon(`${new URL(offered.url).origin}/*`), h("span", { text: offered.name, title: offered.url })),
+        h("p", { class: "reason muted", text: offerSource(offered) }),
         h("p", { class: "reason muted", text: offerReason(state, offered) }),
         h(
             "div",

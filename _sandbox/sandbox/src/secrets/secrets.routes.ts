@@ -9,6 +9,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Caller } from "../auth/auth.js";
 import { holdsRight } from "@intentic/sandbox-contract/schemas/members";
 import { ensureRight } from "../auth/owner-gates.js";
+import { provenTurnOrRefuse } from "../auth/scope/proven-turn.js";
 import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -326,9 +327,10 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 lane: "session",
                 detail: gate.subject,
                 ...(input.why !== undefined && input.why !== "" ? { why: input.why } : {}),
-                // Body field first, else the header every agent CLI sends; the gate re-derives the live conversation
-                // anyway.
-                conversationId: input.conversationId ?? context.headers.get("x-intentic-conversation") ?? undefined,
+                // The turn the header proves, which a body field may repeat but never replace: the release is that
+                // conversation's for the rest of it, so a name without its proof is refused. The gate re-derives the
+                // live conversation anyway.
+                conversationId: provenTurnOrRefuse(context.headers, input.conversationId),
                 signal: signal ?? new AbortController().signal,
             });
             if (!verdict.allow) {

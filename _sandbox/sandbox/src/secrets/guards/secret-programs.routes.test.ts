@@ -7,6 +7,7 @@ import { fakeDevices, fakeKeyring, pointerOf } from "../device/keyring.testing.j
 import type { ProgramWidenRequest, ProgramWidenVerdict } from "../gates/program-guard-gate.js";
 import { createSecretProgramRoutes, type SecretProgramRoutesDeps } from "./secret-programs.routes.js";
 import { secretsSliceFake } from "../secrets-slice.testing.js";
+import { provenTurnHeaders } from "../../seams/workload-stamp.testing.js";
 
 // Who may change a secret's program guard turns on the change, as for the host guard: taking a program off or turning
 // any-field off is open to every caller the route admits; adding a program or an app, or turning any-field on, is the
@@ -42,7 +43,7 @@ const setup = async (options: { readonly owner: boolean; readonly widen?: Progra
 };
 
 const signedIn: OrpcContext = { headers: new Headers(), method: "PUT", url: "/secrets/programs/RDP_PASSWORD" };
-const agentCli: OrpcContext = { ...signedIn, headers: new Headers({ "x-intentic-agent": "agent-token", "x-intentic-conversation": "conv-7" }) };
+const agentCli: OrpcContext = { ...signedIn, headers: new Headers({ "x-intentic-agent": "agent-token", ...provenTurnHeaders("conv-7") }) };
 
 const MSTSC = { subject: "RDP_PASSWORD", programs: ["mstsc.exe"], packages: [], anyField: false };
 
@@ -80,6 +81,12 @@ test("a widening from the agent's CLI asks the owner in its conversation, and is
     const declined = await setup({ owner: false, widen: { refusal: "The owner kept RDP_PASSWORD's program guard as it is." } });
     expect(await errorCode(call(declined.routes.setPrograms, MSTSC, { context: agentCli }))).toBe("FORBIDDEN");
     expect(await declined.slice.programGuardFor("RDP_PASSWORD")).toEqual({ programs: [], packages: [], anyField: false });
+    // A conversation named without its proof, in the header or the body, raises no card and widens nothing.
+    const forged = await setup({ owner: false, widen: { approvedBy: "owner@example.com" } });
+    const bare: OrpcContext = { ...signedIn, headers: new Headers({ "x-intentic-agent": "agent-token", "x-intentic-conversation": "conv-7" }) };
+    expect(await errorCode(call(forged.routes.setPrograms, MSTSC, { context: bare }))).toBe("FORBIDDEN");
+    expect(await errorCode(call(forged.routes.setPrograms, { ...MSTSC, conversationId: "conv-other" }, { context: agentCli }))).toBe("FORBIDDEN");
+    expect([forged.widened, await forged.slice.programGuardFor("RDP_PASSWORD")]).toEqual([[], { programs: [], packages: [], anyField: false }]);
 });
 
 test("the owner widens without a card; a program already listed in another case is no widening", async () => {

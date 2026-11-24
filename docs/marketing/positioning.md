@@ -114,7 +114,10 @@ below, so that is what the page now claims and proves; the rest support it or li
    vendor stores none of your code and cannot drive your sandbox (identity-only hub, off the command
    path; platform-held tokens AES-256-GCM at rest, `_platform/api/src/crypto.ts`). Claim "never
    stores", not "never sees": the relay decrypts browser traffic in transit, and a sandbox opened at
-   its local address bypasses it. (P1)
+   its local address bypasses it. "Cannot drive" holds for a sandbox the user runs; never say it of a
+   hosted one, where the platform runs fixed health and update checks through Fly's exec API and can
+   vouch for a sign-in (`_platform/api/src/sandbox/hosted/gate/`, the privacy policy says both). Nor
+   say a sandbox "reports nothing": it checks in hourly with its computer's name (`legal.ts`). (P1)
 3. **The whole environment is editable, not just the prompt**: everyone lets you tune a system
    prompt; intentic opens the image the dev-tools are installed in (owner-approved overlay), the
    systems the agent may reach (capabilities, with a "this will add to your sandbox" effects panel

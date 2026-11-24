@@ -44,6 +44,11 @@ flowchart LR
   platform on it, for its background delivery. It is found at `INTENTIC_CUA_DRIVER`, on PATH, or where its installers
   put it. Measured against cua-driver 0.33.4 on Linux/X11 (2026-10-05); macOS is untested.
 - On Wayland, window listing works only under sway.
+- (2026-11-24) A window id is one of the spellings the lists hand out (`isWindowId` in `parse.ts`: decimal for an HWND
+  or a sway container, wmctrl's hex, cua-driver's `pid:window`), and each backend checks its own before the id reaches
+  a command: Windows parses it to a number (`windowHandle`), since it once went into a double-quoted PowerShell string
+  where `$(…)` runs, and sway's must be digits, since swaymsg reads `;` as a second command. Text an agent chose
+  travels to PowerShell as base64 (`psText`), never as a literal.
 - Linux window bounds come from `xwininfo -root -tree` where it is installed: wmctrl counts a window's frame offset
   twice under a reparenting window manager (openbox put a window 18 px too low), which cut off the top of a window's
   screenshot.

@@ -52,6 +52,49 @@ describe("a call that carries nothing to judge", () => {
     });
 });
 
+describe("a tools/call the gate cannot read", () => {
+    const UNREAD = /^Refused: this call could not be read/;
+
+    it("is refused unjudged rather than forwarded, whatever made it unreadable", async () => {
+        const call = { id: MACHINE, conversationId: CONVERSATION };
+        expect(await gate({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: 7, arguments: { command: "rm -rf ~" } } }, call)).toEqual({
+            refusal: expect.stringMatching(UNREAD),
+        });
+        expect(await gate({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "run_command", arguments: "rm -rf ~" } }, call)).toEqual({
+            refusal: expect.stringMatching(UNREAD),
+        });
+        expect(await gate({ jsonrpc: "2.0", id: { nested: true }, method: "tools/call", params: { name: "run_command", arguments: { command: "rm -rf ~" } } }, call)).toEqual({
+            refusal: expect.stringMatching(UNREAD),
+        });
+        expect(await gate({ jsonrpc: "2.0", id: 3, method: "tools/call" }, call)).toEqual({ refusal: expect.stringMatching(UNREAD) });
+        expect(asked).toEqual([]);
+    });
+
+    it("judges a call with a null id, which the device runs as surely as a numbered one", async () => {
+        commandAnswer = { refusal: "Refused." };
+        expect(await gate({ jsonrpc: "2.0", id: null, method: "tools/call", params: { name: "run_command", arguments: { command: "rm -rf ~" } } }, { id: MACHINE, conversationId: CONVERSATION })).toEqual({
+            refusal: "Refused.",
+        });
+        expect(asked.map((entry) => entry.judge)).toEqual(["command"]);
+    });
+});
+
+describe("an argument of the wrong type beside a program", () => {
+    it("still puts the command to the judge: `slug: 0` once skipped the judge, the card and the restart guard together", async () => {
+        commandAnswer = { refusal: "Refused: deletes files recursively." };
+        expect(await through("run_command", { command: "rm -rf ~", slug: 0, op: ["x"], when: 1, apply: "yes" })).toEqual({
+            refusal: "Refused: deletes files recursively.",
+        });
+        expect(asked).toEqual([{ judge: "command", what: { machine: MACHINE, command: "rm -rf ~", kind: "command", conversationId: CONVERSATION } }]);
+    });
+
+    it("still asks about a restart spelled as a command", async () => {
+        restartAnswer = { refusal: "Held for the owner." };
+        expect(await through("run_command", { command: "ic sandbox restart work", slug: 0 })).toEqual({ refusal: "Held for the owner." });
+        expect(asked.map((entry) => entry.judge)).toEqual(["restart"]);
+    });
+});
+
 describe("a restart of this sandbox by the device's own tool", () => {
     it("is put to the restart judge alone, and its refusal is the answer", async () => {
         restartAnswer = { refusal: "Held for the owner." };

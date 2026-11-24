@@ -42,6 +42,9 @@ declare global {
         intenticFocusPin?: { readonly pin: string; readonly el: HTMLElement } | undefined;
         // markDocument's mark: present for as long as this document is.
         intenticDocumentMark?: string;
+        // Every field this document has shown as a password input, which collectPage remembers and describeRef and
+        // typing.ts's checkField read: a "show password" button turns one into a text input still holding the password.
+        intenticSecretFields?: WeakSet<Element>;
     }
 }
 
@@ -62,6 +65,16 @@ export const collectPage = (): DriverSnapshot => {
     const refs: Element[] = [];
     (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs = refs;
 
+    // Never a secret's value, nor a name read off it: a password input, any field this document ever showed as one (a "show
+    // password" button makes it text), one whose autocomplete names a password, one-time code, card number or CVC; any role.
+    const secret = (el: Element): boolean => {
+        const shown = (window.intenticSecretFields ??= new WeakSet<Element>());
+        if (el.matches("input[type=password i]")) {
+            shown.add(el);
+        }
+        return shown.has(el) || el.matches("[autocomplete*=password i], [autocomplete*=one-time-code i], [autocomplete*=cc-number i], [autocomplete*=cc-csc i]");
+    };
+
     const visible = (el: Element): boolean => {
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) {
@@ -78,7 +91,8 @@ export const collectPage = (): DriverSnapshot => {
         INPUT_ROLES.set(role, role);
     }
     const roleOf = (el: Element): string => {
-        const explicit = el.getAttribute("role");
+        // A secret's own role is not read, so `role="textbox"` cannot turn a password input into a textbox.
+        const explicit = secret(el) ? null : el.getAttribute("role");
         const tag = el.tagName.toLowerCase();
         if (explicit !== null && explicit !== "") {
             return explicit;
@@ -99,10 +113,9 @@ export const collectPage = (): DriverSnapshot => {
             el.getAttribute("placeholder"),
             el.getAttribute("title"),
             el.getAttribute("name"),
-            // innerText (what's visible) falls back to textContent (headless DOM has no layout, so innerText is
-            // undefined).
+            // innerText is what's visible; jsdom lays nothing out, so it has none and textContent stands in.
             (el as HTMLElement).innerText ?? el.textContent ?? "",
-            (el as HTMLInputElement).value ?? "",
+            secret(el) ? "" : ((el as HTMLInputElement).value ?? ""),
         ];
         for (const candidate of candidates) {
             if (typeof candidate === "string" && candidate.trim() !== "") {
@@ -138,13 +151,13 @@ export const collectPage = (): DriverSnapshot => {
         }
         return box.width < 64 || box.height < 64 ? null : { role: tag, size: sizeOf(el, box) };
     };
-    // A password's value is never reported, only that the field exists; a box says whether it is ticked.
+    // A secret's value is never reported, only that the field exists; a box says whether it is ticked.
     const valueOf = (el: Element, role: string): string | undefined => {
         const input = el as HTMLInputElement;
         if (role === "checkbox" || role === "radio") {
             return input.checked ? "checked" : "unchecked";
         }
-        return role === "password" || role === "button" || typeof input.value !== "string" || input.value === "" ? undefined : input.value.slice(0, 120);
+        return secret(el) || role === "password" || role === "button" || typeof input.value !== "string" || input.value === "" ? undefined : input.value.slice(0, 120);
     };
     // Roles listed even with no name, since they are aimed at by ref; past the cap, media is still listed, this many more,
     // since a sidebar that fills the list (ChatGPT's chat history) would otherwise hide the picture the agent came for.
@@ -223,7 +236,12 @@ export const describeRef = (ref: string, pin?: string): RefDescription => {
     // names with `form=` from outside it. The markup says it in any language: a card number is `autocomplete="cc-…"`.
     const named = el.getAttribute("form");
     const scopes = [el.closest("form, dialog, [role='dialog'], [role='form'], section, article, main"), named === null ? null : document.getElementById(named)];
-    const credentials = 'input[type="password"], input[autocomplete*="cc-"], input[name*="card" i], input[autocomplete="one-time-code"]';
+    const credentials =
+        'input[type="password"], input[autocomplete*="password" i], input[autocomplete*="cc-"], input[name*="card" i], input[autocomplete*="one-time-code" i]';
+    // A password field a "show password" button turned into text is still one (collectPage remembers it).
+    const secrets = window.intenticSecretFields;
+    const holdsCredentials = (scope: Element): boolean =>
+        scope.querySelector(credentials) !== null || (secrets !== undefined && Array.from(scope.querySelectorAll("input")).some((input) => secrets.has(input)));
     // What the element says, including what an icon button or an <input type=submit> says only in its attributes.
     const button = el.matches('input[type="submit" i], input[type="button" i], input[type="image" i]');
     const said = [text, el.getAttribute("aria-label"), el.getAttribute("title"), button ? el.getAttribute("value") : null, button ? el.getAttribute("alt") : null]
@@ -276,7 +294,7 @@ export const describeRef = (ref: string, pin?: string): RefDescription => {
             "(?:zakończ|anuluj|wypowi|rozwiąż)\\p{L}*\\s+(?:subskrypc|członkostw|umow|abonament|kont|plan)",
         ].join("|"),
     );
-    const sensitive = scopes.some((scope) => scope !== null && scope.querySelector(credentials) !== null) || money.test(said) || destructive.test(said);
+    const sensitive = scopes.some((scope) => scope !== null && holdsCredentials(scope)) || money.test(said) || destructive.test(said);
     return { ok: true, role: el.tagName.toLowerCase(), name: text, sensitive };
 };
 

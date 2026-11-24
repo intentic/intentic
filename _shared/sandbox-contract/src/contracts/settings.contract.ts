@@ -58,6 +58,8 @@ export const settingsContract = {
             summary: "Change the sandbox settings",
             description: "Writes the settings whole, so send the complete object rather than the fields you changed.",
         })
+        // The command judge, auto-approval and the rest of what holds the agent back: never a panel process's to change.
+        .meta({ panel: false })
         .input(SandboxSettingsWriteSchema)
         .output(OkSchema),
     savings: procedure

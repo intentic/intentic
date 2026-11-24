@@ -5700,6 +5700,11 @@
             "foundKeyFailed": "Could not add that key.",
             "foundKeyFrom": "From {source}, ending in {hint}. Adding it copies the key into this sandbox.",
             "foundKeyTitle": "{provider} API key",
+            "foundKeysLook": "Look",
+            "foundKeysLookAgain": "Look again",
+            "foundKeysNone": "No API keys found on your computers",
+            "foundKeysReads": "Reads {files} on each connected computer, only when you press Look.",
+            "foundKeysTitle": "API keys on your computers",
             "foundSignedIn": "Signed in on this computer. Connect it here with one click in your browser; it stays signed in there too.",
             "foundConnectHint": "Connect in one click",
             "foundTitle": "Found on this computer",
@@ -12535,7 +12540,7 @@
         },
         "analytics": {
             "title": "Product analytics",
-            "description": "Share usage and masked replays to help improve Intentic."
+            "description": "Usage events and recordings of the interface while you work, tied to your account, so we can see where people get stuck. Your workspace's content is masked in them. Switched off, this browser sends nothing."
         },
         "settingsVoice": {
             "group": "Wake word",
@@ -13202,8 +13207,8 @@
             "skippedUnchanged": "Skipped {count} unchanged file. | Skipped {count} unchanged files.",
             "uploadedFiles": "Uploaded {count} file | Uploaded {count} files",
             "analyticsConsentTitle": "Help us see where intentic gets in the way?",
-            "analyticsConsentDetail": "Clicks and a masked replay. Never your work.",
-            "analyticsConsentHint": "Product analytics run through PostHog. The replay replaces every piece of text that is not the app's own wording with asterisks, and blanks the editor and terminals. You can change your answer any time under Settings, Data & privacy. The privacy policy at intentic.dev/privacy says exactly what is recorded.",
+            "analyticsConsentDetail": "Clicks and a masked replay, tied to your account. Never your work.",
+            "analyticsConsentHint": "Product analytics run through PostHog. Events carry your account id, never your email or name. The replay replaces every piece of text that is not the app's own wording with asterisks, and blanks the editor and terminals. You can change your answer any time under Settings, Data & privacy. The privacy policy at intentic.dev/privacy says exactly what is recorded.",
             "analyticsConsentAllow": "Allow",
             "analyticsConsentDecline": "No, thanks"
         },

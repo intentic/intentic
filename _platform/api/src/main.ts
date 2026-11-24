@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { createApp } from "./app.js";
 import { CONFIG_SECRETS, loadConfig } from "./config.js";
+import { secretsKeyRefusal } from "./crypto.js";
 import { mask } from "./log.js";
 import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
@@ -34,8 +35,13 @@ logger.info({ config: mask(config, CONFIG_SECRETS) }, `config loaded`);
 if (!config.google.clientId || !config.google.clientSecret) {
     logger.warn(`GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET unset: Google sign-in will fail until they are provided`);
 }
+const secretsRefusal = secretsKeyRefusal(config);
+if (secretsRefusal !== undefined) {
+    logger.fatal(secretsRefusal);
+    process.exit(1);
+}
 if (!config.secrets.key) {
-    logger.warn(`SECRETS_KEY unset: OAuth/sandbox tokens will be persisted in plaintext (never run production like this)`);
+    logger.warn(`SECRETS_KEY unset: OAuth/sandbox tokens will be persisted in plaintext (production refuses to start like this)`);
 }
 if (!config.email.apiKey || !config.email.from) {
     logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset: invite links and setup-failure mails will be logged instead of emailed`);

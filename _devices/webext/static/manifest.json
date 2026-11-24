@@ -24,7 +24,7 @@
     },
     "content_scripts": [
         {
-            "matches": ["*://*.intentic.dev/*"],
+            "matches": ["https://app.intentic.dev/*"],
             "js": ["pair-bridge.js"],
             "run_at": "document_idle"
         }

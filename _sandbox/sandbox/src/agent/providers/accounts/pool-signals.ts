@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { type PoolSignal, PoolSignalsSchema, POOL_SIGNALS_MAX_FINGERPRINTS } from "@intentic/api-contract/ingress";
+import { createHmac } from "node:crypto";
+import { type PoolSignal, PoolSignalKeySchema, PoolSignalsSchema, POOL_SIGNALS_MAX_FINGERPRINTS } from "@intentic/api-contract/ingress";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { cliProxyIdOf } from "@intentic/sandbox-contract/models/provider-specs";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
@@ -24,11 +24,21 @@ import type { TranslatorAuthFile } from "../../../usage/translator-usage.js";
    Run-outs on file (run-outs.json) are left alone: they count this sandbox's own agents, the rate the planner reads, and
    are keyed by provider and pool, which cannot say which of several local accounts another sandbox meant.
 
-   An account is named to the platform only as a fingerprint: sha256 over the provider and the provider's own ids for it,
-   never the ids, a credential or a reading. Claude's is the seat's account and organisation uuids together, since one
-   organisation uuid covers every seat of a Team org and each seat is metered apart; Codex's the ChatGPT account and
-   user ids, for the same reason; Gemini's and Antigravity's the Google account's email and its project. Kimi is left
-   out: its credential names no stable account id. So is every provider that publishes no plan limits. */
+   An account is named to the platform only as a fingerprint: HMAC-SHA256 over the provider and the provider's own ids
+   for it, never the ids, a credential or a reading. Claude's is the seat's account and organisation uuids together,
+   since one organisation uuid covers every seat of a Team org and each seat is metered apart; Codex's the ChatGPT
+   account and user ids, for the same reason; Gemini's and Antigravity's the Google account's email and its project.
+   Kimi is left out: its credential names no stable account id. So is every provider that publishes no plan limits.
+
+   The HMAC's key is the owner's pool key, which the platform mints once per owner and hands to each of the owner's
+   sandboxes (`POST /pool-signals/key`), so every sandbox of one owner names a shared seat alike and the same seat held
+   by two owners is two unrelated values (2026-11-24). A plain sha256 was the same value for every owner, which let the
+   platform tie together the Intentic accounts holding one seat, and one over a Google email could be confirmed by
+   guessing the address. The owner email this daemon is bound to was the other key on hand, and was rejected: it is
+   guessable, so the email hash stays confirmable by anyone who knows the owner's address, and it is not one value
+   across the owner's sandboxes (an unbound sandbox has none, and a changed address splits them). The daemon learns no
+   other owner-wide value (an accepted announce names this sandbox's row, not its owner). Without a key (a platform from
+   before the route, or one not reached) the daemon tells nothing and asks nothing. */
 
 /** One provider account this sandbox holds, with the fingerprint its other sandboxes know it by. */
 export interface HeldAccount {
@@ -38,18 +48,21 @@ export interface HeldAccount {
     readonly fingerprint: string;
 }
 
-/** sha256 hex over `provider \0 id \0 id …`; undefined when any id is missing, so a partial identity never matches. */
-export const poolFingerprint = (provider: string, ids: readonly (string | undefined)[]): string | undefined => {
+/**
+ * HMAC-SHA256 hex under the owner's pool key over `provider \0 id \0 id …`; undefined when any id is missing, so a
+ * partial identity never matches.
+ */
+export const poolFingerprint = (key: string, provider: string, ids: readonly (string | undefined)[]): string | undefined => {
     const present = ids.flatMap((id) => (id === undefined || id === "" ? [] : [id]));
     return present.length !== ids.length || present.length === 0
         ? undefined
-        : createHash("sha256")
+        : createHmac("sha256", key)
               .update([provider, ...present].join("\0"))
               .digest("hex");
 };
 
-export const claudeFingerprint = (stored: Pick<StoredAccount, "accountUuid" | "organizationUuid">): string | undefined =>
-    poolFingerprint("claude", [stored.accountUuid, stored.organizationUuid]);
+export const claudeFingerprint = (key: string, stored: Pick<StoredAccount, "accountUuid" | "organizationUuid">): string | undefined =>
+    poolFingerprint(key, "claude", [stored.accountUuid, stored.organizationUuid]);
 
 // The ids Codex's OpenID token names the seat by: the ChatGPT account (a Team workspace's, shared by its seats) and the
 // user in it, at the top level or under OpenAI's own claim. A field of the wrong shape reads as absent.
@@ -75,13 +88,13 @@ const codexIds = (file: TranslatorAuthFile): (string | undefined)[] => {
     return [seat?.chatgpt_account_id, seat?.chatgpt_user_id ?? seat?.user_id];
 };
 
-export const routedFingerprint = (provider: KeyedProvider, file: TranslatorAuthFile): string | undefined => {
+export const routedFingerprint = (key: string, provider: KeyedProvider, file: TranslatorAuthFile): string | undefined => {
     switch (provider) {
         case "codex":
-            return poolFingerprint(provider, codexIds(file));
+            return poolFingerprint(key, provider, codexIds(file));
         // Google's, signed in through Antigravity: the account's email and the project it is served under.
         case "gemini":
-            return poolFingerprint(provider, [file.email?.trim().toLowerCase(), file.project_id]);
+            return poolFingerprint(key, provider, [file.email?.trim().toLowerCase(), file.project_id]);
         default:
             return undefined;
     }
@@ -91,20 +104,20 @@ const KEYED_BY_FILE: ReadonlyMap<string, KeyedProvider> = new Map(
     KeyedProviderSchema.options.map((provider) => [cliProxyIdOf(provider) ?? provider, provider] as const),
 );
 
-/** Every account this sandbox holds that has a fingerprint: Claude's own store, and the translator's auth files. */
-const heldAccounts = async (services: Pick<Services, "claudeStore" | "authRoot">): Promise<HeldAccount[]> => {
+/** Every account this sandbox holds that has a fingerprint under `key`: Claude's own store, and the translator's auth files. */
+const heldAccounts = async (services: Pick<Services, "claudeStore" | "authRoot">, key: string): Promise<HeldAccount[]> => {
     // allow(silent-catch): an account store that cannot be read holds nothing to hear about this round.
     const claude = await services.claudeStore.list().catch(() => []);
     // allow(silent-catch): one account file that cannot be read is left out of this round, and read again at the next.
     const stored = await Promise.all(claude.map((account) => services.claudeStore.read(account.id).catch(() => undefined)));
     const claudeHeld = stored.flatMap((account) => {
-        const fingerprint = account === undefined ? undefined : claudeFingerprint(account);
+        const fingerprint = account === undefined ? undefined : claudeFingerprint(key, account);
         return account === undefined || fingerprint === undefined ? [] : [{ provider: "claude", account: account.id, fingerprint }];
     });
     const files = await authFilesOnDisk(cliProxyAuthDir(services.authRoot));
     const routedHeld = files.flatMap((file) => {
         const provider = file.provider === undefined ? undefined : KEYED_BY_FILE.get(file.provider);
-        const fingerprint = provider === undefined ? undefined : routedFingerprint(provider, file);
+        const fingerprint = provider === undefined ? undefined : routedFingerprint(key, provider, file);
         return provider === undefined || fingerprint === undefined || file.name === undefined ? [] : [{ provider, account: file.name, fingerprint }];
     });
     return [...claudeHeld, ...routedHeld];
@@ -112,12 +125,36 @@ const heldAccounts = async (services: Pick<Services, "claudeStore" | "authRoot">
 
 /** What the daemon asks the platform, injected so a test needs none. */
 export interface PoolSignalPlatform {
+    // The owner's pool key; undefined from a platform without the route, or one not reached.
+    readonly key: () => Promise<string | undefined>;
     readonly report: (signal: PoolSignal) => Promise<void>;
     // The live run-outs the owner's other sandboxes reported for these fingerprints; none from a platform without the route.
     readonly read: (fingerprints: readonly string[]) => Promise<readonly PoolSignal[]>;
 }
 
+// The owner's key as the platform last handed it to this daemon, asked again after an hour so a sandbox handed to
+// another owner follows. A refusal or an unreached platform is never kept, nor an older key used in its place: a key
+// past its hour may be a former owner's, and would name the seat alike under both owners.
+const KEY_KEEP_MS = 60 * 60_000;
+const ownerKeys = new WeakMap<Services["config"], { readonly key: string; readonly at: number }>();
+
+const ownerKeyOf = async (config: Services["config"]): Promise<string | undefined> => {
+    const kept = ownerKeys.get(config);
+    if (kept !== undefined && Date.now() - kept.at < KEY_KEEP_MS) {
+        return kept.key;
+    }
+    const answer = await callPlatform(config, { route: "poolSignalKey", unreached: "no key was handed over" });
+    const key = answer.status === 200 ? PoolSignalKeySchema.safeParse(parseJsonOr(answer.body, undefined)).data?.key : undefined;
+    if (key === undefined) {
+        ownerKeys.delete(config);
+    } else {
+        ownerKeys.set(config, { key, at: Date.now() });
+    }
+    return key;
+};
+
 const platformPoolSignals = (config: Services["config"]): PoolSignalPlatform => ({
+    key: () => ownerKeyOf(config),
     report: async (signal) => {
         await callPlatform(config, { route: "poolSignal", input: signal, unreached: "no other sandbox heard of it" });
     },
@@ -135,10 +172,17 @@ const platformPoolSignals = (config: Services["config"]): PoolSignalPlatform => 
 export type LogFields = Readonly<Record<string, string | Error>>;
 
 export interface PoolSignalDeps {
-    readonly held: () => Promise<readonly HeldAccount[]>;
+    // The accounts held here, fingerprinted under the owner's key.
+    readonly held: (key: string) => Promise<readonly HeldAccount[]>;
     readonly platform: PoolSignalPlatform;
     readonly log: (fields: LogFields, message: string) => void;
 }
+
+// The accounts held here under the owner's key, or none without one: with no key, nothing is told and nothing asked.
+const heldUnderKey = async (deps: PoolSignalDeps): Promise<readonly HeldAccount[]> => {
+    const key = await deps.platform.key();
+    return key === undefined ? [] : deps.held(key);
+};
 
 // What this sandbox's own refusals tell the others: a spent allowance on a named account, a person's mark excepted (it
 // is a guess about a plan nothing reads, not a refusal), and never one heard from another sandbox, which would echo.
@@ -168,7 +212,7 @@ const tellOthers = async (
     provider: string,
     refusal: ProviderRefusal & { readonly account: string },
 ) => {
-    const held = (await deps.held()).find((account) => account.provider === provider && account.account === refusal.account);
+    const held = (await heldUnderKey(deps)).find((account) => account.provider === provider && account.account === refusal.account);
     if (held === undefined) {
         return;
     }
@@ -217,7 +261,7 @@ export const hearPoolSignals = async (
     heard: Set<string>,
     now: number = Date.now(),
 ): Promise<number> => {
-    const held = await deps.held();
+    const held = await heldUnderKey(deps);
     if (held.length === 0) {
         return 0;
     }
@@ -256,7 +300,7 @@ export interface PoolSignalListener {
 
 /** What the daemon hears through: the platform this sandbox is connected to, and the accounts it holds. */
 export const poolSignalDepsOf = (services: Pick<Services, "claudeStore" | "authRoot" | "config" | "logger">): PoolSignalDeps => ({
-    held: () => heldAccounts(services),
+    held: (key) => heldAccounts(services, key),
     platform: platformPoolSignals(services.config),
     log: (fields, message) => services.logger.info(fields, message),
 });

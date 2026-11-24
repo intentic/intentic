@@ -133,13 +133,13 @@ export const repairRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () =
         }
         const raw = await attempt.response.text();
         if (!attempt.response.ok) {
-            c.get(`logger`).warn({ status: attempt.response.status, body: raw.slice(0, 2000) }, `repair upstream error`);
+            c.get(`logger`).warn({ status: attempt.response.status, bytes: raw.length }, `repair upstream error`); // never the body: it can quote diagnostics
             await refundRepairTurn(prisma, c.get(`logger`), user.id, at);
             return c.json({ error: { type: `repair_upstream`, message: `Repair could not reach the model. Try again shortly.` } }, 502);
         }
         const assistant = parseAssistant(raw);
         if (assistant === undefined) {
-            c.get(`logger`).warn({ body: raw.slice(0, 2000) }, `repair upstream answer was not parseable`);
+            c.get(`logger`).warn({ bytes: raw.length }, `repair upstream answer was not parseable`);
             await refundRepairTurn(prisma, c.get(`logger`), user.id, at);
             return c.json({ error: { type: `repair_upstream`, message: `Repair could not read the model's answer. Try again shortly.` } }, 502);
         }

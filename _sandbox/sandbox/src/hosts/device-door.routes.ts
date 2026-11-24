@@ -5,16 +5,19 @@ import { MAX_STOP_GRACE_SECONDS, RunBuiltFromSchema } from "@intentic/sandbox-co
 import { DialHostSchema } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
-import { soleLiveConversation } from "../conversations/actor/conversation-holdings.js";
 import { callTool } from "./device-reports.js";
 import { startedRun } from "./runs/device-runs.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { opt } from "../opt.js";
+import { turnClaimOf, unprovenTurnWords } from "../seams/workload-stamp.js";
 
 // WHO MAY ACT ON ONE OF THE OWNER'S COMPUTERS FROM A SHELL IN THE SANDBOX: the `devices` command's routes (push a build,
 // start it, reach its ports). Two callers, one rule each:
-// - an agent's shell: the conversation it names must have a live turn that mounts that computer, so a role that
-//   withholds a computer withholds these too;
+// - an agent's shell: the conversation it names, believed only with its turn's proof (seams/workload-stamp.ts), must have
+//   a live turn that mounts that computer, so a role that withholds a computer withholds these too. (2026-11-24) Every
+//   turn presents the same agent token, so a bare name once let one conversation act as another that mounts the
+//   computer. A shell naming none is refused rather than read as the one live turn: an agent that unset its stamp
+//   makes the same call, and a person's terminal has the run grant below;
 // - a run the owner started from the editor (`runs.start`): its terminal carries a grant minted for that one computer,
 //   which ends with the run.
 // What the computer itself allows is still the computer's to say: its switches are checked there, on every call.
@@ -33,11 +36,14 @@ export const refusalFor = (services: DoorServices, c: Context<AppEnv>, device: s
                   error: `this run may act on its own computer only, and only while it lasts; "${device}" is not it, or the run has ended`,
               };
     }
-    const named = c.req.header("x-intentic-conversation");
-    const conversationId = named !== undefined && named !== "" ? named : soleLiveConversation(services.conversations);
-    if (conversationId === undefined) {
+    const claim = turnClaimOf((name) => c.req.header(name));
+    if (claim.kind === "none") {
         return { status: 400, error: "no conversation named: run this from an agent's shell, or from a run started in the editor" };
     }
+    if (claim.kind === "unproven") {
+        return { status: 403, error: unprovenTurnWords(claim.named) };
+    }
+    const { conversationId } = claim;
     if (!services.turnMounts.reaches(conversationId, { kind: "device", id: device })) {
         return {
             status: 403,

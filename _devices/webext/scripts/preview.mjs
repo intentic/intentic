@@ -62,7 +62,7 @@ const STATES = {
     another: {
         ...working,
         pending: [],
-        offered: { url: SECOND, name: "marketing", paired: false },
+        offered: { url: SECOND, name: "marketing", from: "https://app.intentic.dev", paired: false },
     },
     quiet: { ...working, pending: [] },
     // An agent's update to a script the person installed, reviewed as a diff, beside the scripts already running.
@@ -126,7 +126,7 @@ const STATES = {
         pending: [],
         grants: [],
         log: [],
-        offered: { url: SANDBOX, name: "intentic", paired: false },
+        offered: { url: SANDBOX, name: "intentic", from: "https://app.intentic.dev", paired: false },
     },
     welcome: { ...working, sandboxes: [], pending: [], grants: [], log: [] },
 };

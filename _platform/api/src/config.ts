@@ -24,7 +24,8 @@ export const configSchema = z.object({
         // AND orphans every deleted account's carried standing, which then expires unread.
         secret: z.string().min(1).meta({ secret: true }),
     }),
-    // Key for encrypting persisted secrets at rest (crypto.ts); unset stores those columns as plaintext.
+    // Key for encrypting persisted secrets at rest (crypto.ts); unset stores those columns as plaintext, which only
+    // development may: production refuses to start without it (crypto.ts secretsKeyRefusal).
     secrets: z
         .object({
             key: z.string().default(``).meta({ secret: true }),

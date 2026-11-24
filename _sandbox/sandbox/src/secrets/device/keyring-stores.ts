@@ -9,7 +9,8 @@ import { openDocument } from "../../store/open-document.js";
 // - what each computer's keyring last said: the entries it shares here, names and rules only, never a value, so an
 //   offline computer's secrets still list, and the keys this sandbox pinned for it the first time it heard them;
 // - the `copy` entries, kept as ordinary secrets (sealed at rest where the sandbox has an at-rest key);
-// - the values released for one use each, kept only so the terminal's output filter can mask them (released-values).
+// - the values released for one use each, kept a few minutes only so the terminal's output filter can mask them
+//   (released-values).
 
 // One computer's keyring as last heard. `keyring` is its state the last time it answered; `pinned` its keys as first
 // heard, which a typing or an inbox item is sealed to and which a keyring reporting different ones does not replace
@@ -83,43 +84,82 @@ export const fileKeyringCopies = (path: string): KeyringCopies => {
 export const RELEASED_VALUES_FILE = "keyring-released.json";
 
 // Values a computer's keyring released for one use each, for masking and nothing else. In memory for the daemon's own
-// masking; written whole to a file only the terminal's output filter reads, a separate process that cannot ask the
-// daemon, in the flat layout it reads every store in (sealed at rest under the same rule as the sandbox's own secrets).
-// Never read back: the daemon's memory is the record, so the file is rewritten from it on every change and once as the
-// daemon starts, and no value outlives the process that was handed it. Resolution never reads it (secret-access.ts).
+// masking; the ones a process was handed (a shell's, a script's) also written whole to a file only the terminal's output
+// filter reads, a separate process that cannot ask the daemon, in the flat layout it reads every store in (sealed at
+// rest under the same rule as the sandbox's own secrets). Never read back: the daemon's memory is the record, so the file
+// is rewritten from it on every change and once as the daemon starts. (2026-11-24) Each is dropped from both once its
+// use has had RELEASED_MASK_MS to print what it prints: every value a computer released was kept, in the clear in
+// memory and on disk, for the daemon's whole life, a store of one-use values any later reader of the auth root could
+// open. A value typed into a browser or a window prints nowhere the filter reads, so it is never written. Resolution
+// never reads any of it (secret-access.ts).
+const RELEASED_MASK_MS = 10 * 60_000;
+
+// Where a released value went, as keyring-link-types.ts names a release's lane.
+export type ReleaseLane = "shell" | "code" | "browser" | "desktop";
+
 export interface ReleasedDeviceValues {
-    readonly add: (name: string, value: string) => void;
+    readonly add: (name: string, value: string, lane: ReleaseLane) => void;
+    // The values still masked, none past its window.
     readonly all: () => Readonly<Record<string, string>>;
     // Rewrites the file from this process's memory, which drops whatever an earlier process left in it: called once as
     // the daemon starts.
     readonly reset: () => Promise<void>;
 }
 
-export const releasedDeviceValues = (path: string, warn: (message: string, error: Error) => void): ReleasedDeviceValues => {
-    const values = new Map<string, string>();
-    // Writes queue behind each other, so the file ends as the last change left memory.
+interface Released {
+    readonly value: string;
+    readonly until: number;
+    // Whether the terminal's filter reads it: a process was handed it.
+    readonly filed: boolean;
+}
+
+export const releasedDeviceValues = (
+    path: string,
+    warn: (message: string, error: Error) => void,
+    clock: { readonly now?: () => number; readonly keepMs?: number } = {},
+): ReleasedDeviceValues => {
+    const now = clock.now ?? Date.now;
+    const keepMs = clock.keepMs ?? RELEASED_MASK_MS;
+    const values = new Map<string, Released>();
+    // Writes queue behind each other, so the file ends as the last change left memory; with nothing to mask it goes.
     let writing: Promise<void> = Promise.resolve();
     const write = (): void => {
-        const snapshot = Object.fromEntries(values);
+        const snapshot = Object.fromEntries([...values].flatMap(([name, held]) => (held.filed ? [[name, held.value] as const] : [])));
         writing = writing
-            .then(() => writeJsonFile(path, snapshot, 0o600, false, RELEASED_VALUES_FILE))
+            .then(() => (Object.keys(snapshot).length === 0 ? rm(path, { force: true }) : writeJsonFile(path, snapshot, 0o600, false, RELEASED_VALUES_FILE)))
             .catch((error: Error) => warn("keyring: the released values could not be written for the terminal's masking", error));
     };
-    return {
-        add: (name, value) => {
-            if (values.get(name) === value) {
-                return;
+    // Drops every value past its window, and rewrites the file when the filter was reading one of them.
+    const expire = (): void => {
+        const at = now();
+        let filed = false;
+        for (const [name, held] of values) {
+            if (held.until <= at) {
+                values.delete(name);
+                filed ||= held.filed;
             }
-            values.set(name, value);
+        }
+        if (filed) {
             write();
+        }
+    };
+    return {
+        add: (name, value, lane) => {
+            const before = values.get(name);
+            const filed = lane === "shell" || lane === "code";
+            values.set(name, { value, until: now() + keepMs, filed });
+            setTimeout(expire, keepMs + 1).unref();
+            if (filed || before?.filed === true) {
+                write();
+            }
         },
-        all: () => Object.fromEntries(values),
+        all: () => {
+            expire();
+            return Object.fromEntries([...values].map(([name, held]) => [name, held.value]));
+        },
         reset: async () => {
             await writing;
-            if (values.size === 0) {
-                await rm(path, { force: true });
-                return;
-            }
+            expire();
             write();
             await writing;
         },

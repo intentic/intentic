@@ -155,6 +155,15 @@ export const focusRefusal = (id: string, attempts: number, state: SessionState |
     return `Windows would not give window ${id} the keyboard after ${attempts} attempts: ${cause}.`;
 };
 
+// (2026-11-24) A window id is one of the spellings the window lists hand out, and nothing else: an HWND (Windows) and a
+// sway container id are decimal, an X window id is hex as wmctrl lists it or decimal as xdotool does, and cua-driver's
+// is `pid:window`. Every backend's focus puts the id into a command of some kind (a PowerShell script, a sway command
+// line, xdotool's arguments), and Windows' interpolated it into a double-quoted string where `$(…)` runs, so a caller
+// refuses anything else before a backend sees it, and each backend checks its own spelling again.
+const WINDOW_ID = /^(?:-?\d{1,20}|0x[0-9a-f]{1,16}|\d{1,10}:\d{1,20})$/i;
+
+export const isWindowId = (id: string): boolean => WINDOW_ID.test(id);
+
 // Whether a launch target should be opened (a URL, or an existing path) rather than run as a command; picks between
 // xdg-open/Start-Process and spawning it directly.
 export const looksLikeUrl = (target: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(target) || /^(www\.|mailto:)/i.test(target);

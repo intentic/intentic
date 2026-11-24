@@ -384,8 +384,10 @@ flowchart LR
   before `set-shape` (v1.312.0 and older), and go in v1.314.0.
 - Every path under the user's home goes through `homeDir()` from [local-agent](../local-agent), which follows a `HOME`
   set after startup; a check holds the sources to it ([home-dir](../../_tools/checks/home-dir.mjs)).
-- Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.
-  Files stay inside the configured roots, writes need their own switch, and every call is appended to
+- Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off. The
+  owner sets the switches through the sandbox, which pushes the grant on every connect (`setScopes`), so this agent
+  holds every call to the grant as it stands; it cannot tell a grant the owner chose from one a compromised sandbox
+  pushed. Files stay inside the configured roots, writes need their own switch, and every call is appended to
   `~/.intentic/machine/audit.jsonl`, set aside as `audit.jsonl.1` once it reaches 8 MB (2026-10-05: it grew without
   limit; the writer rolls it itself, and the [upkeep](#upkeep) does for an agent that wrote nothing lately). While an
   agent drives input on Windows, a notice shows on screen and
@@ -408,6 +410,29 @@ flowchart LR
   the schema's keys, so a new switch is off everywhere it is not named and no test needs an edit for it. The daemon's
   setup grant (`SETUP_HOST_SCOPES`) is the one place spelled out on purpose, and its test fails until someone decides
   whether a setup-connected machine gets the new switch.
+- (2026-11-24) **Protected places** ([`device/protected-places.ts`](src/device/protected-places.ts)): even inside the
+  allowed folders, the file tools (read, list, write, edit, trash, `devices copy` both ways, a command's working folder)
+  refuse `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, gcloud's config, `~/.kube`, `~/.docker/config.json`, `~/.netrc`,
+  `~/.git-credentials`, `~/.pgpass`, `~/.claude/.credentials.json`, `~/.intentic` (link tokens, the sync key, the
+  keyring's vault), the OS keychains, Chrome, Chromium, Edge, Brave and Firefox profiles on all three systems, and
+  Windows' `Credentials`, `Vault` and `Protect` folders. Judged after links are resolved (a place that is itself a link
+  protects where it leads), and on Windows and macOS without regard to case; a folder taken whole (a copy off, a copy
+  merged onto it, the trash) is refused while it holds one. The owner opens a place by naming it, or a folder inside
+  it, as a line of "Folders it may touch"; a line that merely holds it, the home folder included, does not. Reads had
+  needed no switch and defaulted to the whole home folder, so an agent could read SSH keys and this agent's own link
+  tokens. The files the sandbox's provider-key import reads (`.hermes`, `.openclaw`, `.codex/auth.json`,
+  `.gemini/.env`, opencode's `auth.json`) are not protected.
+- (2026-11-24) **`clipboard` reads a length, never the text**: what the owner copied is as likely to be a password as
+  anything typed. Its comment had said so while it returned the whole text. `focus_window` and `ui_elements` take only
+  a window id in a spelling a window list hands out (desktop-automation's `isWindowId`): Windows' focus put the id into
+  a double-quoted PowerShell string, where `$(…)` runs.
+- (2026-11-24) **A loopback daemon is dialled only once it proves itself** ([`daemon-base.ts`](src/daemon-base.ts)). The
+  agent prefers `127.0.0.1:<port derived from the sandbox id>` for the link, remoted's uplink and folder sync, and used
+  to trust any listener whose `/health` echoed the id: another account or container on that port took the link token
+  from the first frame and pushed itself a grant. Now each probe sends a fresh challenge with a key naming the
+  credential it is about to send (the link token, or the sync token), and only a daemon that keeps that credential's
+  digest answers it, on its loopback port alone (sandbox-contract `protocol/doors/loopback-proof.ts`). No proof, or a
+  daemon from before it, and the public address is dialled. Redeeming a pairing always goes to the public address.
 - Every connection dials out; the only listeners are on loopback. One of them is short-lived: while a sandbox's
   sign-in is open, [`device/loopback-catch.ts`](src/device/loopback-catch.ts) listens on the
   `http://localhost:<port>/…` address the provider redirects to, the one a CLI running here would have held, and
@@ -464,6 +489,10 @@ put on localhost is still reported, with its reason:
 - `held-by-sandbox`: another sandbox paired here already mirrors it.
 - `ignored`: this device was told to leave the number alone, by `intentic-machine sync mirror ignore --sandbox <id>
   --port <n>` (without `--sandbox`, for every pairing). `unignore` hands it back, and it is mirrored once it is free.
+
+(2026-11-24) **The local-daemon band is never mirrored**: a port from 28000 to 31999 is where this agent dials a
+sandbox's daemon over loopback (`isLocalDaemonPort` in sandbox-run), so a sandbox listening on one is neither mirrored
+nor reported, even when asked for with `include`.
 
 (2026-11-03) **An agent's own server stays in the sandbox.** A port the sandbox's list names an agent's (`owner`: its
 shell, or a background job it ran) is not mirrored and not reported, unless the agent left the job running for the

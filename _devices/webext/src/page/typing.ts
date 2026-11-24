@@ -229,7 +229,12 @@ export const checkField = async (ref: string, text: string): Promise<ActionResul
         return { ok: true, message: `typed` };
     }
     if (valued) {
-        const note = field instanceof HTMLInputElement && field.type === "password" ? `the page changed what the field holds` : `the page changed it: the field now reads ${quote(field.value)}`;
+        // A secret as collectPage judges one (driver.ts): a password input, one this document showed as one, or one whose
+        // autocomplete names a password, a one-time code, a card number or its security code.
+        const secret =
+            field.matches("input[type=password i], [autocomplete*=password i], [autocomplete*=one-time-code i], [autocomplete*=cc-number i], [autocomplete*=cc-csc i]") ||
+            window.intenticSecretFields?.has(field) === true;
+        const note = secret ? `the page changed what the field holds` : `the page changed it: the field now reads ${quote(field.value)}`;
         return { ok: true, message: `typed`, note };
     }
     const got = lines(read());
