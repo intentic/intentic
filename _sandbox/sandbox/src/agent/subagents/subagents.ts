@@ -849,7 +849,10 @@ export const settleSpawnedChild = (
     if (record === undefined) {
         return;
     }
-    const summary = outcome.report.trim().slice(0, REPORT_TAIL).trim();
+    const report = outcome.report.trim().slice(0, REPORT_TAIL).trim();
+    // A start that never ran drops the line it waited under ("Waiting for the owner to allow its start"), which read as
+    // its ending beside a failed status (2026-11-24): what ended it says why instead.
+    const summary = report !== "" ? report : record.status === "pending" ? (outcome.error ?? "") : undefined;
     if (subagentRunning(record)) {
         takeReportedAhead(record, outcome.status);
     }
@@ -862,7 +865,7 @@ export const settleSpawnedChild = (
             ending(record, {
                 status: outcome.status,
                 source: "report",
-                ...(summary !== "" ? { summary } : {}),
+                ...opt("summary", summary),
                 ...(outcome.error !== undefined && outcome.error !== "" ? { error: outcome.error } : {}),
             }),
         ),

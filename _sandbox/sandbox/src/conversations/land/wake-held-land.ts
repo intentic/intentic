@@ -5,6 +5,7 @@ import { isIsolated } from "../registry/agents-store.js";
 import { landByHandLeased, type LandByHandDeps } from "./land-by-hand.js";
 import { landTargetOf } from "./land-target.js";
 import { takeLandHeldForWake } from "./wake-held.js";
+import { haltOf } from "../actor/conversation-halt.js";
 
 // THE LAND A WAKE HELD, run once the wake goes away without firing. A turn that ends while the conversation will run
 // again by itself (a watch it armed, a job its ending handed to one) skips its land: the turn that wakes finishes the
@@ -22,9 +23,14 @@ const notYet = (state: ConversationState | undefined): boolean =>
     state === undefined || state.phase.kind !== "idle" || state.turn.resuming || state.turn.landing || awaitingWake(state);
 
 // Why a conversation at rest lands nothing of what its last close held, or undefined when it may: a message waiting,
-// whose turn lands its own; a last turn that failed or was stopped, which never lands by itself; or no work held on its
-// branch any more (a person landed or discarded it meanwhile).
+// whose turn lands its own; a last turn that failed or was stopped, which never lands by itself; a cancel that stopped
+// it, whose disarming of its wakes is what brought this on (subagents/family/halt-quiet.ts), so its unfinished work stays
+// on its branch until somebody sends it on or merges it; or no work held on its branch any more (a person landed or
+// discarded it meanwhile).
 const unlandable = (services: WakeHeldLandDeps, conversationId: string): string | undefined => {
+    if (haltOf(services.conversations, conversationId) !== undefined) {
+        return "a cancel stopped it, and its work stays on its branch";
+    }
     if (services.conversations.queued(conversationId).items.length > 0) {
         return "a message waits for its next turn";
     }

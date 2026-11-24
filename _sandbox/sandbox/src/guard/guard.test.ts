@@ -168,6 +168,8 @@ describe("agents.spawn", () => {
         const held = guard(childSpawn, { provider: "claude", rules: {}, outsideSource: "webchat" });
         expect(held.effect).toBe("hold");
         expect(held.reason).toContain("webchat");
+        // The owner's way to decide it for good is named on the card (2026-11-24: a subagent's spawn waited out a night).
+        expect(held.reason).toContain("(an `agents.spawn` action rule of the owner's decides this instead)");
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "allow" }, outsideSource: "webchat" }).effect).toBe("allow");
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "deny" }, outsideSource: "webchat" }).effect).toBe("deny");
     });

@@ -6,6 +6,7 @@ import type { DomainEventMap } from "../../../seams/domain-events.js";
 import { type FakeTurns, fakeTurns } from "../../../seams/turn-starter.testing.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { type ChildReportDeps, reportChildTurn } from "../child-report.js";
+import { haltConversation, liftHalt } from "../../../conversations/actor/conversation-halt.js";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "../subagents.js";
 
 // A child's ending reaches its parent once, and only when it is the parent's news.
@@ -200,6 +201,29 @@ describe("a spawned child's report", () => {
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf({ stopped: true }));
         expect((doors.started[0]?.prompt ?? "").split("\n", 1)[0]).toMatch(/was stopped\.$/u);
+    });
+
+    // 2026-11-24: each sign-in renewal told an orchestrator its slice had failed, and a second later that it was working again.
+    it("reads a refused sign-in the sandbox renews and re-runs by itself as a pause, not a failure", async () => {
+        const fleet = memoryFleet();
+        await fleet.conversations.send("sub-1", { kind: "turn-held", held: { input: { conversationId: "sub-1", prompt: "Port the tests" }, reason: "auth", ran: true } }).settled;
+        const doors = doorsOf();
+        await reportChildTurn({ ...doors.deps, conversations: fleet.conversations }, settledOf({ failure: "Failed to authenticate: OAuth token revoked." }));
+        expect(doors.started[0]?.prompt).toContain(
+            "Paused, not finished. The sandbox runs this same turn again by itself shortly, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile. To have it not run again, cancel it (the cancel tool, or `agents cancel sub-1`), then decide yourself.\n\nPorted all 12 tests; they pass.\n\nThe turn failed: Failed to authenticate: OAuth token revoked.",
+        );
+    });
+
+    // 2026-11-24: a slice whose subagent its orchestrator cancelled from above was woken by that subagent's stopped ending.
+    it("starts no turn on a resting parent for a child a cancel stopped, which it did not ask to hear", async () => {
+        haltConversation(actors, "sub-1", "agent");
+        try {
+            const resting = doorsOf();
+            await reportChildTurn(resting.deps, settledOf({ stopped: true }));
+            expect(resting.started).toEqual([]);
+        } finally {
+            liftHalt(actors, "sub-1");
+        }
     });
 
     it("stays quiet for a turn a person started in the child's own chat", async () => {

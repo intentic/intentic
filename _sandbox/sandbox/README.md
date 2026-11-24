@@ -1062,7 +1062,8 @@ flowchart LR
   claim, with repository-wide head touches shared once; a path touched and then reverted stays expired.
 - A job an agent kept running for the person survives a restart and never expires (`agent/tools/jobs/background-jobs.ts`
   `keptJobSessions`, adopted by the boot's session sweep), and archiving, purging or discarding a conversation cancels
-  the subagents it spawned (`agent/subagents/family/family-cancel.ts`); a paused child's end is kept in
+  the subagents it spawned (`agent/subagents/family/family-cancel.ts`, carried out by `family/child-cancel.ts`, which
+  also runs an agent's cancel down the subtree and halts what it stops, `conversations/actor/conversation-halt.ts`); a paused child's end is kept in
   `/history/paused-children.json` so a restart still tells its parent (2026-10-05).
 - Spawned children keep their checkout warm for 20 minutes after a completed, failed or killed turn, then the periodic
   sweep commits any remainder onto `agent/<child>` and parks that branch. A quick follow-up `send` restores it through

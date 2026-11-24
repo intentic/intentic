@@ -40,7 +40,7 @@ import { agentLookups } from "./agent-lookups.js";
 import { refuseUnlessHome } from "./home/home-conversation.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import { subagentTranscriptOf } from "../agent/subagents/subagent-transcript.js";
-import { cancelFamily, familyOf } from "../agent/subagents/children.js";
+import { cancelFamily, familyOf } from "../agent/subagents/family/child-cancel.js";
 import { draftRoutes } from "./drafts/drafts.routes.js";
 import { notifyRoutes } from "./people/notify.routes.js";
 import { autoApproveRoutes } from "./auto-approve.routes.js";

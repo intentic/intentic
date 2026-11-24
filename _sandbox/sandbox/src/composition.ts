@@ -110,7 +110,7 @@ import { streamAgent } from "./agent/run/stream-agent.js";
 import { drainBehindTurns, turnDoors } from "./agent/run/turn/turn-doors.js";
 import type { TurnEngine } from "./seams/turn-engine.js";
 import { askRoleModel, roleModelIsSet } from "./agent/models/role-model.js";
-import { cancelFamily, familyOf } from "./agent/subagents/children.js";
+import { cancelFamily, familyOf } from "./agent/subagents/family/child-cancel.js";
 import { cancelWatchersFor } from "./agent/verification/watchers.js";
 import { createPerfTracker, type PerfTracker } from "./system/resources/perf.js";
 import { panePids } from "./terminal/terminal-session.js";

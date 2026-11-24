@@ -12,7 +12,8 @@ import { conversationProfile } from "../../../conversations/registry/agents-stor
 import { deliverWake } from "../../../seams/wake-delivery.js";
 import { opt } from "../../../opt.js";
 import type { ResultValue } from "../child-result.js";
-import { cancelChild, type ChildParent } from "../children.js";
+import type { ChildParent } from "../children.js";
+import { cancelChild } from "../family/child-cancel.js";
 import { agentCall, forgetWorker, placesFor, resetCallsForTest, type RunContext } from "./script-run-calls.js";
 import { type Cache, cacheOf, keepRun, type LiveRun, runFiles, runOnFile, type ScriptCall, type ScriptDefaults, type ScriptRun } from "./script-run-store.js";
 import { ScriptMetaSchema, splitScript } from "./script-source.js";

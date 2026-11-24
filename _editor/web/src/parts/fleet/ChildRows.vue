@@ -4,7 +4,17 @@ import { useT } from "@intentic/ui/i18n";
 import { type ComponentPublicInstance, computed, inject } from "vue";
 import { agentDisplayTitle } from "../../models/agent-status/agentStatus-meta";
 import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
-import { FINISHED_FOLD, inProcess, stackedRuns, startingChild, type TrayChild, trayOf } from "../../models/fleet/board/childFold";
+import {
+    FINISHED_FOLD,
+    inProcess,
+    reportsTo,
+    stackedRuns,
+    startersIn,
+    startingChild,
+    type TrayChild,
+    type TrayGroup,
+    trayOf,
+} from "../../models/fleet/board/childFold";
 import { trayFold } from "@intentic/ui/motion";
 import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
@@ -20,6 +30,9 @@ import { CHILD_ROWS } from "../../models/fleet/board/childRows";
 // Reader-only asks remain visible even under unfocused cards because chat cards have no other place to show that news.
 // So do the workflow runs the card's agent started (ScriptRunRow): a run starts the next agent as each one stops, so its
 // row, with its Stop, is the news of what keeps them coming, whichever card is looked at.
+// A grandchild rides here too, never as the card's own: a step in under its starter's row where that row is in its section,
+// else flush with "via <starter>" (childFold.TrayLine). 2026-11-24: a tray drew 11 agents flat under an orchestrator that
+// had started 6, and its owner took all 11 for its own.
 
 const props = defineProps<{
     agent: FleetAgent;
@@ -46,9 +59,22 @@ const title = computed(() => agentDisplayTitle(props.agent));
 const runs = computed(() => (isRemote(props.agent) ? [] : (props.agent.scriptRuns ?? [])));
 // An automation's earlier runs are named for the automation, not as agents its latest run started.
 const automation = computed(() => (children.value.length > 0 && stackedRuns(children.value).length === children.value.length ? automationOf(props.agent) : undefined));
-const label = computed(() =>
-    automation.value === undefined ? t(`agents.childRows.startedBy`, { title: title.value }) : t(`agents.childRows.runsOf`, { automation: automation.value }),
-);
+// Who started each rider that its card did not: a grandchild rides the card its parent rides, and must not read as the card's.
+const starters = computed(() => startersIn(children.value));
+// The tray's name claims the card started its rows only while it started every one of them.
+const label = computed(() => {
+    if (automation.value !== undefined) {
+        return t(`agents.childRows.runsOf`, { automation: automation.value });
+    }
+    return starters.value.size === 0 ? t(`agents.childRows.startedBy`, { title: title.value }) : t(`agents.childRows.startedByFamily`, { title: title.value });
+});
+// Where a row sits under the rider that started it (childFold.TrayLine), as ChildRow's props; nothing for the card's own.
+const lineOf = (child: TrayChild): { depth?: number; starter?: string; via?: boolean } => {
+    const line = tray.value?.lines.get(child.id);
+    return line === undefined ? {} : { depth: line.depth, starter: agentDisplayTitle(line.starter), via: line.via };
+};
+// Whom a stop group's children report to, by name: the card, and any rider that started some of them.
+const startersOf = (group: TrayGroup): readonly string[] => reportsTo(group.members, starters.value, props.agent).map((agent) => agentDisplayTitle(agent));
 // Whether one of the rows is on screen: its chat in a pane, or its transcript in this card's column.
 const childOnScreen = computed(
     () =>
@@ -116,6 +142,7 @@ const inset = computed(() => (props.rail || props.compact ? `ml-9.25` : props.li
                 :needle="board.needle.value"
                 :match-case="board.matchCase.value"
                 :menus="board.menu !== undefined"
+                v-bind="lineOf(child)"
                 @open="(event) => open(child, event)"
                 @review="review(child)"
                 @menu="(event) => menu(child, event)"
@@ -143,6 +170,7 @@ const inset = computed(() => (props.rail || props.compact ? `ml-9.25` : props.li
                             :needle="board.needle.value"
                             :match-case="board.matchCase.value"
                             :menus="board.menu !== undefined"
+                            v-bind="lineOf(child)"
                             @open="(event) => open(child, event)"
                             @review="review(child)"
                             @menu="(event) => menu(child, event)"
@@ -150,7 +178,7 @@ const inset = computed(() => (props.rail || props.compact ? `ml-9.25` : props.li
                     </template>
                     <template v-for="group in tray.groups" :key="group.key">
                         <!-- One child alone is its own row: a fold of one would be a press to read a single line. -->
-                        <ChildGroupRow v-if="group.members.length > 1" :group="group" :parent="title" @toggle="board?.toggle(agent, group.key)" />
+                        <ChildGroupRow v-if="group.members.length > 1" :group="group" :parents="startersOf(group)" @toggle="board?.toggle(agent, group.key)" />
                         <ChildRow
                             v-for="child in group.shown"
                             :key="child.id"
@@ -161,6 +189,7 @@ const inset = computed(() => (props.rail || props.compact ? `ml-9.25` : props.li
                             :needle="board.needle.value"
                             :match-case="board.matchCase.value"
                             :menus="board.menu !== undefined"
+                            v-bind="lineOf(child)"
                             @open="(event) => open(child, event)"
                             @review="review(child)"
                             @menu="(event) => menu(child, event)"
@@ -187,6 +216,7 @@ const inset = computed(() => (props.rail || props.compact ? `ml-9.25` : props.li
                         :needle="board.needle.value"
                         :match-case="board.matchCase.value"
                         :menus="board.menu !== undefined"
+                        v-bind="lineOf(child)"
                         @open="(event) => open(child, event)"
                         @review="review(child)"
                         @menu="(event) => menu(child, event)"

@@ -6,8 +6,12 @@ import type { ListeningPort } from "../../../ports/port-scan.js";
 import type { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import { adoptBackgroundJobs } from "../../tools/jobs/background-adoption.js";
 import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
+import { haltOf } from "../../../conversations/actor/conversation-halt.js";
+import { opt } from "../../../opt.js";
 
 // Close in order: hush steering into the next-turn queue, judge leftover jobs once, then arm watches for awaited/unread exits.
+// A turn a cancel stopped (conversations/actor/conversation-halt.ts) stops every job it left but those kept for the person, and arms
+// nothing: an exit that woke it would undo the cancel.
 // Park on held cards until settled (stop cancels); conversation state, not later guesses, decides awaitingWake.
 // Land only clean endings with no wake pending, under the lease; regenerate derived files afterward in the destination tree.
 // Settle placement then actor, publish PlacedTurnEnding once, and only then announce run.settled to independent listeners.
@@ -34,10 +38,11 @@ export interface TurnCloserDeps {
 export const turnCloser = (deps: TurnCloserDeps, conversationId: string, steering: SteeringQueue | undefined, signal?: AbortSignal): TurnCloser => ({
     hush: () => steering?.close(),
     armWakes: async (ending = { failed: false }) => {
-        await resolveTurnJobs(deps, conversationId, { clean: !ending.failed });
+        const halted = haltOf(deps.conversations, conversationId)?.by;
+        await resolveTurnJobs(deps, conversationId, { clean: !ending.failed, ...opt("halted", halted) });
         await deps.heldCards.hold(conversationId, signal);
         // A job that exited before its watch armed wakes the conversation at once: a wake already on its way.
-        const handed = await adoptBackgroundJobs(deps.conversations, conversationId, deps.logger, { cut: ending.failed });
+        const handed = halted === undefined ? await adoptBackgroundJobs(deps.conversations, conversationId, deps.logger, { cut: ending.failed }) : 0;
         const state = deps.conversations.state(conversationId);
         return handed > 0 || (state !== undefined && awaitingWake(state));
     },

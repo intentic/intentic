@@ -57,7 +57,8 @@ export const spawnServices = (
         privacyShield: privacySliceFake().privacyShield,
         resources: budgetOn(memory, { waitDeadlineMs: 10_000 }),
         // No conversation here was placed on a runner before, so a follow-up runs where a first turn would.
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        // Nor in the registry's spawn links: a cancel walks this sandbox's own records of who started whom.
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined, ids: () => [] }),
         // Every row the database holds is one this build reads: a conversation the registry lacks is gone, not unreadable.
         conversationUnits: unstubbed<Services["conversationUnits"]>("conversationUnits", { owners: { has: () => false, any: () => false, recreated: false } }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {

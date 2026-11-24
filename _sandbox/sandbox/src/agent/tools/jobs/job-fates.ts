@@ -57,7 +57,8 @@ type JobFateVerdict = "handed" | "stopped" | "awaited";
  * `targets` what the turn's calls acted on, `handed` ports this conversation already left for the person (a restarted
  * server keeps its standing without being kept twice), `reachedBefore` ports its earlier turns reached, `waiting`
  * whether it sits at a prompt nobody will answer, `leftover` whether a cut-off turn left it awaited and this clean run
- * never reached it.
+ * never reached it, `halted` whether a cancel stopped the turn (conversations/actor/conversation-halt.ts), whose exits nobody is to be
+ * woken by.
  */
 export const jobFate = (fact: {
     readonly kept: boolean;
@@ -67,9 +68,13 @@ export const jobFate = (fact: {
     readonly reachedBefore: ReadonlySet<number>;
     readonly waiting: boolean;
     readonly leftover?: boolean;
+    readonly halted?: boolean;
 }): JobFateVerdict => {
     if (fact.kept || fact.ports.some((port) => fact.handed.has(port))) {
         return "handed";
+    }
+    if (fact.halted === true) {
+        return "stopped";
     }
     if (fact.ports.some((port) => fact.reachedBefore.has(port) || fact.targets.some((target) => reachedAt(port).test(target)))) {
         return "stopped";
@@ -85,7 +90,7 @@ const reachesJob = (targets: readonly string[], judged: JudgedJob): boolean =>
 // Disarming a watch that already fired or was stopped is nothing to report; any other failure is logged, never thrown,
 // since a stop must end the job whatever the watch journal did.
 const disarmWith =
-    (logger: Logger) =>
+    (logger: Pick<Logger, "warn">) =>
     async (conversationId: string, watchId: string): Promise<void> => {
         try {
             await cancelWatcher(conversationId, watchId);
@@ -95,7 +100,11 @@ const disarmWith =
     };
 
 /** Stops one job for whoever asked, disarming the watch it was handed to first; never throws. */
-export const stopJob = async (deps: Omit<JobFateDeps, "scanPorts">, job: BackgroundJob, by: JobStopper): Promise<boolean> => {
+export const stopJob = async (
+    deps: { readonly conversations: JobFateDeps["conversations"]; readonly logger: Pick<Logger, "warn"> },
+    job: BackgroundJob,
+    by: JobStopper,
+): Promise<boolean> => {
     try {
         return await stopBackgroundJob(deps.conversations, job, by, disarmWith(deps.logger));
     } catch (error) {
@@ -125,9 +134,10 @@ const carryOut = async (
     verdict: JobFateVerdict,
     ports: readonly number[],
     waiting: ReturnType<typeof jobInputWait>,
-    leftover: boolean,
+    why: { readonly leftover: boolean; readonly halted: JobStopper | undefined },
 ): Promise<void> => {
     const { job, kept } = judged;
+    const { leftover, halted } = why;
     const { conversationId } = job;
     if (verdict === "handed") {
         const watch = handJobOver(deps.conversations, job, ports);
@@ -140,7 +150,9 @@ const carryOut = async (
     if (verdict !== "stopped") {
         return;
     }
-    if (waiting === undefined && leftover) {
+    if (halted !== undefined) {
+        deps.logger.info({ conversationId, job: job.id, label: job.label, by: halted }, "background job: stopped with its turn, which a cancel stopped");
+    } else if (waiting === undefined && leftover) {
         deps.logger.info({ conversationId, job: job.id, label: job.label }, "background job: stopped, a cut-off turn left it and the run that carried the work on finished without it");
     } else if (waiting === undefined) {
         deps.logger.info({ conversationId, job: job.id, ports }, "background job: stopped with its turn, which used it and handed it to nobody");
@@ -148,7 +160,7 @@ const carryOut = async (
         deps.logger.warn({ conversationId, job: job.id, program: waiting.program, since: waiting.since }, "background job: stopped with its turn, it was waiting for input nobody would type");
     }
     // Not awaited: marking it is what frees the land, and the processes take their grace in the background.
-    void stopJob(deps, job, "turn");
+    void stopJob(deps, job, halted ?? "turn");
 };
 
 /**
@@ -156,8 +168,13 @@ const carryOut = async (
  * whatever way the turn ended, before it arms the wakes the awaited ones are handed to and before any land (so a
  * reclaimed server no longer holds it). Never throws: a turn's ending must not fail on it, and a job it could not judge
  * stays awaited. `clean`: the run ended rather than failed, which is what lets it settle a job a cut-off turn left.
+ * `halted`: who cancelled the conversation (conversations/actor/conversation-halt.ts), whose jobs all stop but those kept for the person.
  */
-export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string, ending: { readonly clean: boolean } = { clean: true }): Promise<void> => {
+export const resolveTurnJobs = async (
+    deps: JobFateDeps,
+    conversationId: string,
+    ending: { readonly clean: boolean; readonly halted?: JobStopper } = { clean: true },
+): Promise<void> => {
     const run = turnRunOf(deps.conversations, conversationId);
     if (run === undefined) {
         return;
@@ -178,11 +195,11 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string,
             const waiting = jobInputWait(judged.job);
             const reached = judged.cut && reachesJob(targets, judged);
             const leftover = judged.cut && ending.clean && !reached;
-            const verdict = jobFate({ kept: judged.kept, ports, targets, handed, reachedBefore, waiting: waiting !== undefined, leftover });
+            const verdict = jobFate({ kept: judged.kept, ports, targets, handed, reachedBefore, waiting: waiting !== undefined, leftover, halted: ending.halted !== undefined });
             if (verdict === "awaited" && reached) {
                 awaitedByRun(deps.conversations, judged.job);
             }
-            await carryOut(deps, judged, verdict, ports, waiting, leftover);
+            await carryOut(deps, judged, verdict, ports, waiting, { leftover, halted: ending.halted });
         }
         // A server kept while still starting is handed over listening nowhere yet; it is looked at again (handed-ports.ts).
         if (portlessHandedJobs(deps.conversations).some((job) => job.conversationId === conversationId)) {

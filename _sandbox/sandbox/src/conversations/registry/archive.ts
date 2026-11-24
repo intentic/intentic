@@ -3,7 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { parentOfActor } from "../../auth/principal.js";
 import type { Logger } from "pino";
-import type { Family, FamilyDeps } from "../../agent/subagents/children.js";
+import type { Family, FamilyDeps } from "../../agent/subagents/family/child-cancel.js";
 import type { FamilyEnd } from "../../agent/subagents/family/family-cancel.js";
 import type { TurnEngine } from "../../seams/turn-engine.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";

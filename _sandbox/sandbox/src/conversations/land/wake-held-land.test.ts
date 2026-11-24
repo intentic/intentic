@@ -14,6 +14,7 @@ import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js"
 import type { LandStanding } from "./standing.js";
 import { landHeldForWake, type WakeHeldLandDeps } from "./wake-held-land.js";
 import { noteLandHeldForWake, takeLandHeldForWake } from "./wake-held.js";
+import { haltConversation } from "../actor/conversation-halt.js";
 
 // Pins the land a turn's close skipped for a wake, run once that wake goes away without firing: only for a conversation
 // at rest that waits on nothing else, whose last turn ended clean and whose work is held on its branch, and only as the
@@ -24,6 +25,8 @@ interface Held {
     readonly standing?: LandStanding;
     readonly state?: ConversationState;
     readonly queue?: TurnQueue;
+    // A cancel stopped it (conversations/actor/conversation-halt.ts), whose disarming of its wakes is what brings the land on.
+    readonly halted?: true;
 }
 
 const ID = "c1";
@@ -47,6 +50,10 @@ beforeEach(() => {
 
 const deps = async (held: Held = {}, over: FleetStore = store): Promise<WakeHeldLandDeps> => {
     const agents = await daemonOver(over, held.entry ?? finished);
+    const { conversations: actors } = memoryFleet();
+    if (held.halted === true) {
+        haltConversation(actors, ID, "agent");
+    }
     return unstubbed<WakeHeldLandDeps>("services", {
         logger: pino({ level: "silent" }),
         agents: unstubbed<Services["agents"]>("agents", {
@@ -55,6 +62,7 @@ const deps = async (held: Held = {}, over: FleetStore = store): Promise<WakeHeld
             standingOf: () => held.standing ?? "ready",
         }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
+            holdings: actors.holdings,
             state: () => held.state ?? idleConversation(),
             queued: () => held.queue ?? NO_QUEUE,
         }),
@@ -131,6 +139,8 @@ describe("the land a wake held", () => {
         ["a person's message waits for the next turn", { queue: joined(NO_QUEUE, { id: "m1", voice: "person", queuedAt: 1, turn: { conversationId: ID, prompt: "next" } }) }],
         ["the work is no longer held on its branch", { standing: "landed" as const }],
         ["the land already met a conflict", { standing: "conflict" as const }],
+        // 2026-11-24: a cancel's disarming of a subagent's watches must not land its unfinished work in its parent's checkout.
+        ["a cancel stopped it", { halted: true as const }],
     ])("lands nothing, and forgets it, when %s", async (_case, held: Held) => {
         const services = await deps(held);
         await noteLandHeldForWake(services, ID, { autoLand: true });

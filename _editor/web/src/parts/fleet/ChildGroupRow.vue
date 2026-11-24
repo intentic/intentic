@@ -16,8 +16,8 @@ import type { TrayGroup } from "../../models/fleet/board/childFold";
 
 const props = defineProps<{
     group: TrayGroup;
-    // The card the tray hangs from, named in the row's hover: whose news these are.
-    parent: string;
+    // Whose news these are, named in the row's hover: the card the tray hangs from, and any rider that started some of them.
+    parents: readonly string[];
 }>();
 const emit = defineEmits<{ toggle: [] }>();
 
@@ -70,7 +70,7 @@ const back = computed(() => {
         :aria-expanded="group.open"
         v-tooltip.top="{
             title: t(`agents.childRows.parentNotified`),
-            rows: [{ label: t(`agents.childRows.parent`), value: parent }],
+            rows: [{ label: t(`agents.childRows.parent`, {}, parents.length), value: parents.join(`, `) }],
             note: t(`agents.childRows.yoursIfStops`),
         }"
         @click="emit(`toggle`)"

@@ -24,6 +24,7 @@ import { bookingFor, bookingOfAsk, unbookable } from "./booking-ask.js";
 import { bookContinuation, continueQueued } from "./continuation.js";
 import { checkBookedPower } from "../../../hosts/power/host-power.js";
 import { queuedMessageOf, requestOf } from "./queued-message.js";
+import { HALTED_WORDS, haltOf, liftHalt } from "../../../conversations/actor/conversation-halt.js";
 
 // Every message to a conversation comes through here, whoever sends it: said into the live turn where that turn takes
 // words, started as a turn of its own when nothing runs, and otherwise queued on the conversation's actor until one of
@@ -41,6 +42,7 @@ const NOT_STEERABLE: Unsteered = { why: "no steerable turn running for that conv
 const steeredOr = (steered: boolean | { readonly invalid: string }): true | Unsteered => (steered === false ? NOT_STEERABLE : steered);
 
 const ARCHIVED: Unsaid = { why: "the conversation is archived, and only a person's message reopens it" };
+const HALTED: Unsaid = { why: HALTED_WORDS };
 
 // A scheduled send booked: said in the log, and (2026-11-22) checked against the settings of the computer this sandbox
 // runs on, which raises a card when it would sleep through the send (hosts/power/host-power.ts). Never waited for; a booking
@@ -223,6 +225,58 @@ const dropArchived = (daemon: Services, conversationId: string, batch: readonly 
     daemon.logger.info({ conversationId, messages: batch.length }, "admission: the conversation is archived, the sandbox's waiting words were dropped");
 };
 
+/**
+ * Whether words of this voice go to a conversation a cancel stopped (conversations/actor/conversation-halt.ts): the sandbox's never,
+ * since a wake of its own (a watch, a finished job, a child's report) would undo the cancel; a person's or an agent's
+ * always, and they lift the cancel, since whoever writes to it means it to work again. True for one no cancel stopped.
+ */
+const passesHalt = (daemon: Services, conversationId: string, voice: QueuedItem["voice"]): boolean => {
+    if (haltOf(daemon.conversations, conversationId) === undefined) {
+        return true;
+    }
+    if (voice === "sandbox") {
+        daemon.logger.info({ conversationId }, "admission: the conversation was stopped by a cancel, the sandbox's words go nowhere");
+        return false;
+    }
+    liftHalt(daemon.conversations, conversationId);
+    daemon.logger.info({ conversationId, voice }, "admission: words from a person or an agent lift the cancel that stopped the conversation");
+    return true;
+};
+
+// The sandbox's words that joined the queue of a conversation a cancel has since stopped (while its turn was still being
+// stopped): dropped before anything waiting goes, as an archived one's are. A person's or an agent's stay, and the turn
+// they start lifts the cancel (children.ts liftHaltOnStart).
+const dropHaltedWords = (daemon: Services, conversationId: string): void => {
+    if (haltOf(daemon.conversations, conversationId) === undefined) {
+        return;
+    }
+    const sandbox = daemon.conversations.queued(conversationId).items.filter((item) => item.voice === "sandbox");
+    for (const item of sandbox) {
+        daemon.conversations.send(conversationId, { kind: "queue-removed", id: item.id, revision: item.revision });
+    }
+    if (sandbox.length > 0) {
+        daemon.logger.info({ conversationId, messages: sandbox.length }, "admission: the conversation was stopped by a cancel, the sandbox's waiting words were dropped");
+    }
+};
+
+// A person's words a refusal at the door turned away go back to the head of the queue, held, for everyone to see.
+const handBack = (daemon: Services, carrying: Map<string, readonly Carrying[]>, conversationId: string): void => {
+    const all = carrying.get(conversationId) ?? [];
+    const still = all.filter(({ run }) => !run.done);
+    if (still.length === 0) {
+        carrying.delete(conversationId);
+    } else {
+        carrying.set(conversationId, still);
+    }
+    for (const { run, batch } of all.filter((carried) => carried.run.done && carried.run.ranNothing)) {
+        daemon.conversations.send(conversationId, { kind: "queue-returned", items: batch });
+        for (const item of batch) {
+            keepReceipt(daemon.conversations, conversationId, item.id, { delivered: "queued" });
+        }
+        daemon.logger.info({ conversationId, run: run.id, messages: batch.length }, "admission: a refusal at the door handed the words back to the queue");
+    }
+};
+
 // `services` is read per call, since the port this serves is composed into the very object it reads.
 export const createAdmission = (
     services: () => Services,
@@ -313,6 +367,7 @@ export const createAdmission = (
 
     // Everything of the queue that can go out now, by message id.
     const deliver = async (conversationId: string): Promise<Map<string, MessageReceipt>> => {
+        dropHaltedWords(services(), conversationId);
         const delivered = new Map<string, MessageReceipt>();
         while (!held(conversationId)) {
             const stepped = await step(conversationId);
@@ -372,6 +427,9 @@ export const createAdmission = (
             services().logger.info({ conversationId, voice: item.voice }, "admission: the conversation is archived, the sandbox's words go nowhere");
             return ARCHIVED;
         }
+        if (!passesHalt(services(), conversationId, item.voice)) {
+            return HALTED;
+        }
         // Only a booked message waiting is nothing ahead of this one: it goes at its own time, and this one now.
         const queue = services().conversations.queued(conversationId);
         const now = waitingOf(queue).length === 0 && holdOf(queue) === undefined ? await deliverNow(item) : undefined;
@@ -388,23 +446,6 @@ export const createAdmission = (
     const duplicate = async (conversationId: string, messageId: string | undefined): Promise<MessageReceipt | undefined> => {
         const earlier = messageId === undefined ? undefined : await receiptOf(services(), conversationId, messageId);
         return earlier === undefined ? undefined : { ...earlier, duplicate: true };
-    };
-
-    // A person's words a refusal at the door turned away go back to the head of the queue, held, for everyone to see.
-    const handBack = (conversationId: string): void => {
-        const daemon = services();
-        const all = carrying.get(conversationId) ?? [];
-        const still = all.filter(({ run }) => !run.done);
-        if (still.length === 0) {
-            carrying.delete(conversationId);
-        } else {
-            carrying.set(conversationId, still);
-        }
-        for (const { run, batch } of all.filter((carried) => carried.run.done && carried.run.ranNothing)) {
-            daemon.conversations.send(conversationId, { kind: "queue-returned", items: batch });
-            kept(conversationId, new Map(batch.map((item) => [item.id, { delivered: "queued" } as const])));
-            daemon.logger.info({ conversationId, run: run.id, messages: batch.length }, "admission: a refusal at the door handed the words back to the queue");
-        }
     };
 
     // Books the message by its own booking, every other waiting message left as it was, opening the conversation's entry
@@ -466,7 +507,7 @@ export const createAdmission = (
             }),
         drain: (conversationId) =>
             inTurn(conversationId, async () => {
-                handBack(conversationId);
+                handBack(services(), carrying, conversationId);
                 kept(conversationId, await deliver(conversationId));
             }),
         // The message taken back, and with it the conversation it opened when nothing else is in it: the card goes in every

@@ -226,7 +226,7 @@ export const childSpawn = defineGuardedAction<ChildSpawnInput>({
         }
         if (rule === undefined && outsideSource !== undefined) {
             return HOLD(
-                `this turn has taken in content from outside (${taintWords(outsideSource)}), and a subagent would spend the owner's accounts on its say-so`,
+                `this turn has taken in content from outside (${taintWords(outsideSource)}), and a subagent would spend the owner's accounts on its say-so (an \`agents.spawn\` action rule of the owner's decides this instead)`,
             );
         }
         return ALLOW(`no action rule restricts spawning subagents on ${provider}`);

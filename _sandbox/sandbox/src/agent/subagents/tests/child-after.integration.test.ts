@@ -17,7 +17,8 @@ import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { readKinds, RESUMES } from "../../../seams/restart/in-flight.testing.js";
 import { opt } from "../../../opt.js";
 import { listSubagentSessions, openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "../subagents.js";
-import { cancelChild, type ChildSpawnResult, resetChildrenForTest, sendToChild, spawnChild } from "../children.js";
+import { type ChildSpawnResult, resetChildrenForTest, sendToChild, spawnChild } from "../children.js";
+import { cancelChild } from "../family/child-cancel.js";
 import { AFTER_SKIPPED, afterLanded, afterMoved, afterRefusal, afterSummary, prerequisiteOf } from "../starting/child-after.js";
 import { withBrief } from "../starting/child-brief.js";
 import { CHILDREN } from "../child-records.js";
@@ -61,6 +62,8 @@ const daemonOver = (body: TurnStarter["stream"], entries: Map<string, PersistedA
         ...driven,
         agents: unstubbed<Services["agents"]>("agents", {
             entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : entries.get(id)),
+            // A cancel walks the spawn links below the child it names (family/child-cancel.ts).
+            ids: () => [parent.conversationId, ...entries.keys()],
             standingOf: (id: string) => standings.get(id) ?? "idle",
         }),
         turns: {

@@ -1,13 +1,16 @@
 import type { AgentFamilyStopped } from "@intentic/sandbox-contract/schemas/agents";
 import type { Services } from "../../../composition.js";
 import { liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
-import { cancelFamily, familyOf } from "../children.js";
+import { cancelFamily, familyOf } from "./child-cancel.js";
 import { markFamilyEnded } from "./family-cancel.js";
+import { haltConversation } from "../../../conversations/actor/conversation-halt.js";
+import { quietHalted } from "./halt-quiet.js";
 import { liveRun, stopRunsOf } from "../workflows/live-runs.js";
 import { stopScriptRun } from "../workflows/script-runs.js";
 
 // A PERSON'S STOP ALL ON A CARD (agents.stopFamily): the conversation's own turn, the workflow runs it and the agents
-// below it started, and every one of those agents' work, stopped together. A conversation's own Stop ends only its turn,
+// below it started, and every one of those agents' work, stopped together, each staying stopped until somebody writes to
+// it (conversations/actor/conversation-halt.ts). A conversation's own Stop ends only its turn,
 // and a child stopped by hand only that child: a workflow run starts the next worker as each one stops, and a parent woken
 // by a stopped child's ending may start another. Both are what this press ends (2026-11-22: a run on marta kept starting
 // workers while its owner stopped them one by one, until the agent was told in words to stop). The card stays on the
@@ -20,8 +23,11 @@ export const stopFamily = async (services: Services, conversationId: string): Pr
     const runs = stopRunsOf([conversationId, ...before.members.map(({ child }) => child)], "owner");
     // The endings stopped below are news for nobody: said to it, they would wake it into a turn that may start them again.
     markFamilyEnded(services.conversations, conversationId, Date.now());
+    // The card's own conversation stays stopped too (conversations/actor/conversation-halt.ts): nothing it left running wakes it, until the person writes.
+    haltConversation(services.conversations, conversationId, "person");
     const turn = liveRunOf(services.conversations, conversationId) === undefined ? false : (await services.turns.stop({ conversationId, live: true })).stopped;
     const cancelled = await cancelFamily(services, familyOf(services, [conversationId]), "stopped");
+    await quietHalted(services, conversationId, "person");
     services.logger.info({ conversationId, turn, runs, agents: cancelled.length }, "family stop: a person stopped a conversation and everything it started");
     return { turn, runs, agents: cancelled.length };
 };

@@ -314,6 +314,50 @@ it(`stands in for a spawned child whose first turn has not begun, and gives way 
     expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2`);
 });
 
+// 2026-11-24, jelly-ymz3: the agents two of an orchestrator's slices started rode its tray as if it had started them.
+// They still ride the card their starter rides, and now say whose they are: a step in under the starter's row where it
+// is in sight in the same section, else flush with "via" and the starter's title. The tray's name stops saying the card
+// started every row in it.
+it(`hangs an agent a child started a step in under that child's row, or names the child where its row is not above it`, async () => {
+    const grandchild = (id: string, starter: string, over: Partial<AgentSummary>): AgentSummary => agent(id, { startedBy: `agent:${starter}`, ...over });
+    setAgents(
+        [
+            lead,
+            helper(`port`, { title: `port the parser`, status: `running`, startedAt: 2 }),
+            helper(`notes`, { title: `write the notes`, updatedAt: 900 }),
+            grandchild(`grammar`, `port`, { title: `check the grammar`, status: `running`, startedAt: 3 }),
+            grandchild(`index`, `notes`, { title: `rebuild the index`, status: `running`, startedAt: 4 }),
+        ],
+        100,
+    );
+    const board = await mountBoard();
+    await focus(board, `ship the release`);
+
+    expect(tray(board)).toBeNull();
+    const named = board.querySelector(`[role="group"][aria-label="${t(`agents.childRows.startedByFamily`, { title: `ship the release` })}"]`);
+    const drawn = [...(named?.querySelectorAll(`button:not([aria-expanded])`) ?? [])];
+    // Each row as [its title, its starter's words, whether they are drawn rather than read to a screen reader alone, steps in].
+    const lines = drawn.map((row) => {
+        const via = row.querySelector(`[data-via]`);
+        return [
+            row.querySelector(`.truncate`)?.textContent?.trim(),
+            via?.textContent?.trim() ?? null,
+            via === null ? null : !via.classList.contains(`sr-only`),
+            row.querySelectorAll(`[data-nest-guide]`).length,
+        ];
+    });
+    expect(lines).toEqual([
+        // Its starter settled alone, a row of the settled section below: named, flush.
+        [`rebuild the index`, t(`agents.childRows.via`, { title: `write the notes` }), true, 0],
+        [`port the parser`, null, null, 0],
+        // Right under its starter's row, one step in; its starter named to a screen reader alone.
+        [`check the grammar`, t(`agents.childRows.via`, { title: `port the parser` }), false, 1],
+        [`write the notes`, null, null, 0],
+    ]);
+    // The family is counted on the card as before: every agent riding it, started by it or by one of them.
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 3, total: 4 }))).toBe(`4`);
+});
+
 it(`draws no tray for a card that started nothing`, async () => {
     setAgents([agent(`alone`)], 100);
     const board = await mountBoard();

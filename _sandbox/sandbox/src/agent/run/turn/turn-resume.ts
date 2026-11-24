@@ -52,6 +52,7 @@ import { breakPolicyFor } from "./break-policy.js";
 import { keepStandingTrue } from "./holds/held-standing.js";
 import { releaseBooked } from "./booked-release.js";
 import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
+import { droppedForHalt } from "./holds/halted-holds.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
 // (a rotated token, a restart, a session past its window), which needs nobody's permission, and the three walls the
@@ -533,6 +534,9 @@ const wallAhead = (services: Services, held: HeldRecord, routing: ResumeRouting 
 
 // A given-up hold tells the card first; what it leaves waits until that lands, for a turn still unwinding.
 const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number, pass: PassNotes): Promise<void> => {
+    if (droppedForHalt(services, conversationId, held)) {
+        return;
+    }
     if (held.reason === "limit") {
         await runLimitHold(services, conversationId, held, now, pass);
         return;

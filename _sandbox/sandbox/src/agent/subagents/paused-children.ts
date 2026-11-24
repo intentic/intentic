@@ -16,6 +16,15 @@ import { noteSpawnedChild } from "./subagents.js";
 // settled by its own boot pass, told parents "a restart drops that booking" after held turns had become durable, while
 // the child's own restore was waiting for that very booking, and nothing watched the restored pause.
 
+/**
+ * The re-run a renewed sign-in brings, where the child's turn failed on a refused credential the sandbox re-mints and
+ * re-runs by itself (an `auth` hold, fired or about to): a pause like any booked re-run, though the failure frame its
+ * pump read named none. 2026-11-24, shinobi-society: each renewal told an orchestrator its slice had failed, and a second
+ * later that it was working again; a sibling waiting after it was said to wait for the parent. Undefined otherwise.
+ */
+export const signInRerunOf = (actors: Pick<Services["conversations"], "state">, childId: string): { readonly at?: number } | undefined =>
+    actors.state(childId)?.resume.held?.reason === "auth" ? {} : undefined;
+
 // How often a paused child looks whether the re-run it waits for is still coming, and how many looks in a row may find
 // it gone before the pause ends as failed; two, since a re-run firing is a moment with no hold and no run yet. Since
 // 2026-10-20 the slow fallback only: the events below settle a lapse within seconds, and this catches one they missed.

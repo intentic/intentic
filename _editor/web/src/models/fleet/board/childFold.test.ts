@@ -6,7 +6,10 @@ import {
     cardKey,
     FINISHED_FOLD,
     foldChildren,
+    NEST_DEPTH,
+    reportsTo,
     standsAlone,
+    startersIn,
     steadyFold,
     stopOf,
     trayCount,
@@ -19,7 +22,8 @@ import {
 // parent is on the board, save one owing a press a row cannot carry; a child calling the reader moves its family's card
 // to Attention instead of standing there itself; a grandchild rides with its parent. Then what a tray draws: asks and
 // working children always, stopped ones one row per thing they stopped on, settled ones behind the fold, a filter's
-// matches unfolded; and the subagents its runtime ran in-process dealt into those same rows.
+// matches unfolded, a grandchild under its starter's row or naming it; and the subagents its runtime ran in-process
+// dealt into those same rows.
 
 const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
     id,
@@ -373,7 +377,7 @@ describe(`what a tray draws`, () => {
     });
 
     it(`shows every working child and folds the settled ones behind a count`, () => {
-        expect(trayOf(brood, at())).toEqual({ asks: [], lead: [w1, w2], groups: [], folded: 2, open: false, tail: [] });
+        expect(trayOf(brood, at())).toEqual({ asks: [], lead: [w1, w2], groups: [], folded: 2, open: false, tail: [], lines: new Map() });
     });
 
     it(`unfolds the settled ones under the toggle`, () => {
@@ -383,7 +387,7 @@ describe(`what a tray draws`, () => {
     });
 
     it(`draws one settled child alone as its own row, with no fold to open`, () => {
-        expect(trayOf([w1, s1], at())).toEqual({ asks: [], lead: [w1], groups: [], folded: 0, open: false, tail: [s1] });
+        expect(trayOf([w1, s1], at())).toEqual({ asks: [], lead: [w1], groups: [], folded: 0, open: false, tail: [s1], lines: new Map() });
         expect(ids(trayRows(trayOf([w1, s1], at())))).toEqual([`w1`, `s1`]);
     });
 
@@ -424,7 +428,7 @@ describe(`what a tray draws`, () => {
 
     it(`lists only a filter's matches, and folds none of them away`, () => {
         const tray = trayOf(brood, at({ filtering: true, matches: (agent) => agent.id === `s2` || agent.id === `w1` }));
-        expect(tray).toEqual({ asks: [], lead: [w1, s2], groups: [], folded: 0, open: false, tail: [] });
+        expect(tray).toEqual({ asks: [], lead: [w1, s2], groups: [], folded: 0, open: false, tail: [], lines: new Map() });
     });
 
     it(`draws nothing for a card with no children, or none the filter kept`, () => {
@@ -432,6 +436,114 @@ describe(`what a tray draws`, () => {
         expect(trayOf(undefined, at())).toBeUndefined();
         expect(trayOf(brood, at({ filtering: true, matches: () => false }))).toBeUndefined();
         expect(trayRows(undefined)).toEqual([]);
+    });
+
+    // 2026-11-24, jelly-ymz3: an orchestrator started six slices and two of them started five more; its tray drew all
+    // eleven flat, as if it had started them. A row another rider started goes a step in under its starter's row where
+    // that row is in the same section, else stays flush and names its starter ("via …").
+    describe(`with agents its riders started`, () => {
+        const by = (id: string, starter: string, over: Partial<FleetAgent> = {}): FleetAgent => working(id, { startedBy: `agent:${starter}`, ...over });
+        // Each drawn line as [row, depth, starter, says "via"], in the order the tray met them.
+        const drawn = (tray: ReturnType<typeof trayOf>) => [...(tray?.lines ?? [])].map(([id, line]) => [id, line.depth, line.starter.id, line.via]);
+        const session = (id: string, startedAt: number): SubagentSession => ({
+            id,
+            kind: `subagent`,
+            conversationId: `root`,
+            status: `running`,
+            startedAt,
+            activityAt: startedAt,
+        });
+
+        it(`nests a starter's working rows under its own, and names a starter whose row is in another section`, () => {
+            const sliceB = child(`b`, `root`, { updatedAt: 9_500 });
+            const riders = [
+                by(`a1`, `a`, { startedAt: 5_000 }),
+                by(`b1`, `b`, { startedAt: 4_000 }),
+                by(`a2`, `a`, { startedAt: 3_000 }),
+                by(`c`, `root`, { startedAt: 2_000 }),
+                by(`a`, `root`, { startedAt: 1_000 }),
+                sliceB,
+            ];
+            const tray = trayOf(riders, at(), [session(`call`, 4_500)]);
+            // The card's own rows keep the section's order (newest started first); a slice's rows follow it, a step in.
+            expect(ids(tray?.lead)).toEqual([`call`, `b1`, `c`, `a`, `a1`, `a2`]);
+            expect(ids(tray?.tail)).toEqual([`b`]);
+            expect(drawn(tray)).toEqual([
+                [`b1`, 0, `b`, true],
+                [`a1`, 1, `a`, false],
+                [`a2`, 1, `a`, false],
+            ]);
+            expect(ids(trayRows(tray))).toEqual([`b1`, `c`, `a`, `a1`, `a2`, `b`]);
+        });
+
+        it(`names the starter of a row whose starter is folded away, and nests it once the fold opens`, () => {
+            const riders = [child(`a`, `root`, { updatedAt: 9_000 }), child(`b`, `root`, { updatedAt: 8_000 }), child(`a1`, `a`, { updatedAt: 7_000 })];
+            const shut = trayOf(riders, at({ selected: `a1` }));
+            expect([shut?.folded, ids(shut?.tail)]).toEqual([3, [`a1`]]);
+            expect(drawn(shut)).toEqual([[`a1`, 0, `a`, true]]);
+            const opened = trayOf(riders, at({ opened: new Set([FINISHED_FOLD]) }));
+            expect(ids(opened?.tail)).toEqual([`a`, `a1`, `b`]);
+            expect(drawn(opened)).toEqual([[`a1`, 1, `a`, false]]);
+        });
+
+        it(`steps in at most NEST_DEPTH times, and names the starter of a row deeper than that`, () => {
+            expect(NEST_DEPTH).toBe(2);
+            const tray = trayOf([by(`a`, `root`), by(`b`, `a`), by(`c`, `b`), by(`d`, `c`), by(`e`, `d`)], at());
+            expect(ids(tray?.lead)).toEqual([`a`, `b`, `c`, `d`, `e`]);
+            expect(drawn(tray)).toEqual([
+                [`b`, 1, `a`, false],
+                [`c`, 2, `b`, false],
+                [`d`, 2, `c`, true],
+                [`e`, 2, `d`, true],
+            ]);
+        });
+
+        it(`names the starter of a grandchild asking the reader, whose ask leads the tray apart from its starter's row`, () => {
+            const fold = folded(working(`root`), working(`mid`, { startedBy: `agent:root` }), child(`leaf`, `mid`, { status: `awaiting`, attention: permission }));
+            const tray = trayOf(fold.children.get(`root`), at());
+            expect([ids(tray?.asks), ids(tray?.lead)]).toEqual([[`leaf`], [`mid`]]);
+            expect(drawn(tray)).toEqual([[`leaf`, 0, `mid`, true]]);
+        });
+
+        it(`nests within an open stop group, and names the starter of the one member kept in sight while it is shut`, () => {
+            const spent = [limited(`x`, `root`), limited(`x1`, `x`), limited(`y`, `root`)];
+            const opened = trayOf(spent, at({ opened: new Set([`limit:codex`]) }));
+            expect(opened?.groups.map((group) => [ids(group.members), ids(group.shown)])).toEqual([[[`x`, `x1`, `y`], [`x`, `x1`, `y`]]]);
+            expect(drawn(opened)).toEqual([[`x1`, 1, `x`, false]]);
+            const shut = trayOf(spent, at({ selected: `x1` }));
+            expect(shut?.groups.map((group) => ids(group.shown))).toEqual([[`x1`]]);
+            expect(drawn(shut)).toEqual([[`x1`, 0, `x`, true]]);
+        });
+
+        it(`nests a filter's matches only where the starter matched too`, () => {
+            const riders = [by(`a1`, `a`, { title: `fix the parser` }), by(`a`, `root`, { title: `parser slice` }), by(`c`, `root`, { title: `docs` })];
+            const alone = trayOf(riders, at({ filtering: true, matches: (agent) => agent.id === `a1` }));
+            expect([ids(alone?.lead), drawn(alone)]).toEqual([[`a1`], [[`a1`, 0, `a`, true]]]);
+            const both = trayOf(riders, at({ filtering: true, matches: (agent) => agent.title?.includes(`parser`) === true }));
+            expect([ids(both?.lead), drawn(both)]).toEqual([[`a`, `a1`], [[`a1`, 1, `a`, false]]]);
+        });
+
+        it(`draws rows that name each other as starters once each, rather than walking the ring`, () => {
+            const tray = trayOf([by(`x`, `y`), by(`y`, `x`)], at());
+            expect(ids(tray?.lead)).toEqual([`x`, `y`]);
+            expect(drawn(tray)).toEqual([
+                [`x`, 0, `y`, true],
+                [`y`, 1, `x`, false],
+            ]);
+        });
+
+        it(`reads a starter among the riders alone, in the started one's own box`, () => {
+            const riders = [by(`a`, `root`), by(`a1`, `a`), by(`far`, `a`, { sandboxId: `box-b` }), card(`run`)];
+            expect([...startersIn(riders)].map(([key, starter]) => [key, starter.id])).toEqual([[`a1`, `a`]]);
+        });
+
+        it(`names whom a stop group's children report to: the card, and each slice that started some of them`, () => {
+            const root = working(`root`);
+            const [x, y] = [limited(`x`, `root`), limited(`y`, `root`)];
+            const spent = [x, limited(`x1`, `x`), y, limited(`y1`, `y`), limited(`x2`, `x`)];
+            expect(ids(reportsTo(spent, startersIn(spent), root))).toEqual([`root`, `x`, `y`]);
+            expect(ids(reportsTo([x, y], startersIn([x, y]), root))).toEqual([`root`]);
+        });
     });
 
     // A subagent the card's runtime ran in-process has no conversation, so the roster hands it to the tray, which deals it
@@ -468,8 +580,8 @@ describe(`what a tray draws`, () => {
         });
 
         it(`draws a tray for a card whose only children ran in-process`, () => {
-            expect(trayOf([], at(), [early])).toEqual({ asks: [], lead: [early], groups: [], folded: 0, open: false, tail: [] });
-            expect(trayOf(undefined, at(), [newest])).toEqual({ asks: [], lead: [], groups: [], folded: 0, open: false, tail: [newest] });
+            expect(trayOf([], at(), [early])).toEqual({ asks: [], lead: [early], groups: [], folded: 0, open: false, tail: [], lines: new Map() });
+            expect(trayOf(undefined, at(), [newest])).toEqual({ asks: [], lead: [], groups: [], folded: 0, open: false, tail: [newest], lines: new Map() });
         });
 
         it(`lists the ones a filter matched beside the conversations it matched`, () => {

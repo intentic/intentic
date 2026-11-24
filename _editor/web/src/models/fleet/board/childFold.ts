@@ -60,7 +60,8 @@ export interface ChildFold {
     // The lanes less every child riding under a card, each card in the lane its family asks for: what the board draws.
     readonly lanes: Lanes;
     // What rides under each card, by its cardKey: the calling children first, then working ones as Active orders them,
-    // then settled ones as Finished does, newest first. A grandchild rides under the same card as its parent does.
+    // then settled ones as Finished does, newest first. A grandchild rides under the same card as its parent does, and
+    // its tray row says which rider started it (startersIn, Tray.lines), so the card is never read as its starter.
     readonly children: ReadonlyMap<string, readonly FleetAgent[]>;
     // The card each riding child is drawn under, by the child's cardKey.
     readonly hosts: ReadonlyMap<string, FleetAgent>;
@@ -375,7 +376,99 @@ export interface Tray {
     // else only the one wearing the ring, which stays in sight wherever it is, as the Finished window keeps its selection
     // (windowFinished).
     readonly tail: readonly TrayChild[];
+    // Every drawn row another rider started rather than the card, by its id: where it sits under its starter (TrayLine).
+    // Each list above is in tree order, a starter's rows a step in right under its own.
+    readonly lines: ReadonlyMap<string, TrayLine>;
 }
+
+// The most steps a row goes in under its starter's. A chain deeper still stays at this depth and names its starter,
+// since one more row at the same depth would read as its starter's sibling.
+export const NEST_DEPTH = 2;
+
+// Where a row another rider started sits in its section of the tray (asks, working, a stop group, the settled tail).
+export interface TrayLine {
+    // Steps in from the card's own rows: 0 when its starter's row is not above it in this section, else 1 to NEST_DEPTH.
+    readonly depth: number;
+    // The rider that started it: a grandchild riding its parent's card (foldChildren), or an automation run's own child.
+    readonly starter: FleetAgent;
+    // Its row names the starter in words ("via …"), since no step says it: the starter's row is in another section or
+    // behind a fold, or the chain runs deeper than NEST_DEPTH. A nested row names it to a screen reader alone.
+    readonly via: boolean;
+}
+
+const NO_LINES: ReadonlyMap<string, TrayLine> = new Map<string, TrayLine>();
+
+// The rider that started each rider, where that is another rider rather than the card, by the started one's cardKey.
+// The card's own children, an automation's earlier runs and its in-process subagents have none here.
+export const startersIn = (children: readonly FleetAgent[]): ReadonlyMap<string, FleetAgent> => {
+    const byKey = new Map(children.map((child) => [cardKey(child), child]));
+    const starters = new Map<string, FleetAgent>();
+    for (const child of children) {
+        const parentId = parentOf(child.startedBy);
+        const starter = parentId === undefined ? undefined : byKey.get(keyOf(parentId, child.sandboxId));
+        if (starter !== undefined && starter !== child) {
+            starters.set(cardKey(child), starter);
+        }
+    }
+    return starters;
+};
+
+// The agents a stop group's children report to, each once and in the members' order: the card for the ones it started,
+// and each rider that started some of the others.
+export const reportsTo = (members: readonly FleetAgent[], starters: ReadonlyMap<string, FleetAgent>, card: FleetAgent): readonly FleetAgent[] => [
+    ...new Set(members.map((member) => starters.get(cardKey(member)) ?? card)),
+];
+
+// A conversation row's cardKey; an in-process subagent's row is no conversation, so no rider names it as its starter.
+const keyOfRow = (row: TrayChild): string | undefined => (inProcess(row) ? undefined : cardKey(row));
+
+// One section's rows in tree order: a row whose starter's row is here too goes right under it, a step in, the rows one
+// starter started in the section's own order; every other row stays where the section put it. Writes the line of each
+// row a rider started into `lines`.
+const nest = <T extends TrayChild>(rows: readonly T[], starters: ReadonlyMap<string, FleetAgent>, lines: Map<string, TrayLine>): readonly T[] => {
+    if (starters.size === 0) {
+        return rows;
+    }
+    const starterOf = (row: TrayChild): FleetAgent | undefined => {
+        const key = keyOfRow(row);
+        return key === undefined ? undefined : starters.get(key);
+    };
+    const here = new Set(rows.map(keyOfRow));
+    const under = new Map<string, T[]>();
+    const tops: T[] = [];
+    for (const row of rows) {
+        const starter = starterOf(row);
+        if (starter !== undefined && here.has(cardKey(starter))) {
+            push(under, cardKey(starter), row);
+        } else {
+            tops.push(row);
+        }
+    }
+    const drawn: T[] = [];
+    const placed = new Set<T>();
+    const place = (row: T, depth: number): void => {
+        if (placed.has(row)) {
+            return;
+        }
+        placed.add(row);
+        drawn.push(row);
+        const starter = starterOf(row);
+        if (starter !== undefined) {
+            lines.set(row.id, { depth: Math.min(depth, NEST_DEPTH), starter, via: depth === 0 || depth > NEST_DEPTH });
+        }
+        for (const started of under.get(keyOfRow(row) ?? ``) ?? []) {
+            place(started, depth + 1);
+        }
+    };
+    for (const top of tops) {
+        place(top, 0);
+    }
+    // Rows starting each other in a ring, which only a corrupt record names, reach no top: flush, each naming its starter.
+    for (const row of rows) {
+        place(row, 0);
+    }
+    return drawn;
+};
 
 export interface TrayState {
     // The folds the reader opened on this card: FINISHED_FOLD for its settled children, a stop's key for its group.
@@ -418,9 +511,14 @@ export const trayOf = (
     if (riders.length === 0 && subagents.length === 0) {
         return undefined;
     }
+    // Each section nests on its own, so a row never leaves the section its standing put it in for its starter's.
+    const starters = startersIn(riders);
+    const lines = new Map<string, TrayLine>();
+    const tree = <T extends TrayChild>(rows: readonly T[]): readonly T[] => nest(rows, starters, lines);
+    const drawnLines = (): ReadonlyMap<string, TrayLine> => (lines.size === 0 ? NO_LINES : lines);
     if (state.filtering) {
-        const lead = [...riders.filter(state.matches), ...subagents.filter(state.matchesSubagent)];
-        return lead.length === 0 ? undefined : { asks: [], lead, groups: [], folded: 0, open: false, tail: [] };
+        const lead = tree([...riders.filter(state.matches), ...subagents.filter(state.matchesSubagent)]);
+        return lead.length === 0 ? undefined : { asks: [], lead, groups: [], folded: 0, open: false, tail: [], lines: drawnLines() };
     }
     const asks: FleetAgent[] = [];
     const lead: FleetAgent[] = [];
@@ -442,17 +540,19 @@ export const trayOf = (
         .sort(([a], [b]) => stopRank(a) - stopRank(b) || (a < b ? -1 : a > b ? 1 : 0))
         .map(([key, members]): TrayGroup => {
             const open = state.opened.has(key);
-            return { key, members, open, shown: open || members.length === 1 ? members : members.filter((child) => child.id === state.selected) };
+            const shown = open || members.length === 1 ? members : members.filter((child) => child.id === state.selected);
+            return { key, members, open, shown: tree(shown) };
         });
     const dealt = withSubagents(lead, settled, subagents);
+    const sections = { asks: tree(asks), lead: tree(dealt.lead), groups };
     // One settled child alone is its own row, as a stop group of one is: the toggle would take the same line to say less,
     // and a press to read a single line.
     if (dealt.settled.length === 1) {
-        return { asks, lead: dealt.lead, groups, folded: 0, open: false, tail: dealt.settled };
+        return { ...sections, folded: 0, open: false, tail: tree(dealt.settled), lines: drawnLines() };
     }
     const open = state.opened.has(FINISHED_FOLD);
-    const tail = open ? dealt.settled : dealt.settled.filter((child) => child.id === state.selected);
-    return { asks, lead: dealt.lead, groups, folded: dealt.settled.length, open, tail };
+    const tail = tree(open ? dealt.settled : dealt.settled.filter((child) => child.id === state.selected));
+    return { ...sections, folded: dealt.settled.length, open, tail, lines: drawnLines() };
 };
 
 // The riders under a card that are its automation's earlier runs rather than agents it started: whatever rides with no

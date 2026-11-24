@@ -416,12 +416,16 @@ const steeringTools = (children: ChildSupervisor): ServerTool[] => [
     ),
     sdk().tool(
         "cancel",
-        "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the " +
-            "sandbox booked for it by itself after a spent allowance or a turn that stopped short (wait shows " +
-            "that as status `paused`). Use it when you will do the work another way, so the original never " +
-            "resumes and duplicates it. What it already wrote stays in its worktree, and a later send carries on " +
-            "from there. A start or message waiting on the owner's card is theirs to decline, not yours to withdraw.",
-        { child: z.string().min(1).describe("The subagent's id, from spawn.") },
+        "Stop a subagent below you, and every subagent below it: its running turn, a start still waiting for " +
+            "memory, or a re-run the sandbox booked for it by itself after a spent allowance or a turn that " +
+            "stopped short (wait shows that as status `paused`), and the same for each subagent it started and " +
+            "theirs. Any subagent below you may be named, not only one you spawned; `all` stops every one of " +
+            "yours. A cancelled subagent stays stopped: the background jobs and watches it left are stopped too, " +
+            "and nothing wakes it until a message reaches it. Use it when you will do the work another way, so the " +
+            "original never resumes and duplicates it. What it already wrote stays on its own branch: a later send " +
+            "carries on from there, or merge brings it into your checkout. A start or message waiting on the " +
+            "owner's card is theirs to decline, not yours to withdraw.",
+        { child: z.string().min(1).describe("The subagent's id (from spawn, wait or `agents list`), or `all` for every one of yours.") },
         async (args) => {
             return answer(await children.cancel(args.child));
         },
@@ -454,9 +458,10 @@ const steeringTools = (children: ChildSupervisor): ServerTool[] => [
     ),
     sdk().tool(
         "merge",
-        "Bring a subagent's finished work into your own checkout when it was held on its branch: its changes " +
-            "clashed with your edits, or you are a conversation that judges its subagents' work before taking " +
-            "it (a home conversation holds all of it), as its report or wait's `landing` says. Writes them with " +
+        "Bring a subagent's work into your own checkout when it was held on its branch: its changes clashed " +
+            "with your edits, you cancelled it before it finished, or you are a conversation that judges its " +
+            "subagents' work before taking it (a home conversation holds all of it), as its report or wait's " +
+            "`landing` says. Writes them with " +
             "conflict markers where they clash, for you to resolve, as you would merge a branch yourself. " +
             "Otherwise its work reaches your checkout by itself.",
         { child: z.string().min(1).describe("The subagent's id, from spawn.") },

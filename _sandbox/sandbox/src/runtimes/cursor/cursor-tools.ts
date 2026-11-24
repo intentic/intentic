@@ -240,12 +240,14 @@ const settleTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool
 
 const cancelTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
-        "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the sandbox booked " +
-        "for it by itself after a spent allowance or a turn that stopped short (the wait tool shows that as status " +
-        "`paused`). Use it when you will do the work another way, so the original never resumes and duplicates it.",
+        "Stop a subagent below you, and every subagent below it: its running turn, a start still waiting for memory, or " +
+        "a re-run the sandbox booked for it by itself after a spent allowance or a turn that stopped short (the wait " +
+        "tool shows that as status `paused`). Any subagent below you may be named; `all` stops every one of yours. A " +
+        "cancelled subagent stays stopped until a message reaches it. Use it when you will do the work another way, so " +
+        "the original never resumes and duplicates it.",
     inputSchema: {
         type: "object",
-        properties: { child: { type: "string", description: "The subagent's id, from spawn." } },
+        properties: { child: { type: "string", description: "The subagent's id, or `all` for every one of yours." } },
         required: ["child"],
     },
     execute: async (args) => {

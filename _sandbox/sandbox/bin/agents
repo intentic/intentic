@@ -193,11 +193,14 @@ SPAWN AND SUPERVISE
   agents answer <id> --json '<obj>'    or pass picks keyed by question text: {"<question>": ["<pick>"]}.
                                        Questions only: permission and plan cards are the owner's to
                                        answer, and the daemon refuses them here
-  agents cancel <id>                   stop a subagent: its running turn, a start still waiting, or a re-run the
-                                       sandbox booked for it by itself (\`wait\` shows that as paused). Use it
-                                       before handing its task to another agent, so the original never resumes
-  agents merge <id>                    bring a subagent's finished work into your checkout when it clashed with
-                                       your edits and was held on its branch, with conflict markers to resolve
+  agents cancel <id>|all               stop a subagent below you and every subagent below it: its running turn,
+                                       a start still waiting, or a re-run the sandbox booked for it by itself
+                                       (\`wait\` shows that as paused), and the jobs and watches it left. Any
+                                       subagent below you may be named, not only your own; \`all\` stops all of
+                                       yours. It stays stopped until a message reaches it. Use it before handing
+                                       its task to another agent, so the original never resumes
+  agents merge <id>                    bring a subagent's work into your checkout when it was held on its branch
+                                       (it clashed with your edits, or you cancelled it), with conflict markers
   agents settle <id>                   record that a held subagent's work is already in your checkout because you
                                        brought it in yourself (a patch, a port by hand), so it stops calling the
                                        owner about a land conflict. Nothing is written; work you keep back stays held

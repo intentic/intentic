@@ -30,6 +30,7 @@ import { onJobEnded } from "./job-ended.js";
 import { INPUT_WAIT_MS } from "./input-wait.js";
 import { lookAtRuns } from "./input-wait-follow.js";
 import { jobFate, resolveTurnJobs, stopJob } from "./job-fates.js";
+import { quietHalted } from "../../subagents/family/halt-quiet.js";
 import { settleRunnerlessJobs } from "./job-files.js";
 import { portlessHandedJobs, reattributeHandedPorts } from "./handed-ports.js";
 
@@ -212,6 +213,14 @@ describe("a job's fate, from what its turn did", () => {
     it("stops a leftover of a cut-off turn the clean run never reached, unless the agent kept it for the person", () => {
         expect(jobFate({ kept: false, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false, leftover: true })).toBe("stopped");
         expect(jobFate({ kept: true, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false, leftover: true })).toBe("handed");
+    });
+
+    // 2026-11-24: a cancelled subagent's close handed its builds and benches to watches, and their exits woke it again.
+    it("stops whatever a turn a cancel stopped left, unless the agent kept it for the person", () => {
+        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false, halted: true })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [34_567], targets: ["pnpm test"], handed: none, reachedBefore: none, waiting: false, halted: true })).toBe("stopped");
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false, halted: true })).toBe("handed");
+        expect(jobFate({ kept: false, ports: [5173], targets: [], handed: new Set([5173]), reachedBefore: none, waiting: false, halted: true })).toBe("handed");
     });
 });
 
@@ -483,6 +492,34 @@ describe("what a cut-off turn left awaited", () => {
         await resolveTurnJobs(quiet, "conv-ended-on", { clean: true });
         expect(card("conv-ended-on", job.id)?.stoppedBy).toBeUndefined();
         await stopBackgroundJob(actors, job, "agent");
+    });
+});
+
+// 2026-11-24, shinobi-society: a cancelled subagent's builds and benches were handed to watches by its own close, and each
+// exit woke it into a turn again; one ran a full turn after three cancels.
+describe("a conversation a cancel stopped", () => {
+    const quiet = { conversations: actors, logger, scanPorts: () => Promise.resolve([]) };
+
+    it("stops what its turn left running, and one an earlier turn left awaited, as the cancel's", async () => {
+        const earlier = await running("conv-halted-close");
+        settledBackgroundJobs(actors, "conv-halted-close");
+        const { job } = await running("conv-halted-close", "exec sleep 60", "tu-halted-bench");
+        turnWith("conv-halted-close", [said("Running the bench in the quiet lane.")], "run-halted-close-2");
+        await resolveTurnJobs(quiet, "conv-halted-close", { clean: true, halted: "agent" });
+        expect([card("conv-halted-close", earlier.job.id)?.stoppedBy, card("conv-halted-close", job.id)?.stoppedBy]).toEqual(["agent", "agent"]);
+        expect(settledBackgroundJobs(actors, "conv-halted-close").running).toEqual([]);
+        await ended(job);
+        await ended(earlier.job);
+        expect(card("conv-halted-close", job.id)).toMatchObject({ stoppedBy: "agent", exitCode: 143 });
+    });
+
+    it("at rest, has the jobs it waits on stopped as the cancel's, and a second quieting finds nothing left", async () => {
+        const { job } = await running("conv-halted-rest");
+        settledBackgroundJobs(actors, "conv-halted-rest");
+        expect(await quietHalted({ conversations: actors, logger }, "conv-halted-rest", "person")).toEqual({ jobs: 1, watches: 0, rerun: false, words: 0 });
+        expect(card("conv-halted-rest", job.id)?.stoppedBy).toBe("person");
+        await ended(job);
+        expect(await quietHalted({ conversations: actors, logger }, "conv-halted-rest", "person")).toEqual({ jobs: 0, watches: 0, rerun: false, words: 0 });
     });
 });
 

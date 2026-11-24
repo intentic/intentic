@@ -173,6 +173,12 @@ on each spawn: both are required, and no setting picks them. So "spawn the cheap
   keeps it waiting for the parent's `merge` or `settle`; one that failed or was cancelled keeps it waiting for the
   parent, who is told. A message sent to it starts it at once, its task first; a cancel drops it. An id the parent did
   not spawn is refused. `agents spawn --after <id>,<id>` from a shell.
+- `cancel` (`agents cancel <id>`) stops a subagent and every subagent below it, and any agent above it may ask, not
+  only the one that spawned it; `all` stops all of the caller's. A cancelled subagent stays stopped: the jobs and
+  watches it left are stopped too, nothing the sandbox does wakes it again, and only a message from a person or an
+  agent starts it. What it wrote stays on its own branch for a follow-up or `merge`. A person's **Stop all** on a card
+  does the same for everything below that card. The board draws a subagent's own subagents in its root card's tray,
+  each nested under (or marked "via") the one that started it.
 - A subagent placed on a runner whose copy of the workspace cannot be prepared runs here instead, in the same
   conversation, and its parent is told; nothing had run there.
 - **Wait for a reset** is how long a subagent refused for a spent allowance waits for the provider's reset before it

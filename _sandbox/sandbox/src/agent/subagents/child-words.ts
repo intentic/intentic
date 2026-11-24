@@ -120,8 +120,10 @@ export const unansweredWords = (move: ChildMove, reason: string): string =>
 // call open while they decide: it carries on, and hears what becomes of the move.
 const heldFor = (reason: string): string =>
     `Held for the owner's approval, because ${reason}. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again.`;
+// Its last sentence is for a turn nobody watches: on 2026-11-24 a subagent waited hours on a card raised in the night,
+// until its own parent told it to do that part itself.
 export const heldStart = (reason: string): string =>
-    `${heldFor(reason)} It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run.`;
+    `${heldFor(reason)} It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run. If nobody may be there to answer for a while and you can do its part yourself, do that instead of waiting on the card.`;
 export const heldMessage = (reason: string): string => `${heldFor(reason)} It goes to the child once they allow it, and you are told if it does not.`;
 export const heldAnswer = (reason: string): string => `${heldFor(reason)} Your answer goes once they allow it, and you are told if it does not.`;
 // What a held start's roster row says while the owner decides.
@@ -133,13 +135,31 @@ export const laneHeldNote = (id: string, reason: string): string =>
 export const movedWords = (from: ChildSpawnSpec, to: ChildSpawnSpec): string =>
     `Moved from ${from.provider}/${from.model} to ${to.provider}/${to.model}: its next turn runs there in the same worktree, in a fresh session seeded from its own record.`;
 
-// What a cancel found to stop, as its parent reads it.
+// What a cancel found to stop, as its parent reads it. A cancelled conversation stays stopped (conversations/actor/conversation-halt.ts): nothing
+// the sandbox does wakes it again, only a message.
 export const CANCEL_NOTES = {
     running:
-        "Cancelled: its turn is being stopped, and it ends as killed. Whatever it already wrote stays in its worktree: send it a message to carry on (naming a provider and model moves it there), or merge it to bring that work into your checkout.",
+        "Cancelled: its turn is being stopped, and it ends as killed. It stays stopped: nothing it left running wakes it again. Whatever it already wrote stays on its own branch: send it a message to carry on (naming a provider and model moves it there), or merge it to bring that work into your checkout.",
     waiting: "Cancelled: it will not start. Send it a message if you want it after all.",
     paused: "Cancelled: the sandbox will not run it again by itself, and it ends as killed. Send it a message to carry on from where it stopped.",
+    idle: "Cancelled: its own turn had already ended.",
 } as const satisfies Record<string, string>;
+
+// A cancel that found nothing at all to stop or take away.
+export const NOTHING_TO_CANCEL = "It is not running, and nothing is booked to run it again: there is nothing to cancel.";
+
+// What else a cancel reached: the subagents below the one it named, and what would have woken that one by itself.
+export const cancelledWords = (below: number, quieted: { readonly jobs: number; readonly watches: number; readonly rerun: boolean } | undefined): string => {
+    const took = quieted === undefined ? [] : [
+        ...(quieted.jobs > 0 ? [`stopped ${quieted.jobs} background job${quieted.jobs === 1 ? "" : "s"} it left running`] : []),
+        ...(quieted.watches > 0 ? [`disarmed ${quieted.watches} watch${quieted.watches === 1 ? "" : "es"} that would have woken it`] : []),
+        ...(quieted.rerun ? ["dropped the re-run the sandbox had booked for it"] : []),
+    ];
+    return [
+        ...(took.length === 0 ? [] : [`It also ${took.join(", ")}.`]),
+        ...(below === 0 ? [] : [`${below} subagent${below === 1 ? "" : "s"} below it (ones it started, and theirs) ${below === 1 ? "was" : "were"} cancelled with it, and stay stopped until a message reaches them.`]),
+    ].join(" ");
+};
 
 // A send naming only part of a move (a provider with no model, an effort with no provider): sent unmoved, its parent read
 // the plain "Sent" as the move having happened.

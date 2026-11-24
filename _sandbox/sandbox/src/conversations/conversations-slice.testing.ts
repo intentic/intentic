@@ -5,7 +5,7 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { askRoleModel, roleModelIsSet } from "../agent/models/role-model.js";
 import { streamAgent } from "../agent/run/stream-agent.js";
-import { cancelFamily, familyOf } from "../agent/subagents/children.js";
+import { cancelFamily, familyOf } from "../agent/subagents/family/child-cancel.js";
 import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import { turnDoors } from "../agent/run/turn/turn-doors.js";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";

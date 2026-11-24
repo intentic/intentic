@@ -11,7 +11,10 @@ import { noteQueuedReport, queuedChildReportId } from "./waiting/queued-reports.
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import type { ConversationActors, ConversationObserver } from "../../conversations/actor/conversation-actors.js";
 import type { ConversationState } from "../../conversations/actor/conversation-state.js";
-import { expectTurn } from "../../conversations/actor/conversation-holdings.js";
+import { expectTurn, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { haltOf } from "../../conversations/actor/conversation-halt.js";
+import { signInRerunOf } from "./paused-children.js";
+import { opt } from "../../opt.js";
 
 // A child's settled turn reaches its parent one way: a parked `wait` took it, or it is delivered like any wake, queued
 // behind a parent busy with a turn that cannot take it.
@@ -21,7 +24,7 @@ export interface ChildReportDeps {
     readonly logger: Logger;
     // Where the child's roster record, its verification ledger and a report still queued for its parent are held, and
     // where a report on its way marks its parent (owedReports).
-    readonly conversations: Pick<ConversationActors, "holdings" | "send">;
+    readonly conversations: Pick<ConversationActors, "holdings" | "send" | "state">;
     // A child's entry names its parent in `startedBy`; `fresh` marks a session a person opened on another conversation's
     // work (`of`), which a review or test pass reports to and a person's own ask does not.
     readonly entryOf: (conversationId: string) =>
@@ -154,7 +157,9 @@ export const owedReports = (deps: ChildReportDeps): OwedReports => {
 };
 
 /** Never throws: it runs off a turn's ending. */
-export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEventMap["run.settled"]): Promise<void> => {
+export const reportChildTurn = async (deps: ChildReportDeps, ended: DomainEventMap["run.settled"]): Promise<void> => {
+    // A refused sign-in the sandbox renews and re-runs by itself reads as the pause it is (paused-children.ts).
+    const settled = ended.failure !== undefined && ended.rerun === undefined ? { ...ended, ...opt("rerun", signInRerunOf(deps.conversations, ended.conversationId)) } : ended;
     try {
         const target = parentToTell(deps, settled);
         if (target === undefined) {
@@ -167,6 +172,12 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
                 { child: settled.conversationId, parent: target.parent },
                 "child report: its family was just cancelled, it stays in the child's own chat",
             );
+            return;
+        }
+        // Stopped by a cancel (conversations/actor/conversation-halt.ts): news for a parent at work, said into its turn, but a parent at rest did not
+        // ask for it (an agent above it cancelled its child) and a turn of its own would only start the work again.
+        if (haltOf(deps.conversations, settled.conversationId) !== undefined && liveRunOf(deps.conversations, target.parent) === undefined) {
+            deps.logger.info({ child: settled.conversationId, parent: target.parent }, "child report: a cancel stopped it and its parent is at rest, it stays in the child's own chat");
             return;
         }
         // Taken before anything is awaited: the record this ending is about, whichever arrives first of it and this.

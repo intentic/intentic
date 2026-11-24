@@ -5,11 +5,12 @@ import type { Holding } from "../../../conversations/actor/conversation-holdings
 // purged; discarded) takes the work of the children it spawned with it: their running turns stop, the re-runs the
 // sandbox booked for them are dropped and the workflow runs that would start more end, so nothing goes on working for a
 // parent that will never read it, and nothing starts again by itself. A person's Stop all on a card that stays
-// (family-stop.ts) does the same. Their conversations stay, with whatever they wrote. The decisions are here; children.ts
-// carries them out through the cancel tool's own path (cancelFamily).
+// (family-stop.ts) does the same, and so does an agent's cancel for everything below the conversation it names. Their
+// conversations stay, with whatever they wrote. The decisions are here; child-cancel.ts carries them out through the
+// cancel tool's own path (cancelFamily).
 
-/** Why a family ends: its head left the board, or a person stopped it all. */
-export type FamilyEnd = "archived" | "purged" | "discarded" | "stopped";
+/** Why a family ends: its head left the board, a person stopped it all, or an agent above it cancelled it (child-cancel.ts). */
+export type FamilyEnd = "archived" | "purged" | "discarded" | "stopped" | "cancelled";
 
 /** One edge of the spawn tree: a conversation and the one that spawned it. */
 export interface FamilyLink {
@@ -54,9 +55,16 @@ export type ChildStanding =
     | { readonly tracked: true; readonly heldForOwner: boolean; readonly paused: boolean; readonly running: boolean }
     | { readonly tracked: false; readonly sandboxRun: boolean; readonly bookedRerun: boolean };
 
-/** What stopping one child takes: the cancel tool's own path, its live turn stopped and its booking dropped, or nothing. */
+/**
+ * What stopping one child takes: the cancel tool's own path, its live turn stopped and its booking dropped, or nothing.
+ * `quiet` is no stop at all, only what could wake it by itself taken away (halt-quiet.ts): a child at rest waiting on a
+ * watch or a job of its own, as a family's cancel answers it.
+ */
 export type CancelMove =
-    { readonly kind: "cancel" } | { readonly kind: "halt"; readonly stop: boolean; readonly drop: boolean } | { readonly kind: "none" };
+    | { readonly kind: "cancel" }
+    | { readonly kind: "halt"; readonly stop: boolean; readonly drop: boolean }
+    | { readonly kind: "quiet" }
+    | { readonly kind: "none" };
 
 /**
  * A supervised child is cancelled as its parent's cancel would: a running turn, a start still waiting, a booked re-run.

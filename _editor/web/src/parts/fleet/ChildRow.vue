@@ -30,6 +30,12 @@ const props = defineProps<{
     matchCase: boolean;
     // The surface drawing it offers a conversation's row a menu of its own; without one the browser's stays.
     menus: boolean;
+    // Steps in under the row of the rider that started it (childFold.TrayLine), each drawn as a guide in the indent.
+    depth?: number;
+    // The rider that started it, when that is not the card it rides: named after its title ("via …") where `via` says
+    // no step shows it, and to a screen reader alone where its row sits a step in under the starter's.
+    starter?: string;
+    via?: boolean;
 }>();
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
@@ -66,8 +72,20 @@ const menu = (event: MouseEvent): void => {
         @dblclick="review"
         @contextmenu="menu"
     >
-        <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
-            <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
+        <!-- One guide per step in, under the text of the row above it, so a starter's rows hang off one line. -->
+        <span v-for="step in depth ?? 0" :key="step" aria-hidden="true" class="ml-1 w-px shrink-0 self-stretch bg-content/15" data-nest-guide />
+        <span class="flex min-w-0 flex-1 items-baseline gap-1.5">
+            <span class="min-w-0 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
+                <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
+            </span>
+            <!-- Who started it, when its card did not: the title gives way first, so the starter stays readable. -->
+            <span
+                v-if="starter !== undefined"
+                :class="via ? 'max-w-2/5 shrink-0 truncate text-2xs text-subtle' : 'sr-only'"
+                v-tooltip.top="via ? { title: t(`agents.childRows.viaTitle`), rows: [{ label: t(`agents.childRows.parent`, {}, 1), value: starter }] } : undefined"
+                data-via
+                >{{ ` ${t(`agents.childRows.via`, { title: starter })}` }}</span
+            >
         </span>
         <!-- A fresh session on the parent's work: what its review found, or that it is the reader's own ask (its kind titles a
              review's or a test's row already), told apart from a child the parent spawned. -->

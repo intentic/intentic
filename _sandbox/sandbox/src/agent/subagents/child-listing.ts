@@ -11,6 +11,7 @@ import type { ChildActionResult, ChildRecord, ChildSpawnSpec, ChildTurnTally } f
 import { bookedRerunWords, sayToParent } from "../../conversations/land/child-lands.js";
 import { sameModel, taskLine } from "./child-spec.js";
 import { CANCELLED } from "./child-words.js";
+import { signInRerunOf } from "./paused-children.js";
 
 // What the records say a child can still run on, and what a failed one leaves behind: the spawn preflight against a
 // spent model, and the words that name a child's work and the doors that keep it.
@@ -183,7 +184,9 @@ export const childEnding = async (
     if (failure === undefined) {
         return { error: undefined, rerun: undefined };
     }
-    const rerun = tally.rerun === undefined ? undefined : bookedRerunWords(tally.rerun, childId);
+    // A refused sign-in the sandbox renews and re-runs by itself is booked too, though the frame read here named none.
+    const booked = tally.rerun ?? signInRerunOf(services.conversations, childId);
+    const rerun = booked === undefined ? undefined : bookedRerunWords(booked, childId);
     // Only where nothing is bringing it back: with a re-run booked, where else it could go is noise.
     const elsewhere = rerun !== undefined ? undefined : await elsewhereFor(services, childId, kid?.spec, failure);
     return { error: [failure, rerun, elsewhere].filter((part) => part !== undefined).join(" "), rerun };

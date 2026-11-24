@@ -5,6 +5,7 @@ import type { Holding } from "../../conversations/actor/conversation-holdings.js
 import { ROSTER, subagentRunning } from "../../conversations/actor/subagent-roster.js";
 import { opt } from "../../opt.js";
 import { checkResult, type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
+import { seatLine } from "./child-admission.js";
 import type { ChildRecord } from "./children.js";
 import { type SpawnedChild, spawnedChildren, specOnFile } from "./spawned-children.js";
 import { markSubagentEndingReported, settleSpawnedChild, type SubagentRecord } from "./subagents.js";
@@ -20,6 +21,23 @@ type Actors = Pick<ConversationActors, "holdings">;
 export const CHILDREN: Holding<ChildRecord> = { name: "children" };
 // A parent's child turns, live and lifetime, held by the parent under its own id.
 export const SEATS: Holding<{ readonly live: number; readonly total: number }> = { name: "child seats" };
+// The run a person started in a spawned child's own chat, held by the child under its own id. A parent leaving stops the
+// sandbox's turns on its children and never a person's (family/child-cancel.ts cancelFamily), and nothing on a run says
+// who started it.
+export const PERSON_RUNS: Holding<string> = { name: "person runs in child chats" };
+
+// Starts past their parent's "at once" ceiling, waiting for a seat, oldest first per parent (child-admission.ts).
+export const SEAT_LINE = seatLine();
+
+// A lane wait that never ran returns both its live reservation and the lifetime turn it had reserved.
+export const refundReservedSeat = (actors: Actors, parent: string): void => {
+    const seats = actors.holdings(SEATS);
+    const now = seats.get(parent);
+    if (now !== undefined) {
+        seats.hold(parent, parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
+    }
+    SEAT_LINE.freed(parent);
+};
 
 /** How a child's turn ended, for what follows it beside its parent (a workflow run waiting on its worker). */
 export interface ChildSettlement {

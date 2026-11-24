@@ -1,5 +1,5 @@
 import type { askRoleModel, roleModelIsSet } from "../agent/models/role-model.js";
-import type { cancelFamily, familyOf } from "../agent/subagents/children.js";
+import type { cancelFamily, familyOf } from "../agent/subagents/family/child-cancel.js";
 import type { cancelWatchersFor } from "../agent/verification/watchers.js";
 
 // What the fleet asks of the turn engine besides its turns (turn-starter.ts), bound by composition so conversations never

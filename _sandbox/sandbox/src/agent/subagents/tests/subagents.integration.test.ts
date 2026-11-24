@@ -372,6 +372,14 @@ describe("spawned children", () => {
         expect(listSubagentSessions(actors).find((session) => session.id === birth.id)?.status).toBe("running");
     });
 
+    // 2026-11-24: a start the owner never allowed read "It is failed: Waiting for the owner to allow its start".
+    it("drops the line a start that never ran waited under, for what ended it", () => {
+        openSpawnedChild(turn(), birth, true);
+        noteSpawnedChild(actors, birth.id, { status: "pending", summary: "Waiting for the owner to allow its start, on the card in your chat." });
+        settleSpawnedChild(actors, birth.id, { status: "failed", report: "", error: "The parent's turn ended before the owner answered." });
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "failed", summary: "The parent's turn ended before the owner answered.", error: "The parent's turn ended before the owner answered." });
+    });
+
     it("settles with the head of the child's closing text, and wakes a parked wait", async () => {
         openSpawnedChild(turn(), birth);
         const parked = waitForSubagent(actors, "conv-1", { target: birth.id, until: ["finished"], timeoutMs: 5_000 });

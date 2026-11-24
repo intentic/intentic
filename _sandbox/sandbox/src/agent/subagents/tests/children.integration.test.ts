@@ -32,11 +32,8 @@ import {
     adoptChildTurn,
     answerChild,
     armSupervisor,
-    cancelChild,
-    cancelFamily,
     childReportOf,
     composeRuntimeFloor,
-    familyOf,
     type ChildSpawnSpec,
     pendingQuestionOf,
     resetChildrenForTest,
@@ -46,6 +43,7 @@ import {
     type ChildSupervisor,
 } from "../children.js";
 import { mergeChild, settleHeldChild } from "../child-held.js";
+import { cancelChild, cancelFamily, familyOf } from "../family/child-cancel.js";
 import { withBrief } from "../starting/child-brief.js";
 import { ROOM_CEILING_MS } from "../starting/child-room.js";
 import { budgetOn } from "../../run/turn/turn-plan.testing.js";
@@ -1404,7 +1402,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 held: true,
                 // Says why the owner is asked and how long the card waits, so the parent can tell a rule from a taint and
                 // knows it may ask again.
-                note: "Held for the owner's approval, because spawning subagents on claude requires owner approval. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again. It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run.",
+                note: "Held for the owner's approval, because spawning subagents on claude requires owner approval. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again. It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run. If nobody may be there to answer for a while and you can do its part yourself, do that instead of waiting on the card.",
             });
             // Filed as a child already, so the parent's wait parks on it like any other.
             expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
