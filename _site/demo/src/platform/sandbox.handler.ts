@@ -26,9 +26,9 @@ const hostedRow = (sandboxId: string) => {
 export const sandboxAnswers = {
     list: () => ({ sandboxes: sandboxRows() }),
     create: ({ name }) => createRow(name),
-    update: ({ sandboxId, name, image }) => {
+    update: ({ sandboxId, name, image, color }) => {
         owned(sandboxId);
-        return updateRow(sandboxId, { name, image }) ?? refusePlatform(`No sandbox ${sandboxId} on this account.`, 404);
+        return updateRow(sandboxId, { name, image, color }) ?? refusePlatform(`No sandbox ${sandboxId} on this account.`, 404);
     },
     delete: ({ sandboxId }) => ({ ok: deleteRow(sandboxId) }),
     trash: () => ({ sandboxes: trashRows() }),

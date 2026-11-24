@@ -100,6 +100,8 @@ const toSummary = async (
         id: string;
         name: string;
         image: string | null;
+        // Absent from a caller that selected columns without it; reads as no colour picked.
+        color?: string | null;
         daemonUrl: string | null;
         lastSeenAt: Date | null;
         setupCodeClaimedAt: Date | null;
@@ -135,6 +137,7 @@ const toSummary = async (
         id: sandbox.id,
         name: sandbox.name,
         image: sandbox.image,
+        color: sandbox.color ?? null,
         daemonUrl: sandbox.daemonUrl,
         lastSeenAt: isoOrNull(sandbox.lastSeenAt),
         setupCodeClaimedAt: isoOrNull(sandbox.setupCodeClaimedAt),
@@ -196,14 +199,19 @@ export const sandboxRoutes = {
         const { sandbox } = await mintSandbox(context.prisma, context.config, { name: input.name, ownerId: user.id }, input.requestId);
         return toSummary(sandbox, `owner`, context);
     }),
-    // Renames and/or sets the switcher logo (`null` clears it); the `!== undefined` guards keep the two fields
-    // independent. The owner or Full access, and the summary carries the caller's own tier, since the editor files it
+    // Renames and/or sets the switcher logo and the colour (`null` clears either); the `!== undefined` guards keep the
+    // three fields independent. The owner or Full access, and the summary carries the caller's own tier, since the editor files it
     // over the caller's row.
     update: os.sandbox.update.handler(async ({ context, input }) => {
         const tier = await requireFullAccess(context, input.sandboxId);
         const sandbox = await context.prisma.sandbox.update({
             where: { id: input.sandboxId },
-            data: { ...(input.name !== undefined && { name: input.name }), ...(input.image !== undefined && { image: input.image }) },
+            data: {
+                ...(input.name !== undefined && { name: input.name }),
+                ...(input.image !== undefined && { image: input.image }),
+                // Stored lower-case, so two editors comparing it agree on one spelling.
+                ...(input.color !== undefined && { color: input.color === null ? null : input.color.toLowerCase() }),
+            },
             include: { hosted: true },
         });
         return toSummary(sandbox, tier, context);

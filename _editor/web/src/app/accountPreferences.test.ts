@@ -157,7 +157,6 @@ test(`a device meeting the account first offers what the account lacks in one pa
     // None of these is the account's to keep.
     localStorage.setItem(`ui-audience`, `maker`);
     localStorage.setItem(`ui-profile`, `desk`);
-    localStorage.setItem(`ui-accent`, `#2563eb`);
     const kept = keeping({ "ui-text-size": `large` });
 
     await start(kept);

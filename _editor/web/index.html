@@ -79,8 +79,6 @@
                     url.searchParams.delete("profile");
                     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
                 }
-                var accentVars = setting("ui-accent-vars");
-                if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = setting("ui-text-size");
                 // Every rung of the ladder but Compact, which is the stylesheet's own (useTextSize.ts TEXT_SIZES).
                 var UI_TEXT_SIZES = ["90", "default", "large", "135", "150", "175", "200"];

@@ -8695,6 +8695,11 @@
                 "gift": "Prezent"
             }
         },
+        "sandboxColor": {
+            "couldntSave": "Nie udało się zapisać koloru.",
+            "hint": "Barwi pasek boczny, tapetę i pole wiadomości, dla wszystkich w tym sandboksie.",
+            "label": "Kolor"
+        },
         "sandboxOverview": {
             "addLogo": "Dodaj logo",
             "available": "Dostępna aktualizacja",
@@ -11484,9 +11489,6 @@
                 "showIgnoredHint": "Pokazuj node_modules, wyniki budowania i ścieżki z gitignore."
             },
             "look": {
-                "colour": "Kolor",
-                "colourSanctumHint": "W Sanctum wyróżnienia pozostają złote, a ten kolor tylko zabarwia kamień.",
-                "colourSilverHint": "W motywie Srebro wyróżnienia pozostają srebrne, a ten kolor barwi tylko szkło.",
                 "group": "Wygląd",
                 "language": "Język",
                 "languageHint": "Język, w którym napisany jest ten interfejs. Twoje pliki, czaty i agenty pozostają nietknięte.",
@@ -11876,7 +11878,6 @@
             "language": "język, tłumaczenie, English, Deutsch, Español, Français, Polski",
             "theme": "tryb ciemny, ciemny motyw, tryb jasny, tryb nocny, schemat kolorów",
             "wallpaper": "tło, tapeta, obraz",
-            "accentColour": "kolor akcentu, kolor, wyróżnienie",
             "textSize": "rozmiar czcionki, rozmiar tekstu, powiększenie, większy tekst, mniejszy tekst, skala",
             "changesList": "diff, przegląd, zmienione pliki",
             "toolCalls": "transkrypt, kroki agenta, szczegóły, narzędzia",

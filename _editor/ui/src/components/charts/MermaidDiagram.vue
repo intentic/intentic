@@ -8,7 +8,7 @@ import { useTheme } from "../../composables/useTheme.js";
 
 const { code } = defineProps<{ code: string }>();
 
-const { scheme, accent } = useTheme();
+const { scheme } = useTheme();
 
 const host = ref<HTMLElement>();
 const drawn = ref<string>();
@@ -114,7 +114,7 @@ const onClickCapture = (event: MouseEvent): void => {
 };
 
 // Accent is watched too: it moves the same tokens the diagram was painted from.
-watch(() => [code, scheme.value, accent.value], draw, { immediate: true });
+watch(() => [code, scheme.value], draw, { immediate: true });
 watch(drawn, () => void nextTick(floorWidth));
 </script>
 

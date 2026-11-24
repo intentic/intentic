@@ -25,8 +25,8 @@ flowchart LR
   (`features/setup/add/seedLook.ts`).
 - Sanctum's accent is its gold. It restates the whole `--color-primary-*` ramp, with 500 as the house gold and
   300 as the bright gold, so every selection, tab, check, toggle, focus ring and the Send button share that one
-  metal (the rule is "One signal colour" in [../../../ui/README.md](../../../ui/README.md)). The colour picked in
-  Appearance still tints the stone through the neutral ramp, and its row says so while Sanctum is on.
+  metal (the rule is "One signal colour" in [../../../ui/README.md](../../../ui/README.md)). The open sandbox's
+  colour tints its rail's stone (`sandboxColor.css`), as it does the rail in every look.
 - Silver is smoked glass in a misty room, in neutral greys. The room is `valley-ground.avif`, the valley blurred past
   recognition (`wallpaper:art` makes it). The canvas, the rail, the panes and the raised surfaces (composer, dialogs,
   menus) each paint that same ground, fixed to the window, under a near-opaque veil of their own tone. Only 3–5% of

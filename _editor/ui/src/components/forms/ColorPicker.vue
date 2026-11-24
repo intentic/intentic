@@ -1,34 +1,17 @@
-<!-- The app's colour picker: a fixed row of swatches, not a wheel or hex field, since the accent is always used at one fixed lightness (themeColor.ts). -->
+<!-- The app's colour picker: a fixed row of swatches, not a wheel or hex field, since every pick is used at one fixed lightness (themeColor.ts). -->
 <script setup lang="ts">
-import { type Accent, accentHex } from "../../lib/themeColor.js";
+import { SWATCHES, swatchHex } from "../../lib/themeColor.js";
 import { useT } from "../../i18n/index.js";
 import { computed } from "vue";
 
 const t = useT();
 
-const { size = `md` } = defineProps<{ size?: `sm` | `md` }>();
+const { size = `md`, label } = defineProps<{ size?: `sm` | `md`; /** What is being coloured, for the group's accessible name. */ label?: string }>();
 
-/** The accent, as `#rrggbb`: always one of the swatches below. */
+/** The colour, as `#rrggbb`: one of the swatches below once picked. */
 const model = defineModel<string>({ required: true });
 
-const PRESETS = computed((): readonly (Accent & { readonly label: string })[] => [
-    // Ember is at full saturation on purpose: it is DEFAULT_ACCENT exactly, so a workspace nobody has
-    // recoloured shows this swatch as the selected one rather than none of them.
-    { label: t(`ui.colorPicker.ember`), hue: 55, saturation: 1 },
-    { label: t(`ui.colorPicker.vermilion`), hue: 25, saturation: 0.85 },
-    { label: t(`ui.colorPicker.rose`), hue: 350, saturation: 0.78 },
-    { label: t(`ui.colorPicker.orchid`), hue: 320, saturation: 0.8 },
-    { label: t(`ui.colorPicker.iris`), hue: 290, saturation: 0.85 },
-    { label: t(`ui.colorPicker.cobalt`), hue: 260, saturation: 0.9 },
-    { label: t(`ui.colorPicker.azure`), hue: 230, saturation: 0.95 },
-    { label: t(`ui.colorPicker.lagoon`), hue: 200, saturation: 1 },
-    { label: t(`ui.colorPicker.emerald`), hue: 172, saturation: 0.95 },
-    { label: t(`ui.colorPicker.fern`), hue: 145, saturation: 0.85 },
-    { label: t(`ui.colorPicker.moss`), hue: 115, saturation: 0.9 },
-    { label: t(`ui.colorPicker.brass`), hue: 85, saturation: 0.95 },
-    { label: t(`ui.colorPicker.graphite`), hue: 250, saturation: 0.14 },
-]);
-const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accentHex(preset) }));
+const presets = computed(() => SWATCHES.map((swatch) => ({ label: t(`ui.colorPicker.${swatch.key}`), hex: swatchHex(swatch) })));
 </script>
 
 <template>
@@ -36,7 +19,7 @@ const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accen
          shrink a little (square, by aspect-ratio) rather than strand the last one alone on a second row. -->
     <div
         role="radiogroup"
-        :aria-label="t(`ui.colorPicker.accentColour`)"
+        :aria-label="label ?? t(`ui.colorPicker.colour`)"
         class="flex min-w-0 items-center"
         :class="size === `sm` ? `gap-1.5` : `gap-2.5`"
     >

@@ -9232,6 +9232,11 @@
                 "gift": "Regalo"
             }
         },
+        "sandboxColor": {
+            "couldntSave": "No se pudo guardar el color.",
+            "hint": "Tiñe la barra lateral, el fondo y el cuadro de mensaje, para todos en este sandbox.",
+            "label": "Color"
+        },
         "sandboxOverview": {
             "addLogo": "Añadir un logo",
             "available": "Actualización disponible",
@@ -12097,9 +12102,6 @@
                 "showIgnoredHint": "Mostrar node_modules, la salida de compilación y las rutas en gitignore."
             },
             "look": {
-                "colour": "Color",
-                "colourSanctumHint": "En Sanctum, los resaltados siguen siendo dorados y este color solo tiñe la piedra.",
-                "colourSilverHint": "En Plata, los resaltes siguen en plata y este color solo tiñe el cristal.",
                 "group": "Aspecto",
                 "language": "Idioma",
                 "languageHint": "El idioma en el que está escrita esta interfaz. Tus archivos, tus chats y tus agentes no se tocan.",
@@ -12489,7 +12491,6 @@
             "language": "idioma, traducción, English, Deutsch, Español, Français, Polski",
             "theme": "modo oscuro, modo claro, modo noche, esquema de color, tema oscuro",
             "wallpaper": "fondo, fondo de pantalla, imagen",
-            "accentColour": "color de acento, color, resaltado",
             "textSize": "tamaño de letra, tamaño de fuente, zoom, texto más grande, texto más pequeño, escala",
             "changesList": "diff, revisión, archivos cambiados",
             "toolCalls": "transcripción, pasos del agente, detalles, herramientas",

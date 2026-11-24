@@ -16,6 +16,8 @@ export const DEMO_SANDBOX: SandboxSummary = {
     id: `demo`,
     name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`,
     image: null,
+    // Picked by its owner, so the demo opens in a sandbox's own colour rather than in one derived from its id.
+    color: `#00aab1`,
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),
     setupCodeClaimedAt: null,
@@ -45,8 +47,23 @@ export const DEMO_SANDBOXES: readonly SandboxSummary[] = noSandboxes
       ? [
             { ...DEMO_SANDBOX, image: homeSandboxLogos.shop },
             // Each at its own daemon address, so the home conversation it opens on is its own (fixture/home/sandboxes.ts).
-            { ...DEMO_SANDBOX, id: HOME_SANDBOXES.research.id, name: `Research`, image: homeSandboxLogos.research, daemonUrl: HOME_SANDBOXES.research.origin },
-            { ...DEMO_SANDBOX, id: HOME_SANDBOXES.personal.id, name: `Personal`, image: homeSandboxLogos.personal, daemonUrl: HOME_SANDBOXES.personal.origin },
+            // Each in the colour its logo is drawn in, as an owner would pick it (the editor snaps it onto its swatches).
+            {
+                ...DEMO_SANDBOX,
+                id: HOME_SANDBOXES.research.id,
+                name: `Research`,
+                image: homeSandboxLogos.research,
+                color: `#7c9b8b`,
+                daemonUrl: HOME_SANDBOXES.research.origin,
+            },
+            {
+                ...DEMO_SANDBOX,
+                id: HOME_SANDBOXES.personal.id,
+                name: `Personal`,
+                image: homeSandboxLogos.personal,
+                color: `#a395b3`,
+                daemonUrl: HOME_SANDBOXES.personal.origin,
+            },
         ]
       : [DEMO_SANDBOX];
 

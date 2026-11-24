@@ -9232,6 +9232,11 @@
                 "gift": "Gift"
             }
         },
+        "sandboxColor": {
+            "couldntSave": "Couldn't save the color.",
+            "hint": "Tints the rail, the wallpaper and the message box, for everyone in this sandbox.",
+            "label": "Color"
+        },
         "sandboxOverview": {
             "addLogo": "Add a logo",
             "available": "Update available",
@@ -12097,9 +12102,6 @@
                 "showIgnoredHint": "Show node_modules, build output, and gitignored paths."
             },
             "look": {
-                "colour": "Color",
-                "colourSanctumHint": "In Sanctum, highlights stay gold and this color only tints the stone.",
-                "colourSilverHint": "In Silver, highlights stay silver and this color only tints the glass.",
                 "group": "Look",
                 "language": "Language",
                 "languageHint": "The language this interface is written in. Your files, your chats and your agents are untouched.",
@@ -12489,7 +12491,6 @@
             "language": "locale, translation, english, deutsch, español, français, polski",
             "theme": "dark mode, light mode, night mode, colour scheme, color scheme",
             "wallpaper": "background, backdrop, image",
-            "accentColour": "accent, colour, color, highlight",
             "textSize": "font size, zoom, bigger text, smaller text, scale",
             "changesList": "diff, review, changed files",
             "toolCalls": "transcript, agent steps, details, tools",

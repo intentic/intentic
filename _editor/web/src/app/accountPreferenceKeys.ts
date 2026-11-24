@@ -25,8 +25,5 @@ export const ACCOUNT_PREFERENCE_KEYS: readonly string[] = [
     `ui-file-hide-comments`,
     `ui-markdown-outline`,
 ];
-// Left out on purpose. `ui-accent`: index.html paints the accent before any module runs, from `ui-accent-vars`, a copy
-// that only the window picking the colour refreshes (useTheme's `setAccent`), never the preference's own `apply`; an
-// accent taken from the account would open this device in its old colour on every load until one was picked here.
-// `ui-audience`: the words are the sandbox's to keep (client/sandbox/audienceSync.ts). `ui-profile`: which link brought
-// this browser, a fact about the browser.
+// Left out on purpose. `ui-audience`: the words are the sandbox's to keep (client/sandbox/audienceSync.ts).
+// `ui-profile`: which link brought this browser, a fact about the browser.

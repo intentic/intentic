@@ -17,10 +17,11 @@ import { type Chime, ringOnce } from "../../workbench/browser-tab/chimes";
 import { showDesktopBadge } from "./desktopBadge";
 import { readerBack, settleDesktop, tellDesktop } from "./desktopSignal";
 import { readerHere } from "../../workbench/browser-tab/readerHere";
-import { setTabLogo, setTabMark } from "./tabTitle";
+import { setTabLogo, setTabMark, setTabTint } from "./tabTitle";
 import { chimeAsks, chimeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
 import { newsItemsBetween, type TabFrame, tabMark, tabOffline } from "./tabSignal";
 import { justSetUp } from "../../models/sandbox/live/justSetUp";
+import { useSandboxColor } from "../../features/sandbox/overview/logo/useSandboxColor";
 import { useSkin } from "../../skins/useSkin";
 import { countPlate } from "./tabIcon";
 
@@ -133,12 +134,12 @@ export const startBrowserTab = (): void => {
         tellDesktop(news, chime !== undefined);
     });
 
-    // The rail's count chip in the look on screen, read again whenever the look changes: the scheme, the skin and the
-    // accent all repaint it, and each is on <html> before this runs (they apply synchronously).
-    const { scheme, accent } = useTheme();
+    // The rail's count chip in the look on screen, read again whenever the look changes: the scheme and the skin both
+    // repaint it, and each is on <html> before this runs (they apply synchronously).
+    const { scheme } = useTheme();
     const { skin } = useSkin();
     const plate = ref(countPlate());
-    watch([scheme, skin, accent], () => {
+    watch([scheme, skin], () => {
         plate.value = countPlate();
     });
     const shown = computed(() => {
@@ -159,6 +160,10 @@ export const startBrowserTab = (): void => {
     // the desktop app's icon alike.
     const logo = computed(() => active.value?.image ?? undefined);
     watch(logo, (image) => setTabLogo(image), { immediate: true });
+    // Without a logo, the lotus is drawn in the sandbox's own colour (sandboxColor.ts), so two sandboxes' tabs differ
+    // even where neither has a picture.
+    const { color } = useSandboxColor();
+    watch(color, (hex) => setTabTint(hex), { immediate: true });
     // The open sandbox owns the desktop app's taskbar button, so a pin made from it is that sandbox's (badge.rs). Its id
     // is known from storage before its row has loaded, and saying so keeps the button where it is through a page load
     // rather than moving it to the app's own and back.
@@ -169,6 +174,7 @@ export const startBrowserTab = (): void => {
     watch([shown, logo, sandbox], ([mark, image, open]) => showDesktopBadge(mark, image, open), { immediate: true });
     onScopeDispose(() => {
         setTabLogo(undefined);
+        setTabTint(undefined);
         setTabMark(undefined);
         showDesktopBadge(undefined);
     });

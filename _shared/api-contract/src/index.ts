@@ -28,6 +28,7 @@ import {
     HostedPlanStateSchema,
     HostedRebuildInputSchema,
     HostedStatusSchema,
+    HexColorSchema,
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
@@ -99,12 +100,14 @@ export const sandboxRegistryContract = {
         .output(SandboxSummarySchema),
     update: oc
         .route({ method: "POST", path: "/sandbox/update" })
-        // `image: null` clears the logo; absent leaves it alone, so the field must be both nullable and optional.
+        // `image: null` clears the logo and `color: null` the colour; absent leaves either alone, so each field must be both
+        // nullable and optional.
         .input(
             z.object({
                 sandboxId: z.string(),
                 name: z.string().min(1).max(SANDBOX_NAME_MAX).optional(),
                 image: ImageDataUrlSchema.nullable().optional(),
+                color: HexColorSchema.nullable().optional(),
             }),
         )
         .output(SandboxSummarySchema),

@@ -42,6 +42,7 @@ import { activeSandboxId } from "./app/storage/activeSandbox";
 import { loadContract } from "./client/sandbox/daemon/contract";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { watchPageLeaving } from "@intentic/ui/reload-reason";
+import { installSandboxColor } from "./features/sandbox/overview/logo/useSandboxColor";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
 import { installTextZoom } from "./workbench/window/textZoom";
 import "./features/sandbox/switching/sandboxScope";
@@ -113,6 +114,8 @@ if (returning) {
 
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
+// The open sandbox's colour on <html> (rail, wallpaper, composer), in every window for the same reason.
+installSandboxColor();
 // Ctrl+Plus, Ctrl+Minus, Ctrl+0 and Ctrl+wheel step the text size in the desktop app's windows; a tab keeps its browser's zoom.
 installTextZoom();
 

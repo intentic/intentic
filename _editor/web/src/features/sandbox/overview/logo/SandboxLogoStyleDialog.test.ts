@@ -7,14 +7,14 @@ import SandboxLogoStyleDialog from "./SandboxLogoStyleDialog.vue";
 import { logoStyleImage, readLogoStyle } from "./presets";
 
 let app: App | undefined;
-const write = jest.fn<(image: string) => Promise<void>>();
+const write = jest.fn<(look: { image: string; color: string }) => Promise<void>>();
 const closed = jest.fn<() => void>();
 const savedImage = logoStyleImage({ icon: `moon`, color: `#e07400` });
 
-const mount = async (image: string | null = savedImage): Promise<void> => {
+const mount = async (image: string | null = savedImage, color = `#e07400`): Promise<void> => {
     const root = document.createElement(`div`);
     document.body.append(root);
-    app = createApp({ render: () => h(SandboxLogoStyleDialog, { image, name: `My sandbox`, write, onClose: closed }) });
+    app = createApp({ render: () => h(SandboxLogoStyleDialog, { image, name: `My sandbox`, color, write, onClose: closed }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -64,7 +64,14 @@ it(`previews both choices before saving the exact image being previewed`, async 
     button(`Save`).click();
     await waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
     expect(write).toHaveBeenCalledTimes(1);
-    expect(write).toHaveBeenCalledWith(image);
+    expect(write).toHaveBeenCalledWith({ image, color: readLogoStyle(image)!.color });
+});
+
+it(`starts a sandbox with no preset in its own colour, so the logo matches the rail it sits on`, async () => {
+    const lagoon = `#00a7c7`;
+    await mount(`data:image/webp;base64,CUSTOM`, lagoon);
+    expect(readLogoStyle(preview().getAttribute(`src`))?.color).toBe(lagoon);
+    expect(button(`Box`).getAttribute(`aria-pressed`)).toBe(`true`);
 });
 
 it(`cancels a draft without replacing an uploaded image`, async () => {
@@ -90,5 +97,5 @@ it(`keeps the draft and the dialog open after a failed save, allowing a retry`, 
     button(`Save`).click();
     await waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
     expect(write).toHaveBeenCalledTimes(2);
-    expect(write).toHaveBeenLastCalledWith(image);
+    expect(write).toHaveBeenLastCalledWith({ image, color: `#e07400` });
 });

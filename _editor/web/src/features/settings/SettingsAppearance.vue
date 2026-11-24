@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-    ColorPicker,
     Picker,
     Row,
     RowGroup,
@@ -27,10 +26,10 @@ import { embedded, tellNative } from "../../app/environments/nativeApp";
 import { NAMED_TEXT_SIZES } from "@intentic/ui/text-size";
 import FactsHint, { type HintFact } from "../../components/FactsHint.vue";
 
-// How the workspace looks: color scheme, accent color, what the file tree and the review list show. Each setting
+// How the workspace looks: color scheme, what the file tree and the review list show. Each setting
 // re-renders the whole UI live, so the app is its own preview.
 
-const { choice: schemeChoice, handed: handedScheme, set: setScheme, hand: handScheme, accent, setAccent } = useTheme();
+const { choice: schemeChoice, handed: handedScheme, set: setScheme, hand: handScheme } = useTheme();
 const { textSize, setTextSize, percent: textPercent } = useTextSize();
 const { mobile } = useDevice();
 const { fileNesting } = useFileNesting();
@@ -214,26 +213,6 @@ const pickLanguage = (locale: Locale | undefined): void => {
             >
                 <template #control>
                     <SegmentedControl :model-value="wallpaper" :options="wallpaperOptions" @update:model-value="(value) => (wallpaper = value)" />
-                </template>
-            </Row>
-            <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
-            <!-- Sanctum's accent ramp is its gold and Silver's its silver (skins/*.css), so there the pick reaches only the
-                 surfaces: said, or the picker looks broken. -->
-            <Row
-                data-setting="accent-colour"
-                icon="palette"
-                :title="t(`settings.appearance.look.colour`)"
-                :description="
-                    skin === `sanctum`
-                        ? t(`settings.appearance.look.colourSanctumHint`)
-                        : skin === `silver`
-                          ? t(`settings.appearance.look.colourSilverHint`)
-                          : undefined
-                "
-                wide-control
-            >
-                <template #control>
-                    <ColorPicker :model-value="accent" size="sm" class="justify-end" @update:model-value="setAccent" />
                 </template>
             </Row>
             <!-- A phone's only way to bigger text: a desktop has the zoom keys (textZoom.ts) or the browser's own zoom. -->

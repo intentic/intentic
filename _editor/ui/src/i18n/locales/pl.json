@@ -81,10 +81,10 @@
         "showAll": "Pokaż wszystko"
     },
     "colorPicker": {
-        "accentColour": "Kolor akcentu",
         "azure": "Lazur",
         "brass": "Mosiądz",
         "cobalt": "Kobalt",
+        "colour": "Kolor",
         "ember": "Żar",
         "emerald": "Szmaragd",
         "fern": "Paproć",

@@ -81,10 +81,10 @@
         "showAll": "Tout afficher"
     },
     "colorPicker": {
-        "accentColour": "Couleur d'accent",
         "azure": "Azur",
         "brass": "Laiton",
         "cobalt": "Cobalt",
+        "colour": "Couleur",
         "ember": "Braise",
         "emerald": "Émeraude",
         "fern": "Fougère",

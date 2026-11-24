@@ -81,10 +81,10 @@
         "showAll": "Show all"
     },
     "colorPicker": {
-        "accentColour": "Accent color",
         "azure": "Azure",
         "brass": "Brass",
         "cobalt": "Cobalt",
+        "colour": "Color",
         "ember": "Ember",
         "emerald": "Emerald",
         "fern": "Fern",

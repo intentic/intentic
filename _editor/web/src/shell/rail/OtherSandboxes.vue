@@ -20,7 +20,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useFolderPlace } from "../../features/sandbox/gates/switcherPlace";
 import type { AttentionReading } from "../../models/home/homeFacts";
 import { localRailUnrolled } from "../../models/home/masterRail";
-import { identityHue } from "../../lib/identityHue";
+import { sandboxColor } from "../../features/sandbox/overview/logo/sandboxColor";
 import { type ClusterSlot, clusterOf, type MakingBox } from "../../models/home/otherSandboxes";
 import { newSandbox, readNewSandbox, readySandboxes } from "../../features/home/newSandbox/newSandbox";
 import { sandboxOrder } from "../../models/home/sandboxOrder";
@@ -82,10 +82,11 @@ const at = (index: number) => {
     return { left: `calc(var(--cluster-d) * ${x})`, top: `calc(var(--cluster-d) * ${y})` };
 };
 
-// A picture brings its own colour and sits on the card, since a logo is often line art on nothing. A monogram's own colour, from the same curated wheel a person's avatar is drawn from, mixed toward the theme's own card
-// and ink so it reads in light and dark alike: three grey letters overlapping at this size would read as one smudge.
-const tint = (id: string) => {
-    const hue = `hsl(${identityHue(id)} 65% 50%)`;
+// A picture brings its own colour and sits on the card, since a logo is often line art on nothing. A monogram is drawn in
+// the sandbox's own colour (sandboxColor.ts), the one its rail wears once it is open, so the circle here and the rail
+// there say the same thing; mixed toward the theme's own card and ink so it reads in light and dark alike.
+const tint = (slot: ClusterSlot) => {
+    const hue = sandboxColor(slot);
     return {
         backgroundColor: `color-mix(in oklab, ${hue} 24%, var(--color-card))`,
         color: `color-mix(in oklab, ${hue} 55%, var(--color-content))`,
@@ -173,7 +174,7 @@ const label = computed(() =>
                 data-rail-into="sandboxes"
                 class="icon-rail-cluster-circle absolute flex items-center justify-center rounded-full font-semibold"
                 :class="{ 'opacity-40 grayscale': slot.unreachable, 'bg-card': slot.image }"
-                :style="{ ...at(index), ...(slot.image ? {} : tint(slot.id)) }"
+                :style="{ ...at(index), ...(slot.image ? {} : tint(slot)) }"
             >
                 <SandboxLogo :image="slot.image" :name="slot.name" class="rounded-full [&_span]:text-inherit" />
                 <!-- The sandbox being made: a turning arc around its circle while it runs, the rail's "in flight" ink. -->

@@ -68,7 +68,6 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
     { id: `language`, slug: `appearance`, title: () => t(`settings.appearance.look.language`), terms: () => [t(`settings.search.language`)] },
     { id: `theme`, slug: `appearance`, title: () => t(`settings.appearance.look.theme`), terms: () => [t(`settings.search.theme`)] },
     { id: `wallpaper`, slug: `appearance`, title: () => t(`settings.appearance.look.wallpaper`), terms: () => [t(`settings.search.wallpaper`)] },
-    { id: `accent-colour`, slug: `appearance`, title: () => t(`settings.appearance.look.colour`), terms: () => [t(`settings.search.accentColour`)] },
     {
         id: `text-size`,
         slug: `appearance`,

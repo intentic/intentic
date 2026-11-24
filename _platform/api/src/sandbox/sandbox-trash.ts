@@ -94,6 +94,7 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
                 ownerId: sandbox.ownerId,
                 name: sandbox.name,
                 image: sandbox.image,
+                color: sandbox.color,
                 ...(hosted === null ? {} : machineSnapshot(hosted)),
                 purgeAfter,
             },
@@ -142,12 +143,13 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
         throw new TrashedSandboxGone(`that sandbox is no longer recoverable`);
     }
     const { token, sandbox } = await mintSandbox(prisma, config, { name: row.name, ownerId });
-    if (row.image !== null) {
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { image: row.image } });
+    // Its logo and colour come back with it, so it is the sandbox its members knew by sight.
+    if (row.image !== null || row.color !== null) {
+        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { image: row.image, color: row.color } });
     }
     if (row.appName === null) {
         await prisma.sandboxTrash.delete({ where: { id: trashId } });
-        return { sandbox: { ...sandbox, image: row.image } };
+        return { sandbox: { ...sandbox, image: row.image, color: row.color } };
     }
 
     const owner = await prisma.user.findUniqueOrThrow({ where: { id: ownerId }, select: { email: true } });
@@ -195,7 +197,7 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
         ),
     );
     await prisma.sandboxTrash.delete({ where: { id: trashId } });
-    return { sandbox: { ...sandbox, hosted, image: row.image } };
+    return { sandbox: { ...sandbox, hosted, image: row.image, color: row.color } };
 };
 
 // Hands every expired row's app to the cleanup queue and drops the row. Kept separate from the queue itself so the

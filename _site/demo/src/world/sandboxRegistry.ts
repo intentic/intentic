@@ -93,14 +93,21 @@ export const createRow = (name: string): SandboxSummary => {
     return { ...row };
 };
 
-/** sandbox.update: a new name, a new logo, or the logo cleared (`null`); an absent field is left as it was. */
-export const updateRow = (id: string, change: { readonly name?: string | undefined; readonly image?: string | null | undefined }): SandboxSummary | undefined => {
+/** sandbox.update: a new name, a new logo or colour, or either cleared (`null`); an absent field is left as it was. */
+export const updateRow = (
+    id: string,
+    change: { readonly name?: string | undefined; readonly image?: string | null | undefined; readonly color?: string | null | undefined },
+): SandboxSummary | undefined => {
     const next: Partial<SandboxSummary> = {};
     if (change.name !== undefined) {
         next.name = change.name;
     }
     if (change.image !== undefined) {
         next.image = change.image;
+    }
+    // Lower-cased as the platform stores it (sandbox.routes.ts `update`).
+    if (change.color !== undefined) {
+        next.color = change.color === null ? null : change.color.toLowerCase();
     }
     return patch(id, next);
 };

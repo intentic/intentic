@@ -81,10 +81,10 @@
         "showAll": "Mostrar todo"
     },
     "colorPicker": {
-        "accentColour": "Color de acento",
         "azure": "Azur",
         "brass": "Latón",
         "cobalt": "Cobalto",
+        "colour": "Color",
         "ember": "Brasa",
         "emerald": "Esmeralda",
         "fern": "Helecho",

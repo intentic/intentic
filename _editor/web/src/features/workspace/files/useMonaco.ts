@@ -27,7 +27,7 @@ const activeTheme = (): string => (useTheme().scheme.value === `dark` ? `dark-pl
 const channel = (n: number): string => n.toString(16).padStart(2, `0`);
 
 // Monaco theme colors must be concrete #rrggbb strings; oklch()/color() computed values are rasterized on a 1x1
-// canvas to read sRGB bytes. Read live so it reflects the active scheme and accent.
+// canvas to read sRGB bytes. Read live so it reflects the active scheme and look.
 const resolveEditorBg = (): string => {
     const probe = document.createElement(`span`);
     probe.style.color = `var(--color-canvas)`;
@@ -89,9 +89,9 @@ const init = async (): Promise<typeof Monaco> => {
     // Measured again as soon as a face finishes loading, which re-wraps every open editor.
     document.fonts?.addEventListener(`loadingdone`, () => monaco.editor.remeasureFonts());
     void document.fonts?.ready.then(() => monaco.editor.remeasureFonts());
-    // Reruns the bridge (not setTheme) on scheme or accent change, so the background is re-resolved and rebaked.
-    const { scheme, accent } = useTheme();
-    watch([scheme, accent], () => applyBridge(monaco, core));
+    // Reruns the bridge (not setTheme) on a scheme change, so the background is re-resolved and rebaked.
+    const { scheme } = useTheme();
+    watch(scheme, () => applyBridge(monaco, core));
     return monaco;
 };
 

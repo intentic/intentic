@@ -140,14 +140,14 @@ const putSelection = (start: number, end: number): void => {
 const putCaret = (offset: number): void => putSelection(offset, offset);
 
 // A closed ```mermaid block draws its diagram at rest, as the reader does; every rebuild ends in markActive, so drawing
-// there reaches each new holder. Accent is part of the look: it moves the tokens the palette is painted from.
-const { scheme, accent } = useTheme();
+// there reaches each new holder. The scheme is part of the look: it moves the tokens the palette is painted from.
+const { scheme } = useTheme();
 const drawDiagrams = (): void => {
     if (host.value !== undefined) {
-        drawFigures(host.value, scheme.value, `${scheme.value}:${accent.value}`, t(`ui.markdownDocumentSurface.drawingDiagram`));
+        drawFigures(host.value, scheme.value, scheme.value, t(`ui.markdownDocumentSurface.drawingDiagram`));
     }
 };
-watch([scheme, accent], drawDiagrams);
+watch(scheme, drawDiagrams);
 
 // Blocks drawn as their rendering at rest (raw HTML, pictures, inline tags; sourceDom.ts), filled here with what the
 // rendered document would draw. `definitions` is the document's link reference definitions, which a block rendered on

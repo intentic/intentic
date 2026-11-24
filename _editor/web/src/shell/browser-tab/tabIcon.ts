@@ -164,16 +164,17 @@ const discOf = (mark: TabMark): Disc | undefined => {
 
 /**
  * The tab's icon: the logo with the mark's disc, if any. A sandbox without a logo gets its letter where one is given
- * (the desktop app's icon, which stands for the sandbox), and the lotus otherwise. With neither a mark nor a logo the
- * tab keeps the page's own icon and this is never called for it.
+ * (the desktop app's icon, which stands for the sandbox), and the lotus otherwise, drawn in `tint` (the open sandbox's
+ * colour) where one is given. With neither a mark, a logo nor a tint the tab keeps the page's own icon and this is never
+ * called for it.
  */
-export const iconSvg = (mark: TabMark | undefined, logo?: string, crop?: LogoCrop, letter?: string): string => {
+export const iconSvg = (mark: TabMark | undefined, logo?: string, crop?: LogoCrop, letter?: string, tint?: string): string => {
     const disc = mark === undefined ? undefined : discOf(mark);
     const offline = mark?.kind === `offline`;
     const own = drawableLogo(logo);
     const lotusArt = own === undefined && letter === undefined;
     const art =
-        own !== undefined ? picture(own, offline, crop) : letter !== undefined ? monogramArt(letter, offline) : lotus(offline ? LOTUS_OFFLINE : LOTUS);
+        own !== undefined ? picture(own, offline, crop) : letter !== undefined ? monogramArt(letter, offline) : lotus(offline ? LOTUS_OFFLINE : (tint ?? LOTUS));
     // Under the lotus, the quadrant above and right of the disc goes too: only the outer petal's tip reaches there,
     // and past the ring it would float as a speck. A logo or a letter's plate fills its square, so there it is only the ring.
     const corner = disc === undefined || !lotusArt ? `` : `<rect x="${disc.at}" width="${32 - disc.at}" height="${disc.at}" fill="#000"/>`;
@@ -331,10 +332,13 @@ const restore = (): void => {
 };
 
 /** Shows the icon for this mark over this logo, or the page's own for neither; one already showing costs nothing. */
-export const showTabIcon = (mark: TabMark | undefined, logo?: string): void => {
+export const showTabIcon = (mark: TabMark | undefined, logo?: string, tint?: string): void => {
     const own = drawableLogo(logo);
     const markKey = iconKey(mark);
-    const key = own === undefined ? markKey : `${markKey ?? `none`}|${own}`;
+    // A colour counts only where it is drawn, the lotus standing in for a logo; with neither a mark nor a colour the
+    // page's own icon stays.
+    const lotusTint = own === undefined ? tint : undefined;
+    const key = own !== undefined ? `${markKey ?? `none`}|${own}` : lotusTint === undefined ? markKey : `${markKey ?? `none`}|lotus:${lotusTint}`;
     if (key === shown) {
         return;
     }
@@ -346,7 +350,7 @@ export const showTabIcon = (mark: TabMark | undefined, logo?: string): void => {
         return;
     }
     void cropOf(own)
-        .then((crop) => rasterize(iconSvg(mark, own, crop)))
+        .then((crop) => rasterize(iconSvg(mark, own, crop, undefined, lotusTint)))
         .then(({ href, type }) => {
             if (turn === drawing) {
                 place(href, type);

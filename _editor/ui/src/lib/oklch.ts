@@ -99,11 +99,3 @@ export const hexToOklch = (hex: string): Oklch | undefined => {
     return rgb === undefined ? undefined : rgbToOklch(rgb);
 };
 
-/**
- * Canonical `#rrggbb` lowercase spelling, for comparing two colours as strings. Byte-exact: expands and lowercases
- * without touching the colour space, so nothing rounds.
- */
-export const canonicalHex = (hex: string): string | undefined => {
-    const rgb = hexToRgb(hex);
-    return rgb === undefined ? undefined : rgbToHex(rgb);
-};

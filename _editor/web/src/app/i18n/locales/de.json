@@ -9232,6 +9232,11 @@
                 "gift": "Geschenk"
             }
         },
+        "sandboxColor": {
+            "couldntSave": "Die Farbe konnte nicht gespeichert werden.",
+            "hint": "Färbt die Leiste, das Hintergrundbild und das Eingabefeld, für alle in dieser Sandbox.",
+            "label": "Farbe"
+        },
         "sandboxOverview": {
             "addLogo": "Ein Logo hinzufügen",
             "available": "Update verfügbar",
@@ -12097,9 +12102,6 @@
                 "showIgnoredHint": "node_modules, Build-Ausgaben und von gitignore erfasste Pfade zeigen."
             },
             "look": {
-                "colour": "Farbe",
-                "colourSanctumHint": "In Sanctum bleiben Hervorhebungen golden, und diese Farbe tönt nur den Stein.",
-                "colourSilverHint": "In Silber bleiben Hervorhebungen silbern, und diese Farbe tönt nur das Glas.",
                 "group": "Aussehen",
                 "language": "Sprache",
                 "languageHint": "Die Sprache, in der diese Oberfläche geschrieben ist. Ihre Dateien, Ihre Chats und Ihre Agenten bleiben unberührt.",
@@ -12489,7 +12491,6 @@
             "language": "Sprache, Übersetzung, English, Deutsch, Español, Français, Polski",
             "theme": "Dunkelmodus, dunkler Modus, heller Modus, Nachtmodus, Farbschema, Dark Mode",
             "wallpaper": "Hintergrund, Hintergrundbild, Bild",
-            "accentColour": "Akzentfarbe, Farbe, Hervorhebung",
             "textSize": "Schriftgröße, Zoom, größerer Text, kleinerer Text, Skalierung",
             "changesList": "Diff, Review, geänderte Dateien",
             "toolCalls": "Verlauf, Agentenschritte, Details, Werkzeuge",

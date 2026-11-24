@@ -1,6 +1,4 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
-import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../lib/themeColor.js";
-import { storeValue } from "../lib/browserStorage";
 import { definePreference } from "./preference.js";
 
 export type ColorScheme = "light" | "dark";
@@ -9,13 +7,10 @@ export type SchemeChoice = "system" | ColorScheme;
 
 const STORAGE_KEY = `ui-color-scheme`;
 const DARK_ATTRIBUTE = `data-mode`;
-const ACCENT_STORAGE_KEY = `ui-accent`;
-// Pre-serialized accent ramps, restored by index.html's anti-flash script before first paint (see themeCss).
-const ACCENT_VARS_KEY = `ui-accent-vars`;
 
-// Scheme and accent are account preferences, live in every window at once. Scheme flips `data-mode` on <html>,
-// the selector both the PrimeVue dark preset and role tokens key off. Accent is a colour, not a named theme, so
-// it's written as inline custom properties on <html>, which beat the ramps in primitive-colors.css.
+// The scheme is an account preference, live in every window at once. It flips `data-mode` on <html>, the selector both the
+// PrimeVue dark preset and role tokens key off. There is no personal accent colour since 2026-11-24: the colour a
+// person sees is the sandbox's own (web models/sandbox/sandboxColor.ts), the same for every member.
 
 const apply = (value: ColorScheme): void => {
     if (value === `dark`) {
@@ -77,31 +72,6 @@ const toggle = (): void => {
     set(scheme.value === `dark` ? `light` : `dark`);
 };
 
-const applyAccent = (value: string): void => {
-    const style = document.documentElement.style;
-    for (const [name, colour] of Object.entries(themeVars(value))) {
-        style.setProperty(name, colour);
-    }
-};
-
-const accent: Ref<string> = definePreference<string>({
-    key: ACCENT_STORAGE_KEY,
-    // Falls back to default and snaps off-ladder values; `accent` is always one canonical string for comparison.
-    read: (raw) => (raw === null ? DEFAULT_ACCENT : normalizeAccent(raw)),
-    write: (value) => value,
-    apply: applyAccent,
-});
-
-/** Repaint the app in `hex` (`#rrggbb`), snapped to the accent's own lightness, and remember it. */
-const setAccent = (hex: string): void => {
-    const value = normalizeAccent(hex);
-    accent.value = value;
-    // Anti-flash cache, in the account's drawer beside the accent itself; only the window that picked the colour refreshes
-    // it (pure function of the stored hex). Storage may be unavailable (private mode): the colour still applies, it just
-    // flashes on next boot.
-    storeValue(ACCENT_VARS_KEY, themeCss(value));
-};
-
 export function useTheme() {
-    return { scheme, choice, handed, set, hand, toggle, accent, setAccent };
+    return { scheme, choice, handed, set, hand, toggle };
 }

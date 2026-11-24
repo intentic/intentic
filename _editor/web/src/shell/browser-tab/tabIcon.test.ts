@@ -120,6 +120,18 @@ describe(`the icon of a sandbox without a logo`, () => {
     });
 });
 
+describe(`the lotus in the sandbox's colour`, () => {
+    it(`draws the lotus in the open sandbox's colour, so two sandboxes' tabs differ without a logo`, () => {
+        expect(iconSvg(undefined, undefined, undefined, undefined, `#00a7c7`)).toContain(`fill="#00a7c7"`);
+        expect(iconSvg({ kind: `working` }, undefined, undefined, undefined, `#00a7c7`)).toContain(`fill="#00a7c7"`);
+    });
+
+    it(`still greys it for offline, and never tints a logo`, () => {
+        expect(iconSvg({ kind: `offline` }, undefined, undefined, undefined, `#00a7c7`)).not.toContain(`#00a7c7`);
+        expect(iconSvg(undefined, `data:image/webp;base64,AAAA`, undefined, undefined, `#00a7c7`)).not.toContain(`#00a7c7`);
+    });
+});
+
 describe(`the visible square of an upload`, () => {
     // An 8x8 picture, transparent but for a 4x2 bar from (2,3).
     const pixels = new Uint8ClampedArray(8 * 8 * 4);

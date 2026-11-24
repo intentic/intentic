@@ -138,6 +138,9 @@ export type HostedMigration = z.infer<typeof HostedMigrationSchema>;
 // Avatars/logos as inline data URLs, client-downscaled; caps what the API persists in a row.
 export const ImageDataUrlSchema = z.string().startsWith("data:image/").max(150_000);
 
+// A sandbox's own colour, as `#rrggbb` (lower-case or upper). The editor snaps it onto its swatch ladder when it paints.
+export const HexColorSchema = z.string().regex(/^#[0-9a-f]{6}$/iu);
+
 // ---- sandboxes: the user's workspaces + shared access ----
 
 // Two copies of one sandbox seen announcing side by side, on the owner's summary: what each copy named itself as
@@ -297,6 +300,9 @@ export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),
     image: z.string().nullable(),
+    // The owner's pick of the sandbox's colour (2026-11-24), null until one is made; absent from a platform from before,
+    // which reads the same. The editor derives one when there is none (web sandboxColor.ts).
+    color: z.string().nullable().optional(),
     daemonUrl: z.string().nullable(),
     lastSeenAt: z.string().nullable(),
     setupCodeClaimedAt: z.string().nullable(),

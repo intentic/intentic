@@ -1,118 +1,88 @@
-// Expands one accent hex into the brand and neutral colour ramps every semantic token resolves through. Per
-// ladder step:
-// - lightness is fixed (not set by the pick): legibility promises in semantic-colors.css are about a step's lightness.
-// - hue is held constant down the ramp; there's no drift rule that works for every hue.
-// - chroma is scaled by the picked colour's chroma over the reference ramp's, applied to both ramps together, so a
-//   muted pick mutes the neutrals too.
-// Out-of-gamut steps are emitted as CSS oklch() and gamut-mapped by the browser the same way oklch.ts does
-// (chroma only), so the page and a computed swatch agree.
+// THE SWATCH LADDER: every colour the app lets a person pick (a sandbox's own colour, a preset logo's glyph) sits at one
+// fixed OKLCH lightness, so any pick reads the same against light and dark grounds and none of them is the "loud" one.
+// A pick is a hue and a saturation; the lightness is the ladder's. Out-of-gamut picks are reached by chroma only, the
+// way oklch.ts maps them, so the page and a computed swatch agree.
 
-import { canonicalHex, clampBetween, hexToOklch, maxChroma, oklchToHex } from "./oklch.js";
+import { hexToOklch, maxChroma, oklchToHex } from "./oklch.js";
 
-/** Where the accent itself sits on the ladder, step 600, the shade the picker shows and stores. */
-const ACCENT_LIGHTNESS = 0.67;
+/** Where every swatch sits: the lightness of the shipped accent ramp's step 600. */
+const SWATCH_LIGHTNESS = 0.67;
 
-// Tolerance for "on the ladder": ~0.002 lightness drift from 8-bit rounding, nothing more.
-const LADDER_TOLERANCE = 0.005;
-
-// Chroma of step 600 in the original ramp; every scale is a ratio against this.
-const REFERENCE_CHROMA = 0.175;
-
-// Scaling bounds: the floor keeps a near-grey pick from erasing the accent as a colour; the ceiling caps a
-// chroma-generous hue from overshooting the tuned ramp.
-const MIN_SCALE = 0.12;
-const MAX_SCALE = 1.25;
-
-// Default accent: the shipped ramp's step 600 as the browser actually paints it (already gamut-mapped).
-export const DEFAULT_ACCENT = `#e07400`;
-
-/* [step, lightness, chroma at full scale]. Both ladders are the shipped ramps, read off primitive-colors.css. */
-const BRAND_LADDER: readonly (readonly [string, number, number])[] = [
-    [`0`, 0.97, 0.02],
-    [`50`, 0.96, 0.035],
-    [`100`, 0.93, 0.06],
-    [`200`, 0.88, 0.1],
-    [`300`, 0.8, 0.11],
-    [`400`, 0.75, 0.13],
-    [`500`, 0.7, 0.15],
-    [`600`, ACCENT_LIGHTNESS, REFERENCE_CHROMA],
-    [`700`, 0.58, 0.16],
-    [`800`, 0.5, 0.135],
-    [`900`, 0.44, 0.115],
-    [`950`, 0.33, 0.085],
-];
-
-const NEUTRAL_LADDER: readonly (readonly [string, number, number])[] = [
-    [`0`, 0.99, 0.002],
-    [`50`, 0.98, 0.003],
-    [`100`, 0.96, 0.005],
-    [`200`, 0.92, 0.007],
-    [`300`, 0.87, 0.009],
-    [`400`, 0.71, 0.01],
-    [`500`, 0.58, 0.011],
-    [`600`, 0.48, 0.011],
-    [`700`, 0.4, 0.01],
-    [`800`, 0.3, 0.009],
-    [`900`, 0.23, 0.008],
-    [`950`, 0.16, 0.007],
-];
-
-/** Hue and saturation of an accent, 0–360 and 0–1, how the picker's swatches are stated. */
-export interface Accent {
+/** Hue and saturation of a swatch, 0–360 and 0–1. */
+export interface Swatch {
     readonly hue: number;
     /** Fraction of the chroma sRGB can hold at this hue and lightness; full means full at this hue. */
     readonly saturation: number;
 }
 
-/** Hex for a hue and saturation. */
-export const accentHex = ({ hue, saturation }: Accent): string =>
-    oklchToHex({ L: ACCENT_LIGHTNESS, C: maxChroma(ACCENT_LIGHTNESS, hue) * Math.min(1, Math.max(0, saturation)), h: hue });
+/** The picker's swatches, in the order it lays them out. `key` names the swatch in `ui.colorPicker`. */
+export const SWATCHES = [
+    // Ember is the shipped accent exactly (full saturation at hue 55), so the app's own orange is one of the picks.
+    { key: `ember`, hue: 55, saturation: 1 },
+    { key: `vermilion`, hue: 25, saturation: 0.85 },
+    { key: `rose`, hue: 350, saturation: 0.78 },
+    { key: `orchid`, hue: 320, saturation: 0.8 },
+    { key: `iris`, hue: 290, saturation: 0.85 },
+    { key: `cobalt`, hue: 260, saturation: 0.9 },
+    { key: `azure`, hue: 230, saturation: 0.95 },
+    { key: `lagoon`, hue: 200, saturation: 1 },
+    { key: `emerald`, hue: 172, saturation: 0.95 },
+    { key: `fern`, hue: 145, saturation: 0.85 },
+    { key: `moss`, hue: 115, saturation: 0.9 },
+    { key: `brass`, hue: 85, saturation: 0.95 },
+    { key: `graphite`, hue: 250, saturation: 0.14 },
+] as const satisfies readonly (Swatch & { readonly key: string })[];
+
+export type SwatchKey = (typeof SWATCHES)[number][`key`];
+
+/** Hex for a hue and saturation, on the ladder. */
+export const swatchHex = ({ hue, saturation }: Swatch): string =>
+    oklchToHex({ L: SWATCH_LIGHTNESS, C: maxChroma(SWATCH_LIGHTNESS, hue) * Math.min(1, Math.max(0, saturation)), h: hue });
+
+/** The first swatch's hex: what a colour that cannot be read falls back to. */
+export const DEFAULT_SWATCH = swatchHex(SWATCHES[0]);
 
 // Reads any hex back as a hue and saturation, discarding its lightness onto the ladder's own.
-const readAccent = (hex: string): Accent | undefined => {
+const readSwatch = (hex: string): Swatch | undefined => {
     const colour = hexToOklch(hex);
     if (colour === undefined) {
         return undefined;
     }
-    const ceiling = maxChroma(ACCENT_LIGHTNESS, colour.h);
+    const ceiling = maxChroma(SWATCH_LIGHTNESS, colour.h);
     return { hue: colour.h, saturation: ceiling === 0 ? 0 : Math.min(1, colour.C / ceiling) };
 };
 
-/** Snaps a hex onto the accent's lightness, or its canonical form if already there. */
-export const normalizeAccent = (hex: string): string => {
-    const colour = hexToOklch(hex);
-    if (colour === undefined) {
-        return DEFAULT_ACCENT;
-    }
-    if (Math.abs(colour.L - ACCENT_LIGHTNESS) <= LADDER_TOLERANCE) {
-        return canonicalHex(hex) ?? DEFAULT_ACCENT;
-    }
-    const accent = readAccent(hex);
-    return accent === undefined ? DEFAULT_ACCENT : accentHex(accent);
-};
+// Below this a colour is a grey with a cast rather than a hue, and reads as graphite.
+const GREY_BELOW = 0.3;
 
-const round = (value: number, places: number): number => Number(value.toFixed(places));
-
-/** Every custom property one accent implies (both ramps), keyed exactly as primitive-colors.css names them. */
-export const themeVars = (hex: string): Readonly<Record<string, string>> => {
-    const colour = hexToOklch(hex) ?? hexToOklch(DEFAULT_ACCENT)!;
-    const scale = clampBetween(colour.C / REFERENCE_CHROMA, MIN_SCALE, MAX_SCALE);
-    const hue = round(colour.h, 1);
-    const vars: Record<string, string> = {};
-    for (const [step, L, C] of BRAND_LADDER) {
-        vars[`--color-brand-${step}`] = `oklch(${round(L * 100, 1)}% ${round(C * scale, 4)} ${hue})`;
-    }
-    for (const [step, L, C] of NEUTRAL_LADDER) {
-        vars[`--color-neutral-${step}`] = `oklch(${round(L * 100, 1)}% ${round(C * scale, 4)} ${hue})`;
-    }
-    return vars;
+const hueGap = (a: number, b: number): number => {
+    const gap = Math.abs(a - b) % 360;
+    return gap > 180 ? 360 - gap : gap;
 };
 
 /**
- * Same properties as one declaration string, for index.html's anti-flash script: it can assign this to the root
- * element's `style` before any module has loaded, with no colour maths of its own.
+ * The swatch a colour is nearest, as its hex: by hue, or graphite for a near-grey. A colour stored by hand or drawn
+ * from a logo then still lands on one of the picker's own, so the picker can say which one is worn. Anything
+ * unreadable is the first swatch.
  */
-export const themeCss = (hex: string): string =>
-    Object.entries(themeVars(hex))
-        .map(([name, value]) => `${name}:${value}`)
-        .join(`;`);
+export const nearestSwatch = (hex: string): string => {
+    const read = readSwatch(hex);
+    if (read === undefined) {
+        return DEFAULT_SWATCH;
+    }
+    const hued = SWATCHES.filter((swatch) => swatch.key !== `graphite`);
+    const pick =
+        read.saturation < GREY_BELOW
+            ? SWATCHES.find((swatch) => swatch.key === `graphite`)!
+            : hued.reduce((best, swatch) => (hueGap(swatch.hue, read.hue) < hueGap(best.hue, read.hue) ? swatch : best));
+    return swatchHex(pick);
+};
+
+/**
+ * A ground tinted toward a swatch, for what cannot mix colours itself: the browser's own chrome (`theme-color`) beside a
+ * rail painted in the swatch. Light enough to sit under dark text by day, dark enough under light text by night.
+ */
+export const tintedGround = (hex: string, dark: boolean): string => {
+    const colour = hexToOklch(hex) ?? hexToOklch(DEFAULT_SWATCH)!;
+    return oklchToHex({ L: dark ? 0.27 : 0.9, C: Math.min(colour.C * 0.35, dark ? 0.045 : 0.055), h: colour.h });
+};

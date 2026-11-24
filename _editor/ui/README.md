@@ -93,7 +93,8 @@ flowchart LR
   rows' card, `Section` is it over anything else (cards, a grid, a form), and `NavRail` draws it per group. None can
   carry a count, a caption or a fill, and the room under it is the tier's. A sentence a reader needs goes on the
   group's surface as a `RowNote`. `ui.sectionLabel()` is its look, called by nothing else in this repository. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
-  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. `ColorPicker size="sm"` fits a settings row.
+  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. `ColorPicker size="sm"` fits a settings row. Its swatches (`SWATCHES` in `lib/themeColor.ts`) all sit at one lightness,
+  and `nearestSwatch` lands any stored colour on one of them.
   `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details, and nothing else wears it:
   an expanding row is a `DisclosureRow`. `ui-row-select-on` is reserved for selection, the icon rail's current tile
   included (with `ui-row-select-horizontal`, which keeps a tile's or a strip's mark to its tint). The translucent `--ui-row-open-wash` token uses
@@ -101,8 +102,10 @@ flowchart LR
 - **One signal colour.** Each look has one colour for emphasis, and it is the accent ramp (`primary-*`, `text-accent`,
   `primary-fill`). That colour marks where you are (the current nav row's edge, the active tab's underline, the
   current rail tile, the current outline entry), what is picked or on (a check, a picked row, an on chip or toggle, a
-  ticked box, the effort rungs), where focus is, and the primary action (Send). Light and Dark use the colour picked
-  in Appearance, orange by default. Sanctum replaces the whole accent ramp with its gold (`skins/sanctum.css`), so a
+  ticked box, the effort rungs), where focus is, and the primary action (Send). Light and Dark use orange, the same
+  for everyone: there is no personal accent (removed 2026-11-24). The colour that varies is the open sandbox's own,
+  which tints only the rail, the wallpaper and the composer's rim (web `skins/sandboxColor.css`) and never a mark of
+  state. Sanctum replaces the whole accent ramp with its gold (`skins/sanctum.css`), so a
   component that names `primary-500` is gold there without a rule of its own. The site and the entry screens use the
   same gold. Ember, the site's orange, is decoration in those looks (the wordmark, the lotus, the full stop, a
   figure's glow, the warmth a site link takes under the pointer). It never marks a state. Status meanings get the status colours (`success`, `warning`, `danger`, `info`), never the

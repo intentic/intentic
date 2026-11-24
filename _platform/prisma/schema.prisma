@@ -211,6 +211,9 @@ model Sandbox {
     name               String
     // Small square logo for the sandbox switcher, stored inline as a data URL (no upload infrastructure).
     image              String?
+    // The sandbox's own colour, `#rrggbb`, which every member's editor paints its rail, wallpaper and composer in so one
+    // sandbox is not mistaken for another. Null until the owner picks one; the editor then derives one (sandboxColor.ts).
+    color              String?
     ownerId            String
     owner              User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
     token              String          @unique
@@ -546,6 +549,8 @@ model SandboxTrash {
     owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
     name    String
     image   String?
+    // The sandbox's own colour (Sandbox.color), put back on restore with its logo.
+    color   String?
     /* The provider resources held back from teardown; all null for a sandbox that ran on the owner's own computer. */
     appName   String? @unique
     machineId String?

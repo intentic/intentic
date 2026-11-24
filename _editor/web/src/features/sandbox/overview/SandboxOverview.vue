@@ -46,7 +46,9 @@ import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import { diskPressing } from "./storage/diskPressureView";
 import { useDiskPressure } from "./storage/useDiskPressure";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
+import SandboxColorRow from "./logo/SandboxColorRow.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
+import { sandboxColor } from "./logo/sandboxColor";
 import { useT } from "@intentic/ui/i18n";
 import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
 import { askRemoveSandbox } from "../../../models/sandbox/removeSandbox";
@@ -252,11 +254,12 @@ const askRemove = (): void => {
     }
 };
 
-// The dialog keeps the sandbox it opened for, even if the active sandbox changes during the edit.
-const saveStyledLogo = async (image: string): Promise<void> => {
+// The dialog keeps the sandbox it opened for, even if the active sandbox changes during the edit. Its colour is the
+// sandbox's, so saving a styled logo recolours the sandbox in the same write.
+const saveStyledLogo = async ({ image, color }: { image: string; color: string }): Promise<void> => {
     const target = stylingSandbox.value;
     if (target !== undefined) {
-        await sandbox.update(target.id, { image });
+        await sandbox.update(target.id, { image, color });
     }
 };
 </script>
@@ -328,6 +331,7 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                         v-if="stylingSandbox"
                         :name="stylingSandbox.name"
                         :image="stylingSandbox.image"
+                        :color="sandboxColor(stylingSandbox)"
                         :write="saveStyledLogo"
                         @close="stylingSandbox = undefined"
                     />
@@ -400,6 +404,10 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                     </span>
                 </div>
             </div>
+
+            <!-- Its colour, the third part of who it is beside its name and logo: the platform's, so it needs no answer from
+                 the sandbox itself, and only for those who may change the other two. -->
+            <SandboxColorRow v-if="canEditIdentity" />
 
             <!-- What the sandbox reports about itself, relayed via /info and never stored by the platform. Its one wait, the
                  first read, is the hub section's own (lazySection), which holds this page's last look until /info answers.

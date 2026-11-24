@@ -8,6 +8,8 @@ export interface OtherBox {
     readonly id: string;
     readonly name: string;
     readonly image?: string | null | undefined;
+    /** The owner's pick of its colour, which its monogram is drawn in (sandboxColor.ts). */
+    readonly color?: string | null | undefined;
     readonly tier: string;
 }
 
@@ -30,6 +32,7 @@ export interface ClusterSlot {
     readonly id: string;
     readonly name: string;
     readonly image: string | null;
+    readonly color?: string | null | undefined;
     // How many cards wait for the reader there; 0 when none or not answered yet.
     readonly needsYou: number;
     // Its last read went unanswered: drawn dim, as Home dims its tile.
@@ -84,6 +87,7 @@ export const clusterOf = (
             id: box.id,
             name: box.name,
             image: box.image ?? null,
+            color: box.color ?? null,
             needsYou: readings.get(box.id)?.needsYou ?? 0,
             unreachable: readings.get(box.id)?.unreachable ?? false,
             ready: ready?.has(box.id) === true,

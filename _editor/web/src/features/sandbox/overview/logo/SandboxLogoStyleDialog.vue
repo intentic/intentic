@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { Button, ColorPicker, Modal, SandboxLogo, ui, useTheme } from "@intentic/ui";
+import { Button, ColorPicker, Modal, SandboxLogo, ui } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { LOGO_ICONS, logoStyleImage, readLogoStyle, type LogoStyle } from "./presets";
 
-// Mounted for one sandbox and one editing session. Only Save writes; cancelling drops the draft.
-const { name, image, write } = defineProps<{ name: string; image: string | null; write: (image: string) => Promise<void> }>();
+// Mounted for one sandbox and one editing session. Only Save writes; cancelling drops the draft. The glyph is drawn in
+// the sandbox's own colour (sandboxColor.ts) and picking another here recolours the sandbox too, since a logo in one
+// colour on a rail tinted in another would be two colours for one sandbox.
+const { name, image, color, write } = defineProps<{
+    name: string;
+    image: string | null;
+    /** The sandbox's colour as it is painted now. */
+    color: string;
+    write: (look: { image: string; color: string }) => Promise<void>;
+}>();
 const emit = defineEmits<{ close: [] }>();
 const t = useT();
-const { accent } = useTheme();
-const style = ref<LogoStyle>(readLogoStyle(image) ?? { icon: `box`, color: accent.value });
+const style = ref<LogoStyle>({ icon: readLogoStyle(image)?.icon ?? `box`, color });
 const preview = computed(() => logoStyleImage(style.value));
 const icons = computed(() => LOGO_ICONS.map((icon) => ({ icon, label: t(`sandbox.logoStyle.icons.${icon}`) })));
 const saving = ref(false);
@@ -23,7 +30,7 @@ const save = async (): Promise<void> => {
     saving.value = true;
     error.value = undefined;
     try {
-        await write(preview.value);
+        await write({ image: preview.value, color: style.value.color });
         emit(`close`);
     } catch (cause) {
         error.value = messageOr(cause, t(`sandbox.sandboxOverview.couldntSaveLogo`));

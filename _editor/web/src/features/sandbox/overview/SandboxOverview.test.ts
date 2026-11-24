@@ -8,10 +8,13 @@ import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
+import { logoStyleImage, readLogoStyle } from "./logo/presets";
 
 // Stubs the sandbox's other surfaces (version, workspace tree, availability) so only the identity block mounts.
 const active = ref<SandboxSummary | undefined>(undefined);
-const update = jest.fn<(sandboxId: string, input: { name?: string; image?: string | null }) => Promise<void>>().mockResolvedValue(undefined);
+const update = jest
+    .fn<(sandboxId: string, input: { name?: string; image?: string | null; color?: string | null }) => Promise<void>>()
+    .mockResolvedValue(undefined);
 // Undefined by default, which leaves the facts block (image, version, URL) undrawn; a test about one of its lines sets it.
 const daemonUrl = ref<string | undefined>(undefined);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({
@@ -227,6 +230,40 @@ it(`hands Full access the name and the logo, as the owner has them`, () => {
     const el = mount(sandboxRow({ tier: `maintainer` }));
     expect(titleButton(el)).not.toBeNull();
     expect(logoTile(el)).not.toBeNull();
+});
+
+const swatch = (el: HTMLElement, label: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`[data-setting="sandbox-color"] button[aria-label="${label}"]`)!;
+
+it(`shows the sandbox's colour as picked before anyone has chosen one, and saves a press on its own`, async () => {
+    const el = mount(sandboxRow({ id: `s1` }));
+    const picked = el.querySelectorAll(`[data-setting="sandbox-color"] button[aria-checked="true"]`);
+    expect(picked).toHaveLength(1);
+    el.querySelector<HTMLButtonElement>(`[data-setting="sandbox-color"] button[aria-checked="false"]`)!.click();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0]?.[0]).toBe(`s1`);
+    // The colour alone: no logo to redraw here, and the name is not this row's.
+    expect(update.mock.calls[0]?.[1]).toEqual({ color: expect.stringMatching(/^#[0-9a-f]{6}$/u) });
+});
+
+it(`redraws a preset logo in the colour just picked, in the same write, so the sandbox wears one colour`, async () => {
+    const el = mount(sandboxRow({ image: logoStyleImage({ icon: `moon`, color: `#e07400` }) }));
+    swatch(el, `Rose`).click();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    const sent = update.mock.calls[0]![1];
+    expect(readLogoStyle(sent.image)).toEqual({ icon: `moon`, color: sent.color });
+});
+
+it(`leaves an uploaded logo as it is when the colour changes`, async () => {
+    const el = mount(sandboxRow({ image: `data:image/webp;base64,OLD` }));
+    // Any swatch but the one already worn, which is derived from the id and would save nothing.
+    el.querySelector<HTMLButtonElement>(`[data-setting="sandbox-color"] button[aria-checked="false"]`)!.click();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0]?.[1]).not.toHaveProperty(`image`);
+});
+
+it(`keeps a member to the colour they see on the rail, with no swatches to press`, () => {
+    const el = mount(sandboxRow({ tier: `collaborator` }));
+    expect(el.querySelector(`[data-setting="sandbox-color"]`)).toBeNull();
 });
 
 it(`saves the picked file on its own, fitted rather than cropped`, async () => {

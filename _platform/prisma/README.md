@@ -24,6 +24,9 @@ flowchart LR
   columns let a turn that started with allowance left finish past it, up to `TRIAL_GRACE_STEPS` (default 25) more
   calls a day (`20261019120000_trial_turn_grace`). A turn the daemon opened and never closed stops counting an hour
   after it opened.
+- A sandbox's `color` (`20261124120000_sandbox_color`) is its owner's pick of the colour every member's editor tints its
+  rail, wallpaper and composer with; null until one is picked. `sandbox_trash.color` keeps it through the recovery
+  window, so a restore brings it back beside the logo.
 - A sandbox's `activeHost` and `activeEpoch` name the one copy that runs it and how many takeovers moved it
   (`20261111120000_active_host`, backfilled from the newest copy in `seenInstances`); the rules are in the api's
   `src/sandbox/active/active-host.ts`.

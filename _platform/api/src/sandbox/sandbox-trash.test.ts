@@ -36,6 +36,7 @@ const trashRow = {
     ownerId: `u1`,
     name: `dev`,
     image: null,
+    color: null,
     appName: `intentic-sbx-a`,
     machineId: `m1`,
     volumeId: `vol1`,
@@ -212,6 +213,21 @@ describe(`restoreSandbox`, () => {
         expect(fly.calls).toHaveLength(0);
         expect(drop).toHaveBeenCalledTimes(1);
         expect(drop).toHaveBeenCalledWith({ where: { id: `t1` } });
+    });
+});
+
+describe(`restoreSandbox's look`, () => {
+    it(`puts the logo and the colour back, so the sandbox comes back looking as its members knew it`, async () => {
+        stubFly();
+        const ownMachine = { ...trashRow, appName: null, machineId: null, volumeId: null, region: null, image: `data:image/webp;base64,AA==`, color: `#2a9d8f` };
+        const update = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: { update },
+            sandboxTrash: { findUnique: jest.fn().mockResolvedValue(ownMachine), delete: jest.fn().mockResolvedValue({}) },
+        });
+        const { sandbox } = await restoreSandbox(prisma, config(), `u1`, `t1`);
+        expect(update).toHaveBeenCalledWith({ where: { id: `s2` }, data: { image: `data:image/webp;base64,AA==`, color: `#2a9d8f` } });
+        expect(sandbox).toMatchObject({ image: `data:image/webp;base64,AA==`, color: `#2a9d8f` });
     });
 });
 
