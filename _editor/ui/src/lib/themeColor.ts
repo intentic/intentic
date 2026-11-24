@@ -20,18 +20,19 @@ export interface Swatch {
     readonly lightness?: number;
 }
 
-/** The picker's swatches, in the order it lays them out. `key` names the swatch in `ui.colorPicker`. */
+/** The picker's swatches, in the order it lays them out: the stone first, the bar as the look draws it with nothing
+ *  picked, then the hues once around the wheel from red-brown to purple. `key` names the swatch in `ui.colorPicker`. */
 export const SWATCHES = [
-    { key: `ember`, hue: 50 },
+    // The stone's own grey, for a sandbox that should stay quiet.
+    { key: `stone`, hue: 65, chroma: 0.014 },
     // A brick, deeper than the rest: at their lightness a red this calm is salmon-pink.
     { key: `clay`, hue: 30, chroma: 0.08, lightness: 0.6 },
+    { key: `ember`, hue: 50 },
     { key: `ochre`, hue: 82, chroma: 0.085, lightness: 0.7 },
     { key: `moss`, hue: 132, chroma: 0.062 },
     { key: `teal`, hue: 195, chroma: 0.052 },
     { key: `slate`, hue: 250, chroma: 0.052 },
     { key: `plum`, hue: 335, chroma: 0.058 },
-    // The stone's own grey, for a sandbox that should stay quiet.
-    { key: `stone`, hue: 65, chroma: 0.014 },
 ] as const satisfies readonly (Swatch & { readonly key: string })[];
 
 export type SwatchKey = (typeof SWATCHES)[number][`key`];
@@ -40,8 +41,8 @@ export type SwatchKey = (typeof SWATCHES)[number][`key`];
 export const swatchHex = ({ hue, chroma = SWATCH_CHROMA, lightness = SWATCH_LIGHTNESS }: Swatch): string =>
     oklchToHex({ L: lightness, C: Math.min(chroma, maxChroma(lightness, hue)), h: hue });
 
-/** The first swatch's hex: what a colour that cannot be read falls back to. */
-export const DEFAULT_SWATCH = swatchHex(SWATCHES[0]);
+/** Ember's hex, the brand's own orange: what a colour that cannot be read falls back to. */
+export const DEFAULT_SWATCH = swatchHex(SWATCHES.find((swatch) => swatch.key === `ember`)!);
 
 // Below this chroma a colour is a grey with a cast rather than a hue, and reads as stone.
 const GREY_BELOW = 0.035;

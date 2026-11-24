@@ -10,7 +10,7 @@ import { logoStyleImage, readLogoStyle } from "./presets";
 let app: App | undefined;
 const write = jest.fn<(look: { image: string; color: string }) => Promise<void>>();
 const closed = jest.fn<() => void>();
-const ember = swatchHex(SWATCHES[0]);
+const ember = swatchHex(SWATCHES.find((swatch) => swatch.key === `ember`)!);
 const savedImage = logoStyleImage({ icon: `moon`, color: ember });
 
 const mount = async (image: string | null = savedImage, color = ember): Promise<void> => {

@@ -6,7 +6,7 @@
    - THE RAIL, the one strip on every page, in the corner of the eye whatever is open. On a phone the same `.icon-rail`
      is the side rail and the sandbox bar along the foot.
    - THE WALLPAPER, the largest area on screen and the only one that says nothing else, so its colour can only mean
-     "which sandbox". Hue only (a `color` blend): the picture keeps its light and shade.
+     "which sandbox". A whisper of hue only (a `color` blend, faint): the picture keeps its own light, shade and glow.
    - THE COMPOSER'S RIM, where an order is about to go to this sandbox and not another.
 
    Never on a button, a status, a card or text: those colours already mean "the step we ask of you", "failed", "done",
@@ -54,11 +54,14 @@ html[data-sandbox-color][data-skin="silver"] .icon-rail {
 }
 
 /* THE WALLPAPER. wallpapers.css's own stack with one layer more, between the veil and the art: the sandbox's haze (a
-   mid tone of its hue, chroma capped like the rail's), blended as `color` so the picture takes its hue and keeps its
-   light. Under the veil and the scrim, so the header's well
-   and the edges' close read as they always did. Five layers, so five blend modes and five attachments. */
+   mid tone of its hue, chroma capped like the rail's), blended as `color` over the picture at 15%, so the picture leans
+   toward the hue and stays itself. At 80% (until 2026-11-24) it took the hue outright and every wallpaper turned one
+   colour; a cool hue cancels a warm picture's glow first, so past about a fifth the picture reads grey before it reads
+   tinted. The rail and the composer's rim say which sandbox it is; this only agrees with them. Under the veil and the
+   scrim, so the header's well and the edges' close read as they always did. Five layers, so five blend modes and five
+   attachments. */
 html[data-sandbox-color][data-wallpaper] .agents-board {
-    --sandbox-wallpaper-tint: color-mix(in oklab, var(--sandbox-haze) 80%, transparent);
+    --sandbox-wallpaper-tint: color-mix(in oklab, var(--sandbox-haze) 15%, transparent);
     background-image:
         var(--wallpaper-scrim),
         linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)),

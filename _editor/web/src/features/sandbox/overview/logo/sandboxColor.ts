@@ -13,8 +13,11 @@ import { readLogoStyle } from "./presets";
 // and the picker can always say which one is worn.
 
 // The derived colour comes from the hued swatches only: stone is a near-grey, and a sandbox nobody coloured should
-// still read as a colour.
-const DERIVED = SWATCHES.filter((swatch) => swatch.key !== `stone`).map(swatchHex);
+// still read as a colour. Taken in hue order rather than the picker's, so laying the picker out differently never
+// repaints a sandbox nobody coloured.
+const DERIVED = SWATCHES.filter((swatch) => swatch.key !== `stone`)
+    .toSorted((a, b) => a.hue - b.hue)
+    .map(swatchHex);
 
 const HEX = /^#[0-9a-f]{6}$/iu;
 
