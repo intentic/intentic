@@ -18,7 +18,6 @@ import { landStripOf } from "./landing/landStrip";
 import { shipsFrom } from "./landing/shipStrip";
 import { useAudience } from "../../../app/useAudience";
 import { useTier } from "../../../client/sandbox/useTier";
-import NeedsStrip from "../../needs/NeedsStrip.vue";
 import SealAsks from "./seal/SealAsks.vue";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
@@ -95,8 +94,6 @@ const activeAccountReauth = computed(() => {
 </script>
 
 <template>
-    <!-- What this conversation still waits on people for (docs/architecture/needs.md): answerable here, above the composer. -->
-    <NeedsStrip :conversation-id="conversation.conversationId" />
     <!-- Who asked to read this private conversation, answered by its reader here (SealAsks). -->
     <SealAsks />
     <!-- This conversation's agent is off the board. -->

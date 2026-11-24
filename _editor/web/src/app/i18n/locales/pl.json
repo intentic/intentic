@@ -4850,26 +4850,32 @@
             "waitsForPress": "tylko Kontynuuj go wznowi"
         },
         "chatWaitingBar": {
-            "planWaiting": "Plan czeka na Twoją zgodę",
-            "questionForYou": "Pytanie do Ciebie",
-            "permissionNeeded": "Potrzebna zgoda",
-            "waitingOnYou": "Agent czeka na Ciebie",
-            "fetching": "pobieramy to z Twojego sandboxa…",
-            "showIt": "Pokaż",
-            "readPlan": "Przeczytaj plan",
-            "approveWithNotes": "Zatwierdź z tymi uwagami",
-            "keepPlanning": "Planuj dalej",
             "heldMemory": "Wstrzymane: w sandboxie kończy się pamięć",
             "heldMemoryShare": "Wstrzymane: w sandboxie kończy się pamięć ({share})",
             "wait": "Poczekaj",
             "waitHint": "Wiadomość zostaje wstrzymana. Wyślesz ją z czatu, gdy zwolni się pamięć.",
             "sendsWhenRoom": "wyśle się, gdy zwolni się pamięć",
-            "waitHintRoom": "Wyśle się po zwolnieniu pamięci",
-            "others": {
-                "plan": "Plan czeka na kogoś, kto uruchamia agentów",
-                "question": "Pytanie czeka na kogoś, kto uruchamia agentów",
-                "permission": "Zgoda czeka na kogoś, kto uruchamia agentów",
-                "other": "Czeka na kogoś, kto uruchamia agentów"
+            "waitHintRoom": "Wyśle się po zwolnieniu pamięci"
+        },
+        "askDock": {
+            "waitingOnYou": "Czeka na Ciebie",
+            "waitingOnOthers": "Czeka na kogoś, kto uruchamia agentów",
+            "showInChat": "Pokaż w czacie",
+            "fold": "Zwiń",
+            "unfold": "Rozwiń",
+            "show": "Pokaż",
+            "showIt": "Pokaż",
+            "fetching": "Pobieramy to z Twojego sandboxa…",
+            "readPlan": "Przeczytaj plan",
+            "approveWithNotes": "Zatwierdź z tymi uwagami",
+            "keepPlanning": "Planuj dalej",
+            "openPage": "Otwórz stronę",
+            "openChat": "Otwórz czat",
+            "kind": {
+                "plan": "Plan",
+                "question": "Pytanie",
+                "permission": "Uprawnienie",
+                "other": "Potrzebuje Cię"
             }
         },
         "sendLater": {
@@ -13959,14 +13965,6 @@
         }
     },
     "needs": {
-        "strip": {
-            "waiting": "Czeka na Ciebie jedna sprawa: | Czekają na Ciebie {count} sprawy: | Czeka na Ciebie {count} spraw:",
-            "waitingOn": {
-                "maintainer": "Jedna sprawa czeka na opiekuna: | {count} sprawy czekają na opiekuna: | {count} spraw czeka na opiekuna:",
-                "owner": "Jedna sprawa czeka na właściciela: | {count} sprawy czekają na właściciela: | {count} spraw czeka na właściciela:",
-                "approvers": "Jedna sprawa czeka na zatwierdzających: | {count} sprawy czekają na zatwierdzających: | {count} spraw czeka na zatwierdzających:"
-            }
-        },
         "plan": {
             "alsoWaiting": "Ten plan potrzebuje od Ciebie jeszcze jednej rzeczy: | Ten plan potrzebuje od Ciebie jeszcze {count} rzeczy: | Ten plan potrzebuje od Ciebie jeszcze {count} rzeczy:",
             "answerThere": "Odpowiedz na nie na ich kartach przypiętych nad polem wiadomości: kroki, które ich potrzebują, poczekają, a reszta może ruszyć już teraz."

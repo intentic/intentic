@@ -3,8 +3,8 @@ import { browserOwnsClick, MarkdownParts, parseLoopbackLink, useDevice } from "@
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
-import { REQUEST_FIELDS, type RequestField } from "@intentic/sandbox-contract/events/transcript";
-import { type Component, computed, defineAsyncComponent, nextTick, ref, useTemplateRef, watch } from "vue";
+import { REQUEST_FIELDS } from "@intentic/sandbox-contract/events/transcript";
+import { computed, defineAsyncComponent, nextTick, ref, useTemplateRef, watch } from "vue";
 import { loadChunk } from "@intentic/ui/chunk";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { errandOf } from "../../../models/conversations/run/errands";
@@ -22,15 +22,10 @@ import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatReadAloud from "../voice/ChatReadAloud.vue";
 import ChatViewingChip from "./attachments/ChatViewingChip.vue";
-import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";
-import ChatCapabilityCard from "./cards/ChatCapabilityCard.vue";
 import NeedCard from "../../needs/NeedCard.vue";
-import ChatCredentialCard from "./cards/ChatCredentialCard.vue";
-import ChatPaymentCard from "./cards/ChatPaymentCard.vue";
-import ChatPermissionCard from "./cards/ChatPermissionCard.vue";
-import ChatPlanCard from "./cards/ChatPlanCard.vue";
-import ChatQuestionCard from "./cards/ChatQuestionCard.vue";
-import ChatTerminalHelpCard from "./cards/ChatTerminalHelpCard.vue";
+import { CARDS } from "./cards/cardComponents";
+import ChatAskStub from "../panel/asks/ChatAskStub.vue";
+import { useAskDock } from "../panel/asks/askDock";
 import ChatJobRow from "./ChatJobRow.vue";
 import ChatUnsentLine from "./ChatUnsentLine.vue";
 import ChatAsideLane from "./asides/ChatAsideLane.vue";
@@ -90,24 +85,23 @@ const reply = async (answer: CardAnswer): Promise<void> => {
     }
 };
 
-// What a row draws inline (a page, a review's findings), and the card for a page asked on: loaded the first time a chat
-// draws one, since most never do and the sealed document builder behind a page is not small.
+// What a row draws inline (a page, a review's findings): loaded the first time a chat draws one, since most never do.
 const ChatInlineBlocks = defineAsyncComponent(() => loadChunk(() => import(`./ChatInlineBlocks.vue`)));
-const ChatPageAskCard = defineAsyncComponent(() => loadChunk(() => import(`./pages/ChatPageAskCard.vue`)));
 
-// The card each request field is drawn as, as cardReplies' FIELD_OF names the answers; a row holds at most one.
-const CARDS: Readonly<Record<RequestField, Component>> = {
-    plan: ChatPlanCard,
-    question: ChatQuestionCard,
-    permission: ChatPermissionCard,
-    browserHelp: ChatBrowserHelpCard,
-    terminalHelp: ChatTerminalHelpCard,
-    capabilityOffer: ChatCapabilityCard,
-    paymentOffer: ChatPaymentCard,
-    credentialOffer: ChatCredentialCard,
-    pageAsk: ChatPageAskCard,
-};
+// The card this row holds, by its field (CARDS); a row holds at most one.
 const card = computed(() => REQUEST_FIELDS.find((field) => props.message[field] !== undefined));
+
+// The ask this row was made in, by the key the dock above the composer lists it under: a card, or a need it raised.
+// While the dock carries that ask's whole card, the row draws a one-line stub in its place (ChatAskStub), so one live
+// card is never drawn twice; answered, the row draws the settled card, which is the record.
+const dock = useAskDock();
+const askKey = computed(() => {
+    if (card.value !== undefined && requestId.value !== undefined) {
+        return `card:${requestId.value}`;
+    }
+    return props.message.role === `notice` && props.message.need !== undefined ? `need:${props.message.need.id}` : undefined;
+});
+const stubbed = computed(() => askKey.value !== undefined && dock?.holds(askKey.value) === true);
 
 const { mobile } = useDevice();
 
@@ -343,7 +337,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
     <!-- Delegated markdown controls (copy buttons, file links), since both live inside v-html. -->
     <!-- A folded message renders like any other row: no pin, no extra inset. -->
     <!-- Blocks within a message share the transcript's own gap (.chat-stack, --chat-gap). -->
-    <!-- `data-card-request` names the ask a card row holds, so the bar above the composer goes to that card (ChatWaitingBar). -->
+    <!-- `data-ask-row` names the ask this row was made in, so the dock above the composer can bring it on screen (ChatAskDock). -->
     <div
         ref="row"
         class="chat-message chat-stack flex flex-col"
@@ -361,7 +355,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             // A one-line row of the meta lane (a notice, a background job): a run of them closes up into one log (chat.css).
             'chat-message-meta': message.role === 'notice' && message.need === undefined,
         }"
-        :data-card-request="card === undefined ? undefined : requestId"
+        :data-ask-row="askKey"
         @click="onMarkdownClick"
         @pointerdown="copyCodeFromEvent"
     >
@@ -461,6 +455,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <!-- A low-memory hold: one line, whether it still holds a message or only says it once did. -->
         <NoticeMemory v-else-if="isMemoryHold(message)" :message="message" />
         <!-- Something the agent asked a person for: a card of its own, drawn from the need's live state, which outlives the turn (docs/architecture/needs.md). -->
+        <ChatAskStub v-else-if="stubbed && message.role === 'notice'" :ask-key="askKey!" />
         <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
         <!-- Where a home's memory starts over: a divider across the column, not a line down its edge. -->
         <NoticeFreshStart v-else-if="isFreshStart(message)" :message="message" />
@@ -500,8 +495,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <!-- A page the agent showed here, or a review's findings, drawn inline where its reply continues (ChatInlineBlocks). -->
             <ChatInlineBlocks v-if="message.page || message.review" :message="message" />
 
-            <!-- The card this row holds, by its field (CARDS); every answer goes through the chat's one reply. -->
-            <component :is="CARDS[card]" v-if="card" :message="message" :settling="settling" :reply="reply" />
+            <!-- The card this row holds, by its field (CARDS); every answer goes through the chat's one reply. While it waits in
+                 the dock above the composer, a stub stands here for it. -->
+            <ChatAskStub v-if="stubbed" :ask-key="askKey!" />
+            <component :is="CARDS[card]" v-else-if="card" :message="message" :settling="settling" :reply="reply" />
 
             <!-- Same component ChatPane mounts at the column's foot for a turn with no bubble yet — one spinner, one status line. -->
             <ChatTurnStatus v-if="showTyping" />

@@ -22,7 +22,7 @@ import { conversations, focusComposer, setConversations } from "../tabs/useChat-
 import { loadProviderModels } from "../accounts/useChat-catalog";
 import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
-import { waitKindOf } from "./pendingDecision";
+import { waitKindOf } from "./pendingAsks";
 import { bookedGroups, holdOfQueue, unbookedOf, withoutMessage } from "../drafts/bookings";
 import { type PromptAuthor, severalPeopleIn } from "../transcript/promptAuthor";
 import { useAuth } from "../../../client/auth/useAuth";

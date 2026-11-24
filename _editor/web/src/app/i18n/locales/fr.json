@@ -4850,26 +4850,32 @@
             "updateSandbox": "Mettre à jour la sandbox"
         },
         "chatWaitingBar": {
-            "planWaiting": "Plan en attente de votre approbation",
-            "questionForYou": "Question pour vous",
-            "permissionNeeded": "Autorisation requise",
-            "waitingOnYou": "L'agent vous attend",
-            "fetching": "récupération depuis votre sandbox…",
-            "showIt": "Afficher",
-            "readPlan": "Lire le plan",
-            "approveWithNotes": "Approuver avec ces remarques",
-            "keepPlanning": "Poursuivre la planification",
             "heldMemory": "Retenu : la mémoire du sandbox est faible",
             "heldMemoryShare": "En attente : mémoire du sandbox faible ({share})",
             "wait": "Attendre",
             "waitHint": "Attend votre envoi",
             "sendsWhenRoom": "envoi quand la mémoire se libère",
-            "waitHintRoom": "Enverra toujours quand la mémoire se libère",
-            "others": {
-                "plan": "Plan en attente d’une personne qui lance des agents",
-                "question": "Question en attente d’une personne qui lance des agents",
-                "permission": "Autorisation en attente d’une personne qui lance des agents",
-                "other": "En attente d’une personne qui lance des agents"
+            "waitHintRoom": "Enverra toujours quand la mémoire se libère"
+        },
+        "askDock": {
+            "waitingOnYou": "Vous attend",
+            "waitingOnOthers": "En attente d’une personne qui lance des agents",
+            "showInChat": "Afficher dans le chat",
+            "fold": "Replier",
+            "unfold": "Déplier",
+            "show": "Afficher",
+            "showIt": "Afficher",
+            "fetching": "Récupération depuis votre sandbox…",
+            "readPlan": "Lire le plan",
+            "approveWithNotes": "Approuver avec ces remarques",
+            "keepPlanning": "Poursuivre la planification",
+            "openPage": "Ouvrir la page",
+            "openChat": "Ouvrir le chat",
+            "kind": {
+                "plan": "Plan",
+                "question": "Question",
+                "permission": "Autorisation",
+                "other": "Vous attend"
             }
         },
         "sendLater": {
@@ -6313,14 +6319,6 @@
         "firstTaskSendFailed": "L'espace de travail n'a pas pu envoyer votre première tâche."
     },
     "needs": {
-        "strip": {
-            "waiting": "Une chose attend votre réponse : | {count} choses attendent votre réponse :",
-            "waitingOn": {
-                "maintainer": "En attente d’un mainteneur pour une chose : | En attente d’un mainteneur pour {count} choses :",
-                "owner": "En attente du propriétaire pour une chose : | En attente du propriétaire pour {count} choses :",
-                "approvers": "En attente de ses approbateurs pour une chose : | En attente de leurs approbateurs pour {count} choses :"
-            }
-        },
         "plan": {
             "alsoWaiting": "Ce plan a aussi besoin d'une chose de votre part : | Ce plan a aussi besoin de {count} choses de votre part :",
             "answerThere": "Répondez-y sur leurs cartes, épinglées au-dessus de la zone de message : les étapes qui en dépendent attendent, les autres peuvent démarrer maintenant."

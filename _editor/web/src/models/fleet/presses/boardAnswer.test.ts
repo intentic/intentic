@@ -1,6 +1,6 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { SandboxRpc } from "../../../../client/sandbox/sandboxRpc";
-import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // A permission answered on the board card: what it may answer, what it sends, and that the card reads answered from the
 // press and asks again when the sandbox did not take it.
@@ -9,21 +9,21 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async () => ({ ok: true as const })) };
 
 // The fleet store pulls the app shell at import time; the same cuts as useAgents-provisional.test.ts.
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
-jest.mock("../../../../client/sandbox/useSandbox", () => ({
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
 }));
-jest.mock("../../../../app/storage/activeSandbox", () => ({ activeSandboxId: ref<string | undefined>(undefined), sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
-jest.mock("../../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
-jest.mock("../../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
+jest.mock("../../../app/storage/activeSandbox", () => ({ activeSandboxId: ref<string | undefined>(undefined), sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+jest.mock("../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { ref } from "vue";
-import { SKIP_CALL } from "../../../../models/conversations/session/cardReplies";
-import { answerableAsk, answerFromBoard, boardReply } from "../boardAnswer";
-import { useAgents } from "../../../../models/fleet/useAgents";
-import { setAgents } from "../../../../models/fleet/useAgents-registry";
+import { SKIP_CALL } from "../../conversations/session/cardReplies";
+import { answerableAsk, answerFromBoard, boardReply } from "./boardAnswer";
+import { useAgents } from "../useAgents";
+import { setAgents } from "../useAgents-registry";
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 const ASK = { requestId: `perm-1`, ask: "Run `pnpm build`?" };

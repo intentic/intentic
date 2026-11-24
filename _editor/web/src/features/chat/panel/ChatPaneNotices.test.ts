@@ -63,7 +63,6 @@ jest.mock(`../../../models/fleet/useAgents`, () => ({
 // The account gate is its own component with its own test; this file is only about the trial strip beneath it.
 jest.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
 // The needs strip reads the sandbox's needs store, which is not what these notices are about.
-jest.mock(`../../needs/NeedsStrip.vue`, () => ({ default: defineComponent({ name: `NeedsStrip`, setup: () => () => undefined }) }));
 // Who asks to read a private conversation is answered through the seal's writes, which pull in the fleet's action layer.
 jest.mock(`./seal/SealAsks.vue`, () => ({ default: defineComponent({ name: `SealAsks`, setup: () => () => undefined }) }));
 // The privacy shield's strip reads the shield's own status, and has its own test (privacy/ChatPrivacyStrip.test.ts).

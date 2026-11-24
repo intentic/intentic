@@ -12,7 +12,7 @@ import ChatCard from "../../../../components/ChatCard.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { documentDrawn, documentTitled, planStatus } from "./cardStatus";
 
-// The plan and nothing to press: its two answers are the bar's pinned over the composer (ChatWaitingBar), the one place
+// The plan and nothing to press: its two answers are in the dock pinned over the composer (ChatAskDock), the one place
 // they stand. There they are on screen at any scroll position (a long plan's own foot is below the fold on a phone), and
 // they carry the notes in the box, which a press down here could not. The shared card props (`settling`, `reply`) are
 // not declared, and not let fall onto the card either.

@@ -731,7 +731,11 @@ One word per idea on screen and in code. The retired spellings are refused by
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 | gallery | The home drawing a folder's pictures and videos as themselves, in justified rows: each keeps its proportions, every row but the last fills the pane, and the name stays under each (`features/workspace/home/gallery/homeGallery.ts`). A selected picture wears a ring round the picture itself, not a card round picture and name; a caption too narrow for its name gives up the start every name in the group shares first, then is cut in its middle, and a video's says no extension, its play badge saying what it is. The folders above it are the home's one-line chips (`HomeChip.vue`), as in every folder: there a folder or a file with nothing inside to show is a chip, a file read from its start is a card with a miniature of that start (`HomeCard.vue`), and a picture shows itself. On by itself where two of every three files are pictures or videos, and the reader's to switch per folder on the home's bar, beside a size slider (`galleryChoice.ts`). Rows are laid out from each file's box read off its header by the daemon (`workspace.dimensions`), and a video shows a frame the daemon cut with ffmpeg rather than its first, so a film opening on a fade is not a white card |
 
-Plan answers are pinned above the composer (`ChatWaitingBar.vue`). With text or files staged, **Approve with notes**
+Everything a chat waits on a person for stands in one dock above the composer (`features/chat/panel/asks/`): a count,
+one chip per ask in the order asked (cards the turn is parked on, needs it went on without, its children's permissions),
+and the open ask answered in place, while the transcript keeps a one-line stub where it was asked and the settled card
+once it is answered. A plan and a page keep their body in the transcript; the dock carries the plan's answers. With
+text or files staged, **Approve with notes**
 sends those instructions together with the approval, so execution receives them at the gate. **Keep planning** sends
 revision feedback. Interrupted tool cards stop spinning and show “interrupted”; a summary hand-off that falls back
 shows its failure reason.

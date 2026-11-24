@@ -4,13 +4,9 @@ import { IconStub } from "@intentic/ui/testing";
 import { computed, createApp, h, nextTick } from "vue";
 import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../../../../models/agent-status/agentStatus-standing";
-import * as sessionsOriginal from "../../../../../models/conversations/run/useChat-sessions";
 
-// What waits on the reader, pinned over the composer: the card the agent is parked on, before and after this window drew
-// it, the plan's answers there, and a message held for memory, worded as held.
-
-const retryHydrate = jest.fn();
-jest.mock("../../../../../models/conversations/run/useChat-sessions", () => ({ ...sessionsOriginal, retryHydrate }));
+// What waits on the reader, pinned over the composer: a message held for memory, worded as held. Every ask the agent
+// made of the reader stands in the dock beside it, which has its own suite (asks/tests/ChatAskDock.test.ts).
 
 const { Conversation } = await import("../../../../../models/conversations/session/conversation");
 const { conversationView, PANE_VIEW } = await import("../../../../../models/conversations/panel/useChat-view");
@@ -25,9 +21,7 @@ const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement, canDri
     );
     const element = document.createElement(`div`);
     inside?.append(element);
-    const approve = jest.fn();
-    const keepPlanning = jest.fn();
-    const app = createApp({ render: () => h(ChatWaitingBar, { canDrive, onApprove: approve, onKeepPlanning: keepPlanning }) });
+    const app = createApp({ render: () => h(ChatWaitingBar, { canDrive }) });
     app.provide(PANE_VIEW, view);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -41,103 +35,13 @@ const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement, canDri
             ...[...row.querySelectorAll(`button`)].map(squash),
         ]);
     const press = (label: string): void => [...element.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label)?.click();
-    return { view, element, approve, keepPlanning, rows, press };
+    return { view, element, rows, press };
 };
 
 afterEach(() => {
     unmount?.();
     unmount = undefined;
-    retryHydrate.mockClear();
     resetSandboxScope();
-});
-
-describe(`a card the agent is parked on`, () => {
-    it(`stands on the agents list's word before the card is drawn, and asks for the card on Show`, async () => {
-        const chat = new Conversation(`c1`);
-        const bar = mountBar(chat, { status: `awaiting`, attention: { ...NO_ATTENTION, question: true } });
-        await nextTick();
-
-        expect(bar.rows()).toEqual([[`Question for you · getting it from your sandbox…`, `Show it`]]);
-        bar.press(`Show it`);
-        expect(retryHydrate.mock.calls.map(([called]) => called === chat)).toEqual([true]);
-    });
-
-    it(`names a drawn plan and offers its answers, approving with the notes in the box`, async () => {
-        const chat = new Conversation(`c1`);
-        chat.transcript.adopt([
-            { id: 1, role: `user`, text: `plan it` },
-            { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `# Ship the importer\n\nSteps.`, status: `pending` } },
-        ]);
-        const bar = mountBar(chat);
-        await nextTick();
-
-        expect(bar.rows()).toEqual([[`Plan waiting for your approval · Ship the importer`, `Approve`, `Keep planning`, `Read plan`]]);
-        chat.draft.value = `use the v2 endpoint`;
-        await nextTick();
-        bar.press(`Approve with these notes`);
-        bar.press(`Keep planning`);
-
-        expect(bar.approve).toHaveBeenCalledTimes(1);
-        expect(bar.keepPlanning).toHaveBeenCalledTimes(1);
-    });
-
-    // "Read plan" goes to this plan's own card, wherever it is drawn: not the newest card live in the pane (an offer pinned
-    // under it), and not by scrolling alone, which moved nothing for a card already on screen.
-    it(`goes to the plan's own card on Read plan, and gives it the keyboard`, async () => {
-        const chat = new Conversation(`c1`);
-        chat.transcript.adopt([
-            { id: 1, role: `user`, text: `plan it` },
-            { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `# Ship the importer\n\nSteps.`, status: `pending` } },
-        ]);
-        const bar = mountBar(chat);
-        const pane = document.createElement(`div`);
-        pane.className = `chat-pane`;
-        // Each card in its row, as ChatMessageView draws it, the plan's first and a newer one under it.
-        const cardIn = (requestId: string) => {
-            const row = document.createElement(`div`);
-            row.dataset[`cardRequest`] = requestId;
-            const card = document.createElement(`div`);
-            card.dataset[`cardLive`] = ``;
-            const scrolled = jest.fn();
-            card.scrollIntoView = scrolled;
-            row.append(card);
-            pane.append(row);
-            return { card, scrolled };
-        };
-        const plan = cardIn(`d1`);
-        const newer = cardIn(`offer-2`);
-        pane.append(bar.element);
-        document.body.append(pane);
-        await nextTick();
-
-        bar.press(`Read plan`);
-        expect(plan.scrolled).toHaveBeenCalledTimes(1);
-        expect(newer.scrolled).not.toHaveBeenCalled();
-        expect(document.activeElement).toBe(plan.card);
-        expect(retryHydrate).not.toHaveBeenCalled();
-        pane.remove();
-    });
-
-    // A viewer, or a writer with agents off, may read the plan but not answer it: the bar names who it waits on, never
-    // "your approval", and offers only the press that shows it.
-    it(`tells a reader who cannot answer who the plan waits on, with no answers to press`, async () => {
-        const chat = new Conversation(`c1`);
-        chat.transcript.adopt([
-            { id: 1, role: `user`, text: `plan it` },
-            { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `# Ship the importer\n\nSteps.`, status: `pending` } },
-        ]);
-        const bar = mountBar(chat, undefined, undefined, false);
-        await nextTick();
-
-        expect(bar.rows()).toEqual([[`Plan waiting on someone who runs agents · Ship the importer`, `Read plan`]]);
-    });
-
-    it(`says nothing for a chat that waits on nobody`, async () => {
-        const bar = mountBar(new Conversation(`c1`), { status: `idle`, attention: NO_ATTENTION });
-        await nextTick();
-
-        expect(bar.rows()).toEqual([]);
-    });
 });
 
 // The held message sat at the transcript's foot, out of view, and the board called it an error: here it is held, with

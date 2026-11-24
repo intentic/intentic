@@ -59,6 +59,32 @@ export const firstWhere = <Row>(test: (row: Row) => boolean): ((rows: readonly R
     };
 };
 
+// What every row it finds anything in says, oldest first, `pick` answering undefined for a row that says nothing. The
+// same array while nothing it found changed, so a computed reading it wakes nobody on a frame that only wrote prose.
+export const everyOf = <Row, Found>(pick: (row: Row) => Found | undefined): ((rows: readonly Row[]) => readonly Found[]) => {
+    let seen: readonly Row[] = [];
+    // Each find with the index of the row it stood in, oldest first.
+    let finds: { readonly at: number; readonly value: Found }[] = [];
+    let answer: readonly Found[] = [];
+    return (rows) => {
+        const from = firstChange(seen, rows);
+        seen = rows;
+        const kept = finds.filter((find) => find.at < from);
+        for (let index = from; index < rows.length; index += 1) {
+            const value = pick(rows[index]!);
+            if (value !== undefined) {
+                kept.push({ at: index, value });
+            }
+        }
+        const same = kept.length === answer.length && kept.every((find, index) => find.value === answer[index]);
+        finds = kept;
+        if (!same) {
+            answer = kept.map((find) => find.value);
+        }
+        return answer;
+    };
+};
+
 // What the newest row it finds anything in says, `pick` answering undefined for a row that says nothing.
 export const newestOf = <Row, Found>(pick: (row: Row) => Found | undefined): ((rows: readonly Row[]) => Found | undefined) => {
     let seen: readonly Row[] = [];

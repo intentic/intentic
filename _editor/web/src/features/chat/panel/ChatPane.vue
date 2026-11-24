@@ -52,6 +52,7 @@ import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/later/ChatQueue.vue";
 import ComposerMentionMarks from "../composer/mentions/ComposerMentionMarks.vue";
 import ChatWaitingBar from "./pane/ChatWaitingBar.vue";
+import { provideAskDock } from "./asks/askDock";
 import ChatHeldMessages from "../transcript/held/ChatHeldMessages.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
@@ -145,9 +146,7 @@ const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
 const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
 // The picker behind the paperclip (useChatAttachments.onPick).
 const filePicker = ref<HTMLInputElement | null>(null);
-
 usePaneAttach({ conversation: () => props.conversation, focused: () => props.focused, streaming });
-
 // A SPAWNED SUBAGENT'S CHAT: its parent directs it, so the subagent bar takes the composer's place, until the parent leaves the fleet (parentCardOf).
 const { agentById, fleet } = useAgents();
 const card = computed(() => agentById(props.conversation.conversationId));
@@ -177,6 +176,7 @@ const { pin, realizing } = usePaneScroll({
     streaming,
     grow,
 });
+provideAskDock({ view: paneView, canDrive: () => readOnly.value === undefined, pin }); // every ask, for the dock over the composer and the rows it stubs
 const { takeFocus, closeHint } = usePaneFocus({
     focused: () => props.focused,
     raise: () => emit(`focus`),
@@ -558,7 +558,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
                         <ChatLeftRunning v-if="!strip" />
-                        <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
+                        <!-- What waits on the reader (every ask the agent made of them, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
                         <ChatWaitingBar v-if="!strip" :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()" />
                         <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's, a stop, or the continue that undoes one. -->
                         <ChatSubagentBar

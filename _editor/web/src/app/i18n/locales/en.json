@@ -4850,26 +4850,32 @@
             "updateSandbox": "Update the sandbox"
         },
         "chatWaitingBar": {
-            "planWaiting": "Plan waiting for your approval",
-            "questionForYou": "Question for you",
-            "permissionNeeded": "Permission needed",
-            "waitingOnYou": "The agent is waiting for you",
-            "fetching": "getting it from your sandbox…",
-            "showIt": "Show it",
-            "readPlan": "Read plan",
-            "approveWithNotes": "Approve with these notes",
-            "keepPlanning": "Keep planning",
             "heldMemory": "Held: sandbox memory is low",
             "heldMemoryShare": "Held: sandbox memory is low ({share})",
             "wait": "Wait",
             "waitHint": "Held until you send",
             "sendsWhenRoom": "sends once memory frees up",
-            "waitHintRoom": "Still sends when memory frees",
-            "others": {
-                "plan": "Plan waiting on someone who runs agents",
-                "question": "Question waiting on someone who runs agents",
-                "permission": "Permission waiting on someone who runs agents",
-                "other": "Waiting on someone who runs agents"
+            "waitHintRoom": "Still sends when memory frees"
+        },
+        "askDock": {
+            "waitingOnYou": "Waiting on you",
+            "waitingOnOthers": "Waiting on someone who runs agents",
+            "showInChat": "Show in chat",
+            "fold": "Fold",
+            "unfold": "Unfold",
+            "show": "Show",
+            "showIt": "Show it",
+            "fetching": "Getting it from your sandbox…",
+            "readPlan": "Read plan",
+            "approveWithNotes": "Approve with these notes",
+            "keepPlanning": "Keep planning",
+            "openPage": "Open page",
+            "openChat": "Open chat",
+            "kind": {
+                "plan": "Plan",
+                "question": "Question",
+                "permission": "Permission",
+                "other": "Needs you"
             }
         },
         "sendLater": {
@@ -6313,14 +6319,6 @@
         "firstTaskSendFailed": "The workspace could not send your first task."
     },
     "needs": {
-        "strip": {
-            "waiting": "Waiting on you for one thing: | Waiting on you for {count} things:",
-            "waitingOn": {
-                "maintainer": "Waiting on a maintainer for one thing: | Waiting on a maintainer for {count} things:",
-                "owner": "Waiting on the owner for one thing: | Waiting on the owner for {count} things:",
-                "approvers": "Waiting on its approvers for one thing: | Waiting on their approvers for {count} things:"
-            }
-        },
         "plan": {
             "alsoWaiting": "This plan also needs one thing from you: | This plan also needs {count} things from you:",
             "answerThere": "Answer them on their cards, pinned above the message box: the steps that need them wait, the rest can start now."

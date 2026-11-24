@@ -45,7 +45,7 @@ const withheld = computed(() => (status === undefined ? injected?.value : undefi
 </script>
 
 <template>
-    <!-- `data-card-live` marks a card still waiting on its answer, for the bar above the composer to scroll to (ChatWaitingBar). -->
+    <!-- `data-card-live` marks a card still waiting on its answer. -->
     <div
         class="chat-card w-full overflow-hidden"
         :class="status === undefined ? `chat-card-live` : `chat-card-settled`"

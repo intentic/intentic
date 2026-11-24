@@ -55,7 +55,7 @@ import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
 import CardStamps from "../../../../parts/fleet/CardStamps.vue";
 import AutoApproveMark from "../../../../parts/fleet/AutoApproveMark.vue";
 import { useCardStamps } from "../../../../models/fleet/board/useCardStamps";
-import CardPermissionAsk from "./CardPermissionAsk.vue";
+import CardPermissionAsk from "../../../../parts/fleet/CardPermissionAsk.vue";
 import { reachLine } from "../../../../models/fleet/board/reachLine";
 import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the

@@ -4850,26 +4850,32 @@
             "updateSandbox": "Actualizar el sandbox"
         },
         "chatWaitingBar": {
-            "planWaiting": "Plan pendiente de tu aprobación",
-            "questionForYou": "Pregunta para ti",
-            "permissionNeeded": "Hace falta permiso",
-            "waitingOnYou": "El agente te está esperando",
-            "fetching": "obteniéndolo de tu sandbox…",
-            "showIt": "Mostrar",
-            "readPlan": "Leer el plan",
-            "approveWithNotes": "Aprobar con estas notas",
-            "keepPlanning": "Seguir planificando",
             "heldMemory": "En espera: la memoria del sandbox está baja",
             "heldMemoryShare": "En espera: la memoria del sandbox está baja ({share})",
             "wait": "Esperar",
             "waitHint": "En espera hasta que envíes",
             "sendsWhenRoom": "se envía cuando se libere memoria",
-            "waitHintRoom": "Se sigue enviando cuando se libere memoria",
-            "others": {
-                "plan": "Plan a la espera de alguien que ejecute agentes",
-                "question": "Pregunta a la espera de alguien que ejecute agentes",
-                "permission": "Permiso a la espera de alguien que ejecute agentes",
-                "other": "A la espera de alguien que ejecute agentes"
+            "waitHintRoom": "Se sigue enviando cuando se libere memoria"
+        },
+        "askDock": {
+            "waitingOnYou": "Te está esperando",
+            "waitingOnOthers": "A la espera de alguien que ejecute agentes",
+            "showInChat": "Mostrar en el chat",
+            "fold": "Plegar",
+            "unfold": "Desplegar",
+            "show": "Mostrar",
+            "showIt": "Mostrar",
+            "fetching": "Obteniéndolo de tu sandbox…",
+            "readPlan": "Leer el plan",
+            "approveWithNotes": "Aprobar con estas notas",
+            "keepPlanning": "Seguir planificando",
+            "openPage": "Abrir la página",
+            "openChat": "Abrir el chat",
+            "kind": {
+                "plan": "Plan",
+                "question": "Pregunta",
+                "permission": "Permiso",
+                "other": "Te necesita"
             }
         },
         "sendLater": {
@@ -6313,14 +6319,6 @@
         "firstTaskSendFailed": "El espacio de trabajo no pudo enviar tu primera tarea."
     },
     "needs": {
-        "strip": {
-            "waiting": "Esperando una cosa de ti: | Esperando {count} cosas de ti:",
-            "waitingOn": {
-                "maintainer": "A la espera de un responsable por una cosa: | A la espera de un responsable por {count} cosas:",
-                "owner": "A la espera del propietario por una cosa: | A la espera del propietario por {count} cosas:",
-                "approvers": "A la espera de quienes lo aprueban por una cosa: | A la espera de quienes las aprueban por {count} cosas:"
-            }
-        },
         "plan": {
             "alsoWaiting": "Este plan también necesita una cosa de ti: | Este plan también necesita {count} cosas de ti:",
             "answerThere": "Respóndelas en sus tarjetas, fijadas encima del cuadro de mensaje: los pasos que las necesitan esperan y el resto puede empezar ya."

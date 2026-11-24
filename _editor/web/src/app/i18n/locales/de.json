@@ -4850,26 +4850,32 @@
             "updateSandbox": "Sandbox aktualisieren"
         },
         "chatWaitingBar": {
-            "planWaiting": "Plan wartet auf Ihre Freigabe",
-            "questionForYou": "Frage an Sie",
-            "permissionNeeded": "Berechtigung nötig",
-            "waitingOnYou": "Der Agent wartet auf Sie",
-            "fetching": "wird aus Ihrer Sandbox geholt…",
-            "showIt": "Anzeigen",
-            "readPlan": "Plan lesen",
-            "approveWithNotes": "Mit diesen Anmerkungen freigeben",
-            "keepPlanning": "Weiter planen",
             "heldMemory": "Zurückgehalten: Sandbox-Speicher ist knapp",
             "heldMemoryShare": "Zurückgehalten: Sandbox-Speicher ist knapp ({share})",
             "wait": "Warten",
             "waitHint": "Zurückgehalten, bis Sie senden",
             "sendsWhenRoom": "sendet, sobald Speicher frei wird",
-            "waitHintRoom": "Sendet trotzdem, wenn Speicher frei wird",
-            "others": {
-                "plan": "Plan wartet auf jemanden, der Agenten ausführt",
-                "question": "Frage wartet auf jemanden, der Agenten ausführt",
-                "permission": "Freigabe wartet auf jemanden, der Agenten ausführt",
-                "other": "Wartet auf jemanden, der Agenten ausführt"
+            "waitHintRoom": "Sendet trotzdem, wenn Speicher frei wird"
+        },
+        "askDock": {
+            "waitingOnYou": "Wartet auf Sie",
+            "waitingOnOthers": "Wartet auf jemanden, der Agenten ausführt",
+            "showInChat": "Im Chat zeigen",
+            "fold": "Einklappen",
+            "unfold": "Ausklappen",
+            "show": "Zeigen",
+            "showIt": "Anzeigen",
+            "fetching": "Wird aus Ihrer Sandbox geholt…",
+            "readPlan": "Plan lesen",
+            "approveWithNotes": "Mit diesen Anmerkungen freigeben",
+            "keepPlanning": "Weiter planen",
+            "openPage": "Seite öffnen",
+            "openChat": "Chat öffnen",
+            "kind": {
+                "plan": "Plan",
+                "question": "Frage",
+                "permission": "Berechtigung",
+                "other": "Braucht Sie"
             }
         },
         "sendLater": {
@@ -6313,14 +6319,6 @@
         "firstTaskSendFailed": "Der Arbeitsbereich konnte Ihre erste Aufgabe nicht senden."
     },
     "needs": {
-        "strip": {
-            "waiting": "Wartet auf eine Sache von Ihnen: | Wartet auf {count} Dinge von Ihnen:",
-            "waitingOn": {
-                "maintainer": "Wartet bei einer Sache auf einen Maintainer: | Wartet bei {count} Dingen auf einen Maintainer:",
-                "owner": "Wartet bei einer Sache auf den Eigentümer: | Wartet bei {count} Dingen auf den Eigentümer:",
-                "approvers": "Wartet bei einer Sache auf die Freigebenden: | Wartet bei {count} Dingen auf die Freigebenden:"
-            }
-        },
         "plan": {
             "alsoWaiting": "Dieser Plan braucht außerdem eine Sache von Ihnen: | Dieser Plan braucht außerdem {count} Dinge von Ihnen:",
             "answerThere": "Antworten Sie auf den Karten über dem Nachrichtenfeld: Die betroffenen Schritte warten, der Rest kann jetzt starten."
