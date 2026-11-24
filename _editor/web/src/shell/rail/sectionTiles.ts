@@ -120,9 +120,10 @@ function useDevicesTile(): ComputedRef<SectionTile> {
     });
 }
 
-// THE RUN TILE'S BADGE (runBadge.ts): what runs, and what stopped with an error, read off the Run view's own lanes while
-// the tile is there for a reader who may run things; the computers asked seldom (RUNS_RAIL_POLL_MS), and as often as the
-// view asks while it is open.
+// THE RUN TILE'S BADGE (runBadge.ts): what runs, and what stopped with an error, read off the Run view's own lanes for a
+// reader who may run things, whether the tile is on the rail or behind More: Run is a signal tile (registry.ts), so this
+// badge is what brings it onto the rail. The computers asked seldom (RUNS_RAIL_POLL_MS), and as often as the view asks
+// while it is open.
 function useRunBadge(shown: Ref<boolean>): ComputedRef<ViewBadge | undefined> {
     const { lanes } = useRunLanes(shown, RUNS_RAIL_POLL_MS);
     return computed(() => (shown.value ? runBadgeOf(lanes.value) : undefined));

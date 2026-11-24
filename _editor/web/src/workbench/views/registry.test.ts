@@ -266,10 +266,17 @@ describe(`rail order`, () => {
         }
     });
 
-    it(`keeps Run beside Workspace in the work band, and Pipelines after it, a tile that holds its place only while it has news`, () => {
-        // Starting what the files make, in the sandbox or natively on a computer, is part of the loop: Run is always there.
+    it(`keeps Run beside Workspace in the work band, and Pipelines after it, tiles that hold their place only while they have news`, () => {
+        // Run with nothing running says nothing: it waits behind More, and comes onto the rail while a program runs,
+        // starts or stopped with an error (runBadge.ts).
         expect(railRank(`run`)).toBe(railRank(`workspace`) + 1);
-        expect(railPolicy(`run`)).toBe(`always`);
+        expect(railPolicy(`run`)).toBe(`signal`);
+        const resting = { pinned: false, active: false };
+        expect(onRail({ id: `run` }, resting)).toBe(false);
+        expect(onRail({ id: `run`, badge: { count: 1, tone: `neutral`, tooltip: `1 running` } }, resting)).toBe(true);
+        expect(onRail({ id: `run`, badge: { running: `1 starting` } }, resting)).toBe(true);
+        expect(onRail({ id: `run`, badge: { count: 1, tone: `danger`, tooltip: `1 stopped with an error` } }, resting)).toBe(true);
+        expect(onRail({ id: `run` }, { pinned: true, active: false })).toBe(true);
         expect(railRank(`pipelines`)).toBe(railRank(`run`) + 1);
         expect(railRank(`devices`)).toBe(railRank(`pipelines`) + 1);
         expect(railPolicy(`pipelines`)).toBe(`signal`);
@@ -406,7 +413,7 @@ describe(`rail tiles`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `workspace`, `run`]);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`]);
         // Devices is pinned to keep, and tiles itself while a machine is being worked on.
         expect(railPolicy(`devices`)).toBe(`signal`);
         expect(onRail({ id: `devices`, badge: { running: `Updating a machine's agents on rog` } }, resting)).toBe(true);
@@ -477,7 +484,7 @@ describe(`the work band`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `workspace`, `run`]);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`]);
     });
 
     // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the

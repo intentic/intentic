@@ -120,9 +120,12 @@ const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), it
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully.
 const know = (): RailGroup => ({ id: `know`, label: t(`views.registry.know`), items: [signal(`documentation`)] });
 
-// The Work band. Run follows the Workspace, a tile of its own and always there once the workspace holds a repository:
-// starting what the files make, here or natively on one of the owner's computers, is part of the loop the band serves,
-// not news. A workspace of documents alone detects no Run tile (core-views/coreViews.ts), so `always` has nothing to keep. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
+// The Work band. Run follows the Workspace, a signal tile since 2026-11-24 (always there before): with nothing running it
+// said nothing, so it waits behind More and comes onto the rail by itself while a program runs (its count), starts (its
+// turning mark) or stopped with an error (its count in danger, held until it is run again: runLanes.ts), which is when
+// it is worth a look. Starting one is asked where the files are, by the ▷ on a repository's row in the Workspace tree and
+// the Preview tab's Run on computer; a reader who opens it all day pins it. A workspace of documents alone detects no Run
+// tile at all (core-views/coreViews.ts). Devices closes the band: the machines this sandbox reaches, a place to go as This computer is in a local
 // window. A signal tile a reader pins to keep: it comes onto the rail by itself while one of the machines is being worked
 // on (its turning mark) or a port is held, which is exactly when it has to be in sight. The live app, Browsers and the
 // sandbox's own Desktop are not in any band: they are live surfaces, not places, so they are behind the one Browsers tool
@@ -133,7 +136,7 @@ const know = (): RailGroup => ({ id: `know`, label: t(`views.registry.know`), it
 const work = (): RailGroup => ({
     id: `work`,
     label: t(`views.registry.work`),
-    items: [always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(RUN_VIEW_ID), signal(`pipelines`), signal(DEVICES_VIEW_ID)],
+    items: [always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), signal(RUN_VIEW_ID), signal(`pipelines`), signal(DEVICES_VIEW_ID)],
 });
 
 // One table per audience, the same for both today: a maker reads the same rail in plainer words (useVocabulary), with
