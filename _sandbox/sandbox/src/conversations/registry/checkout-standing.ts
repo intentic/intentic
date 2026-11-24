@@ -7,6 +7,7 @@ import type { CheckoutFacts } from "../../system/resources/storage/checkout-usag
 import { overlaysDir } from "../worktrees/isolation.js";
 import { leftoverRefusal, type OrphanCheckoutsDeps } from "../worktrees/orphan-checkouts.js";
 import { type AgentArchiveDeps, buildOutputsReapable, checkoutReleaseRefusal, type RunningJobs, stillWorking } from "./archive.js";
+import { boardCard } from "./board-card.js";
 
 // Where each measured checkout's conversation stands now, for the Storage card's per-conversation rows
 // (system/resources/storage/checkout-usage.ts): read from the registry and the conversations, never from the disk scan.
@@ -41,7 +42,7 @@ export const checkoutStanding = async (deps: CheckoutStandingDeps, id: string): 
     if (!standing) {
         return undefined;
     }
-    const agent = deps.archive.agents.list().find((card) => card.id === id);
+    const agent = boardCard(deps.archive.agents, id);
     if (agent === undefined) {
         return { state: "leftover", reapable: false, releasable: false, trashable: leftoverRefusal(deps.leftovers, id) === undefined };
     }

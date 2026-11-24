@@ -63,8 +63,9 @@ const billed = (turn: UsageTurn): boolean => turn.turns > 0;
 
 export const fileUsageStore = (path: string, now: () => number = Date.now): UsageStore => {
     // Only an absent ledger is empty; a torn line (crash mid-append) loses one turn's numbers, never the ledger. Never
-    // capped: see the head of this file.
-    const ledger = openLedger(usageLedgerDocument, path, { cap: "never" });
+    // capped: see the head of this file. Kept parsed between reads, which then parse only what was appended: every
+    // reader below copies or sums the turns it is handed and changes none.
+    const ledger = openLedger(usageLedgerDocument, path, { cap: "never", keepParsed: true });
     const read = (): Promise<UsageTurn[]> => ledger.read();
 
     return {

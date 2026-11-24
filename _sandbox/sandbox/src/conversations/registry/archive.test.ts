@@ -460,7 +460,11 @@ test("a held card touched while its checkout is probed is left in place", async 
     const retire = jest.fn(async () => undefined);
     const now = 14 * DAY;
     const deps = unstubbed<AgentArchiveDeps>("archive", {
-        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [current], entry: () => isolatedAgent([]) }),
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", {
+            list: () => [current],
+            get: (id) => (id === current.id ? current : undefined),
+            entry: () => isolatedAgent([]),
+        }),
         conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: () => false }),
         agentWorktrees: unstubbed<AgentWorktrees>("worktrees", {
             presence: async () => {
@@ -499,7 +503,11 @@ const heldDeps = (
             : [[family.child, unstubbed<ChildRecord>("child", { running: family.running, held: undefined, paused: undefined, pending: undefined })]],
     );
     const deps = unstubbed<AgentArchiveDeps>("archive", {
-        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [overrides.card ?? card({ status: "ready" })], entry: () => isolatedAgent([]) }),
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", {
+            list: () => [overrides.card ?? card({ status: "ready" })],
+            get: (id) => [overrides.card ?? card({ status: "ready" })].find((held) => held.id === id),
+            entry: () => isolatedAgent([]),
+        }),
         conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", {
             running: (id) => family?.turnRunning === true && id === family.child,
             state: () => undefined,

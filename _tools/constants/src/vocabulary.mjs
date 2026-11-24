@@ -161,14 +161,16 @@ export const RETIRED = [
     },
 ];
 
-/** Every retired spelling this text still carries, as `{id, became, line}` findings. */
-export const retiredIn = (text) => {
+/**
+ * Every retired spelling this text still carries, as `{id, became, line}` findings: of every entry, or of `entries`
+ * alone, which is how a caller that already knows which entries cannot match a text skips them.
+ */
+export const retiredIn = (text, entries = RETIRED) => {
     const findings = [];
     const lines = text.split("\n");
-    for (const entry of RETIRED) {
-        const probe = new RegExp(entry.pattern.source, "g");
+    for (const entry of entries) {
+        const probe = new RegExp(entry.pattern.source);
         for (const [index, line] of lines.entries()) {
-            probe.lastIndex = 0;
             if (probe.test(line)) {
                 findings.push({ id: entry.id, became: entry.became, line: index + 1, text: line.trim().slice(0, 120) });
             }

@@ -587,6 +587,16 @@ export const createFleet = (
         dirty.add(next.id);
         return next;
     };
+    // `replace` for entries of distinct ids, in one pass: the roster as replacing them in this order would leave it. One
+    // pass per entry made marking all seen quadratic in the archive (5,500 here: 30 million copies a press; 2026-11-24).
+    const replaceMany = (changed: readonly PersistedAgent[]): void => {
+        const next = changed.map(withHomeTitle);
+        const ids = new Set(next.map((entry) => entry.id));
+        entries = [...entries.filter((held) => !ids.has(held.id)), ...next];
+        for (const id of ids) {
+            dirty.add(id);
+        }
+    };
 
     // Every entry changed since the last write and every journal row owed with them, one transaction. Synchronous
     // underneath, so writes land in the order they were asked for; async only so a caller can await it like any write.
@@ -1076,9 +1086,7 @@ export const createFleet = (
         // Broadcasts so the badge clears on every connected surface at once.
         markSeen: (id, now) => amend(id, (entry) => ({ ...entry, social: { ...entry.social, seenAt: now } })),
         markAllSeen: async (now) => {
-            for (const entry of entries) {
-                replace({ ...entry, social: { ...entry.social, seenAt: now } });
-            }
+            replaceMany(entries.map((entry) => ({ ...entry, social: { ...entry.social, seenAt: now } })));
             await persist();
             broadcast();
         },
@@ -1102,9 +1110,7 @@ export const createFleet = (
         wearRole: (id, role) => amend(id, (entry) => ({ ...entry, profile: { ...entry.profile, actsAs: role } })),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);
-            for (const entry of moving) {
-                replace({ ...entry, profile: profileOn(entry.profile, to) });
-            }
+            replaceMany(moving.map((entry) => ({ ...entry, profile: profileOn(entry.profile, to) })));
             if (moving.length > 0) {
                 await persist();
                 broadcast();
@@ -1223,9 +1229,7 @@ export const createFleet = (
         },
         setArchived: async (ids, now) => {
             const targets = new Set(ids);
-            for (const entry of entries.filter((candidate) => targets.has(candidate.id))) {
-                replace({ ...entry, archivedAt: now });
-            }
+            replaceMany(entries.filter((candidate) => targets.has(candidate.id)).map((entry) => ({ ...entry, archivedAt: now })));
             await persist();
             // Excluding them from this broadcast's roster is how every connected surface learns the cards left the
             // board.
@@ -1233,10 +1237,7 @@ export const createFleet = (
         },
         clearArchived: async (ids) => {
             const targets = new Set(ids);
-            for (const entry of entries.filter((candidate) => targets.has(candidate.id))) {
-                const { archivedAt: _archived, ...live } = entry;
-                replace(live);
-            }
+            replaceMany(entries.filter((candidate) => targets.has(candidate.id)).map(({ archivedAt: _archived, ...live }) => live));
             await persist();
             broadcast();
         },

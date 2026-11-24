@@ -136,7 +136,7 @@ if (parsers !== undefined) {
     const { sfc, ts } = parsers;
     for (const path of files) {
         const source = readFileSync(join(root, path), "utf8");
-        const ast = sfc.parse(source, { filename: path }).descriptor.template?.ast;
+        const ast = sfc.parse(source, { filename: path, sourceMap: false }).descriptor.template?.ast;
         if (ast === undefined || ast === null) {
             continue;
         }

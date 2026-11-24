@@ -13,10 +13,11 @@ import { compactJsonArrays } from "./json-arrays.mjs";
 import { foldHitRuns, foldPathRuns } from "./path-runs.mjs";
 import { fairSearch, SEARCH_COMMAND } from "./search-fairness.mjs";
 import { byteBudget, capOutput, FAIL_TAIL, priorityCap, READ_COMMAND, READ_MAX_BYTES } from "./output-cap.mjs";
-import { contextualEntries, maskValues } from "./short-secrets.mjs";
+import { contextualEntries, redactLines, redactText, secretReference } from "./short-secrets.mjs";
 
 export { ANSI, collapseCr, bodyBytes } from "./cleaner-shapes.mjs";
 export { cleanToolText } from "./text-shaping.mjs";
+export { CREDENTIAL_ISSUER_PREFIXES, CREDENTIAL_ISSUERS, redactText, SECRET_REFERENCE, secretReference } from "./short-secrets.mjs";
 
 // Success-path per-command noise strippers. Narrow patterns: a false command match strips nothing real.
 const strip = (id, match, patterns) => ({
@@ -183,132 +184,7 @@ export const CLEANERS = [
     "cache",
 ];
 
-// Masks common secret shapes before output reaches the model, as defense-in-depth. A secret-shaped NAME is not enough
-// (source often says "token" without holding one), so the VALUE must look like a credential too.
-const SECRET_NAME = String.raw`[A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY)[A-Za-z0-9_]*`;
-// A single `=` or `:`, never `===`/`!==`/`=>`; optional closing quote covers a quoted JSON key.
-const ASSIGN = String.raw`["']?\s*[:=](?![=>])\s*`;
-// `\x60` is a backtick: template-literal values are quoted too.
-const QUOTED_VALUE = String.raw`(["'\x60])([^"'\x60\n]{6,})\2`;
-// No `.` (property access) and not a call: `usage.inputTokens` and `computed(` are expressions, not values.
-const BARE_VALUE = String.raw`[\w+/=~-]{6,}(?![\w+/=~(-])`;
-
-// Credentials that name their own issuer: the literal prefix it mints them with and the body that follows. The contract
-// holds the same table (_shared/sandbox-contract/src/policy/credential-material.ts); this is a copy only because this
-// package imports nothing but node builtins, and the daemon's src/secrets/terminal-masking-parity.test.ts fails the moment
-// the two part. The sides read it with different appetites, on purpose:
-//   - here, beside a credential-shaped NAME, the prefix alone marks the value at any length (`TOKEN=ghp_x`): the name
-//     already said it is a credential, so recall wins;
-//   - anywhere else in output, and in the contract everywhere, only the whole shape counts, since a bare `sk-` in prose
-//     or a CSS class is not one.
-export const CREDENTIAL_ISSUERS = [
-    { prefix: "npm_", body: "[A-Za-z0-9]{30,}" },
-    { prefix: "ghp_", body: "[A-Za-z0-9]{20,}" },
-    { prefix: "gho_", body: "[A-Za-z0-9]{20,}" },
-    { prefix: "ghu_", body: "[A-Za-z0-9]{20,}" },
-    { prefix: "ghs_", body: "[A-Za-z0-9]{20,}" },
-    { prefix: "ghr_", body: "[A-Za-z0-9]{20,}" },
-    { prefix: "github_pat_", body: "[A-Za-z0-9_]{50,}" },
-    { prefix: "glpat-", body: "[A-Za-z0-9_-]{16,}" },
-    { prefix: "xoxa-", body: "[A-Za-z0-9-]{10,}" },
-    { prefix: "xoxb-", body: "[A-Za-z0-9-]{10,}" },
-    { prefix: "xoxo-", body: "[A-Za-z0-9-]{10,}" },
-    { prefix: "xoxp-", body: "[A-Za-z0-9-]{10,}" },
-    { prefix: "xoxr-", body: "[A-Za-z0-9-]{10,}" },
-    { prefix: "xoxs-", body: "[A-Za-z0-9-]{10,}" },
-    { prefix: "sk-", body: "[A-Za-z0-9_-]{20,}" },
-    { prefix: "pk-", body: "[A-Za-z0-9_-]{20,}" },
-    { prefix: "rk-", body: "[A-Za-z0-9_-]{20,}" },
-    { prefix: "sk_live_", body: "[A-Za-z0-9]{16,}" },
-    { prefix: "rk_live_", body: "[A-Za-z0-9]{16,}" },
-    { prefix: "AKIA", body: String.raw`[0-9A-Z]{16}\b` },
-    { prefix: "ASIA", body: String.raw`[0-9A-Z]{16}\b` },
-    { prefix: "AIza", body: String.raw`[0-9A-Za-z_-]{35}\b` },
-    { prefix: "ya29.", body: "[0-9A-Za-z_-]{20,}" },
-    { prefix: "hf_", body: "[A-Za-z0-9]{30,}" },
-    { prefix: "dop_v1_", body: "[a-f0-9]{60,}" },
-    { prefix: "shpat_", body: "[a-fA-F0-9]{32,}" },
-    // SendGrid: a key id and its secret, dot-separated.
-    { prefix: "SG.", body: String.raw`[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}` },
-    // A JWT: three base64url segments, the first two of which decode from `{"` and so always begin `eyJ` and `ey`.
-    { prefix: "eyJ", body: String.raw`[A-Za-z0-9_-]{9,}\.ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*` },
-];
-export const CREDENTIAL_ISSUER_PREFIXES = CREDENTIAL_ISSUERS.map(({ prefix }) => prefix);
-
-// RegExp.escape is Node 24; spelled out so the file does not depend on the node it runs on.
-const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-const ISSUER_PREFIX = new RegExp(`^(?:${CREDENTIAL_ISSUER_PREFIXES.map(escapeRegExp).join("|")})`);
-// Starts where no word or kebab-case word runs into it: `task-sk-runner-config-file` is a name, not a key. The other
-// side builds its patterns the same way.
-const ISSUED_TOKENS = CREDENTIAL_ISSUERS.map(({ prefix, body }) => new RegExp(String.raw`(?<![\w-])${escapeRegExp(prefix)}${body}`, "g"));
-
-// What counts as a credential once the NAME already matched: machine-generated values carry letters and digits
-// together, but so do plain counts and paths.
-//   1. A known issuer prefix (CREDENTIAL_ISSUER_PREFIXES) is a credential at any length.
-//   2. Otherwise it must be entropic and not: all-digits, a path/URL/`${template}`, or SCREAMING_SNAKE (a name, not a
-//      value).
-//   3. And longer than a human would type, or it might be a fixture value like `"tok-abc-123"`.
-// The gap is deliberate: a handwritten passphrase reads exactly like an identifier.
-const NUMERIC_VALUE = /^[\d_,.]+$/;
-const STRUCTURAL_VALUE = /[\s/\\${}]/;
-const ENV_NAME_VALUE = /^[A-Z0-9_]+$/;
-const ENTROPIC_VALUE = /^(?=[^\n]*\d)(?=[^\n]*[A-Za-z])/;
-const HANDWRITTEN_MAX = 12;
-const looksLikeCredential = (value) =>
-    ISSUER_PREFIX.test(value) ||
-    (value.length > HANDWRITTEN_MAX &&
-        ENTROPIC_VALUE.test(value) &&
-        !NUMERIC_VALUE.test(value) &&
-        !STRUCTURAL_VALUE.test(value) &&
-        !ENV_NAME_VALUE.test(value));
-
-// A `{{secret:name}}` reference, capturing the name: the alphabet every store below names a value with (env keys,
-// `<id>/<field>`). The contract's SECRET_REFERENCE is the same pattern, pinned to this one by the daemon's parity test.
-// Not global, so it carries no `lastIndex` between callers.
-export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)(?:\|(file))?\}\}/;
-// Double braces, not a value-lookalike, since substitution must be exact-match; a key-shaped token invites a model to
-// "fix" it or reason about its length. The daemon's tool-result masking re-exports this one.
-export const secretReference = (name) => `{{secret:${name}}}`;
-
-const SECRET_PATTERNS = [
-    [
-        new RegExp(`\\b(${SECRET_NAME}${ASSIGN})(?:${QUOTED_VALUE}|(${BARE_VALUE}))`, "gi"),
-        // Quoted and bare arrive in different groups because only the quoted one has a quote to put back.
-        (match, assignment, quote, quoted, bare) => (looksLikeCredential(quoted ?? bare) ? `${assignment}${quote ?? ""}***${quote ?? ""}` : match),
-    ],
-    ...ISSUED_TOKENS.map((token) => [token, "***"]),
-    // Same rule for a bearer value: prose about tokens carries no digit, every real bearer token does.
-    [/\b(Bearer\s+)(?=[\w.-]*\d)[\w.-]{8,}/gi, "$1***"],
-    // scheme://user:password@host for any scheme (a postgres DSN as much as an https remote). Any length, unlike the
-    // contract's three-character floor: output reaching a model is not a file someone meant to publish. A `/` ends the
-    // password, so `http://host:3000/@scope/pkg` is a port and a path, and a reference already standing in is kept.
-    [/\b([a-z][a-z0-9+.-]*:\/\/[^:@\s/]+:)(?!\{\{secret:)[^@\s/]+@/gi, "$1***@"],
-];
-
-// A private key spans lines, which the per-line patterns above cannot see, so these run over the joined body first; the
-// same shapes as the contract's maskCredentialMaterial, so the terminal and the tools mask a key alike (the daemon's
-// parity test compares the two on the same keys). A PEM keeps its header and footer with its body masked through to
-// the matching footer, or through its last body line when the output was cut short; a PuTTY key keeps its first line's
-// label. Already-masked text is skipped, so masking twice changes nothing.
-const MASKED_NEXT = String.raw`(?!(?:\s|\\[nr])*\*\*\*)`;
-// One armored body line after a newline or a `\n` escape: a whole line of base64, or a `Proc-Type: 4,ENCRYPTED` header.
-const ARMOR_LINES = String.raw`(?:(?:\s|\\[nr])+(?:[A-Za-z-]+:[^\n\\]*|[A-Za-z0-9+/=]+(?=[ \t]*(?:[\r\n"'\x60<>,;})\]]|\\[nr]|$))))*`;
-const PRIVATE_KEY_BLOCK = new RegExp(
-    String.raw`(-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY( BLOCK)?-----)${MASKED_NEXT}(?:[\s\S]*?(-----END \2PRIVATE KEY\3-----)|${ARMOR_LINES})`,
-    "g",
-);
-const PUTTY_KEY = new RegExp(String.raw`(PuTTY-User-Key-File-\d:)${MASKED_NEXT}[^\n\\]*${ARMOR_LINES}`, "g");
-const maskKeyBlocks = (text) =>
-    // The cheap test first: almost no output holds a key, and the block patterns scan the whole body.
-    text.includes("PRIVATE KEY") || text.includes("PuTTY-User-Key-File-")
-        ? text
-              .replace(PRIVATE_KEY_BLOCK, (_block, header, _label, _kind, footer) =>
-                  footer === undefined ? `${header}\n***` : `${header}\n***\n${footer}`,
-              )
-              .replace(PUTTY_KEY, "$1 ***")
-        : text;
-
-// Known secret VALUES (from the daemon's own env) mask exactly, with no per-field upkeep; name patterns above are a
+// Known secret VALUES (from the daemon's own env) mask exactly, with no per-field upkeep; the name patterns (short-secrets.mjs) are a
 // backstop only for a value not stored here. A known value masks to its reference (`{{secret:name}}`); a multi-line
 // value masks per line to the anonymous mask instead, since a reference stands for the whole value. Below this length a
 // value masks only in a secret-like context (short-secrets.mjs); the daemon's tool-result masking uses the same rule.
@@ -497,23 +373,6 @@ export const secretValues = (env = process.env) => {
     );
 };
 
-// Every line masked: key blocks across the joined body first (a token shape matched inside a key's body would cut the
-// body short), then known values and the per-line patterns.
-const redactLines = (lines, values = []) => {
-    const joined = lines.join("\n");
-    const keyed = maskKeyBlocks(joined);
-    return (keyed === joined ? lines : keyed.split("\n")).map((line) => redactLine(line, values));
-};
-
-// Masks a whole body for the two paths that skip the pipeline: the holdout and the fail-open catch. Neither excuses
-// handing over a credential; idempotent, so re-running it after the pipeline already masked a line costs a scan and
-// changes nothing.
-export const redactText = (text, values = []) => redactLines(text.split("\n"), values).join("\n");
-
-const redactLine = (line, values) => {
-    const masked = maskValues(line, values, secretReference);
-    return SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), masked);
-};
 
 // Allow-list if any token lacks `-` ("git,pnpm" = only those), else default-minus ("-git" = all except);
 // empty/undefined = all on. Unknown tokens are ignored rather than thrown, so a typo'd setting can't break a tool

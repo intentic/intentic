@@ -94,6 +94,11 @@ for (const path of tracked) {
     }
     const scan = MARKUP.test(path) ? blank(text) : undefined;
     for (const { value, offset } of scannable(path, text)) {
+        // Every bypass spells `-[`. BYPASS's leading `[\w-]*` is retried from every character of a value that has none,
+        // which was 0.9 s of this check's 1.1 s over the tree's script lines (2026-11-24).
+        if (!value.includes(`-[`)) {
+            continue;
+        }
         BYPASS.lastIndex = 0;
         for (let hit = BYPASS.exec(value); hit !== null; hit = BYPASS.exec(value)) {
             if (!excusedAt(text, scan, offset + hit.index, `tailwind`)) {

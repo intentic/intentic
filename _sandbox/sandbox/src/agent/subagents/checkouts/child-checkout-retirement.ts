@@ -4,6 +4,7 @@ import { runningJobsOf } from "../../tools/jobs/background-jobs.js";
 import { CHILDREN } from "../child-records.js";
 import { ROSTER } from "../../../conversations/actor/subagent-roster.js";
 import type { PressureRelief } from "../../../system/resources/storage/disk-pressure.js";
+import { boardCard } from "../../../conversations/registry/board-card.js";
 
 /** A child keeps its checkout warm for this long after its last turn, so a quick follow-up avoids a fresh checkout. */
 export const CHILD_CHECKOUT_IDLE_GRACE_MS = 20 * 60_000;
@@ -18,7 +19,7 @@ const stillSafe = (services: RetirementServices, id: string): boolean => {
     const kid = services.conversations.holdings(CHILDREN).get(id);
     const row = services.conversations.holdings(ROSTER).get(id);
     const entry = services.agents.entry(id);
-    const card = services.agents.list().find((agent) => agent.id === id);
+    const card = boardCard(services.agents, id);
     if (
         kid === undefined ||
         (row !== undefined && !settled.has(row.status)) ||

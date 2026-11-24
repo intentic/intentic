@@ -75,13 +75,12 @@ const scanCss = (path, css, offset = 0) => {
     }
 };
 
-for (const path of tracked) {
+// Only stylesheets and markup are read: the site's sources are mostly its images, 46 of them at 2 MB each, which were
+// decoded as text and dropped, half a second of this check (2026-11-24).
+for (const path of tracked.filter((file) => /\.(css|astro|vue|html)$/.test(file))) {
     const source = readFileSync(`${root}/${path}`, `utf8`);
     if (path.endsWith(`.css`)) {
         scanCss(path, source);
-        continue;
-    }
-    if (!/\.(astro|vue|html)$/.test(path)) {
         continue;
     }
     // The template: a mark and a vertical utility in the same tag.

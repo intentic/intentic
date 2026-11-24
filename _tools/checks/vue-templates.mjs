@@ -22,7 +22,7 @@ if (compiler !== undefined) {
         // A CompilerError carries `loc`; a plain SyntaxError from a script block doesn't, and both arrive here.
         const reported = (error, offset) =>
             `${relative}${error.loc === undefined ? "" : `:${error.loc.start.line + offset}:${error.loc.start.column}`}: ${error.message}`;
-        const { descriptor, errors } = parseSfc(readFileSync(file, "utf8"), { filename: file });
+        const { descriptor, errors } = parseSfc(readFileSync(file, "utf8"), { filename: file, sourceMap: false });
         uncompilable.push(...errors.map((error) => reported(error, 0)));
         if (errors.length > 0 || descriptor.template === null) {
             continue;

@@ -56,6 +56,7 @@ const servicesFor = (ids: readonly string[], overrides: { readonly standing?: Re
         },
         agents: {
             list: () => ids.map((id) => ({ id, queue: { items: [] } })),
+            get: (id: string) => (ids.includes(id) ? { id, queue: { items: [] } } : undefined),
             entry: (id: string) => entries.get(id),
             standingOf: (id: string) => overrides.standing?.[id] ?? "idle",
         },

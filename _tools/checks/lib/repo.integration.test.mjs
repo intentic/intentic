@@ -59,6 +59,12 @@ const SPECS = [
     "_sandbox**e.vue",
     "*",
     "_*/*/*.ts",
+    // A head and tail that would overlap in a short path, and pieces that repeat or recur in the tail.
+    "a*a.ts",
+    "_*s*s*.ts",
+    "*src*src*",
+    "*.ts*",
+    "*e*e*.vue",
 ];
 
 test("every pathspec shape the checks ask is answered as git answers it", () => {

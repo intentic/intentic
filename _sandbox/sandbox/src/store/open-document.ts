@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { appendFile, type FileHandle, mkdir, open, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
@@ -214,6 +215,9 @@ export type LedgerCap =
 
 export interface LedgerOptions {
     readonly cap: LedgerCap;
+    // Keep what was read and, on the next read, parse only the lines appended since (keptLines, below): for a ledger
+    // never cut (`cap: "never"`) and read often, whose callers never change the entries they are handed.
+    readonly keepParsed?: boolean;
 }
 
 export interface Appended {
@@ -335,12 +339,55 @@ export const openLedger = <D extends AnyDocument<"entries", false>>(spec: D, pat
         throw layoutError(spec, "a ledger of lines");
     }
     const lines = lineLog(path, options);
+    const parse = (text: string): DocumentUnit<D>[] => text.split("\n").flatMap((line) => (line === "" ? [] : (ledgerEntry(spec, line) ?? [])));
     return {
-        read: async () => {
-            const text = await readFile(path, "utf8").catch(undefinedIfMissing);
-            return text === undefined ? [] : text.split("\n").flatMap((line) => (line === "" ? [] : (ledgerEntry(spec, line) ?? [])));
-        },
+        read:
+            options.keepParsed === true
+                ? keptLines(path, parse)
+                : async () => {
+                      const text = await readFile(path, "utf8").catch(undefinedIfMissing);
+                      return text === undefined ? [] : parse(text);
+                  },
         append: (entry) => lines.append(JSON.stringify(entry)),
+    };
+};
+
+// What was read of a file: the bytes up to the end of its last whole line, their digest, and the entries they parsed to.
+interface KeptRead<E> {
+    readonly offset: number;
+    readonly digest: Buffer;
+    readonly entries: readonly E[];
+}
+
+/* READ WHAT WAS APPENDED (2026-11-24). usage.jsonl is never cut, and every read converted and checked all of it, 12
+   thousand lines and 9 MB here, 280 ms of the event loop, at every turn start that asks whether a provider has been
+   failing, every cold turn start, and every diagnostics question, to keep the few rows of the last hours. A ledger is
+   appended to and nothing else, so the whole lines read last time read the same, and only what follows them is new:
+   those alone are parsed. The file is still read whole and the part read before is checked against its digest (6 ms
+   for those 9 MB), so the answer is exactly a whole read's whatever happened to the file: a last line still being
+   written is parsed afresh each time and never kept, and a file cut, replaced or changed anywhere is parsed whole. */
+const keptLines = <E>(path: string, parse: (text: string) => E[]): (() => Promise<E[]>) => {
+    let kept: KeptRead<E> | undefined;
+    return async () => {
+        const bytes = await readFile(path).catch(undefinedIfMissing);
+        if (bytes === undefined) {
+            kept = undefined;
+            return [];
+        }
+        let hash = createHash("sha256");
+        let from: KeptRead<E> | undefined;
+        if (kept !== undefined && kept.offset <= bytes.length) {
+            hash.update(bytes.subarray(0, kept.offset));
+            from = hash.copy().digest().equals(kept.digest) ? kept : undefined;
+            hash = from === undefined ? createHash("sha256") : hash;
+        }
+        const fresh = bytes.subarray(from?.offset ?? 0);
+        // Whole lines end at the last newline; a newline byte is never part of a longer UTF-8 character, so the text
+        // decodes alike whether read in pieces cut there or at once.
+        const whole = fresh.lastIndexOf(0x0a) + 1;
+        const entries = [...(from?.entries ?? []), ...parse(fresh.subarray(0, whole).toString("utf8"))];
+        kept = { offset: (from?.offset ?? 0) + whole, digest: hash.update(fresh.subarray(0, whole)).digest(), entries };
+        return [...entries, ...parse(fresh.subarray(whole).toString("utf8"))];
     };
 };
 

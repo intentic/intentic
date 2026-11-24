@@ -1,9 +1,16 @@
 import { afterEscape } from "@intentic/privacy-detect/text";
+import { NONE, UnitTrie } from "./known-trie.js";
 
 // Finds every value the vault already holds, wherever it stands as a whole word, in each spelling its kind allows
-// (`Spelling`). Indexed by the first few characters of each value as compared rather than as one automaton: the vault
-// can hold tens of thousands of values (a taught dataset), and a trie over all of them costs a node per character,
-// while a map of short prefixes costs one entry per distinct prefix and a text is scanned once, word start by word start.
+// (`Spelling`). A value can only start at a word start, so each spelling's values sit in one trie over their units as
+// compared, and the text is walked from each word start only as far as some value still agrees with it.
+//
+// 2026-11-24: replaced an index of each value's first 3 units, which tried every value in that bucket at every word
+// start (names share prefixes: `Ann`, `Mar`, `Jan`), and was rebuilt whole by the vault for every new token. Measured
+// with 30k vault values: 120 KB of text with no hits 48 → 9 ms, 200 KB with many 213 → 22 ms; 6k values sharing a
+// prefix over 100 KB 7.2 s → 7 ms. Building costs about twice the index (63 ms against 31 ms at 30k), paid once: `add`.
+// Matching is unchanged: every match, its span and the order `accept` is asked in (checked against the index on
+// randomized texts and vaults).
 
 // How a value may be written and still be that value. `exact`: as written (one plain word, where case is what tells
 // `Mark` from `mark`). `case`: in any case (an e-mail address, whose dots and dashes are its own). `folded`: in any
@@ -29,6 +36,9 @@ export interface KnownMatch<C> {
 export interface KnownMatcher<C> {
     // `accept` turns a match down where it stands, and the next shorter value at that place is tried instead.
     readonly find: (text: string, accept?: (start: number, end: number, payload: C) => boolean) => KnownMatch<C>[];
+    // Matches these too from now on, as if they had been passed last to createKnownMatcher: a vault handing out one new
+    // token does not rebuild the whole trie.
+    readonly add: (values: readonly KnownValue<C>[]) => void;
     readonly size: number;
 }
 
@@ -36,7 +46,8 @@ const WORD = /[\p{L}\p{N}]+/gu;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 // What a folded spelling may write between, or leave out of, the characters that count.
 const FOLD = /[\s_-]/u;
-// How many characters of a value, as compared, its index entry holds.
+// How many units of a value the index replaced on 2026-11-24 was keyed by. Still the second key values of equal length
+// are tried in (`order`), so `accept` is asked in exactly the order it was.
 const PREFIX = 3;
 
 const isWordChar = (char: string | undefined): boolean => char !== undefined && WORD_CHAR.test(char);
@@ -73,55 +84,24 @@ export const spellingKey = (value: string, spelling: Spelling): string => {
     return parts === undefined ? `${spelling}:${value}` : `${spelling}:${parts.lead}\u0000${parts.units.join("")}`;
 };
 
-interface Candidate<C> extends Spelled {
-    readonly spelling: Spelling;
+interface Candidate<C> {
+    // What stands before the value's first word, as compared (Spelled `lead`).
+    readonly lead: string;
     readonly payload: C;
+    // The value ends in a character of a word, so a word character after it means it is part of a longer word.
+    readonly endsInWord: boolean;
+    // The order values are tried in where several match at one place: longest first (lead's UTF-16 length plus the
+    // number of units, as the prefix index measured it), then spelling (SPELLINGS), then how many units its prefix-index
+    // key held, then the order the values were given in. The index replaced on 2026-11-24 tried them in this order, and
+    // `accept` must still be asked about them in it.
+    readonly order: readonly [number, number, number, number];
 }
 
-const lengthOf = <C>(candidate: Candidate<C>): number => candidate.lead.length + candidate.units.length;
+const SPELLINGS: readonly Spelling[] = ["exact", "case", "folded"];
 
-// Each prefix bucket is sorted once when the vocabulary is built. Merge only as far as the first accepted match,
-// rather than copying and sorting every candidate at every word. Ties keep spelling, prefix and insertion order.
-function* longestFirst<C>(groups: readonly (readonly Candidate<C>[])[]): Generator<Candidate<C>> {
-    if (groups.length === 1) {
-        yield* groups[0]!;
-        return;
-    }
-    const positions = groups.map(() => 0);
-    for (;;) {
-        let next: Candidate<C> | undefined;
-        let group = -1;
-        for (let index = 0; index < groups.length; index += 1) {
-            const candidate = groups[index]![positions[index]!];
-            if (candidate !== undefined && (next === undefined || lengthOf(candidate) > lengthOf(next))) {
-                next = candidate;
-                group = index;
-            }
-        }
-        if (next === undefined) {
-            return;
-        }
-        positions[group]! += 1;
-        yield next;
-    }
-}
-
-// Where `candidate` ends if it is written at `at` (its first word's first character), else undefined.
-const endAt = <C>(text: string, at: number, candidate: Candidate<C>): number | undefined => {
-    let position = at;
-    for (const [index, unit] of candidate.units.entries()) {
-        if (candidate.spelling === "folded" && index > 0) {
-            while (position < text.length && FOLD.test(text.charAt(position))) {
-                position += 1;
-            }
-        }
-        const char = String.fromCodePoint(text.codePointAt(position) ?? 0);
-        if (position >= text.length || unitOf(char, candidate.spelling) !== unit) {
-            return undefined;
-        }
-        position += char.length;
-    }
-    return position;
+const byTryOrder = <C>(left: { readonly candidate: Candidate<C> }, right: { readonly candidate: Candidate<C> }): number => {
+    const [a, b] = [left.candidate.order, right.candidate.order];
+    return b[0] - a[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3];
 };
 
 // Whole-word on each side the value itself is a word on: `Ala` is not found inside `Alabama`, and a PESEL not inside a
@@ -129,7 +109,7 @@ const endAt = <C>(text: string, at: number, candidate: Candidate<C>): number | u
 // (`\n` in raw JSON text) is the escape's, not a word's.
 const boundedAt = <C>(text: string, start: number, end: number, candidate: Candidate<C>): boolean => {
     const before = candidate.lead === "" && isWordChar(text[start - 1]) && !afterEscape(text, start);
-    const after = isWordChar(candidate.units.at(-1)) && isWordChar(text[end]);
+    const after = candidate.endsInWord && isWordChar(text[end]);
     return !before && !after;
 };
 
@@ -139,75 +119,137 @@ const wordStarts = (text: string): number[] =>
         word[0].length > 1 && afterEscape(text, word.index + 1) ? [word.index, word.index + 1] : [word.index],
     );
 
-// The first characters of the text at `at` as each spelling compares them, as far as an index key reaches.
-const prefixesAt = (text: string, at: number, spelling: Spelling): string[] => {
-    const units: string[] = [];
-    let position = at;
-    while (units.length < PREFIX && position < text.length) {
-        const char = String.fromCodePoint(text.codePointAt(position) ?? 0);
-        position += char.length;
-        if (spelling === "folded" && units.length > 0 && FOLD.test(char)) {
-            continue;
-        }
-        units.push(unitOf(char, spelling));
-    }
-    return units.map((_, index) => `${spelling}:${units.slice(0, index + 1).join("")}`);
+// Whether an ASCII character is one a folded spelling skips (FOLD), by its code.
+const ASCII_FOLD = Array.from({ length: 128 }, (_, code) => FOLD.test(String.fromCharCode(code)));
+const skipped = (text: string, position: number): boolean => {
+    const code = text.charCodeAt(position);
+    return code < ASCII_FOLD.length ? ASCII_FOLD[code]! : FOLD.test(text.charAt(position));
 };
 
-const SPELLINGS: readonly Spelling[] = ["exact", "case", "folded"];
+// Where a folded spelling's next unit stands from `position`: past any separators. Other spellings skip nothing.
+const nextUnitAt = (text: string, position: number, spelling: Spelling): number => {
+    if (spelling !== "folded") {
+        return position;
+    }
+    let at = position;
+    while (at < text.length && skipped(text, at)) {
+        at += 1;
+    }
+    return at;
+};
+
+// Whether what stands before `at` is the candidate's lead, as its spelling compares it.
+const leadAt = <C>(text: string, start: number, at: number, candidate: Candidate<C>): boolean =>
+    candidate.lead === "" ||
+    Array.from(text.slice(start, at))
+        .map((char) => unitOf(char, SPELLINGS[candidate.order[1]]!))
+        .join("") === candidate.lead;
+
+interface Reached<C> {
+    readonly candidate: Candidate<C>;
+    readonly end: number;
+}
+
+// The values a spelling holds, as one trie with a root of its own per spelling, and the values that end at each node.
+interface Vocabulary<C> {
+    readonly trie: UnitTrie;
+    readonly ending: Map<number, Candidate<C>[]>;
+    // Each spelling's root, once it holds a value, in SPELLINGS order.
+    readonly roots: { readonly spelling: Spelling; readonly node: number }[];
+}
+
+const rootOf = <C>({ trie, roots }: Vocabulary<C>, spelling: Spelling): number => {
+    const existing = roots.find((root) => root.spelling === spelling);
+    if (existing !== undefined) {
+        return existing.node;
+    }
+    const node = trie.newNode();
+    roots.push({ spelling, node });
+    roots.sort((left, right) => SPELLINGS.indexOf(left.spelling) - SPELLINGS.indexOf(right.spelling));
+    return node;
+};
+
+// Adds a value as the `added`th given; false for one with no word in it, which is never matched.
+const insert = <C>(vocabulary: Vocabulary<C>, { value, payload, spelling = "exact" }: KnownValue<C>, added: number): boolean => {
+    const parts = spelled(value, spelling);
+    if (parts === undefined) {
+        return false;
+    }
+    const node = vocabulary.trie.insert(rootOf(vocabulary, spelling), parts.units);
+    const list = vocabulary.ending.get(node) ?? [];
+    list.push({
+        lead: parts.lead,
+        payload,
+        endsInWord: isWordChar(parts.units.at(-1)),
+        order: [parts.lead.length + parts.units.length, SPELLINGS.indexOf(spelling), Math.min(PREFIX, parts.units.length), added],
+    });
+    vocabulary.ending.set(node, list);
+    return true;
+};
+
+// Every value of a spelling written at `at` (its first word's first character), and where each ends: the trie walked as
+// the text goes, a folded spelling's separators skipped between units, until no value agrees with the text. Each
+// character is compared as one code point, as `unitOf` compares it.
+const reachedFrom = <C>({ trie, ending }: Vocabulary<C>, text: string, at: number, spelling: Spelling, root: number, out: Reached<C>[]): void => {
+    let node = root;
+    let position = at;
+    while (position < text.length) {
+        const code = text.codePointAt(position) ?? 0;
+        const unit = trie.unitOf(code, spelling === "exact", () => unitOf(String.fromCodePoint(code), spelling));
+        node = unit === NONE ? NONE : trie.child(node, unit);
+        if (node === NONE) {
+            return;
+        }
+        position += code > 0xffff ? 2 : 1;
+        for (const candidate of ending.get(node) ?? []) {
+            out.push({ candidate, end: position });
+        }
+        position = nextUnitAt(text, position, spelling);
+    }
+};
 
 export const createKnownMatcher = <C>(values: readonly KnownValue<C>[]): KnownMatcher<C> => {
-    const byPrefix = new Map<string, Candidate<C>[]>();
-    for (const { value, payload, spelling = "exact" } of values) {
-        const parts = spelled(value, spelling);
-        if (parts === undefined) {
-            continue;
+    const vocabulary: Vocabulary<C> = { trie: new UnitTrie(), ending: new Map(), roots: [] };
+    let size = 0;
+    let added = 0;
+    const add = (more: readonly KnownValue<C>[]): void => {
+        for (const value of more) {
+            added += insert(vocabulary, value, added) ? 1 : 0;
         }
-        const key = `${spelling}:${parts.units.slice(0, PREFIX).join("")}`;
-        const list = byPrefix.get(key) ?? [];
-        list.push({ ...parts, spelling, payload });
-        byPrefix.set(key, list);
-    }
-    for (const list of byPrefix.values()) {
-        list.sort((left, right) => lengthOf(right) - lengthOf(left));
-    }
-    const spellings = SPELLINGS.filter((spelling) => values.some((value) => (value.spelling ?? "exact") === spelling));
+        size += more.length;
+    };
+    add(values);
+
+    // The first value written at `at`, longest first so a full name wins over the first name it starts with, that stands
+    // clear of what was matched already, as a whole word, and that `accept` takes.
+    const firstAt = (text: string, at: number, covered: number, accept: (start: number, end: number, payload: C) => boolean) => {
+        const here: Reached<C>[] = [];
+        for (const root of vocabulary.roots) {
+            reachedFrom(vocabulary, text, at, root.spelling, root.node, here);
+        }
+        here.sort(byTryOrder);
+        return here.find(({ candidate, end }) => {
+            const start = at - candidate.lead.length;
+            return start >= covered && leadAt(text, start, at, candidate) && boundedAt(text, start, end, candidate) && accept(start, end, candidate.payload);
+        });
+    };
+
     return {
-        size: values.length,
+        get size() {
+            return size;
+        },
+        add,
         find: (text, accept = () => true) => {
-            if (byPrefix.size === 0) {
-                return [];
-            }
             const found: KnownMatch<C>[] = [];
+            if (vocabulary.ending.size === 0) {
+                return found;
+            }
             let covered = 0;
             for (const at of wordStarts(text)) {
-                if (at < covered) {
-                    continue;
-                }
-                // Longest first, so a full name wins over the first name it starts with.
-                const groups = spellings.flatMap((spelling) =>
-                    prefixesAt(text, at, spelling).flatMap((key) => {
-                        const list = byPrefix.get(key);
-                        return list === undefined ? [] : [list];
-                    }),
-                );
-                for (const candidate of longestFirst(groups)) {
-                    const start = at - candidate.lead.length;
-                    if (
-                        start < covered ||
-                        Array.from(text.slice(start, at))
-                            .map((char) => unitOf(char, candidate.spelling))
-                            .join("") !== candidate.lead
-                    ) {
-                        continue;
-                    }
-                    const end = endAt(text, at, candidate);
-                    if (end === undefined || !boundedAt(text, start, end, candidate) || !accept(start, end, candidate.payload)) {
-                        continue;
-                    }
-                    found.push({ start, end, payload: candidate.payload });
-                    covered = end;
-                    break;
+                const match = at < covered ? undefined : firstAt(text, at, covered, accept);
+                if (match !== undefined) {
+                    found.push({ start: at - match.candidate.lead.length, end: match.end, payload: match.candidate.payload });
+                    covered = match.end;
                 }
             }
             return found;

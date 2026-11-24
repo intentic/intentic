@@ -12,105 +12,191 @@ const DAEMON_CALL = /\bsandbox(Json|Request|Blob|Upload)\w*\s*[<(]|\bpostTurnCon
 /** Every `path: "…"` literal of a contract or router file. */
 export const pathsIn = (text) => [...text.matchAll(/\bpath:\s*["'`]([^"'`]*)["'`]/g)].map((match) => match[1]);
 
-export const scan = (text) => {
-    const at = { i: 0, line: 1, operand: false, found: [] };
-    const next = () => {
-        at.line += text[at.i] === "\n" ? 1 : 0;
-        at.i += 1;
-    };
-    const until = (stop) => {
-        while (at.i < text.length && !stop(text[at.i])) {
-            next();
+// Characters that only ever continue an operand ([\w$]), and blank ones that never touch the scanner's state.
+const WORD = new Uint8Array(128);
+for (const char of "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$") {
+    WORD[char.charCodeAt(0)] = 1;
+}
+const BLANK = new Set([" ", "\t", "\r", "\v", "\f"]);
+const BRACES = { "{": 1, "}": -1 };
+
+// Whether a character of code leaves an operand behind (`x`, `)`, `]`), else undefined for a blank, which keeps what was.
+const endsOperand = (char) => {
+    const code = char.charCodeAt(0);
+    if (code < 128) {
+        return BLANK.has(char) || char === "\n" ? undefined : WORD[code] === 1 || char === ")" || char === "]";
+    }
+    return /\S/.test(char) ? /[\w$)\]]/.test(char) : undefined;
+};
+
+// FASTER, NOT DIFFERENT (2026-11-24). Two checks read every tracked file through this scanner, 2.6 s of scanning
+// each, nearly all of it spent a character at a time: two regex tests and a closure call per character of code, every
+// literal built up one character at a time, and every closure made again for each of the thousands of snippets a
+// component's attributes are scanned as. A run of word characters or blanks changes nothing but the operand flag, so
+// it is passed in one step; a literal is sliced out between its escapes. The line still advances exactly where it did,
+// including at the newlines the regex reader steps over without counting.
+class Scanner {
+    constructor(text) {
+        this.text = text;
+        this.i = 0;
+        this.line = 1;
+        this.operand = false;
+        this.found = [];
+    }
+
+    next() {
+        this.line += this.text[this.i] === "\n" ? 1 : 0;
+        this.i += 1;
+    }
+
+    // Moves to `to`, counting the newlines passed.
+    advance(to) {
+        for (let newline = this.text.indexOf("\n", this.i); newline !== -1 && newline < to; newline = this.text.indexOf("\n", newline + 1)) {
+            this.line += 1;
         }
-    };
-    const escaped = () => {
-        next();
-        const char = text[at.i] ?? "";
-        next();
+        this.i = to;
+    }
+
+    escaped() {
+        this.next();
+        const char = this.text[this.i] ?? "";
+        this.next();
         return char;
-    };
-    const quoted = (quote) => {
-        const line = at.line;
+    }
+
+    quoted(quote) {
+        const { text } = this;
+        const line = this.line;
         let value = "";
-        next();
-        while (at.i < text.length && text[at.i] !== quote && text[at.i] !== "\n") {
-            value += text[at.i] === "\\" ? escaped() : text[at.i++];
-        }
-        next();
-        at.found.push({ value, line });
-    };
-    const template = () => {
-        const line = at.line;
-        let value = "";
-        next();
-        while (at.i < text.length && text[at.i] !== "`") {
-            if (text[at.i] === "$" && text[at.i + 1] === "{") {
-                value += HOLE;
-                at.i += 2;
-                code(true);
-            } else if (text[at.i] === "\\") {
-                value += escaped();
+        this.next();
+        let from = this.i;
+        while (this.i < text.length && text[this.i] !== quote && text[this.i] !== "\n") {
+            if (text[this.i] === "\\") {
+                value += text.slice(from, this.i) + this.escaped();
+                from = this.i;
             } else {
-                value += text[at.i];
-                next();
+                this.i += 1;
             }
         }
-        next();
-        at.found.push({ value, line });
-    };
-    const regex = () => {
-        let inClass = false;
-        next();
-        while (at.i < text.length && text[at.i] !== "\n" && (inClass || text[at.i] !== "/")) {
-            inClass = text[at.i] === "[" || (inClass && text[at.i] !== "]");
-            at.i += text[at.i] === "\\" ? 2 : 1;
+        value += text.slice(from, Math.min(this.i, text.length));
+        this.next();
+        this.found.push({ value, line });
+    }
+
+    template() {
+        const { text } = this;
+        const line = this.line;
+        let value = "";
+        this.next();
+        let from = this.i;
+        while (this.i < text.length && text[this.i] !== "`") {
+            const char = text[this.i];
+            if (char === "$" && text[this.i + 1] === "{") {
+                value += text.slice(from, this.i) + HOLE;
+                this.i += 2;
+                this.code(true);
+                from = this.i;
+            } else if (char === "\\") {
+                value += text.slice(from, this.i) + this.escaped();
+                from = this.i;
+            } else {
+                this.next();
+            }
         }
-        next();
-    };
-    const comment = () => {
-        if (text[at.i + 1] === "/") {
-            until((char) => char === "\n");
+        value += text.slice(from, Math.min(this.i, text.length));
+        this.next();
+        this.found.push({ value, line });
+    }
+
+    regex() {
+        const { text } = this;
+        let inClass = false;
+        this.next();
+        while (this.i < text.length && text[this.i] !== "\n" && (inClass || text[this.i] !== "/")) {
+            inClass = text[this.i] === "[" || (inClass && text[this.i] !== "]");
+            this.i += text[this.i] === "\\" ? 2 : 1;
+        }
+        this.next();
+    }
+
+    comment() {
+        const { text } = this;
+        if (text[this.i + 1] === "/") {
+            const newline = text.indexOf("\n", this.i);
+            this.i = newline === -1 ? Math.max(this.i, text.length) : newline;
             return true;
         }
-        if (text[at.i + 1] === "*") {
-            at.i += 2;
-            until(() => text.startsWith("*/", at.i));
-            at.i += 2;
+        if (text[this.i + 1] === "*") {
+            this.i += 2;
+            const close = text.indexOf("*/", this.i);
+            this.advance(close === -1 ? Math.max(this.i, text.length) : close);
+            this.i += 2;
             return true;
         }
         return false;
-    };
-    const readers = { '"': () => quoted('"'), "'": () => quoted("'"), "`": template };
-    // A literal opening here, if any: a quote or backtick, or a `/` where no operand has just ended.
-    const literalAt = (char) => readers[char] ?? (char === "/" && !at.operand ? regex : undefined);
-    const BRACES = { "{": 1, "}": -1 };
+    }
+
+    // Reads the literal opening here and answers true, if one does: a quote or backtick, or a `/` where no operand
+    // has just ended.
+    literal(char) {
+        if (char === '"' || char === "'") {
+            this.quoted(char);
+        } else if (char === "`") {
+            this.template();
+        } else if (char === "/" && !this.operand) {
+            this.regex();
+        } else {
+            return false;
+        }
+        this.operand = true;
+        return true;
+    }
+
     // One token of code, returning the brace depth after it: -1 once a substitution's own closing brace is passed.
-    const token = (depth, inTemplate) => {
-        const char = text[at.i];
-        if (char === "/" && comment()) {
+    token(depth, inTemplate) {
+        const char = this.text[this.i];
+        if ((char === "/" && this.comment()) || this.literal(char)) {
             return depth;
         }
-        const read = literalAt(char);
-        if (read !== undefined) {
-            read();
-            at.operand = true;
-            return depth;
-        }
-        next();
+        this.next();
         if (char === "}" && depth === 0) {
             return inTemplate ? -1 : 0;
         }
-        at.operand = /\S/.test(char) ? /[\w$)\]]/.test(char) : at.operand;
+        this.operand = endsOperand(char) ?? this.operand;
         return depth + (BRACES[char] ?? 0);
-    };
-    function code(inTemplate) {
+    }
+
+    // A run of word characters ends an operand and a run of blanks leaves everything as it was, whatever their length.
+    skipRun() {
+        const { text } = this;
+        const start = this.i;
+        while (this.i < text.length && WORD[text.charCodeAt(this.i)] === 1) {
+            this.i += 1;
+        }
+        if (this.i > start) {
+            this.operand = true;
+            return true;
+        }
+        while (this.i < text.length && BLANK.has(text[this.i])) {
+            this.i += 1;
+        }
+        return this.i > start;
+    }
+
+    code(inTemplate) {
         let depth = 0;
-        while (at.i < text.length && depth >= 0) {
-            depth = token(depth, inTemplate);
+        while (this.i < this.text.length && depth >= 0) {
+            if (!this.skipRun()) {
+                depth = this.token(depth, inTemplate);
+            }
         }
     }
-    code(false);
-    return at.found;
+}
+
+export const scan = (text) => {
+    const scanner = new Scanner(text);
+    scanner.code(false);
+    return scanner.found;
 };
 
 // The code of a file: a Vue component's script blocks, whose template attributes are markup rather than literals.

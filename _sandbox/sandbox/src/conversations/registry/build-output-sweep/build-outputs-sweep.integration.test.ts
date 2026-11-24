@@ -59,6 +59,7 @@ const sweepDeps = (cards: readonly AgentSummary[], running: ReadonlySet<string> 
     unstubbed<AgentArchiveDeps>("archive", {
         agents: unstubbed<AgentArchiveDeps["agents"]>("agents", {
             list: () => [...cards],
+            get: (id) => cards.find((held) => held.id === id),
             entry: () => isolatedAgent([{ repo: "root", base: "main" }]),
         }),
         conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: (id) => running.has(id), state: () => undefined }),

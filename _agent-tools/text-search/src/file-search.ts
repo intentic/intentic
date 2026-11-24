@@ -1,4 +1,4 @@
-import { rankByFuzzy } from "@intentic/base/fuzzy";
+import { type TopRanked, topByFuzzy } from "@intentic/base/fuzzy";
 import type { WorkspaceSearchGroup } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { globToRegExp } from "./glob.js";
 import { admitterOf, normalized, runRg, targetsOf, walkArgs, type WalkScope } from "./walk.js";
@@ -53,21 +53,22 @@ const listFiles = async (options: WalkScope): Promise<{ readonly paths: readonly
     return { paths, ceiling: run.stopped };
 };
 
+// Paths a glob matches, in path order, the first `limit` of them shown.
+const globbed = (paths: readonly string[], glob: RegExp, limit: number): TopRanked => {
+    const matched = paths.filter((path) => glob.test(path)).toSorted();
+    return { ranked: matched.slice(0, limit).map((path) => ({ path, score: 1 })), matched: matched.length };
+};
+
 // Files whose path matches the query: a glob as a pattern (in path order), anything else by fuzzy score, best first.
 export const findFiles = async (options: FileSearchOptions): Promise<FileFind> => {
     const listed = await listFiles(options);
     const query = options.query.trim();
     const glob = GLOB_CHARS.test(query) ? globToRegExp(query) : undefined;
-    const ranked =
-        glob === undefined
-            ? rankByFuzzy(query, listed.paths)
-            : listed.paths
-                  .filter((path) => glob.test(path))
-                  .toSorted()
-                  .map((path) => ({ path, score: 1 }));
+    // Only the shown matches are put in order; the rest are only counted.
+    const found = glob === undefined ? topByFuzzy(query, listed.paths, options.limit) : globbed(listed.paths, glob, options.limit);
     return {
-        groups: ranked.slice(0, options.limit).map(({ path, score }) => ({ path, score, hits: [] })),
-        files: ranked.length,
+        groups: found.ranked.map(({ path, score }) => ({ path, score, hits: [] })),
+        files: found.matched,
         ceiling: listed.ceiling,
     };
 };

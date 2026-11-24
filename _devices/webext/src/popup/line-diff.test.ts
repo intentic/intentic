@@ -20,7 +20,17 @@ test("unchanged runs far from a change fold into one line", () => {
     expect(shown.filter((line) => line !== "fold" && line.kind !== "same").map((line) => line !== "fold" && line.text)).toEqual(["line ten", "line 10"]);
 });
 
-test("versions too long to compare here are left to be shown whole", () => {
-    const long = Array.from({ length: 2100 }, (_, index) => String(index)).join("\n");
-    expect(lineDiff(long, `${long}\nmore`)).toBeUndefined();
+test("a long script with a small update still reads as that update", () => {
+    const long = Array.from({ length: 20_000 }, (_, index) => String(index)).join("\n");
+    const lines = lineDiff(long, `${long.replace("\n10000\n", "\nten thousand\n")}\nmore`)!;
+    expect(lines.filter((line) => line.kind !== "same")).toEqual([
+        { kind: "added", text: "ten thousand" },
+        { kind: "removed", text: "10000" },
+        { kind: "added", text: "more" },
+    ]);
+});
+
+test("long versions with little in common are left to be shown whole", () => {
+    const long = (tag: string) => Array.from({ length: 2100 }, (_, index) => `${tag} ${index}`).join("\n");
+    expect(lineDiff(long("old"), long("new"))).toBeUndefined();
 });

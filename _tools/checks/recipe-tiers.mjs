@@ -54,6 +54,31 @@ const OWNS = {
 };
 
 // Rule 6: what a chip's or a pill's size owns (lib/kit-decisions.mjs's `boxOverrides`, where its tests read it).
+// The characters that end a ternary's condition, read back from its `?`.
+const CONDITION_ENDS = new Set(["?", ":", "{", "}", ",", "\n"]);
+
+// What `text.matchAll(/([^?:{},\n]*)\?\s*(`[^`]*`|'[^'\n]*'|"[^"\n]*")/gu)` finds, match for match: a condition, its `?`
+// and the literal it picks. Each `?` followed by a literal is found first and its condition read back to the nearest
+// end, never past where the last match ended, as that regex's next search begins there.
+//
+// 2026-11-24: that regex took 1.2 s of this check's 2.2 s. Its leading run, free to start anywhere, backtracks to
+// empty and fails at every character of a stretch with no `?`, then starts again one character on: quadratic in each
+// stretch. Read back from the `?`, every character is passed at most once.
+const ternaryPicks = (text) => {
+    const picks = [];
+    let ended = 0;
+    for (const hit of text.matchAll(/\?\s*(`[^`]*`|'[^'\n]*'|"[^"\n]*")/gu)) {
+        let start = hit.index;
+        while (start > ended && !CONDITION_ENDS.has(text[start - 1])) {
+            start -= 1;
+        }
+        const end = hit.index + hit[0].length;
+        picks.push(Object.assign([text.slice(start, end), text.slice(start, hit.index), hit[1]], { index: start }));
+        ended = end;
+    }
+    return picks;
+};
+
 const CHIP_SAYS = `the chip's box is its size variant: \`ui.chip({ size: "sm" | "md" | "lg" })\` (20, 26, 32px), with \`{ lead: true }\` when it opens on a mark and \`{ trail: true }\` when it ends in its own ×`;
 const PILL_SAYS = `the pill's box is the kit's: \`ui-status-pill\` (20px), \`ui-status-pill-md\` (24px), \`ui-status-pill-inline\` (16px, inside a line of text)`;
 OWNS.chip = [{ test: (t) => boxOverrides(`ui-chip ${t}`).words.length > 0, say: CHIP_SAYS }];
@@ -141,10 +166,7 @@ for (const path of tracked) {
     // A bound attribute's own quotes are markup, not a string: read the expression inside them, or `:class="{ 'x': on }"`
     // is one literal and the tint in it is never seen.
     const bound = code.replace(/(\s(?::|v-bind:)[\w.-]+=)"([^"]*)"/gu, (_, name, value) => `${name} ${value} `);
-    const picks = [
-        ...bound.matchAll(/([^?:{},\n]*)\?\s*(`[^`]*`|'[^'\n]*'|"[^"\n]*")/gu),
-        ...bound.matchAll(/(`[^`]*`|'[^'\n]*'|"[^"\n]*")[ \t]*:[ \t]*([^,}\n]*)/gu),
-    ];
+    const picks = [...ternaryPicks(bound), ...bound.matchAll(/(`[^`]*`|'[^'\n]*'|"[^"\n]*")[ \t]*:[ \t]*([^,}\n]*)/gu)];
     for (const pick of picks) {
         const [condition, literal] = pick[0].trimStart().startsWith(pick[1]) && /\?/u.test(pick[0]) ? [pick[1], pick[2]] : [pick[2], pick[1]];
         if (PICKED.test(condition ?? ``) && HAND_TINT.test(literal ?? ``) && !excused(pick.index)) {

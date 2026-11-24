@@ -12,6 +12,7 @@ import {
     sweepBuildOutputs,
 } from "../archive.js";
 import { removeQuietly } from "../../worktrees/build-outputs/build-outputs.js";
+import { boardCard } from "../board-card.js";
 
 // The one door to removing build output from conversation checkouts (worktrees/build-outputs/build-outputs.ts says what counts as one): the
 // hourly sweep, the disk-pressure watch and the Storage card's Clean press all go through it, so they share one memory
@@ -87,7 +88,7 @@ export const createBuildOutputReaper = (deps: BuildOutputReaperDeps): BuildOutpu
             if (id === undefined) {
                 return false;
             }
-            const agent = deps.archive.agents.list().find((card) => card.id === id);
+            const agent = boardCard(deps.archive.agents, id);
             return agent !== undefined && buildOutputsReapable(deps.archive, deps.runningJobs, agent, now);
         },
     };

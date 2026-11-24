@@ -34,7 +34,7 @@ export interface CredentialIssuer {
 }
 
 // Credentials that name their own issuer. Kept as data, not regexes, so the terminal filter's copy
-// (CREDENTIAL_ISSUERS in _sandbox/output-cleaners/src/cleaners.mjs, builtins only, so it cannot import this) can be
+// (CREDENTIAL_ISSUERS in _sandbox/output-cleaners/src/short-secrets.mjs, builtins only, so it cannot import this) can be
 // compared entry by entry: the daemon's src/secrets/terminal-masking-parity.test.ts fails the moment the two part. Only
 // the whole shape counts here, never the prefix alone: the outbox reads text nobody said holds a credential, where a
 // bare `sk-` in prose is not one. The terminal side also takes the prefix alone beside a credential-shaped name, where

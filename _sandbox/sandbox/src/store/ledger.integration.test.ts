@@ -46,6 +46,32 @@ test("every line reads through the document's conversions, whichever build wrote
     expect((await readFile(path, "utf8")).split("\n")[0]).toBe(JSON.stringify({ cost: 1 }));
 });
 
+// keepParsed parses only what was appended since the last read; what it answers must be a whole read's, line for line,
+// whatever happened to the file in between.
+test("a ledger kept parsed answers what a whole read would, through appends, a torn tail, an edit and a replacement", async () => {
+    const path = join(dir, "test.jsonl");
+    const whole = openLedger(ledgerDocument, path, uncapped);
+    const kept = openLedger(ledgerDocument, path, { cap: "never", keepParsed: true });
+    const agree = async (): Promise<void> => expect(await kept.read()).toEqual(await whole.read());
+    await agree();
+    await writeFile(path, `${JSON.stringify({ cost: 1 })}\n${JSON.stringify({ amount: 2 })}\n`);
+    await agree();
+    await kept.append({ amount: 3 });
+    await agree();
+    await writeFile(path, `${await readFile(path, "utf8")}{"amou`);
+    await agree();
+    await writeFile(path, `${await readFile(path, "utf8")}nt": 4}\n\n{torn\n${JSON.stringify({ amount: 5 })}\n`);
+    await agree();
+    // Rewritten in place: an earlier line changed, the bytes around where the last read stopped did not.
+    await writeFile(path, (await readFile(path, "utf8")).replace(`{"cost":1}`, `{"cost":7}`));
+    await agree();
+    expect((await kept.read())[0]).toEqual({ amount: 7 });
+    await writeFile(path, `${JSON.stringify({ amount: 9 })}\n`);
+    await agree();
+    await rm(path);
+    expect(await kept.read()).toEqual([]);
+});
+
 test("a torn line or one this build cannot read costs itself, never the ledger", async () => {
     const path = join(dir, "test.jsonl");
     await writeFile(path, `${JSON.stringify({ amount: 1 })}\n{torn\n${JSON.stringify({ amount: "many" })}\n${JSON.stringify({ amount: 4 })}\n`);

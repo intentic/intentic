@@ -213,6 +213,33 @@ const matchedValues = (entries: Iterable<VaultEntry>): KnownValue<VaultHit>[] =>
                   ];
         });
 
+// The vault's matcher, built once and kept up with what changes. A value newly given a token stands last in the vault's
+// by-value map, so adding it last to the matcher it was built with is what rebuilding would make; anything else (a
+// deletion, a value matched or taught where it already stood, a load) rebuilds it. Before 2026-11-24 every new token
+// rebuilt it: ~35 ms at 30k values, once per string a request masks after one.
+const vaultMatcher = (entries: () => Iterable<VaultEntry>) => {
+    let built: KnownMatcher<VaultHit> | undefined;
+    let appended: VaultEntry[] = [];
+    return {
+        changed: (entry?: VaultEntry): void => {
+            if (entry === undefined) {
+                built = undefined;
+            } else {
+                appended.push(entry);
+            }
+        },
+        matcher: (): KnownMatcher<VaultHit> => {
+            if (built === undefined) {
+                built = createKnownMatcher(matchedValues(entries()));
+            } else if (appended.length > 0) {
+                built.add(matchedValues(appended));
+            }
+            appended = [];
+            return built;
+        },
+    };
+};
+
 // Each source values were taught from, how many, and when last; the newest first.
 const sourcesOf = (entries: Iterable<VaultEntry>): PrivacyKnownSource[] => {
     const bySource = new Map<string, { count: number; at: string }>();
@@ -264,7 +291,12 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     const byToken = new Map<string, VaultEntry>();
     let dirty = false;
     let generation = 0;
-    let built: { readonly generation: number; readonly matcher: KnownMatcher<VaultHit> } | undefined;
+    const matched = vaultMatcher(() => byValue.values());
+    // A matched value added (`entry`, newly given a token) or anything else changed.
+    const changed = (entry?: VaultEntry): void => {
+        generation += 1;
+        matched.changed(entry);
+    };
 
     // Every entry stays by its token until it is deleted, so every token it gave out resolves; by value, one entry stands
     // for every spelling of it. Two that a vault written before spellings counted holds apart keep the first.
@@ -295,7 +327,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             index(entry);
         }
         dirty = true;
-        generation += 1;
+        changed();
     };
     const touch = (entry: VaultEntry | undefined): void => {
         const day = utcDayOf(now());
@@ -311,7 +343,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         const entry: VaultEntry = { value, class: kind, index: nextIndex, seen: utcDayOf(now()), ...extra };
         index(entry);
         dirty = true;
-        generation += 1;
+        changed(entry);
         return entry;
     };
     const loaded = (): void => {
@@ -341,6 +373,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             for (const entry of kept) {
                 index(entry);
             }
+            matched.changed();
         })().catch((error: unknown) => {
             // A failed read is tried again next time rather than remembered as loaded.
             loading = undefined;
@@ -372,7 +405,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 const { rule: _, ...rest } = byToken.get(keyOfEntry(existing)) ?? existing;
                 index(rest);
                 dirty = true;
-                generation += 1;
+                changed();
             }
             return entryToken(existing);
         },
@@ -383,11 +416,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         generation: () => generation,
         matcher: () => {
             loaded();
-            if (built !== undefined && built.generation === generation) {
-                return built.matcher;
-            }
-            built = { generation, matcher: createKnownMatcher(matchedValues(byValue.values())) };
-            return built.matcher;
+            return matched.matcher();
         },
         learn: async (source, values) => {
             await load();
@@ -405,7 +434,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 } else if (existing.source === undefined) {
                     index({ ...existing, source, at, seen: utcDayOf(now()) });
                     dirty = true;
-                    generation += 1;
+                    changed();
                     added += 1;
                 }
             }

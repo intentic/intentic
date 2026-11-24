@@ -34,6 +34,7 @@ const standingDeps = async (cards: readonly AgentSummary[], options: { running?:
     const archive = unstubbed<AgentArchiveDeps>("archive", {
         agents: unstubbed<AgentArchiveDeps["agents"]>("agents", {
             list: () => [...cards],
+            get: (id) => cards.find((held) => held.id === id),
             entry: () => {
                 const entry = isolatedAgent([]);
                 return { ...entry, social: { ...entry.social, title: { text: "Fix the login bug", source: "derived" } } };

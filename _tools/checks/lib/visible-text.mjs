@@ -435,7 +435,8 @@ const walk = (node, verbatim, found, ts) => {
  * template literal inside a bound one — which carries placeholders, so it arrives as `parts` like a run does.
  */
 export const visibleLiterals = (source, filename, { sfc, ts }) => {
-    const { descriptor, errors } = sfc.parse(source, { filename });
+    // No source maps: nothing here reads them, and building them was a third of the parse.
+    const { descriptor, errors } = sfc.parse(source, { filename, sourceMap: false });
     if (errors.length > 0 || descriptor.template === null) {
         return [];
     }
@@ -443,6 +444,19 @@ export const visibleLiterals = (source, filename, { sfc, ts }) => {
     for (const child of descriptor.template.ast?.children ?? []) {
         walk(child, false, found, ts);
     }
-    const lineAt = (offset) => source.slice(0, offset).split("\n").length;
+    // Each line's start offset, searched for each literal: splitting the text up to every literal was quadratic in a
+    // long template, which holds hundreds of them.
+    const starts = [0];
+    for (let at = source.indexOf("\n"); at !== -1; at = source.indexOf("\n", at + 1)) {
+        starts.push(at + 1);
+    }
+    const lineAt = (offset) => {
+        let [low, high] = [0, starts.length - 1];
+        while (low < high) {
+            const middle = (low + high + 1) >> 1;
+            [low, high] = starts[middle] <= offset ? [middle, high] : [low, middle - 1];
+        }
+        return low + 1;
+    };
     return found.sort((left, right) => left.start - right.start).map((finding) => ({ ...finding, line: lineAt(finding.start) }));
 };

@@ -15,6 +15,7 @@ import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-st
 import { type PruneOptions, type PruneScope, pruneBuildOutputs, removeQuietly } from "../worktrees/build-outputs/build-outputs.js";
 import { releaseWarmLayers } from "../worktrees/cargo-warm.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import { boardCard } from "./board-card.js";
 
 // The board's only non-destructive exit: the Finished lane never transitions out on its own, and each finished card
 // holds a full worktree checkout, so this reclaims that disk. The worktree is committed onto `agent/<id>` first; only
@@ -343,7 +344,7 @@ export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, re
             continue;
         }
         // Earlier reclaims and the disk probe yield: somebody may have used this card since the pass began.
-        const current = deps.agents.list().find((card) => card.id === agent.id);
+        const current = boardCard(deps.agents, agent.id);
         if (current === undefined || !heldCheckoutByAge(current, now, retentionMs) || deps.conversations.running(agent.id)) {
             continue;
         }
@@ -377,7 +378,7 @@ export class CheckoutBusy extends Error {}
 // and at any age: the Storage card's per-conversation row. Watches, queued words and unsent drafts still need the working
 // copy, as for the reclaim; an archived conversation whose checkout outlived its archive may always go.
 export const checkoutReleaseRefusal = (deps: AgentArchiveDeps, runningJobs: RunningJobs, id: string): string | undefined => {
-    const agent = deps.agents.list().find((card) => card.id === id);
+    const agent = boardCard(deps.agents, id);
     const entry = deps.agents.entry(id);
     if (agent === undefined || entry === undefined) {
         return "no conversation by that id";
@@ -590,7 +591,7 @@ export const reapOneBuildOutput = async (
     remove: (path: string) => Promise<void> = removeQuietly,
     overlaysOf?: (id: string) => string,
 ): Promise<SweptCheckout> => {
-    const agent = deps.agents.list().find((card) => card.id === id);
+    const agent = boardCard(deps.agents, id);
     if (agent === undefined || !buildOutputsReapable(deps, runningJobs, agent, Date.now())) {
         throw new CheckoutBusy("something still runs in the conversation, or it waits on work that would build again");
     }

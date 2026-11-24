@@ -121,7 +121,9 @@ MCP conversations raw and records them as the control. The dedup, wide and cap s
 
 ## Key files
 
-- [src/cleaners.mjs](src/cleaners.mjs) — the cleaner registry, the spec parser, redaction and the repeat cache.
+- [src/cleaners.mjs](src/cleaners.mjs) — the cleaner registry, the spec parser, the secret stores and the repeat cache.
+- [src/short-secrets.mjs](src/short-secrets.mjs) — `redactText`: credential-shaped names, issuer tokens, key blocks and
+  stored values, short ones by context; each per-line pattern sits behind a cheap gate so a line pays only for what could match.
 - [src/log-templates.mjs](src/log-templates.mjs), [src/json-arrays.mjs](src/json-arrays.mjs) and
   [src/search-fairness.mjs](src/search-fairness.mjs) — the new shape stages.
 - [src/output-cap.mjs](src/output-cap.mjs), [src/repeated-output.mjs](src/repeated-output.mjs) and

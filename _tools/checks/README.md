@@ -55,7 +55,9 @@ flowchart LR
   (2026-11-24) The rest of that 1.4 s was module compiling, git and stats: `run.mjs` and `lint-edit.mjs` now turn on
   node's compile cache (`lib/compile-cache.mjs`, for the oxlint they start too), a `--paths` run answers every
   `ls-files -z` pathspec it can model from the one whole listing (`pathspecTest`, held to git's own answers by
-  `lib/repo.integration.test.mjs`), stats the tracked files once and reads the workspace graph once (`workspaceGraph`),
+  `lib/repo.integration.test.mjs`), and a check's subjects by looking the scoped files up in it rather than walking it
+  (`subjectFiles`), with each `*` pattern matched in one pass instead of by a backtracking regex: about 600 ms an edit
+  to about 390. It stats the tracked files once and reads the workspace graph once (`workspaceGraph`),
   code-shape takes its listing from those and loads typescript only for a file that can hold a function over the cap,
   and `code-shape` and `runtime-deps` declare `applies`, so a catalog or a README edit skips them. A long-lived worker
   process was rejected: a check's module state (`packages`, the kept listings) would outlive the tree it read.

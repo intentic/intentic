@@ -17,8 +17,7 @@ export const pathRanker = (limit: number): ((query: string, paths: readonly stri
             // Deduped before scoring: a repeated path would score twice and displace a genuine next-best match under the cap.
             unique = [...new Set(paths)];
         }
-        return rank(query, unique)
-            .slice(0, limit)
-            .map((entry) => entry.path);
+        // Only the shown matches are put in order; the ranker keeps the rest for the next keystroke.
+        return rank(query, unique, limit).map((entry) => entry.path);
     };
 };

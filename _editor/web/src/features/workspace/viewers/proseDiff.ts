@@ -1,7 +1,7 @@
 // A document's two versions as one text with tracked changes, the way a word processor shows them: paragraphs are
 // matched first, then the words inside a changed paragraph. Pure, so the view only draws. The edit scripts
 // themselves are the kit's (`@intentic/ui/diff`), shared with the table diff and the viewers' redlines.
-import { diffSequence, pairEdits, type Segment as ProseSegment, type SegmentKind, similarity, wordDiff } from "@intentic/ui/diff";
+import { diffSequence, pairEdits, type Segment as ProseSegment, type SegmentKind, similarityOf, wordDiff } from "@intentic/ui/diff";
 
 export type { ProseSegment };
 
@@ -36,24 +36,38 @@ const whole = (kind: BlockKind, block: string): ProseBlock => {
     return { kind, ...(heading === undefined ? {} : { heading }), segments: [{ kind: segmentKind, text }] };
 };
 
-// A paragraph paired with its edited self is diffed word by word; the heading level is the new one's.
-const changed = (removed: string, added: string): ProseBlock => {
-    const from = shape(removed);
-    const to = shape(added);
-    const heading = to.heading ?? from.heading;
-    return { kind: `changed`, ...(heading === undefined ? {} : { heading }), segments: wordDiff(from.text, to.text) };
-};
-
 // Below this share of common words, a removed paragraph and the added one after it are two paragraphs, not one
 // edited: worded, they would read as a soup of marks over neither.
 export const ALIKE = 0.4;
-const alike = (before: string, after: string): boolean => similarity(shape(before).text, shape(after).text) >= ALIKE;
 
 export const proseDiff = (before: string, after: string): ProseBlock[] => {
-    const ops = diffSequence(blocksOf(before), blocksOf(after), (left, right) => left === right);
+    const blocksBefore = blocksOf(before);
+    const blocksAfter = blocksOf(after);
+    const ops = diffSequence(blocksBefore, blocksAfter, (left, right) => left === right);
     if (ops === undefined) {
-        return [...blocksOf(before).map((block) => whole(`removed`, block)), ...blocksOf(after).map((block) => whole(`added`, block))];
+        return [...blocksBefore.map((block) => whole(`removed`, block)), ...blocksAfter.map((block) => whole(`added`, block))];
     }
+    // Each pair's word diff, kept from the likeness test for drawing, which would otherwise diff the pair a second time.
+    const worded = new Map<string, Map<string, ProseSegment[]>>();
+    const wordsOf = (removed: string, added: string): ProseSegment[] => {
+        let byAdded = worded.get(removed);
+        if (byAdded === undefined) {
+            byAdded = new Map();
+            worded.set(removed, byAdded);
+        }
+        let segments = byAdded.get(added);
+        if (segments === undefined) {
+            segments = wordDiff(shape(removed).text, shape(added).text);
+            byAdded.set(added, segments);
+        }
+        return segments;
+    };
+    const alike = (removed: string, added: string): boolean => similarityOf(shape(removed).text, shape(added).text, wordsOf(removed, added)) >= ALIKE;
+    // A paragraph paired with its edited self is diffed word by word; the heading level is the new one's.
+    const changed = (removed: string, added: string): ProseBlock => {
+        const heading = shape(added).heading ?? shape(removed).heading;
+        return { kind: `changed`, ...(heading === undefined ? {} : { heading }), segments: wordsOf(removed, added) };
+    };
     return pairEdits(ops, alike).map((edit) => (edit.kind === `pair` ? changed(edit.before, edit.after) : edit.kind === `same` ? whole(`same`, edit.after) : whole(edit.kind, edit.item)));
 };
 

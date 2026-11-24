@@ -5,6 +5,7 @@ import type { OrpcContext } from "../../app-env.js";
 import { landsHereFor } from "../../auth/operator.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
+import { boardCard } from "../registry/board-card.js";
 
 // A PERSON'S HOME CONVERSATION: the one long-running chat the master view opens on this sandbox, one per member
 // (ids/conversation-ids.ts homeConversationId). It is an orchestrator by design: it spawns subagents, judges their work
@@ -86,6 +87,6 @@ export const refuseUnlessHome = (services: Pick<Services, "auth">, context: Call
 /** `GET /agents/home`: the caller's home conversation id, its card once a turn opened it, and where its work goes. */
 export const homeConversationOf = (services: Pick<Services, "auth" | "agents">, context: Caller): HomeConversation => {
     const conversationId = homeIdOf(services, context);
-    const agent = services.agents.list().find((summary) => summary.id === conversationId);
+    const agent = boardCard(services.agents, conversationId);
     return { conversationId, ...opt("agent", agent), lands: landsHereFor(services, context) ? "itself" : "asks" };
 };

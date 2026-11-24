@@ -76,3 +76,30 @@ test("a rejected candidate does not consume its word or the rest of its prefix b
         { start: 5, end: 9, payload: "next" },
     ]);
 });
+
+test("values added later are matched as if they had been given last", () => {
+    const values = [
+        { value: "Zorbix", payload: "first" },
+        { value: "Zorbix Quell", payload: "long", spelling: "folded" as const },
+        { value: "Zorbix", payload: "added" },
+        { value: "Quell Vantro", payload: "later", spelling: "folded" as const },
+    ];
+    const whole = createKnownMatcher(values);
+    const grown = createKnownMatcher(values.slice(0, 1));
+    grown.add(values.slice(1, 3));
+    grown.add(values.slice(3));
+    const text = "Zorbix, zorbixquell and QUELL-VANTRO";
+    const tried = (matcher: typeof whole): string[] => {
+        const log: string[] = [];
+        matcher.find(text, (_start, _end, payload) => {
+            log.push(payload);
+            return payload !== "first";
+        });
+        return log;
+    };
+
+    expect(grown.size).toBe(whole.size);
+    expect(grown.find(text)).toEqual(whole.find(text));
+    expect(tried(grown)).toEqual(tried(whole));
+    expect(tried(grown)).toEqual(["first", "added", "long", "later"]);
+});

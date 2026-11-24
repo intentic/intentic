@@ -421,7 +421,7 @@ test("a held ready checkout is reclaimed without losing review, land or the next
     await writeFile(join(overlay, "dependency"), "installed");
     await writeFile(join(conversation.cwd, "added.ts"), "held work\n");
     const deps = unstubbed<AgentArchiveDeps>("archive", {
-        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [card], entry: () => entry }),
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [card], get: (id) => (id === card.id ? card : undefined), entry: () => entry }),
         conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: () => false, state: () => undefined }),
         // A card that spawned nothing: its family below is empty.
         turns: { stop: async () => await Promise.resolve({ stopped: false }) },

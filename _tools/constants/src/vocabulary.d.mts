@@ -12,4 +12,4 @@ export interface RetiredFinding {
     readonly text: string;
 }
 export const RETIRED: readonly RetiredWord[];
-export function retiredIn(text: string): RetiredFinding[];
+export function retiredIn(text: string, entries?: readonly RetiredWord[]): RetiredFinding[];

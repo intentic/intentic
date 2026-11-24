@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { RETIRED, retiredIn } from "../constants/src/vocabulary.mjs";
+import { regexPrefilter } from "./lib/literals.mjs";
 import { finish } from "./lib/report.mjs";
 import { ADOPTING, ratchet } from "./lib/ratchet.mjs";
 import { root, subjectFiles } from "./lib/repo.mjs";
@@ -32,9 +33,13 @@ const EXEMPT = [
 const exemptFor = (path) => EXEMPT.find((rule) => rule.test(path))?.why;
 
 const files = subjectFiles().filter((path) => READABLE.test(path) && exemptFor(path) === undefined);
+// Only the entries whose required literals a file holds are run over its lines (lib/literals.mjs): the rest cannot match.
+const candidates = regexPrefilter(RETIRED.map((entry) => entry.pattern));
 const found = new Map();
 for (const path of files) {
-    const findings = retiredIn(readFileSync(join(root, path), "utf8"));
+    const text = readFileSync(join(root, path), "utf8");
+    const entries = candidates(text).map((index) => RETIRED[index]);
+    const findings = entries.length === 0 ? [] : retiredIn(text, entries);
     if (findings.length > 0) {
         found.set(path, findings);
     }

@@ -78,13 +78,19 @@ describe(`the card's diff budget`, () => {
         expect(rows.at(-1)).toEqual({ type: `add`, text: `new tail` });
     });
 
-    it(`replaces the whole middle just over it (501 x 501 cells), rather than paying for the table`, () => {
+    it(`still finds the shared lines just over it (501 x 501 cells), since the work grows with what changed`, () => {
         const [before, after] = sides(499);
-        expect(diffStat(before, after)).toEqual({ additions: 501, deletions: 501 });
-        const rows = diffRows(before, after);
+        expect(diffStat(before, after)).toEqual({ additions: 2, deletions: 2 });
+        expect(diffRows(before, after).at(-1)).toEqual({ type: `add`, text: `new tail` });
+    });
+
+    it(`replaces the whole middle when the sides past it have nothing in common, rather than searching on`, () => {
+        const lines = (tag: string): string => Array.from({ length: 501 }, (_, i) => `${tag} ${i}`).join(`\n`);
+        expect(diffStat(lines(`old`), lines(`new`))).toEqual({ additions: 501, deletions: 501 });
+        const rows = diffRows(lines(`old`), lines(`new`));
         expect(rows.slice(0, 2)).toEqual([
-            { type: `del`, text: `old head` },
-            { type: `del`, text: `shared 0` },
+            { type: `del`, text: `old 0` },
+            { type: `del`, text: `old 1` },
         ]);
         expect(rows.some((row) => row.type === `context`)).toBe(false);
     });
