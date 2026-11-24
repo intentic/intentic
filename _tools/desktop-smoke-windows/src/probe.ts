@@ -3,6 +3,7 @@
 
 import { errorMessage } from "@intentic/base/errors";
 import { desktop, windowsSession, type SessionState, type WindowInfo } from "@intentic/desktop-automation";
+import { CONFIRM_BUTTON } from "./constants.js";
 import {
     asList,
     containerNames,
@@ -18,6 +19,7 @@ import {
     type UninstallEntry,
 } from "./parse.js";
 import { powershell, run } from "./run.js";
+import { clickSetupButton } from "./native/task-dialog.js";
 
 // Both hives: currentUser install mode puts the app in HKCU, an elevated or per-machine install in HKLM.
 const UNINSTALL_KEYS = [
@@ -165,31 +167,23 @@ export const appWindowTitled = async (app: string, fragment: string): Promise<bo
         fragment,
     );
 
-// Presses Return only after confirming focus, then verifies success by watching the dialog vanish rather than trusting
-// the focus call, since focus can shift (a start-from-cold link's main window stealing it) between the two.
-const ANSWER_PRESSES = 3;
+const ANSWER_CLICKS = 3;
 const ANSWER_SETTLE_MS = 3_000;
 const ANSWER_POLL_MS = 250;
-// How long a desktop that answers nothing (every listing, focus or key past run()'s 15s) is waited out. That counts
-// toward this time limit, not toward the presses: in run 37292817794 nothing on the runner answered for about two
-// minutes after the cold launch, and three timed-out attempts gave up before a single Return went out.
+// In run 37292817794 the desktop timed out for about two minutes after the cold launch. Failed reads spend time
+// from this deadline without using up the clicks the dialog gets.
 const ANSWER_DEADLINE_MS = 150_000;
 
-// Window layer the retry loop drives, injectable so tests can fake it; the loop is this file's one real decision (when
-// to press again, what silence means).
 export interface ConfirmOps {
-    /** The dialog's window id, or `undefined` when no window of the app's is showing that title. */
-    readonly showing: () => Promise<string | undefined>;
-    readonly focus: (id: string) => Promise<void>;
-    readonly press: () => Promise<void>;
+    readonly showing: () => Promise<WindowInfo | undefined>;
+    readonly click: (dialog: WindowInfo) => Promise<void>;
     readonly sleep: (ms: number) => Promise<void>;
     readonly now: () => number;
 }
 
 const desktopOps = (app: string, titleFragment: string): ConfirmOps => ({
-    showing: async () => (await appWindows(app)).find((window) => window.title.includes(titleFragment))?.id,
-    focus: async (id) => await screen.focusWindow(id),
-    press: async () => await screen.key(`Return`),
+    showing: async () => (await appWindows(app)).find((window) => window.title.includes(titleFragment)),
+    click: clickSetupButton,
     sleep: async (ms) => await new Promise<void>((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
 });
@@ -203,7 +197,7 @@ export const answerConfirm = async (
         const deadline = ops.now() + ANSWER_SETTLE_MS;
         for (;;) {
             // allow(silent-catch): a listing that failed (one past run()'s timeout on a loaded runner) is "not known yet", not "still up".
-            const still = await ops.showing().catch(() => ``);
+            const still = await ops.showing().catch(() => null);
             if (still === undefined) {
                 return true;
             }
@@ -214,26 +208,23 @@ export const answerConfirm = async (
         }
     };
 
-    // Only a press that went out counts toward ANSWER_PRESSES. A step that threw sent nothing, so it is retried until
-    // the deadline, and what the last one said is the refusal.
+    // The message may reach the dialog before the PowerShell process reports back. The tier checks the setup
+    // marker after the dialog closes, including when that process times out.
     const deadline = ops.now() + ANSWER_DEADLINE_MS;
-    let presses = 0;
-    while (presses < ANSWER_PRESSES) {
+    let asked = false;
+    let clicks = 0;
+    while (clicks < ANSWER_CLICKS) {
         try {
-            // Inside the try: a window listing that throws is a failed step to retry, not a crash of the whole smoke
-            // (run 36875866500 died here on a listing that ran past its 15s).
             const dialog = await ops.showing();
             if (dialog === undefined) {
-                // Gone before any press means it was never there; gone after one means the press worked.
-                return presses > 0 ? undefined : `no window of ${app}'s is showing "${titleFragment}" any more`;
+                return asked ? undefined : `no window of ${app}'s is showing "${titleFragment}" any more`;
             }
-            await ops.focus(dialog);
-            await ops.press();
-            presses += 1;
+            asked = true;
+            await ops.click(dialog);
+            clicks += 1;
         } catch (error) {
             if (ops.now() >= deadline) {
-                const said = errorMessage(error);
-                return presses > 0 ? said : `${said} No Return went out in ${ANSWER_DEADLINE_MS / 1_000}s of trying.`;
+                return errorMessage(error);
             }
             await ops.sleep(ANSWER_POLL_MS);
             continue;
@@ -242,7 +233,7 @@ export const answerConfirm = async (
             return undefined;
         }
     }
-    return `"${titleFragment}" was still up after ${ANSWER_PRESSES} presses of Return, each one sent to a window this machine confirmed had the keyboard`;
+    return `"${titleFragment}" was still up after ${ANSWER_CLICKS} clicks on "${CONFIRM_BUTTON}"`;
 };
 
 /** Who holds the keyboard, and whether Windows' sign-in screen is over this desktop. */

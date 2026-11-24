@@ -19,6 +19,7 @@ export const SETUP_LINK = `${SCHEME}://setup?code=windows-smoke-code&name=Window
 // Titles matched on their distinctive half so a copy reword doesn't break these. A confirmed setup opens no screen of
 // its own: it runs out of sight and the window the reader was on stays (desktop-app windows/links.rs `park_setup`).
 export const CONFIRM_TITLE = `Set up a sandbox on this device`;
+export const CONFIRM_BUTTON = `Set up`;
 export const WORKSPACE_TITLE = `Intentic`;
 
 // RFC 2606 reserved TLD: resolves for no one, so an accidental reach for the public network fails loudly instead of

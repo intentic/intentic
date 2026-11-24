@@ -1,33 +1,37 @@
+import type { WindowInfo } from "@intentic/desktop-automation";
 import { answerConfirm, type ConfirmOps } from "./probe.js";
 
-// Answers the confirmation against a fake desktop, exercising the race where a window mapping between focus and Return
-// steals the keystroke. Clock advances only when the loop sleeps, so a test controls press count without real seconds.
+const confirmation: WindowInfo = {
+    id: `1234`,
+    title: `Set up a sandbox on this device?`,
+    app: `intentic-desktop`,
+    focused: false,
+    bounds: { x: 0, y: 0, width: 10, height: 10 },
+    pid: 5678,
+};
 
 interface Fake {
     readonly ops: ConfirmOps;
-    /** One entry per press, the window id that had the keyboard when it went out. */
-    readonly presses: string[];
+    readonly clicks: WindowInfo[];
 }
 
-/** A dialog that closes on the nth press: `Infinity` for one that never does. */
-const dialog = (closesOnPress: number, options: { readonly focusFails?: number; readonly present?: boolean } = {}): Fake => {
-    const presses: string[] = [];
+/** A dialog that closes on the nth click: `Infinity` for one that never does. */
+const dialog = (closesOnClick: number, options: { readonly clickFails?: number; readonly present?: boolean } = {}): Fake => {
+    const clicks: WindowInfo[] = [];
     let clock = 0;
     let open = options.present ?? true;
-    let focusAttempts = 0;
+    let clickAttempts = 0;
     return {
-        presses,
+        clicks,
         ops: {
-            showing: async () => (open ? `0x1234` : undefined),
-            focus: async () => {
-                focusAttempts += 1;
-                if (focusAttempts <= (options.focusFails ?? 0)) {
-                    throw new Error(`Windows would not give window 0x1234 the keyboard`);
+            showing: async () => (open ? confirmation : undefined),
+            click: async (window) => {
+                clickAttempts += 1;
+                if (clickAttempts <= (options.clickFails ?? 0)) {
+                    throw new Error(`Window ${window.id} has no enabled "Set up" button.`);
                 }
-            },
-            press: async () => {
-                presses.push(`0x1234`);
-                if (presses.length >= closesOnPress) {
+                clicks.push(window);
+                if (clicks.length >= closesOnClick) {
                     open = false;
                 }
             },
@@ -39,37 +43,50 @@ const dialog = (closesOnPress: number, options: { readonly focusFails?: number; 
     };
 };
 
-test("a dialog that takes the first Return is answered once", async () => {
+test("clicks the dialog itself even when it does not have the keyboard", async () => {
     const fake = dialog(1);
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, fake.ops)).toBeUndefined();
-    expect(fake.presses).toHaveLength(1);
+    expect(fake.clicks).toEqual([confirmation]);
 });
 
-test("a Return the app's own window intercepted is sent again, and the dialog closing is the proof", async () => {
+test("clicks again if the dialog stays open after the first click", async () => {
     const fake = dialog(2);
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, fake.ops)).toBeUndefined();
-    expect(fake.presses).toHaveLength(2);
+    expect(fake.clicks).toHaveLength(2);
 });
 
-test("a dialog that never closes answers with why, naming how many presses it took to be sure", async () => {
+test("a dialog that never closes answers with why, naming how many clicks it took to be sure", async () => {
     const title = `Set up a sandbox`;
     const fake = dialog(Number.POSITIVE_INFINITY);
     const refusal = await answerConfirm(`intentic-desktop`, title, fake.ops);
     expect(refusal).toContain(title);
-    expect(refusal).toContain(String(fake.presses.length));
-    expect(fake.presses).toHaveLength(3);
+    expect(refusal).toContain(String(fake.clicks.length));
+    expect(fake.clicks).toHaveLength(3);
 });
 
-test("a machine that would not hand over the keyboard is reported in its own words", async () => {
-    const fake = dialog(Number.POSITIVE_INFINITY, { focusFails: Number.POSITIVE_INFINITY });
-    expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, fake.ops)).toContain(`0x1234`);
-    expect(fake.presses).toHaveLength(0);
+test("a machine that always refuses the click is reported in its own words", async () => {
+    const fake = dialog(Number.POSITIVE_INFINITY, { clickFails: Number.POSITIVE_INFINITY });
+    expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, fake.ops)).toBe(`Window 1234 has no enabled "Set up" button.`);
+    expect(fake.clicks).toHaveLength(0);
 });
 
-test("focus refused once is retried, not reported: a foreground held for a moment is not a machine that refuses", async () => {
-    const fake = dialog(1, { focusFails: 1 });
+test("a transient click failure is retried", async () => {
+    const fake = dialog(1, { clickFails: 1 });
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, fake.ops)).toBeUndefined();
-    expect(fake.presses).toHaveLength(1);
+    expect(fake.clicks).toHaveLength(1);
+});
+
+test("a dialog that closes before the click is acknowledged can still have answered it", async () => {
+    const fake = dialog(1);
+    const ops: ConfirmOps = {
+        ...fake.ops,
+        click: async (window) => {
+            await fake.ops.click(window);
+            throw new Error(`timed out waiting for PowerShell`);
+        },
+    };
+    expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBeUndefined();
+    expect(fake.clicks).toHaveLength(1);
 });
 
 test("no dialog at all is a refusal, not a silent pass: nothing was answered", async () => {
@@ -77,7 +94,7 @@ test("no dialog at all is a refusal, not a silent pass: nothing was answered", a
     const title = `Set up a sandbox`;
     const fake = dialog(1, { present: false });
     expect(await answerConfirm(app, title, fake.ops)).toContain(app);
-    expect(fake.presses).toHaveLength(0);
+    expect(fake.clicks).toHaveLength(0);
 });
 
 test("a window listing that fails mid-answer is retried, not thrown: a slow listing on a loaded runner is not a crash", async () => {
@@ -95,10 +112,10 @@ test("a window listing that fails mid-answer is retried, not thrown: a slow list
         },
     };
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBeUndefined();
-    expect(fake.presses).toHaveLength(1);
+    expect(fake.clicks).toHaveLength(1);
 });
 
-test("a desktop that answers nothing for longer than three tries still gets its Return: silence spends time, not presses", async () => {
+test("a desktop that answers nothing for longer than three tries still gets a click", async () => {
     const fake = dialog(1);
     let listings = 0;
     const showing = fake.ops.showing;
@@ -114,10 +131,10 @@ test("a desktop that answers nothing for longer than three tries still gets its 
         },
     };
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBeUndefined();
-    expect(fake.presses).toHaveLength(1);
+    expect(fake.clicks).toHaveLength(1);
 });
 
-test("a desktop that never answers is reported in its own words, saying no Return went out", async () => {
+test("a desktop that never answers is reported in its own words", async () => {
     const fake = dialog(1);
     const ops: ConfirmOps = {
         ...fake.ops,
@@ -126,7 +143,7 @@ test("a desktop that never answers is reported in its own words, saying no Retur
         },
     };
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBe(
-        `"powershell.exe" did not answer within 15s and was stopped. No Return went out in 150s of trying.`,
+        `"powershell.exe" did not answer within 15s and was stopped.`,
     );
-    expect(fake.presses).toHaveLength(0);
+    expect(fake.clicks).toHaveLength(0);
 });
