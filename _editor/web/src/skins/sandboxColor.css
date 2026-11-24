@@ -13,27 +13,24 @@
    and a sandbox painted red must not make every primary button read as a danger. Unlayered and keyed on <html>, so it
    outranks both the utilities and the skins it tints over. */
 
+/* THE RAIL wears the sandbox's tinted ground for the scheme (`--sandbox-light`/`--sandbox-dark`, ui themeColor.ts
+   `tintsOf`): built from the swatch's hue at a fixed lightness with its chroma capped, rather than the swatch mixed into
+   the look's own surface, which turned a green olive on warm stone and let the strong hues outshout the weak ones. Laid
+   as an inset shadow over the look's background, as iconRail.css lays the brand's wash: no specificity fight with a
+   skin's background-image. The badge ring's ground follows it, or a count plate would be cut out of the untinted
+   surface. */
 html[data-sandbox-color] {
-    /* How much of the colour a surface takes: enough to be seen from the corner of the eye, little enough that the
-       glyphs on it keep their contrast. The dark looks take less, since the colour carries further on a dark ground. */
-    --sandbox-rail-share: 28%;
-    --sandbox-rail-wash: color-mix(in oklab, var(--sandbox-color) var(--sandbox-rail-share), transparent);
+    --sandbox-ground: var(--sandbox-light);
 }
 html[data-sandbox-color][data-mode="dark"] {
-    --sandbox-rail-share: 24%;
+    --sandbox-ground: var(--sandbox-dark);
 }
-
-/* THE RAIL. A wash laid as an inset shadow, over the look's own background, as iconRail.css lays the brand's: no
-   specificity fight with a skin's background-image. The badge ring's ground follows it, or a count plate would be cut
-   out of the untinted stone. */
 html[data-sandbox-color] .icon-rail {
-    box-shadow:
-        inset 0 0 0 100vmax var(--sandbox-rail-wash),
-        inset 0 0 0 100vmax color-mix(in oklab, var(--color-brand-950) 11%, transparent);
-    --ui-tile-ground: color-mix(in oklab, var(--sandbox-color) var(--sandbox-rail-share), color-mix(in oklab, var(--color-brand-950) 11%, var(--color-card)));
+    box-shadow: inset 0 0 0 100vmax var(--sandbox-ground);
+    --ui-tile-ground: var(--sandbox-ground);
 }
 html[data-sandbox-color]:not([data-skin]) .icon-rail {
-    border-color: color-mix(in oklab, var(--sandbox-color) 45%, transparent);
+    border-color: color-mix(in oklab, var(--sandbox-color) 30%, transparent);
 }
 /* The picked tile is a plate of the page's own ground on the tinted strip: the brand's orange wash it wears on a plain
    rail read as a second colour fighting the sandbox's. Sanctum and Silver keep their own (gold, glass). */
@@ -44,27 +41,24 @@ html[data-sandbox-color][data-mode="dark"]:not([data-skin]) .icon-rail-tile.ui-r
     background: rgb(255 255 255 / 0.1);
 }
 
-/* Sanctum's rail is stone with no brand wash of its own (sanctum.css), and it paints its background in the tile ground:
-   tinting the ground tints the stone, under the gilt light that falls down it. */
+/* Sanctum's rail is stone painted in its tile ground (sanctum.css), under its grain and the gilt light that falls down
+   it: the deepest ground takes the stone's place, and the grain and the light stay on it. */
 html[data-sandbox-color][data-skin="sanctum"] .icon-rail {
     box-shadow: none;
-    --ui-tile-ground: color-mix(
-        in oklab,
-        var(--sandbox-color) var(--sandbox-rail-share),
-        color-mix(in oklab, var(--color-surface-900) 70%, var(--color-surface-950))
-    );
+    --ui-tile-ground: var(--sandbox-deep);
 }
-/* Silver's rail is glass over the room (silver.css): the wash lies on the glass, and the ground follows it. */
+/* Silver's rail is glass over the room (silver.css): the ground lies on the glass, a little of the room showing. */
 html[data-sandbox-color][data-skin="silver"] .icon-rail {
-    box-shadow: inset 0 0 0 100vmax var(--sandbox-rail-wash);
-    --ui-tile-ground: color-mix(in oklab, var(--sandbox-color) var(--sandbox-rail-share), var(--silver-rail));
+    box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--sandbox-dark) 88%, transparent);
+    --ui-tile-ground: var(--sandbox-dark);
 }
 
-/* THE WALLPAPER. wallpapers.css's own stack with one layer more, between the veil and the art: the colour, blended as
-   `color` so it takes the picture's hue and leaves its light alone. Under the veil and the scrim, so the header's well
+/* THE WALLPAPER. wallpapers.css's own stack with one layer more, between the veil and the art: the sandbox's haze (a
+   mid tone of its hue, chroma capped like the rail's), blended as `color` so the picture takes its hue and keeps its
+   light. Under the veil and the scrim, so the header's well
    and the edges' close read as they always did. Five layers, so five blend modes and five attachments. */
 html[data-sandbox-color][data-wallpaper] .agents-board {
-    --sandbox-wallpaper-tint: color-mix(in oklab, var(--sandbox-color) 62%, transparent);
+    --sandbox-wallpaper-tint: color-mix(in oklab, var(--sandbox-haze) 80%, transparent);
     background-image:
         var(--wallpaper-scrim),
         linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)),

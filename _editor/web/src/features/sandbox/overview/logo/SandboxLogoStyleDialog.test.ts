@@ -3,15 +3,17 @@ import { waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
+import { SWATCHES, swatchHex } from "@intentic/ui";
 import SandboxLogoStyleDialog from "./SandboxLogoStyleDialog.vue";
 import { logoStyleImage, readLogoStyle } from "./presets";
 
 let app: App | undefined;
 const write = jest.fn<(look: { image: string; color: string }) => Promise<void>>();
 const closed = jest.fn<() => void>();
-const savedImage = logoStyleImage({ icon: `moon`, color: `#e07400` });
+const ember = swatchHex(SWATCHES[0]);
+const savedImage = logoStyleImage({ icon: `moon`, color: ember });
 
-const mount = async (image: string | null = savedImage, color = `#e07400`): Promise<void> => {
+const mount = async (image: string | null = savedImage, color = ember): Promise<void> => {
     const root = document.createElement(`div`);
     document.body.append(root);
     app = createApp({ render: () => h(SandboxLogoStyleDialog, { image, name: `My sandbox`, color, write, onClose: closed }) });
@@ -48,14 +50,14 @@ it(`restores saved choices and keeps the matching preview when reopened`, async 
 it(`previews both choices before saving the exact image being previewed`, async () => {
     await mount();
     button(`Flask`).click();
-    button(`Azure`).click();
+    button(`Cobalt`).click();
     await nextTick();
     const image = preview().getAttribute(`src`)!;
     expect(readLogoStyle(image)?.icon).toBe(`flask`);
     const ink = document.createElement(`span`);
     ink.style.color = readLogoStyle(image)!.color;
-    expect(ink.style.color).toBe(button(`Azure`).style.backgroundColor);
-    expect(button(`Azure`).getAttribute(`aria-checked`)).toBe(`true`);
+    expect(ink.style.color).toBe(button(`Cobalt`).style.backgroundColor);
+    expect(button(`Cobalt`).getAttribute(`aria-checked`)).toBe(`true`);
     expect(button(`Ember`).getAttribute(`aria-checked`)).toBe(`false`);
     expect(button(`Flask`).getAttribute(`aria-pressed`)).toBe(`true`);
     expect(button(`Moon`).getAttribute(`aria-pressed`)).toBe(`false`);
@@ -97,5 +99,5 @@ it(`keeps the draft and the dialog open after a failed save, allowing a retry`, 
     button(`Save`).click();
     await waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
     expect(write).toHaveBeenCalledTimes(2);
-    expect(write).toHaveBeenLastCalledWith({ image, color: `#e07400` });
+    expect(write).toHaveBeenLastCalledWith({ image, color: ember });
 });

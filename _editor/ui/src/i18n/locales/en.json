@@ -81,20 +81,16 @@
         "showAll": "Show all"
     },
     "colorPicker": {
-        "azure": "Azure",
         "brass": "Brass",
         "cobalt": "Cobalt",
         "colour": "Color",
         "ember": "Ember",
         "emerald": "Emerald",
-        "fern": "Fern",
         "graphite": "Graphite",
         "iris": "Iris",
         "lagoon": "Lagoon",
-        "moss": "Moss",
         "orchid": "Orchid",
-        "rose": "Rose",
-        "vermilion": "Vermilion"
+        "rose": "Rose"
     },
     "confirmDialog": {
         "more": "…and {count} more"

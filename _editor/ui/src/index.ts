@@ -434,7 +434,7 @@ export {
 export { type ColorScheme, type SchemeChoice, useTheme } from "./composables/useTheme.js";
 // The swatch picker and the ladder it picks from (a sandbox's colour, a preset logo's glyph): every pick at one lightness.
 export { default as ColorPicker } from "./components/forms/ColorPicker.vue";
-export { DEFAULT_SWATCH, SWATCHES, type Swatch, type SwatchKey, nearestSwatch, swatchHex, tintedGround } from "./lib/themeColor.js";
+export { DEFAULT_SWATCH, SWATCHES, type Swatch, type SwatchKey, nearestSwatch, swatchHex, type Tints, tintsOf } from "./lib/themeColor.js";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";
 // Whether the interface moves: the Appearance row, its OS fallback, and the one answer script-played moves ask.
 export { lessMotion, useMotion } from "./motion/choice.js";

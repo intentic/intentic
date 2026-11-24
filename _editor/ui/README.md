@@ -93,8 +93,10 @@ flowchart LR
   rows' card, `Section` is it over anything else (cards, a grid, a form), and `NavRail` draws it per group. None can
   carry a count, a caption or a fill, and the room under it is the tier's. A sentence a reader needs goes on the
   group's surface as a `RowNote`. `ui.sectionLabel()` is its look, called by nothing else in this repository. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
-  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. `ColorPicker size="sm"` fits a settings row. Its swatches (`SWATCHES` in `lib/themeColor.ts`) all sit at one lightness,
-  and `nearestSwatch` lands any stored colour on one of them.
+  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. `ColorPicker size="sm"` fits a settings row. Its nine swatches (`SWATCHES` in `lib/themeColor.ts`) share one lightness
+  and one chroma, about 40° of hue apart, `nearestSwatch` lands any stored colour on one of them, and `tintsOf` gives
+  the calm grounds a surface tinted in one wears (fixed lightness, capped chroma, never the swatch mixed into the
+  surface, which went olive on warm stone).
   `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details, and nothing else wears it:
   an expanding row is a `DisclosureRow`. `ui-row-select-on` is reserved for selection, the icon rail's current tile
   included (with `ui-row-select-horizontal`, which keeps a tile's or a strip's mark to its tint). The translucent `--ui-row-open-wash` token uses

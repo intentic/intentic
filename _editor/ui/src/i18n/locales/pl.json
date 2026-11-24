@@ -81,20 +81,16 @@
         "showAll": "Pokaż wszystko"
     },
     "colorPicker": {
-        "azure": "Lazur",
         "brass": "Mosiądz",
         "cobalt": "Kobalt",
         "colour": "Kolor",
         "ember": "Żar",
         "emerald": "Szmaragd",
-        "fern": "Paproć",
         "graphite": "Grafit",
         "iris": "Irys",
         "lagoon": "Laguna",
-        "moss": "Mech",
         "orchid": "Storczyk",
-        "rose": "Róż",
-        "vermilion": "Cynober"
+        "rose": "Róż"
     },
     "confirmDialog": {
         "more": "…i {count} więcej"
