@@ -215,7 +215,7 @@
         "e2e:hermetic": {
             "dependsOn": ["^build"],
             "cache": false,
-            "passThroughEnv": ["INTENTIC_E2E_HERMETIC", "CI_HOST_JOBS"]
+            "passThroughEnv": ["DEBUG", "INTENTIC_E2E_HERMETIC", "CI_HOST_JOBS"]
         },
         // Live capability contracts use dedicated credentials and must run afresh each night.
         "e2e:capabilities": {

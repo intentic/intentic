@@ -410,7 +410,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
                             <span class="sr-only">{{ t(`approvalsView.readingApprovalsQueue`) }}</span>
                             <Row v-for="row in 2" :key="row" aria-hidden="true">
                                 <template #lead="{ mark }"><span class="skeleton block shrink-0 rounded-md" :style="{ width: `${mark}px`, height: `${mark}px` }" /></template>
-                                <template #description><span class="flex min-h-[1lh] items-center"><span class="skeleton block h-2.5 w-36" /></span></template>
+                                <template #description><span class="flex min-h-lh items-center"><span class="skeleton block h-2.5 w-36" /></span></template>
                                 <template #control>
                                     <span class="skeleton block h-5 w-5" />
                                     <span class="skeleton block h-7 w-20" />

@@ -250,12 +250,11 @@ const expectHomeAs = async (page: Page, email: string): Promise<Locator> => {
 
 /**
  * Presses something that moves the browser to another account (or to nobody), which the page leaves for by a full
- * navigation, and waits for the page it lands on. The address alone cannot tell: a switch from Home lands Home again.
+ * navigation. A switch from Home lands Home again, and the new document can render before all its assets load.
  */
 const pressToLeave = async (page: Page, control: Locator): Promise<void> => {
-    const landed = page.waitForEvent(`load`);
-    await control.click();
-    await landed;
+    await page.waitForLoadState(`domcontentloaded`);
+    await Promise.all([page.waitForEvent(`domcontentloaded`), control.click()]);
 };
 
 /** Adds `email` beside `current`, the account the page is drawn for, from the account menu; lands Home as `email`. */

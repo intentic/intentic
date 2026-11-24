@@ -1395,6 +1395,8 @@ jobs:
       - id: billing
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && needs.changes.outputs.platform == 'true' }}
         run: pnpm turbo run e2e:hermetic --filter=@intentic/api
+        env:
+          DEBUG: testcontainers
       # The released image is public; the login is for the pull's rate limit, client-side, since the host daemon behind
       # the mounted socket holds no registry credential (nightly.yml's e2e job says the same). Whatever billing said.
       - uses: ./.github/actions/ghcr-login

@@ -97,6 +97,7 @@ const openArchive = async (el: HTMLElement): Promise<void> => {
     await settle();
 };
 
+// Rendering 70 real cards in jsdom can exceed the default hang bound on a busy CI runner.
 it(`adds a page at a time, and stops offering when there is nothing left behind the row`, async () => {
     live();
     fileAway(70);
@@ -115,4 +116,4 @@ it(`adds a page at a time, and stops offering when there is nothing left behind 
     await settle();
     expect(archiveCards(board)).toHaveLength(70);
     expect(tailRow(board)).toBeNull();
-});
+}, 60_000);

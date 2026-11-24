@@ -8,13 +8,13 @@ import { fdinfoFlocked, flockedFiles, lockedSlots, slotFileKeys } from "./ci-loc
 
 const PROC_LOCKS = `1: FLOCK  ADVISORY  WRITE 2008618 00:25:1022361 0 EOF
 2: POSIX  ADVISORY  WRITE 1104207 00:25:1022362 1073741824 1073742335
-3: FLOCK  ADVISORY  WRITE 0 103:0a:77 0 EOF
+3: FLOCK  ADVISORY  WRITE 0 103:10b:77 0 EOF
 3: -> FLOCK  ADVISORY  WRITE 4242 00:25:1022363 0 EOF
 4: OFDLCK ADVISORY  READ  -1 00:25:1022364 0 EOF
 `;
 
 test("/proc/locks gives the files that carry a flock now, device numbers read as hex", () => {
-    expect([...flockedFiles(PROC_LOCKS)]).toEqual(["0:37:1022361", "259:10:77"]);
+    expect([...flockedFiles(PROC_LOCKS)]).toEqual(["0:37:1022361", "259:267:77"]);
     expect(flockedFiles("")).toEqual(new Set());
 });
 
@@ -35,9 +35,9 @@ const slotsDir = async (count: number): Promise<string> => {
 
 const procLine = async (path: string): Promise<string> => {
     const info = await stat(path, { bigint: true });
-    // st_dev on a test filesystem is below 2^20, so the old 8-bit split is the kernel's too
+    // Linux stores the low eight minor bits below the major and the remaining twelve above it.
     const major = Number(info.dev >> 8n) & 0xfff;
-    const minor = Number(info.dev & 0xffn);
+    const minor = Number((info.dev & 0xffn) | ((info.dev >> 12n) & 0xfff00n));
     return `9: FLOCK  ADVISORY  WRITE 1 ${major.toString(16).padStart(2, "0")}:${minor.toString(16).padStart(2, "0")}:${info.ino} 0 EOF\n`;
 };
 

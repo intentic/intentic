@@ -213,6 +213,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(said.status).toBe(200);
     };
 
+    // A cold runner has to pull Postgres and replay the deployed migration history before any assertions can run.
     beforeAll(async () => {
         container = await new GenericContainer(POSTGRES_IMAGE)
             .withEnvironment({ POSTGRES_USER: `app`, POSTGRES_PASSWORD: `app`, POSTGRES_DB: `app`, POSTGRES_INITDB_ARGS: `--no-sync` })
@@ -244,7 +245,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         if (session?.user.email !== alice.email) {
             throw new Error(`the seeded session cookie was rejected: the Better Auth cookie recipe in this suite no longer matches the server`);
         }
-    });
+    }, 240_000);
 
     afterAll(async () => {
         unstubAllGlobals();
