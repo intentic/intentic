@@ -5,15 +5,21 @@ import { setEngine, track } from "../../analytics";
 import { revealLog } from "../../desktop";
 import {
     engineCleanup,
+    engineModeSet,
     engineMove,
     enginePrefer,
+    engineStartNow,
     engineStatus,
+    engineStopNow,
+    onEngineBackground,
+    type EngineMode,
     type EngineMoveEnd,
     type EngineMoveEvent,
     type EngineStatus,
     type MoveTarget,
 } from "../../desktopEngine";
 import { endOf, engineOf, foldMove, keptCopiesOf, offerOf, pcEngineOf, startMove, type MoveProgress } from "./engineMove";
+import { refresh } from "../machine";
 import { running, start } from "../runs";
 
 // WHICH ENGINE THIS PC'S SANDBOXES RUN ON, AND THE MOVE TO THE OTHER (src-tauri/src/engine.rs): Docker Desktop or
@@ -247,4 +253,88 @@ export const removeEngineCopies = async (): Promise<void> => {
 export const dismissEngineMove = (): void => {
     engineMoveEnd.value = undefined;
     engineMoveError.value = undefined;
+};
+
+/* WHEN THE ENGINE RUNS (ic's engine/background.rs): from sign-in on, while the app is open, or not at all; set here or in
+   the tray, and the engine stopped or started now. This computer's "Runs in the background" draws it (BackgroundRows.vue). */
+
+/** This PC runs on Intentic's engine and its ic says when the engine runs: the page's "Runs in the background" is up. */
+export const engineBackgroundShown = computed(() => onOurEngine.value && (engineState.value?.mode ?? null) !== null);
+/** The mode a change asked for here goes to, until ic answers. */
+export const engineModeSetting = ref<EngineMode | undefined>(undefined);
+/** Why the last change did not take, in ic's words. */
+export const engineModeError = ref<string | undefined>(undefined);
+/** Stop now or Start, pressed here, until ic answers. */
+export const engineToggling = ref<`stop` | `start` | undefined>(undefined);
+/** The last Stop now or Start that did not take, and ic's words for why. */
+export const engineToggleError = ref<{ readonly verb: `stop` | `start`; readonly reason: string } | undefined>(undefined);
+
+// After any of them the engine may have stopped or started: what ic says of it, and whether it answers (the list under it).
+const reread = async (): Promise<void> => {
+    await Promise.all([loadEngine(), refresh()]);
+};
+
+/** When the engine runs from now on. The app's own start at sign-in follows it (on for `always` only). */
+export const setEngineMode = async (mode: EngineMode): Promise<void> => {
+    if (engineModeSetting.value !== undefined) {
+        return;
+    }
+    const from = engineState.value?.mode ?? null;
+    engineModeSetting.value = mode;
+    engineModeError.value = undefined;
+    try {
+        await engineModeSet(mode);
+        track(`desktop_engine_background`, { action: `mode`, mode, from });
+    } catch (error) {
+        engineModeError.value = String(error);
+    }
+    await reread();
+    engineModeSetting.value = undefined;
+};
+
+const toggle = async (verb: `stop` | `start`, run: () => Promise<void>): Promise<void> => {
+    if (engineToggling.value !== undefined) {
+        return;
+    }
+    engineToggling.value = verb;
+    engineToggleError.value = undefined;
+    try {
+        await run();
+        track(`desktop_engine_background`, { action: verb, mode: engineState.value?.mode ?? null });
+    } catch (error) {
+        engineToggleError.value = { verb, reason: String(error) };
+    }
+    await reread();
+    engineToggling.value = undefined;
+};
+
+/** Stop the engine now, and every sandbox on it, until a start: whatever the mode, nothing starts it by itself. */
+export const stopEngineNow = (): Promise<void> => toggle(`stop`, engineStopNow);
+/** Start it now, lifting whatever held it down. */
+export const startEngineNow = (): Promise<void> => toggle(`start`, engineStartNow);
+
+/** The app is starting the engine itself (its launch's start in `whenOpen` or at sign-in, the keeper's restart). */
+export const engineAppStarting = ref(false);
+
+/** Read again whenever the tray, or the app seeing WSL shut down, changes the setting or the engine; the returned call
+ *  stops listening, also when it comes before the listener is in place. While the app says it is starting the engine
+ *  itself, that is all there is to read. */
+export const followEngineBackground = (): (() => void) => {
+    let stopped = false;
+    let unlisten: (() => void) | undefined;
+    onEngineBackground((ping) => {
+        if (ping.starting !== undefined) {
+            engineAppStarting.value = ping.starting;
+            if (ping.starting) {
+                return;
+            }
+        }
+        void reread();
+    })
+        .then((off) => (stopped ? off() : (unlisten = off)))
+        .catch((error) => console.error(`[device] the engine's background setting is not followed:`, error));
+    return () => {
+        stopped = true;
+        unlisten?.();
+    };
 };

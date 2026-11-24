@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import { freshImport, waitFor } from "@intentic/testing/bun";
+import { emit } from "@tauri-apps/api/event";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { EngineMoveEnd, EngineMoveEvent, EngineStatus } from "../../desktopEngine";
 
@@ -44,6 +45,8 @@ let status: EngineStatus | null = ON_DOCKER_DESKTOP;
 let yes = true;
 let moving: (args: Record<string, unknown>) => EngineMoveEnd | Promise<EngineMoveEnd> = () => MOVED;
 let cleaned: () => void = () => undefined;
+// What `engine_mode_set`, `engine_stop_now` and `engine_start_now` do: change what the status says next, or throw.
+let background: (command: string, args: Record<string, unknown>) => void = () => undefined;
 
 const asked = (command: string) => calls.filter((call) => call.command === command);
 
@@ -53,6 +56,7 @@ beforeEach(() => {
     yes = true;
     moving = () => MOVED;
     cleaned = () => undefined;
+    background = () => undefined;
     mockIPC((command, args) => {
         const sent = (args ?? {}) as Record<string, unknown>;
         calls.push({ command, args: sent });
@@ -69,10 +73,15 @@ beforeEach(() => {
             case `engine_cleanup`:
                 cleaned();
                 return null;
+            case `engine_mode_set`:
+            case `engine_stop_now`:
+            case `engine_start_now`:
+                background(command, sent);
+                return null;
             default:
                 return null;
         }
-    });
+    }, { shouldMockEvents: true });
 });
 afterEach(() => clearMocks());
 
@@ -262,4 +271,82 @@ it(`removes the copies at the reader's yes, and says so when an engine kept its 
     yes = false;
     await engine.removeEngineCopies();
     expect(asked(`engine_cleanup`)).toHaveLength(2);
+});
+
+it(`sets when the engine runs, reads it again after, and says why a change did not take`, async () => {
+    const engine = await load();
+    status = { ...ON_OURS, mode: `always`, hold: null };
+    await engine.loadEngine();
+    expect(engine.engineBackgroundShown.value).toBe(true);
+    background = () => (status = { ...ON_OURS, running: false, held: true, mode: `off`, hold: `off` });
+    await engine.setEngineMode(`off`);
+    expect(asked(`engine_mode_set`).map((call) => call.args)).toEqual([{ mode: `off` }]);
+    expect(engine.engineState.value?.mode).toBe(`off`);
+    expect(engine.engineModeSetting.value).toBeUndefined();
+    expect(engine.engineModeError.value).toBeUndefined();
+
+    background = () => {
+        throw new Error(`the background setting could not be written`);
+    };
+    await engine.setEngineMode(`whenOpen`);
+    expect(engine.engineModeError.value).toContain(`could not be written`);
+    expect(engine.engineModeSetting.value).toBeUndefined();
+    expect(engine.engineState.value?.mode).toBe(`off`);
+
+    // Docker Desktop's PC has no setting to show, whatever an ic says of one.
+    status = { ...ON_DOCKER_DESKTOP, mode: `always` };
+    await engine.loadEngine();
+    expect(engine.engineBackgroundShown.value).toBe(false);
+});
+
+it(`stops and starts the engine now, and says which press did not take`, async () => {
+    const engine = await load();
+    status = { ...ON_OURS, mode: `always` };
+    await engine.loadEngine();
+    background = () => (status = { ...ON_OURS, running: false, held: true, mode: `always`, hold: `stopped` });
+    await engine.stopEngineNow();
+    expect(asked(`engine_stop_now`)).toHaveLength(1);
+    expect(engine.engineState.value?.hold).toBe(`stopped`);
+    expect(engine.engineToggling.value).toBeUndefined();
+    expect(engine.engineToggleError.value).toBeUndefined();
+
+    background = () => {
+        throw new Error(`WSL did not answer`);
+    };
+    await engine.startEngineNow();
+    expect(asked(`engine_start_now`)).toHaveLength(1);
+    expect(engine.engineToggleError.value).toEqual({ verb: `start`, reason: `Error: WSL did not answer` });
+    expect(engine.engineToggling.value).toBeUndefined();
+});
+
+it(`reads the engine again when the tray changes it, until the page stops following`, async () => {
+    const engine = await load();
+    status = { ...ON_OURS, mode: `always` };
+    const stop = engine.followEngineBackground();
+    await waitFor(async () => {
+        const reads = asked(`engine_status`).length;
+        await emit(`desktop://engine-background`);
+        expect(asked(`engine_status`).length).toBeGreaterThan(reads);
+    });
+    expect(engine.engineState.value?.mode).toBe(`always`);
+    stop();
+    const reads = asked(`engine_status`).length;
+    await emit(`desktop://engine-background`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(asked(`engine_status`)).toHaveLength(reads);
+});
+
+it(`says the app is starting the engine itself while it does, and reads it once that is over`, async () => {
+    const engine = await load();
+    status = { ...ON_OURS, mode: `whenOpen` };
+    const stop = engine.followEngineBackground();
+    await waitFor(async () => {
+        await emit(`desktop://engine-background`, { starting: true });
+        expect(engine.engineAppStarting.value).toBe(true);
+    });
+    const reads = asked(`engine_status`).length;
+    await emit(`desktop://engine-background`, { starting: false });
+    await waitFor(() => expect(asked(`engine_status`).length).toBeGreaterThan(reads));
+    expect(engine.engineAppStarting.value).toBe(false);
+    stop();
 });

@@ -47,6 +47,9 @@ pub fn status_json(
         "distro": status.distro,
         "network": status.network,
         "pipe": status.pipe,
+        "mode": status.mode,
+        "hold": status.hold,
+        "signIn": status.sign_in.map(|(by, disabled)| serde_json::json!({ "by": by, "disabledInWindows": disabled })),
         "dockerDesktop": facts.docker_desktop,
         "ownEngine": facts.own_engine,
         "preferred": facts.preferred.map(Kind::id),
@@ -60,8 +63,11 @@ pub fn status_json(
 
 pub fn run_status(json: bool) -> Result<()> {
     let kind = super::in_use();
-    let status = super::status();
+    let mut status = super::status();
     if json {
+        if status.mode.is_some() {
+            status.sign_in = super::sign_in();
+        }
         let mut facts = super::choice_facts(docker_desktop_installed());
         facts.gpu = gpu_in_use();
         // allow(terminal-output): --json: one document on stdout for the desktop app and the smoke tests.
@@ -109,12 +115,12 @@ pub fn run_install() -> Result<()> {
     Ok(())
 }
 
-pub fn run_start(quiet: bool) -> Result<()> {
+pub fn run_start(quiet: bool, app: bool) -> Result<()> {
     if !quiet {
         ui::act("Starting the intentic engine");
     }
     let res = if quiet {
-        super::start_quiet().map_err(Fail::from)
+        super::start_quiet(app).map_err(Fail::from)
     } else {
         super::start().map_err(Fail::from)
     };
@@ -144,6 +150,49 @@ pub fn run_copy(args: super::moves::CopyArgs) -> Result<()> {
 
 pub fn run_relay() -> Result<()> {
     super::relay().map_err(Fail::from)
+}
+
+/// `ic engine mode [always|when-open|off]`: when the engine runs (background.rs), shown, or set and carried out.
+pub fn run_mode(word: Option<&str>, json: bool) -> Result<()> {
+    if let Some(word) = word {
+        let mode = super::background::Mode::parse(word).ok_or_else(|| {
+            Fail(format!(
+                "{word} is not a mode: always, when-open or off."
+            ))
+        })?;
+        if !json {
+            ui::act(&format!("Setting the intentic engine to run {}", mode.sentence()));
+        }
+        super::set_mode(mode).map_err(Fail::from)?;
+    }
+    let Some(mode) = super::mode() else {
+        return Err(Fail(
+            "when the engine runs is set on Windows, where Intentic runs its own engine.".to_string(),
+        ));
+    };
+    if json {
+        // allow(terminal-output): --json: one document on stdout for the desktop app.
+        println!(
+            "{}",
+            serde_json::json!({ "mode": mode.id(), "hold": super::hold_kind().map(super::background::HoldKind::id) })
+        );
+        return Ok(());
+    }
+    if word.is_some() {
+        ui::done(&format!("The intentic engine runs {}.", mode.sentence()));
+    } else {
+        ui::detail(&format!("The intentic engine runs {}.", mode.sentence()));
+        ui::later(&[(
+            "change it".to_string(),
+            "ic engine mode always|when-open|off".to_string(),
+        )]);
+    }
+    Ok(())
+}
+
+/// `ic engine stop --until-app-opens`: down until the desktop app's next start (background.rs `HoldKind::Closed`).
+pub fn run_stop_until_app_opens() -> Result<()> {
+    super::stop_until_app_opens().map_err(Fail::from)
 }
 
 pub fn run_stop() -> Result<()> {
@@ -358,6 +407,9 @@ mod tests {
             distro: "intentic-engine".into(),
             network: Some("isolated".into()),
             pipe: Some("npipe:////./pipe/intentic-engine.me".into()),
+            mode: Some("whenOpen"),
+            hold: Some("closed"),
+            sign_in: Some(("app", true)),
         };
         let facts = super::super::choice::Facts {
             docker_desktop: true,
@@ -379,6 +431,11 @@ mod tests {
         assert_eq!(json["offerMove"], true);
         assert_eq!(json["bringYourOwn"], true);
         assert!(json.get("held").is_some());
+        // The desktop app's This computer and tray read these three (desktopEngine.ts `EngineStatus`).
+        assert_eq!(json["mode"], "whenOpen");
+        assert_eq!(json["hold"], "closed");
+        assert_eq!(json["signIn"]["by"], "app");
+        assert_eq!(json["signIn"]["disabledInWindows"], true);
         let on_ours = status_json(Kind::Intentic, &facts, &status);
         assert_eq!(on_ours["offerMove"], false);
         assert_eq!(on_ours["bringYourOwn"], false);

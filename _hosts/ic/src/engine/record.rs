@@ -91,6 +91,21 @@ pub fn held() -> bool {
     paths::held_path().is_some_and(|path| path.exists())
 }
 
+/// Which kind of hold the engine is under (background.rs), when it is held.
+pub fn hold_kind() -> Option<super::background::HoldKind> {
+    let path = paths::held_path()?;
+    if !path.exists() {
+        return None;
+    }
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    Some(super::background::HoldKind::of(&text))
+}
+
+/// Held down as `kind`, for the reason `why`.
+pub fn hold(kind: super::background::HoldKind, why: &str) -> Result<(), String> {
+    hold_as(&kind.text(why))
+}
+
 pub fn hold_as(reason: &str) -> Result<(), String> {
     let path = paths::held_path().ok_or("could not find this account's home folder.")?;
     if let Some(parent) = path.parent() {

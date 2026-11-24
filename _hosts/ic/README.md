@@ -648,7 +648,8 @@ flowchart LR
   `%USERPROFILE%\.intentic\engine\bin\` and `docker-buildx.exe` into `%USERPROFILE%\.docker\cli-plugins\` (unless the
   CLI already finds one there or in Docker Desktop's plugin folder: the static zip has none, and Docker 29's `docker
   build` refuses to run without it; an engine installed before that gets it before its next image build), writes `%USERPROFILE%\.intentic\engine\engine.json`, registers
-  `HKCU\…\Run\IntenticEngine` to run `ic engine start --quiet` at sign-in, and starts a hidden keeper
+  `HKCU\…\Run\IntenticEngine` to run `ic engine start --quiet` at sign-in (while `ic engine mode` is `always` and the
+  app does not start at sign-in itself, below), and starts a hidden keeper
   (`wsl.exe -d intentic-engine --exec /usr/local/bin/intentic-engine <port>`). Nothing of either is a window
   (2026-10-13): the keeper gets a console of its own with no window rather than none, since the Store WSL's `wsl.exe`
   that System32's hands it to was given a new console by Windows, which Windows Terminal showed as a tab running the
@@ -708,6 +709,19 @@ flowchart LR
   - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
     the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
     `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.
+  - **When it runs (2026-11-24).** `ic engine mode always|when-open|off` (`~/.intentic/engine/background.json`, the
+    desktop app's This computer and tray set the same file): `always` starts at sign-in, `when-open` runs only while the
+    Intentic app is open, `off` runs nothing until turned on. A person's laptop kept starting `VmmemWSL` at every
+    sign-in after its owner "turned Intentic off": the app's tray row only switched the app's own start, and the
+    engine's `IntenticEngine` Run value ran regardless. A PC that never chose keeps what it did (`always` while a sign-in
+    start is registered, `when-open` once somebody removed it), and an install writes `always`. The hold carries the
+    setting out, its first word saying which kind it is: `off:` (the setting), `closed:` (the app quit, or WSL was shut
+    down under an app in `when-open`; the app's next `ic engine start --quiet --app` lifts it), anything else a person's
+    own stop. `ic sandbox fix` says each as what it is, with where to change it, never as a fault. The engine's own
+    Run value is kept only while `always` wants it and the app does not start at sign-in itself (the app starts the
+    engine then, so Startup apps lists one Intentic, not an Intentic and a "Console Window Host"); choosing `always`
+    switches a value the person had turned off in Startup apps back on. `ic engine status --json` says `mode`, `hold`
+    and `signIn` (`by`: `app`, `engine` or `none`; `disabledInWindows`). Code: [src/engine/background.rs](src/engine/background.rs).
   - **A VHDX WSL cannot reattach.** If Windows ran out of drive space under the engine disk, WSL can keep a broken
     attachment after `ic engine start` or a plain `ic engine restart`. They try the ordinary start first and report
     when guest errors match the disk failure. `ic engine restart --wsl` then consents to `wsl --shutdown` and starts

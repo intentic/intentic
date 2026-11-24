@@ -237,6 +237,9 @@ pub struct Project {
 /// The file earlier versions kept the folders in (2026-10-20: the agent's pairings are the one record, bindings.rs).
 const RETIRED_PROJECTS: &str = "projects.json";
 
+/// Whether the first quit's word about the sandboxes here was said (engine_keeper.rs `quit_question`).
+const QUIT_ENGINE_TOLD: &str = "quit-engine-told.json";
+
 pub struct AppState {
     config_dir: PathBuf,
     pub settings: Mutex<Settings>,
@@ -264,6 +267,9 @@ pub struct AppState {
     /// Whether this install has ever shown the workspace: the older half of [`AppState::account_seen`]. It no longer
     /// decides what a launch opens (see [`face_or_first`]).
     workspace_seen: Mutex<bool>,
+    /// Whether a quit has said, once, what quitting does to the sandboxes on this computer (engine_keeper.rs
+    /// `quit_question`).
+    quit_engine_told: Mutex<bool>,
     /// The face a launch and the tray's "Open Intentic" open onto (lib.rs `opening`).
     last_face: Mutex<Face>,
     /// Whether a sign-in has ever completed here (`intentic://auth`, auth.rs). What earns the tray its "Open
@@ -330,6 +336,7 @@ impl AppState {
         let ui_look = read_json(&config_dir.join("ui-look.json"));
         let hosts_sandboxes = read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false);
         let workspace_seen = read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false);
+        let quit_engine_told = read_json(&config_dir.join(QUIT_ENGINE_TOLD)).unwrap_or(false);
         let last_face = face_or_first(read_json(&config_dir.join("last-face.json")));
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         let home_folder = read_json(&config_dir.join("home-folder.json"));
@@ -353,6 +360,7 @@ impl AppState {
             ui_look: Mutex::new(ui_look),
             hosts_sandboxes: Mutex::new(hosts_sandboxes),
             workspace_seen: Mutex::new(workspace_seen),
+            quit_engine_told: Mutex::new(quit_engine_told),
             last_face: Mutex::new(last_face),
             account_seen: Mutex::new(account_seen),
             lists: Mutex::new(()),
@@ -406,6 +414,20 @@ impl AppState {
         }
         *held = true;
         write_json(&self.config_dir.join("workspace-seen.json"), &true);
+    }
+
+    pub fn quit_engine_told(&self) -> bool {
+        *self.quit_engine_told.lock().unwrap()
+    }
+
+    /// Written the first time a quit says what it does to the sandboxes here, and never unwritten.
+    pub fn remember_quit_engine_told(&self) {
+        let mut held = self.quit_engine_told.lock().unwrap();
+        if *held {
+            return;
+        }
+        *held = true;
+        write_json(&self.config_dir.join(QUIT_ENGINE_TOLD), &true);
     }
 
     /* THE FACE THE USER WAS LAST USING, and whether they have an account to go back to. */
@@ -822,6 +844,7 @@ mod tests {
             workspace_seen: Mutex::new(
                 read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
             ),
+            quit_engine_told: Mutex::new(read_json(&config_dir.join(QUIT_ENGINE_TOLD)).unwrap_or(false)),
             last_face: Mutex::new(face_or_first(read_json(&config_dir.join("last-face.json")))),
             account_seen: Mutex::new(
                 read_json(&config_dir.join("account-seen.json")).unwrap_or(false),

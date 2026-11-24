@@ -25,6 +25,17 @@ export interface EngineMoves {
     readonly leftBehind: readonly EngineLeftBehind[];
 }
 
+/** When Intentic's engine runs (ic's engine/background.rs `Mode`): from sign-in on, while the app is open, or not at all. */
+export type EngineMode = `always` | `whenOpen` | `off`;
+/** Why Intentic's engine is held down (background.rs `HoldKind`): a person's Stop, the Off setting, or the app closed. */
+export type EngineHold = `stopped` | `off` | `closed`;
+
+/** What starts the engine at sign-in, and whether the person switched that start off in Windows' Startup apps. */
+export interface EngineSignIn {
+    readonly by: `app` | `engine` | `none`;
+    readonly disabledInWindows: boolean;
+}
+
 /** `ic engine status --json` (its engine/commands.rs `status_json`), as ic printed it. */
 export interface EngineStatus {
     /** What the sandboxes run on now. */
@@ -52,6 +63,15 @@ export interface EngineStatus {
     readonly offerMove: boolean;
     /** Absent from an ic before moves. */
     readonly moves?: EngineMoves | null;
+    /** When it runs: null on a PC without Intentic's engine, absent from an ic before the setting. */
+    readonly mode?: EngineMode | null;
+    /** Why it is held down, when it is. */
+    readonly hold?: EngineHold | null;
+    readonly signIn?: EngineSignIn | null;
+    /** Added by the app (engine.rs): the memory the whole WSL VM holds now (VmmemWSL); null when unknown or not running. */
+    readonly wslMemoryBytes?: number | null;
+    /** Added by the app: the person's own WSL distros running now, which keep VmmemWSL up with our engine stopped. */
+    readonly otherDistros?: readonly string[];
 }
 
 /** How a move ended (engine.rs `MoveEnd`). */
@@ -86,5 +106,20 @@ export const engineMove = (to: MoveTarget): Promise<EngineMoveEnd> => invoke(`en
 export const enginePrefer = (engine: MoveTarget): Promise<void> => invoke(`engine_prefer`, { engine });
 /** Remove the copies moves left behind now, rather than once their days are up. */
 export const engineCleanup = (): Promise<void> => invoke(`engine_cleanup`);
+/** When the engine runs from now on (`ic engine mode`), and the app's own start at sign-in switched to match. */
+export const engineModeSet = (mode: EngineMode): Promise<void> => invoke(`engine_mode_set`, { mode });
+/** Stop the engine now and keep it stopped until a start (`ic engine stop`). */
+export const engineStopNow = (): Promise<void> => invoke(`engine_stop_now`);
+/** Start the engine now, lifting any hold (`ic engine start`). */
+export const engineStartNow = (): Promise<void> => invoke(`engine_start_now`);
+/** What the app says with it (engine_keeper.rs `BackgroundPing`): `starting` while the app starts the engine itself. */
+export interface EngineBackgroundPing {
+    readonly starting?: boolean;
+}
+
+/** The setting or the engine's running changed outside this page (the tray, the keeper seeing WSL shut down, the app
+ *  starting the engine itself). */
+export const onEngineBackground = (handler: (ping: EngineBackgroundPing) => void): Promise<UnlistenFn> =>
+    listen<EngineBackgroundPing | null>(`desktop://engine-background`, (event) => handler(event.payload ?? {}));
 export const onEngineMove = (handler: (event: EngineMoveEvent) => void): Promise<UnlistenFn> =>
     listen<EngineMoveEvent>(`desktop://engine-move`, (event) => handler(event.payload));

@@ -287,6 +287,70 @@
         },
         "movingBadge": "moving sandboxes"
     },
+    "background": {
+        "title": "Runs in the background",
+        "about": "About running in the background",
+        "info": {
+            "headline": "Intentic's engine runs the sandboxes on this computer, inside WSL. This is where you choose when it runs.",
+            "vmmem": "Task Manager shows the memory WSL holds as VmmemWSL.",
+            "stop": "“Stop now” keeps it stopped until you start it again, whatever “Keep running” says.",
+            "tray": "The same setting is in the tray menu."
+        },
+        "keepRunning": "Keep running",
+        "mode": {
+            "always": "Always",
+            "whenOpen": "When Intentic is open",
+            "off": "Off"
+        },
+        "meaning": {
+            "always": "Starts when you sign in, so sandboxes here stay reachable from the browser and your phone.",
+            "whenOpen": "Starts with Intentic and stops when you quit it.",
+            "off": "Nothing runs, even when Intentic is open, until you turn it back on."
+        },
+        "lead": {
+            "always": "Starts when you sign in to Windows.",
+            "whenOpen": "Starts with Intentic and stops when you quit it.",
+            "off": "Nothing runs, even when Intentic is open."
+        },
+        "reach": {
+            "always": "Sandboxes here stay reachable from the browser and your phone.",
+            "whenOpen": "While it's closed, sandboxes here can't be reached.",
+            "off": "Sandboxes here can't be reached."
+        },
+        "reachCount": {
+            "always": "{count} sandbox here stays reachable from the browser and your phone. | {count} sandboxes here stay reachable from the browser and your phone.",
+            "whenOpen": "While it's closed, {count} sandbox here can't be reached. | While it's closed, {count} sandboxes here can't be reached.",
+            "off": "{count} sandbox here can't be reached. | {count} sandboxes here can't be reached."
+        },
+        "changing": "Changing…",
+        "didntChange": "It didn't change: {reason}",
+        "now": {
+            "label": "Now",
+            "running": "Running",
+            "sandboxes": "{count} sandbox | {count} sandboxes",
+            "noSandboxes": "no sandboxes",
+            "starting": "Starting…",
+            "stopping": "Stopping…",
+            "down": "Not running",
+            "held": {
+                "stopped": "Stopped by you",
+                "off": "Off",
+                "closed": "Stopped until you open Intentic"
+            },
+            "memoryTitle": "WSL's memory",
+            "memoryNote": "VmmemWSL in Task Manager",
+            "othersKeep": "WSL keeps running for {names}, so its memory stays in use.",
+            "othersHold": "WSL keeps running for {names} and still holds {size}."
+        },
+        "stopNow": "Stop now",
+        "start": "Start",
+        "didnt": {
+            "stop": "It didn't stop: {reason}",
+            "start": "It didn't start: {reason}"
+        },
+        "startupOff": "Intentic is switched off in Windows' Startup apps, so it won't start when you sign in.",
+        "switchBackOn": "Switch back on"
+    },
     "os": {
         "title": "This system",
         "version": "Intentic OS {version}",

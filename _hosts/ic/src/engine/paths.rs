@@ -12,6 +12,16 @@ pub fn held_path() -> Option<PathBuf> {
     home().map(|home| home.join(".intentic").join("engine").join("held"))
 }
 
+/// `%USERPROFILE%\.intentic\engine\background.json` — when the engine runs: always, while the app is open, or never
+/// (background.rs).
+pub fn background_path() -> Option<PathBuf> {
+    home().map(|home| {
+        home.join(".intentic")
+            .join("engine")
+            .join("background.json")
+    })
+}
+
 /// `%USERPROFILE%\.intentic\engine\preference.json` — the engine the person chose in the app (`ic engine prefer`).
 pub fn preference_path() -> Option<PathBuf> {
     home().map(|home| {

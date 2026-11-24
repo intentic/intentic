@@ -68,6 +68,7 @@ fn quit_cancelled() {
     QUITTING.store(false, Ordering::SeqCst);
     RUNS_ANSWERED.store(false, Ordering::SeqCst);
     AGENTS_ANSWERED.store(false, Ordering::SeqCst);
+    ENGINE_ANSWERED.store(false, Ordering::SeqCst);
     QUIT_WAIT.lock().unwrap().cancel();
 }
 
@@ -84,7 +85,9 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
     }
     let count = unsaved_windows();
     if count == 0 {
-        return hold_quit_for_agents(app, code) || hold_quit_for_runs(app, code);
+        return hold_quit_for_agents(app, code)
+            || hold_quit_for_runs(app, code)
+            || hold_quit_for_engine(app, code);
     }
     if ASKING_QUIT.swap(true, Ordering::SeqCst) {
         return true;
@@ -106,6 +109,71 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
             } else {
                 quit_cancelled();
             }
+        });
+    true
+}
+
+/// Set once the engine question is answered: the exit that follows is not asked about it again.
+static ENGINE_ANSWERED: AtomicBool = AtomicBool::new(false);
+
+/// The first quit while Intentic's engine runs says what quitting does to the sandboxes on this computer, by the
+/// background setting (engine_keeper.rs `quit_question`), with the other way at hand for this once: keep them running,
+/// or stop them too. Asked once ever; after that a quit does what the setting says. `true` means the exit was held for
+/// the answer. (2026-11-24)
+fn hold_quit_for_engine(app: &AppHandle, code: i32) -> bool {
+    use crate::state::AppState;
+    use tauri::Manager;
+    if !cfg!(windows) || ENGINE_ANSWERED.load(Ordering::SeqCst) {
+        return false;
+    }
+    if app.state::<AppState>().quit_engine_told() || !crate::engine_keeper::ours() {
+        return false;
+    }
+    let mode = crate::scripts::engine_mode();
+    let running = crate::scripts::engine_hold_kind().is_none() && crate::scripts::our_engine_listening();
+    let Some((title, message, own, other)) =
+        crate::engine_keeper::quit_question(mode.as_deref(), running)
+    else {
+        return false;
+    };
+    if ASKING_QUIT.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    let handle = app.clone();
+    let other_stops = crate::engine_keeper::other_way_stops(mode.as_deref());
+    let (own, other) = (own.to_string(), other.to_string());
+    app.dialog()
+        .message(message)
+        .title(title)
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            own.clone(),
+            other.clone(),
+            "Cancel".into(),
+        ))
+        .show_with_result(move |answer| {
+            ASKING_QUIT.store(false, Ordering::SeqCst);
+            use tauri_plugin_dialog::MessageDialogResult;
+            let chose_other = match answer {
+                MessageDialogResult::Yes => false,
+                MessageDialogResult::Custom(said) if said == own => false,
+                MessageDialogResult::No => true,
+                MessageDialogResult::Custom(said) if said == other => true,
+                _ => {
+                    quit_cancelled();
+                    return;
+                }
+            };
+            if chose_other {
+                if other_stops {
+                    crate::engine_keeper::quit_stops_engine();
+                } else {
+                    crate::engine_keeper::quit_keeps_engine();
+                }
+            }
+            handle.state::<AppState>().remember_quit_engine_told();
+            ENGINE_ANSWERED.store(true, Ordering::SeqCst);
+            handle.exit(code);
         });
     true
 }

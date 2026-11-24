@@ -134,6 +134,10 @@ const COMMANDS: &[&str] = &[
     "engine_move",
     "engine_prefer",
     "engine_cleanup",
+    // When the engine runs, and Stop or Start now (engine.rs).
+    "engine_mode_set",
+    "engine_stop_now",
+    "engine_start_now",
     // Intentic OS: this computer's system, and the changes This device makes to it (os.rs).
     "os_status",
     "os_update_check",

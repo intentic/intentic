@@ -827,7 +827,7 @@ fn engine_down(
     if facts.os == Os::Windows
         && crate::engine::EngineRecord::load().is_some_and(|record| record.is_active())
     {
-        return intentic_engine_down(engine, crate::engine::held(), tried);
+        return intentic_engine_down(engine, crate::engine::hold_kind(), tried);
     }
     if matches!(engine, Engine::Silent) {
         return Check::fail(
@@ -864,10 +864,16 @@ fn engine_down(
     )
 }
 
-/// Our WSL engine, which this PC's sandboxes run on, does not answer. Down: started (by itself, unless a person stopped
-/// it on purpose). Up and not answering: restarted, with a yes, since every sandbox restarts with it. Either way, WSL
+/// Our WSL engine, which this PC's sandboxes run on, does not answer. Down: started (by itself, unless it is held: a
+/// person stopped it, the background setting is Off, or it waits for the app to open, each said as what it is rather
+/// than as a fault). Up and not answering: restarted, with a yes, since every sandbox restarts with it. Either way, WSL
 /// itself restarted next, and after that the person. Pure.
-pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair) -> bool) -> Check {
+pub fn intentic_engine_down(
+    engine: &Engine,
+    hold: Option<crate::engine::background::HoldKind>,
+    tried: &dyn Fn(&Repair) -> bool,
+) -> Check {
+    use crate::engine::background::HoldKind;
     if matches!(engine, Engine::Erroring(reason) if crate::engine::wsl_errors::broken_disk_attachment(reason))
         && !tried(&Repair::ShutdownWsl)
     {
@@ -879,13 +885,22 @@ pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair)
         );
     }
     let stuck = matches!(engine, Engine::Silent | Engine::Erroring(_));
-    if held && !stuck {
-        return Check::fail(
-            DOCKER,
-            "The intentic engine was stopped on purpose (ic engine stop), and your sandboxes run on it.",
-            "start it again: ic engine start",
-            Fix::You,
-        );
+    if let (Some(kind), false) = (hold, stuck) {
+        let (problem, remedy) = match kind {
+            HoldKind::Stopped => (
+                "The intentic engine was stopped on purpose (ic engine stop), and your sandboxes run on it.",
+                "start it again: ic engine start",
+            ),
+            HoldKind::Off => (
+                "Intentic is set to Off on this computer, so the engine your sandboxes run on is stopped.",
+                "turn it on in the Intentic app (This computer, Runs in the background), or run: ic engine mode always",
+            ),
+            HoldKind::Closed => (
+                "Intentic runs on this computer only while its app is open, and the app is closed.",
+                "open Intentic on this computer, or start it now: ic engine start",
+            ),
+        };
+        return Check::fail(DOCKER, problem, remedy, Fix::You);
     }
     let (problem, first) = if stuck {
         (
@@ -1298,15 +1313,15 @@ mod tests {
     #[test]
     fn our_engine_down_is_started_unasked_then_wsl_then_a_person() {
         let down = Engine::Down("cannot connect".to_string());
-        let first = intentic_engine_down(&down, false, &never);
+        let first = intentic_engine_down(&down, None, &never);
         assert_eq!(repair_of(&first), Some(Repair::StartIntenticEngine));
         assert_eq!(first.who(), Some(Who::Auto));
         let started = |r: &Repair| *r == Repair::StartIntenticEngine;
-        let second = intentic_engine_down(&down, false, &started);
+        let second = intentic_engine_down(&down, None, &started);
         assert_eq!(repair_of(&second), Some(Repair::ShutdownWsl));
         assert_eq!(second.who(), Some(Who::Consent));
         assert_eq!(
-            intentic_engine_down(&down, false, &always).who(),
+            intentic_engine_down(&down, None, &always).who(),
             Some(Who::You)
         );
     }
@@ -1316,7 +1331,7 @@ mod tests {
         let engine = Engine::Erroring(
             "Wsl/Service/CreateInstance/E_FAIL while /dev/sdd cannot be opened".to_string(),
         );
-        let check = intentic_engine_down(&engine, false, &never);
+        let check = intentic_engine_down(&engine, None, &never);
         assert_eq!(repair_of(&check), Some(Repair::ShutdownWsl));
         assert_eq!(check.who(), Some(Who::Consent));
         assert!(check
@@ -1328,22 +1343,36 @@ mod tests {
 
     #[test]
     fn our_engine_up_and_silent_is_restarted_only_with_a_yes() {
-        let first = intentic_engine_down(&Engine::Silent, false, &never);
+        let first = intentic_engine_down(&Engine::Silent, None, &never);
         assert_eq!(repair_of(&first), Some(Repair::RestartIntenticEngine));
         assert_eq!(first.who(), Some(Who::Consent));
         // A hold is about a stopped engine; one that is up and stuck is still put right.
-        let held = intentic_engine_down(&Engine::Silent, true, &never);
+        let held = intentic_engine_down(
+            &Engine::Silent,
+            Some(crate::engine::background::HoldKind::Stopped),
+            &never,
+        );
         assert_eq!(repair_of(&held), Some(Repair::RestartIntenticEngine));
     }
 
     #[test]
     fn our_engine_stopped_on_purpose_is_left_to_the_person_who_stopped_it() {
-        let held = intentic_engine_down(&Engine::Down("cannot connect".to_string()), true, &never);
+        use crate::engine::background::HoldKind;
+        let down = Engine::Down("cannot connect".to_string());
+        let held = intentic_engine_down(&down, Some(HoldKind::Stopped), &never);
         assert_eq!(held.who(), Some(Who::You));
         assert!(held
             .remedy
             .as_deref()
             .is_some_and(|r| r.contains("ic engine start")));
+        // The background setting is said as a setting, with where to change it, never as a fault to repair.
+        let off = intentic_engine_down(&down, Some(HoldKind::Off), &never);
+        assert_eq!(off.who(), Some(Who::You));
+        assert!(off.problem.as_deref().is_some_and(|p| p.contains("set to Off")));
+        assert!(off.remedy.as_deref().is_some_and(|r| r.contains("ic engine mode always")));
+        let closed = intentic_engine_down(&down, Some(HoldKind::Closed), &never);
+        assert_eq!(closed.who(), Some(Who::You));
+        assert!(closed.problem.as_deref().is_some_and(|p| p.contains("app is closed")));
     }
 
     #[test]

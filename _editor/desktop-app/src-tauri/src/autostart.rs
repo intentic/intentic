@@ -118,12 +118,12 @@ fn entry_starts(contents: &str) -> bool {
 
 /// Whether the system will start this app at the next sign-in. BLOCKING on Windows for one `reg.exe`.
 #[cfg(windows)]
-fn starts_at_login() -> bool {
+pub(crate) fn starts_at_login() -> bool {
     crate::resume::reg(&reg_args(RegVerb::Query)).is_ok()
 }
 
 #[cfg(windows)]
-fn set_start_at_login(on: bool) -> Result<(), String> {
+pub(crate) fn set_start_at_login(on: bool) -> Result<(), String> {
     if !on {
         return crate::resume::reg(&reg_args(RegVerb::Delete));
     }
@@ -140,14 +140,14 @@ fn linux_entry_path() -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
-fn starts_at_login() -> bool {
+pub(crate) fn starts_at_login() -> bool {
     linux_entry_path()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .is_some_and(|contents| entry_starts(&contents))
 }
 
 #[cfg(target_os = "linux")]
-fn set_start_at_login(on: bool) -> Result<(), String> {
+pub(crate) fn set_start_at_login(on: bool) -> Result<(), String> {
     let path = linux_entry_path().ok_or("no home folder to keep an autostart entry in")?;
     if !on {
         return match std::fs::remove_file(&path) {
@@ -172,12 +172,12 @@ fn set_start_at_login(on: bool) -> Result<(), String> {
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-fn starts_at_login() -> bool {
+pub(crate) fn starts_at_login() -> bool {
     false
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-fn set_start_at_login(_on: bool) -> Result<(), String> {
+pub(crate) fn set_start_at_login(_on: bool) -> Result<(), String> {
     Err("starting at login is not offered here".to_string())
 }
 

@@ -287,6 +287,70 @@
         },
         "movingBadge": "Sandboxes werden verschoben"
     },
+    "background": {
+        "title": "Läuft im Hintergrund",
+        "about": "Über den Betrieb im Hintergrund",
+        "info": {
+            "headline": "Die Intentic-Engine führt die Sandboxes auf diesem Computer in WSL aus. Hier legen Sie fest, wann sie läuft.",
+            "vmmem": "Der Task-Manager zeigt den Arbeitsspeicher von WSL als VmmemWSL.",
+            "stop": "„Jetzt stoppen“ hält sie gestoppt, bis Sie sie wieder starten, egal was bei „Weiterlaufen“ steht.",
+            "tray": "Dieselbe Einstellung finden Sie im Menü im Infobereich."
+        },
+        "keepRunning": "Weiterlaufen",
+        "mode": {
+            "always": "Immer",
+            "whenOpen": "Wenn Intentic geöffnet ist",
+            "off": "Aus"
+        },
+        "meaning": {
+            "always": "Startet bei der Anmeldung, damit die Sandboxes hier im Browser und auf Ihrem Telefon erreichbar bleiben.",
+            "whenOpen": "Startet mit Intentic und stoppt, wenn Sie es beenden.",
+            "off": "Nichts läuft, auch nicht bei geöffnetem Intentic, bis Sie es wieder einschalten."
+        },
+        "lead": {
+            "always": "Startet bei der Anmeldung bei Windows.",
+            "whenOpen": "Startet mit Intentic und stoppt, wenn Sie es beenden.",
+            "off": "Nichts läuft, auch nicht bei geöffnetem Intentic."
+        },
+        "reach": {
+            "always": "Die Sandboxes hier bleiben im Browser und auf Ihrem Telefon erreichbar.",
+            "whenOpen": "Solange es geschlossen ist, sind die Sandboxes hier nicht erreichbar.",
+            "off": "Die Sandboxes hier sind nicht erreichbar."
+        },
+        "reachCount": {
+            "always": "{count} Sandbox hier bleibt im Browser und auf Ihrem Telefon erreichbar. | {count} Sandboxes hier bleiben im Browser und auf Ihrem Telefon erreichbar.",
+            "whenOpen": "Solange es geschlossen ist, ist {count} Sandbox hier nicht erreichbar. | Solange es geschlossen ist, sind {count} Sandboxes hier nicht erreichbar.",
+            "off": "{count} Sandbox hier ist nicht erreichbar. | {count} Sandboxes hier sind nicht erreichbar."
+        },
+        "changing": "Wird geändert…",
+        "didntChange": "Nicht geändert: {reason}",
+        "now": {
+            "label": "Jetzt",
+            "running": "Läuft",
+            "sandboxes": "{count} Sandbox | {count} Sandboxes",
+            "noSandboxes": "keine Sandboxes",
+            "starting": "Wird gestartet…",
+            "stopping": "Wird gestoppt…",
+            "down": "Läuft nicht",
+            "held": {
+                "stopped": "Von Ihnen gestoppt",
+                "off": "Aus",
+                "closed": "Gestoppt, bis Sie Intentic öffnen"
+            },
+            "memoryTitle": "Speicher von WSL",
+            "memoryNote": "VmmemWSL im Task-Manager",
+            "othersKeep": "WSL läuft weiter für {names}, daher bleibt sein Arbeitsspeicher belegt.",
+            "othersHold": "WSL läuft weiter für {names} und belegt noch {size}."
+        },
+        "stopNow": "Jetzt stoppen",
+        "start": "Starten",
+        "didnt": {
+            "stop": "Nicht gestoppt: {reason}",
+            "start": "Nicht gestartet: {reason}"
+        },
+        "startupOff": "Intentic ist in den Autostart-Apps von Windows ausgeschaltet und startet daher nicht bei der Anmeldung.",
+        "switchBackOn": "Wieder einschalten"
+    },
     "os": {
         "title": "Dieses System",
         "version": "Intentic OS {version}",

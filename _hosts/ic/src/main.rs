@@ -481,11 +481,28 @@ enum EngineCommand {
     Install,
     /// Start the engine and wait until it answers
     Start {
+        /// A background start (sign-in, the app): follows `ic engine mode` and leaves a held engine alone
         #[arg(long)]
         quiet: bool,
+        /// With --quiet: the desktop app asks, open on this PC (starts it in when-open mode, lifts its own quit's hold)
+        #[arg(long, requires = "quiet", hide = true)]
+        app: bool,
     },
     /// Stop the engine and keep it stopped until `ic engine start` (nothing restarts it by itself meanwhile)
-    Stop,
+    Stop {
+        /// Down until the desktop app's next start (what the app does as it quits): not for people to run
+        #[arg(long = "until-app-opens", hide = true)]
+        until_app_opens: bool,
+    },
+    /// When the engine runs: `always` (from sign-in), `when-open` (while the Intentic app is open) or `off`.
+    /// Without a mode, says which one it is
+    Mode {
+        /// always, when-open or off
+        mode: Option<String>,
+        /// One line of JSON (the desktop app reads this)
+        #[arg(long)]
+        json: bool,
+    },
     /// Stop the engine without removing it (same as stop today)
     Hold,
     /// Stop the engine and start it again: for one that is up and does not answer
@@ -1703,8 +1720,12 @@ fn execute(mut cli: Cli) -> i32 {
                 json,
             }),
             Some(EngineCommand::Install) => engine::run_install(),
-            Some(EngineCommand::Start { quiet }) => engine::run_start(quiet),
-            Some(EngineCommand::Stop) => engine::run_stop(),
+            Some(EngineCommand::Start { quiet, app }) => engine::run_start(quiet, app),
+            Some(EngineCommand::Stop {
+                until_app_opens: true,
+            }) => engine::run_stop_until_app_opens(),
+            Some(EngineCommand::Stop { .. }) => engine::run_stop(),
+            Some(EngineCommand::Mode { mode, json }) => engine::run_mode(mode.as_deref(), json),
             Some(EngineCommand::Hold) => engine::run_hold(),
             Some(EngineCommand::Restart { wsl }) => engine::run_restart(wsl),
             Some(EngineCommand::Move { abort: true, .. }) => engine::moves::abort(),
@@ -1871,6 +1892,7 @@ fn allowed_during_a_move(command: &Command) -> bool {
         Command::Engine { command } => matches!(
             command,
             None | Some(EngineCommand::Status { .. })
+                | Some(EngineCommand::Mode { mode: None, .. })
                 | Some(EngineCommand::Fetch)
                 | Some(EngineCommand::Disk { relieve: false, .. })
         ),

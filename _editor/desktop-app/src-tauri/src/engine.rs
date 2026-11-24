@@ -38,6 +38,9 @@ const PREFER_LIMIT: Duration = Duration::from_secs(60);
 /// `ic engine cleanup --now` may start Intentic's engine to remove what it keeps, then removes a few things per copy.
 const CLEANUP_LIMIT: Duration = Duration::from_secs(600);
 
+/// How long a stop may take: the relay, then `wsl --terminate`.
+const STOP_LIMIT: Duration = Duration::from_secs(60);
+
 /// A move this app started (the card's or Repair's) is running. ic refuses a second move only once the first has written
 /// its journal, which is minutes in when Intentic's engine is installed first, so this app holds one at a time itself.
 static MOVING: AtomicBool = AtomicBool::new(false);
@@ -279,7 +282,10 @@ pub async fn engine_status() -> Option<Value> {
         return None;
     }
     tauri::async_runtime::spawn_blocking(|| match read_status() {
-        Ok(status) => Some(status),
+        Ok(mut status) => {
+            with_wsl_readings(&mut status);
+            Some(status)
+        }
         Err(problem) => {
             eprintln!("intentic: the engine's status could not be read: {problem}");
             None
@@ -288,6 +294,170 @@ pub async fn engine_status() -> Option<Value> {
     .await
     .ok()
     .flatten()
+}
+
+/* WHAT WSL HOLDS, for This computer's "Runs in the background" (2026-11-24). VmmemWSL is the whole WSL VM, not our
+ * engine: a person who stops the engine while a distro of their own runs still sees it in Task Manager, and would read
+ * that as Intentic still running. So the page is told both: the memory the VM holds now, and which of the person's own
+ * distros keep it up. */
+
+/// The status with `wslMemoryBytes` (the VM's working set now, null when it is not running or cannot be read) and
+/// `otherDistros` (running distros that are neither ours nor Docker Desktop's).
+fn with_wsl_readings(status: &mut Value) {
+    let Some(object) = status.as_object_mut() else {
+        return;
+    };
+    let ours = scripts::engine_distro();
+    let others: Vec<String> = running_distro_names()
+        .into_iter()
+        .filter(|name| !is_engine_distro(name, &ours))
+        .collect();
+    object.insert("otherDistros".into(), Value::from(others));
+    object.insert(
+        "wslMemoryBytes".into(),
+        wsl_memory_bytes().map_or(Value::Null, Value::from),
+    );
+}
+
+/// Pure: a distro that is an engine's rather than the person's: ours (and a test engine beside it), Docker Desktop's.
+fn is_engine_distro(name: &str, ours: &str) -> bool {
+    name == ours || name.starts_with("intentic-engine") || name.starts_with("docker-desktop")
+}
+
+#[cfg(windows)]
+fn running_distro_names() -> Vec<String> {
+    crate::found::running_distros()
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn running_distro_names() -> Vec<String> {
+    Vec::new()
+}
+
+/// The WSL VM's memory now, as `tasklist` reads its process (`vmmemWSL` on a Store WSL, `vmmem` before it).
+fn wsl_memory_bytes() -> Option<u64> {
+    ["vmmemWSL", "vmmem"].iter().find_map(|image| {
+        let mut command = Command::new("tasklist.exe");
+        command.args([
+            "/FI",
+            &format!("IMAGENAME eq {image}"),
+            "/FO",
+            "CSV",
+            "/NH",
+        ]);
+        intentic_bounded::no_window(&mut command);
+        let ran = scripts::capture("tasklist", command, Duration::from_secs(10)).ok()?;
+        tasklist_memory(&ran.stdout, image)
+    })
+}
+
+/// Pure: the memory `tasklist /FO CSV /NH` prints for `image`, in bytes: its last field, kilobytes written with the
+/// locale's own grouping (`"6,123,456 K"`, `"6 123 456 K"` with a no-break space in Polish), so only its digits count.
+fn tasklist_memory(stdout: &str, image: &str) -> Option<u64> {
+    stdout.lines().find_map(|line| {
+        let fields: Vec<&str> = line.split("\",\"").collect();
+        let name = fields.first()?.trim().trim_matches('"');
+        if !name.eq_ignore_ascii_case(&format!("{image}.exe")) && !name.eq_ignore_ascii_case(image) {
+            return None;
+        }
+        let digits: String = fields
+            .last()?
+            .chars()
+            .filter(char::is_ascii_digit)
+            .collect();
+        digits.parse::<u64>().ok().map(|kilobytes| kilobytes * 1024)
+    })
+}
+
+/// How long a mode change may take: `always` starts the engine, which can boot WSL's VM.
+const MODE_LIMIT: Duration = Duration::from_secs(180);
+
+/// `ic engine mode <mode>`, and the app's own start at sign-in made to match it: on for `always` (so the tray, the
+/// handle on what runs, is there whenever the engine is; ic then drops the engine's own sign-in entry, since this app
+/// starts it), off otherwise. For `always` the app's entry goes in first, so ic sees it when it decides about its own.
+/// `whenOpen` starts the engine now, since this app is open. Then the tray says the new setting.
+#[tauri::command]
+pub async fn engine_mode_set(app: AppHandle, mode: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || set_mode_blocking(&mode))
+        .await
+        .map_err(|error| error.to_string())??;
+    crate::engine_keeper::tell_background(&app);
+    Ok(())
+}
+
+/// [`engine_mode_set`]'s work, which the tray's rows share. BLOCKING, up to minutes for `always`'s start.
+pub(crate) fn set_mode_blocking(mode: &str) -> Result<(), String> {
+    let word = match mode {
+        "always" => "always",
+        "whenOpen" => "when-open",
+        "off" => "off",
+        other => return Err(format!("{other} is not a mode: always, whenOpen or off.")),
+    };
+    if Host::current() != Host::Windows {
+        return Err(
+            "when the engine runs is set on Windows, where Intentic runs its own engine.".to_string(),
+        );
+    }
+    if word == "always" {
+        crate::autostart::set_start_at_login(true)?;
+    }
+    let answer = ic_engine(&["mode", word], MODE_LIMIT)?;
+    if !answer.success {
+        return Err(last_words(&answer.stdout, &answer.stderr, "ic engine mode"));
+    }
+    if word != "always" {
+        crate::autostart::set_start_at_login(false)?;
+    }
+    if word == "when-open" {
+        scripts::start_our_engine_for_app(crate::engine_keeper::START_LIMIT)
+            .map_err(|failure| failure.said)?;
+    }
+    Ok(())
+}
+
+/// Stop now: `ic engine stop`, which holds it down until somebody starts it, whatever the setting.
+#[tauri::command]
+pub async fn engine_stop_now(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(stop_now_blocking)
+        .await
+        .map_err(|error| error.to_string())??;
+    crate::engine_keeper::tell_background(&app);
+    Ok(())
+}
+
+pub(crate) fn stop_now_blocking() -> Result<(), String> {
+    let answer = ic_engine(&["stop"], STOP_LIMIT)?;
+    if answer.success {
+        Ok(())
+    } else {
+        Err(last_words(&answer.stdout, &answer.stderr, "ic engine stop"))
+    }
+}
+
+/// `ic engine stop --until-app-opens`: down until this app's next start (ic's background.rs `HoldKind::Closed`).
+/// BLOCKING.
+pub(crate) fn stop_until_app_opens() -> Result<(), String> {
+    let answer = ic_engine(&["stop", "--until-app-opens"], STOP_LIMIT)?;
+    if answer.success {
+        Ok(())
+    } else {
+        Err(last_words(&answer.stdout, &answer.stderr, "ic engine stop"))
+    }
+}
+
+/// Start: `ic engine start`, a person's own, which lifts any hold (the setting stays as it is).
+#[tauri::command]
+pub async fn engine_start_now(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        scripts::start_our_engine(false, crate::engine_keeper::START_LIMIT).map_err(|failure| failure.said)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    crate::engine_keeper::tell_background(&app);
+    Ok(())
 }
 
 /// A move asked for while one of this app's runs: `busy`, as ic answers for one running from anywhere else, and told to
@@ -429,6 +599,27 @@ fn progress_tick(line: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_wsl_vms_memory_is_read_off_tasklist_in_any_locale() {
+        let english = "\"vmmemWSL\",\"20480\",\"Services\",\"0\",\"6,123,456 K\"\r\n";
+        assert_eq!(tasklist_memory(english, "vmmemWSL"), Some(6_123_456 * 1024));
+        // Polish groups with a no-break space.
+        let polish = "\"vmmemWSL\",\"20480\",\"Services\",\"0\",\"6\u{a0}123\u{a0}456 K\"\r\n";
+        assert_eq!(tasklist_memory(polish, "vmmemWSL"), Some(6_123_456 * 1024));
+        // No such process: tasklist says so in a line of its own words.
+        assert_eq!(tasklist_memory("INFO: No tasks are running which match the specified criteria.\r\n", "vmmemWSL"), None);
+        assert_eq!(tasklist_memory(english, "vmmem"), None);
+    }
+
+    #[test]
+    fn the_persons_own_distros_are_told_apart_from_the_engines() {
+        assert!(is_engine_distro("intentic-engine", "intentic-engine"));
+        assert!(is_engine_distro("intentic-engine-ci", "intentic-engine"));
+        assert!(is_engine_distro("docker-desktop", "intentic-engine"));
+        assert!(!is_engine_distro("archlinux", "intentic-engine"));
+        assert!(!is_engine_distro("Ubuntu-24.04", "intentic-engine"));
+    }
 
     #[test]
     fn a_move_goes_to_one_of_two_engines_spelled_as_ics_command_line_spells_them() {

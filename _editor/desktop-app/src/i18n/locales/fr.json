@@ -287,6 +287,70 @@
         },
         "movingBadge": "déplacement des sandboxes"
     },
+    "background": {
+        "title": "Tourne en arrière-plan",
+        "about": "À propos de l'exécution en arrière-plan",
+        "info": {
+            "headline": "Le moteur d'Intentic fait tourner les sandboxes de cet ordinateur dans WSL. C'est ici que vous choisissez quand il tourne.",
+            "vmmem": "Le Gestionnaire des tâches affiche la mémoire occupée par WSL sous le nom VmmemWSL.",
+            "stop": "« Arrêter maintenant » le garde arrêté jusqu'à ce que vous le redémarriez, quel que soit le réglage « Laisser tourner ».",
+            "tray": "Le même réglage se trouve dans le menu de la zone de notification."
+        },
+        "keepRunning": "Laisser tourner",
+        "mode": {
+            "always": "Toujours",
+            "whenOpen": "Quand Intentic est ouvert",
+            "off": "Désactivé"
+        },
+        "meaning": {
+            "always": "Démarre à l'ouverture de session, pour que les sandboxes d'ici restent accessibles depuis le navigateur et votre téléphone.",
+            "whenOpen": "Démarre avec Intentic et s'arrête quand vous le quittez.",
+            "off": "Rien ne tourne, même avec Intentic ouvert, tant que vous ne le réactivez pas."
+        },
+        "lead": {
+            "always": "Démarre à l'ouverture de session Windows.",
+            "whenOpen": "Démarre avec Intentic et s'arrête quand vous le quittez.",
+            "off": "Rien ne tourne, même avec Intentic ouvert."
+        },
+        "reach": {
+            "always": "Les sandboxes d'ici restent accessibles depuis le navigateur et votre téléphone.",
+            "whenOpen": "Tant qu'il est fermé, les sandboxes d'ici sont inaccessibles.",
+            "off": "Les sandboxes d'ici sont inaccessibles."
+        },
+        "reachCount": {
+            "always": "{count} sandbox d'ici reste accessible depuis le navigateur et votre téléphone. | {count} sandboxes d'ici restent accessibles depuis le navigateur et votre téléphone.",
+            "whenOpen": "Tant qu'il est fermé, {count} sandbox d'ici est inaccessible. | Tant qu'il est fermé, {count} sandboxes d'ici sont inaccessibles.",
+            "off": "{count} sandbox d'ici est inaccessible. | {count} sandboxes d'ici sont inaccessibles."
+        },
+        "changing": "Modification…",
+        "didntChange": "Pas de changement : {reason}",
+        "now": {
+            "label": "Maintenant",
+            "running": "En marche",
+            "sandboxes": "{count} sandbox | {count} sandboxes",
+            "noSandboxes": "aucun sandbox",
+            "starting": "Démarrage…",
+            "stopping": "Arrêt…",
+            "down": "Arrêté",
+            "held": {
+                "stopped": "Arrêté par vous",
+                "off": "Désactivé",
+                "closed": "Arrêté jusqu'à l'ouverture d'Intentic"
+            },
+            "memoryTitle": "Mémoire de WSL",
+            "memoryNote": "VmmemWSL, Gestionnaire des tâches",
+            "othersKeep": "WSL continue de tourner pour {names}, donc sa mémoire reste occupée.",
+            "othersHold": "WSL continue de tourner pour {names} et occupe encore {size}."
+        },
+        "stopNow": "Arrêter maintenant",
+        "start": "Démarrer",
+        "didnt": {
+            "stop": "Ne s'est pas arrêté : {reason}",
+            "start": "N'a pas démarré : {reason}"
+        },
+        "startupOff": "Intentic est désactivé dans les Applications de démarrage de Windows, il ne démarrera donc pas à l'ouverture de session.",
+        "switchBackOn": "Le réactiver"
+    },
     "os": {
         "title": "Ce système",
         "version": "Intentic OS {version}",

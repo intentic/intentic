@@ -287,6 +287,70 @@
         },
         "movingBadge": "moviendo sandboxes"
     },
+    "background": {
+        "title": "Se ejecuta en segundo plano",
+        "about": "Sobre la ejecución en segundo plano",
+        "info": {
+            "headline": "El motor de Intentic ejecuta los sandboxes de este ordenador dentro de WSL. Aquí eliges cuándo funciona.",
+            "vmmem": "El Administrador de tareas muestra la memoria que ocupa WSL como VmmemWSL.",
+            "stop": "«Detener ahora» lo mantiene detenido hasta que lo vuelvas a iniciar, diga lo que diga «Mantener en marcha».",
+            "tray": "El mismo ajuste está en el menú del área de notificación."
+        },
+        "keepRunning": "Mantener en marcha",
+        "mode": {
+            "always": "Siempre",
+            "whenOpen": "Cuando Intentic está abierto",
+            "off": "Desactivado"
+        },
+        "meaning": {
+            "always": "Se inicia al iniciar sesión, así que los sandboxes de aquí siguen accesibles desde el navegador y tu teléfono.",
+            "whenOpen": "Se inicia con Intentic y se detiene cuando lo cierras.",
+            "off": "No se ejecuta nada, ni siquiera con Intentic abierto, hasta que lo vuelvas a activar."
+        },
+        "lead": {
+            "always": "Se inicia al iniciar sesión en Windows.",
+            "whenOpen": "Se inicia con Intentic y se detiene cuando lo cierras.",
+            "off": "No se ejecuta nada, ni siquiera con Intentic abierto."
+        },
+        "reach": {
+            "always": "Los sandboxes de aquí siguen accesibles desde el navegador y tu teléfono.",
+            "whenOpen": "Mientras está cerrado, no se puede acceder a los sandboxes de aquí.",
+            "off": "No se puede acceder a los sandboxes de aquí."
+        },
+        "reachCount": {
+            "always": "{count} sandbox de aquí sigue accesible desde el navegador y tu teléfono. | {count} sandboxes de aquí siguen accesibles desde el navegador y tu teléfono.",
+            "whenOpen": "Mientras está cerrado, no se puede acceder a {count} sandbox de aquí. | Mientras está cerrado, no se puede acceder a {count} sandboxes de aquí.",
+            "off": "No se puede acceder a {count} sandbox de aquí. | No se puede acceder a {count} sandboxes de aquí."
+        },
+        "changing": "Cambiando…",
+        "didntChange": "No cambió: {reason}",
+        "now": {
+            "label": "Ahora",
+            "running": "En marcha",
+            "sandboxes": "{count} sandbox | {count} sandboxes",
+            "noSandboxes": "ningún sandbox",
+            "starting": "Iniciando…",
+            "stopping": "Deteniendo…",
+            "down": "No está en marcha",
+            "held": {
+                "stopped": "Detenido por ti",
+                "off": "Desactivado",
+                "closed": "Detenido hasta que abras Intentic"
+            },
+            "memoryTitle": "Memoria de WSL",
+            "memoryNote": "VmmemWSL en el Administrador de tareas",
+            "othersKeep": "WSL sigue en marcha por {names}, así que su memoria sigue ocupada.",
+            "othersHold": "WSL sigue en marcha por {names} y aún ocupa {size}."
+        },
+        "stopNow": "Detener ahora",
+        "start": "Iniciar",
+        "didnt": {
+            "stop": "No se detuvo: {reason}",
+            "start": "No se inició: {reason}"
+        },
+        "startupOff": "Intentic está desactivado en las Aplicaciones de arranque de Windows, así que no se iniciará al iniciar sesión.",
+        "switchBackOn": "Volver a activarlo"
+    },
     "os": {
         "title": "Este sistema",
         "version": "Intentic OS {version}",

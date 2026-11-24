@@ -392,7 +392,10 @@ flowchart LR
   open beside it down too._ The tray's "Open Intentic"
   opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then
   "Open a folder…" and "Open a file…" (each in a window of its own), the wake word's two rows once there is an account
-  (below), the machine agent's row (Devices), the update row, "Start Intentic at login" and Quit. Updates download
+  (below), the machine agent's row (Devices), the update row, "Start Intentic at login" and Quit. On a PC whose
+  sandboxes run on Intentic's engine, the login row gives way to what runs now ("Sandboxes running"), "Stop sandboxes
+  and engine" or "Start sandboxes", and "Keep running" with ic's background setting as three choices (Always, When
+  Intentic is open, Off; `engine_keeper.rs`), which decides what starts at sign-in, this app included. Updates download
   in the background and install on quit or from the editor's banner or Devices;
   setup and project operations hold an install, while the resumable onboarding downloads pause before it and resume
   on the next launch (or when the install fails). The update smoke checks both the installed bytes and the restarted
@@ -471,6 +474,17 @@ flowchart LR
   itself for an AppImage. Either starts the app with `--background`: the tray and no window, except for a setup parked
   across a restart, and then the hidden workspace when its page was listening. A second launch with `--background`
   while the app runs does nothing. The row's tick is read back from the registry or the file after every press.
+
+  **What runs in the background, on Intentic's engine (2026-11-24).** One setting, ic's `ic engine mode` (its
+  README's "When it runs"), set from This computer's "Runs in the background" or the tray's "Keep running", and carried
+  out here (`engine_keeper.rs`, `engine.rs`): `always` puts this app at sign-in too (so whenever the engine holds memory
+  its tray is there to say so and stop it; ic then drops the engine's own Run value), and the others take it away. The
+  app's launch asks ic for the app's start (`ic engine start --quiet --app`), which is what `when-open` waits for; its
+  exit stops the engine in `when-open` (`before_exit`), not at an update's restart. An engine stopped under the app by a
+  `wsl --shutdown` is left stopped in `when-open`, and started again in `always` with one notification saying so and
+  where to keep it stopped. The first quit while the engine runs says once what quitting does to the sandboxes, with
+  the other way at hand for that quit (`quit-engine-told.json`). This computer's section is also told how much memory
+  the WSL VM holds and which of the person's own distros keep it up, since VmmemWSL is WSL's, not only the engine's.
 - **Google's sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The
   credential returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`)
   and opens the workspace at `/desktop-auth/complete`, in the main window's place. That link can be lost: Chrome

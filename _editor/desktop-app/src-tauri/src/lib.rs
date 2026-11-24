@@ -290,6 +290,10 @@ pub fn run() {
             engine::engine_move,
             engine::engine_prefer,
             engine::engine_cleanup,
+            // When the engine runs, and Stop or Start now (engine.rs, engine_keeper.rs).
+            engine::engine_mode_set,
+            engine::engine_stop_now,
+            engine::engine_start_now,
             // Intentic OS: this computer's system, and the changes This device makes to it (os.rs).
             os::os_status,
             os::os_update_check,
@@ -491,6 +495,7 @@ pub fn run() {
                 api.prevent_exit();
             } else {
                 launch::exit_requested(code);
+                engine_keeper::exiting(code);
             }
         }
         RunEvent::Exit => {
@@ -500,6 +505,8 @@ pub fn run() {
             launch::exited();
             // A folder's setup under way is stopped with all it started, and run again next launch.
             folder_setup::before_exit();
+            // Intentic's engine, stopped with the app when the background setting or the quit says so (engine_keeper.rs).
+            engine_keeper::before_exit();
             // Nothing the app put up can be answered once it has gone.
             notice::clear_before_exit(app);
             sidecar::shutdown(app);
@@ -561,6 +568,39 @@ pub(crate) fn offer_workspace(app: &AppHandle) {
     }
 }
 
+/// The tray's rows for the engine (engine_keeper.rs `TrayEngine`): what runs, Stop or Start, and "Keep running" with the
+/// setting's three choices. Their words are put right by `refresh_tray` as soon as the menu is up.
+fn engine_tray_rows(app: &AppHandle) -> tauri::Result<(engine_keeper::TrayEngine, tauri::menu::Submenu<Wry>)> {
+    let status = MenuItemBuilder::with_id("engine-status", "Sandboxes…")
+        .enabled(false)
+        .build(app)?;
+    let toggle = MenuItemBuilder::with_id(engine_keeper::ROW_TOGGLE, "Stop sandboxes and engine").build(app)?;
+    let always = CheckMenuItemBuilder::with_id(engine_keeper::ROW_ALWAYS, "Always")
+        .checked(false)
+        .build(app)?;
+    let when_open = CheckMenuItemBuilder::with_id(engine_keeper::ROW_WHEN_OPEN, "When Intentic is open")
+        .checked(false)
+        .build(app)?;
+    let off = CheckMenuItemBuilder::with_id(engine_keeper::ROW_OFF, "Off")
+        .checked(false)
+        .build(app)?;
+    let keep_running = tauri::menu::SubmenuBuilder::with_id(app, "engine-mode", "Keep running")
+        .item(&always)
+        .item(&when_open)
+        .item(&off)
+        .build()?;
+    Ok((
+        engine_keeper::TrayEngine {
+            status,
+            toggle,
+            always,
+            when_open,
+            off,
+        },
+        keep_running,
+    ))
+}
+
 /// Where the app lives once its window is closed: the × hides a face (the workspace or the main window) rather than
 /// ending the app, so `Open Intentic` here is the way back to whichever face was last in use. That is a lot of weight
 /// on an icon the user may never have seen, which is why the × asks the first time and names this tray in the asking
@@ -589,20 +629,32 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // The wake word's rows, and the rule between them and the agent's; in the menu once there is a workspace.
     let wake_rows = wake::tray_rows(app)?;
     let wake_gap = PredefinedMenuItem::separator(app)?;
-    let menu = MenuBuilder::new(app)
+    // On a PC whose sandboxes run on Intentic's engine, what runs and the setting for it take the login row's place:
+    // the setting decides what starts at sign-in, this app included (engine_keeper.rs). Read once, as the menu is built.
+    let engine_rows = if cfg!(windows) && engine_keeper::ours() {
+        Some(engine_tray_rows(app)?)
+    } else {
+        None
+    };
+    let mut builder = MenuBuilder::new(app)
         .item(&open)
         .item(&manager)
         .separator()
         .item(&open_folder)
         .item(&open_file)
         .item(&repair)
-        .separator()
-        .item(&agent)
-        .item(&update)
-        .item(&login)
-        .separator()
-        .item(&quit)
-        .build()?;
+        .separator();
+    builder = match &engine_rows {
+        Some((rows, keep_running)) => builder
+            .item(&rows.status)
+            .item(&rows.toggle)
+            .item(keep_running)
+            .separator()
+            .item(&agent)
+            .item(&update),
+        None => builder.item(&agent).item(&update).item(&login),
+    };
+    let menu = builder.separator().item(&quit).build()?;
     let mut tray = TrayIconBuilder::with_id(badge::TRAY)
         .menu(&menu)
         .show_menu_on_left_click(true)
@@ -619,6 +671,10 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             wake::LISTEN_ROW => wake::listen_pressed(app),
             wake::PAUSE_ROW => wake::pause_pressed(app),
             autostart::ROW => autostart::pressed(app),
+            row @ (engine_keeper::ROW_TOGGLE
+            | engine_keeper::ROW_ALWAYS
+            | engine_keeper::ROW_WHEN_OPEN
+            | engine_keeper::ROW_OFF) => engine_keeper::tray_pressed(app, row),
             "quit" => app.exit(0),
             _ => {}
         });
@@ -632,6 +688,10 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     app.manage(agent_status::TrayAgent(agent));
     app.manage(autostart::TrayLogin(login));
     autostart::refresh(app);
+    if let Some((rows, _)) = engine_rows {
+        app.manage(rows);
+        engine_keeper::refresh_tray(app);
+    }
     app.manage(wake_rows);
     app.manage(TrayWorkspace {
         menu,

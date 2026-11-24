@@ -5,6 +5,7 @@
 //! Desktop are carried across by the setup (`ic engine move`): until then the engine is installed beside it inactive,
 //! and only the move switches the PC onto it.
 
+pub mod background;
 pub mod choice;
 mod commands;
 mod compact;
@@ -116,6 +117,13 @@ pub struct Status {
     /// The named pipe the relay serves the engine on (engine/relay.rs), when it is there now: docker reaches the
     /// engine through it, and over TLS on TCP without it.
     pub pipe: Option<String>,
+    /// When the engine runs (background.rs `Mode::id`), on a PC with our engine.
+    pub mode: Option<&'static str>,
+    /// Which kind of hold keeps it down (background.rs `HoldKind::id`), when one does.
+    pub hold: Option<&'static str>,
+    /// What starts it at sign-in (`app`, `engine` or `none`) and whether Startup apps switched that off. Read only for
+    /// `ic engine status --json`: it costs a few `reg.exe`.
+    pub sign_in: Option<(&'static str, bool)>,
 }
 
 /// The engine a setup on this device puts sandboxes on (choice.rs has the rules): ours on Windows, unless `IC_ENGINE`
@@ -362,15 +370,70 @@ pub fn relay() -> Result<(), String> {
     }
 }
 
-pub fn start_quiet() -> Result<(), String> {
+/// A background start: the sign-in start, or (`app`) the desktop app open on this PC (background.rs `quiet_start`).
+pub fn start_quiet(app: bool) -> Result<(), String> {
     #[cfg(windows)]
     {
-        windows::start_quiet()
+        windows::start_quiet(app)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+/// The engine down until the desktop app's next start (background.rs `HoldKind::Closed`).
+pub fn stop_until_app_opens() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        windows::stop_until_app_opens()
     }
     #[cfg(not(windows))]
     {
         Ok(())
     }
+}
+
+/// When the engine runs. Windows only: elsewhere sandboxes run on this system's own Docker, which is not ours to start.
+pub fn mode() -> Option<background::Mode> {
+    #[cfg(windows)]
+    {
+        Some(windows::mode())
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+pub fn set_mode(mode: background::Mode) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        windows::set_mode(mode)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = mode;
+        Err("when the engine runs is set on Windows, where Intentic runs its own engine; here sandboxes run on this system's Docker.".to_string())
+    }
+}
+
+/// What starts the engine at sign-in, and whether Startup apps switched it off (windows.rs `sign_in`).
+pub fn sign_in() -> Option<(&'static str, bool)> {
+    #[cfg(windows)]
+    {
+        Some(windows::sign_in())
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// Which kind of hold keeps the engine down, when one does.
+pub fn hold_kind() -> Option<background::HoldKind> {
+    record::hold_kind()
 }
 
 pub fn stop() -> Result<(), String> {
@@ -422,11 +485,6 @@ pub fn hold() -> Result<(), String> {
     {
         stop()
     }
-}
-
-/// Whether the engine was stopped on purpose (record.rs `held`).
-pub fn held() -> bool {
-    record::held()
 }
 
 /// Stop the engine and hold it down, saying why: an engine no sandbox runs on gives its memory back.
@@ -526,6 +584,6 @@ pub fn readopt() {
 
 pub use commands::{
     default_action, docker_desktop_installed, run_compact, run_copy, run_disk, run_fetch, run_hold,
-    run_install, run_prefer, run_relay, run_remove, run_restart, run_start, run_status, run_stop,
-    run_update, run_wsl,
+    run_install, run_mode, run_prefer, run_relay, run_remove, run_restart, run_start, run_status,
+    run_stop, run_stop_until_app_opens, run_update, run_wsl,
 };

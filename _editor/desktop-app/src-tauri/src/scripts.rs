@@ -671,6 +671,56 @@ pub(crate) fn engine_held() -> bool {
     engine_home().is_some_and(|home| home.join(".intentic").join("engine").join("held").exists())
 }
 
+/// When our engine runs, as ic's `~/.intentic/engine/background.json` says (ic's engine/background.rs): `always`,
+/// `whenOpen` or `off`. None before ic first wrote one, which is a PC that keeps doing what it did: starting it.
+pub(crate) fn engine_mode() -> Option<String> {
+    let home = engine_home()?;
+    let text =
+        std::fs::read_to_string(home.join(".intentic").join("engine").join("background.json"))
+            .ok()?;
+    mode_in(&text)
+}
+
+fn mode_in(text: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()?
+        .get("mode")?
+        .as_str()
+        .filter(|mode| matches!(*mode, "always" | "whenOpen" | "off"))
+        .map(str::to_string)
+}
+
+/// The kind of hold on our engine, from its held file's first word (ic's background.rs `HoldKind`): `off`, `closed`,
+/// or a person's own `stopped`. None when it is not held.
+pub(crate) fn engine_hold_kind() -> Option<&'static str> {
+    let path = engine_home()?
+        .join(".intentic")
+        .join("engine")
+        .join("held");
+    if !path.exists() {
+        return None;
+    }
+    Some(hold_kind_in(&std::fs::read_to_string(path).unwrap_or_default()))
+}
+
+fn hold_kind_in(text: &str) -> &'static str {
+    let first = text.trim_start();
+    if first.starts_with("off:") {
+        "off"
+    } else if first.starts_with("closed:") {
+        "closed"
+    } else {
+        "stopped"
+    }
+}
+
+/// The WSL distro our engine runs in, from its record; the default one when the record does not say.
+pub(crate) fn engine_distro() -> String {
+    our_engine_record()
+        .and_then(|record| record.get("distro")?.as_str().map(str::to_string))
+        .unwrap_or_else(|| "intentic-engine".to_string())
+}
+
 /// A move between engines is running (ic's `~/.intentic/engine/moves.json`, a `moving` entry whose heartbeat is
 /// under ten minutes old): every container is in somebody's hands, and nothing here starts or restarts one.
 pub(crate) fn engine_move_running() -> bool {
@@ -765,11 +815,27 @@ pub(crate) fn start_our_engine(quiet: bool, limit: Duration) -> Result<(), Engin
         .ok_or_else(|| {
             EngineStartFailure::plain("ic is not installed on this computer.".to_string())
         })?;
-    let mut command = quiet_command(&ic);
-    command.args(["engine", "start"]);
-    if quiet {
-        command.arg("--quiet");
-    }
+    let args: &[&str] = if quiet {
+        &["engine", "start", "--quiet"]
+    } else {
+        &["engine", "start"]
+    };
+    ic_engine_start(&ic, args, limit)
+}
+
+/// The app's own background start (`ic engine start --quiet --app`): open on this PC, which is what the `whenOpen`
+/// setting waits for and what lifts the hold this app's last quit left (ic's engine/background.rs). Through the ic
+/// beside this app first, since an installed one older than the setting does not know `--app`.
+pub(crate) fn start_our_engine_for_app(limit: Duration) -> Result<(), EngineStartFailure> {
+    let ic = crate::engine::ic_program().ok_or_else(|| {
+        EngineStartFailure::plain("ic is not installed on this computer.".to_string())
+    })?;
+    ic_engine_start(&ic, &["engine", "start", "--quiet", "--app"], limit)
+}
+
+fn ic_engine_start(ic: &Path, args: &[&str], limit: Duration) -> Result<(), EngineStartFailure> {
+    let mut command = quiet_command(ic);
+    command.args(args);
     match capture("ic engine start", command, limit) {
         Ok(answer) if answer.success => Ok(()),
         Ok(answer) => Err(EngineStartFailure {
@@ -2265,6 +2331,17 @@ fn quiet(mut command: Command) -> Command {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_background_setting_and_the_hold_read_as_ic_writes_them() {
+        // ic's engine/background.rs writes these: `{"mode":"whenOpen"}`, and a held file whose first word is its kind.
+        assert_eq!(super::mode_in(r#"{"mode":"whenOpen"}"#).as_deref(), Some("whenOpen"));
+        assert_eq!(super::mode_in(r#"{"mode":"sometimes"}"#), None);
+        assert_eq!(super::mode_in("not json"), None);
+        assert_eq!(super::hold_kind_in("off: set to Off"), "off");
+        assert_eq!(super::hold_kind_in("closed: the app closed"), "closed");
+        assert_eq!(super::hold_kind_in("stopped by `ic engine stop`"), "stopped");
+    }
+
 
     /// A failed engine start is said by its stop block on stderr, never by a note ic printed on stdout on its way, and the
     /// note still counts towards its cause (2026-11-21: "could not refresh the engine's keeper (… getpwnam(root) failed

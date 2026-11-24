@@ -287,6 +287,70 @@
         },
         "movingBadge": "przenoszenie sandboxów"
     },
+    "background": {
+        "title": "Działanie w tle",
+        "about": "O działaniu w tle",
+        "info": {
+            "headline": "Silnik Intentic uruchamia sandboxy tego komputera w WSL. Tutaj decydujesz, kiedy działa.",
+            "vmmem": "Menedżer zadań pokazuje pamięć zajętą przez WSL jako VmmemWSL.",
+            "stop": "„Zatrzymaj teraz” zatrzymuje go, dopóki sam go nie uruchomisz, niezależnie od ustawienia „Uruchamiaj”.",
+            "tray": "To samo ustawienie jest w menu ikony w zasobniku systemowym."
+        },
+        "keepRunning": "Uruchamiaj",
+        "mode": {
+            "always": "Zawsze",
+            "whenOpen": "Gdy Intentic jest otwarty",
+            "off": "Nigdy"
+        },
+        "meaning": {
+            "always": "Uruchamia się po zalogowaniu, więc sandboxy na tym komputerze są dostępne z przeglądarki i telefonu.",
+            "whenOpen": "Uruchamia się razem z Intentic i zatrzymuje, gdy go zamkniesz.",
+            "off": "Nic nie działa, nawet gdy Intentic jest otwarty, dopóki tego nie zmienisz."
+        },
+        "lead": {
+            "always": "Uruchamia się po zalogowaniu do Windows.",
+            "whenOpen": "Uruchamia się razem z Intentic i zatrzymuje, gdy go zamkniesz.",
+            "off": "Nic nie działa, nawet gdy Intentic jest otwarty."
+        },
+        "reach": {
+            "always": "Sandboxy na tym komputerze są dostępne z przeglądarki i telefonu.",
+            "whenOpen": "Gdy Intentic jest zamknięty, sandboxy na tym komputerze są niedostępne.",
+            "off": "Sandboxy na tym komputerze są niedostępne."
+        },
+        "reachCount": {
+            "always": "{count} sandbox na tym komputerze jest dostępny z przeglądarki i telefonu. | {count} sandboxy na tym komputerze są dostępne z przeglądarki i telefonu. | {count} sandboxów na tym komputerze jest dostępnych z przeglądarki i telefonu.",
+            "whenOpen": "Gdy Intentic jest zamknięty, {count} sandbox na tym komputerze jest niedostępny. | Gdy Intentic jest zamknięty, {count} sandboxy na tym komputerze są niedostępne. | Gdy Intentic jest zamknięty, {count} sandboxów na tym komputerze jest niedostępnych.",
+            "off": "{count} sandbox na tym komputerze jest niedostępny. | {count} sandboxy na tym komputerze są niedostępne. | {count} sandboxów na tym komputerze jest niedostępnych."
+        },
+        "changing": "Zmienianie…",
+        "didntChange": "Nie udało się zmienić: {reason}",
+        "now": {
+            "label": "Teraz",
+            "running": "Działa",
+            "sandboxes": "{count} sandbox | {count} sandboxy | {count} sandboxów",
+            "noSandboxes": "brak sandboxów",
+            "starting": "Uruchamianie…",
+            "stopping": "Zatrzymywanie…",
+            "down": "Nie działa",
+            "held": {
+                "stopped": "Zatrzymany przez Ciebie",
+                "off": "Wyłączony",
+                "closed": "Zatrzymany do otwarcia Intentic"
+            },
+            "memoryTitle": "Pamięć WSL",
+            "memoryNote": "VmmemWSL w Menedżerze zadań",
+            "othersKeep": "WSL nadal działa dla: {names}, więc jego pamięć pozostaje zajęta.",
+            "othersHold": "WSL nadal działa dla: {names} i zajmuje {size}."
+        },
+        "stopNow": "Zatrzymaj teraz",
+        "start": "Uruchom",
+        "didnt": {
+            "stop": "Nie zatrzymał się: {reason}",
+            "start": "Nie uruchomił się: {reason}"
+        },
+        "startupOff": "Intentic jest wyłączony w Aplikacjach autostartu Windows, więc nie uruchomi się po zalogowaniu.",
+        "switchBackOn": "Włącz ponownie"
+    },
     "os": {
         "title": "Ten system",
         "version": "Intentic OS {version}",

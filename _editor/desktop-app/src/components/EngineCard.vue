@@ -4,6 +4,7 @@ import { formatDateLong, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import type { EngineMoveEnd, EngineStatus, MoveTarget } from "../desktopEngine";
+import { keptRunningSaid } from "../device/engine/background";
 import { barOf, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type MoveProgress } from "../device/engine/engineMove";
 import { copiedWords, positionWords, stepWords } from "../device/engine/moveWords";
 
@@ -75,7 +76,8 @@ const lead = computed(() => {
         case `gpu`:
             return t(`desktop.engine.gpu`);
         default:
-            return engine.value === `intentic` ? t(`desktop.engine.keptRunning`) : undefined;
+            // Not where the reader chose otherwise: when it runs is This computer's "Runs in the background".
+            return engine.value === `intentic` && keptRunningSaid(props.status.mode) ? t(`desktop.engine.keptRunning`) : undefined;
     }
 });
 

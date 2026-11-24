@@ -7,6 +7,7 @@ use super::fetch::{self, FetchOutcome};
 use super::install_plan::{self, InstallFacts, InstallStep};
 use super::paths;
 use super::pins;
+use super::background;
 use super::record::{self, EngineRecord};
 use super::wsl;
 use super::{Kind, Status};
@@ -59,6 +60,9 @@ pub fn status() -> Status {
         distro,
         network,
         pipe,
+        mode: record.is_some().then(|| mode().id()),
+        hold: record::hold_kind().map(background::HoldKind::id),
+        sign_in: None,
     }
 }
 
@@ -177,18 +181,32 @@ pub fn start() -> Result<(), String> {
 }
 
 /// The sign-in start (the Run key) and every background one: an engine nobody's sandboxes run on stays down rather than
-/// holding memory, and one stopped on purpose stays stopped.
-pub fn start_quiet() -> Result<(), String> {
+/// holding memory, one stopped on purpose stays stopped, and the background setting decides the rest (background.rs
+/// `quiet_start`). `app`: the desktop app asks, open on this PC, which is what `whenOpen` waits for and what lifts the
+/// hold its own quit left.
+pub fn start_quiet(app: bool) -> Result<(), String> {
     let Some(record) = EngineRecord::load() else {
         return Ok(());
     };
     // Wanted when this account's sandboxes run on it, or when a WSL distro uses it as its Docker
     // (engine/wsl_integration.rs), whichever engine the Windows side's sandboxes are on.
     let wanted = record.is_active() || (record.is_ours() && !record.wsl.is_empty());
-    if !wanted || record::held() {
+    if !wanted {
         return Ok(());
     }
-    start_internal(true)
+    match background::quiet_start(mode(), record::hold_kind(), app) {
+        background::QuietStart::Skip => {
+            // A sign-in entry a mode no longer wants goes now, so it does not start this again at the next sign-in.
+            reconcile_sign_in(&record.distro);
+            Ok(())
+        }
+        background::QuietStart::Start { lift_closed } => {
+            if lift_closed {
+                record::release();
+            }
+            start_internal(true)
+        }
+    }
 }
 
 fn start_internal(quiet: bool) -> Result<(), String> {
@@ -199,7 +217,7 @@ fn start_internal(quiet: bool) -> Result<(), String> {
     }
     // A start asked for is the end of any hold.
     record::release();
-    refresh_autostart(&record.distro);
+    reconcile_sign_in(&record.distro);
     if engine_answers(&record) {
         keep_relay(&mut record, quiet);
         super::wsl_integration::apply_all(&record, quiet);
@@ -276,6 +294,111 @@ pub fn hold() -> Result<(), String> {
     record::hold_as("held by `ic engine hold`")?;
     super::relay::stop();
     terminate()
+}
+
+/// The engine down until the app's next start (`ic engine stop --until-app-opens`): what the app does as it quits in
+/// `whenOpen`, or when the person quitting chose to stop everything. The app's next `start --quiet --app` lifts it;
+/// the sign-in start and the agent's repairs leave it. A person's own stop or the `off` setting stays as it is.
+pub fn stop_until_app_opens() -> Result<(), String> {
+    if matches!(
+        record::hold_kind(),
+        Some(background::HoldKind::Stopped | background::HoldKind::Off)
+    ) {
+        return Ok(());
+    }
+    record::hold(
+        background::HoldKind::Closed,
+        "stopped as the Intentic app closed; its next start starts it again",
+    )?;
+    super::relay::stop();
+    terminate()
+}
+
+/// The background setting: the one chosen, else what this PC did before there was one (written down then, so it is
+/// read the same way from then on).
+pub fn mode() -> background::Mode {
+    if let Some(mode) = background::stored() {
+        return mode;
+    }
+    let distro = distro();
+    let inferred = background::inferred(
+        run_value_registered(&autostart_value(&distro))
+            || (distro == super::DISTRO && run_value_registered(APP_RUN_VALUE)),
+    );
+    // Written only once there is an engine to have a setting: a PC without one infers again when it gets one.
+    if EngineRecord::load().is_some() {
+        let _ = background::save(inferred);
+    }
+    inferred
+}
+
+/// `ic engine mode <mode>`: the setting written, then carried out. `off` stops the engine and holds it; `always` lifts
+/// any hold, puts back the sign-in start (switching it on again in Startup apps when the person had switched it off
+/// there, since choosing `always` is asking for it) and starts the engine; `whenOpen` lifts any hold and starts nothing,
+/// since the app it waits for starts it.
+pub fn set_mode(mode: background::Mode) -> Result<(), String> {
+    background::save(mode)?;
+    let distro = distro();
+    match mode {
+        background::Mode::Off => {
+            record::hold(
+                background::HoldKind::Off,
+                "Intentic is set to Off on this computer (ic engine mode)",
+            )?;
+            super::relay::stop();
+            reconcile_sign_in(&distro);
+            terminate()
+        }
+        background::Mode::WhenOpen => {
+            record::release();
+            reconcile_sign_in(&distro);
+            Ok(())
+        }
+        background::Mode::Always => {
+            record::release();
+            // Whichever entry starts it (ours, or the app's), switched back on in Startup apps.
+            let mut entries = vec![autostart_value(&distro)];
+            if distro == super::DISTRO {
+                entries.push(APP_RUN_VALUE.to_string());
+            }
+            for value in &entries {
+                let _ = docker::run_bounded(
+                    "reg",
+                    &["delete", STARTUP_APPROVED_KEY, "/v", value, "/f"],
+                    Duration::from_secs(15),
+                );
+            }
+            if EngineRecord::load().is_some_and(|record| record.is_ours()) {
+                start_internal(true)
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+/// What starts the engine at sign-in, for `ic engine status --json`: `app` (the app's own entry, which starts it),
+/// `engine` (ours), or `none`; and whether the person switched that entry off in Windows' Startup apps.
+pub fn sign_in() -> (&'static str, bool) {
+    let distro = distro();
+    let approved = docker::run_bounded(
+        "reg",
+        &["query", STARTUP_APPROVED_KEY],
+        Duration::from_secs(15),
+    )
+    .map(|ran| ran.stdout)
+    .unwrap_or_default();
+    if distro == super::DISTRO && run_value_registered(APP_RUN_VALUE) {
+        return (
+            "app",
+            background::startup_disabled_in(&approved, APP_RUN_VALUE),
+        );
+    }
+    let value = autostart_value(&distro);
+    if run_value_registered(&value) {
+        return ("engine", background::startup_disabled_in(&approved, &value));
+    }
+    ("none", false)
 }
 
 /// `ic engine relay`: serve the engine on its named pipe until a newer relay or a stop takes over (engine/relay.rs).
@@ -1091,9 +1214,56 @@ fn write_autostart(distro: &str, ic: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// What an install does at its last step but one: a PC that never chose gets `always` (it was set up to run sandboxes,
+/// and a set-up PC always started its engine at sign-in), then the sign-in entry that setting wants.
 fn register_autostart(distro: &str) -> Result<(), String> {
+    if background::stored().is_none() {
+        background::save(background::Mode::Always)?;
+    }
+    reconcile_sign_in(distro);
+    Ok(())
+}
+
+/// The app's own Run value (the desktop app's autostart.rs `VALUE`): when it is there, the app starts at sign-in and
+/// starts the engine itself.
+const APP_RUN_VALUE: &str = "Intentic";
+
+/// Where Windows' Startup apps (Task Manager, Settings) keeps whether each Run value may start.
+const STARTUP_APPROVED_KEY: &str =
+    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+fn run_value_registered(value: &str) -> bool {
+    docker::run_bounded(
+        "reg",
+        &["query", RUN_KEY, "/v", value],
+        Duration::from_secs(15),
+    )
+    .is_ok_and(|ran| run_value_data(&ran.stdout, value).is_some())
+}
+
+/// The engine's sign-in entry made to match the setting (background.rs `engine_entry_wanted`): written, or rewritten to
+/// this ic's windowless command when an older one wrote it, while `always` wants it and the app does not start at sign-in
+/// itself; taken away otherwise. A value the person switched off in Startup apps keeps its name, so it stays off there.
+/// `IC_ENGINE_AUTOSTART=0` (a test engine) leaves the Run key alone.
+fn reconcile_sign_in(distro: &str) {
     if std::env::var("IC_ENGINE_AUTOSTART").as_deref() == Ok("0") {
-        return Ok(());
+        return;
+    }
+    let value = autostart_value(distro);
+    let app_entry = distro == super::DISTRO && run_value_registered(APP_RUN_VALUE);
+    let wanted = background::engine_entry_wanted(mode(), app_entry);
+    let registered = docker::run_bounded(
+        "reg",
+        &["query", RUN_KEY, "/v", &value],
+        Duration::from_secs(15),
+    )
+    .ok()
+    .and_then(|ran| run_value_data(&ran.stdout, &value).map(str::to_string));
+    if !wanted {
+        if registered.is_some() {
+            let _ = unregister_autostart(distro);
+        }
+        return;
     }
     let Some(ic) = autostart_ic() else {
         ui::note(&format!(
@@ -1102,36 +1272,10 @@ fn register_autostart(distro: &str) -> Result<(), String> {
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "~/.intentic/ic/bin/ic.exe".to_string())
         ));
-        return Ok(());
-    };
-    write_autostart(distro, &ic)?;
-    ui::detail(&format!(
-        "registered intentic engine autostart at sign-in: {}",
-        ic.display()
-    ));
-    Ok(())
-}
-
-/// A sign-in start an older ic registered, rewritten to this one's command, so a PC set up before the windowless one
-/// stops opening a window at sign-in without being set up again. A value that is not there was never registered or was
-/// taken away on purpose, and stays away.
-fn refresh_autostart(distro: &str) {
-    let value = autostart_value(distro);
-    let Ok(ran) = docker::run_bounded(
-        "reg",
-        &["query", RUN_KEY, "/v", &value],
-        Duration::from_secs(15),
-    ) else {
-        return;
-    };
-    let Some(registered) = run_value_data(&ran.stdout, &value) else {
-        return;
-    };
-    let Some(ic) = autostart_ic() else {
         return;
     };
     let system_root = std::env::var("SystemRoot").ok();
-    if registered != autostart_command(system_root.as_deref(), &ic) {
+    if registered.as_deref() != Some(autostart_command(system_root.as_deref(), &ic).as_str()) {
         let _ = write_autostart(distro, &ic);
     }
 }
