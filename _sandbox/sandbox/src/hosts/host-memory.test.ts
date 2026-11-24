@@ -1,4 +1,4 @@
-import { HOST_MEMORY_STALE_MS, hostRoomFrom } from "./host-room.js";
+import { HOST_MEMORY_STALE_MS, hostAnswering, hostRoomFrom } from "./host-room.js";
 
 const GIB = 1024 ** 3;
 const NOW = 1_800_000_000_000;
@@ -31,4 +31,18 @@ test("no machine, a stale answer, an older agent or an answer that does not pars
     expect(hostRoomFrom("rog", beats({ rog: { at: NOW, answer: { ok: true } } }), NOW)).toBeUndefined();
     expect(hostRoomFrom("rog", beats({ rog: { at: NOW, answer: { ok: true, memory: { availableBytes: "lots" } } } }), NOW)).toBeUndefined();
     expect(hostRoomFrom("rog", beats({}), NOW)).toBeUndefined();
+});
+
+// Whether a runner's machine is awake, whatever its heartbeat said: what tells a runner down on an awake machine from one
+// asleep with it (runners/held-turns/runner-relay.ts).
+test("a machine whose agent answered lately is awake, on the runner's own door or its card's native one", () => {
+    const ok = { ok: true };
+    expect(hostAnswering("omen", beats({ omen: { at: NOW - 10_000, answer: ok } }), NOW)).toBe(true);
+    expect(hostAnswering("omen::wsl:archlinux", beats({ omen: { at: NOW - 10_000, answer: ok } }), NOW)).toBe(true);
+});
+
+test("a heartbeat older than the stale line, none at all, or no machine named is not awake", () => {
+    expect(hostAnswering("omen", beats({ omen: { at: NOW - HOST_MEMORY_STALE_MS - 1, answer: { ok: true } } }), NOW)).toBe(false);
+    expect(hostAnswering("omen", beats({}), NOW)).toBe(false);
+    expect(hostAnswering(undefined, beats({ omen: { at: NOW, answer: { ok: true } } }), NOW)).toBe(false);
 });

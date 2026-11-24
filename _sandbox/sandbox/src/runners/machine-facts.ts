@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import { statfs } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
 import type { HostRoom } from "@intentic/constants/memory-room";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { GPU_LIBRARY_ENV, gpuHere, WSL_GPU_LIBRARY_PATH } from "../hosts/gpu/gpu-state.js";
 import { type Pressure, readPressure } from "../system/resources/cgroup.js";
+import { readHistorySpace } from "../system/resources/storage/checkout-admission.js";
 import { runCheck } from "../workload/run-check.js";
 import { opt } from "../opt.js";
 import type { BudgetSnapshot, ResourceBudget } from "../workload/resource-budget.js";
@@ -40,10 +40,16 @@ const realOs = (): OsReading => ({
     loadOne: loadavg()[0] ?? 0,
 });
 
+/* A RUNNER'S DISK IS THE WINDOWS DRIVE UNDER ITS ENGINE WHERE THAT IS TIGHTER (2026-11-24). Inside a container on Docker
+   Desktop a statfs reads the engine's virtual disk, which grows on its Windows drive up to a terabyte, so omen's runner
+   kept reading hundreds of gigabytes free while C: went to 0: ten subagents were placed there at 02:06, Docker Desktop
+   died at 05:12 and took the runner and every one of their turns with it. Read through the host drive's hint, as the
+   sandbox's own checkouts are (checkout-admission.ts readHistorySpace); where ic gives none, the statfs stands. The
+   unprivileged figure, as before: what any writer there can still use. */
 const realDisk = async (path: string): Promise<{ freeBytes: number } | undefined> => {
     // allow(silent-catch): a disk that can't be read reports nothing free, the answer a host should plan around.
-    const disk = await statfs(path).catch(() => undefined);
-    return disk === undefined ? undefined : { freeBytes: disk.bavail * disk.bsize };
+    const space = await readHistorySpace(path, false).catch(() => undefined);
+    return space === undefined ? undefined : { freeBytes: space.freeBytes };
 };
 
 const GPU_QUERY_MS = 5_000;

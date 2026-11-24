@@ -198,6 +198,7 @@ export type RunnerCredentialRefresh = z.infer<typeof RunnerCredentialRefreshSche
 export const RunnerFactsSchema = z.object({
     cpus: z.number().int().positive(),
     memoryMb: z.number().int().positive(),
+    // Free where its workspace lives, clamped by the host drive under its engine where ic tells it (machine-facts.ts).
     freeDiskMb: z.number().int().nonnegative(),
     // 0..1 over the last minute; a coarse busy signal for a picker, not a metrics feed.
     load: z.number().nonnegative(),

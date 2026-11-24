@@ -44,6 +44,13 @@ const CPU_BUSY_PRESSURE = 40;
 const CPU_FULL_PRESSURE = 80;
 // The share of a machine's slots in use from which it reads busy.
 const AGENTS_BUSY_SHARE = 0.75;
+/* DISK IS ROOM TOO (2026-11-24). Placement weighed memory and CPU alone, so omen took ten subagents at 02:06 while its C:
+   drive was filling (each a checkout and a Rust build), and at 05:12 Docker Desktop died with all of them on it. What one
+   more agent's checkout and build take, a few gigabytes and a good deal more for a compiled workspace: below the full
+   line a machine takes none, below the busy line it takes one only when nothing calmer has room. */
+const AGENT_DISK_MB = 5 * 1024;
+const DISK_FULL_MB = 10 * 1024;
+const DISK_BUSY_MB = 30 * 1024;
 
 const RANK = { calm: 0, busy: 1, full: 2 } as const satisfies Readonly<Record<MachineStanding, number>>;
 
@@ -83,6 +90,11 @@ const strainsOf = (facts: RunnerFacts, agents: number, slots: number): Strains =
     } else if (agents >= Math.ceil(slots * AGENTS_BUSY_SHARE)) {
         busy.push("agents");
     }
+    if (facts.freeDiskMb < DISK_FULL_MB) {
+        full.push("disk");
+    } else if (facts.freeDiskMb < DISK_BUSY_MB) {
+        busy.push("disk");
+    }
     return { full, busy };
 };
 
@@ -103,6 +115,7 @@ export const machineLoad = (facts: RunnerFacts, agents: number): MachineLoad => 
         load: facts.load,
         ...opt("memoryFreeMb", facts.memoryFreeMb),
         ...opt("memoryLimitMb", facts.memoryLimitMb),
+        diskFreeMb: facts.freeDiskMb,
         agents,
         slots,
         headroom: round2(clamp01(Math.min(slotRoom, memoryRoom, cpuRoom))),
@@ -210,7 +223,13 @@ export interface PendingWork {
 const NOTHING_PENDING: PendingWork = { here: 0, runners: new Map() };
 
 const lessPending = (facts: RunnerFacts, pending: number): RunnerFacts =>
-    pending === 0 || facts.memoryFreeMb === undefined ? facts : { ...facts, memoryFreeMb: Math.max(0, facts.memoryFreeMb - pending * AGENT_MB) };
+    pending === 0
+        ? facts
+        : {
+              ...facts,
+              ...opt("memoryFreeMb", facts.memoryFreeMb === undefined ? undefined : Math.max(0, facts.memoryFreeMb - pending * AGENT_MB)),
+              freeDiskMb: Math.max(0, facts.freeDiskMb - pending * AGENT_DISK_MB),
+          };
 
 export type FleetReadDeps = Pick<Services, "runners" | "runnerHub" | "hostHub" | "conversations" | "resources" | "workspace">;
 

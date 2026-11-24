@@ -5196,6 +5196,8 @@
             "strainAgents": "{count} Agent läuft | {count} Agenten laufen",
             "strainBoth": "{first} und {second}",
             "strainCpu": "ihre CPUs sind voll ausgelastet",
+            "strainDisk": "nur {free} Festplatte frei",
+            "strainDiskShort": "Festplattenplatz ist knapp",
             "strainMemory": "nur {free} Speicher frei",
             "strainMemoryShort": "Speicher ist knapp",
             "strainMemoryStall": "Speicher stockt",

@@ -102,9 +102,10 @@ export type SessionsPlacement = z.infer<typeof SessionsPlacementSchema>;
 export const MachineStandingSchema = z.enum(["calm", "busy", "full"]);
 export type MachineStanding = z.infer<typeof MachineStandingSchema>;
 
-// What made a machine busy or full: memory short of what an agent needs, memory stalling, CPUs saturated, or as many
-// agents running as it has slots for.
-export const MachineStrainSchema = z.enum(["memory", "memory-stall", "cpu", "agents"]);
+// What made a machine busy or full: memory short of what an agent needs, memory stalling, CPUs saturated, as many
+// agents running as it has slots for, or its disk (the Windows drive under its engine, where that is tighter) too short
+// for another agent's checkout and build.
+export const MachineStrainSchema = z.enum(["memory", "memory-stall", "cpu", "agents", "disk"]);
 export type MachineStrain = z.infer<typeof MachineStrainSchema>;
 
 export const MachineLoadSchema = z.object({
@@ -117,6 +118,8 @@ export const MachineLoadSchema = z.object({
     // What its resource budget has free, and the limit that is measured against; absent where nothing measures it.
     memoryFreeMb: z.number().int().nonnegative().optional(),
     memoryLimitMb: z.number().int().positive().optional(),
+    // What its workspace's disk has free, by the tighter of the volume and the host drive under it.
+    diskFreeMb: z.number().int().nonnegative().optional(),
     // Conversations running a turn there now, and how many it holds at once (the fan-out scheduler's own slots).
     agents: z.number().int().nonnegative(),
     slots: z.number().int().positive(),

@@ -5196,6 +5196,8 @@
             "strainAgents": "{count} agent running | {count} agents running",
             "strainBoth": "{first} and {second}",
             "strainCpu": "its CPUs are saturated",
+            "strainDisk": "only {free} of disk free",
+            "strainDiskShort": "disk space is short",
             "strainMemory": "only {free} of memory free",
             "strainMemoryShort": "memory is short",
             "strainMemoryStall": "memory is stalling",

@@ -5196,6 +5196,8 @@
             "strainAgents": "{count} agente en marcha | {count} agentes en marcha",
             "strainBoth": "{first} y {second}",
             "strainCpu": "sus CPU están saturadas",
+            "strainDisk": "solo {free} de disco libre",
+            "strainDiskShort": "falta espacio en disco",
             "strainMemory": "solo {free} de memoria libre",
             "strainMemoryShort": "falta memoria",
             "strainMemoryStall": "la memoria se está atascando",

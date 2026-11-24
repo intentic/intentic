@@ -41,10 +41,22 @@ test("a borrowed Claude token refused on the runner is held here for a re-mint, 
     expect(out.find((frame) => frame.kind === "error")).toMatchObject({ autoResume: "scheduled" });
 });
 
-test("the re-mint's own re-run refused again is not held again, and promises nothing", async () => {
+test("the re-mint's own re-run refused before it ran is not held again, and promises nothing", async () => {
     const { sent, out } = await relayed([refused], { ...turn, resume: "auth" });
     expect(sent).toEqual([]);
     expect(out[0]).toMatchObject({ autoResume: "available" });
+});
+
+test("the re-mint's own re-run refused after it ran met a later rotation, so it is held for another re-mint", async () => {
+    lentToRunner("omen", "acct-1", "token-reminted", () => () => undefined);
+    const { sent, out } = await relayed([{ kind: "delta", text: "hours of work" }, refused], { ...turn, resume: "auth" });
+    expect(sent).toEqual([
+        {
+            kind: "turn-held",
+            held: { input: { ...turn, resume: "auth" }, reason: "auth", ran: true, remint: { account: "acct-1", refusedToken: "token-reminted" } },
+        },
+    ]);
+    expect(out.find((frame) => frame.kind === "error")).toMatchObject({ autoResume: "scheduled" });
 });
 
 test("a re-run the runner booked for itself is offered for a press here, never read as one coming", async () => {

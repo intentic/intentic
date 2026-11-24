@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import type { RoutedTurn } from "../../seams/turn-starter.js";
+import { remintEarned, type RoutedTurn } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
 import { lastLentToRunner } from "../ownership/account-holds.js";
 
@@ -46,8 +46,8 @@ const failureHere = (
     seen: { readonly sessionId: string | undefined; readonly answered: boolean },
 ): ErrorFrame => {
     const { conversationId } = turn;
-    // A re-mint's own re-run refused again is dead: re-minting once more would only replay it.
-    if (frame.code === "claude-token-refused" && frame.account !== undefined && turn.resume !== "auth") {
+    // A re-mint's own re-run refused before it ran is dead; one refused after it ran met a later rotation (seams/turn-starter.ts remintEarned).
+    if (frame.code === "claude-token-refused" && frame.account !== undefined && remintEarned(turn, seen.answered)) {
         const { account } = frame;
         // An unknown token never matches the stored one, so the re-mint adopts whatever this sandbox holds now.
         const refusedToken = lastLentToRunner(runnerId, account) ?? "";

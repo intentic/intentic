@@ -73,6 +73,14 @@ export type TurnInput = AgentTurn & {
     readonly seal?: Seal;
 };
 
+/* A RE-MINT'S OWN RE-RUN IS RE-MINTED AGAIN ONCE IT HAS RUN. The guard against replaying a dead credential used to
+   refuse every auth re-run outright, so a re-run that worked for hours and then met the sandbox's next rotation of the
+   same account (a token refused only because it was superseded) ended for good with nothing booked (2026-11-24,
+   ferret-c2eb: cut by the 23:16 rotation and re-run, cut again by the 07:16 one, idle until a press at 11:32). Refused
+   before the provider answered it, the re-minted token is itself what failed: dead, as before. Each further re-mint
+   costs an answer, so a credential that never serves cannot spin. */
+export const remintEarned = (turn: Pick<TurnInput, "resume">, answered: boolean): boolean => turn.resume !== "auth" || answered;
+
 // A turn as the engine takes it: provider and loop named, by the port it came in through (routeTurn), so
 // nothing past the door defaults them again.
 export type RoutedTurn<T extends TurnInput = TurnInput> = T & { readonly agent: AgentProvider; readonly harness: AgentHarness };

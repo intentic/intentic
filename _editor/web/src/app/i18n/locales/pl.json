@@ -5196,6 +5196,8 @@
             "strainAgents": "działa {count} agent | działa {count} agentów | działa {count} agentów",
             "strainBoth": "{first} i {second}",
             "strainCpu": "procesory są w pełni obciążone",
+            "strainDisk": "wolne tylko {free} dysku",
+            "strainDiskShort": "brakuje miejsca na dysku",
             "strainMemory": "wolne tylko {free} pamięci",
             "strainMemoryShort": "brakuje pamięci",
             "strainMemoryStall": "pamięć się dławi",

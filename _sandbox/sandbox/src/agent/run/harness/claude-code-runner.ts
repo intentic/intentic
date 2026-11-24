@@ -404,8 +404,12 @@ const runtimeSpawn =
         return child;
     };
 
-// On a 401 the CLI asks this callback for a refreshed token and resumes on what comes back; the same token ends the
-// turn. Untyped in sdk.d.ts (present in sdk.mjs), hence the OauthRecoveryOptions extension.
+// Meant for a 401: the CLI asks this callback for a refreshed token and resumes on what comes back; the same token ends
+// the turn. Untyped in sdk.d.ts (present in sdk.mjs), hence the OauthRecoveryOptions extension. NOT ASKED TODAY: the CLI
+// (0.3.326 to 0.3.330 at least) installs the bridge that asks only when CLAUDE_CODE_ENTRYPOINT is claude-desktop,
+// local-agent or claude-vscode, and the SDK sets sdk-ts, so a turn holding a token the sandbox rotates is refused and
+// recovered by the auth re-run instead (turn-resume.ts, seams/turn-starter.ts remintEarned). Every turn cut by the 07:16 rotation
+// on 2026-11-24 ended so. Setting one of those entrypoints is no fix: each changes dozens of the CLI's behaviours.
 export type OauthRecoveryOptions = Options & {
     getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
 };

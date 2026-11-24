@@ -5196,6 +5196,8 @@
             "strainAgents": "{count} agent en cours | {count} agents en cours",
             "strainBoth": "{first} et {second}",
             "strainCpu": "ses processeurs sont saturés",
+            "strainDisk": "seulement {free} de disque libre",
+            "strainDiskShort": "l'espace disque manque",
             "strainMemory": "seulement {free} de mémoire libre",
             "strainMemoryShort": "la mémoire manque",
             "strainMemoryStall": "la mémoire provoque des blocages",

@@ -476,6 +476,35 @@ test("a refused credential is promised a re-mint and held for it, unless the tur
     ]);
 });
 
+// 2026-11-24, ferret-c2eb: the re-mint's re-run worked for 8 hours, then the sandbox's next rotation refused its token.
+test("a re-mint's own re-run refused after it ran is held for another re-mint", async () => {
+    const input: TurnInput = { prompt: "go", conversationId: "frames-token-later", resume: "auth" };
+    const later = scripted([
+        { kind: "session", sessionId: "s-later" },
+        { kind: "delta", text: "hours of work" },
+        { kind: "error", code: "claude-token-refused", message: "Failed to authenticate: OAuth token revoked." },
+        { kind: "done" },
+    ]);
+    const { services: s } = turnServices(later);
+
+    const frames = await collect(streamAgent(s, input, undefined));
+
+    expect(frames.find((frame) => frame.kind === "error")).toMatchObject({ code: "claude-token-refused", autoResume: "scheduled" });
+    expect(resumes.find(({ event }) => event.kind === "turn-held")).toStrictEqual({
+        conversationId: "frames-token-later",
+        event: {
+            kind: "turn-held",
+            held: {
+                input: { ...input, agent: "claude", harness: "native", conversationId: "frames-token-later" },
+                reason: "auth",
+                sessionId: "s-later",
+                ran: true,
+                remint: { account: "default", refusedToken: "tok-xyz" },
+            },
+        },
+    });
+});
+
 test("a turn that ends with nothing to show gets its failure synthesized ahead of done, and is held like any stopped turn", async () => {
     const { services: s, writes } = turnServices(
         scripted([

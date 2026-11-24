@@ -10,6 +10,7 @@ import { mainBranchOf } from "../git/agent-refs.js";
 import type { ConversationWorktree,AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import type { RunnerHub } from "./runner-peer.js";
+import { hostAnswering } from "../hosts/host-room.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 import { openRunnerTurn } from "./ownership/account-holds.js";
 import { collectHeld, payOwedStop, type RelayContext, type RelayFrame, relayTurn, stopRemoteTurn } from "./held-turns/runner-relay.js";
@@ -34,6 +35,12 @@ import { sweepArtifactsHome } from "./held-turns/runner-artifacts.js";
 // What a dispatch reads of the daemon: the runner's socket, the checkouts it mirrors, and the log.
 export interface DispatchServices {
     readonly runnerHub: Pick<RunnerHub, "client" | "reconnected">;
+    // The machine each runner runs on and that machine's heartbeats, so a runner gone quiet on an awake machine is told
+    // from one asleep with it (held-turns/runner-relay.ts); absent, a dropped runner is waited for the whole day.
+    readonly runners?: Pick<Services["runners"], "list">;
+    readonly hostHub?: Pick<Services["hostHub"], "state">;
+    // How long a dropped runner may stay away while its machine answers; the relay's own line unless a test says.
+    readonly runnerDownAfterMs?: number;
     readonly logger: Services["logger"];
     readonly agentWorktrees: Pick<AgentWorktrees, "mainDir" | "worktreeDir">;
     readonly workspace: Pick<Services["workspace"], "root">;
@@ -55,6 +62,28 @@ const COLLECTED_SWEEP_MS = 2 * 24 * 60 * 60 * 1000;
 // How long a turn's `done` waits for its branch: the push queues behind the runner's other git work. Past it `done` goes
 // on, and the backstop push in the dispatch's `finally` delivers once the first one is through.
 const DONE_DELIVERY_MS = 120_000;
+
+// Asks, when a dropped runner has been away long enough to wonder, whether the machine it runs on still answers.
+const hostAnsweringOf = (services: DispatchServices, runnerId: string): RelayContext["hostAnswering"] => {
+    const { runners, hostHub } = services;
+    if (runners === undefined || hostHub === undefined) {
+        return undefined;
+    }
+    return async () => {
+        const host = (await runners.list()).find((runner) => runner.id === runnerId)?.host;
+        return hostAnswering(host, (door) => hostHub.state(door).pinged, Date.now());
+    };
+};
+
+const relayContextOf = (services: DispatchServices, runnerId: string, conversationId: string, signal: AbortSignal | undefined): RelayContext => ({
+    hub: services.runnerHub,
+    logger: services.logger,
+    runnerId,
+    conversationId,
+    signal,
+    hostAnswering: hostAnsweringOf(services, runnerId),
+    downAfterMs: services.runnerDownAfterMs,
+});
 
 // Waits for `work` (whose own failures it reports itself) at most `ms`.
 const within = async (work: Promise<void>, ms: number): Promise<void> => {
@@ -222,7 +251,7 @@ export async function* dispatchRemoteTurn(
     const { conversationId } = input;
     const repos = await syncRepos(services, worktree);
     const sync = (op: "pull" | "push"): RunnerSync => ({ op, conversationId, branch: worktree.branch, repos });
-    const context: RelayContext = { hub: services.runnerHub, logger: services.logger, runnerId, conversationId, signal };
+    const context = relayContextOf(services, runnerId, conversationId, signal);
     const home = { hub: services.runnerHub, logger: services.logger, runnerId, workspaceRoot: services.workspace.root, historyRoot: services.config.historyRoot, conversationId };
     const openedAt = Date.now();
     // The tips this dispatch moved the mirror onto, per repo, and the delivery `done` started, which the backstop waits for.

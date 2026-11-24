@@ -310,6 +310,47 @@ test("a runner that restarted while the link was down says the turn was lost, an
     expect(second.calls()).toContain("sync:push");
 });
 
+// 2026-11-24: Docker Desktop died on omen with ten turns on its runner while omen's own agent kept answering; each turn
+// waited, read as running, until the agents that spawned them stopped them an hour and more later.
+describe("a runner that drops and stays away", () => {
+    const endless = [delta("a"), ...Array.from({ length: 50 }, (_, index) => delta(`more ${index}`))];
+    const onMachine = (services: DispatchServices, answering: boolean): DispatchServices => ({
+        ...services,
+        // SAFETY: the relay reads only the runner's id and host off the enrollment.
+        runners: { list: async () => [{ id: "rog", card: "rog", host: "omen-pc" }] as never },
+        // SAFETY: the relay reads only `pinged` of a device's state.
+        hostHub: { state: (door: string) => ({ pinged: answering && door === "omen-pc" ? { at: Date.now(), answer: { ok: true } } : undefined }) as never },
+        runnerDownAfterMs: 30,
+    });
+
+    test("while its machine still answers is down there: the turn stops following it and says why", async () => {
+        const { services, dial, leave } = parent();
+        const first = await runnerAt(createRemoteTurns(), endless, { dieAfter: 1, redial: () => leave() });
+        dial(first.client);
+        const frames = await dispatched(onMachine(services, true));
+        expect(work(frames)).toEqual(["a"]);
+        const error = frames.find((frame) => frame.kind === "error");
+        expect(error?.kind === "error" ? error.message : "").toMatch(/has not come back for .* while its machine still answers/);
+        expect(frames.at(-1)).toEqual(done);
+    });
+
+    test("while its machine is quiet too is asleep with it: the turn keeps waiting until Stop", async () => {
+        const { services, dial, leave } = parent();
+        const stop = new AbortController();
+        const first = await runnerAt(createRemoteTurns(), endless, { dieAfter: 1, redial: () => leave() });
+        dial(first.client);
+        const running = dispatched(onMachine(services, false), stop.signal);
+        let finished = false;
+        void running.then(() => (finished = true));
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        expect(finished).toBe(false);
+        stop.abort();
+        const frames = await running;
+        expect(frames.some((frame) => frame.kind === "error" && frame.message.includes("while its machine still answers"))).toBe(false);
+        expect(frames.at(-1)).toEqual(done);
+    });
+});
+
 test("a runner too old to pick a turn back up is said to be, rather than the turn quietly stopping", async () => {
     const turns = createRemoteTurns();
     const { services, dial, leave } = parent();

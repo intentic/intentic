@@ -452,8 +452,9 @@ export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: 
     return rotate(store, id, account.accessToken, refresh);
 };
 
-// Mints a replacement for a token the API just rejected, regardless of its recorded expiry (the mid-turn recovery path,
-// see getOAuthToken in agent.ts). Returning the same token back tells the CLI the credential is genuinely dead.
+// Mints a replacement for a token the API just rejected, regardless of its recorded expiry: the auth re-run's re-mint
+// (turn-resume.ts), a runner's borrowed token, and the CLI's mid-turn ask, which the CLI does not make today
+// (claude-code-runner.ts OauthRecoveryOptions). Returning the same token back tells the CLI the credential is genuinely dead.
 export const replaceRejectedToken = (
     store: ClaudeStore,
     id: string,

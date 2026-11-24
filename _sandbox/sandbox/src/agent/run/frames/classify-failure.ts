@@ -13,7 +13,7 @@ import type { VerificationStanding } from "../../verification/agent-verification
 import type { RefreshOptions } from "../../../usage/headroom.js";
 import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
 import { opt } from "../../../opt.js";
-import type { RoutedTurn } from "../../../seams/turn-starter.js";
+import { remintEarned, type RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/holds/held-turn.js";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
@@ -541,7 +541,7 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
         // Says on the frame whether the daemon will re-mint and re-run this credential.
         case "remint": {
             const { remint } = context;
-            return remint === undefined
+            return remint === undefined || !remintEarned(context.turn, context.answered)
                 ? bare(event)
                 : { frame: { ...event, autoResume: "scheduled" }, held: { ...heldBase(context, conversationId), reason: "auth" as const, remint } };
         }
@@ -565,9 +565,10 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     }
 };
 
-// Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
+// Only a stored Claude account's credential is re-minted; whether a re-mint's own re-run is again is decided once its
+// refusal arrives, by whether it ran first (seams/turn-starter.ts remintEarned).
 export const remintFor = (input: RoutedTurn, account: string | undefined, request: AgentRequest): FailureContext["remint"] =>
-    input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth" && input.resume !== "auth"
+    input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth"
         ? { account, refusedToken: request.credential.token }
         : undefined;
 

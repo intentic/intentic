@@ -258,7 +258,8 @@ export const resolveHarnessCredentials = async (
     if (oauthToken === undefined) {
         return { ok: true, credentials: {} };
     }
-    // Lets the CLI re-mint the token on a 401; `current` tracks it so another turn's rotation is adopted.
+    // Lets the CLI re-mint the token on a 401, once it asks (it does not today: claude-code-runner.ts OauthRecoveryOptions);
+    // `current` tracks it so another turn's rotation is adopted.
     let current: string | undefined = oauthToken;
     const refreshOauthToken = async (): Promise<string | undefined> => {
         if (current === undefined || accountId === undefined) {

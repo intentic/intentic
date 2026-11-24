@@ -82,6 +82,20 @@ describe("how full a machine is", () => {
         expect(machineLoad(idle({ memoryFreeMb: 500, load: 1.0 }), 5).strain).toEqual(["memory", "cpu", "agents"]);
     });
 
+    // 2026-11-24: omen took ten subagents while its C: drive filled, and Docker Desktop died with all of them on it.
+    test("a disk without room for another agent's checkout and build is full; a little more than that is busy", () => {
+        expect(machineLoad(idle({ freeDiskMb: 0 }), 0)).toMatchObject({ standing: "full", strain: ["disk"], diskFreeMb: 0 });
+        expect(machineLoad(idle({ freeDiskMb: 8_000 }), 0)).toMatchObject({ standing: "full", strain: ["disk"] });
+        expect(machineLoad(idle({ freeDiskMb: 20_000 }), 0)).toMatchObject({ standing: "busy", strain: ["disk"] });
+        expect(machineLoad(idle({ freeDiskMb: 40_000 }), 0)).toMatchObject({ standing: "calm", diskFreeMb: 40_000 });
+    });
+
+    test("a disk-full runner is never suggested, however idle the rest of it reads", () => {
+        const here = machineLoad(idle({ load: 1.0 }), 0);
+        expect(suggestionFor("auto", here, machines(["omen", idle({ freeDiskMb: 0 })]))).toBeUndefined();
+        expect(suggestionFor("auto", here, machines(["omen", idle({ freeDiskMb: 0 })], ["z440", idle()]))).toEqual({ runner: "z440", name: "z440" });
+    });
+
     // Slots follow the memory the sandbox may use, not the machine's: a 4 GiB container on a 64 GiB box holds four.
     test("a container's memory limit sizes its slots, not the machine around it", () => {
         expect(machineLoad(idle({ cpus: 16, memoryMb: 65_536, memoryLimitMb: 4_096, memoryFreeMb: 3_500 }), 0).slots).toBe(4);
@@ -89,7 +103,7 @@ describe("how full a machine is", () => {
 
     // A runner that predates the live figures still has a load and a size to be judged by.
     test("a runner that reports no memory figures is judged by what it does report", () => {
-        const old: RunnerFacts = { cpus: 8, memoryMb: 32_768, freeDiskMb: 0, load: 0.2 };
+        const old: RunnerFacts = { cpus: 8, memoryMb: 32_768, freeDiskMb: 100_000, load: 0.2 };
         expect(machineLoad(old, 1)).toMatchObject({ standing: "calm", slots: 6 });
     });
 });
@@ -175,6 +189,14 @@ describe("the fleet as one reading", () => {
         expect(await readHere(deps({}, 1), pending)).toMatchObject({ agents: 4, memoryFreeMb: 28_000 - 3 * 1024 });
         const [omen] = await readRunners(deps({ omen: idle() }), { refresh: false, pending });
         expect(omen).toMatchObject({ name: "omen-pc", agents: 2, facts: { memoryFreeMb: 28_000 - 2 * 1024 } });
+    });
+
+    // Ten siblings placed in one burst would each read the same free disk; the book spends it as they go.
+    test("counts children placed a moment ago against the disk they are about to fill", async () => {
+        const pending = { here: 0, runners: new Map([["omen", 3]]) };
+        const [omen] = await readRunners(deps({ omen: idle({ freeDiskMb: 30_000 }) }), { refresh: false, pending });
+        expect(omen?.facts?.freeDiskMb).toBe(30_000 - 3 * 5 * 1024);
+        expect(omen === undefined ? undefined : fleetMachine(omen, FITS).load).toMatchObject({ standing: "busy", strain: ["disk"] });
     });
 
     test("names the calm machines only while this sandbox is full", async () => {

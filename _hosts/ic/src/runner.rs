@@ -38,6 +38,17 @@ fn slug_of(name: &str) -> Result<String> {
     Ok(format!("{SLUG_PREFIX}{name}"))
 }
 
+/// The engine a runner runs on and, on Windows, the read-only mount of the host-disk hints (engine/host_disk.rs), as
+/// `docker run` options.
+fn engine_stamp() -> Vec<String> {
+    let mut args = vec![
+        "-e".to_string(),
+        format!("HOST_ENGINE={}", crate::engine::stamp()),
+    ];
+    args.extend(crate::engine::host_disk::mount_args());
+    args
+}
+
 /// Everything `runner up` takes. A struct (connect::Args' shape) because the optional shape files pushed the
 /// positional form past what reads at a call site.
 pub struct Up {
@@ -237,6 +248,13 @@ pub fn up(args: Up) -> Result<()> {
     // A runner is a sandbox container too: on Intentic OS the host policy may put it in a microVM (os/policy.rs).
     let mut stamped = sandbox::labels::here(&slug, sandbox::labels::Kind::Runner);
     stamped.extend(sandbox::at_rest::stamp(&key));
+    // The engine it runs on and the Windows drive under that engine's disk, as a sandbox's own run carries them
+    // (connect.rs stamped_run, recreate.rs): a runner's free disk is read through them (machine-facts.ts), since inside
+    // Docker Desktop's growing disk a statfs reads hundreds of gigabytes free while the drive under it is at 0
+    // (2026-11-24, omen, its runner taking ten subagents as C: filled). A recreate stamped these already; a fresh
+    // `runner up` did not.
+    stamped.extend(engine_stamp());
+    crate::engine::host_disk::refresh_hints();
     let argv = crate::os::policy::sandbox_run(sandbox::labels::into_run(
         &contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?,
         &stamped,
@@ -341,6 +359,19 @@ fn already_gone(slug: &str, live: Option<&[String]>, leftovers: impl FnOnce() ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Without these a runner reads its free disk off the engine's growing disk, never the drive under it.
+    #[test]
+    fn a_runner_run_carries_its_engine_and_the_host_disk_hints() {
+        let stamp = engine_stamp();
+        assert!(stamp
+            .windows(2)
+            .any(|pair| pair == ["-e", &format!("HOST_ENGINE={}", crate::engine::stamp())]));
+        #[cfg(windows)]
+        assert!(stamp
+            .windows(2)
+            .any(|pair| pair[0] == "-v" && pair[1].ends_with(":/run/intentic/host:ro")));
+    }
 
     #[test]
     fn a_runner_with_no_container_and_no_leftovers_is_already_gone() {

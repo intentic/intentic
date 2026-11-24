@@ -608,6 +608,23 @@ describe("a refused credential", () => {
         expect(plan.held).toBeUndefined();
     });
 
+    // 2026-11-24, ferret-c2eb: an auth re-run that worked for 8 hours was cut by the next rotation and never re-run.
+    test("on a re-mint's own re-run that ran first is a later rotation, held for another re-mint", async () => {
+        const remint = { account: "acct", refusedToken: "tok-2" };
+        const rerun = { ...input, resume: "auth" as const };
+        const plan = await classifyFailure(token, context({ turn: rerun, remint, answered: true }), answering());
+        expect(plan.frame).toStrictEqual({ ...token, autoResume: "scheduled" });
+        expect(plan.held).toStrictEqual({ input: rerun, reason: "auth", sessionId: "s-1", ran: true, remint });
+    });
+
+    test("on a re-mint's own re-run before it ran is the re-minted token dead, holding nothing", async () => {
+        const remint = { account: "acct", refusedToken: "tok-2" };
+        const rerun = { ...input, resume: "auth" as const };
+        const plan = await classifyFailure(token, context({ turn: rerun, remint, answered: false }), answering());
+        expect(plan.frame).toBe(token);
+        expect(plan.held).toBeUndefined();
+    });
+
     test("that reads as a spent allowance is filed as one", async () => {
         const spent = { ...token, message: "You've hit your usage limit" };
         expect((await classifyFailure(spent, context(), answering())).writes).toStrictEqual(refused("limit", "You've hit your usage limit"));

@@ -29,6 +29,10 @@ const strainPhrase = (strain: MachineStrain, load: MachineLoad): string => {
             return t(`chat.fleetAdvice.strainCpu`);
         case `agents`:
             return t(`chat.fleetAdvice.strainAgents`, { count: load.agents }, load.agents);
+        case `disk`:
+            return load.diskFreeMb === undefined
+                ? t(`chat.fleetAdvice.strainDiskShort`)
+                : t(`chat.fleetAdvice.strainDisk`, { free: formatBytes(load.diskFreeMb * 1_048_576) });
     }
 };
 

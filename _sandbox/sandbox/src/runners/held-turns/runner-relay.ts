@@ -13,6 +13,16 @@ import type { RunnerClient, RunnerHub } from "../runner-peer.js";
 // (remote-turns.ts, its retention). Stop ends the wait at any time.
 const RUNNER_REATTACH_MS = 24 * 60 * 60 * 1000;
 
+/* A RUNNER AWAY WHILE ITS MACHINE ANSWERS IS DOWN, NOT ASLEEP (2026-11-24). The day's wait is for a machine that slept or
+   lost its network, where the runner carries the turn on unseen. When omen's C: drive filled, Docker Desktop died at 05:12
+   with ten turns on its runner, while omen's own agent kept answering every heartbeat; each turn waited, read as running
+   by the agents that spawned it, until they stopped it themselves an hour and more later. So once the runner has been away
+   this long and its machine still answers, the turn stops following it. Nothing is lost by it: whatever the runner still
+   holds of the turn comes home with the conversation's next turn there (collectHeld). */
+const RUNNER_DOWN_ON_AWAKE_HOST_MS = 10 * 60_000;
+// Past that, how often the wait asks again whether the machine answers: one that wakes with its runner dead is caught too.
+const AWAKE_RECHECK_MS = 60_000;
+
 // How often the parent tells the runner how many frames it has: what a parent that restarted mid-turn reads on from.
 const ACK_EVERY_MS = 2_000;
 
@@ -30,6 +40,11 @@ export interface RelayContext {
     readonly runnerId: string;
     readonly conversationId: string;
     readonly signal: AbortSignal | undefined;
+    // Whether the machine the runner runs on answers its heartbeat now (hosts/host-room.ts hostAnswering); absent where
+    // the runner's machine is not a connected device, which waits the whole day as before.
+    readonly hostAnswering?: (() => Promise<boolean>) | undefined;
+    // RUNNER_DOWN_ON_AWAKE_HOST_MS unless a test says.
+    readonly downAfterMs?: number | undefined;
 }
 
 // How a relay ended: the turn said `done` (or the runner holds nothing more of it), Stop was pressed, or the turn is
@@ -119,6 +134,42 @@ const pickUp = async (client: RunnerClient, context: RelayContext, received: num
     }
 };
 
+// The runner's next socket, or why none came: the day ran out or Stop was pressed (`undefined`), or the runner stayed away
+// past the line while its machine answered (`down`). Without a machine to ask, one wait to the deadline; with one, to the
+// line and then a minute at a time, so one that wakes with its runner dead is caught too.
+const awaitRunner = async (
+    context: RelayContext,
+    tried: RunnerClient | undefined,
+    clock: { readonly downAt: number; readonly deadline: number },
+): Promise<RunnerClient | "down" | undefined> => {
+    for (;;) {
+        const now = Date.now();
+        const until = context.hostAnswering === undefined ? clock.deadline : Math.min(clock.deadline, now < clock.downAt ? clock.downAt : now + AWAKE_RECHECK_MS);
+        const client = await context.hub.reconnected(context.runnerId, tried, until - now, context.signal);
+        if (client !== undefined || context.signal?.aborted === true || Date.now() >= clock.deadline) {
+            return client;
+        }
+        if (Date.now() >= clock.downAt && (await context.hostAnswering?.()) === true) {
+            return "down";
+        }
+    }
+};
+
+// What a turn whose runner is down says, and logs, as it stops following it.
+const runnerDown = (context: RelayContext, lostAt: number): AgentEvent => {
+    context.logger.warn(
+        { id: context.conversationId, runner: context.runnerId, awayMs: Date.now() - lostAt },
+        "runner dispatch: the runner stayed away while its machine answered, so the turn stops following it",
+    );
+    return {
+        kind: "error",
+        message:
+            `The runner "${context.runnerId}" has not come back for ${lasted(Date.now() - lostAt)} while its machine still answers: ` +
+            "the runner's container or the machine's Docker engine is down (a full disk or a crash). Whatever the runner still holds " +
+            "of this turn comes back with the next turn sent there once it is up; to carry on now, run the task in this sandbox.",
+    };
+};
+
 // The socket under the stream died: wait for the runner (the same socket first, since a stream can die alone), then read
 // on. Says so while it waits, and how long the gap was once it is back.
 async function* reattach(
@@ -127,12 +178,17 @@ async function* reattach(
     received: number,
 ): AsyncGenerator<AgentEvent, { readonly end: RelayEnd } | { readonly client: RunnerClient; readonly stream: AsyncIterable<AgentEvent> }> {
     const lostAt = Date.now();
-    const deadline = lostAt + RUNNER_REATTACH_MS;
+    const clock = { downAt: lostAt + (context.downAfterMs ?? RUNNER_DOWN_ON_AWAKE_HOST_MS), deadline: lostAt + RUNNER_REATTACH_MS };
     yield status(`Lost the link to the runner "${context.runnerId}". The turn carries on there; it is picked back up here when the runner reconnects. Stop ends the wait.`);
-    let candidate: RunnerClient | undefined = previous;
+    let candidate: RunnerClient | "down" | undefined = previous;
     let tried: RunnerClient | undefined;
     for (;;) {
-        candidate ??= await context.hub.reconnected(context.runnerId, tried, deadline - Date.now(), context.signal);
+        candidate ??= await awaitRunner(context, tried, clock);
+        if (candidate === "down") {
+            yield status(null);
+            yield runnerDown(context, lostAt);
+            return { end: { outcome: "lost", client: undefined } };
+        }
         if (candidate === undefined) {
             yield status(null);
             if (context.signal?.aborted === true) {

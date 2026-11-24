@@ -13,6 +13,20 @@ import type { Pinged } from "../peers/peer-hub.js";
 // Four missed heartbeats: a reading older than that is a machine that stopped answering, and its memory says nothing now.
 export const HOST_MEMORY_STALE_MS = 2 * 60_000;
 
+// Whether the machine behind a door answered a heartbeat lately, on that door or its card's native one, whatever its
+// answer said: an awake machine. A runner gone quiet while its machine still answers is down there, not asleep with it
+// (runners/held-turns/runner-relay.ts).
+export const hostAnswering = (door: string | undefined, pinged: (door: string) => Pinged | undefined, now: number): boolean => {
+    if (door === undefined) {
+        return false;
+    }
+    const { card } = parseHostConnection(door);
+    return [door, hostConnectionKey(card, HOST_NATIVE_ENVIRONMENT)].some((asked) => {
+        const beat = pinged(asked);
+        return beat !== undefined && now - beat.at <= HOST_MEMORY_STALE_MS;
+    });
+};
+
 // The host part of a reading, from a door (a hub key: a card, or `<card>::wsl:<distro>`) and each door's last heartbeat.
 // That door's own answer first; a distro's door has none, so its machine's Windows side (the card's native door) is
 // asked next, since the distro and Docker Desktop's VM live in the same Windows.
