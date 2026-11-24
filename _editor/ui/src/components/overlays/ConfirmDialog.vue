@@ -7,6 +7,8 @@ import { useT } from "../../i18n/index.js";
 import { toneWash } from "../../lib/tone.js";
 import Icon from "../primitives/Icon.vue";
 import Modal from "./Modal.vue";
+import { provide } from "vue";
+import { type ControlActions, EXTRA_CONTROL_ACTIONS } from "../../composables/agentControls.js";
 
 const t = useT();
 
@@ -57,6 +59,16 @@ const {
 
 /* `hide` fires once the modal has actually closed, by WHICHEVER road: Cancel, Esc, the mask, or a completed confirm. */
 const emit = defineEmits<{ cancel: []; confirm: []; hide: [] }>();
+
+// The two answers, for a dev build's agent working the <Modal> this is drawn in (composables/agentControls.ts). The confirm only
+// while its button would take a press.
+provide(EXTRA_CONTROL_ACTIONS, () => {
+    const actions: ControlActions = { cancel: { takes: `nothing`, run: () => emit(`cancel`) } };
+    if (!confirmDisabled && !loading) {
+        actions[`confirm`] = { takes: `nothing`, run: () => emit(`confirm`) };
+    }
+    return actions;
+});
 
 // Five, because it is the most a modal can name without becoming the list it is asking about.
 const NAMED = 5;

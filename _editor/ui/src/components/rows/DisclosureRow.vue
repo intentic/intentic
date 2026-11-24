@@ -1,6 +1,7 @@
 <!-- A record row, built on <Row>, that opens into its own evidence below. -->
 <script setup lang="ts">
-import { computed, useId, useSlots } from "vue";
+import { computed, ref, useId, useSlots } from "vue";
+import { type ControlActions, useAgentControl } from "../../composables/agentControls.js";
 import { FACE_SIZES } from "../brand/roleFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
@@ -16,6 +17,7 @@ const {
     tone = `default`,
     disabled = false,
     wideControl = false,
+    title,
 } = defineProps<{
     /** Open state; `v-model:open` for the row to own it, or bind + listen for a parent (e.g. an accordion) to. */
     open?: boolean;
@@ -52,6 +54,28 @@ const toggle = (): void => {
         emit(`update:open`, !open);
     }
 };
+
+// A dev build's agent opens and closes the row as a press would (composables/agentControls.ts); its name is the row's title.
+const root = ref<HTMLElement>();
+useAgentControl({
+    kind: `disclosure`,
+    element: () => root.value,
+    label: () => title,
+    state: () => ({ open, disabled }),
+    actions: (): ControlActions =>
+        disabled
+            ? {}
+            : {
+                  setOpen: {
+                      takes: `flag`,
+                      run: (on) => {
+                          if (on !== open) {
+                              toggle();
+                          }
+                      },
+                  },
+              },
+});
 
 // A drag is not a press, so selecting text inside the row must not also toggle it. Measured from pointerdown
 // position rather than `getSelection()`; `event.detail > 0` excludes synthetic keyboard clicks (which land at 0,0).
@@ -120,6 +144,7 @@ const wrapperBleed = computed(() => (flushInline && (wrapperSelect.value !== `` 
 <template>
     <!-- With a selection column, a grid: the column and <Row> share its first line and the drawer spans both under them. -->
     <div
+        ref="root"
         class="group"
         :class="[tint, wrapperSelect, wrapperBleed, $slots[`before`] ? `grid grid-cols-[auto_minmax(0,1fr)] items-center` : ``]"
         @pointerdown="onPointerDown"

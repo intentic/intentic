@@ -351,6 +351,8 @@ export { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
 export { installChunkRecovery, isStaleChunkError, loadChunk, recoverStaleChunk } from "./lib/loadChunk.js";
+// The kit's controls as a dev build's agent tools read and work them; idle until armed (composables/agentControls.ts).
+export { type AgentControl, armAgentControls, type ControlAction, type ControlChoice, type ControlStateValue } from "./composables/agentControls.js";
 // Markdown engine ships separately as `@intentic/ui/markdown`, so plain-TypeScript callers and tests avoid this
 // barrel's component graph.
 export { vTw } from "./lib/tw.js";

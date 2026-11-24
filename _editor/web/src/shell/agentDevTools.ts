@@ -14,6 +14,7 @@ import { navigation } from "../workbench/navigation/navigation";
 import { useSkin } from "../skins/useSkin";
 import { commandLabel, commands, executeCommand } from "../workbench/commands/useCommands";
 import { effectiveKeybinding } from "../workbench/commands/useKeymap";
+import { controlTools } from "./agentControlTools";
 
 // THE EDITOR, AS TOOLS AN AGENT CAN CALL. Dev servers only: main.ts installs this under import.meta.env.DEV, so a
 // production build and the public demo carry none of it. WebMCP lets a page register functions for agents through
@@ -22,7 +23,7 @@ import { effectiveKeybinding } from "../workbench/commands/useKeymap";
 // the page is running, what state the app believes it is in, and the debugging handles a person types into the console.
 // A browser without WebMCP (every stock one today, the owner's own included) has no modelContext and gets nothing.
 
-interface WebMcpTool {
+export interface WebMcpTool {
     readonly name: string;
     readonly description: string;
     readonly inputSchema: Readonly<Record<string, unknown>>;
@@ -269,7 +270,12 @@ export const installAgentDevTools = (render: RenderTrace): void => {
     if (context === undefined) {
         return;
     }
-    for (const tool of [buildTool, stateTool, lookTool(), commandTool, perfTool, renderTool(render)].map(answeringErrors)) {
+    // The route's components resolve before the router is ready; one tick more and they are drawn.
+    const settled = async (): Promise<void> => {
+        await navigation().isReady();
+        await nextTick();
+    };
+    for (const tool of [buildTool, stateTool, lookTool(), commandTool, perfTool, renderTool(render), ...controlTools(settled)].map(answeringErrors)) {
         // A refused registration costs that one tool, not the page.
         void (async () => await context.registerTool(tool))().catch((error: unknown) => console.warn(`[webmcp] ${tool.name}: ${errorMessage(error)}`));
     }

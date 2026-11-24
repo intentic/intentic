@@ -1,7 +1,7 @@
 // In production every lazy view's CSS is extracted into the initial stylesheet; this virtual module gives dev the same
 // stable style set before the app mounts.
 import { installDevStyles } from "virtual:intentic-dev-styles";
-import { installChunkRecovery, installUi, isStaleChunkError, recoverStaleChunk } from "@intentic/ui";
+import { armAgentControls, installChunkRecovery, installUi, isStaleChunkError, recoverStaleChunk } from "@intentic/ui";
 import { setDeveloperBuild } from "@intentic/ui/motion";
 import { highlightInWorker } from "@intentic/ui/markdown";
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -220,6 +220,8 @@ app.config.errorHandler = (err, _instance, info) => {
 // behind it leave a production build entirely. So do the WebMCP tools an agent's browser calls (shell/agentDevTools.ts),
 // imported rather than bundled so nothing of them reaches a production chunk.
 if (import.meta.env.DEV) {
+    // Before the mount, so the kit's controls mounted with the first screen register too (editor_controls, editor_act).
+    armAgentControls();
     const render = installRenderTrace(app);
     void import("./shell/agentDevTools").then(({ installAgentDevTools }) => installAgentDevTools(render));
 }

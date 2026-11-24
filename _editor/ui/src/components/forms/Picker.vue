@@ -9,6 +9,7 @@ import RoleFace from "../brand/RoleFace.vue";
 import PickerPanel from "./PickerPanel.vue";
 import ResponsiveOverlay from "../overlays/ResponsiveOverlay.vue";
 import { useT } from "../../i18n/index.js";
+import { type ControlActions, useAgentControl } from "../../composables/agentControls.js";
 
 const t = useT();
 
@@ -43,11 +44,8 @@ const model = defineModel<T | undefined>();
 const { mobile } = useDevice();
 const slots = useSlots();
 
-const selected = computed<PickerOption<T> | undefined>(() =>
-    normalizePickerGroups(options)
-        .flatMap((group) => group.options)
-        .find((option) => option.value === model.value),
-);
+const flat = computed(() => normalizePickerGroups(options).flatMap((group) => group.options));
+const selected = computed<PickerOption<T> | undefined>(() => flat.value.find((option) => option.value === model.value));
 
 // Fallthrough class lands on the trigger, twMerge'd so a caller's override beats the variant base.
 const attrs = useAttrs();
@@ -102,6 +100,37 @@ const applyPick = (option: PickerOption<T>): void => {
     model.value = option.value;
     close();
 };
+
+// A dev build's agent reads the choices and picks one as a press on its row would (composables/agentControls.ts).
+useAgentControl({
+    kind: `picker`,
+    element: () => triggerEl.value,
+    label: () => ariaLabel ?? header,
+    state: () => ({ value: model.value ?? null, chosen: selected.value?.label ?? null, open: open.value, disabled }),
+    choices: () => flat.value.map((option) => ({ value: option.value, label: option.label, disabled: option.disabled === true })),
+    actions: (): ControlActions =>
+        disabled
+            ? {}
+            : {
+                  pick: {
+                      takes: `choice`,
+                      run: (choice) => {
+                          const option = flat.value.find((each) => each.value === choice.value);
+                          if (option !== undefined) {
+                              applyPick(option);
+                          }
+                      },
+                  },
+                  setOpen: {
+                      takes: `flag`,
+                      run: (on) => {
+                          if (on !== open.value) {
+                              toggle();
+                          }
+                      },
+                  },
+              },
+});
 </script>
 
 <template>

@@ -1,8 +1,9 @@
 <!-- The app's one centred, dismissable box; forms, confirms and documents are all built on it. Its anatomy and why is dialog.css. -->
 <script setup lang="ts">
 import Dialog from "primevue/dialog";
-import { computed, nextTick, ref, useId, useSlots, type VNode } from "vue";
+import { computed, inject, nextTick, provide, ref, useId, useSlots, type VNode } from "vue";
 import { useBackDismiss } from "../../composables/useBackDismiss.js";
+import { type ControlActions, EXTRA_CONTROL_ACTIONS, useAgentControl } from "../../composables/agentControls.js";
 import { useDevice } from "../../composables/useDevice.js";
 import { provideSurfaceGround } from "./surfaceGround.js";
 
@@ -81,6 +82,28 @@ const WIDTH: Record<string, string> = {
 
 // Only `full` claims a height too: a canvas needs a committed height to fill; other sizes size to content.
 const rootClass = computed(() => [sheet.value ? `ui-dialog-sheet` : WIDTH[size], size === `full` ? `h-panel-xl` : ``].filter(Boolean).join(` `));
+
+// A dev build's agent finds an open dialog by its title and closes it as Escape would; a confirm adds its own two
+// answers (composables/agentControls.ts). On screen only while open: the box exists only then.
+const extraActions = inject(EXTRA_CONTROL_ACTIONS, undefined);
+provide(EXTRA_CONTROL_ACTIONS, undefined);
+useAgentControl({
+    kind: `dialog`,
+    element: () => box,
+    label: () => header,
+    state: () => ({ open: open.value, dismissable }),
+    actions: () => {
+        // A closed dialog is no question anyone is being asked: answering it would confirm what nobody saw.
+        if (!open.value) {
+            return {};
+        }
+        const actions: ControlActions = { ...extraActions?.() };
+        if (dismissable) {
+            actions[`close`] = { takes: `nothing`, run: () => (open.value = false) };
+        }
+        return actions;
+    },
+});
 
 // The three body treatments interact (padding, full's flex sizing, scroll cap), so they're set together here.
 const contentClass = computed(() =>

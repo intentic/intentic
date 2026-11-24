@@ -8,6 +8,7 @@ import { segmented } from "./segmented.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
 import { tipText } from "../../lib/tipText.js";
 import type { TooltipValue } from "../../lib/tooltip.js";
+import { useAgentControl } from "../../composables/agentControls.js";
 
 const {
     options,
@@ -83,6 +84,26 @@ const navigate = (event: KeyboardEvent, index: number): void => {
     model.value = option.value;
     track.value?.querySelectorAll<HTMLButtonElement>(`[role="tab"]`)[target]?.focus();
 };
+
+// A dev build's agent reads the options and selects one as a press would (composables/agentControls.ts). Its name is the
+// `aria-label` a caller sets on the strip, when it sets one; the choices tell the unnamed ones apart.
+useAgentControl({
+    kind: `segmented`,
+    element: () => track.value,
+    state: () => ({ value: model.value, chosen: options.find((option) => option.value === model.value)?.label ?? null }),
+    choices: () => options.map((option) => ({ value: option.value, label: option.label, disabled: option.disabled === true })),
+    actions: () => ({
+        select: {
+            takes: `choice`,
+            run: (choice) => {
+                const option = options.find((each) => each.value === choice.value);
+                if (option !== undefined) {
+                    model.value = option.value;
+                }
+            },
+        },
+    }),
+});
 
 // Derived from the device, not a prop, so a coarse pointer is served everywhere without a call site opting in. The
 // pill leaves it to `touch-target`'s CSS overlay; the underline tab reads this and grows for real (see below).

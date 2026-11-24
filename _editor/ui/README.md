@@ -69,6 +69,15 @@ flowchart LR
   inside it, so a picker in a popover neither closes it nor shares its Escape (`overlayNest.ts`). The
   `substitutes` check refuses each drawn by hand; a place the primitive cannot draw (a browser's page tabs, a commit
   graph's rows) says why with `allow(substitutes)`.
+- **Agents work the controls, not the pixels.** `Picker`, `SegmentedControl`, `Modal` (with `ConfirmDialog`'s confirm
+  and cancel) and `DisclosureRow` register with `useAgentControl` (`src/composables/agentControls.ts`): a kind, an element, what
+  the control holds, its choices, and the actions an agent may take, each declaring what it takes (nothing, a flag or a
+  choice). A dev build arms the record before mounting and serves it as the `editor_controls` and `editor_act` WebMCP
+  tools (web's `shell/agentControlTools.ts`), so an agent changes a setting in one call through the component's own
+  model rather than a snapshot and a click per step. Unarmed, as in production, registering is one comparison and keeps
+  nothing. A control is named by its `aria-label`, its label or the title of the row it sits in, so a picker in a
+  settings row needs no name of its own; a dialog offers its actions only while it is open. A new kit control with a
+  value or a popup registers the same way.
 - **Tones.** `src/lib/tone.ts` is the one tone vocabulary (`success`, `warning`, `danger`, `info`, `neutral`,
   `primary`) and the only file that spells a tone at a strength: `toneInk`, `toneDot`, `toneWash` (a pill),
   `toneTint(tone, "strong" | "soft")` (a tinted box's rim and fill), `tonePlate` (a count), `toneHover`, and
