@@ -1,0 +1,1404 @@
+---
+/* WHAT PASSES BETWEEN YOUR SANDBOXES, drawn (docs/between-sandboxes). One component, one picture per `part`, so the
+   pictures share one look: each sandbox in its big-picture colour (big-picture-art.ts), gold for what travels, and
+   small moving tokens for things on their way (still under reduced motion). Every word comes from
+   site-content/between-sandboxes.ts; the rules behind the pictures are docs/architecture/account-routing.md. */
+import { betweenSandboxes, type BetweenSandboxId, type BetweenThingId } from "@intentic/site-content/between-sandboxes";
+import { HUE, ICON, glyph } from "./big-picture-art";
+
+interface Props {
+    part: "hero" | "rule" | "five" | "allow" | "keys" | "claims" | "stays";
+}
+
+const { part } = Astro.props;
+const words = betweenSandboxes;
+
+/* Glyphs this page needs beyond the big picture's. 24px line drawings, currentColor. */
+const MORE = {
+    bug: '<path d="M8 9a4 4 0 0 1 8 0v4.5a4 4 0 0 1-8 0z"/><path d="M12 9v8.5"/><path d="M4 12.5h4"/><path d="M16 12.5h4"/><path d="m5 7.5 3 1.8"/><path d="m19 7.5-3 1.8"/><path d="m5 18 3-1.8"/><path d="m19 18-3-1.8"/><path d="m10 5-1.2-1.8"/><path d="m14 5 1.2-1.8"/>',
+    clip: '<path d="M20 11.5 12.6 19a5 5 0 0 1-7.1-7.1L13 4.4a3.3 3.3 0 0 1 4.7 4.7l-7.5 7.4a1.7 1.7 0 0 1-2.4-2.4L14.5 7.4"/>',
+    gauge: '<path d="M4.5 16.5a8 8 0 1 1 15 0"/><path d="m12 16.5-4-4.5"/><circle cx="12" cy="16.5" r="1.2"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    door: '<path d="M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21"/><path d="M3.5 21h17"/><path d="M14.5 12.5h.01"/>',
+    doorOpen: '<path d="M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21"/><path d="M3.5 21h17"/><path d="M6 4.2 12.5 6v16L6 21"/><path d="M10.5 13h.01"/>',
+    pointer: '<path d="M6 3.5 18.5 12l-5.5 1.3 3.2 6.2-2.4 1.2-3.2-6.2L6 18.5z"/>',
+    tag: '<path d="M3.5 12.5V5A1.5 1.5 0 0 1 5 3.5h7.5L21 12l-8.5 8.5z"/><circle cx="8" cy="8" r="1.4"/>',
+    building: '<path d="M4 21V5.5A1.5 1.5 0 0 1 5.5 4h7A1.5 1.5 0 0 1 14 5.5V21"/><path d="M14 10h4.5a1.5 1.5 0 0 1 1.5 1.5V21"/><path d="M2.5 21h19"/><path d="M7.5 8h3"/><path d="M7.5 12h3"/><path d="M7.5 16h3"/>',
+    inbox: '<path d="M3.5 13.5 6 5h12l2.5 8.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19z"/><path d="M3.5 13.5H8l1.5 2.5h5l1.5-2.5h4.5"/>',
+    stop: '<circle cx="12" cy="12" r="8.5"/><path d="m6 6 12 12"/>',
+};
+
+const THING_ICON = {
+    report: MORE.bug,
+    drop: MORE.clip,
+    read: ICON.eye,
+    task: ICON.agent,
+    runout: MORE.gauge,
+} satisfies Record<BetweenThingId, string>;
+
+/* Each sandbox's colour; Ola's private sandbox, which you are not in, has none. */
+const hueOf = (id: BetweenSandboxId | "private"): string => (id === "private" ? "" : `--h:${HUE[id]}`);
+const sandboxOf = (id: BetweenSandboxId) => words.sandboxes.find((sandbox) => sandbox.id === id);
+---
+
+<div class="bs-host">
+{
+    part === "hero" && (
+        <figure class="bs bs-hero" aria-label={words.label}>
+            <div class="bs-you">
+                <span class="bs-you-face" set:html={glyph(ICON.person, 22, 1.6)} />
+                <span class="bs-you-name">{words.you}</span>
+            </div>
+            <svg class="bs-hero-ties" viewBox="0 0 300 36" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M150 0 C150 20 44 14 44 36" />
+                <path d="M150 0 L150 36" />
+                <path d="M150 0 C150 20 256 14 256 36" />
+            </svg>
+            <div class="bs-hero-row">
+                {words.sandboxes.map((sandbox, index) => (
+                    <>
+                        <div class="bs-world" style={hueOf(sandbox.id)}>
+                            <span class="bs-badge">{sandbox.you}</span>
+                            <span class="bs-world-name">{sandbox.name}</span>
+                            <span class="bs-world-whose">{sandbox.whose}</span>
+                            <span class="bs-world-kit" aria-hidden="true">
+                                <span set:html={glyph(ICON.agent, 16)} />
+                                <span set:html={glyph(ICON.folder, 16)} />
+                                <span set:html={glyph(ICON.key, 16)} />
+                            </span>
+                        </div>
+                        {index < words.sandboxes.length - 1 && (
+                            <div class="bs-lane" aria-hidden="true">
+                                <span class="bs-token" set:html={glyph(index === 0 ? MORE.clip : ICON.agent, 15)} />
+                                <span class="bs-token bs-token-back" set:html={glyph(index === 0 ? MORE.bug : ICON.eye, 15)} />
+                            </div>
+                        )}
+                    </>
+                ))}
+            </div>
+        </figure>
+    )
+}
+
+{
+    part === "rule" && (
+        <figure class="bs bs-rule" aria-label={words.rule.label}>
+            <div class="bs-rule-from" style={hueOf("game")}>
+                <span class="bs-rule-agent" set:html={glyph(ICON.agent, 22, 1.6)} />
+                <span class="bs-rule-from-name">Your agent</span>
+                <span class="bs-rule-from-as">
+                    <span set:html={glyph(ICON.person, 13)} />
+                    as you
+                </span>
+            </div>
+            <ul class="bs-rule-places">
+                {words.rule.places.map((place) => {
+                    const open = place.can.some(Boolean);
+                    return (
+                        <li class:list={[`bs-rule-row`, !open && `bs-rule-row-shut`]}>
+                            <span class="bs-rule-arrow" aria-hidden="true">
+                                {!open && <span class="bs-rule-stop" set:html={glyph(MORE.stop, 16, 2)} />}
+                            </span>
+                            <div class:list={[`bs-place`, !open && `bs-place-shut`]} style={place.id === "private" ? "" : hueOf(place.id)}>
+                                <span class="bs-place-head">
+                                    <span class="bs-place-name">{place.name}</span>
+                                    <span class="bs-badge">{open ? `You: ${place.you}` : place.you}</span>
+                                </span>
+                                <span class="bs-place-can">
+                                    {words.rule.abilities.map((ability, index) => (
+                                        <span class:list={[`bs-can`, !place.can[index] && `bs-can-no`]}>
+                                            <span set:html={glyph(place.can[index] ? MORE.check : ICON.close, 13, 2.2)} />
+                                            {ability}
+                                        </span>
+                                    ))}
+                                </span>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        </figure>
+    )
+}
+
+{
+    part === "five" && (
+        <div class="bs bs-five" role="list">
+            {words.things.map((thing, index) => (
+                <article class="bs-thing" role="listitem" style={`--i:${index}`}>
+                    {thing.automatic === true ? (
+                        <div class="bs-mini bs-mini-broadcast" aria-hidden="true">
+                            <span class="bs-mini-box" style={hueOf("home")} />
+                            <span class="bs-mini-pulse">
+                                <span class="bs-ring" />
+                                <span class="bs-ring bs-ring-late" />
+                                <span class="bs-mini-hub" set:html={glyph(THING_ICON[thing.id], 18)} />
+                            </span>
+                            <span class="bs-mini-box" style={hueOf("game")} />
+                        </div>
+                    ) : (
+                        <div class="bs-mini" aria-hidden="true">
+                            <span class="bs-mini-box" style={hueOf("game")} />
+                            <span class="bs-mini-lane">
+                                <span class="bs-token" set:html={glyph(THING_ICON[thing.id], 15)} />
+                            </span>
+                            <span class="bs-mini-box" style={hueOf(thing.id === "report" ? "work" : "home")}>
+                                {thing.id === "report" && <span class="bs-mini-inbox" set:html={glyph(MORE.inbox, 13)} />}
+                            </span>
+                        </div>
+                    )}
+                    <p class="bs-thing-name">{thing.name}</p>
+                    <p class="bs-thing-line">{thing.line}</p>
+                    {thing.automatic === true ? <span class="bs-thing-auto">{thing.how}</span> : <code class="bs-thing-how">{thing.how}</code>}
+                </article>
+            ))}
+        </div>
+    )
+}
+
+{
+    part === "allow" && (
+        <figure class="bs bs-allow" aria-label={words.allow.label}>
+            <ol class="bs-story">
+                <li class="bs-frame">
+                    <span class="bs-step">1</span>
+                    <div class="bs-card" style={hueOf("home")}>
+                        <span class="bs-card-from">
+                            <span set:html={glyph(ICON.agent, 13)} />
+                            Home
+                        </span>
+                        <span class="bs-card-ask">{words.allow.card.ask}</span>
+                        <span class="bs-card-buttons">
+                            <span class="bs-button bs-button-yes">{words.allow.card.yes}</span>
+                            <span class="bs-button">{words.allow.card.no}</span>
+                        </span>
+                    </div>
+                    <span class="bs-frame-name">{words.allow.steps[0]}</span>
+                </li>
+                <li class="bs-frame">
+                    <span class="bs-step">2</span>
+                    <div class="bs-press">
+                        <span class="bs-button bs-button-yes bs-button-big">{words.allow.card.yes}</span>
+                        <span class="bs-pointer" set:html={glyph(MORE.pointer, 26, 1.6)} />
+                        <span class="bs-press-ring" />
+                    </div>
+                    <span class="bs-frame-name">{words.allow.steps[1]}</span>
+                </li>
+                <li class="bs-frame">
+                    <span class="bs-step">3</span>
+                    <div class="bs-remember">
+                        {(["home", "work"] as const).map((id) => (
+                            <span class="bs-remember-side" style={hueOf(id)}>
+                                <span class="bs-remember-key" set:html={glyph(ICON.key, 18)} />
+                                <span class="bs-remember-name">{sandboxOf(id)?.name}</span>
+                            </span>
+                        ))}
+                    </div>
+                    <span class="bs-frame-name">{words.allow.steps[2]}</span>
+                    <span class="bs-frame-note">{words.allow.revoke}</span>
+                </li>
+            </ol>
+        </figure>
+    )
+}
+
+{
+    part === "keys" && (
+        <figure class="bs bs-keys" aria-label={words.keys.label}>
+            {[
+                { have: [true, false], open: false },
+                { have: [false, true], open: false },
+                { have: [true, true], open: true },
+            ].map((door) => (
+                <div class:list={[`bs-door`, door.open && `bs-door-open`]}>
+                    <span class="bs-door-keys">
+                        {words.keys.keys.map((key, index) => (
+                            <span class:list={[`bs-key`, !door.have[index] && `bs-key-missing`]}>
+                                <span set:html={glyph(ICON.key, 16)} />
+                                <span class="bs-key-text">
+                                    <span class="bs-key-name">{key.name}</span>
+                                    <span class="bs-key-from">{key.from}</span>
+                                </span>
+                            </span>
+                        ))}
+                    </span>
+                    <span class="bs-door-art" set:html={glyph(door.open ? MORE.doorOpen : MORE.door, 54, 1.3)} />
+                    <span class="bs-door-verdict">
+                        <span set:html={glyph(door.open ? MORE.check : ICON.close, 14, 2.2)} />
+                        {door.open ? "Opens" : "Stays shut"}
+                    </span>
+                </div>
+            ))}
+        </figure>
+    )
+}
+
+{
+    part === "claims" && (
+        <figure class="bs bs-claims" aria-label={words.claims.label}>
+            <ul class="bs-claim-rows">
+                {words.claims.rows.map((row, index) => (
+                    <li class="bs-claim-row">
+                        <span class="bs-repo">
+                            <span set:html={glyph(ICON.branch, 15)} />
+                            <span class="bs-repo-name">{row.repo}</span>
+                        </span>
+                        <span class="bs-claim-lane" aria-hidden="true">
+                            {index === 0 && <span class="bs-token" set:html={glyph(MORE.bug, 14)} />}
+                        </span>
+                        <span class="bs-claim-home" style={hueOf(row.sandbox)}>
+                            <span set:html={glyph(MORE.inbox, 15)} />
+                            {sandboxOf(row.sandbox)?.name}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+            <span class="bs-claim-where">
+                <span set:html={glyph(ICON.folder, 13)} />
+                {words.claims.where}
+            </span>
+        </figure>
+    )
+}
+
+{
+    part === "stays" && (
+        <div class="bs bs-stays">
+            <figure class="bs-panel" aria-label={words.stays.label}>
+                <div class="bs-vault" style={hueOf("game")}>
+                    <span class="bs-vault-lock" set:html={glyph(ICON.lock, 26, 1.5)} />
+                    <span class="bs-vault-items">
+                        {words.stays.items.map((item) => (
+                            <span class="bs-chip">{item}</span>
+                        ))}
+                    </span>
+                </div>
+                <span class="bs-vault-out" aria-hidden="true">
+                    <span class="bs-vault-line" />
+                    <span class="bs-vault-stop" set:html={glyph(MORE.stop, 18, 2)} />
+                </span>
+                <figcaption class="bs-panel-caption">
+                    <span class="bs-panel-title">{words.stays.title}</span>
+                    {words.stays.line}
+                </figcaption>
+            </figure>
+            <figure class="bs-panel" aria-label={words.org.label}>
+                <div class="bs-cross">
+                    <span class="bs-cross-side bs-cross-org">
+                        <span set:html={glyph(MORE.building, 22, 1.5)} />
+                        {words.org.from}
+                    </span>
+                    <span class="bs-cross-lane">
+                        <span class="bs-cross-tag">
+                            <span set:html={glyph(MORE.tag, 13)} />
+                            {words.org.tag}
+                        </span>
+                    </span>
+                    <span class="bs-cross-side">
+                        <span set:html={glyph(ICON.person, 22, 1.5)} />
+                        {words.org.to}
+                    </span>
+                </div>
+                <figcaption class="bs-panel-caption">
+                    <span class="bs-panel-title">{words.org.title}</span>
+                    {words.org.line}
+                </figcaption>
+            </figure>
+        </div>
+    )
+}
+</div>
+
+<style>
+    /* The column a picture is drawn in: what its narrow layouts ask about (a container cannot ask about itself). */
+    .bs-host {
+        container-type: inline-size;
+    }
+    .bs {
+        --bs-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+        --bs-gold: color-mix(in oklab, var(--color-gold) 85%, var(--color-content));
+        --bs-wash: color-mix(in oklab, var(--color-content) 5%, transparent);
+        --bs-line: color-mix(in oklab, var(--color-gold) 45%, transparent);
+        margin: 0;
+        color: var(--color-content);
+    }
+
+    /* A sandbox, a place, a box: its colour mixed into whichever skin is on, the way the big picture does it. */
+    [style*="--h"] {
+        --bs-tint: oklch(70% 0.11 var(--h));
+        --bs-ink: color-mix(in oklab, var(--bs-tint) 62%, var(--color-content));
+        --bs-ground: color-mix(in oklab, var(--bs-tint) 13%, var(--color-card));
+    }
+
+    .bs-badge {
+        align-self: flex-start;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--bs-tint, var(--color-gold)) 22%, transparent);
+        padding: 0.12rem 0.55rem;
+        color: var(--bs-ink, var(--color-muted));
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+    }
+
+    /* Something on its way: a gold coin with its glyph, riding a lane from one side to the other. */
+    .bs-token {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--color-canvas);
+        box-shadow:
+            0 0 0 1.5px var(--bs-gold),
+            0 0 14px color-mix(in oklab, var(--color-gold) 35%, transparent);
+        width: 1.75rem;
+        height: 1.75rem;
+        color: var(--bs-gold);
+        translate: 0 -50%;
+        animation: bs-ride 4.2s var(--bs-ease) infinite;
+        animation-delay: calc(var(--i, 0) * -0.7s);
+    }
+    .bs-token-back {
+        animation-name: bs-ride-back;
+        animation-delay: -2.1s;
+    }
+    @keyframes bs-ride {
+        0% {
+            left: 0;
+            opacity: 0;
+        }
+        12%,
+        82% {
+            opacity: 1;
+        }
+        100% {
+            left: calc(100% - 1.75rem);
+            opacity: 0;
+        }
+    }
+    @keyframes bs-ride-back {
+        0% {
+            left: calc(100% - 1.75rem);
+            opacity: 0;
+        }
+        12%,
+        82% {
+            opacity: 1;
+        }
+        100% {
+            left: 0;
+            opacity: 0;
+        }
+    }
+
+    /* ── The hero: you, three sandboxes, things riding between them ─────────────────────────────────────────────── */
+    .bs-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        border-radius: 28px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: clamp(1.1rem, 3vw, 2rem);
+    }
+    .bs-you {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        border-radius: 999px;
+        background: var(--color-card);
+        box-shadow: 0 0 0 1px var(--color-line-strong);
+        padding: 0.4rem 1rem 0.4rem 0.45rem;
+    }
+    .bs-you-face {
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-gold) 20%, transparent);
+        width: 2.2rem;
+        height: 2.2rem;
+        color: var(--bs-gold);
+    }
+    .bs-you-name {
+        font-family: var(--font-serif, inherit);
+        font-size: 1.05rem;
+    }
+    .bs-hero-ties {
+        width: 100%;
+        height: 2.5rem;
+        overflow: visible;
+    }
+    .bs-hero-ties path {
+        fill: none;
+        stroke: var(--color-line-strong);
+        stroke-width: 1.4;
+        vector-effect: non-scaling-stroke;
+    }
+    .bs-hero-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 7.5rem) minmax(0, 1fr) minmax(5.5rem, 7.5rem) minmax(0, 1fr);
+        align-items: stretch;
+        width: 100%;
+    }
+    .bs-world {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        border-radius: 22px;
+        background:
+            radial-gradient(90% 60% at 50% 0%, color-mix(in oklab, var(--bs-tint) 18%, transparent), transparent 70%),
+            var(--bs-ground);
+        padding: 0.95rem 1rem 1rem;
+        min-width: 0;
+    }
+    .bs-world-name {
+        font-family: var(--font-serif, inherit);
+        font-size: 1.2rem;
+        line-height: 1.2;
+    }
+    .bs-world-whose {
+        color: var(--bs-ink);
+        font-size: 0.78rem;
+    }
+    .bs-world-kit {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.35rem;
+    }
+    .bs-world-kit > span {
+        display: grid;
+        place-items: center;
+        border-radius: 10px;
+        background: color-mix(in oklab, var(--bs-tint) 14%, transparent);
+        width: 2rem;
+        height: 2rem;
+        color: var(--bs-ink);
+    }
+    /* A two-way street between two sandboxes: one dashed track each way, a token riding each. */
+    .bs-lane {
+        position: relative;
+        align-self: center;
+        margin: 0 0.6rem;
+        height: 4.5rem;
+    }
+    .bs-lane::before,
+    .bs-lane::after {
+        position: absolute;
+        top: 30%;
+        right: 0;
+        left: 0;
+        border-top: 1.5px dashed var(--bs-line);
+        content: "";
+    }
+    .bs-lane::after {
+        top: 70%;
+    }
+    .bs-lane .bs-token {
+        top: 30%;
+    }
+    .bs-lane .bs-token-back {
+        top: 70%;
+    }
+
+    /* ── One rule: your agent, and what it may do in each place ──────────────────────────────────────────────────── */
+    .bs-rule {
+        display: grid;
+        grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+        align-items: center;
+        gap: 0;
+        border-radius: 28px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: clamp(1.1rem, 3vw, 2rem);
+    }
+    .bs-rule-from {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 22px;
+        background: var(--bs-ground);
+        padding: 1.1rem 0.8rem;
+        text-align: center;
+    }
+    .bs-rule-agent {
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--bs-tint) 22%, transparent);
+        width: 2.75rem;
+        height: 2.75rem;
+        color: var(--bs-ink);
+    }
+    .bs-rule-from-name {
+        font-family: var(--font-serif, inherit);
+        font-size: 1.05rem;
+    }
+    .bs-rule-from-as {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        color: var(--bs-ink);
+        font-size: 0.75rem;
+    }
+    .bs-rule-places {
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .bs-rule-row {
+        display: grid;
+        grid-template-columns: 3.5rem minmax(0, 1fr);
+        align-items: center;
+        margin: 0;
+    }
+    /* The way there: a gold line with its head, or a dashed one stopped short. */
+    .bs-rule-arrow {
+        position: relative;
+        height: 1.5rem;
+    }
+    .bs-rule-arrow::before {
+        position: absolute;
+        top: 50%;
+        right: 0.35rem;
+        left: 0;
+        border-top: 1.5px solid var(--bs-gold);
+        content: "";
+    }
+    .bs-rule-arrow::after {
+        position: absolute;
+        top: 50%;
+        right: 0.3rem;
+        border-top: 1.5px solid var(--bs-gold);
+        border-right: 1.5px solid var(--bs-gold);
+        width: 0.45rem;
+        height: 0.45rem;
+        content: "";
+        rotate: 45deg;
+        translate: 0 -50%;
+    }
+    .bs-rule-row-shut .bs-rule-arrow::before {
+        right: 45%;
+        border-top-style: dashed;
+        border-top-color: var(--color-line-strong);
+    }
+    .bs-rule-row-shut .bs-rule-arrow::after {
+        display: none;
+    }
+    .bs-rule-stop {
+        position: absolute;
+        top: 50%;
+        left: 55%;
+        color: var(--color-danger);
+        translate: 0 -50%;
+    }
+    .bs-place {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        border-radius: 18px;
+        background: var(--bs-ground, var(--color-card));
+        padding: 0.75rem 0.95rem;
+    }
+    .bs-place-shut {
+        background: transparent;
+        box-shadow: inset 0 0 0 1.5px var(--color-line);
+        color: var(--color-subtle);
+    }
+    .bs-place-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .bs-place-name {
+        font-family: var(--font-serif, inherit);
+        font-size: 1.05rem;
+    }
+    .bs-place-can {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+    .bs-can {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--color-success) 14%, transparent);
+        padding: 0.18rem 0.6rem 0.18rem 0.45rem;
+        color: color-mix(in oklab, var(--color-success) 70%, var(--color-content));
+        font-size: 0.76rem;
+    }
+    .bs-can-no {
+        background: color-mix(in oklab, var(--color-danger) 10%, transparent);
+        color: color-mix(in oklab, var(--color-danger) 55%, var(--color-subtle));
+        text-decoration: line-through;
+        text-decoration-color: color-mix(in oklab, var(--color-danger) 40%, transparent);
+    }
+
+    /* ── Five things that travel ────────────────────────────────────────────────────────────────────────────────── */
+    /* Three over two on a wide column, so no slot is left empty; two across, then one, as it narrows. */
+    .bs-five {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 1rem;
+    }
+    .bs-thing {
+        grid-column: span 2;
+    }
+    .bs-thing:nth-child(n + 4) {
+        grid-column: span 3;
+    }
+    @container (max-width: 46rem) {
+        .bs-five {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .bs-thing,
+        .bs-thing:nth-child(n + 4) {
+            grid-column: auto;
+        }
+        .bs-thing:last-child {
+            grid-column: 1 / -1;
+        }
+    }
+    @container (max-width: 30rem) {
+        .bs-five {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+    .bs-thing {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        border-radius: 22px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        box-shadow: inset 0 0 0 1px var(--color-line);
+        padding: 1rem 1.1rem 1.1rem;
+    }
+    .bs-mini {
+        display: grid;
+        grid-template-columns: 2.6rem minmax(0, 1fr) 2.6rem;
+        align-items: center;
+        margin-bottom: 0.55rem;
+        height: 3.25rem;
+    }
+    .bs-mini-box {
+        position: relative;
+        border-radius: 12px;
+        background:
+            radial-gradient(80% 70% at 50% 0%, color-mix(in oklab, var(--bs-tint) 30%, transparent), transparent 75%),
+            var(--bs-ground);
+        box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--bs-tint) 30%, transparent);
+        height: 2.6rem;
+    }
+    .bs-mini-inbox {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--bs-ink);
+    }
+    .bs-mini-lane {
+        position: relative;
+        height: 100%;
+    }
+    .bs-mini-lane::before {
+        position: absolute;
+        top: 50%;
+        right: 0.25rem;
+        left: 0.25rem;
+        border-top: 1.5px dashed var(--bs-line);
+        content: "";
+    }
+    .bs-mini-pulse {
+        position: relative;
+        display: grid;
+        place-items: center;
+        height: 100%;
+    }
+    .bs-mini-hub {
+        position: relative;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--color-canvas);
+        box-shadow: 0 0 0 1.5px var(--bs-gold);
+        width: 2.1rem;
+        height: 2.1rem;
+        color: var(--bs-gold);
+    }
+    .bs-ring {
+        position: absolute;
+        border-radius: 999px;
+        box-shadow: 0 0 0 1.5px var(--bs-gold);
+        width: 2.1rem;
+        height: 2.1rem;
+        animation: bs-pulse 2.8s ease-out infinite;
+    }
+    .bs-ring-late {
+        animation-delay: -1.4s;
+    }
+    @keyframes bs-pulse {
+        0% {
+            opacity: 0.8;
+            scale: 1;
+        }
+        100% {
+            opacity: 0;
+            scale: 2.6;
+        }
+    }
+    .bs-thing-name {
+        margin: 0;
+        font-family: var(--font-serif, inherit);
+        font-size: 1.1rem;
+        line-height: 1.25;
+    }
+    .bs-thing-line {
+        flex: 1;
+        margin: 0;
+        color: var(--color-muted);
+        font-size: 0.86rem;
+        line-height: 1.45;
+    }
+    .bs-thing-how,
+    .bs-thing-auto {
+        align-self: flex-start;
+        margin-top: 0.4rem;
+        border-radius: 8px;
+        background: color-mix(in oklab, var(--color-gold) 10%, transparent);
+        padding: 0.15rem 0.5rem;
+        color: var(--bs-gold);
+        font-size: 0.76rem;
+    }
+    .bs-thing-auto {
+        background: transparent;
+        box-shadow: inset 0 0 0 1px var(--color-line-strong);
+        color: var(--color-muted);
+        font-style: italic;
+    }
+
+    /* ── Allow once: a three-frame story ───────────────────────────────────────────────────────────────────────── */
+    .bs-allow {
+        border-radius: 28px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: clamp(1.1rem, 3vw, 2rem);
+    }
+    .bs-story {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 2.25rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .bs-frame {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.7rem;
+        margin: 0;
+        text-align: center;
+    }
+    /* Between frames, a chevron pointing on. */
+    .bs-frame + .bs-frame::before {
+        position: absolute;
+        top: 4.2rem;
+        left: -1.55rem;
+        border-top: 1.5px solid var(--bs-line);
+        border-right: 1.5px solid var(--bs-line);
+        width: 0.65rem;
+        height: 0.65rem;
+        content: "";
+        rotate: 45deg;
+    }
+    .bs-step {
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        box-shadow: 0 0 0 1.5px var(--bs-gold);
+        width: 1.6rem;
+        height: 1.6rem;
+        color: var(--bs-gold);
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .bs-frame-name {
+        font-family: var(--font-serif, inherit);
+        font-size: 1rem;
+    }
+    .bs-frame-note {
+        margin-top: -0.4rem;
+        color: var(--color-subtle);
+        font-size: 0.75rem;
+    }
+    .bs-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+        border-radius: 16px;
+        background: var(--color-card);
+        box-shadow:
+            inset 0 0 0 1px var(--color-line-strong),
+            0 10px 30px -18px var(--color-black);
+        padding: 0.8rem 0.9rem;
+        width: 100%;
+        max-width: 15rem;
+        min-height: 7.5rem;
+        text-align: left;
+    }
+    .bs-card-from {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        color: var(--bs-ink);
+        font-size: 0.72rem;
+    }
+    .bs-card-ask {
+        font-size: 0.86rem;
+        line-height: 1.35;
+    }
+    .bs-card-buttons {
+        display: flex;
+        gap: 0.4rem;
+    }
+    .bs-button {
+        border-radius: 999px;
+        box-shadow: inset 0 0 0 1px var(--color-line-strong);
+        padding: 0.2rem 0.7rem;
+        color: var(--color-muted);
+        font-size: 0.76rem;
+    }
+    .bs-button-yes {
+        background: var(--color-gold);
+        box-shadow: none;
+        color: var(--color-canvas);
+        font-weight: 600;
+    }
+    .bs-button-big {
+        padding: 0.45rem 1.5rem;
+        font-size: 0.95rem;
+    }
+    .bs-press {
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 7.5rem;
+    }
+    .bs-pointer {
+        position: absolute;
+        top: 58%;
+        left: 58%;
+        color: var(--color-content);
+        filter: drop-shadow(0 2px 3px var(--color-black));
+        animation: bs-tap 2.4s var(--bs-ease) infinite;
+    }
+    .bs-press-ring {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        border-radius: 999px;
+        box-shadow: 0 0 0 2px var(--bs-gold);
+        width: 6.5rem;
+        height: 2.4rem;
+        translate: -50% -50%;
+        animation: bs-press 2.4s ease-out infinite;
+    }
+    @keyframes bs-tap {
+        0%,
+        100% {
+            translate: 0.6rem 0.6rem;
+        }
+        40%,
+        55% {
+            translate: 0 0;
+        }
+    }
+    @keyframes bs-press {
+        0%,
+        45% {
+            opacity: 0;
+            scale: 1;
+        }
+        50% {
+            opacity: 0.9;
+            scale: 1;
+        }
+        100% {
+            opacity: 0;
+            scale: 1.35;
+        }
+    }
+    .bs-remember {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        min-height: 7.5rem;
+    }
+    .bs-remember-side {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 16px;
+        background: var(--bs-ground);
+        padding: 0.75rem 0.7rem;
+        min-width: 5.5rem;
+    }
+    .bs-remember-key {
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--color-canvas);
+        box-shadow: 0 0 0 1.5px var(--bs-gold);
+        width: 2.1rem;
+        height: 2.1rem;
+        color: var(--bs-gold);
+    }
+    .bs-remember-name {
+        font-size: 0.8rem;
+    }
+
+    /* ── Two keys, one door ─────────────────────────────────────────────────────────────────────────────────────── */
+    .bs-keys {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+    }
+    .bs-door {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        border-radius: 22px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        box-shadow: inset 0 0 0 1px var(--color-line);
+        padding: 1rem 0.8rem 1.1rem;
+    }
+    .bs-door-open {
+        background:
+            radial-gradient(70% 55% at 50% 55%, color-mix(in oklab, var(--color-gold) 16%, transparent), transparent 75%),
+            color-mix(in oklab, var(--color-content) 3%, transparent);
+        box-shadow: inset 0 0 0 1.5px var(--color-line-bright);
+    }
+    .bs-door-keys {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        width: 100%;
+    }
+    .bs-key {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 12px;
+        background: color-mix(in oklab, var(--color-gold) 10%, transparent);
+        padding: 0.35rem 0.6rem;
+        color: var(--bs-gold);
+    }
+    .bs-key-missing {
+        background: transparent;
+        outline: 1.5px dashed var(--color-line-strong);
+        outline-offset: -1.5px;
+        color: var(--color-subtle);
+        opacity: 0.55;
+    }
+    .bs-key-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+    }
+    .bs-key-name {
+        color: var(--color-content);
+        font-size: 0.78rem;
+    }
+    .bs-key-missing .bs-key-name {
+        color: inherit;
+    }
+    .bs-key-from {
+        font-size: 0.68rem;
+    }
+    .bs-door-art {
+        color: var(--color-muted);
+    }
+    .bs-door-open .bs-door-art {
+        color: var(--bs-gold);
+    }
+    .bs-door-verdict {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        color: color-mix(in oklab, var(--color-danger) 60%, var(--color-muted));
+        font-size: 0.82rem;
+    }
+    .bs-door-open .bs-door-verdict {
+        color: color-mix(in oklab, var(--color-success) 75%, var(--color-content));
+    }
+
+    /* ── Every project has a home ───────────────────────────────────────────────────────────────────────────────── */
+    .bs-claims {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+        border-radius: 28px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        padding: clamp(1.1rem, 3vw, 2rem);
+    }
+    .bs-claim-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .bs-claim-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(3.5rem, 1fr) minmax(0, 0.9fr);
+        align-items: center;
+        margin: 0;
+    }
+    .bs-repo {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 12px;
+        background: var(--color-card);
+        box-shadow: inset 0 0 0 1px var(--color-line-strong);
+        padding: 0.5rem 0.75rem;
+        min-width: 0;
+        color: var(--color-muted);
+    }
+    .bs-repo-name {
+        overflow: hidden;
+        color: var(--color-content);
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.78rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .bs-claim-lane {
+        position: relative;
+        height: 2.2rem;
+    }
+    .bs-claim-lane::before {
+        position: absolute;
+        top: 50%;
+        right: 0.55rem;
+        left: 0.3rem;
+        border-top: 1.5px solid var(--bs-line);
+        content: "";
+    }
+    .bs-claim-lane::after {
+        position: absolute;
+        top: 50%;
+        right: 0.45rem;
+        border-top: 1.5px solid var(--bs-line);
+        border-right: 1.5px solid var(--bs-line);
+        width: 0.45rem;
+        height: 0.45rem;
+        content: "";
+        rotate: 45deg;
+        translate: 0 -50%;
+    }
+    .bs-claim-home {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 12px;
+        background: var(--bs-ground);
+        padding: 0.5rem 0.75rem;
+        min-width: 0;
+        color: var(--bs-ink);
+        font-size: 0.86rem;
+    }
+    .bs-claim-where {
+        display: inline-flex;
+        align-items: center;
+        align-self: flex-end;
+        gap: 0.35rem;
+        color: var(--color-subtle);
+        font-size: 0.75rem;
+    }
+
+    /* ── What stays put, and crossing a company line ───────────────────────────────────────────────────────────── */
+    .bs-stays {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+    .bs-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin: 0;
+        border-radius: 22px;
+        background: color-mix(in oklab, var(--color-content) 3%, transparent);
+        box-shadow: inset 0 0 0 1px var(--color-line);
+        padding: 1.2rem;
+    }
+    .bs-vault {
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        border-radius: 18px;
+        background: var(--bs-ground);
+        padding: 0.9rem;
+    }
+    .bs-vault-lock {
+        display: grid;
+        flex: none;
+        place-items: center;
+        border-radius: 14px;
+        background: color-mix(in oklab, var(--bs-tint) 20%, transparent);
+        width: 3rem;
+        height: 3rem;
+        color: var(--bs-ink);
+    }
+    .bs-vault-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+    .bs-chip {
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--bs-tint) 16%, transparent);
+        padding: 0.15rem 0.6rem;
+        color: var(--bs-ink);
+        font-size: 0.75rem;
+    }
+    .bs-vault-out {
+        position: relative;
+        display: flex;
+        align-items: center;
+        margin: -0.6rem auto -0.4rem;
+        height: 1.6rem;
+        width: 60%;
+    }
+    .bs-vault-line {
+        flex: 1;
+        border-top: 1.5px dashed var(--color-line-strong);
+    }
+    .bs-vault-stop {
+        color: var(--color-danger);
+    }
+    .bs-panel-caption {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        color: var(--color-muted);
+        font-size: 0.86rem;
+    }
+    .bs-panel-title {
+        color: var(--color-content);
+        font-family: var(--font-serif, inherit);
+        font-size: 1.1rem;
+    }
+    .bs-cross {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.5rem;
+        min-height: 5.2rem;
+    }
+    .bs-cross-side {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 16px;
+        background: var(--color-card);
+        box-shadow: inset 0 0 0 1px var(--color-line-strong);
+        padding: 0.6rem 0.8rem;
+        color: var(--color-muted);
+        font-size: 0.8rem;
+    }
+    .bs-cross-org {
+        color: var(--bs-gold);
+    }
+    .bs-cross-lane {
+        position: relative;
+        display: grid;
+        place-items: center;
+        height: 100%;
+    }
+    .bs-cross-lane::before {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        left: 0;
+        border-top: 1.5px dashed var(--bs-line);
+        content: "";
+    }
+    .bs-cross-tag {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 999px;
+        background: var(--color-canvas);
+        box-shadow: 0 0 0 1.5px var(--bs-gold);
+        padding: 0.2rem 0.65rem;
+        color: var(--bs-gold);
+        font-size: 0.74rem;
+        white-space: nowrap;
+    }
+
+    /* ── Narrow: everything stacks, and the lanes run down instead of across ──────────────────────────────────── */
+    @container (max-width: 40rem) {
+        .bs-hero-ties {
+            display: none;
+        }
+        .bs-you {
+            margin-bottom: 1rem;
+        }
+        .bs-hero-row {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .bs-lane {
+            justify-self: center;
+            margin: 0.4rem 0;
+            width: 4rem;
+            height: 3.5rem;
+        }
+        .bs-lane::before,
+        .bs-lane::after {
+            top: 0;
+            bottom: 0;
+            left: 0.875rem;
+            right: auto;
+            border-top: 0;
+            border-left: 1.5px dashed var(--bs-line);
+        }
+        .bs-lane::after {
+            top: 0;
+            left: auto;
+            right: 0.875rem;
+        }
+        .bs-lane .bs-token {
+            animation-name: bs-ride-down;
+        }
+        .bs-lane .bs-token-back {
+            animation-name: bs-ride-up;
+        }
+        .bs-rule {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 0.9rem;
+        }
+        .bs-rule-row {
+            grid-template-columns: 2.25rem minmax(0, 1fr);
+        }
+        .bs-story {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 1.75rem;
+        }
+        .bs-frame + .bs-frame::before {
+            top: -1.25rem;
+            left: 50%;
+            rotate: 135deg;
+        }
+        .bs-keys,
+        .bs-stays {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .bs-claim-row {
+            grid-template-columns: minmax(0, 1fr) 2.5rem;
+            grid-template-areas:
+                "repo repo"
+                "home lane";
+            row-gap: 0.35rem;
+        }
+        .bs-repo {
+            grid-area: repo;
+        }
+        .bs-claim-home {
+            grid-area: home;
+        }
+        .bs-claim-lane {
+            display: none;
+        }
+        /* The company line read top to bottom, the label riding the way down. */
+        .bs-cross {
+            grid-template-columns: minmax(0, 1fr);
+            justify-items: center;
+        }
+        .bs-cross-lane {
+            padding: 0.9rem 0;
+        }
+        .bs-cross-lane::before {
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            right: auto;
+            border-top: 0;
+            border-left: 1.5px dashed var(--bs-line);
+        }
+    }
+    @keyframes bs-ride-down {
+        0% {
+            top: 0;
+            left: 0;
+            opacity: 0;
+            translate: 0 0;
+        }
+        15%,
+        80% {
+            opacity: 1;
+        }
+        100% {
+            top: calc(100% - 1.75rem);
+            left: 0;
+            opacity: 0;
+            translate: 0 0;
+        }
+    }
+    @keyframes bs-ride-up {
+        0% {
+            top: calc(100% - 1.75rem);
+            left: calc(100% - 1.75rem);
+            opacity: 0;
+            translate: 0 0;
+        }
+        15%,
+        80% {
+            opacity: 1;
+        }
+        100% {
+            top: 0;
+            left: calc(100% - 1.75rem);
+            opacity: 0;
+            translate: 0 0;
+        }
+    }
+
+    /* Still pictures for whoever asks for less motion: each token rests midway, each ring at rest. */
+    @media (prefers-reduced-motion: reduce) {
+        .bs-token,
+        .bs-ring,
+        .bs-pointer,
+        .bs-press-ring {
+            animation: none;
+        }
+        .bs-token {
+            left: calc(50% - 0.875rem);
+        }
+        .bs-lane .bs-token {
+            left: calc(35% - 0.875rem);
+        }
+        .bs-lane .bs-token-back {
+            left: calc(65% - 0.875rem);
+        }
+        .bs-ring-late {
+            display: none;
+        }
+        .bs-press-ring {
+            opacity: 0.6;
+        }
+    }
+</style>

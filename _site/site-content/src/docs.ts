@@ -40,6 +40,19 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // Straight after the big picture, which draws the sandboxes: this one draws what passes
+                            // between them. Pictures first, as few words as each needs.
+                            id: "between-sandboxes",
+                            title: "Between your sandboxes",
+                            blurb: "What your agents can carry from one of your sandboxes to another",
+                            meta: {
+                                title: "Between your sandboxes · intentic docs",
+                                description:
+                                    "How your agents carry reports, files, looks, tasks and out-of-credits heads-ups between the sandboxes you are in: one rule, one Allow, and keys that never travel.",
+                                datePublished: "2026-11-24",
+                            },
+                        },
+                        {
                             // Before Architecture on purpose: that page is a system map, and this is the vocabulary it
                             // is drawn in. Owns "role" and "project", which no other page defined.
                             id: "worksite",

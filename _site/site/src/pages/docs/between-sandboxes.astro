@@ -1,0 +1,65 @@
+---
+import { betweenSandboxes } from "@intentic/site-content/between-sandboxes";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+import Figure from "../../components/figures/BetweenSandboxesFigure.astro";
+
+/* WHAT PASSES BETWEEN YOUR SANDBOXES, in pictures: each section is one drawing and one line under its heading. The
+   drawings carry the idea; the words only name what they show. The rules behind it are
+   docs/architecture/account-routing.md. */
+
+const words = betweenSandboxes;
+---
+
+<DocsLayout
+    pageId="between-sandboxes"
+    heading="Between your sandboxes"
+    lead="Your agents can carry things from one of your sandboxes to another: a report, some files, a look, a task."
+>
+    <div class="docs-embed my-8">
+        <Figure part="hero" />
+    </div>
+
+    <h2>{words.rule.title}</h2>
+    <p>{words.rule.line}</p>
+    <div class="docs-embed my-6">
+        <Figure part="rule" />
+    </div>
+
+    <h2>Five things that travel</h2>
+    <div class="docs-embed my-6">
+        <Figure part="five" />
+    </div>
+
+    <h2>{words.allow.title}</h2>
+    <p>{words.allow.line}</p>
+    <div class="docs-embed my-6">
+        <Figure part="allow" />
+    </div>
+
+    <h2>{words.keys.title}</h2>
+    <p>{words.keys.line}</p>
+    <div class="docs-embed my-6">
+        <Figure part="keys" />
+    </div>
+
+    <h2>{words.claims.title}</h2>
+    <p>{words.claims.line}</p>
+    <div class="docs-embed my-6">
+        <Figure part="claims" />
+    </div>
+
+    <h2>Two promises</h2>
+    <div class="docs-embed my-6">
+        <Figure part="stays" />
+    </div>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/big-picture/", title: "The big picture", why: "your account and every sandbox you are in." },
+            { href: "/docs/access/", title: "Access & sharing", why: "what you can do in a sandbox someone shared with you." },
+            { href: "/docs/bug-reports/", title: "Bug reports", why: "the inbox a reported problem lands in." },
+            { href: "/docs/fleet/", title: "Fleet", why: "making and moving sandboxes from inside one." },
+        ]}
+    />
+</DocsLayout>
