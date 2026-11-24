@@ -232,7 +232,7 @@ it(`hands Full access the name and the logo, as the owner has them`, () => {
     expect(logoTile(el)).not.toBeNull();
 });
 
-// The colour reads under the name, and is the press that opens its swatches (logo/SandboxColorValue.vue).
+// The colour is a circle beside the name, and the press that opens its swatches (logo/SandboxColorValue.vue).
 const colorValue = (el: HTMLElement): HTMLElement | null => el.querySelector<HTMLElement>(`[data-setting="sandbox-color"]`);
 const openSwatches = async (el: HTMLElement): Promise<HTMLElement> => {
     const press = colorValue(el)!.querySelector<HTMLButtonElement>(`button`)!;
@@ -246,9 +246,9 @@ const openSwatches = async (el: HTMLElement): Promise<HTMLElement> => {
 const swatch = (editor: HTMLElement, label: string): HTMLButtonElement => editor.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
 const unpicked = (editor: HTMLElement): HTMLButtonElement => editor.querySelector<HTMLButtonElement>(`button[aria-checked="false"]`)!;
 
-it(`names the sandbox's colour under its name before anyone has chosen one, and saves a swatch's press on its own`, async () => {
+it(`shows the sandbox's colour beside its name before anyone has chosen one, and saves a swatch's press on its own`, async () => {
     const el = mount(sandboxRow({ id: `s1` }));
-    // A word for the colour, not only a dot: the swatch's own name, and what the value is for whoever cannot see it.
+    // The circle says nothing on the page; whoever cannot see it is told what it is and which colour it wears.
     expect(colorValue(el)!.querySelector(`button`)!.getAttribute(`aria-label`)).toMatch(/^Sandbox color: \w+$/u);
     const editor = await openSwatches(el);
     expect(editor.querySelectorAll(`button[aria-checked="true"]`)).toHaveLength(1);
@@ -290,7 +290,7 @@ it(`leaves an uploaded logo as it is when the colour changes`, async () => {
 it(`shows a member the colour they see on the rail, with nothing to press`, () => {
     const el = mount(sandboxRow({ tier: `collaborator` }));
     expect(colorValue(el)).not.toBeNull();
-    expect(colorValue(el)!.textContent?.trim()).toMatch(/^\w+$/u);
+    expect(colorValue(el)!.querySelector(`[role="img"]`)!.getAttribute(`aria-label`)).toMatch(/^Sandbox color: \w+$/u);
     expect(colorValue(el)!.querySelector(`button`)).toBeNull();
 });
 

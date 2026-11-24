@@ -1,9 +1,9 @@
-<!-- THE SANDBOX'S COLOUR, the third part of who it is, read on the line under its name ("● Lagoon") as the name and the
-     logo are read beside it. For its owner and Full access the value is its own press, as the name is: it opens the
-     swatches anchored to it, and one press on a swatch saves (useSandboxColor.ts repaints the rail, the wallpaper and the
-     composer for every member as the platform answers). The panel stays open, so the colours can be tried on against
-     the rail behind it. A preset logo is redrawn in the new colour in the same write, so the sandbox never wears two
-     colours at once. Anyone else reads the colour with nothing to press. -->
+<!-- THE SANDBOX'S COLOUR, the third part of who it is: one quiet circle beside its name, the colour itself and nothing
+     said about it (its name rides the tooltip). For its owner and Full access the circle is its own press, as the name
+     and the logo are: it opens the swatches anchored to it, and one press on a swatch saves (useSandboxColor.ts repaints
+     the rail, the wallpaper and the composer for every member as the platform answers). The panel stays open, so the
+     colours can be tried on against the rail behind it. A preset logo is redrawn in the new colour in the same write,
+     so the sandbox never wears two colours at once. Anyone else sees the circle with nothing to press. -->
 <script setup lang="ts">
 import { ColorPicker, ResponsiveOverlay, SWATCHES, swatchHex } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
@@ -23,11 +23,13 @@ const pending = ref<string>();
 let pressed = 0;
 const error = ref<string>();
 const current = computed(() => pending.value ?? (sandbox.active.value === undefined ? undefined : sandboxColor(sandbox.active.value)));
-// The colour in words, the picker's own name for it: sandboxColor() always lands on a swatch.
+// The colour in words, the picker's own name for it (sandboxColor() always lands on a swatch): for the tooltip and
+// for whoever cannot see the circle.
 const named = computed(() => {
     const swatch = SWATCHES.find((entry) => swatchHex(entry) === current.value);
     return swatch === undefined ? `` : t(`ui.colorPicker.${swatch.key}`);
 });
+const tip = computed(() => ({ title: t(`sandbox.sandboxColor.title`), note: named.value }));
 
 const open = ref(false);
 const anchor = ref<HTMLElement>();
@@ -56,8 +58,8 @@ const pick = async (color: string): Promise<void> => {
 
 <template>
     <span v-if="current" data-setting="sandbox-color" class="flex min-w-0 items-center gap-2">
-        <!-- The same transparent rule and inset as the name's own press above it (InlineRename), so the dot sits under
-             the name's first letter at rest and the wash lines up with the name's when hovered. -->
+        <!-- A 12px circle with a hairline edge, so a pale swatch still has a rim on paper. Its press area is the touch
+             target's, not its drawn size. Open, it keeps a ring held off it by the card, the picker's own "chosen" mark. -->
         <button
             v-if="editable"
             ref="anchor"
@@ -65,21 +67,22 @@ const pick = async (color: string): Promise<void> => {
             aria-haspopup="dialog"
             :aria-expanded="open"
             :aria-label="`${t(`sandbox.sandboxColor.title`)}: ${named}`"
-            v-tooltip.bottom="open ? undefined : t(`sandbox.sandboxColor.title`)"
-            class="group/color touch-target flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-transparent px-1 text-left text-xs text-muted transition-colors hover:bg-overlay hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            :class="open ? `bg-overlay text-content` : ``"
+            v-tooltip.bottom="open ? undefined : tip"
+            class="touch-target size-3 shrink-0 cursor-pointer rounded-full ring-1 ring-inset ring-black/10 transition-shadow hover:ring-2 hover:ring-line-strong hover:ring-offset-2 hover:ring-offset-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            :class="open ? `ring-2 !ring-line-strong ring-offset-2 ring-offset-card` : ``"
+            :style="{ background: current }"
             @click="open = !open"
-        >
-            <span class="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10" :style="{ background: current }" aria-hidden="true" />
-            <span class="truncate">{{ named }}</span>
-            <Icon name="pencil" class="shrink-0 text-2xs text-subtle opacity-60 transition-opacity group-hover/color:opacity-100" aria-hidden="true" />
-        </button>
-        <span v-else class="flex h-6 min-w-0 items-center gap-1.5 border border-transparent px-1 text-xs text-muted" v-tooltip.bottom="t(`sandbox.sandboxColor.title`)">
-            <span class="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10" :style="{ background: current }" aria-hidden="true" />
-            <span class="truncate">{{ named }}</span>
-        </span>
+        />
+        <span
+            v-else
+            role="img"
+            :aria-label="`${t(`sandbox.sandboxColor.title`)}: ${named}`"
+            v-tooltip.bottom="tip"
+            class="size-3 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+            :style="{ background: current }"
+        />
         <!-- A refusal that came back after the panel closed stays in sight beside the colour it failed to change. -->
-        <span v-if="error && !open" role="alert" class="min-w-0 truncate text-xs text-danger">{{ error }}</span>
+        <span v-if="error && !open" role="alert" class="min-w-0 truncate text-xs font-normal text-danger">{{ error }}</span>
 
         <ResponsiveOverlay
             v-if="editable"
@@ -87,7 +90,7 @@ const pick = async (color: string): Promise<void> => {
             :anchor="anchor"
             :header="t(`sandbox.sandboxColor.title`)"
             side="bottom"
-            cross="start"
+            cross="center"
             panel-class="w-max max-w-pop"
             padded
             titled

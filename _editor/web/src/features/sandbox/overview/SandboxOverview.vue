@@ -269,9 +269,9 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
     <div class="@container flex flex-col gap-6">
         <!-- Identity: logo, name and colour (owner and Full access edit them), self-reported image/version/URL. -->
         <Card data-setting="overview-name" class="flex flex-col gap-4">
-            <!-- WHO IT IS, as one block: the logo, and beside it the name over its colour, each the press that changes it.
-                 What it runs (the image, the version) stands at the far end with room, and under the name, on the name's
-                 own edge, without, so nothing is ever stranded under the logo. -->
+            <!-- WHO IT IS, as one block: the logo, the name and its colour, each the press that changes it. What it runs
+                 (the image, the version) stands at the far end with room, and under the name, on the name's own edge,
+                 without, so nothing is ever stranded under the logo. -->
             <div class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5 @2xl:grid-cols-[3rem_minmax(12rem,1fr)_minmax(0,auto)] @2xl:gap-x-6">
                 <div class="relative size-12">
                     <!-- The logo tile is the control itself for the owner and Full access, in every state; anyone else sees the logo alone. -->
@@ -341,9 +341,9 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
                     />
                 </div>
 
-                <!-- Pulled back by the name's own inset, so its first letter, the colour's dot and the facts under them
-                     on a narrow pane share one edge. -->
-                <div class="-ml-1 flex min-w-0 flex-col gap-0.5">
+                <!-- Pulled back by the name's own inset, so its first letter and the facts under it on a narrow pane share
+                     one edge. -->
+                <div class="-ml-1 min-w-0">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <!-- The card's heading IS the rename: text at rest, a field in the same box, nothing added beside it.
                              It stays an <h2> around that, so renaming the sandbox doesn't cost the card its heading. -->
@@ -359,6 +359,8 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
                                 failure="Couldn't save the sandbox's name."
                             />
                         </h2>
+                        <!-- Its colour, beside the name it belongs to: a circle and nothing more. -->
+                        <SandboxColorValue :editable="canEditIdentity" />
                         <StatusBadge
                             v-if="showAvailabilityBadge"
                             class="shrink-0"
@@ -367,11 +369,7 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
                             dot
                         />
                     </div>
-                    <!-- The line under the name: its colour, then, while it lasts, what the logo or the sandbox has to report. -->
-                    <div class="flex min-w-0 flex-wrap items-center gap-x-3">
-                        <SandboxColorValue :editable="canEditIdentity" />
-                        <p v-if="subline.text" class="min-w-0 truncate text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
-                    </div>
+                    <p v-if="subline.text" class="h-4 truncate px-1 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                 </div>
                 <!-- Which image it runs and the version installed in it, as two chips at the heading's far end. The image is
                      drawn in parts (where it comes from dimmed, its name, its tag in the accent) and copies itself on a
