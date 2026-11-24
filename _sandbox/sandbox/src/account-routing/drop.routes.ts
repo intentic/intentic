@@ -180,7 +180,7 @@ const stagedFiles = async (services: Services, entry: DropEntry): Promise<DropBo
     const dir = stagedDirOf(services.config.historyRoot, entry.staged);
     // allow(silent-catch): staged files gone (removed by hand) leave the note alone to send.
     const names: readonly string[] = await readdir(dir).catch(() => []);
-    return Promise.all(names.map(async (name) => ({ name, data: (await readFile(join(dir, name))).toString("base64") })));
+    return Promise.all(names.toSorted().map(async (name) => ({ name, data: (await readFile(join(dir, name))).toString("base64") })));
 };
 
 // One try at the far door for a drop the outbox holds: its staged files, under the pass and the person's pairing.

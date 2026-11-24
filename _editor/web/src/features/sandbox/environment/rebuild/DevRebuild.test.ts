@@ -130,19 +130,22 @@ beforeEach(() => {
     } as DOMRect);
 });
 
-afterEach(() => {
+afterEach(async () => {
     scope.stop();
+    app?.unmount();
+    app = undefined;
+    // The device follow outlives the card. Give every pending follow an exit mark before restoring real timers.
+    runDeviceCommand.mockReset();
+    runDeviceCommand.mockResolvedValue(log(`0`, `${DEV_REBUILD_EXIT_MARK} 0`));
+    await settleUi(POLL_MS + 1);
+    jest.useRealTimers();
     fleet.value = [];
     settings.value = undefined;
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
     // A run this test left in flight is module state like the run itself, and would be counted by the next test's
     // row.
     forgetHubWork();
     hostId.value = `host-1`;
     devicesRead.value = { state: `ready` };
-    app?.unmount();
-    app = undefined;
     document.body.innerHTML = ``;
     jest.restoreAllMocks();
 });

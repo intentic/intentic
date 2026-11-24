@@ -923,11 +923,15 @@ test("a run record carries the stable conversation even when the provider mints 
     const withSession = fakeWake([], [{ kind: "session", sessionId: "sess-42" }, { kind: "done" }]);
     await fireAutomation(drivenBy(services, withSession), (await services.automations.get("traced")) as AutomationRecord);
     const traced = (await services.automations.get("traced"))?.runs[0];
-    expect(traced).toMatchObject({ outcome: "completed", conversationId: expect.stringContaining("a-traced-") });
+    // Bun's asymmetric object matchers can replace fields in the cached ledger entry that the next run writes back.
+    expect(traced?.outcome).toBe("completed");
+    expect(traced?.conversationId).toStartWith("a-traced-");
     expect(traced?.conversationId).not.toBe("sess-42");
 
     await fireAutomation(drivenBy(services, fakeWake([])), (await services.automations.get("sessionless")) as AutomationRecord);
-    expect((await services.automations.get("sessionless"))?.runs[0]?.conversationId).toContain("a-sessionless-");
+    const sessionless = (await services.automations.get("sessionless"))?.runs[0];
+    expect(sessionless?.outcome).toBe("completed");
+    expect(sessionless?.conversationId).toStartWith("a-sessionless-");
 });
 
 // Spin-loop guard: a job failing every time is disabled at the configured streak, rather than spending a turn every

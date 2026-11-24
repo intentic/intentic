@@ -13,6 +13,8 @@ const INDEX = new URL("index.ts", SOURCE);
 
 // Served by a machine, the browser extension, the phone app and a runner, with the daemon as the client.
 export const INVERSE = new Set(["device", "phone", "runner", "webext"]);
+// Route groups composed into an aggregate subject instead of mounted on their own.
+const COMPOSED = new Set(["device-ci-runners"]);
 
 const IMPORT = /^import \{ (\w+) \} from "\.\/contracts\/([\w-]+)\.contract\.js";\n/gm;
 const AGGREGATE = /^export const sandboxContract(?:: \{\n(?: {4}[\w$]+: typeof \w+;\n)*\})? = \{\n([\s\S]*?)^\};\n/m;
@@ -25,7 +27,7 @@ export const subjects = (contracts = join(fileURLToPath(SOURCE), "contracts")) =
     readdirSync(contracts)
         .filter((name) => name.endsWith(".contract.ts"))
         .map((name) => name.slice(0, -".contract.ts".length))
-        .filter((stem) => !INVERSE.has(stem))
+        .filter((stem) => !INVERSE.has(stem) && !COMPOSED.has(stem))
         .toSorted();
 
 // What index.ts mounts today: each key with the binding it names, and each contract it imports.
@@ -79,7 +81,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
             console.error(`src/index.ts's sandboxContract does not mount src/contracts/*.contract.ts:\n  ${found.join("\n  ")}`);
             process.exitCode = 1;
         } else {
-            console.log(`sandboxContract mounts all ${stems.length} contracts (${INVERSE.size} served the other way left out)`);
+            console.log(`sandboxContract mounts all ${stems.length} contracts (${INVERSE.size} inverse and ${COMPOSED.size} composed route groups left out)`);
         }
     } else {
         writeFileSync(INDEX, rewritten(text, stems));

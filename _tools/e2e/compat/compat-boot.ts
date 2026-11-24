@@ -97,15 +97,16 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
                 .withWaitStrategy(Wait.forHttp(`/health`, 8787).forStatusCode(200))
                 .withStartupTimeout(STARTUP_MS)
                 .start();
-        // The runner's containerd can drop a pull's lease mid-download ("unable to lease content: lease does not exist"),
-        // a race in the engine rather than anything this tier did; one more pull is what clears it.
+        // On a shared runner, containerd can lose the pull's lease or a disk-pressure prune can remove the image
+        // between pull and create. Re-pull once when either happens. Registry and boot errors still fail the tier.
         try {
             container = await start();
         } catch (error) {
-            if (!/lease does not exist/.test(String(error))) {
+            const reason = String(error);
+            if (!reason.includes(`lease does not exist`) && !reason.includes(`No such image: ${COMPAT_IMAGE}`)) {
                 throw error;
             }
-            process.stdout.write(`compatibility tier: the pull of ${COMPAT_IMAGE} lost its containerd lease, pulling again\n`);
+            process.stdout.write(`compatibility tier: ${reason.trim()}, pulling ${COMPAT_IMAGE} again\n`);
             container = await start();
         }
         const url = `http://${container.getHost()}:${container.getMappedPort(8787)}`;

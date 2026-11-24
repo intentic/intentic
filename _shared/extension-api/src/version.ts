@@ -35,4 +35,5 @@
 // `intentic-kit-check` refuse any other. Additive. The recorded surface grows `wireExports`: each allowed subpath's export
 // names and a digest of its zod schemas, so a schema an extension parses cannot change without a new entry.
 // 2.45.0 records app-routes' `returnPath`, which validates a sign-in destination as a path on the editor's origin.
-export const extensionApiVersion = "2.45.0";
+// 2.46.0 records the routed conversation prefix and account routing fields in the agent and subagent schemas.
+export const extensionApiVersion = "2.46.0";

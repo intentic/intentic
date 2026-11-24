@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { at, drop, mapValue, rename } from "./conversions.js";
-import type { Converted, VanishedKeys } from "./conversion-types.js";
+import { at, drop, mapValue, pinDefault, rename } from "./conversions.js";
+import type { ApplyConversion, Converted, VanishedKeys } from "./conversion-types.js";
 import { defineDocument } from "./documents.js";
 
 // The conversions replayed on types, and the vanished-key check, that the generated shape checks
@@ -55,4 +55,12 @@ test("today's own shape, a shape with nothing in it, and an old field of any sha
     expect(holds<Same<VanishedKeys<Record<never, never>, typeof plain>, never>>()).toBeUndefined();
     // The frozen spelling of a field whose schema could not be written down.
     expect(holds<Same<VanishedKeys<{ agent?: any }, typeof plain>, never>>()).toBeUndefined();
+});
+
+test("pinning a default fills absent discriminants and preserves each existing variant", () => {
+    type Report = { kind: "report"; project: string };
+    type Drop = { kind: "drop"; target: string };
+    type Old = { project: string } | Report | Drop;
+    const conversion = pinDefault("kind", "report");
+    expect(holds<Same<ApplyConversion<Old, typeof conversion>, Report | Drop>>()).toBeUndefined();
 });

@@ -45,7 +45,7 @@ test("it runs the command with its own exit code, holding the gate, and says wha
     const run = await quiet(queue, ["--idle", "0", "--", "bash", "-c", "echo measured; echo \"gate=$INTENTIC_QUEUE_GATE\"; exit 3"]);
     expect(run.code).toBe(3);
     expect(run.stdout.trim().split("\n")).toEqual(["measured", "gate=exclusive"]);
-    expect(run.stderr).toMatch(/\[quiet\] starting: [\d.]+ of \d+ cores busy, load [\d. ]+\. New heavy commands in this sandbox wait until it ends\./u);
+    expect(run.stderr).toMatch(/\[quiet\] starting: [\d.]+ of \d+ cores busy(?: outside this sandbox \([\d.]+ in it\))?, load [\d. ]+\. New heavy commands in this sandbox wait until it ends\./u);
     expect(run.stderr).toMatch(/\[quiet\] exit 3 after [\d.]+s\. Ran under: before, .*; while it ran, everything else kept [\d.]+ cores busy \(it used [\d.]+\); after, load [\d. ]+\./u);
     // The exclusive holder wrote itself down for the commands it holds off to name.
     expect(await readFile(join(queue, ".gate", "holder"), "utf8")).toMatch(/^\d+ \d+ quiet /u);

@@ -29,11 +29,13 @@ type ReplaceIn<V, In, Out> = V extends In ? Out : V;
 type MapIn<V, Mapping> = V extends keyof Mapping ? Mapping[V] : V;
 
 // A key only an index signature covers (a shape a `transform` left as a bare JSON object) says nothing of its value, so
-// it is read as the absent key it may well be, as the other conversions read such a shape, rather than as `unknown`.
+// it is read as the absent key it may well be. A required key keeps its value, including a union arm’s literal.
 type Pinned<S, Key extends string, Value> = Key extends keyof S
     ? unknown extends S[Key & keyof S]
         ? S & { [K in Key]: Value }
-        : { [K in keyof S as K extends Key ? never : K]: S[K] } & { [K in Key]: Exclude<S[K & keyof S], undefined> | Value }
+        : undefined extends S[Key & keyof S]
+          ? { [K in keyof S as K extends Key ? never : K]: S[K] } & { [K in Key]: Exclude<S[K & keyof S], undefined> | Value }
+          : S
     : S & { [K in Key]: Value };
 
 type Field<S, Key extends string, Replace> = Key extends keyof S ? { [K in keyof S]: K extends Key ? Replace : S[K] } : S;

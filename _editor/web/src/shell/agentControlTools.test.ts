@@ -47,7 +47,7 @@ const THEMES = [
 
 it("lists a picker with its name, value and choices, and picks through its model", async () => {
     const theme = ref<string | undefined>(`light`);
-    const host = mount(() => h(Picker, { options: THEMES, ariaLabel: `Theme`, modelValue: theme.value, "onUpdate:modelValue": (next: string) => (theme.value = next) }));
+    const host = mount(() => h(Picker, { options: THEMES, ariaLabel: `Theme`, modelValue: theme.value, "onUpdate:modelValue": (next: string | undefined) => (theme.value = next) }));
     await nextTick();
     showAll(host);
 
@@ -76,7 +76,7 @@ it("lists a picker with its name, value and choices, and picks through its model
 
 it("refuses a disabled choice, an unknown one and an unknown action in words", async () => {
     const theme = ref<string | undefined>(`light`);
-    const host = mount(() => h(Picker, { options: THEMES, ariaLabel: `Theme`, modelValue: theme.value, "onUpdate:modelValue": (next: string) => (theme.value = next) }));
+    const host = mount(() => h(Picker, { options: THEMES, ariaLabel: `Theme`, modelValue: theme.value, "onUpdate:modelValue": (next: string | undefined) => (theme.value = next) }));
     await nextTick();
     showAll(host);
 
@@ -199,7 +199,7 @@ it("waits for a choice the app applies late, and says so when the app never appl
             ariaLabel: `Language`,
             modelValue: language.value,
             // Polski loads its words first; Deutsch is refused outright.
-            "onUpdate:modelValue": (next: string) => {
+            "onUpdate:modelValue": (next: string | undefined) => {
                 if (next === `pl`) {
                     setTimeout(() => (language.value = next), 120);
                 }

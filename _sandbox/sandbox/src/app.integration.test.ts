@@ -485,6 +485,7 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
     expect(list.status).toBe(200);
     // Every row names what it is, not just where it answers; an unowned listener is named as such.
     expect(await list.json()).toEqual({
+        bridgeHeads: [],
         ports: [
             {
                 port: 3000,

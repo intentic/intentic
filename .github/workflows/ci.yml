@@ -656,17 +656,21 @@ jobs:
           # the next one a cold install. The build context is _tools/ci-base, whose tracked files checkout
           # force-updates either way.
           clean: false
+      # Login and BuildKit share this job's credentials, even when multiple runners share an OS account.
       - uses: ./.github/actions/ghcr-login
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/ci-image-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: docker build -t ghcr.io/intentic/ci-base:latest _tools/ci-base
-      - name: Push the tag (main only)
-        if: github.ref == 'refs/heads/main'
-        run: docker push ghcr.io/intentic/ci-base:latest
-      - name: Explain a pull-request build
-        if: github.ref != 'refs/heads/main'
-        run: echo "pull request — image built for validation only, tag not moved"
+      # Export directly from the build so concurrent jobs cannot replace its image in the host's image store.
+      - name: Build the image and publish it from main
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/ci-image-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          CI_IMAGE_PUSH: ${{ github.ref == 'refs/heads/main' }}
+        run: >-
+          docker build -t ghcr.io/intentic/ci-base:latest
+          --output "type=image,store=false,unpack=false,push=$CI_IMAGE_PUSH" _tools/ci-base
 
   # Separate heavy desktop toolchain image; rebuild when it or ci-base changes because its base tag is mutable.
   # Downstream consumers must guard both builds: skipped ci-desktop can mean its base failed, not that its toolchain is current.
@@ -699,16 +703,18 @@ jobs:
           # As in ci-base: nothing here reads node_modules, but cleaning the workspace costs the next job.
           clean: false
       - uses: ./.github/actions/ghcr-login
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/ci-image-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: docker build -t ghcr.io/intentic/ci-desktop:latest _tools/ci-desktop
-      - name: Push the tag (main only)
-        if: github.ref == 'refs/heads/main'
-        run: docker push ghcr.io/intentic/ci-desktop:latest
-      - name: Explain a pull-request build
-        if: github.ref != 'refs/heads/main'
-        run: echo "pull request — image built for validation only, tag not moved"
+      - name: Build the image and publish it from main
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/ci-image-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          CI_IMAGE_PUSH: ${{ github.ref == 'refs/heads/main' }}
+        run: >-
+          docker build --pull -t ghcr.io/intentic/ci-desktop:latest
+          --output "type=image,store=false,unpack=false,push=$CI_IMAGE_PUSH" _tools/ci-desktop
 
   # Verify one release group per job; shared dependencies overlap, but minimize duplicate suites running concurrently.
   # Compare turbo --dry=json closures when changing groups so every package's typecheck/build/test remains covered.

@@ -11,6 +11,7 @@ import type { Services } from "../composition.js";
 import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
 import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { createAttentionRoutes } from "./attention.routes.js";
+import { conversationEntry } from "./registry/agents-store.testing.js";
 
 // What the desktop app's status bar reads over the loopback port: the board's Attention cards plus held wakes, and the
 // turns producing something, counted by the contract's own rules (models/agent-lanes.ts), for the owner alone.
@@ -37,6 +38,8 @@ const routesOver = (agents: readonly AgentSummary[], held: readonly AutomationAp
                 refreshed += 1;
             },
             list: () => [...agents],
+            entry: (id) => (agents.some((agent) => agent.id === id) ? conversationEntry({ id }) : undefined),
+            get: (id) => agents.find((agent) => agent.id === id),
         }),
         heldWakes: unstubbed<Services["heldWakes"]>("heldWakes", { list: async () => [...held] }),
         // Members sign in here: loopback mode (no auth) would make every caller the owner.
