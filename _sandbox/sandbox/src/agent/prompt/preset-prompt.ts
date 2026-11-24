@@ -98,6 +98,8 @@ const capture = async (copy: ClaudeSdk, cwd: string, model: string | undefined):
             allowedTools: [],
             maxTurns: 1,
             thinking: { type: "disabled" },
+            // A throwaway turn, not a conversation: written to disk it would surface in Past chats as "hi".
+            persistSession: false,
             // Excludes cwd, git status, memory: sandbox state, not the prompt, so a copy won't go stale.
             systemPrompt: { type: "preset", preset: "claude_code", excludeDynamicSections: true },
             env: { ...process.env, IS_SANDBOX: "1", ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`, ANTHROPIC_AUTH_TOKEN: "preset-probe" },
