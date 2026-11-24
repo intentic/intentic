@@ -11,6 +11,7 @@ import { createDomainEvents } from "../seams/domain-events.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { budgetOn, ROOMY_READING } from "../agent/run/turn/turn-plan.testing.js";
+import { testProviderCatalogs } from "../agent/providers/providers-slice.testing.js";
 import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { measureHereForTest } from "../runners/fleet-advice.js";
@@ -110,6 +111,7 @@ export const spawnServices = (
         // rule the spawn gate and the governor read (usage/serviceability/serviceability.ts).
         providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
         providerAccounts: async () => [],
+        providerCatalogs: testProviderCatalogs,
         // Heard by nobody: what reacts to a child's settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
     });
