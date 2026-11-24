@@ -25,8 +25,8 @@ import AgentsView from "../board/AgentsView.vue";
    scrolls past its window (expanded, the archive, a filter's matches) it folds to one row, a figure per provider, so the
    cards have the height; a press opens it in place. It never moves to another lane, which would make a press in
    Finished's header shift a column the reader was not looking at. A phone's board is a screen of its own, with no room
-   for it. Between the corner and the chat's rail it travels rather than vanishing from one and appearing in the other
-   (usageTravel.ts), and a drag of the seam between board and chat moves it once, where the hand rests or lets go. */
+   for it. A drag of the seam between board and chat moves it once, where the hand rests or lets go, not at whatever
+   pixel the drag passed. */
 const { mobile } = useDevice();
 const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value);
 // The focused chat's account, marked in Usage left as the one the reader typing beside it is spending (ChatSideRail's rule).

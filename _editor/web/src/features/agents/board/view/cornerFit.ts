@@ -260,8 +260,10 @@ export const useCornerFit = ({ drawn, narrow, view, filtering, hiddenFinished, t
     };
     useWatchedBox(box, scroller, read, keepUp);
     // Drawn differently (the corner come or gone, the lane scrolling or cutting, its window or fold row changed): read
-    // straight after the render that draws it, before that frame paints, whether or not a hand is on a resize handle.
-    watch([active, scrolls, hiddenFinished, tailRow], read, { flush: `post` });
+    // once that render and every render it sets off have been drawn, before the frame paints, whether or not a hand is on
+    // a resize handle. Not straight after it: what stands in the corner can show its insides only in a render of its own
+    // (Usage left's Await reveals them when it mounts), and a corner read empty left every card drawn for a frame.
+    watch([active, scrolls, hiddenFinished, tailRow], () => void nextTick(read), { flush: `post` });
     useLaneSlide(box, drawn, narrow);
 
     // Finished's card box, by a function ref, so a v-for does not make it a list.

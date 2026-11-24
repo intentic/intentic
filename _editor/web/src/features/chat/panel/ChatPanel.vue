@@ -4,7 +4,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CAPACITY_RAIL_PX, railFitsBeside } from "./capacity/chatCapacity";
 import { useCapacityRail } from "./capacity/capacityMemory";
 import { provideRailCarries } from "./capacity/railCarries";
-import { useRailRoom } from "./capacity/usageTravel";
+import { useRailRoom } from "./capacity/railRoom";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../../../models/conversations/run/chatRun";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { traceFocus } from "../../../models/conversations/run/focusTrace";
@@ -149,8 +149,8 @@ watch(
 onBeforeUnmount(stopMeasuring);
 // THE RAIL COMES AND GOES WHEN THE HAND RESTS. Its width is decided off the panel's, but while a resize handle is dragged
 // that decision holds until the pointer rests or lets go (resizeGesture.ts), as the board beside it holds its own fold:
-// the rail and Usage left change homes once, where the reader stopped, and travel there (usageTravel.ts), rather than at
-// whatever pixel the drag passed, and back again if the hand wavers over it.
+// the rail and Usage left change homes once, where the reader stopped, rather than at whatever pixel the drag passed,
+// and back again if the hand wavers over it.
 const railWidth = ref(0);
 const settleRailWidth = (): void => {
     railWidth.value = panelWidth.value;
@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
         chatRailDrawn.value = false;
     }
 });
-// The panes' reading column glides aside for the rail, and back (usageTravel.ts).
+// The panes' reading column slides aside for the rail, and back (railRoom.ts).
 useRailRoom(root, () => showsRail.value);
 // Beside one chat, the rail's marked row is that chat's allowance, so its composer chip gives the figure to the rail.
 provideRailCarries(() => showsRail.value && !split.value);
