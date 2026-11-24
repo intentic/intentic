@@ -17,7 +17,7 @@ import { markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js
 import { type KillCause, killNote, runtimeKilled, witnessedKillCause } from "./child-death.js";
 import { ownKillOf, recentMemoryKills } from "../run/turn/holds/memory-kill.js";
 import { noteChildWork } from "./child-verification.js";
-import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
+import { type SpawnableProvider, spawnableProviders, withChildEffort } from "./spawn-catalog.js";
 import { heldResult, type Placed, releasedGate, startGate } from "./fan-out-budget.js";
 import {
     blockedMoveReporter,
@@ -490,7 +490,7 @@ const moveOnward = async (services: Services, childId: string, parent: string, k
     const from = kid.spec;
     const options = from.fallbacks ?? [];
     for (const [index, option] of options.entries()) {
-        const target = rehomedSpec(from, option, options.slice(index + 1));
+        const target = await withChildEffort(services, rehomedSpec(from, option, options.slice(index + 1)));
         // A move the owner must allow is theirs to make, not the sandbox's: held counts as no.
         if ((await admit("fallback", { services, parent, spec: target, kid }, childId)).kind !== "proceed") {
             continue;
@@ -1176,7 +1176,7 @@ const startAllowedWithSeat = async (services: Services, parent: ChildParent, sta
  * waiting until they answer.
  */
 export const spawnChild = async (services: Services, parent: ChildParent, { after: named, ...ask }: ChildSpawnSpec): Promise<ChildSpawnResult> => {
-    const asked = wearingParent(services.conversations, parent, ask);
+    const asked = await withChildEffort(services, wearingParent(services.conversations, parent, ask));
     const after = named === undefined || named.length === 0 ? undefined : [...new Set(named)];
     const unwaitable = afterRefusal(services.conversations, parent.conversationId, after);
     if (unwaitable !== undefined) {
@@ -1376,7 +1376,7 @@ export const sendToChild = async (
         return noSuchChild(services, parent, childId);
     }
     // A move is judged on where it goes: the records first, so a spent target is refused before any card is raised.
-    const target = rehome === undefined ? undefined : rehomedSpec(kid.spec, rehome);
+    const target = rehome === undefined ? undefined : await withChildEffort(services, rehomedSpec(kid.spec, rehome));
     const verdict = await admit(target === undefined ? "send" : "rehome", { services, parent: parent.conversationId, spec: target ?? kid.spec, kid }, childId);
     if (verdict.kind === "refuse") {
         return { ok: false, message: verdict.message };

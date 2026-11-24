@@ -120,7 +120,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
                     "Which of its models, e.g. composer-2.5 on cursor. Required, and it must be one that provider serves: a model name " +
                     "only means anything to the provider that vends it.",
             },
-            effort: { type: "string", description: "How hard it should think, where the provider offers a choice." },
+            effort: { type: "string", description: "How hard it should think, where the provider offers a choice. Left out: extra-high (xhigh) where its model offers that, else the model's own default." },
             after: { type: "array", items: { type: "string" }, description: AFTER_WORDS },
         },
         required: ["prompt", "provider", "model"],

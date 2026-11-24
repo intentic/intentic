@@ -242,7 +242,7 @@ const SPAWN_FIELDS = {
                 "a model name only means anything to the provider that vends it.",
         ),
     harness: AgentHarnessSchema.optional().describe(SPAWN_HARNESS_WORDS),
-    effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
+    effort: z.string().optional().describe("How hard it should think, where the provider offers a choice. Left out: extra-high (xhigh) where its model offers that, else the model's own default."),
     on: z
         .string()
         .optional()

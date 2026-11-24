@@ -445,3 +445,25 @@ export const spawnBlocked = (
     const others = elsewhere === `` ? `` : ` Other providers with room: ${elsewhere}.`;
     return `${asked.provider}/${asked.model} is out of allowance${renews}: the records say every connected ${asked.provider} account is at its cap for this model, so a subagent on it would be refused before doing any work.${room}${others}`;
 };
+
+// THE EFFORT A CHILD RUNS AT WHEN ITS SPAWN NAMES NONE: extra-high, where its model offers that level. Left to the
+// runtime's own default, every child ran at medium: on 2026-11-24 none of 45 spawns named one, while children each
+// edited 40 to 80 files, and the parents' own turns ran at extra-high. A model whose catalog does not list the level,
+// or names no levels at all, keeps its own default rather than being sent one it may refuse.
+export const CHILD_EFFORT = "xhigh";
+export const withChildEffort = async <T extends { readonly provider: AgentProvider; readonly model: string; readonly effort?: string }>(
+    services: Pick<Services, "providerCatalogs">,
+    spec: T,
+): Promise<T> => {
+    if (spec.effort !== undefined) {
+        return spec;
+    }
+    const provider = NATIVE_PROVIDERS.find((native) => native === spec.provider);
+    if (provider === undefined) {
+        return spec;
+    }
+    // allow(silent-catch): an unreadable catalog only costs the child the default, never its start.
+    const catalog = await services.providerCatalogs[provider].models().catch(() => undefined);
+    const efforts = catalog?.models.find((model) => model.id === spec.model)?.efforts;
+    return efforts?.includes(CHILD_EFFORT) === true ? { ...spec, effort: CHILD_EFFORT } : spec;
+};
