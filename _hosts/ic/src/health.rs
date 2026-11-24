@@ -488,7 +488,8 @@ mod tests {
     }
 
     /// netd's own source, for the one line of its log this binary reads.
-    const NETD_SUPERVISE: &str = include_str!("../../../_sandbox/netd/crates/netd/src/supervise.rs");
+    const NETD_SUPERVISE: &str =
+        include_str!("../../../_sandbox/netd/crates/netd/src/supervise.rs");
 
     #[test]
     fn the_restart_line_read_is_the_one_netd_logs() {
