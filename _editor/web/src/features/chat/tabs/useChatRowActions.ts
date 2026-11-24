@@ -13,7 +13,7 @@ import { chatWide, toggleChatFloating } from "../../../models/conversations/pane
 import type { RevealVerb } from "../../../models/conversations/panel/useChat-reveal";
 import { relaySummons } from "../../../models/conversations/run/summon";
 import { useChat } from "../../../models/conversations/run/useChat";
-import type { OpenChat } from "./cardView";
+import { liveOf, type OpenChat } from "./cardView";
 import { allTabs, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 
 // Every verb an open chat's row answers to, owned once per list host (ChatTabList) and shared by both cuts of it, so a
@@ -112,15 +112,15 @@ export const createChatRowActions = (host: ChatRowHost) => {
     };
     const renamingDrawn = computed(() => renamingId.value !== undefined && [...drawn].some((ids) => ids().has(renamingId.value!)));
 
-    // Hover shows the full title plus the first prompt (what the chat was for) and the last one if different (what it's
-    // about now); images ride along since a prompt is often a screenshot.
+    // Hover shows the full title, what a working chat is doing (its row draws only for how long), the first prompt (what
+    // it was for) and the last if different (what it's about now), images and all: a prompt is often a screenshot.
     const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
     const showPreview = (event: MouseEvent, entry: OpenChat): void => {
         const prompts = entry.conversation.transcript.messages.value.filter((message) => message.role === `user`);
-        const first = prompts[0];
-        const last = prompts.at(-1);
+        const [first, last] = [prompts[0], prompts.at(-1)];
         hoverCard.value?.show(event, {
             title: entry.conversation.title.value ?? undefined,
+            note: liveOf(entry)?.text,
             // Labelled "Latest" only when two prompts differ; a fresh draft with neither shows no preview.
             messages: [
                 ...(first === undefined ? [] : [{ text: first.text, attachments: first.attachments }]),

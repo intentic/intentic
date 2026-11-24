@@ -21,7 +21,7 @@ import ChatShareDialog from "../panel/ChatShareDialog.vue";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { chatRun, showingRunGraph } from "../../../models/conversations/run/chatRun";
 import { openRunInChat } from "../../../models/fleet/openRun";
-import { insideRun, runIdsInLedger, runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
+import { insideRun, runIdsInLedger, runsInLane, runsNeedingYou, useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { useT } from "@intentic/ui/i18n";
 
@@ -333,14 +333,15 @@ defineExpose({ beginRename: actions.beginRename });
                                 :aria-label="t(`chat.chatTabList.openWorkflowRun`, { name: run.workflow.name })"
                                 @click="openRunInChat(run)"
                             >
+                                <!-- How far it got; which steps are running is its diagram's to say, one press away. -->
                                 <template #meta>
-                                    <span class="min-w-0 truncate text-subtle">
+                                    <span class="shrink-0 tabular-nums">
                                         {{
                                             t(`chat.chatTabList.stepsDone`, {
                                                 done: run.steps.filter((step) => step.state === `done`).length,
                                                 total: run.steps.length,
                                             })
-                                        }}<template v-if="runningTitles(run).length > 0"> · {{ runningTitles(run).join(` · `) }}</template>
+                                        }}
                                     </span>
                                 </template>
                             </RailCard>

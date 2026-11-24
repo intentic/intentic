@@ -5,6 +5,7 @@ import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import { useT } from "@intentic/ui/i18n";
 import { timeAgo } from "@intentic/ui";
+import AgentCardDate from "../../../parts/fleet/AgentCardDate.vue";
 
 // The past-chats list, stored sessions as reopenable rows. One body, two hosts (desktop AnchoredOverlay, mobile
 // BottomSheet), so the title/presence/snippet/time rule lives once instead of drifting between two copies. `touch`
@@ -26,18 +27,19 @@ const emit = defineEmits<{ open: [id: string] }>();
             :key="session.id"
             type="button"
             class="ui-row-select flex flex-col gap-0.5 text-left"
-            :class="touch ? `min-h-12 justify-center rounded-lg px-2 py-1.5` : `rounded-lg py-1.5 pr-2.5 pl-10.5`"
+            :class="touch ? `min-h-12 justify-center rounded-lg px-2 py-1.5` : `min-h-9 justify-center rounded-lg px-2.5 py-1.5`"
             @click="emit(`open`, session.id)"
         >
-            <!-- On a pointer the row is inset to an open chat's title (the switcher's rows: 10px of padding, a 24px mark, an
-                 8px gap), so every title in the sheet starts on one line. -->
+            <!-- On a pointer the row starts where an open chat's row does, at its mark, not at its title: with no mark of its own
+                 a past chat inset to the titles' line read as a list pushed off to the right for no reason. -->
             <!-- On a pointer the age ends the title's own line, as an open chat's does above it in the switcher: one line a row,
                  read down the left and dated down the right. A thumb's row has the height, so the age keeps a line there. -->
             <span class="flex items-center gap-1.5">
                 <span class="min-w-0 flex-1 truncate text-content" :class="touch ? `text-sm` : `text-xs`">{{ session.title }}</span>
                 <!-- Members with this session open right now. -->
                 <PresenceAvatars :members="viewersOfSession(session.id)" :label="t(`chat.words.inChat`)" />
-                <span v-if="!touch" class="shrink-0 text-2xs text-subtle">{{ timeAgo(session.updatedAt, { days: true }) }}</span>
+                <!-- The open chats' time column above it (RailCard): the same short age on the same edge. -->
+                <span v-if="!touch" class="min-w-12 shrink-0 text-right text-2xs text-subtle"><AgentCardDate :at="session.updatedAt" /></span>
             </span>
             <!-- Why this row matched, when it wasn't the title: the line the query hit and which side said it. -->
             <MatchLine

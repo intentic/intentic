@@ -104,7 +104,7 @@ export const liveOf = (entry: OpenChat): CardView[`live`] => {
     return undefined;
 };
 
-// Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per card
+// Whether the row has marks to show beside its title; a fresh draft has no numbers, marks or model, so it's asked per card
 // rather than assumed. The standing is not counted here: it wears the card's corner, not this line, and nor is a draft,
 // whose pencil wears the corner too (UnsentMark).
 const hasMeta = (entry: OpenChat, reach: ReachLine | undefined): boolean =>

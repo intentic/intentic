@@ -12,6 +12,7 @@ import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { markSegments } from "../../../lib/markSegments";
 import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
 import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
+import AgentCardDate from "../../../parts/fleet/AgentCardDate.vue";
 import type { SessionFacts } from "../../../models/agent-status/sessionKind";
 import MatchLine from "../../../components/MatchLine.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -37,9 +38,12 @@ const props = defineProps<{
     // What the identity mark's rim draws: how far the session got, decided once by agentStatus.tileRim so this card and
     // the board's cannot disagree. Undefined for every row that isn't a session, which wears the empty rim instead.
     rim?: TileRim;
+    // A turn in flight: `since` is when it started, drawn as its running time where a settled row draws its age. What the
+    // turn is doing (`text`) is not drawn: it is a sentence that changes every few seconds, and down a list of chats it
+    // doubled every working row's height to say what the chat itself says once opened.
     live?: { icon: IconName; text: string; since?: number };
-    // When true, the live readout trails the facts line instead of taking its own row, for narrow rails.
-    tight?: boolean;
+    // When the row's chat last settled, drawn as its age at the row's end while no turn runs.
+    at?: number;
     // True when this card's chat is open in a column: ring and lifted surface, same weight for every open column.
     selected?: boolean;
     // True for a selected card that is not the focused one (another column's chat): the same ring and wash, without the
@@ -86,92 +90,76 @@ const chipHint = computed((): Tip | undefined =>
         :is="to === undefined ? `button` : RouterLink"
         :type="to === undefined ? `button` : undefined"
         :to="to"
-        class="session-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-2xl border p-3 text-left text-2xs"
+        class="session-card group flex w-full min-w-0 shrink-0 scroll-mt-8 flex-col gap-1.5 rounded-2xl border p-3 text-left text-2xs"
         :class="[
             { 'session-card-on': selected, 'session-card-attention': attention, 'border-dashed': dashed || peek },
             { '[--card-border:var(--color-line-strong)]': peek },
-            $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
         ]"
         :style="blade"
     >
-        <!-- Aside slot for a mark beside the whole card; rows without it keep the default column layout. -->
-        <slot name="aside" />
-        <span class="flex min-w-0 flex-1 flex-col gap-1.5">
-            <span class="flex w-full min-w-0 items-start gap-2">
-                <!-- THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at length): a disc inside a rim. -->
-                <span
-                    v-if="provider !== undefined || icon !== undefined"
-                    class="relative -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                    :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
-                >
-                    <SegmentRing
-                        v-if="rim !== undefined"
-                        v-bind="rim.ring"
-                        :size="24"
-                        :stroke="1.5"
-                        class="absolute inset-0 size-full"
-                        :class="rim.tone"
-                    />
-                    <IdentityTile v-if="provider !== undefined" :session="session" class="h-4.5 w-4.5 text-2xs" />
-                    <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
-                    <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
-                        <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
-                    </span>
-                </span>
-                <!-- Clamped to two lines; most titles fit whole at this width. -->
-                <span
-                    class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4"
-                    :class="quiet ? 'text-muted' : 'text-content'"
-                >
-                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
-                        run.text
-                    }}</span>
-                    <!-- The dashed edge is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
-                    <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
-                </span>
-                <slot name="trailing" />
-                <!-- The corner's marks left of the standing, as on the board's card (its stamps). -->
-                <slot name="corner" />
-                <!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
-     "something ended" but never "Usage limit", and the two surfaces drawing the same standing differently was the
-     whole complaint. The resting glyph gets the seat back the moment there is nothing to say. -->
-                <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 font-semibold" :class="chip.tone">{{
-                    chip.label
-                }}</span>
-                <!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
-                <span v-else-if="status !== undefined" class="flex h-4 shrink-0 items-center">
-                    <Icon v-bind="status" />
-                </span>
-            </span>
-
-            <!-- Muted by default; these are reference numbers, not events, so colour here is reserved for what matters. -->
+        <!-- ONE LINE A ROW: the mark, the title, and at the row's end what it carries, closed by its time. Read down the
+             left for names and down the right for how long ago, or for how long it has been working: the same two columns
+             Past chats keeps under it, so the sheet reads as one list rather than three layouts. -->
+        <span class="flex w-full min-w-0 items-center gap-2">
+            <!-- THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at length): a disc inside a rim. -->
             <span
-                v-if="$slots[`meta`] || (tight && live !== undefined)"
-                class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
+                v-if="provider !== undefined || icon !== undefined"
+                class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
             >
-                <slot name="meta" />
-                <!-- Tight card's live readout, held at the end of the facts line; same corner a settled card's age uses. Takes the line's leftover width with its words in a size container, so a long command truncates (whole in the hover) instead of wrapping the readout onto a row of its own. -->
-                <span v-if="tight && live !== undefined" class="flex min-w-max flex-[1_1_0] items-center justify-end gap-1 font-medium text-link">
-                    <span v-tooltip.top="live.text" class="@container min-w-4 flex-1 truncate text-right"
-                        ><Icon :name="live.icon" class="mr-1 text-2xs" /><span class="hidden @[4.5rem]:inline">{{
-                            live.text
-                        }}</span></span
-                    >
-                    <span v-if="live.since !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed((now - live.since) / 1000) }}</span>
+                <SegmentRing
+                    v-if="rim !== undefined"
+                    v-bind="rim.ring"
+                    :size="24"
+                    :stroke="1.5"
+                    class="absolute inset-0 size-full"
+                    :class="rim.tone"
+                />
+                <IdentityTile v-if="provider !== undefined" :session="session" class="h-4.5 w-4.5 text-2xs" />
+                <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
+                <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
+                    <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
                 </span>
             </span>
-
-            <!-- Driven by turnInFlight, not `running`, so the live line doesn't flicker off during a stop's unwind. -->
-            <span v-if="live !== undefined && tight !== true" class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link">
-                <Icon :name="live.icon" class="shrink-0 text-2xs" />
-                <span class="min-w-0 flex-1 truncate">{{ live.text }}</span>
-                <span v-if="live.since !== undefined" class="shrink-0">{{ formatElapsed((now - live.since) / 1000) }}</span>
+            <!-- One line; the whole title is in the row's hover card. -->
+            <span class="min-w-0 flex-1 truncate text-xs font-semibold leading-4" :class="quiet ? 'text-muted' : 'text-content'">
+                <span v-for="(run, index) in titleRuns" :key="index" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                    run.text
+                }}</span>
+                <!-- The dashed edge is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
+                <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
             </span>
-
-            <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
-                <Icon name="search" class="shrink-0 text-2xs text-subtle" />
-                <MatchLine :snippet="snippet" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
+            <!-- The row's marks, each its own item on the line, so a slot that draws nothing leaves no gap. Muted, the card's
+                 own ink, as reference marks are: colour here is reserved for what matters. -->
+            <slot name="meta" />
+            <slot name="trailing" />
+            <!-- The corner's marks left of the standing, as on the board's card (its stamps). -->
+            <slot name="corner" />
+            <!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
+                 "something ended" but never "Usage limit", and the two surfaces drawing the same standing differently was the
+                 whole complaint. The resting glyph gets the seat back the moment there is nothing to say. -->
+            <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 font-semibold" :class="chip.tone">{{
+                chip.label
+            }}</span>
+            <!-- THE ROW ENDS ON ITS TIME, as a child's row under it does (ChildRow): while it works, its turn's clock in the
+                 working ink and nothing else, since a spinner beside a running clock says the same thing twice; settled, its
+                 glyph beside its age. Both hold one width, so the times of a lane end on one edge. -->
+            <span v-if="live?.since !== undefined" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link" data-row-time>{{
+                formatElapsed((now - live.since) / 1000)
+            }}</span>
+            <span
+                v-else-if="(chip === undefined && status !== undefined) || at !== undefined"
+                class="flex h-4 min-w-12 shrink-0 items-center justify-end gap-1.5 text-2xs text-subtle"
+                data-row-time
+            >
+                <Icon v-if="chip === undefined && status !== undefined" v-bind="status" />
+                <AgentCardDate v-if="at !== undefined" :at="at" />
             </span>
+        </span>
+
+        <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
+            <Icon name="search" class="shrink-0 text-2xs text-subtle" />
+            <MatchLine :snippet="snippet" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
         </span>
     </component>
 </template>

@@ -20,7 +20,6 @@ import type { Conversation } from "../../../models/conversations/session/convers
 import { computed } from "vue";
 import { type CardView, modelOrProvider } from "./cardView";
 import { isArchived, originOf, tabLabel, twinTitles } from "./tabs";
-import { timeAgo } from "@intentic/ui";
 import { useAudience } from "../../../app/useAudience";
 import { useTier } from "../../../client/sandbox/useTier";
 import { landFromMenu } from "../../../models/fleet/presses/landPress";
@@ -103,6 +102,11 @@ const landRow = (event: Event): void => {
     }
 };
 
+// Its age, while no turn runs: a running row ends on its turn's clock instead (RailCard's `live`).
+const settledAt = computed(() =>
+    props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0 ? answeredAt(props.agent) : undefined,
+);
+
 // The × sits inside the card's click target; stop propagation or the press also selects the row.
 const closeRow = (event: Event): void => {
     event.stopPropagation();
@@ -122,7 +126,7 @@ const closeRow = (event: Event): void => {
         :chip="chip"
         :rim="props.view.rim"
         :live="props.view.live"
-        tight
+        :at="settledAt"
         :selected="props.selected"
         :still="!props.focused"
         :peek="props.conversation.peek.value"
@@ -172,7 +176,9 @@ const closeRow = (event: Event): void => {
                 <CardStamps v-if="props.view.stamps.length > 0" :stamps="props.view.stamps" :agent="props.agent" :max="3" />
             </span>
         </template>
-        <!-- One line: where it came from, the model, its children, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
+        <!-- Marks, not lines, all on the title's row: where it came from, the model (twins only), its children, where its work
+             went. Why it needs you is the card's corner (see `chipOf`), where the board puts it too; its age or running time
+             ends the row (RailCard's `at` and `live`). -->
         <template v-if="props.view.meta || twinFact !== undefined" #meta>
             <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
             <Icon
@@ -218,20 +224,17 @@ const closeRow = (event: Event): void => {
             <span v-else-if="twinFact !== undefined && modelShown" class="max-w-24 truncate">{{ twinFact }}</span>
             <!-- After the model and before the time, as on its board card. The list opens under this card only while it is on screen (ChildRows). -->
             <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />
-            <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
-            <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
-                timeAgo(answeredAt(props.agent), { days: true })
-            }}</span>
-            <!-- Where its last turn's work went besides its branch, the board card's line on a row of its own: the worst of it, every place in the hover. -->
+            <!-- Where its last turn's work went besides its branch, the board card's line as its glyph: the worst of it in the
+                 tint and the words, every place in the hover. A line of its own doubled the row for a fact read on demand. -->
             <span
                 v-if="props.view.reach !== undefined"
-                class="flex w-full min-w-0 items-center gap-1"
+                class="flex shrink-0 items-center"
                 :class="props.view.reach.tone === `warning` ? 'text-warning' : 'text-muted'"
+                :aria-label="props.view.reach.text"
                 data-reach
                 v-tooltip.top.lines="props.view.reach.detail"
             >
-                <Icon :name="props.view.reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="shrink-0 text-2xs" />
-                <span class="min-w-0 flex-1 truncate">{{ props.view.reach.text }}</span>
+                <Icon :name="props.view.reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="text-2xs" />
             </span>
         </template>
     </RailCard>

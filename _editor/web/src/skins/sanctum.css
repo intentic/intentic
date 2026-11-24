@@ -310,7 +310,7 @@
         box-shadow: inset 0 0 0 1px rgba(229, 196, 137, 0.3);
     }
 
-    /* A search is a channel cut into the stone: the field a rounded recess with a faint rim, the band one channel across its panel. */
+    /* A search FIELD is a channel cut into the stone: a rounded recess with a faint rim. */
     [data-skin="sanctum"] .ui-search {
         --ui-search-fill: var(--sanctum-cut);
         --ui-search-fill-hover: color-mix(in oklab, var(--sanctum-gold) 4%, var(--sanctum-cut));
@@ -323,18 +323,16 @@
         border-color: var(--sanctum-rule-strong);
     }
 
+/* A BAND IS THE OVERLAY'S OWN FIRST ROW, on its stone and parted from the rows under it by the soft rule, not a channel cut
+   across it: on a raised overlay the darkest fill in the theme read as a black strip laid over the panel's top. It always
+   has the caret while its overlay is open, so it warms nothing on focus; the magnifier lighting gold is enough. */
     [data-skin="sanctum"] .ui-search-band {
-        background-color: var(--sanctum-cut);
-        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+        border-bottom-color: var(--sanctum-rule);
     }
 
 /* FOCUS IS THE CHANNEL WARMING and its rim catching the light, not a line under it. */
     [data-skin="sanctum"] .ui-search:focus-within {
         border-color: color-mix(in oklab, var(--sanctum-gold) 70%, transparent);
-    }
-
-    [data-skin="sanctum"] .ui-search-band:focus-within {
-        background-color: color-mix(in oklab, var(--sanctum-gold) 6%, var(--sanctum-cut));
     }
 
     [data-skin="sanctum"] .ui-search:focus-within .ui-search-icon,

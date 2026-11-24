@@ -322,7 +322,8 @@
    own to set it apart. */
 .ground-menu .session-card {
     border-radius: 10px;
-    padding: 0.5rem 0.625rem;
+    /* A 36px row: the 24px mark and a breath either side, the height Past chats' rows keep under it (PastChatList). */
+    padding: 0.3125rem 0.625rem;
     /* The paint itself, not the property: the panel the sheet hangs in is a card ground, whose (and Sanctum's) rules
        draw `--session-card-paint` with more specificity than this one has. */
     --session-card-paint: var(--card-mark), linear-gradient(var(--card-tint), var(--card-tint));
