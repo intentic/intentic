@@ -1,8 +1,14 @@
 <script lang="ts">
 import { errorMessage } from "@intentic/base/errors";
+import { BoundedMap } from "@intentic/base/held";
 // Drawings whose errors this window already reported, and whether the agent heard: kept across mounts, so scrolling a
 // page out of the chat and back neither says it twice nor forgets that it was said.
 const toldPages = new Map<string, boolean>();
+// The height each drawing last said it needs in the chat, kept across mounts the same way: the chat takes rows down as
+// the reader leaves them and draws them again on the way back (paneWindow.ts), and a page drawn again opens at the height
+// it had rather than at a guess, so nothing around it moves when it says its height again. A drawing never changes, so
+// only the column's width moves it, and the page says its new height as it loads anyway.
+const lastHeights = new BoundedMap<string, number>(200);
 </script>
 
 <script setup lang="ts">
@@ -11,8 +17,9 @@ import { type McpAppData, PAGE_ERRORS_MAX, sizedFirst } from "@intentic/sandbox-
 import { type Page, PAGE_MAX_HEIGHT } from "@intentic/sandbox-contract/events/requests";
 import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
+import { TRANSCRIPT_HOLD } from "../useStickToBottom";
 import { setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
@@ -49,14 +56,19 @@ const emit = defineEmits<{ fault: [errors: readonly string[], told: boolean] }>(
 const surface = useChatSurface();
 const theme = usePageTheme();
 
-// Before the page says how tall it is: the height the sandbox measured (laid out without the bleed's inset above and
-// below, so that is added), else a modest box.
+// Before the page says how tall it is: what it said when this window last drew it, else the height the sandbox measured
+// (laid out without the bleed's inset above and below, so that is added), else a modest box.
 const PLACEHOLDER = 200;
 const MIN_HEIGHT = 32;
 const cap = computed(() => props.page.height ?? PAGE_MAX_HEIGHT);
 const reported = ref<number>();
 const measured = computed(() => (props.page.measured === undefined ? undefined : props.page.measured + 2 * PAGE_BLEED));
-const height = computed(() => Math.min(cap.value, Math.max(MIN_HEIGHT, reported.value ?? measured.value ?? PLACEHOLDER)));
+const height = computed(() =>
+    Math.min(cap.value, Math.max(MIN_HEIGHT, reported.value ?? lastHeights.get(props.page.path) ?? measured.value ?? PLACEHOLDER)),
+);
+// Keeps what the reader pressed where it stands while the page reshapes under it (useStickToBottom's hold); a frame
+// drawn outside a transcript's scroller just reshapes.
+const hold = inject(TRANSCRIPT_HOLD, (_element, change) => change());
 // The frame reaches PAGE_BLEED past the column on either side, where the page's own inset leaves room for what it draws
 // outside its edges (pageDocument.ts); above and below, that inset is part of the box's height instead, so the frame
 // never lies over the words before or after it.
@@ -199,6 +211,22 @@ const callTool = async (id: string | number, name: string, args: Record<string, 
     }
 };
 
+// The height the page says it needs now, kept for its next drawing in this window. A page reshaping under the reader's
+// own press (a tab, an accordion) is what they are reading: the chat holds it where it stands, as it does a fold they
+// open, rather than following its newest line down past it.
+const resized = (next: number): void => {
+    if (!props.fill) {
+        lastHeights.set(props.page.path, next);
+    }
+    if (reported.value !== undefined && next !== reported.value && pressedHere()) {
+        hold(box.value, () => {
+            reported.value = next;
+        });
+    } else {
+        reported.value = next;
+    }
+};
+
 const refuse = (id: string | number | undefined, why: string): void => {
     if (id !== undefined) {
         post(pageRefusal(id, why));
@@ -208,7 +236,7 @@ const refuse = (id: string | number | undefined, why: string): void => {
 const act = async (ask: PageAsk): Promise<void> => {
     switch (ask.kind) {
         case `size`:
-            reported.value = Math.ceil(ask.height);
+            resized(Math.ceil(ask.height));
             return;
         case `error`:
             fault(ask.message);

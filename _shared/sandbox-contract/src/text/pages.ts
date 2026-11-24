@@ -221,6 +221,29 @@ const baseCss = (canvas: boolean): string =>
 export const pageThemeCss = (theme: PageTheme, canvas = false): string =>
     `:root{color-scheme:${theme.appearance};${PAGE_THEME_VARIABLES.map((name) => `${name}:${theme.variables[name].replace(/[;{}<>]/g, ``)};`).join(``)}}${baseCss(canvas)}`;
 
+// A script that scrolls something into view, or focuses something, moves every scroller around it, and a sandboxed
+// frame's edge does not stop it: in Chromium 156 a page calling `scrollIntoView()` or `focus()` as it loaded scrolled
+// the chat around it by 2000px (2026-11-24), so a log that shows its newest line or a mock-up that focuses its search
+// field took the reader away from what they were reading. Run first inside a frame, this keeps both to the page: the
+// scrollers inside it and its own viewport move as the browser would move them (block and inline alignment, scroll
+// margins and padding, clamped to each one's range, a fixed box leaving its viewport alone), and nothing outside it.
+// Right after the reader's own press in the page (its transient activation) the browser's own runs instead, since then
+// the scroll is theirs: "show me the chart" may bring the chart into the chat's view. What the browser scrolls by its
+// own hand is out of reach here: a modal dialog focusing its first control, a form reporting a field it refuses.
+const CONTAINED_SCROLL = `(function(){if(window.parent===window)return;
+var E=Element.prototype,into=E.scrollIntoView,needed=E.scrollIntoViewIfNeeded;
+function pressed(){var a=navigator.userActivation;return !!(a&&a.isActive);}
+function px(v){return parseFloat(v)||0;}
+function shift(a,z,lo,hi,how){var inside=a>=lo&&z<=hi;if(how==="start")return a-lo;if(how==="end")return z-hi;if(how==="center"||(how==="if-needed"&&!inside))return (a+z-lo-hi)/2;if(inside||how==="if-needed"||(a<lo&&z>hi))return 0;var big=z-a>hi-lo;return a<lo?(big?z-hi:a-lo):(big?a-lo:z-hi);}
+function contain(el,block,inline,behavior){var g=getComputedStyle(el),r=el.getBoundingClientRect(),top=r.top-px(g.scrollMarginTop),bottom=r.bottom+px(g.scrollMarginBottom),left=r.left-px(g.scrollMarginLeft),right=r.right+px(g.scrollMarginRight),dx=0,dy=0,root=document.scrollingElement||document.documentElement,fixed=g.position==="fixed",e=el;
+function move(c,s,at,by){var y=shift(top-dy,bottom-dy,at.top+px(s.scrollPaddingTop),at.top+c.clientHeight-px(s.scrollPaddingBottom),block),x=shift(left-dx,right-dx,at.left+px(s.scrollPaddingLeft),at.left+c.clientWidth-px(s.scrollPaddingRight),inline),n=s.direction==="rtl"?c.clientWidth-c.scrollWidth:0;y=Math.max(-c.scrollTop,Math.min(c.scrollHeight-c.clientHeight-c.scrollTop,y));x=Math.max(n-c.scrollLeft,Math.min(n+c.scrollWidth-c.clientWidth-c.scrollLeft,x));if(x||y)by({left:x,top:y,behavior:behavior});dx+=x;dy+=y;}
+while(!fixed){e=e.parentElement||(e.getRootNode&&e.getRootNode().host);if(!e||e===root||e===document.documentElement)break;var s=getComputedStyle(e),h=getComputedStyle(document.documentElement);if(!(e===document.body&&h.overflowX+h.overflowY==="visiblevisible")&&/auto|scroll|hidden/.test(s.overflowX+s.overflowY)){var b=e.getBoundingClientRect();move(e,s,{top:b.top+e.clientTop,left:b.left+e.clientLeft},e.scrollBy.bind(e));}fixed=s.position==="fixed";}
+if(!fixed)move(root,getComputedStyle(root),{top:0,left:0},window.scrollBy.bind(window));}
+E.scrollIntoView=function(v){if(pressed())return into.apply(this,arguments);var o=v!==null&&typeof v==="object"?v:{block:v===false?"end":"start"};contain(this,o.block||"start",o.inline||"nearest",o.behavior||"auto");};
+if(needed)E.scrollIntoViewIfNeeded=function(c){if(pressed())return needed.apply(this,arguments);var how=c===false?"nearest":"if-needed";contain(this,how,how,"auto");};
+function guard(P){var f=P&&P.focus;if(!f)return;P.focus=function(o){if(pressed())return f.apply(this,arguments);var p={},k;if(o&&typeof o==="object")for(k in o)p[k]=o[k];var wants=!p.preventScroll;p.preventScroll=true;f.call(this,p);var at=this.getRootNode&&this.getRootNode();if(wants&&at&&at.activeElement===this)contain(this,"if-needed","if-needed","auto");};}
+guard(window.HTMLElement&&HTMLElement.prototype);guard(window.SVGElement&&SVGElement.prototype);})();`;
+
 // The page's half of the bridge, run first in its head: the theme it starts in and every change the chat posts, the
 // height it needs whenever that changes, which of its pictures the pointer rests on or presses (one already drawn at its
 // own size, or inside something the page made pressable, is never offered), and `window.intentic` for the page's own
@@ -265,7 +288,7 @@ export const pageHead = (theme: PageTheme, options: { readonly canvas?: boolean 
     return (
         `<style id="intentic-theme">${pageThemeCss(theme, canvas)}</style>` +
         // The bootstrap, holding the theme it starts from as `intentic.theme`; `<` escaped so the JSON cannot end the script.
-        `<script>${bootstrapScript(canvas).replace(`theme=null`, `theme=${JSON.stringify(theme).replace(/</g, `\\u003c`)}`)}</script>`
+        `<script>${CONTAINED_SCROLL}${bootstrapScript(canvas).replace(`theme=null`, `theme=${JSON.stringify(theme).replace(/</g, `\\u003c`)}`)}</script>`
     );
 };
 
@@ -348,16 +371,20 @@ const STANDALONE_SCRIPT =
 export const standalonePage = (html: string): string =>
     intoHead(html, `<style id="intentic-page-defaults">${pageDefaultsCss()}</style><script>${STANDALONE_SCRIPT}</script>`);
 
-// A stored page as a published conversation carries it (share-publish.ts): sealed off the network, and saying its own
-// height to the page around it, in the bridge's own words, so the shared transcript fits its frame. It keeps the theme
-// it was stored with (standalonePage), which follows the reader's light or dark.
+// A stored page as a published conversation carries it (share-publish.ts): sealed off the network, its scripted
+// scrolling kept to itself (CONTAINED_SCROLL), and saying its own height to the page around it, in the bridge's own
+// words, so the shared transcript fits its frame. It keeps the theme it was stored with (standalonePage), which follows
+// the reader's light or dark.
 const SIZE_SCRIPT =
     `(function(){if(window.parent===window)return;var h=-1;function z(){var r=document.documentElement,b=document.body,` +
     `v=Math.ceil(Math.max(r.getBoundingClientRect().height,b?b.getBoundingClientRect().bottom:0));if(v===h||v<=0)return;h=v;` +
     `window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.sizeChanged)},params:{height:v}},"*");}` +
     `if(window.ResizeObserver)new ResizeObserver(z).observe(document.documentElement);window.addEventListener("load",z);setTimeout(z,50);})();`;
 export const publishedPage = (stored: string): string =>
-    intoHead(withoutPageMedia(stored), `<meta http-equiv="Content-Security-Policy" content="${SEALED_PAGE_POLICY}"><meta name="referrer" content="no-referrer"><script>${SIZE_SCRIPT}</script>`);
+    intoHead(
+        withoutPageMedia(stored),
+        `<meta http-equiv="Content-Security-Policy" content="${SEALED_PAGE_POLICY}"><meta name="referrer" content="no-referrer"><script>${CONTAINED_SCROLL}${SIZE_SCRIPT}</script>`,
+    );
 
 // What an MCP server's app is shown with (agent/pages/mcp-apps.ts): the call's arguments and its result, kept inside the
 // stored page as a data block the chat hands the app over the bridge (`tool-input`, `tool-result`) once it is ready.
