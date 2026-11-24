@@ -86,15 +86,18 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
         <!-- The next comparison's wait is drawn as every sheet of this one was. -->
         <Await :of="compared" imprint="workspace.tableDiff" :label="t(`workspace.tableDiffView.comparing`)">
             <template #fallback>
-                <div
-                    role="status"
-                    aria-busy="true"
-                    :aria-label="t(`workspace.tableDiffView.comparing`)"
-                    class="flex flex-col gap-2.5 rounded-md border border-line p-3"
-                >
-                    <span v-for="row in 8" :key="row" class="flex gap-4">
-                        <span v-for="cell in 4" :key="cell" class="skeleton block h-2 flex-1" />
-                    </span>
+                <!-- A sheet as the comparison draws one: its name and count over its bordered rows, each led by its line number. -->
+                <div role="status" aria-busy="true" :aria-label="t(`workspace.tableDiffView.comparing`)">
+                    <div class="mb-1.5 flex items-center gap-2 text-sm" aria-hidden="true">
+                        <span class="flex h-[1lh] items-center"><span class="skeleton block h-3 w-24" /></span>
+                        <span class="skeleton block h-2 w-16" />
+                    </div>
+                    <div class="flex flex-col rounded-md border border-line text-xs" aria-hidden="true">
+                        <span v-for="row in 8" :key="row" class="flex items-center gap-4 border-line/60 px-2 py-0.5 not-first:border-t">
+                            <span class="flex h-[1lh] w-4 shrink-0 items-center justify-end"><span class="skeleton block h-2 w-2.5" /></span>
+                            <span v-for="cell in 4" :key="cell" class="skeleton block h-2 flex-1" />
+                        </span>
+                    </div>
                 </div>
             </template>
             <template #default="{ data: diff }">

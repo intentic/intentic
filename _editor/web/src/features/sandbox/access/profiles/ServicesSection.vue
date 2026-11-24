@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ServiceSchema, type Service } from "@intentic/sandbox-contract/schemas/services";
-import { Await, Button, Icon, InlineRename, Notice, Picker, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Await, Button, Icon, InlineRename, Notice, Picker, Row, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -96,6 +96,14 @@ const profileName = (id: string | undefined): string =>
 </script>
 <template>
     <Await v-if="available" :of="loaded" imprint="sandbox.access.services">
+        <!-- Until it has been seen once: the group under its real header, a couple of services each with its steward and
+             reach under its name and its Delete beside it. -->
+        <template #fallback>
+            <RowGroup :label="t(`sandbox.accessServices.title`)">
+                <template #info><ServicesExplainer /></template>
+                <div role="status" aria-busy="true"><SkeletonRows :rows="2" :lead="false" description control /></div>
+            </RowGroup>
+        </template>
         <RowGroup :label="t(`sandbox.accessServices.title`)">
             <template #actions
                 ><Button

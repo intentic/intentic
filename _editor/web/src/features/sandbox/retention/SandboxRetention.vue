@@ -6,7 +6,7 @@ import {
     type RetentionSettings,
     RetentionSettingsSchema,
 } from "@intentic/sandbox-contract/schemas/data-protection";
-import { Await, type IconName, InfoHint, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Await, type IconName, InfoHint, Notice, Row, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { commitCount } from "../agent-settings/models/numberInputs";
@@ -38,6 +38,12 @@ const ROWS = computed((): { key: Kind; icon: IconName; title: string; descriptio
     { key: `rawOutputDays`, icon: `align-left`, title: t(`sandbox.retention.rawOutput`), description: t(`sandbox.retention.rawOutputNote`) },
 ]);
 
+// The table as the fallback draws it: the same rows, the audit trail's last.
+const FALLBACK_ROWS = computed(() => [
+    ...ROWS.value,
+    { icon: `list-check` as const, title: t(`sandbox.retention.audit`), description: t(`sandbox.retention.auditNote`) },
+]);
+
 // An emptied or odd field clamps to the schema's bounds, and the box shows what was kept, so it never holds a number
 // the save would refuse.
 const COPY = { min: 0, max: RETENTION_DAYS_MAX };
@@ -57,7 +63,21 @@ const setAuditDays = (event: Event): void => {
 <template>
     <!-- The numbers are the sandbox's own or nothing: never the schema's defaults standing in for a read that has not
          answered, or that failed (the page showed "0 · forever" for every record under a failing read). -->
-    <Await :of="loaded">
+    <Await :of="loaded" imprint="sandbox.retention">
+        <!-- Every row of the table is the same whatever the sandbox holds, so the rows are drawn for real and only the
+             numbers wait: a box and its unit's room. How the audit trail is kept is three rows with a control each. -->
+        <template #fallback>
+            <div role="status" aria-busy="true" :aria-label="t(`ui.status.loading`)" class="@container flex flex-col gap-6">
+                <RowGroup :label="t(`sandbox.retention.title`)">
+                    <Row v-for="row in FALLBACK_ROWS" :key="row.title" :icon="row.icon" :title="row.title" :description="row.description">
+                        <template #control>
+                            <span class="flex items-center gap-2" aria-hidden="true"><span class="skeleton block h-7 w-20" /><span :class="UNIT" /></span>
+                        </template>
+                    </Row>
+                </RowGroup>
+                <RowGroup :label="t(`sandbox.retention.auditKeeping`)"><SkeletonRows :rows="3" description control /></RowGroup>
+            </div>
+        </template>
         <div class="@container flex flex-col gap-6">
             <RowGroup data-setting="retention-periods" :label="t(`sandbox.retention.title`)">
                 <!-- How the numbers work, and the exceptions each row's one line leaves out: reference, so it sits behind the (i)

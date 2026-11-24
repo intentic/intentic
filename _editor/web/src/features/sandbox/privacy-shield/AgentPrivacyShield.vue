@@ -136,7 +136,14 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
              rows sit straight in the group, so nothing smaller can hold the imprint. -->
         <Await :of="loaded" imprint="sandbox.agent.privacy-shield">
             <template #fallback>
-                <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)"><SkeletonRows :rows="1" description /></RowGroup>
+                <!-- The shield's own row says the same whatever is set, so it is drawn; only its mode and the line under it
+                     about what that mode does wait. More rows follow only once it runs, which a new sandbox's does not. -->
+                <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)">
+                    <Row icon="eye-slash" :title="t(`sandbox.agentPrivacyShield.shieldPersonalData`)" :description="t(`sandbox.agentPrivacyShield.whatItKeeps`)">
+                        <template #control><span class="skeleton block h-7 w-36 rounded-md" aria-hidden="true" /></template>
+                        <template #below><span class="flex h-4 items-center" aria-hidden="true"><span class="skeleton block h-2.5 w-96 max-w-full" /></span></template>
+                    </Row>
+                </RowGroup>
             </template>
             <template #failed="{ error: unread }">
                 <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)">

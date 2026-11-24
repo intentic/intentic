@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { Await, ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
+import { Await, ui, ResponsiveOverlay, vAction } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { sharedWorkspaceTreeKey } from "../../../models/workspace/tree/workspaceTreeKey";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
@@ -168,10 +168,18 @@ const remove = (path: string): void => {
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" :header="t(`sandbox.folderPicker.chooseFolder`)" panel-class="w-80 p-1">
             <!-- One name for the whole tree, whichever folders were open: the last listing seen is the likeliest next one. -->
             <Await :of="loaded" imprint="sandbox.folder-picker" :label="t(`sandbox.folderPicker.readingWorkspace`)">
+                <!-- Until it has been seen once: the top level's folders as the tree draws them, an expander's square, then a
+                     folder glyph and a name. -->
                 <template #fallback>
-                    <div role="status" aria-busy="true">
+                    <div role="status" aria-busy="true" class="flex flex-col">
                         <span class="sr-only">{{ t(`sandbox.folderPicker.readingWorkspace`) }}</span>
-                        <SkeletonRows :rows="5" density="dense" :control="false" />
+                        <div v-for="width in [`w-24`, `w-16`, `w-28`, `w-20`, `w-14`]" :key="width" class="flex items-center" aria-hidden="true">
+                            <span class="flex size-6 shrink-0 items-center justify-center"><span class="skeleton block size-2.5" /></span>
+                            <span class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-xs">
+                                <span class="skeleton block size-3 shrink-0" />
+                                <span class="flex h-[1lh] items-center"><span class="skeleton block h-2.5" :class="width" /></span>
+                            </span>
+                        </div>
                     </div>
                 </template>
                 <div v-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">

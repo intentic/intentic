@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Await } from "@intentic/ui";
+import { Await, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { activityPart } from "../activity/activityParts";
@@ -23,7 +23,24 @@ const { loaded: settingsRead } = useSandboxSettings();
 <template>
     <!-- Four of these groups draw the sandbox's settings: never their defaults standing in for a read that has not
          answered or failed ("On" and "Automatic" were shown as this sandbox's choices under a failing read). -->
-    <Await :of="settingsRead">
+    <Await :of="settingsRead" imprint="sandbox.guardrails">
+        <!-- The first screen as it lands: the judge's two rows and the installs row, each titled, described and with a
+             control at its end, then the policy document's heading and paragraphs. The groups' titles never change, so
+             they are drawn for real. -->
+        <template #fallback>
+            <div role="status" aria-busy="true" :aria-label="t(`ui.status.loading`)" class="@container flex flex-col gap-6">
+                <RowGroup :label="t(`sandbox.agentSafetyJudge.safetyJudge`)"><SkeletonRows :rows="2" description control /></RowGroup>
+                <RowGroup :label="t(`sandbox.agentProjectInstalls.title`)"><SkeletonRows :rows="1" description control /></RowGroup>
+                <RowGroup :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)">
+                    <RowNote variant="block"><span class="flex flex-col gap-3" aria-hidden="true">
+                        <span class="skeleton block h-5 w-36" />
+                        <span v-for="(width, index) in [`w-full`, `w-11/12`, `w-full`, `w-3/4`]" :key="index" class="skeleton block h-3" :class="width" />
+                        <span class="mt-6 skeleton block h-5 w-32" />
+                        <span v-for="(width, index) in [`w-full`, `w-5/6`, `w-1/2`]" :key="`second-${index}`" class="skeleton block h-3" :class="width" />
+                    </span></RowNote>
+                </RowGroup>
+            </div>
+        </template>
         <div class="@container flex flex-col gap-6">
             <AgentSafetyJudge />
             <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->

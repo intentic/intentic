@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Loaded } from "@intentic/extension-api";
-import { Await, FilterBar, Icon, Notice, type NoticeModel, PageAction, PageHeader, RowGroup, SegmentedControl, SkeletonRows, ui } from "@intentic/ui";
+import { Await, FilterBar, Icon, Notice, type NoticeModel, PageAction, PageHeader, SegmentedControl, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import PhoneRows from "../phones/PhoneRows.vue";
@@ -79,9 +79,10 @@ const inDesktopApp = desktopApp() !== undefined;
             </p>
 
             <!-- Shown only once there's something to search; ports are matched too. The fleet's counts sit beside it as the
-                 other half of the same narrowing, once there is more than one verdict to tell apart. -->
+                 other half of the same narrowing, once there is more than one verdict to tell apart. Standing while the
+                 board is read, as it does for the fleets that need one, so the tiles do not land under a field that drops in. -->
             <FilterBar
-                v-if="showFilter(rows) || mixed"
+                v-if="showFilter(rows) || mixed || loaded.state === `waiting`"
                 v-model="query"
                 :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
                 :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
@@ -93,16 +94,24 @@ const inDesktopApp = desktopApp() !== undefined;
             </FilterBar>
 
             <Notice v-if="notice" :of="notice" />
-            <!-- Drawn as the board last looked in this sandbox; until it has been seen once, the outline is a card like the
-                 ones it stands in for, so the board does not jump when they land. -->
+            <!-- Drawn as the board last looked in this sandbox; until it has been seen once, two tiles in the board's own grid,
+                 each a mark, a name over a facts line, and a verdict in the corner, so the board does not jump when they land. -->
             <Await :of="loaded" imprint="sandbox.devices.board" :label="t(`sandbox.deviceBoard.readingDevices`)">
                 <template #fallback>
-                    <RowGroup>
-                        <div role="status" aria-busy="true">
-                            <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
-                            <SkeletonRows :rows="2" description />
+                    <div class="@container" role="status" aria-busy="true" :aria-label="t(`sandbox.deviceBoard.readingDevices`)">
+                        <div class="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3" aria-hidden="true">
+                            <div v-for="width in [`w-24`, `w-32`]" :key="width" class="flex items-start gap-3 rounded-xl bg-card px-4 pb-3 pt-4 shadow-sm">
+                                <span class="skeleton block size-10 shrink-0 rounded-lg" />
+                                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                    <span class="flex items-center justify-between gap-2">
+                                        <span class="flex h-6 items-center"><span class="skeleton block h-3.5" :class="width" /></span>
+                                        <span class="skeleton block h-4 w-12 shrink-0 rounded-full" />
+                                    </span>
+                                    <span class="flex h-[1lh] items-center text-xs"><span class="skeleton block h-2.5 w-44 max-w-full" /></span>
+                                </span>
+                            </div>
                         </div>
-                    </RowGroup>
+                    </div>
                 </template>
                 <template #failed="{ error }"><Notice :of="unread(error)" /></template>
 

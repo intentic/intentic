@@ -25,9 +25,9 @@ const ROWS = [
         <RowGroup>
             <template #label>
                 <span class="flex h-4 items-center gap-2">
-                    <span class="skeleton h-3 w-24"></span>
+                    <span class="skeleton h-3 w-12"></span>
                     <span class="skeleton h-3 w-3 rounded-full"></span>
-                    <span class="skeleton h-3 w-32"></span>
+                    <span class="skeleton h-3 w-24"></span>
                 </span>
             </template>
 
@@ -44,11 +44,13 @@ const ROWS = [
                         <span class="skeleton h-4 w-14 rounded-md"></span>
                     </span>
                 </template>
+                <!-- Author, branch behind its glyph, short sha, duration: PipelineRunRow's one description line. -->
                 <template #description>
                     <span class="flex h-4 items-center gap-2">
                         <span class="skeleton h-2.5" :class="row.author"></span>
-                        <span class="skeleton h-2.5 w-10"></span>
                         <span class="skeleton h-2.5 w-12"></span>
+                        <span class="skeleton h-2.5 w-11"></span>
+                        <span class="skeleton h-2.5 w-10"></span>
                     </span>
                 </template>
                 <!-- Stage circles and connectors: the row's most distinctive shape, and what a reader scans first. -->
@@ -61,9 +63,10 @@ const ROWS = [
                     </span>
                 </template>
                 <template #control>
+                    <!-- Time ago, then the quiet Re-run (or Cancel) button: a word, not a wide accent button. -->
                     <span class="flex shrink-0 items-center gap-2">
-                        <span class="skeleton h-2.5 w-12"></span>
-                        <span class="skeleton h-6 w-24 rounded-md"></span>
+                        <span class="skeleton h-2.5 w-10"></span>
+                        <span class="skeleton h-6 w-14 rounded-md"></span>
                         <span class="skeleton mx-1 h-3 w-3"></span>
                     </span>
                 </template>

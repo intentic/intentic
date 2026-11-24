@@ -140,7 +140,11 @@ const EXAMPLE = `{
 
         <template #detail>
             <div class="flex flex-col gap-7">
-                <RowGroup v-if="!read"><SkeletonRows :rows="3" description control /></RowGroup>
+                <!-- A lane as RunLane draws one: its place named over its targets, each a name, its command and its press. -->
+                <RowGroup v-if="!read">
+                    <template #label><span class="skeleton inline-block h-2 w-24 align-middle" /></template>
+                    <SkeletonRows :rows="3" :lead="false" description control />
+                </RowGroup>
                 <RunLane v-for="lane in lanes" :key="lane.place" :lane="lane" :show-repo="picked === undefined" />
 
                 <!-- Nothing says how to run it: an agent can work that out, or the file can be written by hand. -->

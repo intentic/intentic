@@ -212,9 +212,30 @@ flowchart LR
   wrapper, so a run of grid items is imprinted while a live item beside them stays live. The store
   (`src/lib/skeleton/skeletonStore.ts`) is memory, read synchronously so the first frame already has the imprint, and is
   keyed by a scope the app supplies. The editor's scope is the active sandbox, and its persistence is IndexedDB
-  (`_editor/web/src/lib/skeletonPersistence.ts`). _2026-10-04: fixed placeholder counts ("three rows") were
+  (`_editor/web/src/lib/skeletonPersistence.ts`). A scope that has never drawn a view draws the newest look any other
+  scope has of it while it waits (the store's `lends`): a view's own name, or a page's (`route:`, `hub:`, `ext:`, the
+  sandbox's path segment taken out), never one item's (a diff, a conversation's turns), and never a look of nothing.
+  So a sandbox opened for the first time waits in the shape of pages the account has seen elsewhere, not the fallback. _2026-10-04: fixed placeholder counts ("three rows") were
   replaced by imprints, because a list of twelve drawn as three jumps the page when it lands. A per-view count kept
   from the data was rejected: it gets the number of rows right but not their widths, wrapping or controls._
+  The `#fallback` is what people see most, more often than the imprint: on every first visit to a view, in every new
+  sandbox, and on every cold read after a deploy, which drops the query cache but keeps the imprints. A view that has
+  been seen once usually paints from the query cache and shows no placeholder at all. A fallback follows these rules:
+  - Everything the region draws whatever the answer says is drawn for real, outside the `<Await>` or ahead of the part
+    that needs the data: titles with fixed words, tabs, toolbars, filter fields, buttons with fixed labels, explanatory
+    sentences. Where such chrome carries a count from the data, only the count is a bar.
+  - What depends on the answer is drawn with the containers and components the answer uses: rows as `SkeletonRows`
+    inside the same `RowGroup`, with `lead`, `description` and `control` matching the slots the real rows fill;
+    cards in the same card classes and grid; sections under their real headers. A chart or meter is a block of its
+    real height.
+  - It promises the shape a typical answer has (its sections, whether rows carry descriptions and controls) and the
+    shortest list worth promising.
+  - It adds no level of DOM the answer does not have, and nothing that watches or times anything.
+  - Every `<Await>` that guards a region has an `imprint`, so the second wait draws the region as it last looked. One
+    without a name draws its fallback on every wait.
+
+  `_tools/e2e/skeletons/fidelity.mts` checks these against the demo. It holds the reads or the code a surface waits on,
+  finds every placeholder on screen in an empty browser, and scores each one against the content that replaces it.
 - **Workers.** `createWorkerCall` and `serveWorkerCall` (`@intentic/ui/worker-call`, re-exported to extensions as
   `@intentic/extension-ui/worker`) are the two halves of one call a dedicated worker answers, with the page as the
   fallback when no worker runs or one dies. A caller whose work is sometimes cheap checks that first and runs it

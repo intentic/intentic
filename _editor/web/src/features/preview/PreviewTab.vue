@@ -126,15 +126,13 @@ const previewServer = async (port: number): Promise<void> => {
     }
 };
 
-// The iframe, probe-gated
-// Nothing is framed until the address probes itself as reachable (an iframe never retries a DNS/502 error page); a
-// generation counter drops a superseded probe.
+// The iframe, probe-gated: nothing is framed until the address probes itself as reachable (an iframe never retries a
+// DNS/502 error page); a generation counter drops a superseded probe.
 const previewSrc = ref<string | undefined>(undefined);
 const probeSlow = ref(false);
 const probing = ref(false);
 const reach = ref<PreviewProbe | undefined>(undefined);
 let probeGeneration = 0;
-
 const { daemonBase, usingLocal } = useEndpoint();
 
 const probeThenShow = async (url: string): Promise<void> => {
@@ -411,7 +409,9 @@ watch(
         <Notice v-if="passNotice" :of="passNotice" class="mx-3 mt-3" />
 
         <div v-if="!target" class="flex min-h-0 flex-1 flex-col">
+            <!-- Unremembered: "this app is gone" is all it shows. The wait is the page's blank frame, said to a screen reader. -->
             <Await :of="listed" :label="t(`preview.previewPanel.readingWhatPreviewed`)">
+                <template #fallback><div class="flex-1" role="status" aria-busy="true" :aria-label="t(`preview.previewPanel.readingWhatPreviewed`)"></div></template>
                 <!-- The list has answered and this app is not on it: a repo removed, a port taken back. -->
                 <EmptyState icon="eye-slash" :title="t(`browsers.preview.gone`)" :line="t(`browsers.preview.goneLine`)" class="flex-1">
                     <template #actions>

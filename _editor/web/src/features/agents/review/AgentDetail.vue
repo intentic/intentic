@@ -664,7 +664,7 @@ const confirmHandOver = async (): Promise<void> => {
             </template>
         </SwipePages>
         <!-- Still asking about this id: the review's frame and one line saying so, never another agent's review replayed. -->
-        <Await v-else :of="lookup" :label="t(`agents.agentDetail.openingAgentsReview`)">
+        <Await v-else :of="lookup" :imprint="`agents.detail:${remoteBox ?? ``}:${agentId}`" :label="t(`agents.agentDetail.openingAgentsReview`)">
             <template #fallback><AgentReviewOutline :label="t(`agents.agentDetail.openingAgentsReview`)" /></template>
             <!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
             <p v-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">{{ remoteUnavailable }}</p>

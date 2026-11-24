@@ -3,15 +3,17 @@
 // its width, blocks at their size, and nothing outside the band or hidden); what <SkeletonSnapshot> draws from it, and
 // when it draws its fallback instead; that `v-skeleton-source` takes the imprint once the element settles, and never
 // under a scope that changed while it waited; and that the store batches writes, keeps a page's own imprints over
-// older ones read from disk, and forgets everything on sign-out.
+// older ones read from disk, lends a view's look to a sandbox that has not drawn it yet, and forgets everything on
+// sign-out.
 import "@intentic/testing/dom";
 import { SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
-import { type ImprintElement, type ImprintNode, type SkeletonImprint, takeImprint } from "@intentic/ui/skeleton-imprint";
+import { type ImprintElement, type ImprintNode, type SkeletonImprint, takeImprint,emptyImprint } from "@intentic/ui/skeleton-imprint";
 import {
     adoptImprints,
     clearImprints,
     configureSkeletonSnapshots,
     imprintOf,
+    lendImprints,
     loadImprintScope,
     rememberImprint,
     type SkeletonPersistence,
@@ -470,6 +472,49 @@ describe(`the imprint store`, () => {
         jest.advanceTimersByTime(2_000);
         jest.advanceTimersByTime(0);
         expect(saves).toHaveLength(1);
+    });
+
+    // A sandbox opened for the first time draws its pages while they wait as the account last saw them in any sandbox,
+    // under names that carry the sandbox where the route does; never another conversation's turns or another file's diff.
+    describe(`lending between sandboxes`, () => {
+        const lends = (name: string): boolean => !name.includes(`:`) || name.startsWith(`route:`);
+        const scope = ref(`sandbox-b`);
+        beforeEach(async () => {
+            await clearImprints();
+            scope.value = `sandbox-b`;
+            configureSkeletonSnapshots({ scope: () => scope.value, lends });
+        });
+
+        it(`draws the newest look another sandbox has of a view or a page this one has never drawn`, () => {
+            rememberImprint(`sandbox-a`, `sandbox.secrets`, { ...imprintOfList(), at: 1 });
+            rememberImprint(`sandbox-c`, `sandbox.secrets`, { ...imprintOfList(), at: 2 });
+            lendImprints(`sandbox-a`, new Map([[`route:/s/sandbox-a/settings/secrets`, { ...imprintOfList(), at: 3 }]]));
+
+            expect(imprintOf(`sandbox.secrets`)?.at).toBe(2);
+            expect(imprintOf(`route:/s/sandbox-b/settings/secrets`)?.at).toBe(3);
+        });
+
+        it(`draws this sandbox's own look over any it is lent`, () => {
+            rememberImprint(`sandbox-a`, `sandbox.secrets`, { ...imprintOfList(), at: 5 });
+            rememberImprint(`sandbox-b`, `sandbox.secrets`, { ...imprintOfList(), at: 1 });
+
+            expect(imprintOf(`sandbox.secrets`)?.at).toBe(1);
+        });
+
+        it(`lends neither one item's look nor a look of nothing`, () => {
+            rememberImprint(`sandbox-a`, `diff:src/app.ts`, imprintOfList());
+            rememberImprint(`sandbox-a`, `sandbox.roles`, emptyImprint(1));
+
+            expect(imprintOf(`diff:src/app.ts`)).toBeUndefined();
+            expect(imprintOf(`sandbox.roles`)).toBeUndefined();
+        });
+
+        it(`forgets what it lends on sign-out`, async () => {
+            rememberImprint(`sandbox-a`, `sandbox.secrets`, imprintOfList());
+            await clearImprints();
+
+            expect(imprintOf(`sandbox.secrets`)).toBeUndefined();
+        });
     });
 
     it(`forgets every scope, in memory and on disk, on sign-out`, async () => {

@@ -38,7 +38,10 @@ const dataOf = (flow: DataFlow): string => t(`sandbox.dataProtection.data.${keyO
 
 <template>
     <div class="flex flex-col gap-6">
-        <SkeletonRows v-if="isLoading" :rows="6" description />
+        <!-- Unread, the places in use: each with its kind's icon, what goes there, and the facts under it. -->
+        <RowGroup v-if="isLoading" :label="t(`sandbox.dataProtection.inUse`)" role="status" aria-busy="true" :aria-label="t(`ui.status.loading`)">
+            <SkeletonRows :rows="4" description />
+        </RowGroup>
         <template v-else>
             <Notice v-if="questions.length > 0" tone="warning">
                 <p class="font-medium">{{ t(`sandbox.dataProtection.questionsTitle`, { count: questions.length }, questions.length) }}</p>

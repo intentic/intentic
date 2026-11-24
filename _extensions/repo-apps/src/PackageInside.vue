@@ -79,9 +79,22 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
              only until this package has been opened once. -->
         <Await :of="loaded" :imprint="imprint" :label="t(`dependenciesView.inside.reading`)">
             <template #fallback>
-                <div class="flex flex-col gap-2" role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`dependenciesView.inside.reading`) }}</span>
-                    <span v-for="row in 4" :key="row" class="skeleton block h-10 w-full" aria-hidden="true" />
+                <!-- The answer's shape: the stat strip's figures, then a layer per row, its name beside its units' cards. -->
+                <div role="status" aria-busy="true" :aria-label="t(`dependenciesView.inside.reading`)">
+                    <div class="my-4 flex flex-wrap gap-x-10 gap-y-4" aria-hidden="true">
+                        <span v-for="stat in 3" :key="stat" class="flex min-w-24 flex-col gap-1.5">
+                            <span class="skeleton block h-2.5 w-16" />
+                            <span class="skeleton block h-5 w-8" />
+                        </span>
+                    </div>
+                    <div class="mt-2 flex flex-col gap-1.5" aria-hidden="true">
+                        <div v-for="row in 4" :key="row" class="flex items-start gap-3 rounded-md border border-line-subtle p-2">
+                            <span class="w-32 shrink-0 pt-1"><span class="skeleton block h-3 w-20" /></span>
+                            <span class="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                                <span v-for="unit in 5 - row" :key="unit" class="skeleton block h-9 w-28 rounded" />
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </template>
             <Card v-if="modules && modules.units.length === 0" dashed class="text-center text-sm text-muted">{{

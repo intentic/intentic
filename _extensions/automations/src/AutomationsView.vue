@@ -285,9 +285,11 @@ const toggleDetail = (id: string): void => {
             <Notice :of="noticeOf(topError)" />
         </template>
 
-        <!-- The rail narrows rather than selects, so on a phone it folds above the list instead of covering it. -->
-        <template v-if="railed" #rail>
-            <AutomationRail v-model="railShelf" :all="allShelf" :shelves="railShelves" />
+        <!-- The rail narrows rather than selects, so on a phone it folds above the list instead of covering it. Drawn while the
+             list is read too, its shelves as placeholders: a page someone comes back to has its jobs on shelves, and the rail
+             arriving with them moved the title and the whole column sideways. -->
+        <template v-if="railed || loaded.state === `waiting`" #rail>
+            <AutomationRail v-model="railShelf" :all="allShelf" :shelves="railShelves" :reading="loaded.state === `waiting`" />
         </template>
 
         <template #detail>
@@ -333,12 +335,20 @@ const toggleDetail = (id: string): void => {
 
                 <!-- Skeletons distinguish the pending list from a true empty state. -->
                 <Await :of="loaded" imprint="automations.list" :label="t(`automationsView.readingAutomations`)">
+                    <!-- The list as it draws with a rail beside it: the filter field and the state filter, then the shelves' own groups,
+                         of which a rail means there are at least two. -->
                     <template #fallback>
-                        <RowGroup role="status" aria-busy="true">
-                            <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
+                        <div class="flex flex-col gap-6" role="status" aria-busy="true">
                             <span class="sr-only">{{ t(`automationsView.readingAutomations`) }}</span>
-                            <SkeletonRows :rows="3" description control />
-                        </RowGroup>
+                            <div v-if="lens === `list`" class="flex flex-wrap items-center gap-x-3 gap-y-2" aria-hidden="true">
+                                <span class="skeleton block h-8 min-w-56 max-w-sm flex-1 rounded-md" />
+                                <span class="skeleton ml-auto block h-7 w-60 rounded-md" />
+                            </div>
+                            <RowGroup v-for="rows in [3, 2]" :key="rows">
+                                <template #label><span class="skeleton block h-2.5" :class="rows === 3 ? `w-24` : `w-32`" aria-hidden="true" /></template>
+                                <SkeletonRows :rows="rows" description control />
+                            </RowGroup>
+                        </div>
                     </template>
 
                     <!-- The week of whatever the rail stands on: one shelf's wakes, or every one. -->

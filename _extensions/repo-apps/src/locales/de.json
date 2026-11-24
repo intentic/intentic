@@ -20,6 +20,7 @@
         "openTerminal": "Terminal von {app} öffnen",
         "packages": "Pakete",
         "readingRepositorysApps": "Die Apps dieses Repositorys werden gelesen…",
+        "readingRepositorysTests": "Die Tests dieses Repositorys werden gelesen…",
         "run": "Ausführen",
         "runAll": "Alle ausführen",
         "runTests": "Tests ausführen",

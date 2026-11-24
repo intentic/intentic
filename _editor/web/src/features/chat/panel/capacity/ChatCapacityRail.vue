@@ -256,6 +256,9 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
     const names = entry.names.length <= 3 ? entry.names.join(`, `) : entry.count;
     return { title, tone: `warning`, rows: [{ label: t(`chat.chatCapacityRail.accounts`), value: names }], note };
 };
+// The usage column's outline while the accounts are read: the lanes each of two providers' accounts usually carries
+// (a week and its session; one monthly pool).
+const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
 </script>
 
 <template>
@@ -329,18 +332,28 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                 </template>
             </SectionHeader>
 
-            <!-- Drawn as the shape that's coming while the accounts are read, not stated in words. -->
+            <!-- Drawn as the shape that's coming while the accounts are read, not stated in words: two providers, each its
+                 name over the lanes of one account (a label, a bar, the figure and its reset), in the column's own grid. -->
             <Await :of="reading" imprint="chat.capacity" :label="t(`sandbox.words.readingConnections`)">
                 <template #fallback>
                     <div
-                        class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1"
+                        class="flex min-h-0 flex-1 flex-col gap-4 px-3 pb-3"
                         role="status"
                         aria-busy="true"
                         :aria-label="t(`sandbox.words.readingConnections`)"
                     >
-                        <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
-                            <span class="skeleton block h-2.5 w-24" />
-                            <span class="skeleton block h-1 w-full rounded-full" />
+                        <div v-for="(lanes, index) in OUTLINE_LANES" :key="index" class="flex flex-col gap-2.5" aria-hidden="true">
+                            <div class="flex items-center gap-1.5 text-2xs">
+                                <span class="skeleton block size-3 shrink-0" />
+                                <span class="flex h-[1lh] items-center"><span class="skeleton block h-2.5 w-20" /></span>
+                            </div>
+                            <div class="grid grid-cols-[auto_minmax(2.5rem,1fr)_minmax(0,auto)] items-center gap-x-2 gap-y-1">
+                                <template v-for="lane in lanes" :key="lane">
+                                    <span class="flex h-[1lh] items-center text-3xs"><span class="skeleton block h-2 w-5" /></span>
+                                    <span class="skeleton block h-1 rounded-full" />
+                                    <span class="flex h-[1lh] items-center justify-end text-2xs"><span class="skeleton block h-2.5 w-16" /></span>
+                                </template>
+                            </div>
                         </div>
                     </div>
                 </template>

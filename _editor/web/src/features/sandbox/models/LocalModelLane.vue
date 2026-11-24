@@ -4,7 +4,7 @@ import { useLoaded } from "@intentic/extension-api";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { Await, Button, ConfirmDialog, Icon, type IconName, type NoticeModel, Row, RowNote, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
+import { Await, Button, ConfirmDialog, Icon, type IconName, type NoticeModel, Row, RowNote, SkeletonRows, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useOperation } from "../../../workbench/operations/operations";
@@ -310,12 +310,15 @@ const rungs = computed(() => {
 <template>
     <div>
         <!-- A skeleton beats a number we would have to take back: the lane as this machine last drew it, once it has been
-             seen; until then the words. -->
+             seen; until then the words where the machine's memory will be said, over the models that fit it. -->
         <Await :of="measured" imprint="connect.local-model" :label="t(`connect.localModelLane.measuring`)">
             <template #fallback>
-                <p class="flex items-center gap-1.5 px-4 py-3.5 text-xs text-subtle">
-                    <Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}
-                </p>
+                <div role="status" aria-busy="true" class="divide-y divide-line-subtle">
+                    <RowNote variant="block">
+                        <p class="flex items-center gap-1.5 text-xs text-subtle"><Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}</p>
+                    </RowNote>
+                    <SkeletonRows :rows="3" description control />
+                </div>
             </template>
             <template #default="{ data: fit }">
                 <!-- Its parts divided as the rows of the card it sits in. -->

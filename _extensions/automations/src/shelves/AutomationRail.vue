@@ -14,14 +14,16 @@ export interface RailShelf {
 </script>
 
 <script setup lang="ts">
-import { Icon, type IconName, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice, useRailMemory } from "@intentic/extension-ui";
+import { Icon, type IconName, type NavGroup, NavRail, Picker, type PickerOptions, Row, SkeletonRows, useDevice, useRailMemory } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { t } from "../i18n.js";
 
-const { all, shelves } = defineProps<{
+const { all, shelves, reading = false } = defineProps<{
     /** The pinned everything row, the state the rail returns to. */
     all: RailShelf;
     shelves: readonly RailShelf[];
+    /** The automations are still being read: the counts and the shelves are placeholders. */
+    reading?: boolean;
 }>();
 
 const selected = defineModel<string>({ required: true });
@@ -39,7 +41,8 @@ const SHELF_ICON = {
 const picked = useRailMemory(`automations.shelf`, selected, () => shelves.map((shelf) => shelf.key));
 
 // One unlabelled group: a heading would name a distinction the rail doesn't make.
-const groups = computed<NavGroup<RailShelf>[]>(() => [{ key: `shelves`, items: [...shelves] }]);
+// None while the list is read, so the rail's `#empty` draws the shelves' placeholders instead.
+const groups = computed<NavGroup<RailShelf>[]>(() => (reading ? [] : [{ key: `shelves`, items: [...shelves] }]));
 
 // The count's hover card: failing first, since that is why anyone hovers it; a zero row is left out.
 const countTip = (shelf: RailShelf) => ({
@@ -71,11 +74,17 @@ const options = computed<PickerOptions<string>>(() => [
         <template #pinned>
             <Row as="button" density="dense" :icon="SHELF_ICON.all" :title="all.label" :selected="picked === ``" class="rounded-md" @click="picked = ``">
                 <template #meta>
-                    <span class="flex items-center gap-1.5 tabular-nums" v-tooltip.bottom="countTip(all)">
+                    <span v-if="reading" class="skeleton block h-2.5 w-3" aria-hidden="true" />
+                    <span v-else class="flex items-center gap-1.5 tabular-nums" v-tooltip.bottom="countTip(all)">
                         <span v-if="all.failing > 0" class="size-1.5 rounded-full bg-danger" aria-hidden="true"></span>{{ all.total }}
                     </span>
                 </template>
             </Row>
+        </template>
+
+        <!-- Gap, not divider: the shelves' own `flex flex-col gap-0.5`, at the rail's dense tier. -->
+        <template v-if="reading" #empty>
+            <div class="flex flex-col gap-0.5"><SkeletonRows :rows="3" density="dense" /></div>
         </template>
 
         <template #row="{ item: shelf }">

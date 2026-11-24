@@ -164,39 +164,47 @@ const generateOne = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
+        <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
+             needs no section of its own while there is nothing in it yet. Drawn ahead of the inventory, since none of it
+             depends on what it says: the filter stands while it is read (its counts come with the answer) and folds away
+             once a short list turns out to need none. -->
+        <div data-setting="secrets-add" class="flex flex-wrap items-center justify-end gap-2">
+            <!-- 18rem before the presses beside it go to a line of their own: `flex-1` alone has no width to wrap at, so on a
+                 phone the field was squeezed to a single letter of what was typed rather than the buttons moving down. -->
+            <FilterBar
+                v-if="filterable || loaded.state === `waiting`"
+                v-model="query"
+                :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)"
+                class="min-w-[min(100%,18rem)] flex-1"
+            >
+                <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
+            </FilterBar>
+            <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" tier="boring" :disabled="adding" @click="openAdd">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+            <Button :as="RouterLink" :to="here(page.capabilities())" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
+        </div>
+
         <!-- Content waits for inventory, drawn meanwhile as the page last looked in this sandbox. -->
         <Await :of="loaded" imprint="sandbox.secrets" :label="t(`sandbox.sandboxSecrets.readingSandboxsSecrets`)">
-            <!-- Until it has been seen once: the shape of the coming list (rows with a key and reveal control), not a spinner. -->
+            <!-- Until it has been seen once: the groups a sandbox in use shows, owed secrets first and then the owner's own,
+                 each row a key name ending in the disclosure chevron the real row draws by itself. One of the owner's rows
+                 carries a note, as one usually does, and a group stands every row at a described row's height. -->
             <template #fallback>
-                <RowGroup :label="t(`sandbox.sandboxSecrets.secrets`)">
-                    <div role="status" aria-busy="true">
-                        <span class="sr-only">{{ t(`sandbox.sandboxSecrets.readingSandboxsSecrets`) }}</span>
-                        <SkeletonRows :rows="4" control />
-                    </div>
-                </RowGroup>
+                <div role="status" aria-busy="true" class="flex flex-col gap-6">
+                    <span class="sr-only">{{ t(`sandbox.sandboxSecrets.readingSandboxsSecrets`) }}</span>
+                    <RowGroup :label="t(`sandbox.words.needsAttention`)">
+                        <SkeletonRows :rows="2" description />
+                    </RowGroup>
+                    <RowGroup :label="t(`sandbox.sandboxSecrets.secrets`)">
+                        <SkeletonRows :rows="4" />
+                        <SkeletonRows :rows="1" description />
+                    </RowGroup>
+                </div>
             </template>
 
             <!-- One element, spaced as the column it sits in. -->
             <div class="flex flex-col gap-6">
-                <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
-                     needs no section of its own while there is nothing in it yet. -->
-                <div data-setting="secrets-add" class="flex flex-wrap items-center justify-end gap-2">
-                    <!-- 18rem before the presses beside it go to a line of their own: `flex-1` alone has no width to wrap at, so on a
-                         phone the field was squeezed to a single letter of what was typed rather than the buttons moving down. -->
-                    <FilterBar
-                        v-if="filterable"
-                        v-model="query"
-                        :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)"
-                        class="min-w-[min(100%,18rem)] flex-1"
-                    >
-                        <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
-                    </FilterBar>
-                    <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" tier="boring" :disabled="adding" @click="openAdd">
-                        <template #icon><Icon name="plus" /></template>
-                    </Button>
-                    <Button :as="RouterLink" :to="here(page.capabilities())" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
-                </div>
-
                 <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
                 <RowGroup v-if="attention.length > 0 || wants.length > 0" :label="t(`sandbox.words.needsAttention`)">
                     <SecretWantRow v-for="want in wants" :key="want.id" :want="want" />

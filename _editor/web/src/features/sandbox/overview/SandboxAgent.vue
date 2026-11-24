@@ -29,6 +29,7 @@ import AgentVoice from "../agent-settings/behaviour/AgentVoice.vue";
 import AgentOffload from "../agent-settings/behaviour/offload/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
 import SectionLink from "../SectionLink.vue";
+import SandboxAgentFallback from "./SandboxAgentFallback.vue";
 import { here, page } from "../../../lib/routes/links";
 
 // Agent tab: how the agent works in this sandbox. Each group reads and writes the same settings object via
@@ -123,7 +124,17 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
              answered (as Guardrails and Retention wait). Each category is remembered as itself, and keyed so opening one
              waits again: under its own last look while the reads only it makes (instructions, memory, skills, repo
              checks) answer, rather than drawing an empty document and a "Reading…" line where they will be. -->
+        <!-- Every pick on Jobs chooses among what Models holds; said once, where the pick is made, with the way there. Ahead of
+             the wait, as it says the same whatever the settings hold. -->
+        <p v-if="section === `jobs`" class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+            {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
+            <RouterLink :to="modelsHref()" :class="ui.textButton()">
+                {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
+            </RouterLink>
+        </p>
+
         <Await :key="section" :of="settingsRead" :imprint="`sandbox.agent.${section}`">
+            <template #fallback><SandboxAgentFallback :section /></template>
             <template #failed="{ error, retry }">
                 <Notice
                     :of="{
@@ -135,16 +146,7 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 />
             </template>
 
-            <!-- Every pick below chooses among what Models holds; said once, where the pick is made, with the way there. -->
-            <template v-if="section === `jobs`">
-                <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-                    {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
-                    <RouterLink :to="modelsHref()" :class="ui.textButton()">
-                        {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
-                    </RouterLink>
-                </p>
-                <AgentModels />
-            </template>
+            <AgentModels v-if="section === `jobs`" />
 
             <!-- Ordered by widening scope: told every turn, told per job match, memory, then import from elsewhere. -->
             <template v-else-if="section === `instructions`">

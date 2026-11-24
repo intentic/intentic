@@ -29,8 +29,9 @@ const TEXT: Record<StatusVariant, string> = {
 };
 
 // Uneven on purpose and walked in order: state names are words of different lengths ("running", "stopped",
-// "unhealthy"), and three bars of one width read as a rendering artifact rather than as a tally.
-const SKELETON_LABELS = [`w-14`, `w-12`, `w-16`];
+// "unhealthy"), and three bars of one width read as a rendering artifact rather than as a tally. Sized to those words
+// at `text-xs`: wider bars wrapped a line whose real counts fit on one.
+const SKELETON_LABELS = [`w-9`, `w-11`, `w-10`];
 
 const { items = [], skeleton = 0 } = defineProps<{
     items?: readonly TallyItem[];
@@ -44,7 +45,7 @@ const { items = [], skeleton = 0 } = defineProps<{
         <!-- h-5 is the line box of the count above (`text-sm`), so the board does not lift when the numbers arrive; the bars are decoration. -->
         <span v-for="index in skeleton" :key="index" class="flex h-5 items-center gap-1.5" aria-hidden="true">
             <span class="skeleton h-2 w-2 shrink-0 rounded-full"></span>
-            <span class="skeleton h-3 w-4"></span>
+            <span class="skeleton h-3 w-2.5"></span>
             <span class="skeleton h-3" :class="SKELETON_LABELS[(index - 1) % SKELETON_LABELS.length]"></span>
         </span>
         <template v-for="item in items" :key="item.label">

@@ -242,11 +242,12 @@ onMounted(async () => {
                     <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps.
                          Remembered per repo, since each has its own apps; the kit's skeleton rows until a repo has been seen once. -->
                     <Await :of="appsLoaded" :imprint="`repo-apps.apps:${repo}`" :label="t(`appsView.readingRepositorysApps`)">
+                        <!-- The status is the group itself, as the answer's rows are one group with no wrapper. Rows carry a
+                             state badge and their buttons, so a control. -->
                         <template #fallback>
-                            <div role="status" aria-busy="true">
-                                <span class="sr-only">{{ t(`appsView.readingRepositorysApps`) }}</span>
-                                <RowGroup><SkeletonRows :rows="3" control /></RowGroup>
-                            </div>
+                            <RowGroup role="status" aria-busy="true" :aria-label="t(`appsView.readingRepositorysApps`)">
+                                <SkeletonRows :rows="3" control />
+                            </RowGroup>
                         </template>
                         <div v-if="appRows.length === 0" :class="ui.emptyState()">
                             {{ t(`appsView.noAppsYetUse`) }}
@@ -366,7 +367,13 @@ onMounted(async () => {
 
                 <!-- A tests-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
                 <section v-if="!monorepo">
-                    <Await :of="testsLoaded">
+                    <!-- Remembered per repo like its apps; until then, the list's own rows: a glyph, a project's path, Run. -->
+                    <Await :of="testsLoaded" :imprint="`repo-apps.tests:${repo}`">
+                        <template #fallback>
+                            <RowGroup role="status" aria-busy="true" :aria-label="t(`appsView.readingRepositorysTests`)">
+                                <SkeletonRows :rows="3" control />
+                            </RowGroup>
+                        </template>
                         <div v-if="projects.length === 0" :class="ui.emptyState()">
                             {{ t(`appsView.noVitestProjectsFound`) }}
                         </div>

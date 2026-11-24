@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Await, ui } from "@intentic/ui";
+import { Await, RowGroup, RowNote, ui } from "@intentic/ui";
 import { computed } from "vue";
 import { useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
 import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
+import EnvironmentContentsOutline from "./EnvironmentContentsOutline.vue";
 import ExportCard from "../access/ExportCard.vue";
 import ImportCard from "../access/ImportCard.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -25,18 +26,22 @@ const empty = computed(() => !proposal.value && !pending.value && !applied.value
         <Await :of="loaded" imprint="sandbox.environment.overlay" :label="t(`sandbox.sandboxEnvironment.readingSandboxsEnvironment`)">
             <EnvironmentCard />
             <div v-if="empty" :class="ui.emptyState('py-10')">{{ t(`sandbox.sandboxEnvironment.noEnvironmentChangesYet`) }}</div>
+            <!-- Until it has been seen once: the card an applied environment draws, its header with the view switch, badge and
+                 refresh as blocks (they read the overlay), over the contents' own outline. -->
             <template #fallback>
-                <div role="status" aria-busy="true" class="flex flex-col gap-3 rounded-lg bg-card shadow-sm p-4">
-                    <span class="sr-only">{{ t(`sandbox.sandboxEnvironment.readingSandboxsEnvironment`) }}</span>
-                    <span class="skeleton block h-3.5 w-44" aria-hidden="true" />
-                    <div class="flex flex-col gap-2" aria-hidden="true">
-                        <span
-                            v-for="(width, index) in [`w-3/4`, `w-1/2`, `w-5/6`, `w-2/5`]"
-                            :key="index"
-                            class="skeleton block h-2.5"
-                            :class="width"
-                        />
-                    </div>
+                <div role="status" aria-busy="true" :aria-label="t(`sandbox.sandboxEnvironment.readingSandboxsEnvironment`)">
+                    <RowGroup :label="t(`sandbox.words.environment`)">
+                        <template #actions>
+                            <span class="flex items-center justify-end gap-2" aria-hidden="true">
+                                <span class="skeleton block h-7 w-32 rounded-md" />
+                                <span class="skeleton block h-5 w-16 rounded-full" />
+                                <span class="skeleton block size-5" />
+                            </span>
+                        </template>
+                        <RowNote variant="block">
+                            <EnvironmentContentsOutline />
+                        </RowNote>
+                    </RowGroup>
                 </div>
             </template>
         </Await>

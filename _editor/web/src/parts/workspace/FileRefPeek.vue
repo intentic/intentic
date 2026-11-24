@@ -447,7 +447,8 @@ const imprintName = computed(() => `peek:${target.value?.written ?? ``}`);
                 <template #fallback>
                     <div class="bg-canvas py-1.5 font-mono text-2xs leading-relaxed" aria-hidden="true">
                         <div v-for="(width, index) in placeholders" :key="index" class="flex items-center">
-                            <span class="w-12 shrink-0">&nbsp;</span>
+                            <!-- The line's number where the card draws it, right-aligned in its gutter. -->
+                            <span class="flex w-12 shrink-0 justify-end pr-3">&nbsp;<span class="skeleton block h-2 w-4" /></span>
                             <span class="skeleton h-2" :style="{ width: `${width}%` }"></span>
                         </div>
                     </div>

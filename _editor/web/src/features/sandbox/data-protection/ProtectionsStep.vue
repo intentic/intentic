@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
-import { Button, ConfirmDialog, InfoHint, Notice, type NoticeModel, Row, RowGroup, RowNote, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, InfoHint, Notice, type NoticeModel, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
@@ -25,6 +25,9 @@ const mayApply = computed(() => access.can(`compliance.applyPreset`));
 // Said once it is known, so the owner never reads that somebody else applies these while their access loads.
 const othersApply = computed(() => access.known.value && !mayApply.value);
 const { report, isLoading: reportLoading } = useComplianceReport();
+// The placeholder's rows: the ticks under each, as the widths of their lines. A new sandbox is offered most of the
+// protections; most change one setting, and how long records are kept and who approves sending change several.
+const PENDING_TICKS = [[`w-40`], [`w-64`, `w-56`, `w-60`, `w-64`, `w-56`], [`w-44`], [`w-60`, `w-56`, `w-48`], [`w-64`, `w-60`]] as const;
 const { items, error: presetError, isLoading: presetLoading, apply } = usePreset();
 
 const plan = computed(() => planProtections(report.value?.measures ?? [], items.value ?? []));
@@ -71,7 +74,30 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
 
 <template>
     <div class="flex flex-col gap-6">
-        <SkeletonRows v-if="reportLoading || presetLoading" :rows="6" description />
+        <!-- Unread, the list a new sandbox gets: Recommended, each protection's name and state over the ticks it would
+             change. Its header's apply button carries a count, so it waits as a block of its size. -->
+        <RowGroup
+            v-if="reportLoading || presetLoading"
+            :label="t(`sandbox.dataProtection.recommended`)"
+            role="status"
+            aria-busy="true"
+            :aria-label="t(`ui.status.loading`)"
+        >
+            <template #actions><span class="skeleton block h-7 w-28 rounded-md" aria-hidden="true" /></template>
+            <Row v-for="(ticks, index) in PENDING_TICKS" :key="index" indent aria-hidden="true">
+                <template #title>
+                    <span class="flex min-h-[1lh] items-center"><span class="skeleton block h-3.5" :class="index % 2 === 1 ? `w-32` : `w-28`" /></span>
+                </template>
+                <template #control><span class="skeleton block h-5 w-12 rounded-full" /></template>
+                <template #below>
+                    <span class="flex flex-col gap-1.5">
+                        <span v-for="(width, tick) in ticks" :key="tick" class="flex h-4 items-center gap-2">
+                            <span class="skeleton block size-4 shrink-0 rounded" /><span class="skeleton block h-2.5" :class="width" />
+                        </span>
+                    </span>
+                </template>
+            </Row>
+        </RowGroup>
         <template v-else>
             <Notice v-if="presetError" :of="{ tone: `danger`, title: t(`sandbox.dataProtection.couldntReadPreset`), detail: presetError }" />
             <Notice v-if="outcome" :of="outcome" />

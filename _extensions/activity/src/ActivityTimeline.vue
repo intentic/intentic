@@ -53,13 +53,14 @@ const days = computed(() => byDay(episodes, Date.now()));
                 </template>
                 <template #fallback>
                     <div role="status" aria-busy="true" :aria-label="t(`activityTimeline.loadingActivity`)">
-                        <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
-                            <span class="skeleton block h-2 w-16" />
+                        <!-- The day's label alone: the real header carries no count. -->
+                        <div class="sticky top-0 z-1 flex items-center bg-card px-4 py-2">
                             <span class="skeleton block h-2 w-12" />
                         </div>
-                        <!-- The outline is the ROW's own, at the tier the feed actually draws, rather than a second hand-built guess at this row's shape. -->
+                        <!-- The outline is the ROW's own, at the tier the feed actually draws, rather than a second hand-built guess at this row's shape.
+                             `control` is the facts and time that ride every row's right edge. -->
                         <div class="flex flex-col divide-y divide-line-subtle/50">
-                            <SkeletonRows :rows="6" density="compact" description />
+                            <SkeletonRows :rows="6" density="compact" description control />
                         </div>
                     </div>
                 </template>

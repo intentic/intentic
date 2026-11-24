@@ -609,7 +609,8 @@ const seamWidth = computed<number>({
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
         <!-- The review's frame and one line for the wait, the same one AgentDetail's own wait draws; a failed read is said above. -->
-        <Await :of="review" :label="waitLabel">
+        <!-- Remembered per agent: two agents' reviews share nothing but their frame. -->
+        <Await :of="review" :imprint="`agents.review:${at ?? ``}:${agentId}`" :label="waitLabel">
             <template #fallback><AgentReviewOutline :label="waitLabel" /></template>
             <template #failed />
             <!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed.
@@ -944,10 +945,14 @@ const seamWidth = computed<number>({
                         </DiffToolbar>
 
                         <!-- A file read is one line where the diff's first line will be: the toolbar above already names the file
-                             and its counts, and code lines guessed for it (or remembered from another agent's diff of the same
-                             path) would only be torn down. -->
+                             and its counts, and code lines guessed for it would only be torn down. From then on it is this
+                             agent's diff of this file as it last stood, never another agent's diff of the same path. -->
                         <div class="min-h-0 flex-1">
-                            <Await :of="diffRead" :label="t(`workspace.diffSkeleton.readingFile`)">
+                            <Await
+                                :of="diffRead"
+                                :imprint="`agents.review.diff:${at ?? ``}:${agentId}:${selected.change.path}`"
+                                :label="t(`workspace.diffSkeleton.readingFile`)"
+                            >
                                 <template #fallback><ReviewWaitLine :label="t(`workspace.diffSkeleton.readingFile`)" class="px-4" /></template>
                                 <template #failed="{ error }"><p class="p-4 text-xs text-danger">{{ error }}</p></template>
                                 <template #default="{ data: body, refreshError }">

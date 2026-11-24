@@ -164,10 +164,17 @@ const commandSummary = (program: string): string => {
 
 <template>
     <!-- The filter bar and the list stand in as one, drawn as they last looked in this sandbox, so the bar does not push
-         the list down when it arrives. Until then the list's group alone, as no filter is drawn before there are entries. -->
+         the list down when it arrives. Until then the shape a log with entries has: the filter bar (drawn only once there
+         are entries, so a block of its height) and decisions with their reason under them and a verdict at their end. -->
     <Await :of="loaded" imprint="sandbox.agent.safety-log">
         <template #fallback>
-            <RowGroup :label="t(`sandbox.words.recentDecisions`)"><SkeletonRows :rows="4" description /></RowGroup>
+            <div class="flex flex-col gap-3">
+                <span class="flex gap-2" aria-hidden="true">
+                    <span class="skeleton block h-8 flex-1 rounded-md" />
+                    <span class="skeleton block h-8 w-52 rounded-md" />
+                </span>
+                <RowGroup :label="t(`sandbox.words.recentDecisions`)"><SkeletonRows :rows="3" description control /></RowGroup>
+            </div>
         </template>
         <template #failed="{ error: unread }">
             <RowGroup :label="t(`sandbox.words.recentDecisions`)">

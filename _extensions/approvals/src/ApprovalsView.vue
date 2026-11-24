@@ -17,7 +17,6 @@ import {
     NoticeStack,
     Row,
     RowGroup,
-    SkeletonRows,
     SplitView,
     StatusBadge,
     timeAgo,
@@ -391,9 +390,11 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
             </Notice>
         </template>
 
-        <!-- The rail narrows rather than selects, so it folds above the queue on a phone instead of covering it. -->
-        <template v-if="!isEmpty" #rail>
-            <ApprovalRail v-model="railScope" :all="allScope" :scopes="scopes" />
+        <!-- The rail narrows rather than selects, so it folds above the queue on a phone instead of covering it. Drawn while
+             the queue is read too, its rows as placeholders: a queue someone opens usually holds something, and the rail
+             arriving with it moved the title and the whole column sideways. -->
+        <template v-if="!isEmpty || loaded.state === `waiting`" #rail>
+            <ApprovalRail v-model="railScope" :all="allScope" :scopes="scopes" :reading="loaded.state === `waiting`" />
         </template>
 
         <template #detail>
@@ -401,11 +402,30 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
                 <!-- Skeleton rows distinguish loading from an empty approvals queue: the queue (or its empty note) as it last
                      looked here, hand-drawn rows until it has been seen once. -->
                 <Await :of="loaded" imprint="approvals.queue" :label="t(`approvalsView.readingApprovalsQueue`)">
+                    <!-- The review section's rows as they draw: a mark, the meta line, Reject and Approve, and the post's
+                         words below at the column they are read in. Two, since each stands a screen-third tall. -->
                     <template #fallback>
                         <RowGroup role="status" aria-busy="true">
-                            <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
+                            <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
                             <span class="sr-only">{{ t(`approvalsView.readingApprovalsQueue`) }}</span>
-                            <SkeletonRows :rows="3" description control />
+                            <Row v-for="row in 2" :key="row" aria-hidden="true">
+                                <template #lead="{ mark }"><span class="skeleton block shrink-0 rounded-md" :style="{ width: `${mark}px`, height: `${mark}px` }" /></template>
+                                <template #description><span class="flex min-h-[1lh] items-center"><span class="skeleton block h-2.5 w-36" /></span></template>
+                                <template #control>
+                                    <span class="skeleton block h-5 w-5" />
+                                    <span class="skeleton block h-7 w-20" />
+                                </template>
+                                <template #below>
+                                    <!-- A post's lines, then an action's: its heading over its lines. Then the facts line. -->
+                                    <div :class="POST_COLUMN" class="flex max-w-read flex-col gap-2.5 pt-1">
+                                        <span v-if="row === 2" class="skeleton mb-1 block h-4.5 w-1/2" />
+                                        <span class="skeleton block h-3.5 w-full" />
+                                        <span class="skeleton block h-3.5" :class="row === 1 ? `w-3/4` : `w-11/12`" />
+                                        <span class="skeleton block h-3.5" :class="row === 1 ? `w-1/2` : `w-1/3`" />
+                                        <span class="skeleton mt-4 block h-2.5 w-28" />
+                                    </div>
+                                </template>
+                            </Row>
                         </RowGroup>
                     </template>
                     <template #failed="{ error }"><Notice :of="listNoticeOf(error)" /></template>

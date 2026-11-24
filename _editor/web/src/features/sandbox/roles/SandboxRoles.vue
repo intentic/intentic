@@ -363,17 +363,64 @@ const confirmRemove = async (): Promise<void> => {
         </RowGroup>
 
         <Notice v-if="listNotice" :of="listNotice" />
-        <!-- The real list must not show before we know whether roles exist; the list's shape stands in while loading. -->
-        <!-- Drawn as the list last looked in this sandbox. Until then a <RowGroup> like the list itself, so it lands on the
-             same tier as what it stands in for. -->
+        <!-- The real list must not show before we know whether roles exist; the list's shape stands in while loading, drawn
+             as the list last looked in this sandbox. -->
         <Await :of="loaded" imprint="sandbox.roles" :label="t(`sandbox.sandboxRoles.readingSandboxsRoles`)">
+            <!-- Until it has been seen once: what a sandbox with roles of its own shows, the new-chats switch above the grid,
+                 then the grid under its real header, the two built-ins drawn for real (they are the same in every sandbox),
+                 two cards of its own, and the first one's editor, which a bare visit opens. Inert: a placeholder answers
+                 nothing, and a press on a built-in or on Add here would act on a list not read yet. -->
             <template #fallback>
-                <RowGroup :label="t(`sandbox.sandboxRoles.roles`)">
-                    <div role="status" aria-busy="true">
-                        <span class="sr-only">{{ t(`sandbox.sandboxRoles.readingSandboxsRoles`) }}</span>
-                        <SkeletonRows :rows="2" description control />
-                    </div>
-                </RowGroup>
+                <div role="status" aria-busy="true" :aria-label="t(`sandbox.sandboxRoles.readingSandboxsRoles`)" class="flex flex-col gap-6">
+                    <RowGroup :label="t(`sandbox.sandboxRoles.newChats`)">
+                        <SkeletonRows :rows="1" description control />
+                    </RowGroup>
+                    <Section :label="t(`sandbox.sandboxRoles.roles`)" inert>
+                        <template #info><RolesExplainer /></template>
+                        <template #actions>
+                            <Button :label="t(`sandbox.sandboxRoles.addRole`)" size="small" tier="boring">
+                                <template #icon><Icon name="plus" /></template>
+                            </Button>
+                        </template>
+                        <div class="flex flex-wrap gap-1">
+                            <RoleSelector
+                                v-for="builtIn in builtIns"
+                                :key="builtIn.id"
+                                :role="builtInCard(builtIn.id)"
+                                :built-in="builtIn"
+                                :selected="openBuiltIn === builtIn.id"
+                                :controls="detailsId"
+                                :signed-in="true"
+                                :saving="false"
+                            />
+                            <span class="mx-1 my-3 border-l border-line" aria-hidden="true" />
+                            <span
+                                v-for="width in [`w-20`, `w-16`]"
+                                :key="width"
+                                class="flex size-28 flex-col items-center justify-center gap-1 px-1 py-1.5"
+                                aria-hidden="true"
+                            >
+                                <span class="skeleton block size-16 rounded-full" />
+                                <span class="flex min-h-[2.5em] items-start text-xs leading-tight"><span class="skeleton mt-0.5 block h-2.5" :class="width" /></span>
+                            </span>
+                        </div>
+                        <div class="mt-4 flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm" aria-hidden="true">
+                            <span class="flex h-[1lh] items-center text-base"><span class="skeleton block h-4 w-44" /></span>
+                            <span class="flex gap-4 border-b border-line-subtle pb-2.5 pt-1">
+                                <span v-for="width in [`w-16`, `w-12`, `w-14`, `w-24`]" :key="width" class="skeleton block h-3.5" :class="width" />
+                            </span>
+                            <span class="flex flex-col gap-2 pt-2">
+                                <span class="skeleton block h-3.5 w-24" />
+                                <span class="skeleton block h-9 w-full max-w-xl rounded-md" />
+                                <span class="skeleton block h-2.5 w-96 max-w-full" />
+                            </span>
+                            <span class="flex flex-col gap-2 pt-2">
+                                <span class="skeleton block h-3.5 w-28" />
+                                <span class="flex gap-1.5"><span v-for="width in [`w-32`, `w-24`]" :key="width" class="skeleton block h-7 rounded-full" :class="width" /></span>
+                            </span>
+                        </div>
+                    </Section>
+                </div>
             </template>
             <template #failed="{ error }"><Notice :of="unread(error)" /></template>
 

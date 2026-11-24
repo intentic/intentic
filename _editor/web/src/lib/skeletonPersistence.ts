@@ -1,5 +1,5 @@
 import { IMPRINT_VERSION, type ImprintElement, type SkeletonImprint } from "@intentic/ui/skeleton-imprint";
-import { adoptImprints, configureSkeletonSnapshots, loadImprintScope, type SkeletonPersistence } from "@intentic/ui/skeleton-store";
+import { adoptImprints, configureSkeletonSnapshots, lendImprints, loadImprintScope, type SkeletonPersistence } from "@intentic/ui/skeleton-store";
 import { z } from "zod";
 import { activeSandboxId } from "../app/storage/activeSandbox";
 import { accountDatabase } from "../app/storage/accountDatabases";
@@ -55,12 +55,21 @@ const keyOf = (key: IDBValidKey): ImprintKey | undefined => {
     return parsed.success ? parsed.data : undefined;
 };
 
-let connection: Promise<IDBDatabase | undefined> | undefined;
+// The open database, with the name it was opened under. THE NAME IS READ AT EVERY USE, not once: a browser's first
+// sign-in opens the account's drawer while the page that boots into it stays up (`openAccountPartition`, no reload), and
+// a connection kept from before went on writing every look that session took into the drawerless database, which the
+// next load does not read. Each look the first session took was lost, and its first reload drew every fallback again.
+let connection: { readonly name: string; readonly opened: Promise<IDBDatabase | undefined> } | undefined;
 
 const openDb = (): Promise<IDBDatabase | undefined> => {
-    connection ??= new Promise<IDBDatabase | undefined>((resolve) => {
+    const name = accountDatabase(SKELETON_DATABASE);
+    if (connection !== undefined && connection.name === name) {
+        return connection.opened;
+    }
+    void connection?.opened.then((previous) => previous?.close());
+    const opened = new Promise<IDBDatabase | undefined>((resolve) => {
         try {
-            const request = indexedDB.open(accountDatabase(SKELETON_DATABASE), DB_VERSION);
+            const request = indexedDB.open(name, DB_VERSION);
             request.addEventListener(`upgradeneeded`, () => {
                 if (!request.result.objectStoreNames.contains(STORE)) {
                     request.result.createObjectStore(STORE);
@@ -70,7 +79,9 @@ const openDb = (): Promise<IDBDatabase | undefined> => {
                 // Closes on a version change instead of blocking it, as transcriptCache.ts does.
                 request.result.addEventListener(`versionchange`, () => {
                     request.result.close();
-                    connection = undefined;
+                    if (connection?.opened === opened) {
+                        connection = undefined;
+                    }
                 });
                 resolve(request.result);
             });
@@ -81,7 +92,8 @@ const openDb = (): Promise<IDBDatabase | undefined> => {
             resolve(undefined);
         }
     });
-    return connection;
+    connection = { name, opened };
+    return opened;
 };
 
 // One transaction, resolved when it commits (or with `fallback` when it cannot): `act` queues its requests on the
@@ -144,8 +156,21 @@ interface Held {
     readonly imprint: SkeletonImprint;
 }
 
-// A variant names its kind before a colon (`diff:src/app.ts`); a view's own name has none.
-const isVariant = (name: string): boolean => name.includes(`:`);
+// A view's own name has no colon (`sandbox.secrets`); anything else names its kind before one (`diff:src/app.ts`).
+const isView = (name: string): boolean => !name.includes(`:`);
+
+// The kinds that are pages rather than items: a route's whole view, a hub's section and an extension's view, each named
+// for where it is drawn (lib/routes/pageImprint.ts, lazySection.ts, ExtensionView.vue). They look alike in every
+// sandbox, as a view does; a diff, an open file or a transcript is one file's or one conversation's.
+const PAGE_KINDS = [`route:`, `hub:`, `ext:`];
+const isPage = (name: string): boolean => PAGE_KINDS.some((kind) => name.startsWith(kind));
+
+// One of many of a kind: what the cap keeps apart from the views and pages, so a day of opened files and
+// conversations can never push the settings pages out.
+const isVariant = (name: string): boolean => !isView(name) && !isPage(name);
+
+/** Whether a sandbox that has never drawn `name` may draw another sandbox's look of it while it waits the first time. */
+export const lendsAcross = (name: string): boolean => !isVariant(name);
 
 /**
  * One sandbox's imprints split into those kept and those past the cap: the newest `cap` views and the newest `cap`
@@ -213,8 +238,14 @@ const sweepOnce = async (): Promise<void> => {
         // conversation, a diff per file: up to a hundred, and most of the bytes) are read from disk when that sandbox
         // is drawn. Holding every sandbox's whole set was ~14 MB of a 21-sandbox account's heap from boot.
         const own = scope === active;
-        const kept = own ? held : held.filter(({ key }) => !isVariant(key[1]));
+        const kept = own ? held : held.filter(({ key }) => isView(key[1]));
         adoptImprints(scope, new Map(kept.map(({ key, imprint }) => [key[1], imprint])), !own);
+        // Its pages are lent, not held: the store keeps only the newest of each across every sandbox, for a sandbox that
+        // has not drawn that page yet (the store's `lends`). Each is a whole page, so holding every sandbox's would cost
+        // what holding their variants did.
+        if (!own) {
+            lendImprints(scope, new Map(held.filter(({ key }) => isPage(key[1])).map(({ key, imprint }) => [key[1], imprint])));
+        }
     }
 };
 
@@ -222,7 +253,7 @@ const sweepOnce = async (): Promise<void> => {
 const sandboxScope = (): string => activeSandboxId.value ?? `none`;
 
 /** Points @intentic/ui's imprint store at the active sandbox and at IndexedDB. Once, at boot, before anything mounts. */
-export const installSkeletonPersistence = (): void => configureSkeletonSnapshots({ scope: sandboxScope, persistence });
+export const installSkeletonPersistence = (): void => configureSkeletonSnapshots({ scope: sandboxScope, persistence, lends: lendsAcross });
 
 /**
  * Starts reading the active sandbox's imprints at boot, on a browser that had one open, so the guard's restore below

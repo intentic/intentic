@@ -313,7 +313,9 @@ const confirmRemove = async (): Promise<void> => {
                  section's notice region (`notice`), so nothing is drawn here for it. -->
             <Await :of="loaded" imprint="sandbox.extensions.installed" :label="t(`sandbox.extensionsInstalled.readingSandboxsExtensions`)">
                 <template #fallback>
-                    <RowGroup :label="t(`sandbox.words.installed`)">
+                    <!-- The list is grouped by what each extension is for, so the heading is a bar: no group is known yet. -->
+                    <RowGroup>
+                        <template #label><span class="skeleton block h-2.5 w-32" aria-hidden="true" /></template>
                         <div role="status" aria-busy="true">
                             <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
                             <SkeletonRows :rows="3" description control />

@@ -803,8 +803,9 @@ const onEditorSave = (value: string): void =>
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <AccessGate v-else-if="refused" :reason="refused" :place="basename(path)" size="panel" />
             <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full" />
-            <!-- Text waits as the lines it will be, anything else as a spinner, since its shape is not known. -->
-            <Await v-else :of="fileLoaded">
+            <!-- Text waits as the lines it will be, anything else as a spinner, since its shape is not known. From the second
+                 wait on, this file as it last looked here stands in. -->
+            <Await v-else :of="fileLoaded" :imprint="`file:${path}`">
                 <template #fallback>
                     <DiffSkeleton v-if="open.kind === 'code' || open.kind === 'markdown'" single />
                     <div v-else class="flex h-full items-center justify-center text-muted" role="status">

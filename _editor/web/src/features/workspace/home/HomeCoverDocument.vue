@@ -187,6 +187,11 @@ const open = (): void => {
 // Every folder's file starts at its top; one a reader scrolled down in and left is not where the next begins.
 const scroller = ref<HTMLElement>();
 watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0 }));
+// The paragraphs a cover's outline promises before the document has been seen: line widths, uneven so they read as prose.
+const COVER_OUTLINE = [
+    [`w-full`, `w-full`, `w-2/3`],
+    [`w-full`, `w-11/12`, `w-full`, `w-1/3`],
+] as const;
 </script>
 
 <template>
@@ -250,13 +255,16 @@ watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0
                         <button type="button" :class="ui.textButton({ size: `xs` })" @click="open">{{ t(`workspace.homeCover.openWhole`) }}</button>
                     </p>
                 </template>
-                <!-- A wait long enough to show: line-shaped placeholders, still, in a document's measure. -->
+                <!-- A wait long enough to show: a cover is most often a README, so its title and opening paragraphs as
+                     still bars, in the prose's own box and measure. -->
                 <template #fallback>
-                    <div class="mx-auto flex max-w-3xl flex-col gap-2.5 px-8 py-7" aria-hidden="true">
-                        <div class="skeleton h-4 w-1/3"></div>
-                        <div class="skeleton h-3 w-5/6"></div>
-                        <div class="skeleton h-3 w-2/3"></div>
-                        <div class="skeleton h-3 w-3/4"></div>
+                    <div class="px-8 py-7" aria-hidden="true">
+                        <div class="mx-auto flex max-w-3xl flex-col gap-4 text-sm leading-relaxed">
+                            <span class="skeleton block h-5 w-1/3"></span>
+                            <span v-for="(lines, index) in COVER_OUTLINE" :key="index" class="flex flex-col">
+                                <span v-for="(width, line) in lines" :key="line" class="flex h-[1lh] items-center"><span class="skeleton block h-3" :class="width" /></span>
+                            </span>
+                        </div>
                     </div>
                 </template>
             </Await>

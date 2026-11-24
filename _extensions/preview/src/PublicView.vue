@@ -80,7 +80,10 @@ const size = (bytes: number): string => {
                                     <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
                                     <span class="skeleton block h-2 w-12" />
                                 </div>
-                                <span class="skeleton block h-3.5 w-10 shrink-0" />
+                                <!-- Open, Share, Unpublish: what every served file's row ends with. -->
+                                <span class="skeleton mx-1.5 block h-5 w-5 shrink-0" />
+                                <span class="skeleton block h-7 w-16 shrink-0 rounded-md" />
+                                <span class="skeleton mx-2 block h-3.5 w-16 shrink-0" />
                             </div>
                         </div>
                     </div>

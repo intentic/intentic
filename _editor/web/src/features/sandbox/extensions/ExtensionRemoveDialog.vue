@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { useLoaded } from "@intentic/extension-api";
-import { Await, Button, Modal, Notice, Section, SkeletonRows, StatusBadge } from "@intentic/ui";
+import { Await, Button, Modal, Notice, Section, StatusBadge } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
@@ -110,10 +110,25 @@ const processesLine = computed(() => {
         <!-- Waits again at every opening, drawn as the last plan read, whichever extension it was for: every plan has the same
              sections, and one kept per extension would mostly belong to extensions already removed. -->
         <Await :of="loaded" imprint="sandbox.extensions.remove" :label="t(`sandbox.extensionRemoveDialog.workingOutWhatRemoving`)">
+            <!-- Until it has been seen once: the plan an ordinary extension gets, its version line, then what is deleted, what stops
+                 and what is left alone under their real headings, each a few short lines. -->
             <template #fallback>
-                <div role="status" aria-busy="true">
+                <div role="status" aria-busy="true" class="flex flex-col gap-4">
                     <span class="sr-only">{{ t(`sandbox.extensionRemoveDialog.workingOutWhatRemoving`) }}</span>
-                    <SkeletonRows :rows="4" description />
+                    <span class="flex h-[1lh] items-center" aria-hidden="true"><span class="skeleton block h-3 w-56" /></span>
+                    <Section
+                        v-for="[label, lines] in [
+                            [`alsoDeleted`, [`w-64`, `w-48`, `w-72`]],
+                            [`whatStopsBeing`, [`w-56`]],
+                            [`leftAlone`, [`w-40`, `w-52`]],
+                        ] as const"
+                        :key="label"
+                        :label="t(`sandbox.extensionRemoveDialog.${label}`)"
+                    >
+                        <span class="flex flex-col gap-1 text-2xs" aria-hidden="true">
+                            <span v-for="width in lines" :key="width" class="flex h-[1lh] items-center"><span class="skeleton block h-2.5 max-w-full" :class="width" /></span>
+                        </span>
+                    </Section>
                 </div>
             </template>
             <template #failed="{ error }">

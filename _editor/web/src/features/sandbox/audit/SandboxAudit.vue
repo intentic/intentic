@@ -294,7 +294,11 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
             <Notice v-if="listError !== undefined" tone="danger">{{ listError }}</Notice>
             <div v-else-if="isLoading" class="overflow-hidden rounded-xl bg-card shadow-sm" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.sandboxAudit.reading`) }}</span>
-                <div class="flex flex-col divide-y divide-line-subtle/50"><SkeletonRows :rows="8" density="compact" /></div>
+                <!-- As the records land: under their day's heading, each ending in who did it and when. -->
+                <div class="border-b border-line-subtle px-4 py-2" aria-hidden="true">
+                    <span class="flex h-4 items-center"><span class="skeleton block h-2.5 w-14" /></span>
+                </div>
+                <div class="flex flex-col divide-y divide-line-subtle/50"><SkeletonRows :rows="8" density="compact" control /></div>
             </div>
             <p v-else-if="days.length === 0" :class="ui.emptyState(`py-10`)">{{ t(`sandbox.sandboxAudit.empty`) }}</p>
             <!-- `overflow-clip`, not `hidden`: it rounds the rows' corners without becoming the scroller the day headings stick to. -->

@@ -18,15 +18,17 @@ export interface ApprovalScope {
 </script>
 
 <script setup lang="ts">
-import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice, useRailMemory } from "@intentic/extension-ui";
+import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, SkeletonRows, useDevice, useRailMemory } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { t } from "./i18n.js";
 
-const { all, scopes } = defineProps<{
+const { all, scopes, reading = false } = defineProps<{
     /** The pinned everything row: the state the rail returns to. */
     all: ApprovalScope;
     /** One row per platform the queue holds, plus the actions row when it holds any. */
     scopes: readonly ApprovalScope[];
+    /** The queue is still being read: the counts and the slices are placeholders. */
+    reading?: boolean;
 }>();
 
 const selected = defineModel<string>({ required: true });
@@ -35,7 +37,8 @@ const selected = defineModel<string>({ required: true });
 const picked = useRailMemory(`approvals.scope`, selected, () => scopes.map((scope) => scope.key));
 
 // Single unlabelled group: a heading here would name a distinction the rail doesn't make.
-const groups = computed<NavGroup<ApprovalScope>[]>(() => [{ key: `scopes`, items: [...scopes] }]);
+// None while the queue is read, so the rail's `#empty` draws the slices' placeholders instead.
+const groups = computed<NavGroup<ApprovalScope>[]>(() => (reading ? [] : [{ key: `scopes`, items: [...scopes] }]));
 
 const tone = (scope: ApprovalScope): string => (scope.failed > 0 ? `text-danger` : scope.waiting > 0 ? `text-warning` : ``);
 
@@ -96,9 +99,15 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
                 @click="picked = ``"
             >
                 <template #meta>
-                    <span v-tooltip.bottom="note(all)" :class="tone(all)">{{ all.total }}</span>
+                    <span v-if="reading" class="skeleton block h-2.5 w-3" aria-hidden="true" />
+                    <span v-else v-tooltip.bottom="note(all)" :class="tone(all)">{{ all.total }}</span>
                 </template>
             </Row>
+        </template>
+
+        <!-- Gap, not divider: the slices' own `flex flex-col gap-0.5`, at the rail's dense tier. -->
+        <template v-if="reading" #empty>
+            <div class="flex flex-col gap-0.5"><SkeletonRows :rows="3" density="dense" /></div>
         </template>
 
         <!-- The platform's own brand mark, the same object its posts lead with, so a slice and its posts are recognised together. -->

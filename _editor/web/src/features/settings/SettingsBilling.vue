@@ -236,15 +236,29 @@ const HOSTED_SETUP = newSandboxLink(`hosted`);
             <template #failed="{ error: failure }">
                 <Notice :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntLoadYourPlan`), detail: failure }" />
             </template>
+            <!-- Until it has been seen once: the offer most accounts get, spaced as <HostedPlanOffer> spaces it. Its words are bars
+                 here, since a subscriber's page opens on their plan instead and must not flash a pitch first; the tier cards
+                 are outlines in the cards' own classes, a name, a price, the hours meter and the spec lines. -->
             <template #fallback>
-                <div class="flex flex-col gap-6" role="status" aria-busy="true" :aria-label="t(`settings.settingsBilling.readingPlan`)">
-                    <div class="flex flex-col gap-2" aria-hidden="true">
-                        <span class="skeleton block h-2.5 w-28" />
-                        <span class="skeleton block h-7 w-80 max-w-full" />
-                        <span class="skeleton block h-2.5 w-full max-w-md" />
+                <div class="flex flex-col gap-8" role="status" aria-busy="true" :aria-label="t(`settings.settingsBilling.readingPlan`)">
+                    <div class="flex max-w-2xl flex-col gap-2" aria-hidden="true">
+                        <span class="flex h-[1lh] items-center text-2xs"><span class="skeleton block h-2.5 w-28" /></span>
+                        <span class="flex h-[1lh] items-center text-2xl leading-tight @2xl:text-[1.75rem]"><span class="skeleton block h-7 w-80 max-w-full" /></span>
+                        <span class="flex h-[1lh] items-center text-sm"><span class="skeleton block h-3 w-full max-w-md" /></span>
                     </div>
-                    <div class="grid grid-cols-1 gap-4 @2xl:grid-cols-3" aria-hidden="true">
-                        <span v-for="n in 3" :key="n" class="skeleton block h-80 rounded-xl" />
+                    <div class="grid grid-cols-1 items-stretch gap-x-4 gap-y-6 pt-2 @2xl:grid-cols-3" aria-hidden="true">
+                        <div v-for="n in 3" :key="n" class="flex flex-col gap-4 rounded-xl border border-line bg-card p-5">
+                            <span class="flex items-center gap-3">
+                                <span class="skeleton block size-9 shrink-0 rounded-lg" />
+                                <span class="flex flex-col gap-1.5"><span class="skeleton block h-3.5 w-20" /><span class="skeleton block h-2.5 w-28" /></span>
+                            </span>
+                            <span class="skeleton block h-8 w-24" />
+                            <span class="skeleton block h-1.5 w-full rounded-full" />
+                            <span class="flex flex-col gap-2.5">
+                                <span v-for="width in [`w-28`, `w-24`, `w-20`, `w-36`, `w-32`]" :key="width" class="skeleton block h-2.5" :class="width" />
+                            </span>
+                            <span class="skeleton mt-auto block h-8 w-full rounded-md" />
+                        </div>
                     </div>
                 </div>
             </template>

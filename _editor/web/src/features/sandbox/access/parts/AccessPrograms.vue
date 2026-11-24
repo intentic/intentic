@@ -89,7 +89,7 @@ const doors = computed(() => {
             </RowGroup>
             <template #fallback>
                 <RowGroup :label="t(`sandbox.sandboxAccess.otherWaysIn`)">
-                    <div role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
+                    <div role="status" aria-busy="true"><SkeletonRows :rows="3" description /></div>
                 </RowGroup>
             </template>
         </Await>

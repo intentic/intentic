@@ -29,6 +29,7 @@ import { HOME_DIR_ACTIONS, useHome } from "../../../models/workspace/home/useHom
 import { useHomeActions } from "./useHomeActions";
 import { useHomeQuery } from "./useHomeQuery";
 import HomeCover from "./HomeCover.vue";
+import HomeOutline from "./HomeOutline.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeGallerySwitch from "./gallery/HomeGallerySwitch.vue";
 import HomeGalleryTile from "./gallery/HomeGalleryTile.vue";
@@ -649,14 +650,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 </div>
                             </template>
                         </div>
-                        <template #fallback>
-                            <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
-                                <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
-                                    <div class="skeleton h-9 w-9 rounded-lg"></div>
-                                    <div class="skeleton h-3 w-14"></div>
-                                </div>
-                            </div>
-                        </template>
+                        <template #fallback><HomeOutline /></template>
                     </Await>
                     <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
                         {{ t(`workspace.homeView.toolingHidden`, { count: formatCount(hiddenTooling) }, hiddenTooling) }}

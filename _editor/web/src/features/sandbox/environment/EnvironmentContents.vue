@@ -6,6 +6,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { environmentVisual } from "./environmentVisual";
 import { leadVersion, stateOf } from "./environmentItem";
+import EnvironmentContentsOutline from "./EnvironmentContentsOutline.vue";
 import EnvironmentItemCard from "./EnvironmentItemCard.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -148,25 +149,12 @@ const removeOne = (item: EnvironmentItem): void => {
 <template>
     <!-- Section spacing matches the hub pages, including the outline while the inventory loads. -->
     <div class="flex flex-col gap-6">
-        <!-- Loading draws the sections as they last looked in this sandbox; until then, chip shapes and a plain line, so it
-             reads as the same two kinds of list at a glance. -->
+        <!-- Loading draws the sections as they last looked in this sandbox; until then, under their real headings, chip shapes
+             and a line of names, so it reads as the same two kinds of list at a glance. -->
         <Await :of="loaded" imprint="sandbox.environment.contents" :label="t(`sandbox.environmentContents.checkingInstalledVersions`)">
             <template #fallback>
-                <div class="flex flex-col gap-6" role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`sandbox.environmentContents.checkingInstalledVersions`) }}</span>
-                    <!-- Two sections, not three: a sandbox may have no capability group, and an extra one would over-promise height. -->
-                    <Section v-for="(chips, index) in [[`w-40`, `w-32`, `w-36`], [`w-28`, `w-32`]]" :key="index">
-                        <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
-                        <div class="flex flex-wrap gap-2" aria-hidden="true">
-                            <span v-for="(width, chip) in chips" :key="chip" class="skeleton block h-8 rounded-full" :class="width" />
-                        </div>
-                    </Section>
-                    <Section>
-                        <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
-                        <div class="flex flex-wrap gap-x-4 gap-y-2" aria-hidden="true">
-                            <span v-for="(width, index) in [`w-20`, `w-16`, `w-14`, `w-20`, `w-16`, `w-12`]" :key="index" class="skeleton block h-4" :class="width" />
-                        </div>
-                    </Section>
+                <div role="status" aria-busy="true" :aria-label="t(`sandbox.environmentContents.checkingInstalledVersions`)">
+                    <EnvironmentContentsOutline />
                 </div>
             </template>
             <template #failed="{ error }">

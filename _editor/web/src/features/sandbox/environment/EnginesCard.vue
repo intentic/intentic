@@ -84,7 +84,7 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                 </template>
                 <div role="status" aria-busy="true">
                     <span class="sr-only">{{ t(`sandbox.enginesCard.readingSandboxsAgentEngines`) }}</span>
-                    <SkeletonRows :rows="5" description control />
+                    <SkeletonRows :rows="6" description control />
                 </div>
             </RowGroup>
         </template>

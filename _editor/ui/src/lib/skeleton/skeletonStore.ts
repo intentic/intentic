@@ -18,6 +18,12 @@ export interface SkeletonSnapshotOptions {
     /** The current scope, read reactively: a render that reads an imprint re-runs when it changes. */
     readonly scope?: () => string;
     readonly persistence?: SkeletonPersistence;
+    /**
+     * Whether a scope that has never drawn `name` may draw another scope's look of it instead: a view's own name, which
+     * looks the same in every sandbox, and not one of many of a kind (a file's diff, a conversation's turns), whose look
+     * is that one item's. None by default.
+     */
+    readonly lends?: (name: string) => boolean;
 }
 
 // Writes wait this long for more to join them, then for the page to be idle: a view settling writes once, not per
@@ -40,6 +46,33 @@ const unsaved = new Map<string, Map<string, SkeletonImprint>>();
 let flushing: ReturnType<typeof setTimeout> | undefined;
 let scopeOf: () => string = () => UNSCOPED;
 let persistence: SkeletonPersistence | undefined;
+let lends: (name: string) => boolean = () => false;
+
+// LOOKS LENT BETWEEN SCOPES. The newest look of each view in any scope, under its name with the scope taken out, for a
+// scope that has not drawn the view yet: a sandbox opened for the first time draws its Secrets page while it waits as
+// the account last saw a Secrets page anywhere, not as the hand-drawn fallback every view has until it is seen. The same
+// component lays out the same in every sandbox; only how many of each row differs, which its own look corrects once
+// drawn. A name carries its scope where its route does (`route:/s/<sandbox>/settings`), so the scope's own path
+// segment is what is taken out. One look per name, whichever scope's is newest: an account of twenty sandboxes holds
+// one Secrets page here, not twenty.
+// allow(module-state): page-wide like `held`, keyed by names that no longer name their scope
+const lent = new Map<string, SkeletonImprint>();
+
+const unscoped = (scope: string, name: string): string => name.replaceAll(`/${scope}/`, `/*/`);
+
+// A look that drew nothing says only that the region was empty THERE: another scope's region may well hold something.
+const drewSomething = (imprint: SkeletonImprint): boolean => imprint.root.k !== undefined && imprint.root.k.length > 0;
+
+const lend = (scope: string, name: string, imprint: SkeletonImprint): void => {
+    if (!lends(name) || !drewSomething(imprint) || imprint.v !== IMPRINT_VERSION) {
+        return;
+    }
+    const key = unscoped(scope, name);
+    const known = lent.get(key);
+    if (known === undefined || known.at < imprint.at) {
+        lent.set(key, imprint);
+    }
+};
 
 const idle = (task: () => void): void => {
     if (`requestIdleCallback` in globalThis) {
@@ -65,6 +98,7 @@ const merge = (scope: string, stored: ReadonlyMap<string, SkeletonImprint>): voi
         if (imprint.v === IMPRINT_VERSION && !imprints.has(name)) {
             imprints.set(name, imprint);
         }
+        lend(scope, name, imprint);
     }
     revision.value += 1;
 };
@@ -95,6 +129,7 @@ const flushOnLeave = (): void => {
 export const configureSkeletonSnapshots = (options: SkeletonSnapshotOptions): void => {
     scopeOf = options.scope ?? (() => UNSCOPED);
     persistence = options.persistence;
+    lends = options.lends ?? (() => false);
     loads.clear();
     if (persistence !== undefined) {
         flushOnLeave();
@@ -135,13 +170,27 @@ export const adoptImprints = (scope: string, stored: ReadonlyMap<string, Skeleto
     }
 };
 
-/** The imprint `name` last left in the current scope. Reactive: on the scope, and on its imprints arriving from disk. */
+/**
+ * Hands the store other scopes' looks to lend and nothing else: pages a sweep read from scopes that are not drawn now,
+ * kept only where one is the newest of its name, so the rest of each scope stays on disk.
+ */
+export const lendImprints = (scope: string, stored: ReadonlyMap<string, SkeletonImprint>): void => {
+    for (const [name, imprint] of stored) {
+        lend(scope, name, imprint);
+    }
+    revision.value += 1;
+};
+
+/**
+ * The imprint `name` last left in the current scope, else the newest look of it another scope lends (`lends`).
+ * Reactive: on the scope, and on its imprints arriving from disk.
+ */
 export const imprintOf = (name: string): SkeletonImprint | undefined => {
     // Read for the dependency alone: a render that found nothing redraws once the scope's imprints land.
     void revision.value;
     const scope = scopeOf();
     void loadImprintScope(scope);
-    return held.get(scope)?.get(name);
+    return held.get(scope)?.get(name) ?? (lends(name) ? lent.get(unscoped(scope, name)) : undefined);
 };
 
 const flush = (): void => {
@@ -169,6 +218,7 @@ export const rememberImprint = (scope: string, name: string, imprint: SkeletonIm
         return;
     }
     imprints.set(name, imprint);
+    lend(scope, name, imprint);
     // A placeholder already on screen for this name (another pane still loading it) redraws in the new form.
     revision.value += 1;
     let pending = unsaved.get(scope);
@@ -186,6 +236,7 @@ export const clearImprints = async (): Promise<void> => {
     flushing = undefined;
     unsaved.clear();
     held.clear();
+    lent.clear();
     loads.clear();
     revision.value += 1;
     await persistence?.clear();

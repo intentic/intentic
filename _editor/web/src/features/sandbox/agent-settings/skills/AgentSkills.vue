@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
-import { Await, Button, Card, Icon, Modal, Row, SearchBar, Section, SkeletonRows, useDevice } from "@intentic/ui";
+import { Await, Button, Card, Icon, Modal, Row, SearchBar, Section, useDevice } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { here, page } from "../../../../lib/routes/links";
@@ -9,6 +9,7 @@ import { useExtensions } from "../../../../models/extensions/useExtensions";
 import { sideDocked } from "../../../../workbench/side/sideTabs";
 import { revealSideView } from "../../../../workbench/side/sideViews";
 import { useSkills } from "../../environment/useSkills";
+import ShelfSkeleton from "./ShelfSkeleton.vue";
 import SkillChip from "./SkillChip.vue";
 import SkillPage from "./SkillPage.vue";
 import { NEW_SKILL } from "./skillDrafts";
@@ -76,13 +77,16 @@ const openFileFromSheet = (path: string): void => {
             <!-- Until it has been seen once: the section as it reads while loading, its action already where it will be. -->
             <Section :label="t(`sandbox.agentSkills.skills`)">
                 <template #actions>
+                    <!-- The filter shows from eight skills, which the built-in ones and a connection or two already make. -->
+                    <span class="skeleton block h-8 w-56 max-w-full rounded-md" aria-hidden="true" />
                     <Button size="small" tier="boring" :label="t(`sandbox.words.writeSkill`)" disabled>
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </template>
-                <div role="status" aria-busy="true">
+                <!-- The shelves' card, a label beside a wrap of chips, as the skills land in it. -->
+                <div role="status" aria-busy="true" class="flex flex-col gap-3">
                     <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
-                    <SkeletonRows :rows="3" description control />
+                    <ShelfSkeleton :shelves="[3, 1, 4, 2]" />
                 </div>
             </Section>
         </template>

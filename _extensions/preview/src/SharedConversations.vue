@@ -43,8 +43,12 @@ const when = (at: number): string => {
 
 <template>
     <!-- Remembered as it was: nothing, when nobody has shared anything (so no header flashes), or its rows (so they do not
-         pop in late). No fallback of its own; until it has been seen once, the page's wait stands for it. -->
+         pop in late). Until it has been seen once it promises nothing, since most sandboxes have shared no chat: only a
+         busy status a screen reader hears. Without a fallback, <Await> drew three generic rows over the published files. -->
     <Await :of="loaded" imprint="preview.shared-conversations">
+        <template #fallback>
+            <span role="status" aria-busy="true" :aria-label="t(`sharedConversations.sharedConversations`)" class="sr-only"></span>
+        </template>
         <template #default="{ data: shares, refreshError }">
             <Section v-if="shares.length > 0" :label="t(`sharedConversations.sharedConversations`)" :heading="3">
                 <template #info>

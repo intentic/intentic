@@ -25,7 +25,7 @@ import { useComplianceReport, usePreset } from "./useCompliance";
 
 const t = useT();
 const { report, error: reportError } = useComplianceReport();
-const { items } = usePreset();
+const { items, error: presetError } = usePreset();
 
 const STEPS = [`protections`, `places`, `documents`] as const;
 type Step = (typeof STEPS)[number];
@@ -48,6 +48,8 @@ interface Tile {
     note?: { readonly text: string; readonly tone: Tone };
     /** Nothing left to do in it: its number becomes a tick. */
     done: boolean;
+    /** The lines still being read, as the widths of their bars, so the tile is already the height it will be. */
+    pending?: readonly string[];
 }
 
 const tiles = computed<readonly Tile[]>(() => {
@@ -62,6 +64,15 @@ const tiles = computed<readonly Tile[]>(() => {
         line: [t(`sandbox.dataProtection.tile.documents`)],
         done: false,
     };
+    // Unread, the tiles keep the room their lines take: their counts, and the note under them (a new sandbox's places
+    // usually leave a question open).
+    if (count === undefined && reportError.value === undefined) {
+        protections.pending = [`w-16`, `w-20`];
+        places.pending = [`w-16`, `w-24`, `w-28`];
+    }
+    if (recommended === undefined && reportError.value === undefined && presetError.value === undefined) {
+        documents.pending = [`w-24`];
+    }
     if (count !== undefined) {
         protections.line = [t(`sandbox.dataProtection.tile.protectionsOn`, { on: count.protectionsOn, total: count.protections })];
         places.line = [
@@ -135,6 +146,7 @@ const pageNotice = computed<NoticeModel | undefined>(() =>
                     <span class="text-sm font-medium text-content">{{ tile.title }}</span>
                     <span v-for="part in tile.line" :key="part" class="text-xs text-muted">{{ part }}</span>
                     <span v-if="tile.note !== undefined" :class="toneInk(tile.note.tone, `text-xs`)">{{ tile.note.text }}</span>
+                    <span v-for="width in tile.pending" :key="width" class="flex h-4 items-center" aria-hidden="true"><span class="skeleton block h-2.5" :class="width" /></span>
                 </span>
             </button>
         </div>

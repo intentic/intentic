@@ -35,6 +35,7 @@ import {
 import { poolResetNote } from "../../../models/providers/usageNotes";
 import { poolPace } from "../../../models/providers/capacity/usagePace";
 import PaceMark from "../../../parts/providers/PaceMark.vue";
+import PlanLimitsSkeleton, { SPLIT } from "./PlanLimitsSkeleton.vue";
 import { useT } from "@intentic/ui/i18n";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 
@@ -86,9 +87,6 @@ const capacity = computed(() =>
     })),
 );
 
-// The one grid both the panel and its skeleton stand on: provider cards on the left, the fleet-wide card on the right
-// once the panel is wide enough for both. One string, so the outline cannot promise a column the panel never draws.
-const SPLIT = `grid gap-3 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_18rem]`;
 
 // groups
 
@@ -234,34 +232,7 @@ const roster = computed(() => {
     <!-- An unread state is not an empty one: drawn as the panel itself, as it last looked in this sandbox, or until then
          an outline of it (summary card beside provider cards), not a "Reading..." sentence in its place. -->
     <Await :of="accounts" imprint="sandbox.plan-limits" :label="t(`sandbox.words.readingConnections`)">
-        <template #fallback>
-            <section class="@container" role="status" aria-busy="true">
-                <div class="mb-2.5 px-1"><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></div>
-                <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
-                <div :class="SPLIT" aria-hidden="true">
-                    <Card class="flex flex-col gap-3 @2xl:col-start-2 @2xl:row-start-1">
-                        <div class="flex flex-col gap-1.5">
-                            <span class="skeleton block h-4 w-44" />
-                            <span class="skeleton block h-2.5 w-32" />
-                        </div>
-                        <!-- Matches the strip's actual height; a thicker placeholder would promise more than the real thing. -->
-                        <span class="skeleton block h-1.5 w-full rounded-full" />
-                        <div class="flex flex-wrap gap-x-3 gap-y-1.5 @2xl:flex-col">
-                            <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
-                        </div>
-                    </Card>
-                    <div class="flex min-w-0 flex-col gap-3 @2xl:col-start-1 @2xl:row-start-1">
-                        <Card v-for="card in 2" :key="card" class="flex gap-2.5">
-                            <span class="skeleton block size-5 shrink-0 rounded-md" />
-                            <div class="flex min-w-0 flex-1 flex-col gap-3">
-                                <span class="skeleton block h-3.5 w-28" />
-                                <span class="skeleton block h-1.5 w-full rounded-full" />
-                            </div>
-                        </Card>
-                    </div>
-                </div>
-            </section>
-        </template>
+        <template #fallback><PlanLimitsSkeleton /></template>
 
         <!-- `@container` over the section: the columns follow the panel's width, not the window's. -->
         <Section v-if="rows.length > 0" id="accounts" class="@container" :label="t(`shared.planLimits`)">

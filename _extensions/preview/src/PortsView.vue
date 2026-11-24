@@ -57,11 +57,9 @@ const openTerminal = (session: string): void => host().terminal.open(session);
         <!-- An empty scan result would read as 'nothing found' with less confidence; skeleton rows stand in while loading. -->
         <Await :of="loaded" imprint="preview.ports" :label="t(`portsView.scanningListeningPorts`)">
             <template #fallback>
-                <RowGroup :label="t(`portsView.services`)">
-                    <div role="status" aria-busy="true">
-                        <span class="sr-only">{{ t(`portsView.scanningListeningPorts`) }}</span>
-                        <SkeletonRows :rows="3" description control />
-                    </div>
+                <!-- The status is the group itself: a wrapper inside it stood between the rows and lost their dividers. -->
+                <RowGroup :label="t(`portsView.services`)" role="status" aria-busy="true" :aria-label="t(`portsView.scanningListeningPorts`)">
+                    <SkeletonRows :rows="3" description control />
                 </RowGroup>
             </template>
             <!-- Spaced as the column it sits in. -->

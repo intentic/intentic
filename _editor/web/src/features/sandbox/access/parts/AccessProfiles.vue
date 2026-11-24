@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { AccessProfileSchema, profileAccess, type AccessProfile, type AccessProfileEntry } from "@intentic/sandbox-contract/schemas/access-profiles";
 import { tierOf } from "@intentic/sandbox-contract/schemas/members";
-import { Await, Button, Icon, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Await, Button, Icon, Notice, Row, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -112,6 +112,13 @@ const destroy = async (id: string): Promise<void> => {
 </script>
 <template>
     <Await :of="loaded" imprint="sandbox.access.profiles">
+        <!-- Until it has been seen once: the group under its real header, a couple of profiles each with its reach under its
+             name and its Edit beside it. -->
+        <template #fallback>
+            <RowGroup :label="t(`sandbox.accessProfiles.title`)">
+                <div role="status" aria-busy="true"><SkeletonRows :rows="2" :lead="false" description control /></div>
+            </RowGroup>
+        </template>
         <RowGroup :label="t(`sandbox.accessProfiles.title`)">
             <template #actions
                 ><Button

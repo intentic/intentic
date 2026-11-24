@@ -3,11 +3,12 @@ import { Button, Icon, SkeletonSnapshot } from "@intentic/ui";
 import { onScopeDispose, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Placeholder for a transcript that hasn't arrived: previews the layout (prompt, tool rows, answer) content will
-// occupy, so arrival fills its own outline instead of replacing a spinner. Anchored to the bottom, since that's where a
-// restored transcript lands (useStickToBottom). The bars are drawn only until the conversation has been seen once; from
-// then on its own last turns, as they were last drawn, stand in for them. Without a name (a host that asked for a quiet
-// wait, transcriptWait.ts) there is no outline at all: one line at the foot, where the transcript will land.
+// Placeholder for a transcript that hasn't arrived. Before the conversation has been seen once it promises what a
+// transcript's first screen is: the context chip and the day it started at the top, then turns of a prompt bubble, its
+// folded steps and an answer, in the transcript's own classes, filling down until the pane clips them. From then on its own
+// last turns, as they were last drawn, stand in for them, anchored to the bottom where a restored transcript lands
+// (useStickToBottom). Without a name (a host that asked for a quiet wait, transcriptWait.ts) there is no outline at all:
+// one line at the foot, where the transcript will land.
 const t = useT();
 
 const { of } = defineProps<{
@@ -15,15 +16,14 @@ const { of } = defineProps<{
     of?: string;
 }>();
 
-// Per-turn skeleton shapes, newest last; fixed uneven widths so the outline doesn't reshuffle on re-render.
+// Per-turn line widths, oldest first; fixed and uneven so the outline doesn't reshuffle on re-render. A prompt is a line
+// or two, its steps fold to one band (ChatStepGroup), and its answer is a paragraph. Three fill a tall pane; the stack
+// clips what does not fit.
 const TURNS = [
-    { bubble: `w-[52%]`, prompt: [`w-full`, `w-1/2`], tools: [`w-1/3`], answer: [`w-full`, `w-5/6`] },
-    { bubble: `w-[34%]`, prompt: [`w-full`], tools: [`w-2/5`, `w-1/4`], answer: [`w-full`, `w-full`, `w-3/4`, `w-2/5`] },
-    { bubble: `w-[38%]`, prompt: [`w-full`], tools: [`w-2/5`], answer: [`w-full`, `w-11/12`, `w-3/5`] },
-    { bubble: `w-[62%]`, prompt: [`w-full`, `w-2/3`], tools: [`w-1/2`, `w-1/3`], answer: [`w-full`, `w-full`, `w-4/5`, `w-2/5`] },
+    { prompt: [`w-64`, `w-40`], answer: [`w-full`, `w-full`, `w-11/12`, `w-full`, `w-3/5`] },
+    { prompt: [`w-48`], answer: [`w-full`, `w-5/6`, `w-full`, `w-2/5`] },
+    { prompt: [`w-60`, `w-28`], answer: [`w-full`, `w-full`, `w-3/4`] },
 ];
-// Repeated twice so the stack always reaches the top edge; turns that overflow are clipped and cost nothing.
-const OUTLINE = [...TURNS, ...TURNS];
 
 // Asks the sandbox again (the pane's hydration), offered once the wait is past what a read ever takes.
 const emit = defineEmits<{ retry: [] }>();
@@ -60,24 +60,30 @@ const retry = (): void => {
             <!-- Only the bars are remembered: the notes below keep timing the wait and offering to ask again. The status
                  above already announces it, so the remembered turns stay silent. -->
             <SkeletonSnapshot v-if="of !== undefined" :of="of">
-                <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
-                    <!-- Padding here matches .chat-prompt's own vertical padding. -->
-                    <div class="flex justify-end pt-3 pb-2">
-                        <div class="chat-surface flex flex-col gap-1.5 px-4 py-2.5" :class="turn.bubble">
-                            <span v-for="(line, lineIndex) in turn.prompt" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
+                <!-- The column's head as ChatPaneTurns draws it: the context chip (ChatSystemPrompt), then the turns' stack
+                     opening on the day mark. The stack takes the rest and clips, so the notes below stay at the foot. -->
+                <div class="flex shrink-0 justify-center pb-1" aria-hidden="true"><span class="ui-chip"><span class="skeleton block h-2 w-14" /></span></div>
+                <div class="chat-stack flex min-h-0 flex-1 flex-col overflow-hidden" aria-hidden="true">
+                    <div class="flex shrink-0 justify-center pb-0.5 text-2xs">
+                        <span class="flex h-[1lh] items-center"><span class="skeleton block h-2 w-20" /></span>
+                    </div>
+                    <section v-for="(turn, index) in TURNS" :key="index" class="chat-stack flex shrink-0 flex-col">
+                        <!-- Padding here matches .chat-prompt's own; the bubble is .chat-prompt-text's type and padding. -->
+                        <div class="flex justify-end pt-3 pb-2">
+                            <div class="chat-surface flex max-w-[85%] flex-col px-4 py-2.5 text-xs leading-relaxed">
+                                <span v-for="(line, lineIndex) in turn.prompt" :key="lineIndex" class="flex h-[1lh] items-center">
+                                    <span class="skeleton block h-2.5" :class="line" />
+                                </span>
+                            </div>
                         </div>
-                    </div>
-                    <!-- Tool calls are bare rows at the meta tier: a glyph, a name, a target, not cards. -->
-                    <div class="flex flex-col gap-0.5">
-                        <span v-for="(target, toolIndex) in turn.tools" :key="toolIndex" class="flex items-center gap-1.5">
-                            <span class="h-2.5 w-2.5 shrink-0 rounded bg-content/25" />
-                            <span class="h-2 w-10 shrink-0 rounded bg-content/10" />
-                            <span class="h-2 rounded bg-content/10" :class="target" />
-                        </span>
-                    </div>
-                    <div class="chat-surface-assistant flex flex-col gap-2 rounded-lg px-3.5 py-2.5">
-                        <span v-for="(line, lineIndex) in turn.answer" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
-                    </div>
+                        <!-- A finished turn's steps, folded to their band (ChatStepGroup's .chat-spine-wash). -->
+                        <span class="chat-spine-wash pointer-events-none [--wash-height:0.5rem]" />
+                        <div class="chat-surface-assistant flex w-full flex-col rounded-lg px-3.5 py-2.5 text-xs leading-relaxed">
+                            <span v-for="(line, lineIndex) in turn.answer" :key="lineIndex" class="flex h-[1lh] items-center">
+                                <span class="skeleton block h-2.5" :class="line" />
+                            </span>
+                        </div>
+                    </section>
                 </div>
             </SkeletonSnapshot>
             <p v-if="stalled" class="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 pt-2 text-2xs text-subtle" role="alert">

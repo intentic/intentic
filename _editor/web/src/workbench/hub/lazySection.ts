@@ -4,12 +4,12 @@ import { useRouter } from "vue-router";
 import { useChunkLoaded, type ViewChunk, viewChunk } from "../../components/viewChunk";
 import { pageImprint } from "../../lib/routes/pageImprint";
 import { whenIdle } from "../../lib/whenIdle";
-import HubSectionOutline from "./HubSectionOutline.vue";
+import SectionsOutline from "../../components/SectionsOutline.vue";
 
 // A HUB SECTION'S CODE, FETCHED WHEN THE SECTION IS OPENED. A hub draws one section at a time, so bundling them all
 // into the hub's chunk made a reload of any one page pay for every page. Each section is a chunk of its own instead,
 // waited for the way a route's chunk is (components/viewChunk.ts, drawn by <Await>): nothing for a short wait; past the
-// reveal delay, the section as it last looked (its imprint), or the body of the hub's route outline until it has been
+// reveal delay, the section as it last looked (its imprint), or the body of the hub's route outline (SectionsOutline.vue) until it has been
 // seen once, standing until the section's own first reads have answered too; a dead chunk gets loadChunk's one reload,
 // and any other failure a notice with a retry.
 // Once the hub has drawn the section it opened on, it warms the rest at idle (useSectionWarmup), so moving between
@@ -54,7 +54,7 @@ export const lazySection = <T extends Component>(name: string, load: Loader<T>):
                     { of: section.value, imprint: imprint.value },
                     {
                         default: ({ data }: { readonly data: Component }) => h(data, { ...attrs }, slots),
-                        fallback: () => h(HubSectionOutline),
+                        fallback: () => h(SectionsOutline),
                     },
                 );
         },

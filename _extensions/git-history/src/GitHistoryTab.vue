@@ -21,6 +21,7 @@ import type { GitActionResult, GitCommit } from "@intentic/sandbox-contract/sche
 import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import BranchSwitcher from "./BranchSwitcher.vue";
+import CommitRowsSkeleton from "./graph/CommitRowsSkeleton.vue";
 import { branchMenuItems, shortBranchName, STARTABLE_REMOTE } from "./branchActions.js";
 import { host } from "./host.js";
 import { repoAt } from "./repos.js";
@@ -31,7 +32,7 @@ import { useUndo } from "./useUndo.js";
 import { useStashes } from "./useStashes.js";
 import { useWorking } from "./useWorking.js";
 import { buildFileTree, flattenFileTree } from "./commitFileTree.js";
-import { computeGraphLayout, type GraphRow } from "./graphLayout.js";
+import { computeGraphLayout, type GraphRow } from "./graph/graphLayout.js";
 import { commitPeople, rowAuthor } from "./commitPeople.js";
 import { matchesSearch, searchWords } from "./searchCommits.js";
 import { t } from "./i18n.js";
@@ -531,9 +532,13 @@ const runPending = async (): Promise<void> => {
             <!-- The workspace's branch, with the popover that views, starts from, creates and deletes the others; never a switch. -->
             <BranchSwitcher :repo="repoRef" />
             <!-- Rows drawn, and while searching, out of how many are loaded; scoped to fetched pages, not the whole history. -->
-            <span class="ui-status-pill shrink-0 bg-overlay text-muted">{{
-                searching ? t(`gitHistoryTab.of`, { count: matched.length, count2: commits.length }) : commits.length
-            }}</span>
+            <!-- Unread, the count is a bar in its pill: a "0" read as an empty history until the log answered. -->
+            <span class="ui-status-pill shrink-0 bg-overlay text-muted">
+                <span v-if="loaded.state === `waiting`" class="skeleton inline-block h-2 w-3 align-middle" aria-hidden="true" />
+                <template v-else>{{
+                    searching ? t(`gitHistoryTab.of`, { count: matched.length, count2: commits.length }) : commits.length
+                }}</template>
+            </span>
             <SearchBar
                 v-model="search"
                 variant="field"
@@ -593,20 +598,9 @@ const runPending = async (): Promise<void> => {
 
         <!-- One row per commit: an SVG gutter (lanes/edges/node) then metadata. -->
         <div class="min-h-0 flex-1 overflow-auto">
-            <!-- Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. -->
+            <!-- Skeleton rows stand in for the ones about to load, at the graph row's own height and columns. -->
             <Await :of="loaded" imprint="git-history.commits" :label="t(`gitHistoryTab.readingRepositorysHistory`)">
-                <template #fallback>
-                    <div role="status" aria-busy="true">
-                        <span class="sr-only">{{ t(`gitHistoryTab.readingRepositorysHistory`) }}</span>
-                        <div v-for="row in 8" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
-                            <span class="skeleton block h-2 w-2 shrink-0 rounded-full" />
-                            <div class="flex min-w-0 flex-1 flex-col gap-1">
-                                <span class="skeleton block h-2.5" :class="[`w-64`, `w-48`, `w-72`, `w-56`][row % 4]" />
-                                <span class="skeleton block h-2" :class="[`w-28`, `w-36`][row % 2]" />
-                            </div>
-                        </div>
-                    </div>
-                </template>
+                <template #fallback><CommitRowsSkeleton :row-height="ROW_H" :lane-width="LANE_W" /></template>
                 <p v-if="commits.length === 0" class="px-3 py-3 text-2xs text-subtle">
                     {{ t(`gitHistoryTab.noCommitsYetIn`) }}
                 </p>

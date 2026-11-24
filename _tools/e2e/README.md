@@ -62,6 +62,16 @@ flowchart LR
   for the hero and the tour, 1:2 and 5:9 for the hero's wings, the Features menu's preview box), so the site draws it
   whole rather than cropping it. `DEMO_URL` points it at a demo dev server instead of the build. Both need only
   Chromium.
+- `skeletons/fidelity.mts` scores every loading placeholder against the content that replaces it. For each surface it
+  opens an empty browser (no imprint, no query cache: a first visit) with the daemon's reads held (the demo's
+  `?reads=stalled`), or with the route's or a section's code held, and finds every placeholder on screen. It then
+  loads the page normally and compares the ink (text lines, glyphs, fields, skeleton bars) in each placeholder's region,
+  from its top to the foot of the viewport, as a Dice score over 8px cells, lenient by one cell. 1 is the content's
+  own shape. Under 0.5 fails, except where the placeholder is one outline for every page of its kind (a route's or a
+  section's code on its way, an extension's view never seen), which is reported: once a page has been seen in any
+  sandbox its own look replaces that outline. `--imprints` measures a second visit instead, which draws the remembered look. It runs
+  against a demo dev server it is pointed at (`--origin`), and `--shots` writes each placeholder beside its content
+  with the regions outlined. The rules a fallback follows are in `_editor/ui`'s README, under Loading placeholders.
 - `specs/accessibility.spec.ts` uses axe-core on the seeded full stack: sign-in, sandbox home, a chat message,
   composer and settings. It reports every WCAG 2.1 A/AA finding and fails for serious or critical rule/target pairs
   absent from `accessibility/baseline.json`. Each accepted pair needs a note explaining why it remains. The baseline
@@ -99,6 +109,7 @@ flowchart LR
 - [playwright.config.ts](playwright.config.ts) — the browser tier: serial, one retry, seeded session.
 - [smoke-signin.mjs](smoke-signin.mjs) — the post-deploy check against Google's real origin check.
 - [mobile/audit.mts](mobile/audit.mts) — the phone geometry gate.
+- [skeletons/fidelity.mts](skeletons/fidelity.mts) — each loading placeholder scored against its content.
 - [accessibility/audit.ts](accessibility/audit.ts) — shared WCAG 2.1 A/AA axe scan and per-rule summaries.
 
 ## Commands
@@ -108,6 +119,7 @@ pnpm e2e:signin                                   # builds the web first; needs 
 pnpm e2e:compat                                   # the same, plus a daemon from :stable; COMPAT_E2E_IMAGE picks another
 pnpm e2e:browser                                  # SANDBOX_E2E_IMAGE picks the daemon image
 pnpm e2e:mobile                                   # builds the demo first
+pnpm e2e:skeletons --origin=http://127.0.0.1:47146  # a running demo dev server; --only, --imprints, --shots=<dir>
 pnpm e2e:local                                    # builds the local face first
 pnpm -C _site/demo dev --port 47160                # separate terminal, backend-free editor
 pnpm -C _site/site dev --port 47149                # separate terminal, public site

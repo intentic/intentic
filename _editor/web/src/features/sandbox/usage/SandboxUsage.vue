@@ -24,6 +24,7 @@ import { modelLabelFor, providerDisplayLabel, providerGroup, providerGroupLabel 
 import { useSavings } from "./useSavings";
 import { useUsage } from "./useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
+import PlanLimitsSkeleton from "./PlanLimitsSkeleton.vue";
 import SandboxHoursCard from "./SandboxHoursCard.vue";
 import { compositionOf } from "./savingsChart";
 import SavingsCard from "./SavingsCard.vue";
@@ -248,33 +249,27 @@ const hasSpend = computed(() => current.value.length > 0);
             <template #fallback>
                 <div role="status" aria-busy="true" class="flex flex-col gap-6">
                     <span class="sr-only">{{ t(`sandbox.sandboxUsage.readingLedger`) }}</span>
+                    <!-- The tiles as they land: their names are fixed and drawn, their numbers bars of the numbers' height, and
+                         each trend a block of the sparkline's. Then Plan limits, which is what follows them on the first screen. -->
                     <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4" aria-hidden="true">
-                        <Card
-                            v-for="tile in 4"
-                            :key="tile"
-                            class="flex min-w-0 flex-col gap-2"
-                            :class="tile === 1 || tile === 4 ? `col-span-2 @lg:col-span-1` : ``"
-                        >
-                            <span class="skeleton block h-2.5 w-16" />
-                            <span class="skeleton block" :class="tile === 1 ? `h-8 w-32` : `h-5 w-20`" />
-                            <span class="skeleton mt-auto block h-2 w-24" />
+                        <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
+                            <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
+                            <span class="mt-1 skeleton block h-9 w-36" />
+                            <span class="mt-auto pt-2"><span class="skeleton block h-2.5 w-44" /></span>
+                        </Card>
+                        <Card v-for="label in [t(`sandbox.sandboxUsage.turns`), t(`sandbox.sandboxUsage.tokens`)]" :key="label" class="@container flex min-w-0 flex-col">
+                            <div class="text-xs text-muted">{{ label }}</div>
+                            <span class="mt-1 skeleton block h-6 w-16" />
+                            <span class="mt-1 skeleton block h-2.5 w-3" />
+                            <span class="mt-auto pt-2"><span class="skeleton block h-5 w-full" /></span>
+                        </Card>
+                        <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
+                            <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.cacheHitRate`) }}</div>
+                            <span class="mt-1 skeleton block h-6 w-14" />
+                            <span class="mt-auto pt-2"><span class="skeleton block h-2.5 w-36" /></span>
                         </Card>
                     </div>
-                    <Card class="flex flex-col gap-3" aria-hidden="true">
-                        <div class="flex items-baseline justify-between gap-3">
-                            <span class="skeleton block h-3.5 w-32" />
-                            <span class="skeleton block h-3.5 w-16" />
-                        </div>
-                        <!-- Uneven column heights preserve the chart's data shape. -->
-                        <div class="flex h-28 items-end gap-1.5">
-                            <span
-                                v-for="(height, index) in [`h-1/3`, `h-2/3`, `h-1/2`, `h-full`, `h-1/4`, `h-3/5`, `h-4/5`, `h-2/5`, `h-3/4`, `h-1/2`]"
-                                :key="index"
-                                class="skeleton block min-w-0 flex-1"
-                                :class="height"
-                            />
-                        </div>
-                    </Card>
+                    <PlanLimitsSkeleton />
                 </div>
             </template>
             <template #failed="{ error }"><Notice :of="unread(error)" /></template>

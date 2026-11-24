@@ -327,6 +327,7 @@ export {
     adoptImprints,
     clearImprints,
     configureSkeletonSnapshots,
+    lendImprints,
     loadImprintScope,
     type SkeletonPersistence,
     type SkeletonSnapshotOptions,

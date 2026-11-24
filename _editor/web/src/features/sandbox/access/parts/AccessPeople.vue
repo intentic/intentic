@@ -274,9 +274,10 @@ watch(
                             <div role="status" aria-busy="true" class="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5">
                                 <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
                                 <span class="skeleton block size-8 shrink-0 rounded-full" aria-hidden="true" />
-                                <span class="flex min-w-0 flex-1 flex-col gap-1.5" aria-hidden="true">
-                                    <span class="skeleton block h-3.5 w-32 max-w-full" />
-                                    <span class="skeleton block h-2.5 w-16 max-w-full" />
+                                <!-- Each bar in a box of its line's height, so the card stands as tall as one with an address and a line. -->
+                                <span class="flex min-w-0 flex-1 flex-col" aria-hidden="true">
+                                    <span class="flex h-[1lh] items-center text-sm"><span class="skeleton block h-3.5 w-32 max-w-full" /></span>
+                                    <span class="flex h-[1lh] items-center text-xs"><span class="skeleton block h-2.5 w-16 max-w-full" /></span>
                                 </span>
                             </div>
                         </template>

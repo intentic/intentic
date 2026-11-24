@@ -18,6 +18,7 @@ import { heldView } from "../components/heldPlace";
 import { here, routeName } from "../lib/routes/links";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { useVocabulary } from "../workbench/views/vocabulary";
+import { sandboxSectionGroups } from "../models/sandbox/sandboxNav";
 import { accountSettingsView, hubOutline, settingsPartRoutes } from "./routeParts";
 
 // THE SHELL'S PAGES, ONE RECORD PER PAGE AND FRAME (2026-11-04). Every page of the shared table
@@ -94,10 +95,12 @@ const SANDBOX_VIEWS = {
         component: asyncView(
             async () =>
                 heldView((await import(`../features/capabilities/Capabilities.vue`)).default, () => t(`shared.capabilities`), `capabilities.list`),
+            // All and Connected, then the catalog's seven categories, as one run of rows.
             hubOutline(
                 () => t(`shared.capabilities`),
                 () => t(`capabilities.slices.catalogDescription`),
-                6,
+                () => [9],
+                { labelled: false },
             ),
         ),
     },
@@ -112,7 +115,7 @@ const SANDBOX_VIEWS = {
             hubOutline(
                 () => t(`shared.settings`),
                 () => ``,
-                7,
+                () => sandboxSectionGroups().map((group) => group.items.length),
                 { search: true },
             ),
         ),

@@ -25,7 +25,7 @@ flowchart LR
 
 - [src/extension.ts](src/extension.ts) — the per-repository view, the root document and the palette command.
 - [src/GitHistoryTab.vue](src/GitHistoryTab.vue) — the graph, inline commit detail, diffs and the context menu.
-- [src/graphLayout.ts](src/graphLayout.ts) — pure lane and colour geometry for the graph.
+- [src/graph/graphLayout.ts](src/graph/graphLayout.ts) — pure lane and colour geometry for the graph, beside the placeholder rows drawn in its lanes (`CommitRowsSkeleton.vue`).
 - [src/useGitLog.ts](src/useGitLog.ts) — the paged log query and lazy per-commit detail.
 - [src/branchActions.ts](src/branchActions.ts) — a branch's two actions, view in the Workspace and start an agent from it.
 - [src/useUndo.ts](src/useUndo.ts) — the last branch-moving action and its reversal.

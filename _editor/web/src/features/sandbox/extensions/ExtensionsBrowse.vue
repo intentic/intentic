@@ -334,18 +334,23 @@ const emptyNote = computed<string | undefined>(() => {
         <!-- Registry loading, on arrival or after a change of registry, draws the listing as it last looked here; until it has
              been seen once, the tile grid's shape. A failed read says so in the section's notice region (`notice`). -->
         <Await :of="loaded" imprint="sandbox.extensions.browse" :label="t(`sandbox.extensionsBrowse.readingRegistry`)">
+            <!-- Until it has been seen once: the verified shelf a registry leads with, under its real heading, as tiles. -->
             <template #fallback>
-                <div class="@container" role="status" aria-busy="true">
+                <div role="status" aria-busy="true">
                     <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
-                    <div :class="GRID" aria-hidden="true">
-                        <div v-for="tile in 6" :key="tile" class="flex h-[2.875rem] items-stretch overflow-hidden rounded-lg bg-card shadow-sm">
-                            <span class="skeleton block w-11 shrink-0 rounded-none" />
-                            <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-2.5">
-                                <span class="skeleton block h-3" :class="[`w-24`, `w-32`, `w-20`][tile % 3]" />
-                                <span class="skeleton block h-2 w-4/5" />
+                    <Section :label="t(`sandbox.words.verified`)">
+                        <div class="@container">
+                            <div :class="GRID" aria-hidden="true">
+                                <div v-for="tile in 6" :key="tile" class="flex h-[2.875rem] items-stretch overflow-hidden rounded-lg bg-card shadow-sm">
+                                    <span class="skeleton block w-11 shrink-0 rounded-none" />
+                                    <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-2.5">
+                                        <span class="skeleton block h-3" :class="[`w-24`, `w-32`, `w-20`][tile % 3]" />
+                                        <span class="skeleton block h-2 w-4/5" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </Section>
                 </div>
             </template>
             <template #failed />

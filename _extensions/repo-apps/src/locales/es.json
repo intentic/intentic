@@ -20,6 +20,7 @@
         "openTerminal": "Abrir el terminal de {app}",
         "packages": "Paquetes",
         "readingRepositorysApps": "Leyendo las aplicaciones de este repositorio…",
+        "readingRepositorysTests": "Leyendo las pruebas de este repositorio…",
         "run": "Ejecutar",
         "runAll": "Ejecutar todo",
         "runTests": "Ejecutar las pruebas",

@@ -228,6 +228,21 @@ const LABEL = `text-xs text-subtle pt-0.5`;
             </header>
 
             <Await :of="loaded" :imprint="`sandbox.skill.${id}`" :label="t(`ui.status.reading`)">
+                <!-- The detail layout the skill lands in: its properties beside its text once there is room. -->
+                <template #fallback>
+                    <div role="status" aria-busy="true" :aria-label="t(`ui.status.reading`)" class="flex flex-col gap-6 @3xl:flex-row">
+                        <span class="grid shrink-0 grid-cols-[6rem_1fr] content-start gap-x-3 gap-y-3 text-sm @3xl:order-last @3xl:w-72" aria-hidden="true">
+                            <template v-for="(width, index) in [`w-24`, `w-16`, `w-32`]" :key="index">
+                                <span class="flex min-h-[1lh] items-center"><span class="skeleton block h-2.5 w-12" /></span>
+                                <span class="flex min-h-[1lh] items-center"><span class="skeleton block h-3" :class="width" /></span>
+                            </template>
+                        </span>
+                        <span class="flex min-w-0 flex-1 flex-col gap-3" aria-hidden="true">
+                            <span class="skeleton block h-5 w-40" />
+                            <span v-for="(width, index) in [`w-full`, `w-11/12`, `w-full`, `w-2/3`, `w-5/6`]" :key="index" class="skeleton block h-3" :class="width" />
+                        </span>
+                    </div>
+                </template>
                 <template #failed="{ error }">
                     <p class="text-sm text-danger">{{ error }}</p>
                 </template>
