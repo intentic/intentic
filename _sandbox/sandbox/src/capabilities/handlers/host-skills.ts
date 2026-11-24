@@ -67,6 +67,9 @@ Then:
 | \`mcp__devices__stack_action\` | \`up\`, \`pull\` (then up), \`restart\`, \`start\` or \`stop\` one stack by its name from \`list_stacks\`; answers what compose printed. Nothing here takes a stack down or deletes a volume. |
 | \`mcp__devices__stack_logs\` | The end of one stack's logs, every service's lines together. |
 | \`mcp__devices__deploy_stack\` | Runs a repository the sandbox already carried here as a stack. It accepts only a folder the sandbox staged, so you cannot call it with a path of your own: to deploy a workspace repository, use the Deployments extension's \`deploy_to_device\` tool, which packs the committed HEAD and carries it here first. |
+| \`mcp__devices__ci_runners\` | The self-hosted GitHub Actions runners here (Linux, a WSL distro included), as JSON: each one's state (\`not-installed\` is a runner folder whose systemd unit is gone), the job it runs, whether it is held down on purpose, and the fleet service's last keeper, janitor and prune passes and test-memory pool. |
+| \`mcp__devices__ci_runner_action\` / \`ci_runner_logs\` | Start, stop, drain or restart one runner by name (stop refuses one running a job: drain it), or read its journal. Through the root fleet service (\`sudo intentic-machine ci-fleet install\`). |
+| \`mcp__devices__ci_runner_register\` / \`ci_runner_remove\` | Add or remove a runner. They take a token GitHub mints: use the Pipelines view's Runners section (or its daemon routes), which mints it through the workspace's GitHub connection, rather than calling these yourself. |
 | \`mcp__devices__device_logs\` | This device's own records by name: machine.log (watchdog, keeper, restarts), machine-update.log, audit.jsonl of every tool call, ic's per-run logs; no name lists them. Use it instead of hunting paths with \`run_command\`. |
 
 **Files between the sandbox and this machine** move with \`devices copy\` in the sandbox shell, either way, a file or a

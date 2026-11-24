@@ -29,7 +29,7 @@ fi
 
 mapfile -t UNITS < <(systemctl list-unit-files "$UNITS_GLOB" --no-legend --plain 2>/dev/null | awk '{ print $1 }')
 
-# The runner directories whose Runner.Worker is alive, i.e. that are executing a job right now (fleet-janitor.sh).
+# The runner directories whose Runner.Worker is alive, i.e. that are executing a job right now, as the CI fleet service reads them (_devices/machine src/ci-fleet/discover.ts).
 busy() {
     pgrep -a -x Runner.Worker 2>/dev/null | awk '{ print $2 }' | sed -E 's#/bin[^/]*/Runner\.Worker$##' | grep -qxF -- "$1"
 }

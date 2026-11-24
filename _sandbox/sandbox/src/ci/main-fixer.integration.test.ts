@@ -8,6 +8,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { MAIN_FAILURE_STALE_MS, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiFleet } from "@intentic/sandbox-contract/schemas/ci-fleet";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
@@ -113,11 +114,23 @@ const harness = async (autoRepair = true) => {
     const logFields: unknown[] = [];
     const reruns: string[] = [];
     const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds", annotations: {}, runs: {}, refuseRerun: false };
+    // The owner's connected computers that read their CI runners, by card id, with the distro an agent runs in and what
+    // its `ci_runners` answers: none unless a test connects one.
+    const runnerDevices = new Map<string, { readonly distro?: string; readonly fleet: CiFleet }>();
     // These runs exercise the unpinned fallback; fresh settings otherwise assign every job a preset.
     const settings = { autoRepair, roleSetups: {} };
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
+        hostHub: unstubbed<Services["hostHub"]>("hostHub", {
+            connected: () => [...runnerDevices.keys()],
+            state: (id) => {
+                const distro = runnerDevices.get(id)?.distro;
+                const facts = { os: "Arch Linux", arch: "x64", shell: "zsh", home: "/home/me", roots: ["/home/me"], features: ["ci-runners"] };
+                return { online: true, facts: distro === undefined ? facts : { ...facts, wsl: { distro } } };
+            },
+            mcp: async (id) => ({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify(runnerDevices.get(id)?.fleet) }] } }),
+        }),
         ciRuns: createRunsCache(60_000),
         // Where the streak lives, so a restart (resetMainFixer) keeps it.
         ciStore: fileCiStore(join(root, STATE_DIR, "secrets", "ci.json")),
@@ -249,6 +262,7 @@ const harness = async (autoRepair = true) => {
         logFields,
         reruns,
         forge,
+        runnerDevices,
         settings,
         settle,
         failure,
@@ -717,6 +731,35 @@ test("a job whose runner lost its connection starts nobody: its failed jobs are 
     expect(started).toEqual([]);
     expect(told).toEqual(["ci.fleet_rerun", "ci.fleet_failed"]);
     expect(sentences[1]).toContain("its runner was shut down mid-job");
+});
+
+// A runner's name alone says nothing of which computer it is on, and a PC's hostname is its WSL distros' too: the
+// connected computer that has it is asked, and the notice names that computer, the runner's unit and its state.
+test("a fleet failure names the connected computer that has the runner, with its unit and state", async () => {
+    const { services, fetchFn, forge, runnerDevices, sentences } = await harness();
+    const runner = {
+        name: "radarsu-worker-3",
+        unit: "actions.runner.acme-web.radarsu-worker-3.service",
+        dir: "/home/radarsu/actions-runner-3",
+        user: "radarsu",
+        url: "https://github.com/acme/web",
+        light: false,
+        state: "inactive" as const,
+        busy: false,
+        draining: false,
+    };
+    const fleet = (runners: CiFleet["runners"]): CiFleet => ({ service: { running: true, installed: true }, runners, cacheRoot: "/ci-cache", caches: [] });
+    runnerDevices.set("z440", { fleet: fleet([{ ...runner, name: "z440-worker-1", unit: "actions.runner.acme-web.z440-worker-1.service" }]) });
+    runnerDevices.set("omen", { distro: "archlinux", fleet: fleet([runner]) });
+    forge.log = "Runner name: 'radarsu-worker-3'\nMachine name: 'omen'\nFAIL src/a.test.ts > adds";
+    forge.jobs[56] = [{ id: 560, name: "e2e", conclusion: "failure", runner_name: "radarsu-worker-3" }];
+    forge.annotations[560] = [{ message: "The self-hosted runner: radarsu-worker-3 lost communication with the server." }];
+
+    await runFinished(services, run(56, "failed"), fetchFn);
+
+    expect(sentences[0]).toContain(
+        `"e2e" (runner radarsu-worker-3 on omen (archlinux), actions.runner.acme-web.radarsu-worker-3.service, inactive): its runner lost its connection to the forge`,
+    );
 });
 
 test("a job heard by its own webhook has its annotations read before it is judged", async () => {

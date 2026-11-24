@@ -57,6 +57,31 @@ flowchart LR
   project already runs under is refused. Reading and driving need "Run commands"; a deploy also needs "Run programs
   this sandbox sends". Nothing here runs `down`, `rm` or `-v`, and `uninstall --purge` keeps `stacks/` as the person's
   data (`ic uninstall`, which removes `~/.intentic` whole, does not).
+- (2026-11-24) **Self-hosted CI runners** ([`src/ci-fleet/`](src/ci-fleet), tools in
+  [`tools/ci-runners/`](src/device/tools/ci-runners/ci-runners.ts), contract `schemas/ci-fleet.ts`): the GitHub Actions
+  runners on a Linux computer or WSL distro, read and driven from the Pipelines view's Runners section in place of the
+  hand-run scripts in `docs/ops/ci-runner.md`. `ci_runners` reads them as this account, with no root: every
+  `actions.runner.*.service` unit file, one `systemctl show` for all of them, each folder's `.runner` and `bin` link, a
+  live `Runner.Worker` under the folder as the job (named from the worker log's `jobDisplayName`), and runner folders
+  under the janitor's glob whose `.service` names a unit systemd no longer has, as `not-installed` (z440's four on
+  2026-11-24, their units gone since 2026-11-09 while the folders stayed). Everything that needs root goes through the
+  **fleet service**, `intentic-ci-fleet.service`: `intentic-machine ci-fleet serve`, run as root from a root-owned copy in
+  `/usr/local/lib/intentic-ci`, asked over `/run/intentic-ci/fleet.sock` (0660, the agent account's group) with one JSON
+  line per request from a closed list of verbs (`ci-fleet/protocol.ts`). It is installed once with `sudo intentic-machine
+  ci-fleet install --user <account> [--prune] [--slots-usable N]`, which downloads this agent's release binary and checks
+  it against the release's signed `SHA256SUMS` (a build from source names one with `--binary`), writes
+  `/etc/intentic-ci/fleet.json`, and disables the units it replaces (`intentic-ci-janitor.timer`,
+  `intentic-ci-prune.timer`, `intentic-ci-test-slots.service`). It follows the agent's version, said on every read,
+  through a signed release only, never by copying the person's binary (`ci-fleet/update.ts`). Its rounds: the drains
+  (every 3 s), the keeper (a runner unit that is down and not held down on purpose is started, with a doubling wait),
+  the janitor and the host prune (`fleet-janitor.sh` and `linux-host-prune.sh`, ported rule for rule), and the slot
+  holder, which holds slots of CI's test-memory pool for the Intentic sandboxes on the same engine so CI's tests size
+  themselves from what the sandboxes leave, never the gate band. `ci_runner_action` starts, stops, drains or restarts a
+  runner: `stop` refuses one running a job, `drain` and `restart` wait for it, and a runner stopped from here is held
+  down (`/var/lib/intentic-ci/holds.json`) until started from here. `ci_runner_register` downloads the runner release
+  the computer's runners already run, checks it against the SHA-256 its release notes publish, and runs `config.sh` and
+  `svc.sh` as the runner's account. The registration token the sandbox minted is redacted from the audit log and from
+  every error. `ci_runner_remove` is destructive: it unregisters the runner and moves its folder into the service's trash.
 - What the agent has been shown of the screen is kept for the process's life
   ([`tools/view.ts`](src/device/tools/view.ts)): each screenshot is a frame with an id, shrunk to what a model reads
   whole, and a coordinate is read in the newest frame and mapped back to desktop pixels, so one naming an older frame
@@ -1467,7 +1492,7 @@ person who runs it alone, and either way it never downloads anything.
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `remote`, `power`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `remote`, `power`, `ci-fleet`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
 - [src/uninstall/purge.ts](src/uninstall/purge.ts) — `uninstall --purge`: the steps in `steps.ts`, the distros in `distros.ts`, the files in `sweep.ts`, every decision pure in `plan.ts`.
 - [src/resident/resident.ts](src/resident/resident.ts) — the resident process that holds links, pairings and WSL distros; `supervision.ts` beside it starts and stops it through whatever restarts this environment's agent.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
@@ -1485,6 +1510,7 @@ person who runs it alone, and either way it never downloads anything.
 - [src/power/host-power.ts](src/power/host-power.ts) — what this computer's own power settings would do to work left running (the facts' `power`): Windows in `windows-reading.ts` and `windows-findings.ts`, Linux and macOS in `linux.ts` and `macos.ts`; `power stay-on` and `restore` decided in `writes.ts`, done in `apply.ts`, drawn in `power-command.ts`.
 - [src/release/release-verify.ts](src/release/release-verify.ts) — a downloaded release binary checked against the release's signed `SHA256SUMS`.
 - [src/device/egress/set-egress.ts](src/device/egress/set-egress.ts) — the `set-egress` op: a tightening as it comes, a loosening under the owner's passkey (`proof.ts`), checked against the pins in `pins.ts`; `follower.ts` keeps `ic sandbox egress --follow` running, `trust-command.ts` is `intentic-machine egress trust`.
+- [src/ci-fleet/fleet-service.ts](src/ci-fleet/fleet-service.ts) — the root CI fleet service and its socket; `discover.ts` reads the runners, `units.ts` drives them, `register.ts` adds and removes them, `fleet-install.ts` sets the service up, and `keeper/`, `janitor/`, `prune/` and `slots/` are its rounds.
 - [src/keyring/commands.ts](src/keyring/commands.ts) — `intentic-machine keyring …`; `service.ts` installs, starts, upgrades and removes intentic-keyring, `relay.ts` carries the sandbox's `keyring*` calls to its pipe.
 
 ## Commands
@@ -1495,4 +1521,5 @@ pnpm turbo run build --filter=./_devices/machine
 node _devices/machine/dist/cli.js status
 node _devices/machine/dist/cli.js doctor        # what the upkeep would do here; --fix does it
 node _devices/machine/dist/cli.js power status  # what this computer's power settings would do to work left running
+node _devices/machine/dist/cli.js ci-fleet status  # the CI runners here and what the fleet service last did
 ```

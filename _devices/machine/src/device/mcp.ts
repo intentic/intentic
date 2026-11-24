@@ -54,6 +54,7 @@ import { osTools } from "./tools/os/os.js";
 import { osSettingsTools } from "./tools/os/settings.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
 import { stackTools } from "./tools/stacks/stacks.js";
+import { ciRunnerTools } from "./tools/ci-runners/ci-runners.js";
 import { appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
 import { appStartInput } from "./tools/programs/launch.js";
 import { appLogsAfterWait, appStatusAfterWait, DEFAULT_APP_WAIT_MS, MAX_APP_WAIT_MS } from "./tools/programs/app-wait-tools.js";
@@ -742,6 +743,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     // list_stacks, stack_action, stack_logs and deploy_stack: Docker compose stacks on this machine, for the Deployments
     // board (tools/stacks/stacks.ts). A deploy copies only what the calling sandbox pushed here.
     ...stackTools(callerSandbox),
+    // The self-hosted CI runners here, for the Pipelines view (tools/ci-runners/ci-runners.ts); off Linux each says so.
+    ...ciRunnerTools(),
     // os_status, os_update, os_rollback, os_reboot and os_channel, on Intentic OS only (tools/os/os.ts).
     ...osTools(),
     // Its network, sound, screens, keyboard and drives, on Intentic OS only (tools/os/settings.ts).
@@ -750,7 +753,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
 
 // Arguments are logged verbatim except typed text, which is redacted to its length: a `device` or `android_act` "type",
 // `clipboard` "write" or `ui_act` set_value call routinely carries a password. A key combination is not redacted; there is nothing
-// in it to leak. A `password` argument (os_wifi_connect's) is one, whichever tool carries it.
+// in it to leak. A `password` (os_wifi_connect's) or a runner `token` (ci_runner_register's, _remove's) is one too.
 export const auditDetail = (name: string, args: McpAuditEntry["args"]): string => {
     const redact =
         ((name === "device" || name === "android_act") && args["action"] === "type") ||
@@ -761,7 +764,7 @@ export const auditDetail = (name: string, args: McpAuditEntry["args"]): string =
         : name === "ui_act" && args["value"] !== undefined
           ? { ...args, value: `<${String(args["value"]).length} characters>` }
           : args;
-    const safe = typed["password"] === undefined ? typed : { ...typed, password: `<${String(typed["password"]).length} characters>` };
+    const safe = Object.fromEntries(Object.entries(typed).map(([key, value]) => [key, key === "password" || key === "token" ? `<${String(value).length} characters>` : value]));
     return JSON.stringify(safe).slice(0, 500);
 };
 

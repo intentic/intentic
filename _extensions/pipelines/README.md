@@ -93,6 +93,22 @@ flowchart LR
   the composer's Send uses (`api.models.allowance`). Pressing it opens the fix conversation now and books its task for
   that time (`sendAt`, `sendAtReopen`), naming that model, so picking a model with no allowance schedules the fix for
   later. Until it starts, its chip says Scheduled (the contract's `fixStance`).
+- Under the runs, a Runners section shows the self-hosted GitHub Actions runners on the owner's connected computers
+  (`src/runners/`). It asks the daemon's device list which live computers advertise the `ci-runners` feature (a Linux
+  agent: runners are systemd units), then reads each one through `GET /system/devices/{id}/ci-runners` every 15 s while
+  the view is open. A computer gets a group when it has runners, when its CI fleet service is installed, or when the read
+  failed, which says why in the daemon's words; with none of those the section draws nothing. A group's head says the
+  fleet service's state (running and its version, not answering with its problem, or not installed, which leaves the
+  runners read-only) and, where the service holds test-memory slots, how many of them CI may use. Each runner row has a
+  status glyph (a busy runner spins like a running run), its name and light-lane mark, what it is doing (its job and for
+  how long, idle, held down and why, draining, or a systemd unit that is gone and needs registering again), its version,
+  and the presses the fleet service takes for it as it stands (`runnerPresses`): Start for a stopped, failed or held
+  runner; Drain, Restart and Stop for a running one, with Stop refused mid-job in favour of Drain; its log; and Remove,
+  behind a confirm. Each press answers in the daemon's own sentence under the computer and reads it again at once. "Add
+  a runner" suggests the next `<host>-worker-<n>` name and the labels docs/ops/ci-runner.md gives (`intentic,desktop`,
+  or `intentic-light` alone for a `-light-N` name), for one of the workspace repositories with a GitHub remote. The fleet
+  service's last janitor, keeper and prune pass sit folded at the foot of the group. The section is drawn only for an
+  owner or a maintainer, the floor of the runner routes.
 
 ## Key files
 
@@ -101,6 +117,7 @@ flowchart LR
 - [src/ciStreaks.ts](src/ciStreaks.ts) — when a branch counts as failing, and a release's failures apart from it.
 - [src/attention.ts](src/attention.ts) — what CI owes the reader, the rule behind the badge.
 - [src/fixes/mainFailures.ts](src/fixes/mainFailures.ts) — a failing main line and its one fix agent, joined by the fixer's own id.
+- [src/runners/runnerFleet.ts](src/runners/runnerFleet.ts) — the Runners section's reading: which computers get a group, a runner's words and presses.
 - [src/graph/pipelineDag.ts](src/graph/pipelineDag.ts) — a run's flat job list turned into layers, cards and GitHub's order.
 
 ## Commands

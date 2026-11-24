@@ -1,7 +1,6 @@
 import { createReadStream } from "node:fs";
 import { errorMessage } from "@intentic/base/errors";
 import { sizeLabel } from "@intentic/base/format";
-import { parseJsonWith } from "@intentic/base/json";
 import { ARTIFACT_CHUNK_BYTES } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import {
     type DeployStackToolArgs,
@@ -14,13 +13,12 @@ import {
     type StackLogs,
     type StackOpResult,
 } from "@intentic/sandbox-contract/schemas/device-stacks";
-import { DEVICE_FEATURE_PROGRAMS, DEVICE_FEATURE_STACKS, type DeviceFeature, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
+import { DEVICE_FEATURE_PROGRAMS, DEVICE_FEATURE_STACKS } from "@intentic/sandbox-contract/schemas/hosts";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
-import { callFailure } from "../../peers/call-failure.js";
 import { DEVICE_ANSWER_MARGIN_MS, DEVICE_CALL_CEILING_MS, QUICK_CALL_MS } from "../../peers/device-call-deadline.js";
-import { callTool } from "../device-reports.js";
+import { type DeviceNeed, deviceClientFor, parsedToolAnswer, relayTool } from "../devices/device-tool-relay.js";
 import { committedStack, type PackedTree, repoFolder, withPackedTree } from "./device-stack-bundle.js";
 import { alreadyStaged, type StagedBundle, stageBundle, type StagingDeadlines } from "../runs/device-staging.js";
 import type { HostClient } from "../host-peer.js";
@@ -49,73 +47,24 @@ const DEPLOY_DEADLINE_MS = DEVICE_CALL_CEILING_MS;
 const STAGING_DEADLINES: StagingDeadlines = { chunkMs: QUICK_CALL_MS, commitMs: 10 * 60_000 + DEVICE_ANSWER_MARGIN_MS };
 
 // What each part of this needs of the computer's agent, and how a refusal says what it could not do.
-interface Need {
-    readonly feature: DeviceFeature;
-    readonly to: string;
-}
-const STACKS: Need = { feature: DEVICE_FEATURE_STACKS, to: "read or drive Docker compose stacks" };
-const PROGRAMS: Need = { feature: DEVICE_FEATURE_PROGRAMS, to: "receive what this sandbox sends" };
-
-// The computer's client, once it is connected and its agent has every tool the call needs. An older agent would answer
-// an unknown tool with an error the reader cannot act on, so it is refused here, saying how to update it.
-const clientFor = (services: StackServices, id: string, needs: readonly Need[]): HostClient => {
-    const client = services.hostHub.client(id);
-    if (client === undefined || !services.hostHub.online(id)) {
-        throw new ORPCError("CONFLICT", { message: services.hostHub.offline(id) });
-    }
-    const facts = services.hostHub.state(id).facts;
-    const missing = needs.find((need) => !deviceSupports(facts, need.feature));
-    if (missing !== undefined) {
-        throw new ORPCError("CONFLICT", {
-            message: `The agent on "${id}" is too old to ${missing.to}: update it there (\`intentic-machine upgrade\`, or Update on its Devices card), then try again.`,
-        });
-    }
-    return client;
-};
-
-// What the stack tools take: a stack's name, an op, a count, a path; never anything nested.
-type ToolArgs = Readonly<Record<string, string | number>>;
-
-// One of the machine's tools, its answer as text. A refusal (a switch that is off) is FORBIDDEN in the machine's own
-// words; a call that got no answer is BAD_GATEWAY, said as what it means for the call (it may have run).
-const relay = async (services: StackServices, id: string, tool: string, args: ToolArgs, deadlineMs: number): Promise<string> => {
-    const answer = await callTool(services, id, tool, args, AbortSignal.timeout(deadlineMs)).catch((error: Error) => {
-        throw new ORPCError("BAD_GATEWAY", { message: callFailure("device", id, tool, error, deadlineMs).text });
-    });
-    if (answer.refused) {
-        throw new ORPCError("FORBIDDEN", { message: answer.text.trim() === "" ? `"${id}" refused ${tool} without saying why.` : answer.text });
-    }
-    return answer.text;
-};
-
-// How much of an answer that is not what the tool promised is quoted back: enough to recognise it, never a whole log.
-const QUOTED_CHARS = 300;
-
-// A tool's JSON answer, read against what it promises; anything else is the computer's fault, named by what came back.
-const parsedAnswer = <T>(id: string, tool: string, text: string, schema: z.ZodType<T>): T => {
-    const value = parseJsonWith(text, schema);
-    if (value === undefined) {
-        const quoted = text.trim() === "" ? "nothing" : JSON.stringify(text.length > QUOTED_CHARS ? `${text.slice(0, QUOTED_CHARS)}…` : text);
-        throw new ORPCError("BAD_GATEWAY", { message: `"${id}" answered ${tool} with something other than what it promises: ${quoted}` });
-    }
-    return value;
-};
+const STACKS: DeviceNeed = { feature: DEVICE_FEATURE_STACKS, to: "read or drive Docker compose stacks" };
+const PROGRAMS: DeviceNeed = { feature: DEVICE_FEATURE_PROGRAMS, to: "receive what this sandbox sends" };
 
 // Every compose project on the computer, as `list_stacks` reads them.
 export const deviceStacks = async (services: StackServices, id: string): Promise<DeviceStacks> => {
-    clientFor(services, id, [STACKS]);
-    return parsedAnswer(id, "list_stacks", await relay(services, id, "list_stacks", {}, READ_DEADLINE_MS), DeviceStacksSchema);
+    deviceClientFor(services, id, [STACKS]);
+    return parsedToolAnswer(id, "list_stacks", await relayTool(services, id, "list_stacks", {}, READ_DEADLINE_MS), DeviceStacksSchema);
 };
 
 export const deviceStackOp = async (services: StackServices, input: DeviceStackOpInput): Promise<StackOpResult> => {
-    clientFor(services, input.id, [STACKS]);
-    return { output: await relay(services, input.id, "stack_action", { name: input.name, op: input.op }, OP_DEADLINE_MS) };
+    deviceClientFor(services, input.id, [STACKS]);
+    return { output: await relayTool(services, input.id, "stack_action", { name: input.name, op: input.op }, OP_DEADLINE_MS) };
 };
 
 export const deviceStackLogs = async (services: StackServices, input: DeviceStackLogsInput): Promise<StackLogs> => {
-    clientFor(services, input.id, [STACKS]);
+    deviceClientFor(services, input.id, [STACKS]);
     const args = input.tail === undefined ? { name: input.name } : { name: input.name, tail: input.tail };
-    return { text: await relay(services, input.id, "stack_logs", args, READ_DEADLINE_MS) };
+    return { text: await relayTool(services, input.id, "stack_logs", args, READ_DEADLINE_MS) };
 };
 
 // What `deploy_stack` answers: the folder the stack now runs from, and what `docker compose up` printed.
@@ -152,12 +101,12 @@ const staged = async (client: HostClient, id: string, name: string, packed: Pack
 // and nothing reroutes either), because the machine takes as `source` only a build staged in this sandbox's runs folder
 // on that very agent: the WSL side of a PC cannot answer for its Windows side here.
 export const deployDeviceStack = async (services: StackServices, input: DeviceStackDeployInput): Promise<DeviceStackDeployResult> => {
-    const client = clientFor(services, input.id, [STACKS, PROGRAMS]);
+    const client = deviceClientFor(services, input.id, [STACKS, PROGRAMS]);
     const dir = await repoFolder(services.workspace.root, input.repo);
     const { commit, composeFile } = await committedStack(dir, input.repo, input.composeFile);
     const source = await withPackedTree(dir, input.repo, commit, (packed) => staged(client, input.id, input.name, packed));
     const args: DeployStackToolArgs = { source, name: input.name, composeFile, commit };
-    const text = await relay(services, input.id, "deploy_stack", args, DEPLOY_DEADLINE_MS);
-    const deployed = parsedAnswer(input.id, "deploy_stack", text, DeployedSchema);
+    const text = await relayTool(services, input.id, "deploy_stack", args, DEPLOY_DEADLINE_MS);
+    const deployed = parsedToolAnswer(input.id, "deploy_stack", text, DeployedSchema);
     return { stack: input.name, path: deployed.path, commit, output: deployed.output };
 };

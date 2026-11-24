@@ -216,5 +216,77 @@
         "started": "Gestartet",
         "updated": "Aktualisiert",
         "step": "Schritt"
+    },
+    "runners": {
+        "title": "Runner auf {device}",
+        "notAnswering": "Runner konnten nicht gelesen werden: {error}",
+        "service": {
+            "running": "Fleet-Dienst läuft",
+            "runningVersion": "Fleet-Dienst läuft v{version}",
+            "notAnswering": "Fleet-Dienst antwortet nicht",
+            "notInstalled": "Fleet-Dienst nicht installiert: seine Runner sind hier nur lesbar"
+        },
+        "pool": "CI darf {usable} von {total} Test-Slots nutzen; {held} für Sandboxes reserviert",
+        "light": "Light-Lane",
+        "lightTip": "Erste Jobs",
+        "doing": {
+            "aJob": "einen Job",
+            "running": "Führt {job} aus",
+            "runningFor": "Führt {job} seit {elapsed} aus",
+            "draining": "Wird geleert: stoppt, wenn sein Job endet",
+            "notInstalled": "Seine systemd-Unit fehlt: registriere ihn neu",
+            "failed": "Fehlgeschlagen: starte ihn neu oder lies sein Log",
+            "stopped": "Gestoppt",
+            "idle": "Bereit",
+            "state": "{state}"
+        },
+        "held": {
+            "board": "Von hier gestoppt",
+            "drain": "Geleert",
+            "smoke": "Pausiert für einen Windows-Smoke-Job"
+        },
+        "action": {
+            "start": "Starten",
+            "drain": "Leeren",
+            "drainTip": "Stoppt ihn, sobald sein Job endet",
+            "restart": "Neu starten",
+            "restartTip": "Leert ihn und startet ihn wieder",
+            "stop": "Stoppen",
+            "logs": "Log",
+            "remove": "Entfernen",
+            "drainInstead": "Führt einen Job aus: leere ihn stattdessen",
+            "needsService": "Braucht den Fleet-Dienst auf diesem Computer",
+            "add": "Runner hinzufügen"
+        },
+        "logs": {
+            "title": "Log von {name}",
+            "loading": "Log wird gelesen…",
+            "empty": "Sein Dienst hat noch nichts ausgegeben."
+        },
+        "remove": {
+            "header": "{name} entfernen?",
+            "description": "Er wird bei GitHub abgemeldet und sein Dienst von {device} entfernt. Sein Ordner bleibt.",
+            "confirm": "Runner entfernen"
+        },
+        "add": {
+            "header": "Runner zu {device} hinzufügen",
+            "description": "Registriert einen selbst gehosteten GitHub-Actions-Runner für das gewählte Repository. Der Computer lädt den Runner und startet ihn; das dauert ein paar Minuten.",
+            "name": "Name",
+            "labels": "Labels",
+            "labelsHelp": "Durch Kommas getrennt. Ein Light-Lane-Name (-light-N) bekommt nur intentic-light.",
+            "repo": "Repository",
+            "noRepo": "Kein Workspace-Repository hat ein GitHub-Remote.",
+            "submit": "Runner hinzufügen",
+            "cancel": "Abbrechen",
+            "adding": "{name} wird hinzugefügt: das dauert ein paar Minuten."
+        },
+        "pass": {
+            "janitor": "Letzter Janitor-Lauf",
+            "keeper": "Letzter Keeper-Lauf",
+            "prune": "Letzter Host-Prune",
+            "freed": "{bytes} freigegeben",
+            "dryRun": "nur Bericht",
+            "noLines": "Nichts zu berichten."
+        }
     }
 }

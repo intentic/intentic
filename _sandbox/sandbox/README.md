@@ -268,6 +268,16 @@ flowchart LR
   512 MiB at most), it travels into the machine's staging the way `devices push` does (`hosts/runs/device-staging.ts`), and
   the machine brings it up with `--build`. These handlers hold no bearer gate, since the board's backend calls with its
   extension token, admitted by the routes its manifest declares; a person still meets their maintainer floor.
+- (2026-11-24) The Pipelines view reads and drives the self-hosted GitHub Actions runners on the owner's computers
+  (`hosts/ci-fleet/device-ci-fleet.ts`, `/system/devices/{id}/ci-runners…`, routes in the contract's
+  `device-ci-runners.contract.ts`): list, start, stop, drain, restart, logs, register and remove, relayed to the
+  machine's `ci_runner*` tools as the stack routes are (`hosts/devices/device-tool-relay.ts` is both relays' one way to
+  a machine), gated the same way. Registering and removing take a token GitHub mints for the repository; the daemon mints
+  it through the workspace's GitHub connection for that one call and never keeps or logs it (`ci/fleet/runner-registration.ts`, `ci/forge/runner-tokens.ts`),
+  so a connection without admin on the repository is refused saying so. When main's CI fails on the fleet, the notice
+  names the computer that has the runner and its unit's state there (`hosts/ci-fleet/runner-whereabouts.ts`), asked of the
+  connected computers that read their runners, a few seconds at most and remembered for three minutes; one that does
+  not answer leaves the hostname the job's log named.
 - (2026-11-20) A person's remote screen and terminals on the owner's computers (`hosts/remote/`, the `remote.*`
   procedures under `/system/devices/{device}/remote…`). The computer's `intentic-remoted` serves both and dials the
   sandbox's netd itself, so no picture or keystroke crosses this daemon: it decides who may (Full access only, the owner

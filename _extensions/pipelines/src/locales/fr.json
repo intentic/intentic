@@ -216,5 +216,77 @@
         "started": "Démarré",
         "updated": "Mis à jour",
         "step": "Étape"
+    },
+    "runners": {
+        "title": "Runners sur {device}",
+        "notAnswering": "Impossible de lire ses runners : {error}",
+        "service": {
+            "running": "Service de flotte en marche",
+            "runningVersion": "Service de flotte en marche v{version}",
+            "notAnswering": "Le service de flotte ne répond pas",
+            "notInstalled": "Service de flotte non installé : ses runners sont en lecture seule ici"
+        },
+        "pool": "La CI peut utiliser {usable} des {total} slots de test ; {held} réservés aux sandboxes",
+        "light": "voie légère",
+        "lightTip": "Premiers jobs",
+        "doing": {
+            "aJob": "un job",
+            "running": "Exécute {job}",
+            "runningFor": "Exécute {job} depuis {elapsed}",
+            "draining": "Vidage : s'arrête à la fin de son job",
+            "notInstalled": "Son unité systemd a disparu : enregistrez-le à nouveau",
+            "failed": "En échec : redémarrez-le ou lisez son journal",
+            "stopped": "Arrêté",
+            "idle": "Libre",
+            "state": "{state}"
+        },
+        "held": {
+            "board": "Arrêté d'ici",
+            "drain": "Vidé",
+            "smoke": "En pause pour un job de smoke Windows"
+        },
+        "action": {
+            "start": "Démarrer",
+            "drain": "Vider",
+            "drainTip": "L'arrête à la fin de son job",
+            "restart": "Redémarrer",
+            "restartTip": "Le vide puis le redémarre",
+            "stop": "Arrêter",
+            "logs": "Journal",
+            "remove": "Retirer",
+            "drainInstead": "Exécute un job : videz-le plutôt",
+            "needsService": "Nécessite le service de flotte sur cet ordinateur",
+            "add": "Ajouter un runner"
+        },
+        "logs": {
+            "title": "Journal de {name}",
+            "loading": "Lecture de son journal…",
+            "empty": "Son service n'a encore rien écrit."
+        },
+        "remove": {
+            "header": "Retirer {name} ?",
+            "description": "Il est désinscrit de GitHub et son service est retiré de {device}. Son dossier reste.",
+            "confirm": "Retirer le runner"
+        },
+        "add": {
+            "header": "Ajouter un runner à {device}",
+            "description": "Enregistre un runner GitHub Actions auto-hébergé pour le dépôt choisi. L'ordinateur télécharge le runner et le démarre, ce qui prend quelques minutes.",
+            "name": "Nom",
+            "labels": "Libellés",
+            "labelsHelp": "Séparés par des virgules. Un nom de voie légère (-light-N) ne prend qu'intentic-light.",
+            "repo": "Dépôt",
+            "noRepo": "Aucun dépôt de l'espace de travail n'a de remote GitHub.",
+            "submit": "Ajouter le runner",
+            "cancel": "Annuler",
+            "adding": "Ajout de {name} : cela prend quelques minutes."
+        },
+        "pass": {
+            "janitor": "Dernier passage du janitor",
+            "keeper": "Dernier passage du keeper",
+            "prune": "Dernier nettoyage de l'hôte",
+            "freed": "{bytes} libérés",
+            "dryRun": "rapport seul",
+            "noLines": "Rien à signaler."
+        }
     }
 }

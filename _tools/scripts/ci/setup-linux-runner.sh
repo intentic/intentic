@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Provision a native Debian/Ubuntu host as a CI runner host for intentic/intentic (docs/ops/ci-runner.md, "A Linux host").
-# Idempotent: re-run to repair, to add instances, or to install a newer janitor. Registering a new instance needs a
-# repository registration token in RUNNER_TOKEN; instances already configured are left as they are and need none.
+# Idempotent: re-run to repair or to add instances. Registering a new instance needs a repository registration token in
+# RUNNER_TOKEN; instances already configured are left as they are and need none. The runners are kept, and their caches,
+# Docker and the test-memory pool bounded, by the machine agent's root service (`intentic-machine ci-fleet install`),
+# so the person's intentic agent must be installed first.
 #
 #   sudo RUNNER_TOKEN=<token> ./setup-linux-runner.sh --name z440 --workers 3 --light 1 --user radarsu --test-slots 9
 set -euo pipefail
@@ -12,12 +14,9 @@ WORKERS=2
 LIGHT=0
 RUNNER_USER=${SUDO_USER:-}
 # The workflows size the shared test pool at TEST_SLOTS: "16" one-GiB slots, for the 26 GB omen VM. A smaller host
-# keeps only this many usable by holding the locks on the rest for good (hold-test-slots.sh below).
+# keeps only this many usable: the fleet service holds the locks on the rest (`ci-fleet install --slots-usable`).
 TEST_SLOTS_USABLE=
-# The workflows' TEST_SLOTS; slots above TEST_SLOTS_USABLE up to this one are held.
-TEST_SLOTS_TOTAL=16
 LIB=/usr/local/lib/intentic-ci
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 say() { echo "setup-linux-runner: $*"; }
 die() { say "$*" >&2; exit 1; }
@@ -36,8 +35,12 @@ done
 
 [ "$(id -u)" -eq 0 ] || die "run me as root: docker, systemd units and /ci-cache are root's"
 [ -n "$RUNNER_USER" ] && id "$RUNNER_USER" >/dev/null 2>&1 || die "--user must name the existing account the runners run as"
-for f in fleet-janitor.sh linux-host-prune.sh; do [ -f "$HERE/$f" ] || die "$f must sit next to this script"; done
 HOME_DIR=$(getent passwd "$RUNNER_USER" | cut -d: -f6)
+# The fleet service is the person's intentic agent, installed as root from its signed release; the agent's own binary
+# only sets it up. Where the agent runs as root (z440), its binary is root's.
+AGENT="$HOME_DIR/.intentic/machine/bin/intentic-machine"
+[ -x "$AGENT" ] || AGENT=/root/.intentic/machine/bin/intentic-machine
+[ -x "$AGENT" ] || die "no intentic agent at $HOME_DIR/.intentic/machine/bin/intentic-machine or /root/.intentic/machine/bin/intentic-machine: install the intentic agent on this computer first (it runs the CI fleet service)"
 
 # -- packages and docker -------------------------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
@@ -99,37 +102,10 @@ for n in $(seq 1 "$WORKERS"); do instance "$n" "$NAME-worker-$n" intentic,deskto
 # Light instances only ever take the pipeline's two roots; see .github/actionlint.yaml.
 for n in $(seq 1 "$LIGHT"); do instance "light-$n" "$NAME-light-$n" intentic-light; done
 
-# -- janitor: the WSL fleet's, unchanged (its defaults already match /ci-cache and ~/actions-runner-*) ---------------
-install -m 0755 "$HERE/fleet-janitor.sh" "$LIB/fleet-janitor.sh"
-cat > /etc/systemd/system/intentic-ci-janitor.service <<EOF
-[Unit]
-Description=Intentic CI fleet janitor: caps runner temp, /ci-cache and buildkit state ($LIB/fleet-janitor.sh)
-
-[Service]
-Type=oneshot
-ExecStart=$LIB/fleet-janitor.sh
-Nice=19
-IOSchedulingClass=idle
-TimeoutStartSec=3h
-EOF
-cat > /etc/systemd/system/intentic-ci-janitor.timer <<'EOF'
-[Unit]
-Description=Run the Intentic CI fleet janitor hourly
-
-[Timer]
-OnBootSec=20min
-OnUnitActiveSec=1h
-RandomizedDelaySec=5min
-
-[Install]
-WantedBy=timers.target
-EOF
-
 # -- docker and runner logs: what wsl-maintenance.ps1 does on omen, which no Windows task does here -----------------
-# linux-host-prune.sh says what it removes and when. dockerd itself caps what grows between its passes: each
-# container's log, and the default builder's cache. live-restore keeps job containers running through a docker
-# upgrade or restart.
-install -m 0755 "$HERE/linux-host-prune.sh" "$LIB/linux-host-prune.sh"
+# The fleet service's host prune (`--prune` below; _devices/machine src/ci-fleet/prune/) says what it removes and when.
+# dockerd itself caps what grows between its passes: each container's log, and the default builder's cache.
+# live-restore keeps job containers running through a docker upgrade or restart.
 install -d /etc/docker /var/lib/intentic-ci
 daemon_json='{
   "log-driver": "json-file",
@@ -142,7 +118,7 @@ daemon_json='{
 if [ "$(cat /etc/docker/daemon.json 2>/dev/null)" != "$daemon_json" ]; then
     printf '%s\n' "$daemon_json" > /etc/docker/daemon.json
     if pgrep -x Runner.Worker >/dev/null; then
-        # The prune timer restarts docker at its first pass with no job running.
+        # The fleet service's host prune restarts docker at its first pass with no job running.
         : > /var/lib/intentic-ci/docker-restart-pending
         say "wrote /etc/docker/daemon.json; docker restarts at the next idle prune pass"
     else
@@ -150,7 +126,7 @@ if [ "$(cat /etc/docker/daemon.json 2>/dev/null)" != "$daemon_json" ]; then
         say "wrote /etc/docker/daemon.json and restarted docker"
     fi
 fi
-# The journal holds every runner's and timer's output.
+# The journal holds every runner's and the fleet service's output.
 install -d /etc/systemd/journald.conf.d
 printf '[Journal]\nSystemMaxUse=2G\n' > /etc/systemd/journald.conf.d/90-intentic-ci.conf
 systemctl restart systemd-journald
@@ -159,69 +135,13 @@ if [ -f /etc/systemd/system/intentic-ci-docker-prune.timer ]; then
     systemctl disable --now intentic-ci-docker-prune.timer >/dev/null 2>&1
     rm -f /etc/systemd/system/intentic-ci-docker-prune.service /etc/systemd/system/intentic-ci-docker-prune.timer "$LIB/docker-prune.sh"
 fi
-cat > /etc/systemd/system/intentic-ci-prune.service <<EOF
-[Unit]
-Description=Intentic CI: prune docker images, containers, volumes, build cache and runner logs ($LIB/linux-host-prune.sh)
-After=docker.service
 
-[Service]
-Type=oneshot
-ExecStart=$LIB/linux-host-prune.sh
-Nice=19
-IOSchedulingClass=idle
-TimeoutStartSec=1h
-EOF
-cat > /etc/systemd/system/intentic-ci-prune.timer <<'EOF'
-[Unit]
-Description=Run the Intentic CI host prune every 15 minutes
-
-[Timer]
-OnBootSec=10min
-OnUnitActiveSec=15min
-RandomizedDelaySec=2min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-# -- the test-memory pool, shrunk to this host ------------------------------------------------------------------------
-# test-memory-pool.mjs flocks /ci-cache/test-slots/slot-N; a slot held here is one no job can take, so holding
-# slots TEST_SLOTS_USABLE+1..TEST_SLOTS_TOTAL leaves the workflows' pool the size of this machine. The gate band
-# (slot 1 up) stays whole: it is the low numbers that are reserved.
-cat > "$LIB/hold-test-slots.sh" <<'EOF'
-#!/usr/bin/env bash
-# GENERATED by _tools/scripts/ci/setup-linux-runner.sh -- holds test-memory-pool slots FIRST..LAST for as long as it runs.
-dir=$1 first=$2 last=$3
-mkdir -p "$dir"
-for i in $(seq "$first" "$last"); do
-    exec {fd}>>"$dir/slot-$i"
-    flock "$fd"
-done
-echo "holding $dir/slot-$first..slot-$last"
-exec sleep infinity
-EOF
-chmod 755 "$LIB/hold-test-slots.sh"
-if [ -n "$TEST_SLOTS_USABLE" ] && [ "$TEST_SLOTS_USABLE" -lt "$TEST_SLOTS_TOTAL" ]; then
-    cat > /etc/systemd/system/intentic-ci-test-slots.service <<EOF
-[Unit]
-Description=Intentic CI: keep $TEST_SLOTS_USABLE of the workflows' $TEST_SLOTS_TOTAL test-memory slots usable on this host
-
-[Service]
-ExecStart=$LIB/hold-test-slots.sh /ci-cache/test-slots $((TEST_SLOTS_USABLE + 1)) $TEST_SLOTS_TOTAL
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    slots_unit=intentic-ci-test-slots.service
-else
-    rm -f /etc/systemd/system/intentic-ci-test-slots.service
-    slots_unit=
-fi
-
-systemctl daemon-reload
-systemctl enable --now intentic-ci-janitor.timer intentic-ci-prune.timer >/dev/null
-if [ -n "$slots_unit" ]; then systemctl enable "$slots_unit" >/dev/null 2>&1; systemctl restart "$slots_unit"; fi
+# -- the fleet service: keeper, janitor, host prune and the test-memory pool, shrunk to this host ---------------------
+# One root service in place of the janitor's and the prune's timers and the slot-holding unit, which it disables. It
+# starts a runner unit that went down, caps runner temp, /ci-cache and buildkit state hourly, prunes Docker every 15
+# minutes, and holds test-memory-pool slots TEST_SLOTS_USABLE+1..16 so jobs here take only the first ones (the gate
+# band, slot 1 up, stays whole).
+"$AGENT" ci-fleet install --user "$RUNNER_USER" --prune ${TEST_SLOTS_USABLE:+--slots-usable "$TEST_SLOTS_USABLE"}
 
 say "docker $(docker version --format '{{.Server.Version}}'), runner $version, $(df -h --output=avail / | tail -n1 | tr -d ' ') free on /"
-say "timers: $(systemctl is-active intentic-ci-janitor.timer) janitor, $(systemctl is-active intentic-ci-prune.timer) host prune${slots_unit:+; test slots usable: $TEST_SLOTS_USABLE of $TEST_SLOTS_TOTAL ($(systemctl is-active "$slots_unit"))}"
+say "fleet service: $(systemctl is-active intentic-ci-fleet.service)${TEST_SLOTS_USABLE:+; test slots usable: $TEST_SLOTS_USABLE of 16}; \`intentic-machine ci-fleet status\` shows the runners and its passes"

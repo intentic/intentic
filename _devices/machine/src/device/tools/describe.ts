@@ -14,6 +14,7 @@ import {
     DEVICE_FEATURE_REMOTE_SERVICE,
     DEVICE_FEATURE_ADMIN_RUN,
     DEVICE_FEATURE_STACKS,
+    DEVICE_FEATURE_CI_RUNNERS,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -126,7 +127,8 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
         // while one is installed here and answers (keyring/feature.ts); people's remote access only where an
         // intentic-remoted can be had (remote/remoted-binary.ts), and its lock-screen service on Windows alone
         // (remote/remoted-service.ts). The `power-stay-on` op on Windows' own side alone, the one environment whose power
-        // plans the agent changes (power/apply.ts): a Linux or macOS fix needs root, and a WSL distro's are Windows'.
+        // plans the agent changes (power/apply.ts): a Linux or macOS fix needs root, and a WSL distro's are Windows'. The CI
+        // runner tools on Linux alone (a WSL distro included), where runners are systemd units (tools/ci-runners/).
         features: [
             ...features,
             DEVICE_FEATURE_LOOPBACK_CATCH,
@@ -139,6 +141,7 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
             ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
             ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE, DEVICE_FEATURE_ADMIN_RUN] : []),
             ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER] : []),
+            ...(platform() === "linux" ? [DEVICE_FEATURE_CI_RUNNERS] : []),
         ],
     };
     // Why that list is short, when the ic under it could not be brought up to date.

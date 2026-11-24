@@ -56,6 +56,7 @@ test("the tools marked as carrying a program are exactly the contract's table", 
         ["browser_evaluate", "runs JavaScript inside a web page, in the browser's own sandbox"],
         ["android_install", "installs an APK the owner's phone asks to confirm"],
         ["remove_sandbox", "names a sandbox slug and goes to ic; its own switch and the daemon's restart gate decide"],
+        ["ci_runner_remove", "names a runner the fleet service found here; it runs the runner's own svc.sh and config.sh, nothing sent"],
     ]);
     const destructive = response.result.tools.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name);
     expect(destructive.filter((name) => !carried.includes(name) && !carryNone.has(name))).toEqual([]);
@@ -116,6 +117,11 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "stack_action",
         "stack_logs",
         "deploy_stack",
+        "ci_runners",
+        "ci_runner_action",
+        "ci_runner_logs",
+        "ci_runner_register",
+        "ci_runner_remove",
     ]);
     expect(names).not.toContain("delete_file");
     // remove_sandbox is the one exception to "there is no delete", and is not a file tool: it deletes a sandbox
@@ -308,6 +314,8 @@ test("every tool says what a call can do to the device", async () => {
         "diagnose_sandbox",
         "list_stacks",
         "stack_logs",
+        "ci_runners",
+        "ci_runner_logs",
     ]);
     expect(tools.filter((entry) => entry.annotations.destructiveHint).map((entry) => entry.name)).toEqual([
         "run_command",
@@ -325,6 +333,7 @@ test("every tool says what a call can do to the device", async () => {
         "android_install",
         "app_start",
         "remove_sandbox",
+        "ci_runner_remove",
     ]);
 });
 

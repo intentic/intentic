@@ -1,6 +1,7 @@
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
+import { resetRunnerWhereabouts, type RunnerWhereabouts, runnerWhereabouts, whereaboutsWords } from "../../hosts/ci-fleet/runner-whereabouts.js";
 import { FIX_LOG_BYTES } from "../ci-fix.js";
 import { jobVerdict, machineOf } from "./fleet-verdict.js";
 import { orElse, tell } from "../main-ends.js";
@@ -21,6 +22,8 @@ interface FleetJob {
     readonly ambiguous: boolean;
     // The machine its runner ran on, as its log's first lines name it.
     readonly machine?: string;
+    // The connected computer that has its runner, and the runner's unit and state there, where one says so.
+    readonly found?: RunnerWhereabouts;
 }
 
 // What only this process holds, as main-fixer.ts's own: the fleet jobs already judged, so a job's log is not read twice
@@ -38,14 +41,24 @@ export const isFleetJob = (repo: string, job: Pick<FailedJob, "runId" | "jobId">
 export const fleetOf = (repo: string, runId: number): readonly FleetJob[] =>
     [...fleetJobs].filter(([key]) => key.startsWith(`${repo}/${runId}/`)).map(([, fleet]) => fleet);
 
+// Where a fleet job ran, in a notice's words: the computer that has its runner and the runner's unit and state there
+// when one of the owner's connected computers said so, else the runner and the hostname its log named.
+const whereWords = ({ job, machine, found }: FleetJob): string | undefined => {
+    if (found !== undefined) {
+        return `runner ${whereaboutsWords(found)}`;
+    }
+    const where = [job.runner === undefined ? undefined : `runner ${job.runner}`, machine === undefined ? undefined : `on ${machine}`].filter(
+        (part) => part !== undefined,
+    );
+    return where.length === 0 ? undefined : where.join(" ");
+};
+
 // Each fleet job in the words a notice or a prompt names it by: the job, the runner and machine it ran on, what happened.
 const fleetWords = (fleet: readonly FleetJob[]): string =>
     fleet
-        .map(({ job, says, machine }) => {
-            const where = [job.runner === undefined ? undefined : `runner ${job.runner}`, machine === undefined ? undefined : `on ${machine}`].filter(
-                (part) => part !== undefined,
-            );
-            return `"${job.name}"${where.length === 0 ? "" : ` (${where.join(" ")})`}: ${says}`;
+        .map((fleetJob) => {
+            const where = whereWords(fleetJob);
+            return `"${fleetJob.job.name}"${where === undefined ? "" : ` (${where})`}: ${fleetJob.says}`;
         })
         .join("; ");
 
@@ -84,11 +97,14 @@ export const judgedFleet = async (
     if (verdict.kind === "ambiguous" && (ambiguousIsCode || (await services.ciStore.fleetRerunDone(project.repo, job.runId)))) {
         return false;
     }
+    // Asked only once the job is the fleet's, and best-effort: a computer that does not answer leaves the log's hostname.
+    const found = job.runner === undefined ? undefined : await runnerWhereabouts(services, job.runner);
     fleetJobs.set(keyOf(project.repo, job), {
         job: { ...job, annotations },
         says: verdict.says,
         ambiguous: verdict.kind === "ambiguous",
         ...opt("machine", machineOf(log)),
+        ...opt("found", found),
     });
     return true;
 };
@@ -154,4 +170,5 @@ export const rerunFleet = async (services: Services, project: CiProject, run: Pi
 export const resetMainFleet = (): void => {
     fleetJobs.clear();
     rerunRefused.clear();
+    resetRunnerWhereabouts();
 };

@@ -18,12 +18,9 @@ export interface CiProject {
     readonly account: GitHost;
 }
 
-// Every workspace repo (root included) whose remote lands on a connected github/gitlab account.
-export const ciProjects = async (
-    services: { readonly workspace: { readonly root: string }; readonly capabilities: CapabilitiesStore },
-    git: GitRunner = defaultGit,
-): Promise<CiProject[]> => {
-    const accounts: GitHost[] = (await services.capabilities.list()).flatMap((capability) => {
+/** Every connected github/gitlab account, as the REST calls address it: host, API base and token. */
+export const forgeAccounts = async (capabilities: CapabilitiesStore): Promise<GitHost[]> =>
+    (await capabilities.list()).flatMap((capability) => {
         if (capability.kind !== "cli" || (capability.config.provider !== "github" && capability.config.provider !== "gitlab")) {
             return [];
         }
@@ -34,6 +31,13 @@ export const ciProjects = async (
             return [];
         }
     });
+
+// Every workspace repo (root included) whose remote lands on a connected github/gitlab account.
+export const ciProjects = async (
+    services: { readonly workspace: { readonly root: string }; readonly capabilities: CapabilitiesStore },
+    git: GitRunner = defaultGit,
+): Promise<CiProject[]> => {
+    const accounts = await forgeAccounts(services.capabilities);
     if (accounts.length === 0) {
         return [];
     }

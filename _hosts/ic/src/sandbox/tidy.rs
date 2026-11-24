@@ -72,7 +72,7 @@ const WEEK_RECORD_TYPES: [&str; 3] = ["regular", "source.local", "source.git.che
 const CACHE_MOUNT: &str = "exec.cachemount";
 
 /// The most build cache no image shares that tidy leaves once the week's rule has run, least recently used going first
-/// above it, as the CI hosts keep theirs (_tools/scripts/ci/linux-host-prune.sh). The week alone bounds nothing on an
+/// above it, as the CI hosts keep theirs (_devices/machine/src/ci-fleet/prune/prune.ts). The week alone bounds nothing on an
 /// engine that builds daily: every overlay rebuild onto a new base writes a fresh chain of the recipe's steps, and on rog
 /// (2026-11-18) a dev sandbox's Android/Flutter environment rebuilt four times in five days left 85.81 GB of private,
 /// reclaimable cache, every record used within the week, so the week's prune took 0 B of it. BuildKit counts only the

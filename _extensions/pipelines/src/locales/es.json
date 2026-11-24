@@ -216,5 +216,77 @@
         "started": "Iniciado",
         "updated": "Actualizado",
         "step": "Paso"
+    },
+    "runners": {
+        "title": "Runners en {device}",
+        "notAnswering": "No se pudieron leer sus runners: {error}",
+        "service": {
+            "running": "Servicio de flota en marcha",
+            "runningVersion": "Servicio de flota en marcha v{version}",
+            "notAnswering": "El servicio de flota no responde",
+            "notInstalled": "Servicio de flota no instalado: aquí sus runners son de solo lectura"
+        },
+        "pool": "CI puede usar {usable} de {total} slots de pruebas; {held} reservados para sandboxes",
+        "light": "carril ligero",
+        "lightTip": "Primeros jobs",
+        "doing": {
+            "aJob": "un job",
+            "running": "Ejecutando {job}",
+            "runningFor": "Ejecutando {job} desde hace {elapsed}",
+            "draining": "Vaciando: se detiene cuando termine su job",
+            "notInstalled": "Su unidad de systemd ya no existe: regístralo de nuevo",
+            "failed": "Falló: vuelve a iniciarlo o lee su log",
+            "stopped": "Detenido",
+            "idle": "Libre",
+            "state": "{state}"
+        },
+        "held": {
+            "board": "Detenido desde aquí",
+            "drain": "Vaciado",
+            "smoke": "En pausa por un job de smoke de Windows"
+        },
+        "action": {
+            "start": "Iniciar",
+            "drain": "Vaciar",
+            "drainTip": "Lo detiene cuando termine su job",
+            "restart": "Reiniciar",
+            "restartTip": "Lo vacía y lo vuelve a iniciar",
+            "stop": "Detener",
+            "logs": "Log",
+            "remove": "Quitar",
+            "drainInstead": "Está ejecutando un job: vacíalo en su lugar",
+            "needsService": "Necesita el servicio de flota en este equipo",
+            "add": "Añadir un runner"
+        },
+        "logs": {
+            "title": "Log de {name}",
+            "loading": "Leyendo su log…",
+            "empty": "Su servicio aún no ha escrito nada."
+        },
+        "remove": {
+            "header": "¿Quitar {name}?",
+            "description": "Se da de baja en GitHub y su servicio se quita de {device}. Su carpeta se queda.",
+            "confirm": "Quitar runner"
+        },
+        "add": {
+            "header": "Añadir un runner a {device}",
+            "description": "Registra un runner autoalojado de GitHub Actions para el repositorio que elijas. El equipo descarga el runner y lo inicia, lo que tarda unos minutos.",
+            "name": "Nombre",
+            "labels": "Etiquetas",
+            "labelsHelp": "Separadas por comas. Un nombre del carril ligero (-light-N) solo lleva intentic-light.",
+            "repo": "Repositorio",
+            "noRepo": "Ningún repositorio del espacio de trabajo tiene un remoto de GitHub.",
+            "submit": "Añadir runner",
+            "cancel": "Cancelar",
+            "adding": "Añadiendo {name}: tarda unos minutos."
+        },
+        "pass": {
+            "janitor": "Última pasada del janitor",
+            "keeper": "Última pasada del keeper",
+            "prune": "Última limpieza del host",
+            "freed": "liberó {bytes}",
+            "dryRun": "solo informe",
+            "noLines": "Nada que informar."
+        }
     }
 }

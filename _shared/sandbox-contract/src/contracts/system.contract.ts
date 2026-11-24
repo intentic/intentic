@@ -20,6 +20,7 @@ import {
     StackLogsSchema,
     StackOpResultSchema,
 } from "../schemas/device-stacks.js";
+import { deviceCiRunnerRoutes } from "./device-ci-runners.contract.js";
 import { EgressOwnerKeysReadSchema } from "../schemas/egress.js";
 import { SandboxReachSchema } from "../schemas/sandbox-reach.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
@@ -576,4 +577,6 @@ export const systemContract = {
         .meta({ panel: false })
         .input(DeviceStackDeployInputSchema)
         .output(DeviceStackDeployResultSchema),
+    // The self-hosted CI runners on a connected computer, for the Pipelines view (device-ci-runners.contract.ts).
+    ...deviceCiRunnerRoutes,
 };

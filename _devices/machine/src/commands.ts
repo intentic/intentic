@@ -1,6 +1,7 @@
 import { explain, type Ui } from "@intentic/local-agent";
 import { buildRouteMap, type CommandContext } from "@stricli/core";
 import { beforeSignInCommand } from "./autostart/before-sign-in.js";
+import { ciFleetRoutes } from "./ci-fleet/commands.js";
 import { buildCommand, machineUi } from "./cli-ui.js";
 import { runLogPath } from "./config.js";
 import { deviceCommands } from "./device/commands.js";
@@ -162,6 +163,8 @@ export const commands = buildRouteMap({
         // The computer's own power plans (power/): what would sleep it through work left running, and on Windows the
         // mains-power values changed at the owner's word (the sandbox's `power-stay-on` op runs `power stay-on`).
         power: powerRoutes,
+        // The self-hosted CI runners on a Linux computer and the root service that keeps them (ci-fleet/).
+        "ci-fleet": ciFleetRoutes,
         run,
         "before-sign-in": beforeSignInCommand,
         status,

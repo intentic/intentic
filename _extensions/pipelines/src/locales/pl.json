@@ -216,5 +216,77 @@
         "started": "Start",
         "updated": "Zmiana",
         "step": "Krok"
+    },
+    "runners": {
+        "title": "Runnery na {device}",
+        "notAnswering": "Nie udało się odczytać runnerów: {error}",
+        "service": {
+            "running": "Usługa floty działa",
+            "runningVersion": "Usługa floty działa v{version}",
+            "notAnswering": "Usługa floty nie odpowiada",
+            "notInstalled": "Usługa floty nie jest zainstalowana: runnery są tu tylko do odczytu"
+        },
+        "pool": "CI może użyć {usable} z {total} slotów testowych; {held} zarezerwowano dla sandboxów",
+        "light": "lekki tor",
+        "lightTip": "Pierwsze joby",
+        "doing": {
+            "aJob": "job",
+            "running": "Wykonuje {job}",
+            "runningFor": "Wykonuje {job} od {elapsed}",
+            "draining": "Opróżnianie: zatrzyma się po zakończeniu joba",
+            "notInstalled": "Jego jednostka systemd zniknęła: zarejestruj go ponownie",
+            "failed": "Błąd: uruchom go ponownie lub przeczytaj log",
+            "stopped": "Zatrzymany",
+            "idle": "Wolny",
+            "state": "{state}"
+        },
+        "held": {
+            "board": "Zatrzymany stąd",
+            "drain": "Opróżniony",
+            "smoke": "Wstrzymany na job smoke dla Windows"
+        },
+        "action": {
+            "start": "Uruchom",
+            "drain": "Opróżnij",
+            "drainTip": "Zatrzymuje go po zakończeniu joba",
+            "restart": "Uruchom ponownie",
+            "restartTip": "Opróżnia go i uruchamia ponownie",
+            "stop": "Zatrzymaj",
+            "logs": "Log",
+            "remove": "Usuń",
+            "drainInstead": "Wykonuje job: zamiast tego go opróżnij",
+            "needsService": "Wymaga usługi floty na tym komputerze",
+            "add": "Dodaj runner"
+        },
+        "logs": {
+            "title": "Log {name}",
+            "loading": "Odczytywanie logu…",
+            "empty": "Jego usługa jeszcze nic nie wypisała."
+        },
+        "remove": {
+            "header": "Usunąć {name}?",
+            "description": "Zostanie wyrejestrowany z GitHuba, a jego usługa usunięta z {device}. Jego folder zostaje.",
+            "confirm": "Usuń runner"
+        },
+        "add": {
+            "header": "Dodaj runner do {device}",
+            "description": "Rejestruje samodzielnie hostowany runner GitHub Actions dla wybranego repozytorium. Komputer pobiera runner i go uruchamia, co trwa kilka minut.",
+            "name": "Nazwa",
+            "labels": "Etykiety",
+            "labelsHelp": "Oddzielone przecinkami. Nazwa lekkiego toru (-light-N) dostaje tylko intentic-light.",
+            "repo": "Repozytorium",
+            "noRepo": "Żadne repozytorium obszaru roboczego nie ma remote'a GitHub.",
+            "submit": "Dodaj runner",
+            "cancel": "Anuluj",
+            "adding": "Dodawanie {name}: to potrwa kilka minut."
+        },
+        "pass": {
+            "janitor": "Ostatni przebieg janitora",
+            "keeper": "Ostatni przebieg keepera",
+            "prune": "Ostatnie czyszczenie hosta",
+            "freed": "zwolniono {bytes}",
+            "dryRun": "tylko raport",
+            "noLines": "Nic do zgłoszenia."
+        }
     }
 }

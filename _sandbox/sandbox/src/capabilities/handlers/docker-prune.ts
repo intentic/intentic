@@ -12,7 +12,7 @@ import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 // engine that is not running holds nothing that grows.
 //
 // BUILD CACHE KEPT UNDER 5 GB (2026-11-18), least recently used first, as the CI hosts' prune keeps theirs
-// (_tools/scripts/ci/linux-host-prune.sh). BuildKit counts only what no image shares toward the cap and removes one
+// (_devices/machine/src/ci-fleet/prune/prune.ts). BuildKit counts only what no image shares toward the cap and removes one
 // record at a time, oldest use first, until it is under, so the newest builds stay warm; without `--all` it never takes a
 // frontend or internal record. Measured on the intentic sandbox's engine that day: 14.92 GB of build cache, 10.69 GB of
 // it reclaimable and 9.05 GB unshared and unused for 7 to 30 days, which nothing had ever removed. The week rule ic's

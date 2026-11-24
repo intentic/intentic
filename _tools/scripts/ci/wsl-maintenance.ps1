@@ -24,6 +24,9 @@ param(
     [int]$KeepReleases = 3,
     [string]$JanitorFlag = '/var/lib/intentic-ci/compact-requested',
     [string]$JanitorUnit = 'intentic-ci-janitor.service',
+    # The machine agent's CI fleet service, which runs the janitor in a distro moved to it, and the root-owned binary it runs.
+    [string]$FleetUnit = 'intentic-ci-fleet.service',
+    [string]$FleetBinary = '/usr/local/lib/intentic-ci/intentic-machine',
     [switch]$NoCompact,
     [switch]$NoSparse,
     # Where each run looks for a newer copy of this script; empty turns it off. The installed copy is one somebody
@@ -562,7 +565,8 @@ function Restore-DockerIntegration {
 
 # ---- the CI fleet janitor ---------------------------------------------------------------------
 
-# fleet-janitor.sh leaves -JanitorFlag in its distro after a pass that freed a lot. Only RUNNING
+# The CI fleet janitor (intentic-ci-fleet.service's, or the fleet-janitor.sh a distro not yet moved to it still runs)
+# leaves -JanitorFlag in its distro after a pass that freed a lot. Only RUNNING
 # distros are asked, so the hourly guard never boots one. Returns "<distro>: <flag text>" lines.
 function Get-CompactRequests {
     $found = @()
@@ -581,10 +585,18 @@ function Clear-CompactRequests {
     }
 }
 
-# Low on space: have the janitor take its caps now rather than at its next hourly slot.
+# Low on space: have the janitor take its caps now rather than at its next hourly slot. A distro running the fleet
+# service is asked through it (one janitor pass at a time, whoever asks); the old timer's unit is only for a distro the
+# service is not installed in yet, since on one it is, that unit is disabled and runs the retired script.
 function Start-Janitor {
     foreach ($d in (Get-WslDistros -Running)) {
         if ($d -like 'docker-desktop*') { continue }
+        $fleet = ((& wsl.exe -d $d -e systemctl is-active $FleetUnit 2>$null | ForEach-Object { ($_ -replace "`0", '').Trim() }) -join '')
+        if ($fleet -eq 'active') {
+            & wsl.exe -d $d -u root -e systemd-run --no-block --collect $FleetBinary ci-fleet janitor 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { Write-Log "asked $FleetUnit in $d for a janitor pass" }
+            continue
+        }
         & wsl.exe -d $d -u root -e systemctl start --no-block $JanitorUnit 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { Write-Log "started $JanitorUnit in $d" }
     }

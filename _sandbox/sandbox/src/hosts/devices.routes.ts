@@ -11,6 +11,8 @@ import { opt } from "../opt.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
 import { deployDeviceStack, deviceStackLogs, deviceStackOp, deviceStacks } from "./stacks/device-stacks.js";
+import { deviceCiFleet, deviceCiRunnerLogs, deviceCiRunnerOp } from "./ci-fleet/device-ci-fleet.js";
+import { registerDeviceCiRunner, removeDeviceCiRunner } from "../ci/fleet/runner-registration.js";
 import { egressOwnerKeys } from "./egress/owner-keys.js";
 import { egressSuggestions } from "./egress/suggestions.js";
 import { isOwnerBearer, requireMaintainer } from "../auth/owner-gates.js";
@@ -140,6 +142,7 @@ export const createDeviceSystemRoutes = (services: Services) => {
             yield* runDeviceAgentFlow(services, input.id, { op: input.op });
         }),
         ...createDeviceStackRoutes(services),
+        ...createDeviceCiRunnerRoutes(services),
     };
 };
 
@@ -154,5 +157,19 @@ const createDeviceStackRoutes = (services: Services) => {
         deviceStackOp: i.deviceStackOp.handler(async ({ input }) => await deviceStackOp(services, input)),
         deviceStackLogs: i.deviceStackLogs.handler(async ({ input }) => await deviceStackLogs(services, input)),
         deployDeviceStack: i.deployDeviceStack.handler(async ({ input }) => await deployDeviceStack(services, input)),
+    };
+};
+
+// The self-hosted CI runners on a connected device, for the Pipelines view (ci-fleet/device-ci-fleet.ts; adding and
+// removing one, which takes a GitHub token, is ../ci/fleet/runner-registration.ts). Gated as the
+// stack routes are, by the routes' own floor and the computer's switches, so an extension's backend can call them.
+const createDeviceCiRunnerRoutes = (services: Services) => {
+    const i = implement(systemContract).$context<OrpcContext>();
+    return {
+        deviceCiFleet: i.deviceCiFleet.handler(async ({ input }) => await deviceCiFleet(services, input.id)),
+        deviceCiRunnerOp: i.deviceCiRunnerOp.handler(async ({ input }) => await deviceCiRunnerOp(services, input)),
+        deviceCiRunnerLogs: i.deviceCiRunnerLogs.handler(async ({ input }) => await deviceCiRunnerLogs(services, input)),
+        registerDeviceCiRunner: i.registerDeviceCiRunner.handler(async ({ input }) => await registerDeviceCiRunner(services, input)),
+        removeDeviceCiRunner: i.removeDeviceCiRunner.handler(async ({ input }) => await removeDeviceCiRunner(services, input)),
     };
 };

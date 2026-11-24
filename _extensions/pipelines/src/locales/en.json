@@ -216,5 +216,77 @@
         "started": "Started",
         "updated": "Updated",
         "step": "Step"
+    },
+    "runners": {
+        "title": "Runners on {device}",
+        "notAnswering": "Could not read its runners: {error}",
+        "service": {
+            "running": "Fleet service running",
+            "runningVersion": "Fleet service running v{version}",
+            "notAnswering": "Fleet service not answering",
+            "notInstalled": "Fleet service not installed: its runners are read-only here"
+        },
+        "pool": "CI may use {usable} of {total} test slots; {held} held for sandboxes",
+        "light": "light lane",
+        "lightTip": "First jobs",
+        "doing": {
+            "aJob": "a job",
+            "running": "Running {job}",
+            "runningFor": "Running {job} for {elapsed}",
+            "draining": "Draining: stops when its job ends",
+            "notInstalled": "Its systemd unit is gone: register it again",
+            "failed": "Failed: start it again, or read its log",
+            "stopped": "Stopped",
+            "idle": "Idle",
+            "state": "{state}"
+        },
+        "held": {
+            "board": "Stopped from here",
+            "drain": "Drained",
+            "smoke": "Paused for a Windows smoke job"
+        },
+        "action": {
+            "start": "Start",
+            "drain": "Drain",
+            "drainTip": "Stops it once its job ends",
+            "restart": "Restart",
+            "restartTip": "Drains it, then starts it again",
+            "stop": "Stop",
+            "logs": "Logs",
+            "remove": "Remove",
+            "drainInstead": "Running a job: drain it instead",
+            "needsService": "Needs the fleet service on this computer",
+            "add": "Add a runner"
+        },
+        "logs": {
+            "title": "{name} log",
+            "loading": "Reading its log…",
+            "empty": "Its service has printed nothing yet."
+        },
+        "remove": {
+            "header": "Remove {name}?",
+            "description": "It is taken off GitHub and its service is removed from {device}. Its folder stays.",
+            "confirm": "Remove runner"
+        },
+        "add": {
+            "header": "Add a runner to {device}",
+            "description": "Registers a self-hosted GitHub Actions runner for the repository you pick. The computer downloads the runner and starts it, which takes a few minutes.",
+            "name": "Name",
+            "labels": "Labels",
+            "labelsHelp": "Comma-separated. A light-lane name (-light-N) takes intentic-light only.",
+            "repo": "Repository",
+            "noRepo": "No workspace repository has a GitHub remote.",
+            "submit": "Add runner",
+            "cancel": "Cancel",
+            "adding": "Adding {name}: this takes a few minutes."
+        },
+        "pass": {
+            "janitor": "Last janitor pass",
+            "keeper": "Last keeper pass",
+            "prune": "Last host prune",
+            "freed": "freed {bytes}",
+            "dryRun": "report only",
+            "noLines": "Nothing to report."
+        }
     }
 }

@@ -16,7 +16,13 @@
             "POST /ci/runs/dispatch",
             "POST /ci/failures/forget",
             "POST /ci/runs/jobs",
-            "POST /ci/fix"
+            "POST /ci/fix",
+            "GET /system/devices",
+            "GET /system/devices/*/ci-runners",
+            "POST /system/devices/*/ci-runners/*/ops/*",
+            "GET /system/devices/*/ci-runners/*/logs",
+            "POST /system/devices/*/ci-runners",
+            "DELETE /system/devices/*/ci-runners/*"
         ]
     },
     "contributes": {

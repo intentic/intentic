@@ -34,6 +34,7 @@ import { coveredRuns, dispatchKey, forgetKey, leadsRows, mainFailuresOf, type Ma
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
+import RunnersSection from "./runners/RunnersSection.vue";
 import { type RepoStanding, repoStandings, standingNote } from "./repoStandings";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
@@ -435,6 +436,10 @@ const fixRun = async (
                         </div>
                     </div>
                 </Await>
+
+                <!-- The self-hosted runners these runs land on, under the runs: outside the board's Await, since it reads
+                     the computers rather than the CI routes, and draws nothing where no computer has runners. -->
+                <RunnersSection :repos="repos" class="mt-8" />
             </div>
         </template>
     </SplitView>

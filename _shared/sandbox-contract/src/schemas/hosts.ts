@@ -225,6 +225,10 @@ export const DeviceFeatureSchema = z.enum([
     // a Windows agent that advertises `remote-service`; an agent without it would drop the field and run the command
     // unelevated, so the daemon refuses `admin` to it rather than forward it.
     "admin-run",
+    // (2026-11-24) `ci_runners`, `ci_runner_action`, `ci_runner_logs`, `ci_runner_register` and `ci_runner_remove`: the
+    // self-hosted GitHub Actions runners on this computer, read and driven from the Pipelines view
+    // (schemas/ci-fleet.ts). Advertised by a Linux agent: the runners are systemd units.
+    "ci-runners",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -242,6 +246,7 @@ export const DEVICE_FEATURE_REACH_NETWORK: DeviceFeature = "reach-network";
 export const DEVICE_FEATURE_SANDBOX_MOVE: DeviceFeature = "sandbox-move";
 export const DEVICE_FEATURE_FILE_COPY: DeviceFeature = "file-copy";
 export const DEVICE_FEATURE_STACKS: DeviceFeature = "stacks";
+export const DEVICE_FEATURE_CI_RUNNERS: DeviceFeature = "ci-runners";
 export const DEVICE_FEATURE_REMOTE: DeviceFeature = "remote";
 export const DEVICE_FEATURE_REMOTE_ICE: DeviceFeature = "remote-ice";
 export const DEVICE_FEATURE_REMOTE_SERVICE: DeviceFeature = "remote-service";
