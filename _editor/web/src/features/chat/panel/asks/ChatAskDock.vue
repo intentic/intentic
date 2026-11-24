@@ -4,13 +4,14 @@ import { ui } from "@intentic/ui";
 import { countBadgePlate, countBadgeText } from "@intentic/ui/count-badge";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onBeforeUnmount, provide, useTemplateRef, watch } from "vue";
-import { CARD_ANSWERS_WITHHELD } from "../../../../components/ChatCard.vue";
+import { CARD_ANSWERS_WITHHELD, CARD_HEADER_TAIL } from "../../../../components/ChatCard.vue";
 import type { PendingAsk } from "../../../../models/conversations/panel/pendingAsks";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useDriveRefusal } from "../../session/driveRefusal";
 import { useAskDock } from "./askDock";
 import { askLabel } from "./askWords";
 import ChatAskBody from "./ChatAskBody.vue";
+import ChatAskControls from "./ChatAskControls.vue";
 
 // One place for every ask, pinned where the transcript cannot scroll it away. It replaced two: a bar that named only the
 // newest card and sent the reader up the transcript to answer it, and a strip of needs answered in place. Both kinds are
@@ -44,11 +45,18 @@ provide(
 
 // Chips whenever there is a choice to make or nothing open to read: several asks, or a folded dock.
 const chips = computed(() => count.value > 1 || !open.value);
+// ONE ASK, OPEN: the card is the dock's head. A header of the dock's own over the card's read as a box in a box, two
+// headings and two glyphs stacked over one question; the card's title already says what waits, and its live mark that
+// it waits. The dock's presses ride at the end of the card's header instead (CARD_HEADER_TAIL), and its headline stays
+// the dock's name for a screen reader.
+const ownHead = computed(() => chips.value || selected.value === undefined);
+provide(
+    CARD_HEADER_TAIL,
+    computed(() => (ownHead.value ? undefined : ChatAskControls)),
+);
 const isOn = (ask: PendingAsk): boolean => open.value && ask.key === selected.value?.key;
 // A chip opens its ask; the open one's chip folds the dock again.
 const press = (ask: PendingAsk): void => (isOn(ask) ? dock?.toggle() : dock?.pick(ask.key));
-// Only an ask made in this transcript has a row to go to; a child's is in its own chat.
-const inChat = computed(() => selected.value !== undefined && open.value && selected.value.source !== `child` && selected.value.source !== `undrawn`);
 const headline = computed(() => (canDrive.value ? t(`chat.askDock.waitingOnYou`) : t(`chat.askDock.waitingOnOthers`)));
 // The open ask's chip brought into the row's view, when the row has scrolled it off one side.
 const chipRow = useTemplateRef<HTMLElement>(`chipRow`);
@@ -63,15 +71,18 @@ watch(
 </script>
 
 <template>
-    <!-- `chat-card` for its measures alone (chat.css): the header's mark column and the chips' start stand on the card's own edges. -->
+    <!-- `chat-card` for its measures alone (chat.css): the header's mark column and the chips' start stand on the card's own edges.
+         The frame is drawn OVER what it holds (`after:`), not as the box's own border: the open ask scrolls in a layer of its
+         own, and at a fractional offset the GPU snapped that layer over the bottom edge, so the frame lost its foot and the
+         shadow under it read as cutting it. No shadow either: the dock stands on the footer's own ground, like the notices. -->
     <section
         v-if="dock && count > 0"
         ref="root"
-        class="chat-card flex flex-col overflow-hidden rounded-xl border border-primary-500/40 bg-card text-2xs shadow-sm"
+        class="chat-card relative flex flex-col overflow-hidden rounded-xl bg-card text-2xs after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-primary-500/40"
         :aria-label="headline"
         data-ask-dock
     >
-        <div class="chat-card-header items-center text-xs" :class="chips && `pb-1`">
+        <div v-if="ownHead" class="chat-card-header items-center text-xs" :class="chips && `pb-1`">
             <Icon name="exclamation-circle" class="text-sm text-accent" />
             <span class="flex min-w-0 items-center gap-1.5">
                 <span class="truncate font-semibold text-content">{{ headline }}</span>
@@ -79,26 +90,7 @@ watch(
                     countBadgeText(count)
                 }}</span>
             </span>
-            <button
-                v-if="inChat"
-                type="button"
-                :class="ui.iconButton({ size: `sm` })"
-                :aria-label="t(`chat.askDock.showInChat`)"
-                v-tooltip.top="{ title: t(`chat.askDock.showInChat`) }"
-                @click="selected && dock.showInChat(selected.key)"
-            >
-                <Icon name="arrow-up" class="text-2xs" />
-            </button>
-            <button
-                type="button"
-                :class="ui.iconButton({ size: `sm` })"
-                :aria-expanded="open"
-                :aria-label="open ? t(`chat.askDock.fold`) : t(`chat.askDock.unfold`)"
-                v-tooltip.top="open ? t(`chat.askDock.fold`) : t(`chat.askDock.unfold`)"
-                @click="dock.toggle()"
-            >
-                <Icon :name="open ? `chevron-down` : `chevron-up`" class="text-2xs" />
-            </button>
+            <ChatAskControls />
         </div>
         <!-- One chip per ask, in the order asked: its glyph and a few words, lit for the open one. One line that scrolls
              sideways rather than wrapping, so a phone's footer does not grow a row per ask; the count says how many there are. -->
@@ -123,12 +115,15 @@ watch(
                 <span class="max-w-48 truncate">{{ askLabel(ask, t) }}</span>
             </button>
         </div>
-        <!-- The open ask, capped so the transcript keeps room, its answers row held at the foot while the rest scrolls. -->
+        <!-- The open ask, capped so the transcript keeps room, its answers row held at the foot while the rest scrolls. The
+             card clips rather than hides (`overflow-clip`): a box that hides is a scroller of its own, which the answers row
+             stuck to instead of this one, and so scrolled away with the options it answers. -->
         <div
             v-if="open && selected"
             :key="selected.key"
             data-ask-body
-            class="max-h-[50dvh] overflow-y-auto overscroll-contain border-t border-line [&_.chat-card-actions]:sticky [&_.chat-card-actions]:bottom-0 [&_.chat-card-actions]:bg-card"
+            class="max-h-[50dvh] overflow-y-auto overscroll-contain [&_.chat-card]:overflow-clip [&_.chat-card-actions]:sticky [&_.chat-card-actions]:bottom-0 [&_.chat-card-actions]:bg-card"
+            :class="ownHead && `border-t border-line`"
         >
             <ChatAskBody :ask="selected" :can-drive="canDrive" @approve="emit(`approve`)" @keep-planning="emit(`keepPlanning`)" />
         </div>

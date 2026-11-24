@@ -1,6 +1,6 @@
 <!-- Shared shell for cards that ask the user something. -->
 <script lang="ts">
-import type { InjectionKey, Ref } from "vue";
+import type { Component, InjectionKey, Ref } from "vue";
 // Shared shell for every card that asks the user something: header, slot, and the answers below. Every title sits at the
 // body tier and carries its weight, whether it is a sentence or a name. Every inset comes from `.chat-card`'s own
 // measures in chat.css, not from each card.
@@ -16,6 +16,12 @@ export interface CardStatus {
  * card draws in place of its answers, saying who it waits on. Undefined, or not provided, draws the answers.
  */
 export const CARD_ANSWERS_WITHHELD: InjectionKey<Readonly<Ref<string | undefined>>> = Symbol(`card-answers-withheld`);
+
+/**
+ * Provided by a host that wears the card as its own head (the dock above the composer, holding one ask): its presses,
+ * drawn at the end of the card's header, so the host adds no second header over the card's. Undefined draws nothing.
+ */
+export const CARD_HEADER_TAIL: InjectionKey<Readonly<Ref<Component | undefined>>> = Symbol(`card-header-tail`);
 </script>
 
 <script setup lang="ts">
@@ -40,6 +46,7 @@ const {
 }>();
 
 const injected = inject(CARD_ANSWERS_WITHHELD, undefined);
+const tail = inject(CARD_HEADER_TAIL, undefined);
 // Only a live card waits on anybody; a settled one keeps its record either way.
 const withheld = computed(() => (status === undefined ? injected?.value : undefined));
 </script>
@@ -67,6 +74,7 @@ const withheld = computed(() => (status === undefined ? injected?.value : undefi
                 <Icon :name="status.tone === `done` ? `check` : `times`" :class="status.tone === `done` ? `text-success` : `text-subtle`" />
                 {{ status.label }}
             </span>
+            <component :is="tail" v-if="tail" />
         </div>
 
         <slot />

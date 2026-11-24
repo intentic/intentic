@@ -97,6 +97,12 @@ const mountDock = (chat: Chat, { card, canDrive = true }: { card?: AgentStanding
         dock: (): Dock => dock!,
         // The header's words, the count with them.
         headline: (): string => squash(root()?.querySelector(`.chat-card-header`)),
+        // What a screen reader names the dock by.
+        label: (): string => root()?.getAttribute(`aria-label`) ?? ``,
+        // Every header drawn in the dock, the dock's own and the card's, and the presses each one ends on.
+        headers: (): string[] => [...(root()?.querySelectorAll(`.chat-card-header`) ?? [])].map(squash),
+        headerPresses: (): string[][] =>
+            [...(root()?.querySelectorAll(`.chat-card-header`) ?? [])].map((header) => [...header.querySelectorAll(`button[aria-label]`)].map((button) => button.getAttribute(`aria-label`) ?? ``)),
         chips: (): string[] => [...element.querySelectorAll(`[data-ask-chip]`)].map((chip) => `${chip.getAttribute(`aria-pressed`) === `true` ? `*` : ``}${squash(chip)}`),
         body: (): string => squash(element.querySelector(`[data-ask-body]`)),
         press: (label: string): void => [...element.querySelectorAll(`button`)].find((button) => squash(button) === label || button.getAttribute(`aria-label`) === label)?.click(),
@@ -233,7 +239,45 @@ describe(`a plan`, () => {
         const dock = mountDock(chat, { canDrive: false });
         await nextTick();
 
-        expect(dock.headline()).toBe(`Waiting on someone who runs agents`);
-        expect(dock.body()).toBe(`Ship the importer Read plan`);
+        // One ask open: its own header is the dock's head, and the dock's name stays for a screen reader.
+        expect(dock.headline()).toBe(`Ship the importer`);
+        expect(dock.label()).toBe(`Waiting on someone who runs agents`);
+        expect(dock.body()).toBe(`Ship the importer Waiting on someone who runs agents to answer. Read plan`);
+    });
+});
+
+describe(`the dock's head`, () => {
+    // A header of the dock's own over the one card it holds read as a box in a box: two headings over one question.
+    it(`is the card's own header while it holds one ask open, with the dock's presses at its end`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.transcript.adopt(PLAN);
+        const dock = mountDock(chat);
+        await nextTick();
+
+        expect(dock.headers()).toEqual([`Ship the importer`]);
+        expect(dock.headerPresses()).toEqual([[`Show in chat`, `Fold`]]);
+    });
+
+    it(`is the dock's own, over the chips, while there is a choice of asks`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.transcript.adopt(ROWS);
+        const dock = mountDock(chat);
+        await nextTick();
+
+        expect(dock.headers()).toEqual([`Waiting on you 2`]);
+        expect(dock.headerPresses()).toEqual([[`Show in chat`, `Fold`]]);
+    });
+
+    it(`is the dock's own once folded, the one ask a chip under it`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.transcript.adopt(PLAN);
+        const dock = mountDock(chat);
+        await nextTick();
+        dock.press(`Fold`);
+        await nextTick();
+
+        expect(dock.headers()).toEqual([`Waiting on you`]);
+        expect(dock.headerPresses()).toEqual([[`Unfold`]]);
+        expect(dock.chips()).toEqual([`Ship the importer`]);
     });
 });

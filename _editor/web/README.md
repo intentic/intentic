@@ -734,7 +734,8 @@ One word per idea on screen and in code. The retired spellings are refused by
 Everything a chat waits on a person for stands in one dock above the composer (`features/chat/panel/asks/`): a count,
 one chip per ask in the order asked (cards the turn is parked on, needs it went on without, its children's permissions),
 and the open ask answered in place, while the transcript keeps a one-line stub where it was asked and the settled card
-once it is answered. A plan and a page keep their body in the transcript; the dock carries the plan's answers. With
+once it is answered. Holding one ask open, the dock is that card: its header is the dock's head, the dock's presses at
+its end (`CARD_HEADER_TAIL`), with no count or chip row over it. A plan and a page keep their body in the transcript; the dock carries the plan's answers. With
 text or files staged, **Approve with notes**
 sends those instructions together with the approval, so execution receives them at the gate. **Keep planning** sends
 revision feedback. Interrupted tool cards stop spinning and show “interrupted”; a summary hand-off that falls back

@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { computed, inject } from "vue";
+import { CARD_HEADER_TAIL } from "../../../../components/ChatCard.vue";
 import { answerableAsk } from "../../../../models/fleet/presses/boardAnswer";
 import CardPermissionAsk from "../../../../parts/fleet/CardPermissionAsk.vue";
 import type { WaitKind } from "../../../../models/conversations/panel/pendingAsks";
@@ -17,6 +18,8 @@ const t = useT();
 
 const props = defineProps<{ agentId: string; kind: WaitKind; canDrive: boolean }>();
 
+// The dock's presses, when this card's header is the dock's head (ChatAskDock).
+const tail = inject(CARD_HEADER_TAIL, undefined);
 const { agentById } = useAgents();
 const agent = computed(() => agentById(props.agentId));
 // A permission answered right here, as on the board: Allow once or Skip. Anything else is answered in the child's own chat.
@@ -40,6 +43,7 @@ const open = (): void => {
             <Button size="small" :tier="answersHere ? `quiet` : `accent`" class="shrink-0" @click="open">
                 <Icon name="external-link" />{{ t(`chat.askDock.openChat`) }}
             </Button>
+            <component :is="tail" v-if="tail" />
         </div>
         <div v-if="answersHere" class="chat-card-row">
             <CardPermissionAsk :agent="agent" />

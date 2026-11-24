@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
+import { CARD_HEADER_TAIL } from "../../../../components/ChatCard.vue";
 import NeedCard from "../../../needs/NeedCard.vue";
 import { CARDS } from "../../transcript/cards/cardComponents";
 import { dockedBody, type PendingAsk } from "../../../../models/conversations/panel/pendingAsks";
@@ -22,6 +23,8 @@ const emit = defineEmits<{ approve: []; keepPlanning: [] }>();
 const dock = useAskDock();
 const { conversation, staged } = usePaneView();
 const label = computed(() => askLabel(props.ask, t));
+// The dock's presses, when this card's header is the dock's head (ChatAskDock).
+const tail = inject(CARD_HEADER_TAIL, undefined);
 const requestId = computed(() => (props.ask.source === `card` ? props.ask.requestId : undefined));
 const replying = computed(() => requestId.value !== undefined && conversation.value.requests.isReplying(requestId.value));
 const reply = (answer: CardAnswer): Promise<void> => (requestId.value === undefined || dock === undefined ? Promise.resolve() : dock.reply(requestId.value, answer));
@@ -52,8 +55,13 @@ const fetchIt = (): void => {
         <div class="chat-card-header items-center text-xs">
             <Icon :name="ask.source === `undrawn` && fetching ? `spinner` : ask.icon" :spin="ask.source === `undrawn` && fetching" class="text-sm text-accent" />
             <span class="min-w-0 truncate font-semibold text-content" v-tooltip.top.overflow="label">{{ label }}</span>
+            <component :is="tail" v-if="tail" />
         </div>
         <div class="chat-card-row chat-card-actions flex flex-wrap items-center gap-2">
+            <!-- A reader who may not answer is told who will, as a card says it in its answers' place (ChatCard). -->
+            <span v-if="!canDrive && ask.source === `card` && ask.field === `plan`" class="flex basis-full items-center gap-1.5 text-muted" data-card-withheld>
+                <Icon name="lock" aria-hidden="true" class="shrink-0" />{{ t(`chat.cardReplies.waitsOnDriver`) }}
+            </span>
             <template v-if="ask.source === `card` && ask.field === `plan`">
                 <template v-if="canDrive">
                     <Button tier="accent" size="small" thumb :disabled="replying" @click="emit(`approve`)">
