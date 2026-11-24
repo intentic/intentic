@@ -1,12 +1,14 @@
 ---
 /* The bar starts transparent and lifts after the page scrolls. Its menus open on one shared sheet of lacquer below it. */
 import { getImage } from "astro:assets";
+import { githubStars } from "@intentic/astro-integrations";
 import { deskLanding } from "@intentic/site-content/landing";
 import { type MenuItem, navEntries } from "@intentic/site-content/nav";
 import { APP_URL, DESK_PATH, discordUrl, githubUrl } from "@intentic/site-content/site";
-import { GITHUB_MARK } from "../lib/marks";
+import { GITHUB_MARK, STAR_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
 import { shotPair } from "../lib/shots";
+import { formatStars, starsPhrase } from "../lib/stars";
 import Bullet from "./Bullet.astro";
 import DiscordIcon from "./DiscordIcon.astro";
 import DownloadCta from "./DownloadCta.astro";
@@ -27,6 +29,9 @@ interface Props {
 const { product = "default", ctaManaged = false } = Astro.props;
 const home = product === "desk" ? DESK_PATH : "/";
 const currentPath = Astro.url.pathname;
+// Read once per build and shared by every page; null when GitHub could not be read, and the mark then stands alone.
+const stars = await githubStars();
+const githubName = stars === null ? "GitHub repository" : `GitHub repository, ${starsPhrase(stars)}`;
 
 // THE PREVIEW WINDOW. A menu whose rows carry a shot (Features) shows the hovered row's screen beside the list. Its
 // pictures are URLs, not <Image>s, on purpose: the sheet is on every page, and an <img> with a src would be fetched by
@@ -212,8 +217,25 @@ const shownPreview = (index: number): string | undefined => {
         </nav>
 
         <div class="bar-end">
-            <a href={githubUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="GitHub repository" title="GitHub repository">
+            {/* The count rides in the mark's own niche, past a gilt hairline: one door, read as "the repo, and how many
+                starred it". The words are in the label; the figure itself is short for the eye. */}
+            <a
+                href={githubUrl}
+                target="_blank"
+                rel="noopener"
+                class:list={["bar-icon", { "bar-stars": stars !== null }]}
+                aria-label={githubName}
+                title={githubName}
+            >
                 <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d={GITHUB_MARK}></path></svg>
+                {
+                    stars !== null && (
+                        <span class="bar-stars-count" aria-hidden="true">
+                            <svg class="bar-stars-glyph" viewBox="0 0 24 24" width="13" height="13"><path d={STAR_MARK} /></svg>
+                            {formatStars(stars)}
+                        </span>
+                    )
+                }
             </a>
             <a href={discordUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="Discord community" title="Discord community">
                 <DiscordIcon size={18} />
@@ -1077,6 +1099,57 @@ const shownPreview = (index: number): string | undefined => {
     }
     .bar-icon:hover::before {
         opacity: 1;
+    }
+    /* THE STARRED DOOR: the GitHub niche widened to carry its count, the mark and the figure split by a gilt hairline.
+       The star is laid in the same leaf as the menu glyphs and turns one point under the pointer. */
+    .bar-stars {
+        display: inline-flex;
+        gap: 0.55rem;
+        width: auto;
+        padding: 0 0.7rem 0 0.62rem;
+    }
+    .bar-stars-count {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.28rem;
+        padding-left: 0.6rem;
+        font-family: var(--font-mark);
+        font-weight: var(--font-weight-semibold);
+        font-size: 0.9375rem;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+        /* Baloo sits high in its box; this sets its figures on the octocat's optical centre. */
+        padding-top: 0.12em;
+    }
+    .bar-stars-count::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 50%;
+        width: 1px;
+        height: 1.05rem;
+        translate: 0 -50%;
+        background: linear-gradient(180deg, transparent, var(--role-glyph-gilt-2) 30%, var(--role-glyph-gilt-2) 70%, transparent);
+        opacity: 0.55;
+    }
+    .bar-stars-glyph {
+        flex: none;
+        margin-top: -0.12em;
+        fill: url(#nav-gilt) var(--role-glyph-gilt-2);
+        transition: rotate 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+    .bar-stars:hover .bar-stars-glyph {
+        rotate: 72deg;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .bar-stars-glyph {
+            transition: none;
+        }
+        .bar-stars:hover .bar-stars-glyph {
+            rotate: none;
+        }
     }
     .bar-end :global(.bar-cta) {
         margin-left: 0.75rem;

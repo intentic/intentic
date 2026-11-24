@@ -1,9 +1,11 @@
 ---
+import { githubStars } from "@intentic/astro-integrations";
 import { deskLanding } from "@intentic/site-content/landing";
 import { navEntries } from "@intentic/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
 import DownloadCta from "./DownloadCta.astro";
-import { GITHUB_MARK } from "../lib/marks";
+import { GITHUB_MARK, STAR_MARK } from "../lib/marks";
+import { formatStars, starsPhrase } from "../lib/stars";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
@@ -16,6 +18,8 @@ interface Props {
 
 const { product = "default" } = Astro.props;
 const currentPath = Astro.url.pathname;
+// The bar's read (one per build); null leaves the door with its name alone.
+const stars = await githubStars();
 ---
 
 {/* THE PHONE'S SHEET is the bar's panel at full height: the same lacquer, the same niches, and room for each row's
@@ -114,6 +118,15 @@ const currentPath = Astro.url.pathname;
             <a href={githubUrl} target="_blank" rel="noopener" class="mobile-nav-door">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d={GITHUB_MARK} /></svg>
                 GitHub
+                {
+                    stars !== null && (
+                        <span class="mobile-nav-door-stars">
+                            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d={STAR_MARK} /></svg>
+                            <span class="sr-only">, {starsPhrase(stars)}</span>
+                            <span aria-hidden="true">{formatStars(stars)}</span>
+                        </span>
+                    )
+                }
             </a>
             <a href={discordUrl} target="_blank" rel="noopener" class="mobile-nav-door">
                 <DiscordIcon size={18} />
@@ -425,6 +438,21 @@ const currentPath = Astro.url.pathname;
     }
     .mobile-nav-door:focus-visible {
         outline-offset: -3px;
+    }
+    /* The star count, set off from the name the way the bar sets it off from the mark: a gilt star, the short figure. */
+    .mobile-nav-door-stars {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.22rem;
+        margin-left: 0.15rem;
+        padding-left: 0.6rem;
+        border-left: 1px solid color-mix(in oklab, var(--role-glyph-gilt-2) 45%, transparent);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.875rem;
+    }
+    .mobile-nav-door-stars svg {
+        fill: url(#nav-gilt) var(--role-glyph-gilt-2);
+        margin-top: -0.1em;
     }
 
     /* CTA button */

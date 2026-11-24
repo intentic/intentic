@@ -1,4 +1,5 @@
 ---
+import { githubStars } from "@intentic/astro-integrations";
 import { developersHref } from "@intentic/site-content/developers";
 import { referenceHref } from "@intentic/site-content/reference";
 import { compareFamilies, compareHref, comparePages } from "@intentic/site-content/compare";
@@ -6,13 +7,16 @@ import { docsDestinations } from "@intentic/site-content/docs";
 import { guidePages, guidesHref } from "@intentic/site-content/guides";
 import { productHref, productPages } from "@intentic/site-content/product";
 import { APP_URL, DESK_PATH, discordUrl, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic/site-content/site";
-import { GITHUB_MARK } from "../lib/marks";
+import { GITHUB_MARK, STAR_MARK } from "../lib/marks";
+import { formatStars, starsPhrase } from "../lib/stars";
 import { DEFAULT_VARIANT_HREF } from "../lib/variant";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 import Lotus from "./Lotus.astro";
 
 const year = 2026;
+// The bar's read, one per build; null leaves the mark alone.
+const stars = await githubStars();
 
 /* The five columns, as data. */
 const columns: { label: string; links: { href: string; label: string; external?: boolean }[] }[] = [
@@ -117,8 +121,22 @@ const legalLinks = [
             </div>
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
             <div class="mt-4 flex gap-4">
-                <a href={githubUrl} target="_blank" rel="noopener" class="text-muted transition-colors hover:text-primary-400" aria-label="GitHub repository">
+                <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1.5 text-muted transition-colors hover:text-primary-400"
+                    aria-label={stars === null ? "GitHub repository" : `GitHub repository, ${starsPhrase(stars)}`}
+                >
                     <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true"><path d={GITHUB_MARK}></path></svg>
+                    {
+                        stars !== null && (
+                            <span class="inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="11" height="11" class="fill-primary-500"><path d={STAR_MARK} /></svg>
+                                {formatStars(stars)}
+                            </span>
+                        )
+                    }
                 </a>
                 <a href={discordUrl} target="_blank" rel="noopener" class="text-muted transition-colors hover:text-primary-400" aria-label="Discord community">
                     <DiscordIcon size={17} />
