@@ -2,7 +2,7 @@
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
 import type { HostedPlanState, SandboxSummary } from "@intentic/api-contract";
-import type { DeviceSandboxRow } from "@intentic/ui";
+import { type DeviceSandboxRow, SWATCHES, swatchHex } from "@intentic/ui";
 import { waitFor } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -246,11 +246,13 @@ it(`shows the sandbox's colour as picked before anyone has chosen one, and saves
 });
 
 it(`redraws a preset logo in the colour just picked, in the same write, so the sandbox wears one colour`, async () => {
+    const rose = swatchHex(SWATCHES.find((entry) => entry.key === `rose`)!);
     const el = mount(sandboxRow({ image: logoStyleImage({ icon: `moon`, color: `#e07400` }) }));
     swatch(el, `Rose`).click();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     const sent = update.mock.calls[0]![1];
-    expect(readLogoStyle(sent.image)).toEqual({ icon: `moon`, color: sent.color });
+    expect(sent.color).toBe(rose);
+    expect(readLogoStyle(sent.image)).toEqual({ icon: `moon`, color: rose });
 });
 
 it(`leaves an uploaded logo as it is when the colour changes`, async () => {
