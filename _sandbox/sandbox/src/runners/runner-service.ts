@@ -7,6 +7,7 @@ import {
     type RunnerAttach,
     type RunnerSync,
     type RunnerSyncLine,
+    type RunnerSyncWork,
     type RunnerTurn,
     runnerGitUrl,
 } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
@@ -16,7 +17,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../definition/apply-definition.js";
 import { parseDefinitionToml } from "../definition/definition.js";
-import { gitEnv, pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
+import { gitEnv, pushToParent, type RunnerSyncDeps, type SyncSay, syncFromParent } from "./runner-sync.js";
 import { createRunnerCommands } from "./runner-command.js";
 import { materializeFiles } from "./files/runner-files.js";
 import { opt } from "../opt.js";
@@ -37,10 +38,35 @@ type ContractInput<K extends keyof typeof runnerContract> = InferContractRouterI
 // the same doors a local turn takes; a sync is stock git against the parent's door. A remote turn behaves like a local
 // one because it is the same code.
 
-// Turns a sync's callback lines into a stream via the shared `narrate` pump; only this wire's terminal `done` frame
-// lives here.
-const narrated = (run: (onLine: (line: string) => void) => Promise<void>): AsyncGenerator<RunnerSyncLine> =>
-    narrate(run, (outcome): RunnerSyncLine => (outcome.ok ? { kind: "done", ok: true } : { kind: "done", ok: false, detail: outcome.error }));
+// Turns a sync's callback lines into a stream via the shared `narrate` pump, each with the work it reports
+// (RunnerSyncWork) riding on it: narrate carries text alone and yields it in the order it was said, so the n-th line is
+// matched back to what the n-th say carried. Only this wire's terminal `done` frame lives here.
+async function* narrated(run: (say: SyncSay) => Promise<void>): AsyncGenerator<RunnerSyncLine> {
+    const works = new Map<number, RunnerSyncWork>();
+    let said = 0;
+    let yielded = 0;
+    const lines = narrate(
+        (onLine) =>
+            run((line, work) => {
+                if (work !== undefined) {
+                    works.set(said, work);
+                }
+                said += 1;
+                onLine(line);
+            }),
+        (outcome): RunnerSyncLine => (outcome.ok ? { kind: "done", ok: true } : { kind: "done", ok: false, detail: outcome.error }),
+    );
+    for await (const frame of lines) {
+        if (frame.kind !== "line") {
+            yield frame;
+            continue;
+        }
+        const work = works.get(yielded);
+        works.delete(yielded);
+        yielded += 1;
+        yield { kind: "line", text: frame.text, ...opt("work", work) };
+    }
+}
 
 // Translates a dispatched turn into this daemon's AgentTurn; an unknown provider/harness or an escaping attachment path
 // is refused, not thrown.

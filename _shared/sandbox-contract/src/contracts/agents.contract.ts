@@ -519,6 +519,17 @@ export const agentsContract = {
         .meta({ control: "land" })
         .input(AgentIdSchema)
         .output(OkSchema),
+    // The placement menu's "Move here" on a conversation latched to a runner (sandbox runners/move-here.ts).
+    moveHere: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/move-here",
+            summary: "Bring a runner conversation to this sandbox",
+            description:
+                "For a conversation that runs on a runner: the runner sends everything it holds of its work here (what its last turn left uncommitted, committed first), and the conversation goes on in this sandbox, in the same checkout, its next message opening a fresh session from its record. Refused while its turn runs, while the runner is out of reach or still holds a turn not shown here, and when the work cannot be sent; nothing moves then.",
+        })
+        .input(AgentIdSchema)
+        .output(AgentSummarySchema),
     // For work somebody brought in themselves after a refused land: the review's "Already merged" press.
     settle: procedure
         .route({

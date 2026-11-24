@@ -19,8 +19,8 @@ export const RunnerHelloSchema = z.object({
     token: z.string(),
     // The daemon build the runner runs, so an old image is visible rather than mysteriously wrong.
     version: z.string(),
-    // Compared against what the parent runs to report parity (outdated → rebuild action); an outdated runner still runs
-    // turns rather than being refused.
+    // Compared against what the parent runs to report parity (outdated → rebuild action). Parity alone refuses nothing;
+    // what a parent refuses a turn for is a missing guarantee (`capabilities`).
     image: z.string(),
     // The image `image` was composed from (SANDBOX_BASE_IMAGE). Parity compares this, not `image`: an overlay build's
     // tag names its own container (`intentic-sandbox-env-<slug>:<hash>`), so two sides on one base and one overlay
@@ -34,8 +34,29 @@ export const RunnerHelloSchema = z.object({
     // Runner's declared settings-only sandbox.toml (definition.ts), diffed against the parent's to itemize drift;
     // absent on an old image.
     definitionToml: z.string().optional(),
+    // What this build guarantees beyond the protocol's shape (RUNNER_CAPABILITIES); absent on a build from before the
+    // list, which guarantees none of them.
+    capabilities: z.array(z.string()).optional(),
 });
 export type RunnerHello = z.infer<typeof RunnerHelloSchema>;
+
+/* WHAT A RUNNER'S BUILD GUARANTEES (2026-11-24). Parity says a runner differs from its parent; it cannot say whether the
+   difference matters, and a dev build never updates its runners by itself (system/updates/runner-updates.ts). So a
+   runner names the guarantees a parent places work by, and a parent refuses a turn on a runner that lacks one it needs
+   (runner-dispatch.ts) instead of running it there and losing the work.
+   - `sync-keeps-work`: a pull never resets away a conversation's work the parent never received (it commits it and
+     carries it onto the parent's branch, or keeps the runner's own branch), a push commits what a turn left
+     uncommitted, and any snapshot an older build set aside on the runner is sent home (runner-sync.ts). 2026-11-24:
+     ginger-v2nz on a runner built 11-21 lost its edits to 176 files twice, each time a resume's pull reset them away,
+     and only its 18 new files reached the parent. */
+export const RUNNER_CAPABILITIES = ["sync-keeps-work"] as const;
+export type RunnerCapability = (typeof RUNNER_CAPABILITIES)[number];
+// What a parent needs of a runner before it places a turn there.
+export const RUNNER_REQUIRED_CAPABILITIES: readonly RunnerCapability[] = ["sync-keeps-work"];
+
+// The guarantees a runner's hello names that a parent needs and it lacks. Pure.
+export const missingRunnerCapabilities = (announced: readonly string[] | undefined): RunnerCapability[] =>
+    RUNNER_REQUIRED_CAPABILITIES.filter((capability) => !(announced ?? []).includes(capability));
 
 // The URL a runner dials, given its parent's public URL. One builder, so `ic`, the Fly provisioner and the
 // daemon route cannot disagree about where the door is (hostConnectUrl's rule).
@@ -219,7 +240,7 @@ export type RunnerFacts = z.infer<typeof RunnerFactsSchema>;
 // Whether a runner matches this sandbox's image, channel and approved overlay: `current`, `outdated` (gets an update
 // button), or `unknown` (never connected, or a parent that can't name its own image). Reported, never enforced; what
 // the parent does act on is a runner on an older release than its own, which it updates while idle (sandbox
-// system/updates/runner-updates.ts).
+// system/updates/runner-updates.ts), and a runner missing a guarantee it needs (RUNNER_CAPABILITIES), which gets no turn.
 export const RunnerParitySchema = z.enum(["current", "outdated", "unknown"]);
 export type RunnerParity = z.infer<typeof RunnerParitySchema>;
 
@@ -289,8 +310,28 @@ export const RunnerSyncSchema = z.object({
 });
 export type RunnerSync = z.infer<typeof RunnerSyncSchema>;
 
+// A conversation's work a sync found the parent never received, and what it did with it, so the parent can say so in the
+// conversation itself rather than only in its log:
+// - `carried`: committed and replayed onto the parent's branch, in the checkout the next turn works in
+// - `kept`: committed, but the parent's branch moved in a way it would not replay onto, so the runner's own branch stays
+//   as it was (the parent's `parentTip` is set aside) and the next push brings it home
+// - `rescue`: a snapshot an older build set aside on the runner, sent home under `ref` in the parent's git dir of `repo`;
+//   `base` is the commit it was taken over, so `git diff base sha` is the work
+export const RunnerSyncWorkSchema = z.object({
+    kind: z.enum(["carried", "kept", "rescue"]),
+    repo: z.string(),
+    sha: z.string(),
+    files: z.number().int().nonnegative(),
+    base: z.string().optional(),
+    parentTip: z.string().optional(),
+    ref: z.string().optional(),
+    at: z.number().optional(),
+});
+export type RunnerSyncWork = z.infer<typeof RunnerSyncWorkSchema>;
+
 export const RunnerSyncLineSchema = z.union([
-    z.object({ kind: z.literal("line"), text: z.string() }),
+    // `work` rides a plain line, so a parent that predates it reads the text and drops the rest.
+    z.object({ kind: z.literal("line"), text: z.string(), work: RunnerSyncWorkSchema.optional() }),
     z.object({
         kind: z.literal("done"),
         ok: z.boolean(),

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { serve, type ServerType } from "@hono/node-server";
 import { STATE_DIR } from "@intentic/constants";
-import { runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { runnerIncomingRef, type RunnerSyncWork } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { Hono } from "hono";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
@@ -198,32 +198,110 @@ test("a second pull is incremental and reconciles the branch onto what the paren
     expect(existsSync(join(runnerWork, "second.md"))).toBe(true);
 });
 
-// 2026-11-04: a pull for a new turn hard-reset a checkout whose previous turn was still working in it on the runner, and
-// a commit and the edits after it were gone. A pull now keeps what the parent never received before it resets.
-test("a pull keeps work the parent never received before it resets the conversation's checkout", async () => {
+// A runner with conversation `id`'s branch pulled and checked out in a worktree of its own, as a turn there leaves it.
+const checkedOut = async (id: string, title?: string) => {
+    await git(parentWork, ["branch", "-f", `agent/${id}`, mainBranch]);
     const runner = freshRunner();
-    await syncFromParent(runner, identity, sync("pull"), () => undefined);
-    const checkout = join(mkdtempSync(join(tmpdir(), "runner-checkout-")), "conv1");
-    await git(runner.workspaceRoot, ["worktree", "add", checkout, "agent/conv1"]);
-    const attached = { ...runner, worktrees: { attached: async () => true, worktreeDir: () => checkout } };
-    const said: string[] = [];
-    await syncFromParent(attached, identity, sync("pull"), (line) => void said.push(line));
-    expect(said.filter((line) => line.includes("kept work"))).toEqual([]);
+    const pull = { ...sync("pull"), conversationId: id, branch: `agent/${id}` };
+    await syncFromParent(runner, identity, pull, () => undefined);
+    const checkout = join(mkdtempSync(join(tmpdir(), "runner-checkout-")), id);
+    await git(runner.workspaceRoot, ["worktree", "add", checkout, `agent/${id}`]);
+    const attached = { ...runner, worktrees: { attached: async () => true, worktreeDir: () => checkout }, titleOf: () => title };
+    const said: { line: string; work?: RunnerSyncWork }[] = [];
+    const say = (line: string, work?: RunnerSyncWork): void => void said.push(work === undefined ? { line } : { line, work });
+    return { runner: attached, checkout, pull, push: { ...pull, op: "push" as const }, said, say };
+};
 
+// The parent moves a conversation's branch while it waits (as its rebase onto a newer main line does): one commit on top.
+const parentMoves = async (id: string, path: string, text: string): Promise<string> => {
+    const scratch = mkdtempSync(join(tmpdir(), "parent-move-"));
+    await git(parentWork, ["worktree", "add", scratch, `agent/${id}`]);
+    await writeFile(join(scratch, path), text);
+    await git(scratch, ["add", "."]);
+    await git(scratch, ["commit", "-m", `the parent moved ${path}`]);
+    const tip = await git(scratch, ["rev-parse", "HEAD"]);
+    await git(parentWork, ["worktree", "remove", "--force", scratch]);
+    return tip;
+};
+
+// 2026-11-04: a pull for a new turn hard-reset a checkout whose previous turn was still working in it on the runner. And
+// 2026-11-24: the rescue ref that replaced the reset kept the work on the runner only, and the resumed turn went on
+// without it (ginger-v2nz, twice). A pull now commits such work and carries it into the turn.
+test("a pull carries work the parent never received into the checkout instead of resetting it away", async () => {
+    const { runner, checkout, pull, said, say } = await checkedOut("conv6", "Fix the readme");
     await writeFile(join(checkout, "unpushed.md"), "never pushed\n");
     await git(checkout, ["add", "."]);
     await git(checkout, ["commit", "-m", "unpushed"]);
     const unpushed = await git(checkout, ["rev-parse", "HEAD"]);
     await writeFile(join(checkout, "readme.md"), "edited, never committed\n");
-    await syncFromParent(attached, identity, sync("pull"), (line) => void said.push(line));
 
-    expect(said.filter((line) => line.includes("kept work"))).toHaveLength(1);
-    const kept = await git(runner.workspaceRoot, ["for-each-ref", "--format=%(objectname)", "refs/runner-rescue/conv1/"]);
-    expect(kept).not.toBe("");
-    expect(await git(runner.workspaceRoot, ["show", `${kept}:readme.md`])).toBe("edited, never committed");
-    expect(await git(runner.workspaceRoot, ["merge-base", "--is-ancestor", unpushed, kept]).then(() => true, () => false)).toBe(true);
-    // The checkout itself is the parent's branch again, as before.
-    expect(existsSync(join(checkout, "unpushed.md"))).toBe(false);
+    await syncFromParent(runner, identity, pull, say);
+
+    expect(await readFile(join(checkout, "readme.md"), "utf8")).toBe("edited, never committed\n");
+    expect(existsSync(join(checkout, "unpushed.md"))).toBe(true);
+    expect(await git(checkout, ["status", "--porcelain"])).toBe("");
+    expect(await git(checkout, ["merge-base", "--is-ancestor", unpushed, "HEAD"]).then(() => true, () => false)).toBe(true);
+    expect(said.map((entry) => entry.work?.kind).filter((kind) => kind !== undefined)).toEqual(["carried"]);
+    expect(said.find((entry) => entry.work !== undefined)?.work?.files).toBe(2);
+    expect(await git(runner.workspaceRoot, ["for-each-ref", "refs/runner-rescue/"])).toBe("");
+});
+
+// ginger-v2nz's exact shape: edits to tracked files left uncommitted by a failed turn, and the parent's branch rebased
+// onto a newer main line while the conversation waited. The edits are replayed onto the parent's branch.
+test("a pull replays the work the parent never received onto a branch the parent moved while it waited", async () => {
+    const { runner, checkout, pull, said, say } = await checkedOut("conv7");
+    await writeFile(join(checkout, "readme.md"), "a failed turn's edit\n");
+    const moved = await parentMoves("conv7", "other.md", "main moved on\n");
+
+    await syncFromParent(runner, identity, pull, say);
+
+    expect(await readFile(join(checkout, "readme.md"), "utf8")).toBe("a failed turn's edit\n");
+    expect(await readFile(join(checkout, "other.md"), "utf8")).toBe("main moved on\n");
+    expect(await git(checkout, ["merge-base", "--is-ancestor", moved, "HEAD"]).then(() => true, () => false)).toBe(true);
+    const carried = said.find((entry) => entry.work !== undefined)?.work;
+    expect(carried?.kind).toBe("carried");
+    expect(carried?.sha).toBe(await git(checkout, ["rev-parse", "HEAD"]));
+});
+
+test("work that does not replay onto the parent's moved branch stays in the checkout, and the next push brings it home", async () => {
+    const { runner, checkout, pull, push, said, say } = await checkedOut("conv8");
+    await writeFile(join(checkout, "readme.md"), "the runner's edit\n");
+    const moved = await parentMoves("conv8", "readme.md", "the parent's own edit\n");
+
+    await syncFromParent(runner, identity, pull, say);
+
+    expect(await readFile(join(checkout, "readme.md"), "utf8")).toBe("the runner's edit\n");
+    expect(await git(checkout, ["status", "--porcelain"])).toBe("");
+    const kept = said.find((entry) => entry.work !== undefined)?.work;
+    expect(kept).toMatchObject({ kind: "kept", parentTip: moved, files: 1 });
+    await pushToParent(runner, identity, push, () => undefined);
+    expect(await git(parentWork, ["show", `${runnerIncomingRef("conv8")}:readme.md`])).toBe("the runner's edit");
+});
+
+// What a build before `sync-keeps-work` set aside on the runner stayed there: ginger-v2nz's two snapshots, sage-xrd4's and
+// sub-honey-w8qw's were found by hand on omen's disk. The next sync sends each home under the same name and drops it there.
+test("a snapshot an earlier build set aside is sent home, said with what it holds, and dropped from the runner", async () => {
+    const { runner, checkout, pull, said, say } = await checkedOut("conv9");
+    await writeFile(join(checkout, "readme.md"), "set aside by an older build\n");
+    const snapshot = await git(checkout, ["stash", "create", "undelivered work of conv9"]);
+    await git(checkout, ["checkout", "--", "readme.md"]);
+    const ref = "refs/runner-rescue/conv9/1795555026774";
+    await git(runner.workspaceRoot, ["update-ref", ref, snapshot]);
+
+    await syncFromParent(runner, identity, pull, say);
+
+    expect(await git(parentWork, ["rev-parse", ref])).toBe(snapshot);
+    expect(await git(runner.workspaceRoot, ["for-each-ref", "refs/runner-rescue/conv9/"])).toBe("");
+    const rescue = said.find((entry) => entry.work?.kind === "rescue")?.work;
+    expect(rescue).toMatchObject({ kind: "rescue", repo: "root", sha: snapshot, files: 1, ref, at: 1795555026774 });
+    expect(await git(parentWork, ["show", `${rescue?.base}:readme.md`])).toBe("hello from the parent");
+});
+
+test("a push of a branch the parent already has makes no push", async () => {
+    const { runner, push, said, say } = await checkedOut("conv10");
+    await pushToParent(runner, identity, push, say);
+    expect(said.filter((entry) => entry.line.includes("pushing"))).toEqual([]);
+    await expect(git(parentWork, ["rev-parse", runnerIncomingRef("conv10")])).rejects.toThrow();
 });
 
 // 2026-11-23: a failed or stopped turn never reaches the land that commits a checkout's leftovers, so its push carried
@@ -258,6 +336,9 @@ test("a push while the runner's turn still runs delivers the branch's tip alone 
     const checkout = join(mkdtempSync(join(tmpdir(), "runner-checkout-")), "conv5");
     await git(runner.workspaceRoot, ["worktree", "add", checkout, "agent/conv5"]);
     const attached = { ...runner, worktrees: { attached: async () => true, worktreeDir: () => checkout } };
+    await writeFile(join(checkout, "done.md"), "committed by the turn\n");
+    await git(checkout, ["add", "."]);
+    await git(checkout, ["commit", "-m", "the turn's commit"]);
     await writeFile(join(checkout, "readme.md"), "half written\n");
     const tip = await git(checkout, ["rev-parse", "HEAD"]);
     const live = { held: () => ({ state: "live" as const, events: 1, acked: 0 }), settle: async () => undefined, delivered: () => undefined };
@@ -297,6 +378,14 @@ test("a pull survives uncommitted edits in the mirror, keeping the runner's own 
     expect(said.filter((line) => line.includes("kept uncommitted edits"))).toHaveLength(1);
     const kept = await git(runner.workspaceRoot, ["for-each-ref", "--format=%(objectname)", "refs/runner-rescue/main-line/"]);
     expect(await git(runner.workspaceRoot, ["show", `${kept}:readme.md`])).toBe("a person's edit on the runner");
+
+    // The runner's own files alone are put back as they were and keep nothing: it rewrites them on every pull, and each
+    // made a rescue ref and a line before (2026-11-24).
+    await writeFile(join(runner.workspaceRoot, capabilities), '{"from":"runner, again"}\n');
+    const own: string[] = [];
+    await syncFromParent(runner, identity, sync("pull"), (line) => void own.push(line));
+    expect(own.filter((line) => line.includes("kept uncommitted edits"))).toEqual([]);
+    expect(await readFile(join(runner.workspaceRoot, capabilities), "utf8")).toBe('{"from":"runner, again"}\n');
 
     // A clean mirror keeps nothing.
     await git(runner.workspaceRoot, ["checkout", "--", capabilities]);

@@ -3,13 +3,21 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { canonicalHarness } from "@intentic/sandbox-contract/models/agent-catalog";
-import { type RunnerSync, type RunnerSyncLine, type RunnerTurn, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import {
+    missingRunnerCapabilities,
+    type RunnerSync,
+    type RunnerSyncLine,
+    type RunnerSyncWork,
+    type RunnerTurn,
+    runnerIncomingRef,
+} from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { defaultGit } from "@intentic/base/git";
 import { whenAborted } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { mainBranchOf } from "../git/agent-refs.js";
 import type { ConversationWorktree,AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
-import type { RunnerHub } from "./runner-peer.js";
+import type { RunnerClient, RunnerHub } from "./runner-peer.js";
 import { hostAnswering } from "../hosts/host-room.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 import { openRunnerTurn } from "./ownership/account-holds.js";
@@ -18,6 +26,7 @@ import { bringPageHome } from "./held-turns/runner-pages.js";
 import { bringPicturesHome } from "./held-turns/runner-pictures.js";
 import { inlineFiles } from "./files/runner-files.js";
 import { sweepArtifactsHome } from "./held-turns/runner-artifacts.js";
+import { workNotice } from "./held-turns/runner-work-notices.js";
 
 // One turn executed on a runner, the parent's side of the dispatch: mirrors the
 // isolated arm's local shape, station for station.
@@ -34,7 +43,8 @@ import { sweepArtifactsHome } from "./held-turns/runner-artifacts.js";
 
 // What a dispatch reads of the daemon: the runner's socket, the checkouts it mirrors, and the log.
 export interface DispatchServices {
-    readonly runnerHub: Pick<RunnerHub, "client" | "reconnected">;
+    // `state`, for what the runner's hello said it guarantees (RUNNER_CAPABILITIES).
+    readonly runnerHub: Pick<RunnerHub, "client" | "reconnected" | "state">;
     // The machine each runner runs on and that machine's heartbeats, so a runner gone quiet on an awake machine is told
     // from one asleep with it (held-turns/runner-relay.ts); absent, a dropped runner is waited for the whole day.
     readonly runners?: Pick<Services["runners"], "list">;
@@ -99,22 +109,51 @@ const within = async (work: Promise<void>, ms: number): Promise<void> => {
  *  runner by the sandbox runs here instead on reading it (children.ts). */
 export const RUNNER_PREP_FAILED = "Preparing the runner's workspace failed";
 
+// What one sync came to: why it failed, if it did, and the conversation's work it reported handling (RunnerSyncWork).
+export interface SyncOutcome {
+    readonly failure: string | undefined;
+    readonly works: readonly RunnerSyncWork[];
+}
+
 // Sync lines go to the log, not the transcript: they are operations plumbing (clone progress, per-repo acks), and the
-// transcript's own worktree frame already tells the user where things stand.
-const drainSync = async (services: Pick<DispatchServices, "logger">, stream: AsyncIterable<RunnerSyncLine>): Promise<string | undefined> => {
+// transcript's own worktree frame already tells the user where things stand. The work a line reports is the exception,
+// said in the conversation by whoever drained it (workNotice).
+const drainSync = async (services: Pick<DispatchServices, "logger">, stream: AsyncIterable<RunnerSyncLine>): Promise<SyncOutcome> => {
+    const works: RunnerSyncWork[] = [];
     for await (const line of stream) {
         if (line.kind === "line") {
             services.logger.info({ line: line.text }, "runner sync");
+            if (line.work !== undefined) {
+                works.push(line.work);
+            }
             continue;
         }
-        return line.ok ? undefined : (line.detail ?? "the runner's workspace sync failed without saying why");
+        return { failure: line.ok ? undefined : (line.detail ?? "the runner's workspace sync failed without saying why"), works };
     }
-    return "the runner's sync stream ended without an outcome — the link likely dropped";
+    return { failure: "the runner's sync stream ended without an outcome — the link likely dropped", works };
+};
+
+// The notices a sync's reported work owes the conversation, as turn frames.
+const workFrames = (works: readonly RunnerSyncWork[], runnerId: string): AgentEvent[] =>
+    works.map((work) => ({ kind: "agent_notice", ...workNotice(work, runnerId) }));
+
+/** Why a runner cannot take a turn: its hello names no guarantee this sandbox needs (RUNNER_CAPABILITIES), so its sync
+ *  may lose the turn's work; undefined when it can. A runner that has not said hello yet is judged by the turn's own
+ *  sync. Prefixed like a failed preparation, so a spawned child goes on here by itself (children.ts). */
+export const outdatedRunner = (services: { readonly runnerHub: Pick<RunnerHub, "state"> }, runnerId: string): string | undefined => {
+    const announced = services.runnerHub.state(runnerId).announced;
+    if (announced === undefined || missingRunnerCapabilities(announced.capabilities).length === 0) {
+        return undefined;
+    }
+    return (
+        `${RUNNER_PREP_FAILED}: the runner "${runnerId}" runs an older build (${announced.version}), whose sync can lose a turn's uncommitted work, so nothing was sent there. ` +
+        "Update it (Devices, its Update button), or move this conversation here to go on in this sandbox."
+    );
 };
 
 // Repo id, workspace-relative dir ("" for the root), and each repo's own main branch, read from the parent's checkout
 // since the parent is the origin.
-const syncRepos = async (services: DispatchServices, worktree: ConversationWorktree): Promise<RunnerSync["repos"]> => {
+export const syncRepos = async (services: Pick<DispatchServices, "agentWorktrees">, worktree: Pick<ConversationWorktree, "repos">): Promise<RunnerSync["repos"]> => {
     const repos: { repo: string; dir: string; mainBranch: string }[] = [];
     for (const { repo } of worktree.repos) {
         const mainBranch = (await mainBranchOf(services.agentWorktrees.mainDir(repo), defaultGit).catch(() => undefined)) ?? "main";
@@ -134,7 +173,7 @@ const inlineAttachments = async (services: DispatchServices, turn: AgentTurn): P
 // Hard-resets each repo whose incoming ref moved, the sanctioned way to move a checked-out branch, so diff, standing
 // and land read a runner's work like a local turn's. Best-effort: one repo's failure must not hide another's delivery.
 // `applied` holds, per repo, the tip this dispatch already moved the mirror onto.
-const advanceMirror = async (services: DispatchServices, conversationId: string, worktree: ConversationWorktree, applied: Map<string, string>): Promise<void> => {
+const advanceMirror = async (services: Pick<DispatchServices, "logger" | "agentWorktrees">, conversationId: string, worktree: Pick<ConversationWorktree, "repos">, applied: Map<string, string>): Promise<void> => {
     const incoming = runnerIncomingRef(conversationId);
     for (const { repo } of worktree.repos) {
         const main = services.agentWorktrees.mainDir(repo);
@@ -163,30 +202,51 @@ const advanceMirror = async (services: DispatchServices, conversationId: string,
 };
 
 // The turn's branch back from the runner, over whichever socket it holds now (the one the turn started on may be long
-// gone), then the mirror moved onto it. A runner out of reach keeps the branch: the next dispatch on this conversation
-// collects its turn and delivers it before pulling (runner-relay.ts collectHeld), and a pull keeps anything it never
-// delivered before it resets (runner-sync.ts).
+// gone), then the mirror moved onto it; answers with the work the push reported (snapshots an older build set aside,
+// sent home). A runner out of reach keeps the branch: the next dispatch on this conversation collects its turn and
+// delivers it before pulling (runner-relay.ts collectHeld), and a pull never resets away work it did not deliver
+// (runner-sync.ts).
 const deliverBranch = async (
-    services: DispatchServices,
+    services: Pick<DispatchServices, "runnerHub" | "logger" | "agentWorktrees">,
     runnerId: string,
     sync: RunnerSync,
     worktree: ConversationWorktree,
     applied: Map<string, string>,
-): Promise<void> => {
+): Promise<readonly RunnerSyncWork[]> => {
     const client = services.runnerHub.client(runnerId);
     if (client === undefined) {
         services.logger.info({ id: sync.conversationId, runner: runnerId }, "runner dispatch: the runner is out of reach, so its branch comes back with the next turn here");
-        return;
+        return [];
     }
+    const pushed = await pushHome(services, client, sync, worktree, applied);
+    if (pushed.failure !== undefined) {
+        services.logger.warn({ id: sync.conversationId, reason: pushed.failure }, "runner dispatch: push after the turn failed");
+    }
+    return pushed.works;
+};
+
+// The one door of a runner's a push takes.
+export interface RunnerSyncDoor {
+    readonly syncWorkspace: (sync: RunnerSync) => Promise<AsyncIterable<RunnerSyncLine>>;
+}
+
+/** One push from the runner over `client`, then the mirror moved onto what came: what the push came to, a failure to
+ *  reach the runner included. */
+export const pushHome = async (
+    services: Pick<DispatchServices, "logger" | "agentWorktrees">,
+    client: RunnerSyncDoor,
+    sync: RunnerSync,
+    worktree: Pick<ConversationWorktree, "repos">,
+    applied: Map<string, string>,
+): Promise<SyncOutcome> => {
+    let pushed: SyncOutcome;
     try {
-        const pushed = await drainSync(services, await client.syncWorkspace(sync));
-        if (pushed !== undefined) {
-            services.logger.warn({ id: sync.conversationId, reason: pushed }, "runner dispatch: push after the turn failed");
-        }
+        pushed = await drainSync(services, await client.syncWorkspace(sync));
     } catch (error) {
-        services.logger.warn({ err: error, id: sync.conversationId }, "runner dispatch: push after the turn failed");
+        pushed = { failure: errorMessage(error), works: [] };
     }
     await advanceMirror(services, sync.conversationId, worktree, applied);
+    return pushed;
 };
 
 // What the runner is handed for this turn: the dispatch's residue, attachments inline.
@@ -230,6 +290,56 @@ const noteCards = (runnerId: string, conversationId: string) => (event: AgentEve
     return [event];
 };
 
+// Everything before the live turn: a stop owed to the runner, the turn it still holds from before (collected, its branch
+// and files home first), the guarantees its sync needs, and the pull. Answers with the client the turn runs over, or
+// undefined when the turn ends here, what was said about why already yielded.
+async function* prepareRunner(at: {
+    readonly services: DispatchServices;
+    readonly runnerId: string;
+    readonly client: RunnerClient;
+    readonly context: RelayContext;
+    readonly relayed: RelayFrame;
+    readonly applied: Map<string, string>;
+    readonly worktree: ConversationWorktree;
+    readonly home: Parameters<typeof sweepArtifactsHome>[0];
+    readonly sync: (op: "pull" | "push") => RunnerSync;
+}): AsyncGenerator<AgentEvent, RunnerClient | undefined> {
+    const { services, runnerId, client, context, relayed, applied, worktree, home, sync } = at;
+    await payOwedStop(context, client);
+    // A turn the runner still holds from before (one this sandbox lost) comes home first: a pull would reset it.
+    const earlier = yield* collectHeld(context, client, relayed);
+    if (earlier.collected) {
+        yield* workFrames(await deliverBranch(services, runnerId, sync("push"), worktree, applied), runnerId);
+        // Its files too, before the live turn's own window starts after it: its pictures came with their cards, but
+        // a PDF, a video or an evidence file it left would otherwise never come home.
+        yield* await sweepArtifactsHome(home, COLLECTED_SWEEP_MS);
+    }
+    if (earlier.end !== undefined && earlier.end.outcome !== "done") {
+        return undefined;
+    }
+    // Checked here, after what the runner held came home and before the pull that would put this turn's work in its
+    // hands: a runner without the guarantees its sync needs is refused, not used (RUNNER_CAPABILITIES).
+    const outdated = outdatedRunner(services, runnerId);
+    if (outdated !== undefined) {
+        yield { kind: "error", message: outdated };
+        return undefined;
+    }
+    const live = services.runnerHub.client(runnerId) ?? client;
+    const pulled = await drainSync(services, await live.syncWorkspace(sync("pull")));
+    yield* workFrames(pulled.works, runnerId);
+    if (pulled.failure !== undefined) {
+        // Said so whoever placed it can act: the runner's copy is the runner's to repair, and the same task runs here
+        // meanwhile (the shinobi-society audit, 2026-11-17: four children failed on a runner with no way on). A spawned
+        // child goes on here by itself (children.ts).
+        yield {
+            kind: "error",
+            message: `${RUNNER_PREP_FAILED}: ${pulled.failure}. Nothing ran there. To run this task anyway, run it here, in this sandbox.`,
+        };
+        return undefined;
+    }
+    return live;
+}
+
 export async function* dispatchRemoteTurn(
     services: DispatchServices,
     input: RoutedAgentTurn & { conversationId: string },
@@ -271,10 +381,13 @@ export async function* dispatchRemoteTurn(
         if (event.kind !== "done") {
             return relayed(event);
         }
-        atDone = deliverBranch(services, runnerId, sync("push"), worktree, applied);
+        let delivered: readonly RunnerSyncWork[] = [];
+        atDone = deliverBranch(services, runnerId, sync("push"), worktree, applied).then((works) => {
+            delivered = works;
+        });
         await within(atDone, services.doneDeliveryMs ?? DONE_DELIVERY_MS);
         const notices = await sweepArtifactsHome(home, Date.now() - openedAt + SWEEP_SLACK_MS);
-        return [...notices, ...(await relayed(event))];
+        return [...workFrames(delivered, runnerId), ...notices, ...(await relayed(event))];
     };
 
     // Stop must reach the runner explicitly: closing the stream alone races the provider, still spending unseen. A
@@ -284,32 +397,12 @@ export async function* dispatchRemoteTurn(
     // turn (runners/ownership/account-holds.ts).
     const closeHolds = openRunnerTurn(runnerId);
     try {
-        await payOwedStop(context, client);
-        // A turn the runner still holds from before (one this sandbox lost) comes home first: a pull would reset it.
-        const earlier = yield* collectHeld(context, client, relayed);
-        if (earlier.collected) {
-            await deliverBranch(services, runnerId, sync("push"), worktree, applied);
-            // Its files too, before the live turn's own window starts after it: its pictures came with their cards, but
-            // a PDF, a video or an evidence file it left would otherwise never come home.
-            yield* await sweepArtifactsHome(home, COLLECTED_SWEEP_MS);
-        }
-        if (earlier.end !== undefined && earlier.end.outcome !== "done") {
+        const prepared = yield* prepareRunner({ services, runnerId, client, context, relayed, applied, worktree, home, sync });
+        if (prepared === undefined) {
             yield { kind: "done" };
             return;
         }
-        const live = services.runnerHub.client(runnerId) ?? client;
-        const pulled = await drainSync(services, await live.syncWorkspace(sync("pull")));
-        if (pulled !== undefined) {
-            // Said so whoever placed it can act: the runner's copy is the runner's to repair, and the same task runs here
-            // meanwhile (the shinobi-society audit, 2026-11-17: four children failed on a runner with no way on). A spawned
-            // child goes on here by itself (children.ts).
-            yield {
-                kind: "error",
-                message: `${RUNNER_PREP_FAILED}: ${pulled}. Nothing ran there. To run this task anyway, run it here, in this sandbox.`,
-            };
-            yield { kind: "done" };
-            return;
-        }
+        const live = prepared;
         const turn = await runnerTurnOf(services, input, worktree.branch, childNote);
         const end = yield* relayTurn(
             context,
@@ -326,6 +419,8 @@ export async function* dispatchRemoteTurn(
         // The turn is over: nothing it raised can still be answered, so a stale id must not outlive it.
         forgetRemoteRequestsOf(conversationId);
         await atDone;
+        // Its reported work goes to the log only: the turn already said `done`, and a push reports nothing a pull before
+        // this turn had not already sent home and said.
         await deliverBranch(services, runnerId, sync("push"), worktree, applied);
     }
 }

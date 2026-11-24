@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { RUNNER_CAPABILITIES, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { RunnerTurn,RunnerSyncLine,RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PAGES_DIR } from "../workspace/files/stored/stored-pages.js";
 import { ARTIFACTS_DIR, sha256Of } from "../workspace/files/stored/stored-artifacts.js";
-import { dispatchRemoteTurn } from "./runner-dispatch.js";
+import { dispatchRemoteTurn, RUNNER_PREP_FAILED } from "./runner-dispatch.js";
 import { opt } from "../opt.js";
 
 /* The dispatch's OFFLINE answer, the one path that needs no runner to exist: a machine asleep is a normal state. */
@@ -98,6 +98,8 @@ const runnerAt = async (
         onPush?: () => Promise<void>;
         // Each page's media files, by page path.
         media?: Readonly<Record<string, readonly (Buffer | undefined)[]>>;
+        // The lines a sync says before its outcome, by op.
+        syncLines?: Partial<Record<"pull" | "push", readonly RunnerSyncLine[]>>;
     } = {},
 ) => {
     const calls: string[] = [];
@@ -141,7 +143,11 @@ const runnerAt = async (
             if (input.op === "push") {
                 await options.onPush?.();
             }
-            return syncOk();
+            const lines = options.syncLines?.[input.op] ?? [];
+            return (async function* (): AsyncGenerator<RunnerSyncLine> {
+                yield* lines;
+                yield* syncOk();
+            })();
         }),
         ackTurn: os.ackTurn.handler(({ input }) => {
             turns.ack(input.conversationId, input.after);
@@ -220,15 +226,16 @@ const runnerAt = async (
     return { client: link.client, calls: () => [...calls], received: () => [...received], close: () => link.close() };
 };
 
-const announced: RunnerAnnounced = { version: "test", image: "dev" };
+const announced: RunnerAnnounced = { version: "test", image: "dev", capabilities: [...RUNNER_CAPABILITIES] };
 
-// The parent's side as production builds it, its hub holding whichever socket the test says the runner dialled.
-const parent = (workspaceRoot = "/nowhere", historyRoot = "/nowhere") => {
+// The parent's side as production builds it, its hub holding whichever socket the test says the runner dialled; `said`
+// is what the runner's hello claimed.
+const parent = (workspaceRoot = "/nowhere", historyRoot = "/nowhere", said: RunnerAnnounced = announced) => {
     const hub = createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, { warn: () => undefined });
     let hangUp: (() => void) | undefined;
     const dial = (client: RunnerClient | undefined): void => {
         hangUp?.();
-        hangUp = client === undefined ? undefined : hub.attach("rog", { client, close: () => undefined, announced });
+        hangUp = client === undefined ? undefined : hub.attach("rog", { client, close: () => undefined, announced: said });
     };
     const services: DispatchServices = {
         runnerHub: hub,
@@ -281,6 +288,53 @@ test("a link that drops mid-turn is read through: every frame once, the gap said
     expect(first.calls()).toEqual(["heldTurn", "sync:pull", "runTurn"]);
     // Pushed as `done` arrived, and again by the backstop.
     expect(second.calls()).toEqual(["heldTurn", "attachTurn:1", "sync:push", "listArtifacts", "sync:push"]);
+});
+
+// 2026-11-24: ginger-v2nz ran on a runner built three days before the sync that keeps a failed turn's work, and lost its
+// edits to 176 files twice. A runner whose hello names no such guarantee gets no turn: what it held comes home, nothing
+// is pulled or run there, and the refusal reads as a failed preparation, so a spawned child goes on here by itself.
+test("a runner whose build lacks the sync guarantees is refused before its pull, and says how to go on", async () => {
+    const { services, dial, leave } = parent("/nowhere", "/nowhere", { version: "1.420.0", image: "dev" });
+    const runner = await runnerAt(createRemoteTurns(), [delta("never"), done]);
+    dial(runner.client);
+    const frames = await dispatched(services);
+    leave();
+    expect(runner.calls()).toEqual(["heldTurn", "sync:push"]);
+    expect(work(frames)).toEqual([]);
+    const error = frames.find((frame) => frame.kind === "error");
+    const message = error?.kind === "error" ? error.message : "";
+    expect(message.startsWith(RUNNER_PREP_FAILED)).toBe(true);
+    expect(message).toContain("1.420.0");
+    expect(message).toMatch(/move this conversation here/);
+    expect(frames.at(-1)?.kind).toBe("done");
+});
+
+// The work a runner's pull reports (left over by the last turn, carried into this one, or set aside by an older build and
+// sent home) is said in the conversation, not only in the log, with a commit and a command for what came home.
+test("work a pull reports is said in the conversation before the turn runs", async () => {
+    const { services, dial, leave } = parent();
+    const runner = await runnerAt(createRemoteTurns(), [delta("working"), done], {
+        syncLines: {
+            pull: [
+                { kind: "line", text: "intentic: carried", work: { kind: "carried", repo: "intentic", sha: "a".repeat(40), files: 176 } },
+                {
+                    kind: "line",
+                    text: "intentic: sent home",
+                    work: { kind: "rescue", repo: "intentic", sha: "b".repeat(40), base: "c".repeat(40), files: 194, ref: "refs/runner-rescue/c1/1795555026774", at: 1795555026774 },
+                },
+            ],
+        },
+    });
+    dial(runner.client);
+    const frames = await dispatched(services);
+    leave();
+    const notices = frames.flatMap((frame) => (frame.kind === "agent_notice" ? [frame.text] : []));
+    expect(notices[0]).toContain("176 changed files");
+    expect(notices[1]).toContain(`commit ${"b".repeat(12)}`);
+    expect(notices[1]).toContain(`git -C intentic diff --binary ${"c".repeat(12)} ${"b".repeat(12)} | git -C intentic apply --3way`);
+    expect(notices.join("\n")).not.toContain("refs/runner-rescue");
+    // Said before anything the turn itself produced.
+    expect(frames.findIndex((frame) => frame.kind === "agent_notice")).toBeLessThan(frames.findIndex((frame) => frame.kind === "delta"));
 });
 
 // A spawned child placed on a runner: the runner holds no record of it, so the note it opens with is written here and

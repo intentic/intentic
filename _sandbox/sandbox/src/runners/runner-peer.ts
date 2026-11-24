@@ -30,7 +30,7 @@ import { followRunnerFeed } from "./live/runner-feed.js";
 export type RunnerClient = ContractRouterClient<typeof runnerContract>;
 // What a runner's hello asserts about its build and declared shape, kept beside the live socket for the parity card.
 // `definitionToml` is replaced in place after a successful settings push (runner.routes.ts).
-export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "baseImage" | "baseDigest" | "channel" | "overlayHash" | "definitionToml">;
+export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "baseImage" | "baseDigest" | "channel" | "overlayHash" | "definitionToml" | "capabilities">;
 export type RunnerHub = PeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>;
 export type RunnerStore = PeerStore<{ readonly host?: string | undefined; readonly label?: string | undefined }>;
 
@@ -62,7 +62,7 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
     },
     hello: {
         schema: RunnerHelloSchema,
-        announced: ({ version, image, baseImage, baseDigest, channel, overlayHash, definitionToml }) => ({
+        announced: ({ version, image, baseImage, baseDigest, channel, overlayHash, definitionToml, capabilities }) => ({
             version,
             image,
             ...opt("baseImage", baseImage),
@@ -70,6 +70,7 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
             ...opt("channel", channel),
             ...opt("overlayHash", overlayHash),
             ...opt("definitionToml", definitionToml),
+            ...opt("capabilities", capabilities),
         }),
     },
     expired: "pairing expired or already used, mint a fresh one from the parent sandbox.",

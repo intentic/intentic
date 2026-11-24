@@ -46,6 +46,7 @@ import { notifyRoutes } from "./people/notify.routes.js";
 import { autoApproveRoutes } from "./auto-approve.routes.js";
 import { cardStopRoutes } from "./card-stops.routes.js";
 
+import { moveConversationHere, moveHereDeps } from "../runners/move/move-here.js";
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT, but an archive waits out a stop.
 // The card as a press left it, for the press to answer with; missing only once the conversation was deleted meanwhile.
@@ -525,6 +526,14 @@ export const createAgentsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Held work somebody brought in by hand, recorded as landed with nothing written (land/land-by-hand.ts).
+        // The work comes home first and the conversation follows it (runners/move-here.ts); refused rather than leaving
+        // any of it on the runner.
+        moveHere: i.moveHere.handler(async ({ input, context }) => {
+            workEntryFor(input.id, context, "drive");
+            notRunning(input.id);
+            await moveConversationHere(moveHereDeps(services), input.id);
+            return framed(context, summaryAfter(services, input.id));
+        }),
         settle: i.settle.handler(async (call) => framed(call.context, await settleRoute(services, isolatedEntryOf, notRunning)(call))),
         // Archives exactly the ids named, the board's Clear included. Answers with what moved, not the roster, so
         // overlapping requests can't undo each other.

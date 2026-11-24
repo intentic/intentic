@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import { boxNameOf } from "../../../models/fleet/fleetScope";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { placeConversation } from "./pane/composerControls";
@@ -7,7 +7,9 @@ import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../.
 import { useRunners } from "../../../models/sandbox/devices/useRunners";
 import { runnerTitle } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { Button, SectionHeader } from "@intentic/ui";
-import { startAgent } from "../../../models/fleet/agentActions";
+import { moveAgentHere, startAgent } from "../../../models/fleet/agentActions";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { useFleetAdvice } from "./fleet/fleetAdvice";
 import { draftFleet } from "./fleet/fleetPlacement";
@@ -26,7 +28,8 @@ import { loadLine, unfitWords } from "./fleet/fleetWords";
 //
 // Once it has latched the menu stops being a list of choices: rows that cannot be picked drew people into pressing each
 // in turn before finding the one line that said why. It reads instead as where the chat runs, locked, the reason, and
-// the one way forward (a new agent, whose own menu is open again).
+// the way forward: a new agent, whose own menu is open again, or, for a chat on a runner, Move here, which brings it
+// and its work to this sandbox.
 
 const t = useT();
 
@@ -104,6 +107,22 @@ const startElsewhere = (): void => {
     emit(`selected`);
 };
 
+// A conversation latched to a runner can still come here with its work (the sandbox's runners/move-here.ts): the way on
+// when that runner cannot take its turns any more, rather than a new agent told to pick the work up from this one.
+const movable = computed(() => settled.value && picked.value === undefined && pickedRunner.value !== undefined && supportsRoute(`agents.moveHere`));
+const moveFailure = ref<string | undefined>();
+// Its button locks itself while the press is under way (Button.vue).
+const moveHere = async (): Promise<void> => {
+    moveFailure.value = undefined;
+    try {
+        await moveAgentHere(conversation.conversationId);
+        conversation.runner.value = undefined;
+        emit(`selected`);
+    } catch (error) {
+        moveFailure.value = messageOr(error, t(`chat.chatPlacementMenu.moveHereFailed`));
+    }
+};
+
 // A pick here is the person's, which no automatic placement moves again (fleetAdvice.ts autoPlacement).
 const place = (at: { box?: string; runner?: string }): void => {
     if (placeConversation(conversation, at)) {
@@ -123,10 +142,16 @@ const place = (at: { box?: string; runner?: string }): void => {
             </span>
             <Icon name="lock" class="shrink-0 text-2xs text-subtle" :aria-label="t(`chat.chatPlacementMenu.fixedAria`)" />
         </div>
-        <p class="px-2.5 pb-2 pt-2 text-2xs text-subtle">{{ t(`chat.chatPlacementMenu.fixedNote`) }}</p>
-        <Button size="small" tier="accent" :label="t(`chat.words.newAgent`)" class="mx-2.5 mb-1.5 self-start" @click="startElsewhere">
-            <template #icon><Icon name="plus" /></template>
-        </Button>
+        <p class="px-2.5 pb-2 pt-2 text-2xs text-subtle">{{ movable ? t(`chat.chatPlacementMenu.fixedNoteRunner`) : t(`chat.chatPlacementMenu.fixedNote`) }}</p>
+        <div class="mx-2.5 mb-1.5 flex flex-wrap gap-1.5">
+            <Button v-if="movable" size="small" tier="accent" :label="t(`chat.chatPlacementMenu.moveHere`)" @click="moveHere">
+                <template #icon><Icon name="box" /></template>
+            </Button>
+            <Button size="small" :tier="movable ? `boring` : `accent`" :label="t(`chat.words.newAgent`)" @click="startElsewhere">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+        </div>
+        <p v-if="moveFailure !== undefined" role="alert" class="px-2.5 pb-1.5 text-2xs text-danger">{{ moveFailure }}</p>
     </div>
     <div v-else class="flex flex-col p-1">
         <button

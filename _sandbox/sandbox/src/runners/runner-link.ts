@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { createBackoff } from "@intentic/base/async";
 import { writeFileAtomic } from "@intentic/base/fs";
 import {
+    RUNNER_CAPABILITIES,
     RUNNER_HEARTBEAT_MS,
     RUNNER_LINK_PATH,
     type RunnerLinkReading,
@@ -82,6 +83,7 @@ export const startRunnerLink = (
                 ...opt("channel", services.config.sandbox.channel === "" ? undefined : services.config.sandbox.channel),
                 ...opt("overlayHash", build.overlay),
                 ...opt("definitionToml", definitionToml),
+                capabilities: [...RUNNER_CAPABILITIES],
             };
         },
         attach: (ws) => handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]),

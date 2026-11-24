@@ -407,6 +407,11 @@ export const discardAgent = (id: string, at: AgentReach = undefined): Promise<vo
 // files as landed. The one way out for work adapted on its way in, which the sandbox cannot recognise by its content.
 export const settleAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> => sandboxRpc.agents.settle({ id }, { context: { at } });
 
+// A conversation latched to a runner, brought to this sandbox with its work: the runner sends what it holds, and the next
+// message runs here in the same checkout (the sandbox's runners/move-here.ts). Refused, with the reason, while that
+// would leave work behind.
+export const moveAgentHere = (id: string, at: AgentReach = undefined): Promise<AgentSummary> => sandboxRpc.agents.moveHere({ id }, { context: { at } });
+
 // Scratch is what a land leaves in the conversation's copy (AgentChanges.scratch). Including stages it there, so the
 // next land carries it; deleting removes it from the copy. Both name paths exactly as the review listed them.
 export const includeAgentScratch = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {
