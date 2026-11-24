@@ -2,7 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { dockerAnswered, fakeDocker } from "../../device-testing.js";
+import { dockerAnswered, fakeDocker, grantWith } from "../../device-testing.js";
 import { ScopeError } from "../../policy.js";
 import { sandboxRunsDir } from "../programs/artifacts.js";
 import { COMPLETE } from "../programs/builds.js";
@@ -15,7 +15,7 @@ import { deployStack, stackAction, stacksRoot } from "./stacks.js";
 
 const SANDBOX = "https://sandbox-0a1b2c3d4e5f.example.dev";
 const COMMIT = "3f2a9c1e".repeat(5);
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
+const off: DeviceScopes = grantWith();
 const granted: DeviceScopes = { ...off, shell: "on", programs: "on" };
 
 const write = (path: string, text: string): void => {

@@ -44,7 +44,7 @@ const volumes = async (): Promise<{ workspace: string; history: string }> => {
 test("prints one plan line naming its format, conversion set and verdict, and writes nothing", async () => {
     const { workspace, history } = await volumes();
     const line = await plan(workspace, history);
-    // The fields ic (_sandbox/ic/src/sandbox/preflight.rs) and the update card read by name.
+    // The fields ic (_hosts/ic/src/sandbox/preflight.rs) and the update card read by name.
     expect(Object.keys(line)).toEqual(["plan", "version", "engine", "digest", "ok", "downgrade", "failures", "steps", "converts", "files"]);
     // The contract's schema for it, which ic's reader and the staged marker share, takes it whole and adds nothing.
     expect(StatePlanSchema.strict().safeParse(line).error?.issues).toBeUndefined();

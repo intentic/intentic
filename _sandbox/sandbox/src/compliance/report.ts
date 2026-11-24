@@ -1,3 +1,5 @@
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type {
     ComplianceReport,
     DataFlow,
@@ -24,15 +26,14 @@ interface Destination extends Operator {
     readonly hosts: readonly string[];
 }
 
-// The subscription providers' own hosts (privacy/harness-route.ts, agent/providers/*), and who runs them.
-const NATIVE_DESTINATIONS = new Map<string, Destination>([
-    ["claude", { hosts: ["api.anthropic.com"], operator: "Anthropic PBC", region: "US", thirdCountry: true }],
-    ["codex", { hosts: ["chatgpt.com", "api.openai.com"], operator: "OpenAI", region: "US", thirdCountry: true }],
-    ["grok", { hosts: ["api.x.ai"], operator: "xAI", region: "US", thirdCountry: true }],
-    ["kimi", { hosts: ["api.kimi.com"], operator: "Moonshot AI", region: "CN", thirdCountry: true }],
-    ["meta", { hosts: ["api.meta.ai"], operator: "Meta Platforms", region: "US", thirdCountry: true }],
-    ["zai", { hosts: ["api.z.ai"], operator: "Z.ai", thirdCountry: true }],
-]);
+// The subscription providers' own hosts (privacy/harness-route.ts, agent/providers/*), and who runs them: each provider's
+// `destination` trait.
+const NATIVE_DESTINATIONS = new Map<string, Destination>(
+    NATIVE_PROVIDERS.flatMap((provider) => {
+        const destination = providerTraits(provider)?.destination;
+        return destination === undefined ? [] : [[provider, destination] as const];
+    }),
+);
 
 // An endpoint's operator, known by its host where it is one of the API-key providers the sandbox recognises
 // (migrations/provider-keys.ts). Mistral is the one in the EEA.

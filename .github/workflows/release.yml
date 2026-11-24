@@ -112,7 +112,7 @@ jobs:
   # `externalBin`), which a shim pinned to the app's release copies into place instead of downloading
   # (stage-desktop-ic.sh says why). One build is what makes those the same bytes: an installer whose ic differed from
   # the one the release attaches would be a second binary answering to one version. windows-build and linux-build
-  # download this artifact into _sandbox/ic/dist-bin, where build-ic.sh writes, and stage it from there
+  # download this artifact into _hosts/ic/dist-bin, where build-ic.sh writes, and stage it from there
   # (stage-desktop-ic.sh --release refuses a binary of any other version); linux-build carries the directory on to
   # publish inside its own artifact, so what publish attaches and attests is what the installers carry.
   #
@@ -161,7 +161,7 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      # Empties _sandbox/ic/dist-bin among the rest, so the artifact holds this build and nothing a previous job on
+      # Empties _hosts/ic/dist-bin among the rest, so the artifact holds this build and nothing a previous job on
       # this runner left there.
       - uses: ./.github/actions/prepare-workspace
       # The two platforms an installer carries; ic-build-more builds the rest of what a connect/recreate one-liner
@@ -170,11 +170,11 @@ jobs:
       - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 windows-x64
       - run: bash _tools/scripts/build/build-intentic-engine.sh
       # A directory upload is rooted at the directory, so the artifact holds the binaries by name, and a download
-      # into _sandbox/ic/dist-bin puts them back exactly where build-ic.sh wrote them.
+      # into _hosts/ic/dist-bin puts them back exactly where build-ic.sh wrote them.
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: ic-release-binaries
-          path: _sandbox/ic/dist-bin
+          path: _hosts/ic/dist-bin
           if-no-files-found: error
           retention-days: 7
 
@@ -213,7 +213,7 @@ jobs:
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: ic-release-binaries-more
-          path: _sandbox/ic/dist-bin
+          path: _hosts/ic/dist-bin
           if-no-files-found: error
           retention-days: 7
 
@@ -276,7 +276,7 @@ jobs:
       - uses: ./.github/actions/download-artifact-retry
         with:
           name: ic-release-binaries
-          path: _sandbox/ic/dist-bin
+          path: _hosts/ic/dist-bin
       - run: bash _tools/scripts/desktop/build-desktop.sh "$RELEASE_VERSION" --windows-only
       - uses: ./.github/actions/upload-artifact-retry
         with:
@@ -470,7 +470,7 @@ jobs:
       - uses: ./.github/actions/download-artifact-retry
         with:
           name: ic-release-binaries
-          path: _sandbox/ic/dist-bin
+          path: _hosts/ic/dist-bin
       # The Windows launcher stub, which is what the machine agent above actually registers at logon: without it
       # in the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
       # console window on the desktop at every boot. The xwin toolchain ic-build uses; ~200 KB.
@@ -495,7 +495,7 @@ jobs:
             _devices/keyring/dist-bin
             _devices/win-launcher/dist-bin
             _devices/remoted/dist-bin
-            _sandbox/ic/dist-bin
+            _hosts/ic/dist-bin
             _editor/desktop-app/dist-bin
           if-no-files-found: error
           retention-days: 7
@@ -619,14 +619,14 @@ jobs:
       - uses: ./.github/actions/download-artifact-retry
         with:
           name: ic-release-binaries-more
-          path: _sandbox/ic/dist-bin
+          path: _hosts/ic/dist-bin
       # Two jobs now build the five, so the set is counted before anything is tagged: a shim asks this Release for
       # its platform's binary by name, and a missing one is a one-liner that 404s for everyone on that platform.
       - name: Every platform's ic is here
         shell: bash
         run: |
           for name in ic-linux-amd64 ic-linux-arm64 ic-windows-amd64.exe ic-darwin-amd64 ic-darwin-arm64; do
-            [ -f "_sandbox/ic/dist-bin/$name" ] || { echo "::error::_sandbox/ic/dist-bin/$name is missing"; exit 1; }
+            [ -f "_hosts/ic/dist-bin/$name" ] || { echo "::error::_hosts/ic/dist-bin/$name is missing"; exit 1; }
           done
       - uses: ./.github/actions/ghcr-login
         with:
@@ -719,7 +719,7 @@ jobs:
             _devices/keyring/dist-bin/*
             _devices/win-launcher/dist-bin/*
             _devices/remoted/dist-bin/*
-            _sandbox/ic/dist-bin/*
+            _hosts/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*
 
       # A copy of that same bundle, attached to the Release next to the installers it vouches for. The script

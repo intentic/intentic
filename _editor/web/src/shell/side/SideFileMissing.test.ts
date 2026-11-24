@@ -41,27 +41,27 @@ afterEach(() => {
 });
 
 it(`says what was asked and in whose copy, and offers what the opener already learned, without asking again`, async () => {
-    const host = await mount({ reference: `installer/config.toml`, agent: `crisp-maple-eucl`, nearby: [`intentic/_os/installer/bib-config.toml`] });
+    const host = await mount({ reference: `installer/config.toml`, agent: `crisp-maple-eucl`, nearby: [`intentic/_hosts/installer/bib-config.toml`] });
     expect(host.textContent).toContain(`config.toml`);
     expect(host.textContent).toContain(`installer/config.toml`);
     expect(host.textContent).toContain(`Intentic bare-metal OS`);
-    expect(suggestionNames(host)).toEqual([`intentic/_os/installer/bib-config.toml`]);
+    expect(suggestionNames(host)).toEqual([`intentic/_hosts/installer/bib-config.toml`]);
     expect(lookUpWorkspaceRef).not.toHaveBeenCalled();
 });
 
 it(`opens a picked suggestion in the card's place, in the same copy`, async () => {
-    const host = await mount({ reference: `installer/config.toml`, agent: `crisp-maple-eucl`, nearby: [`intentic/_os/installer/bib-config.toml`], line: 7 });
+    const host = await mount({ reference: `installer/config.toml`, agent: `crisp-maple-eucl`, nearby: [`intentic/_hosts/installer/bib-config.toml`], line: 7 });
     host.querySelector<HTMLButtonElement>(`button[title]`)?.click();
     await nextTick();
-    expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ path: `intentic/_os/installer/bib-config.toml`, agent: `crisp-maple-eucl` }]);
+    expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ path: `intentic/_hosts/installer/bib-config.toml`, agent: `crisp-maple-eucl` }]);
     expect(Object.values(panel.jumps.value)[0]?.line).toBe(7);
 });
 
 it(`asks again for a file that went while open, and offers where it is now`, async () => {
-    lookUpWorkspaceRef.mockResolvedValue({ path: `_os/installer/bib-config.toml`, renamedFrom: `_os/installer/config.toml` });
-    const host = await mount({ reference: `_os/installer/config.toml`, gone: true });
-    expect(lookUpWorkspaceRef).toHaveBeenCalledWith(`_os/installer/config.toml`, { agent: undefined });
-    expect(suggestionNames(host)).toEqual([`_os/installer/bib-config.toml`]);
+    lookUpWorkspaceRef.mockResolvedValue({ path: `_hosts/installer/bib-config.toml`, renamedFrom: `_hosts/installer/config.toml` });
+    const host = await mount({ reference: `_hosts/installer/config.toml`, gone: true });
+    expect(lookUpWorkspaceRef).toHaveBeenCalledWith(`_hosts/installer/config.toml`, { agent: undefined });
+    expect(suggestionNames(host)).toEqual([`_hosts/installer/bib-config.toml`]);
 });
 
 it(`offers a search only where this window draws the palette`, async () => {

@@ -5,6 +5,7 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
 import * as residentOriginal from "../resident/resident.js";
 import { recordingUi } from "../testing.js";
+import { grantWith } from "./device-testing.js";
 
 // Dropping the links a machine can no longer reach: the one delete on this device driven from a sandbox, so what it is
 // allowed to act on is the whole subject. It deletes ONLY on live evidence — the resident agent's own stamp — because
@@ -16,7 +17,7 @@ let commands: typeof import("./commands.js");
 let config: typeof import("./config.js");
 const ensured = jest.fn<(log: (message: string) => void) => Promise<void>>();
 
-const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
+const scopes: DeviceScopes = grantWith();
 
 const link = (url: string) => ({ sandboxUrl: url, id: `device-for-${url}`, token: `token-for-${url}`, scopes });
 

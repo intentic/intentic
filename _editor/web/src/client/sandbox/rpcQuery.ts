@@ -1,6 +1,6 @@
 import { computed, type ComputedRef, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcKey, rpcKeyAt } from "../../lib/queryKeys";
-import { UNPERSISTED } from "../../lib/queryPersistence";
+import { AMBIENT_READ, UNPERSISTED } from "../../lib/queryPersistence";
 import { type ProcedureInput, type ProcedureName, type ProcedureOutput, type SandboxCallContext, sandboxRpc } from "./sandboxRpc";
 
 // A contract read as a vue-query entry: the key derived from the procedure and its input (queryKeys.ts says how), and
@@ -13,6 +13,15 @@ export interface RpcQueryOptions {
     readonly unpersisted?: boolean;
     // Nobody is waiting on it: the fetch never raises a sign-in (SandboxCallContext).
     readonly background?: boolean;
+    // A glance at another sandbox, whose failure is that sandbox being asleep: not retried and not reported
+    // (queryPersistence.ts AMBIENT_READ).
+    readonly ambient?: boolean;
+}
+
+// What an ambient read adds to its query's options.
+interface AmbientOptions {
+    readonly meta?: typeof AMBIENT_READ;
+    readonly retry?: false;
 }
 
 // A procedure named by its route name, on the client the app calls; typed by the name, reached by walking it.
@@ -34,9 +43,11 @@ type ReadArguments<N extends ProcedureName> = undefined extends ProcedureInput<N
 export const rpcQuery = <N extends ProcedureName>(
     procedure: N,
     ...[input, options = {}]: ReadArguments<N>
-): { readonly queryKey: ComputedRef<unknown[]>; readonly queryFn: () => Promise<ProcedureOutput<N>> } => {
+): { readonly queryKey: ComputedRef<unknown[]>; readonly queryFn: () => Promise<ProcedureOutput<N>> } & AmbientOptions => {
     const marks = options.unpersisted === true ? [UNPERSISTED] : [];
+    const ambient: AmbientOptions = options.ambient === true ? { meta: AMBIENT_READ, retry: false } : {};
     return {
+        ...ambient,
         queryKey: computed(() => {
             const at = toValue(options.at);
             return at === undefined ? rpcKey(procedure, toValue(input), ...marks) : rpcKeyAt(at, procedure, toValue(input), ...marks);

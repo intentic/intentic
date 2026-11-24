@@ -33,7 +33,7 @@ Var IntenticChoice
 ; How the page's look at this PC went: "found" once `ic uninstall --dry-run` answered and its file was read; otherwise
 ; why not ("missing" when there is no ic beside the app, nsExec's "timeout" or "error", ic's exit code, "unreadable").
 Var IntenticLook
-; What it found, from the [inventory] section of its file (the contract in _sandbox/ic, `plan::ini`).
+; What it found, from the [inventory] section of its file (the contract in _hosts/ic, `plan::ini`).
 Var IntenticSandboxes
 Var IntenticDeleteCount
 Var IntenticPasswords

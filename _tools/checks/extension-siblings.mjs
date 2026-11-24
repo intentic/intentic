@@ -14,10 +14,12 @@ const ALLOWED = new Set([
     `acceptance`,
     `deployments`,
     `documentation`,
+    `e-urzad`,
     `example`,
     `issues`,
     `knowledge`,
     `maintenance`,
+    `prawo`,
     `workflows`,
 ]);
 

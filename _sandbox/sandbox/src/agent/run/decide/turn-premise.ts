@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentHarness, AgentProvider, AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
@@ -98,7 +99,7 @@ const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined
 
 // Native Claude on the Claude Code loop: the one serving that both runs the CLI's tool search and is known to answer its
 // beta. A translator or minted endpoint wears Anthropic's wire over a vendor that may not.
-const toolSearchReaches = (runtime: TurnRuntime): boolean => runtime.provider === "claude" && runtime.capabilities.runtime === "claude-code";
+const toolSearchReaches = (runtime: TurnRuntime): boolean => providerHas(runtime.provider, "firstPartyAnthropic") && runtime.capabilities.runtime === "claude-code";
 
 export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRuntime): TurnPremise => {
     const { settings, entry } = facts;

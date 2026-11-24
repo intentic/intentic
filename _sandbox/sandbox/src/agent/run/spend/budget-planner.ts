@@ -1,3 +1,4 @@
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { gatingWindows, type ServiceFacts, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
@@ -179,7 +180,7 @@ const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = D
     const ready = input.accounts.filter((account) => account.state.kind === "ready" && account.state.room > 0);
     const load = loadByAccount(deps, input.provider, now);
     const child = childCostOf(deps, input.provider, input.model);
-    const placed = input.provider === "claude";
+    const placed = providerTraits(input.provider)?.childPlacement === "per-account";
     const reserve = settings.subagentReservePercent;
     if (placed) {
         const accounts = ready.map(({ facts: reading, flapping }): BudgetAccount => {

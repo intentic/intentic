@@ -1,5 +1,5 @@
 {
-    "$comment": "The terminal design system's shapes, as both renderers must draw them with colour off at this width: _devices/local-agent/src/layout.ts and _sandbox/ic/src/ui.rs are each tested against every case. The rules are docs/ops/cli-output-protocol.md. Regenerate from layout.ts only after changing both renderers on purpose.",
+    "$comment": "The terminal design system's shapes, as both renderers must draw them with colour off at this width: _devices/local-agent/src/layout.ts and _hosts/ic/src/ui.rs are each tested against every case. The rules are docs/ops/cli-output-protocol.md. Regenerate from layout.ts only after changing both renderers on purpose.",
     "width": 72,
     "cases": [
         {

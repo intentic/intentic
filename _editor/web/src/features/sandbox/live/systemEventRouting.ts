@@ -1,3 +1,4 @@
+import { dropSandboxScope } from "../../../client/sandbox/scope/perSandbox";
 import { removeStoredValue, type StorageArea, storedKeys, storedValue, storeValue } from "../../../app/storage/browserStorage";
 
 // What a daemon `/events` frame makes stale: the routing policy, dependency-free (no store, query client, or Vue), so
@@ -30,6 +31,8 @@ export const daemonRebuilt = (sandboxId: string, build: string | undefined): boo
 const IDENTITY_PREFIXES = [`intentic.workspaceId.`, `intentic.daemonBuild.`];
 
 export const dropSandboxLocalState = (sandboxId: string): void => {
+    // And what this window keeps for it by id in memory (scope/perSandbox.ts, which imports nothing).
+    dropSandboxScope(sandboxId);
     for (const area of [`local`, `session`] satisfies StorageArea[]) {
         const doomed = storedKeys(``, area).filter((key) => key.includes(sandboxId) && !IDENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)));
         for (const key of doomed) {

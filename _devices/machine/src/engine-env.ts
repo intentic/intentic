@@ -9,14 +9,14 @@ const delimiter = win32.delimiter;
 
 // INTENTIC'S ENGINE, FOR EVERY `docker` THIS AGENT SPAWNS (2026-10-09). On a Windows PC whose sandboxes run on our
 // engine, `docker` must be the engine's own CLI pointed at its TLS endpoint, which `ic` writes to
-// `~/.intentic/engine/engine.json` (_sandbox/ic/src/engine/record.rs). Every spawn here inherits this process's
+// `~/.intentic/engine/engine.json` (_hosts/ic/src/engine/record.rs). Every spawn here inherits this process's
 // environment, so the agent keeps that environment in step with the record once per round: a move between engines
 // (`ic engine move`) switches the record while the agent runs, and a stale DOCKER_HOST would send its port mirror, its
 // sync and its keeper to an engine no sandbox runs on any more.
 //
-// THE PIPE (2026-10-10). Since ic's relay (_sandbox/ic/src/engine/relay.rs) serves the engine on a named pipe, the
+// THE PIPE (2026-10-10). Since ic's relay (_hosts/ic/src/engine/relay.rs) serves the engine on a named pipe, the
 // record names that too (`pipe`), and `docker` goes through it while it is there: docker.exe reads the TLS endpoint at
-// 31–40 MB/s on omen and the pipe at 140–160 (_sandbox/ic/docker-host/src/engine_pipe.rs), which is the speed of this
+// 31–40 MB/s on omen and the pipe at 140–160 (_hosts/ic/docker-host/src/engine_pipe.rs), which is the speed of this
 // agent's sync (`docker exec -i`). Over the pipe there is no TLS: the relay holds the certificate.
 
 const VARS = ["DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"] as const;

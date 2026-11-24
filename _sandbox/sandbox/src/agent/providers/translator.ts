@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import { type ChildProcess, spawn } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { randomUUID } from "node:crypto";
@@ -227,7 +228,7 @@ export const usageKey = (provider: KeyedProvider, name: string): string => `${pr
 // Google's channel bills a Code Assist project the sign-in discovers. CLIProxyAPI's management login only warns when
 // that discovery comes back empty and files the credential anyway, and its selector reads such a credential as
 // healthy; every turn it then catches dies at "antigravity auth missing project_id". No project means dead, not slow.
-const projectless = (provider: KeyedProvider, file: TranslatorAuthFile): boolean => provider === "gemini" && (file.project_id ?? "").trim() === "";
+const projectless = (provider: KeyedProvider, file: TranslatorAuthFile): boolean => providerHas(provider, "needsProject") && (file.project_id ?? "").trim() === "";
 
 // The bench reason on the row, in the words of the thing that is missing.
 const NO_PROJECT_REASON = "no Antigravity project on this Google account";

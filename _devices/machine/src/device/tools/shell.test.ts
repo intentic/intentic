@@ -10,22 +10,14 @@ import {
     runCommand,
     sandboxPowerIn,
 } from "./shell.js";
+import { grantWith } from "../device-testing.js";
 
 // `shell` used to check only WHERE a command would start (cwd, against the roots), never WHAT it would do, so
 // an agent could run `rm -rf ~/projects` and the sandbox's command gate never saw it (it hooks Bash and the JS
 // backend; this arrives as an MCP call on a different machine). These tests run real, harmless commands, since
 // the refusal has to happen before the spawn.
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "off",
-    screen: "on",
-    control: "off",
-    sandboxes: "off",
-    destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    roots: "/tmp",
-    ...overrides,
-});
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => grantWith(["shell", "screen"], { roots: "/tmp", ...overrides });
 
 test("a destructive command is refused when only `shell` is on", async () => {
     await expect(runCommand({ command: "rm -rf /tmp/does-not-exist" }, scopes())).rejects.toThrow(ScopeError);
@@ -160,18 +152,7 @@ test("a timed-out command is reported as stopped together with what it started",
 // sandboxes on this device"; a shell command that does what they do answers to the same switch, for any sandbox on the
 // machine, since this end cannot know which one the caller runs in.
 
-const withSandboxes = (sandboxes: DeviceScopes["sandboxes"]): DeviceScopes => ({
-    shell: "on",
-    write: "off",
-    screen: "on",
-    control: "off",
-    sandboxes,
-    destructive: "off",
-    programs: "off",
-    remoteView: "off",
-    remoteControl: "off",
-    remoteTerminal: "off", admin: "off",
-});
+const withSandboxes = (sandboxes: DeviceScopes["sandboxes"]): DeviceScopes => grantWith(["shell", "screen"], { sandboxes });
 
 const REFUSALS = [
     "ic sandbox restart work",

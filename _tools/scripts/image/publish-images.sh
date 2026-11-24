@@ -108,7 +108,7 @@ publish() {
     # zstd layers for the sandbox image (ZSTD=1): smaller to pull and quicker to unpack than gzip, which every update
     # of every host waits on. force-compression recompresses the base image's gzip layers too, so a pull is zstd
     # throughout. Docker reads zstd from Engine 23.0, and ic tells an older engine to update before it pulls
-    # (_sandbox/ic/src/docker.rs, too_old_to_unpack). Level 9 is klauspost's "better" encoder: built once per release,
+    # (_hosts/ic/src/docker.rs, too_old_to_unpack). Level 9 is klauspost's "better" encoder: built once per release,
     # pulled by every host.
     #
     # A dry build writes no cache. Its image is loaded, booted once and removed, so cache keys written into it reach

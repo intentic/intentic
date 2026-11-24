@@ -90,6 +90,7 @@ const withGatewayNote = (skill: string, spec: CapabilityContribution, config: Re
 };
 
 export const cliHandler: CapabilityHandler = {
+    removal: () => "its environment variables leave the agent's shell and the skill file teaching this tool is deleted",
     secret: (config, connectors) => {
         const spec = connectors.get(contributionKey("cli", (config as CliConfig).provider))?.spec;
         return spec === undefined ? undefined : contributionSecretField(spec);

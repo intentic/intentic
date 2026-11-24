@@ -14,7 +14,7 @@ const DEBOUNCE_MS = 500;
 const SLUG_ARGS = process.argv.slice(2);
 
 // Groups holding the daemon and its workspace deps; @intentic/constants lives in _tools, unlike the others.
-const WATCH_PATHS = [join(REPO_ROOT, "_sandbox"), join(REPO_ROOT, "_search"), join(REPO_ROOT, "_tools/constants")];
+const WATCH_PATHS = [join(REPO_ROOT, "_sandbox"), join(REPO_ROOT, "_agent-tools"), join(REPO_ROOT, "_tools/constants")];
 
 // chokidar v4 dropped glob support; build artifacts and vcs dirs are filtered by path segment instead.
 const IGNORED_SEGMENTS = new Set(["node_modules", "dist", ".turbo", ".cache", "generated", ".astro", ".git", "target"]);

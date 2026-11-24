@@ -15,7 +15,7 @@ export const ORIGIN_HOST = "intentic-sandbox-workspace";
 // SANDBOX_MANAGER's value on a container Docker Compose owns (the setup page's Compose file sets it). Such a sandbox
 // updates the way any Compose service does, from the folder holding its file. Not in REPLAY_VARS: `ic` decides it from
 // the container's own Compose labels instead, and a swap it makes of a Compose container (an environment rebuild) sets
-// it again and hands the replacement back to Compose (_sandbox/ic/src/sandbox/compose.rs).
+// it again and hands the replacement back to Compose (_hosts/ic/src/sandbox/compose.rs).
 export const COMPOSE_MANAGER = "compose";
 export const COMPOSE_UPDATE_COMMAND = "docker compose pull && docker compose up -d";
 

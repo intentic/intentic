@@ -16,7 +16,7 @@ export const isOfficialSandboxImage = (ref: string): boolean => OFFICIAL_SANDBOX
 // The base the dogfood loop compiles from a working tree (`pnpm build:sandbox`). A sandbox on it is rebuilt from that
 // checkout and never from the registry, which would replace the image rather than refresh it. Exactly this tag, not
 // "any unpublished ref": a rollback pin is a local tag too, and updating off one is how a rolled-back sandbox rejoins
-// its channel. ic's twin is DEV_TAG in _sandbox/ic/src/sandbox/recreate.rs.
+// its channel. ic's twin is DEV_TAG in _hosts/ic/src/sandbox/recreate.rs.
 export const DEV_SANDBOX_IMAGE = "intentic-sandbox:dev";
 
 interface OverlayLine {

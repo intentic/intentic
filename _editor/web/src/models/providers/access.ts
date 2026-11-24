@@ -1,3 +1,4 @@
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import { accessFor, accountServesLoop, isTrialProvider, loopDoor, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type AccessKind, NATIVE_PROVIDERS, type ProviderAccess, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
@@ -53,7 +54,7 @@ export const providerReady = (provider: AgentProvider): boolean => {
 // holds xAI OAuth. The other translator loops (including Gemini on OpenCode) share a subscription pool.
 export const subscriptionProviderOn = (provider: AgentProvider, harness: AgentHarness): KeyedProvider | undefined => {
     const loop = selectedLoop(offeredLoops(provider), harness);
-    if (providerSpec(provider)?.auth.kind !== `translator` || loopDoor(provider, loop) !== undefined || (provider === `grok` && loop === `opencode`)) {
+    if (providerSpec(provider)?.auth.kind !== `translator` || loopDoor(provider, loop) !== undefined || providerTraits(provider)?.ownSignInLoop === loop) {
         return undefined;
     }
     const keyed = KeyedProviderSchema.safeParse(provider);
@@ -151,7 +152,7 @@ export const connectPitch = (provider: AgentProvider, harness: AgentHarness): { 
         return undefined;
     }
     const runs =
-        provider === `grok` && selectedLoop(offeredLoops(provider), harness) === `claude-code`
+        providerTraits(provider)?.ownSignInLoop !== undefined && selectedLoop(offeredLoops(provider), harness) === `claude-code`
             ? t(`chat.access.runsUnderClaudeCode`, { runs: runsWords(access) })
             : runsWords(access);
     const requirement = requirementWords(access, `object`);

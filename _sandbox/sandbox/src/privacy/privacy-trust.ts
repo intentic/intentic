@@ -1,4 +1,5 @@
 import type { AgentHarness } from "@intentic/sandbox-contract/schemas/agent";
+import { traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
     capabilitiesOf,
@@ -59,7 +60,7 @@ export const privacyProviders = (capabilities: readonly Capability[]): PrivacyPr
     const shieldable = (provider: string): boolean => loopsOf(provider).some((loop) => runtimeRoute(provider, loop) !== "runtime");
     const natives = PROVIDER_SPECS.map((spec) => ({ id: spec.id, label: spec.label, shieldable: shieldable(spec.id), local: false }));
     const connected = capabilities.flatMap((capability): PrivacyProvider[] => {
-        if (capability.kind === "endpoint" || capability.kind === "localmodel") {
+        if (traitsOf(capability.kind)?.provider === "endpoint") {
             const id = endpointProvider(capability.id);
             return [
                 {

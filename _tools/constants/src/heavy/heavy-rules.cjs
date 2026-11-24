@@ -79,7 +79,7 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
         // `nests`: judged again under a program that already holds a slot of a pool no `nests` rule names, so the
         // `vue-tsc` a `pnpm -r typecheck` or a repository verification starts still takes this lane (see matchInvocation
         // for why that cannot deadlock).
-        // - A changed-files check (`lsp diag` on a Vue package, _search/lsp/src/vue-check.ts) names the tsconfig it
+        // - A changed-files check (`lsp diag` on a Vue package, _agent-tools/lsp/src/vue-check.ts) names the tsconfig it
         //   writes, `tsconfig.lsp-changed.<pid>.json`, and is priced as what it loads (measured 2026-10-27: 1.0-3.9 GiB,
         //   5-55 s). A lane of its own, two at once, so it never waits behind a full check's ten minutes; the memory gate
         //   still prices each one.

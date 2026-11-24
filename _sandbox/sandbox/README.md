@@ -23,7 +23,7 @@ word “agent” in the UI.
 | --- | --- | --- |
 | Start, continue or recover a turn | [agent/run/stream-agent.ts](src/agent/run/stream-agent.ts) | [turn admission](src/agent/run/turn/turn-admission.ts), [resume and recovery](src/agent/run/turn/turn-resume.ts), [provider/session routing](src/conversations/registry/routing.ts) |
 | Run the Claude Code loop | [harness/claude-code-runner.ts](src/agent/run/harness/claude-code-runner.ts) | [SDK stream frames](src/agent/run/harness/claude-code-stream.ts), [harness planning](src/agent/run/harness/harness-plan.ts); this harness also serves other providers |
-| Add or repair a runtime | [runtimes/runtime-table.ts](src/runtimes/runtime-table.ts) | The selected provider adapter and its execution module; [Claude's adapter](src/runtimes/claude/claude-provider.ts) connects to the shared harness |
+| Add or repair a runtime | [runtimes/runtime-table.ts](src/runtimes/runtime-table.ts) | The selected provider adapter and its execution module; [Claude's adapter](src/runtimes/claude/claude-provider.ts) connects to the shared harness. Adding a provider is a row in the contract's `PROVIDER_SPECS` (`models/provider-specs.ts`) and one in its trait table `PROVIDER_TRAITS` (`models/providers/provider-traits.ts`: hub travel, compliance hosts, effort scale, sign-in shape, placement…), which the compiler makes complete; surfaces read a trait, never `provider === "x"` |
 | Change conversation state or cards | [registry/agents-registry.ts](src/conversations/registry/agents-registry.ts) | [actor decisions](src/conversations/actor/conversation-decide.ts), [title policy](src/conversations/registry/naming/title-policy.ts), [summary projection](src/conversations/registry/projection/agent-summary.ts) |
 | Page or reconstruct a transcript | [conversations/transcript-page-answer.ts](src/conversations/transcript-page-answer.ts) | [session storage](src/sessions/session-store.ts), [session readers](src/sessions/sessions.ts) |
 | Change a turn's prompt | [agent/prompt/system-prompt.ts](src/agent/prompt/system-prompt.ts) | [guidance assembly](src/agent/prompt/guidance.ts) and the selected runtime's prompt adapter |
@@ -149,7 +149,7 @@ flowchart LR
   an app on a phone attached to one (typed by that computer's keyring, which checks the window), and a page in the
   owner's own browser (a one-time ticket the extension redeems at `POST /system/webext/secret`).
 - Files cross between the owner's own browser and the artifacts shelf through two doors on the extension's token
-  (`webext/media-shelf.ts`, `file-tickets.ts`): `POST /system/webext/media` stores what the agent saved from a page
+  (`browser/cast/media-shelf.ts`, `webext/file-tickets.ts`): `POST /system/webext/media` stores what the agent saved from a page
   (`save_media`, or a download its click started) under `.intentic/records/artifacts/chrome/` with a sanitized name, at
   most 50 MB; `POST /system/webext/file` hands one shelf file to the browser for `upload_file`, only for a one-time
   ticket the daemon adds to that call on its way to the browser, after checking the file's real path is on the shelf.
@@ -797,7 +797,7 @@ flowchart LR
   `setInputFiles`; pictures and long answers land in `.intentic/records/artifacts/chatgpt/`; what the kit remembers (its
   project, its chats) is a cache, `.intentic/local/browser/<owner>.chatgpt.json`. One kit call at a time per browser,
   and a router listing the kit is waited on 11 minutes a call, not 5; a client with a shorter ceiling gets the same
-  shortened `wait` as through the extension (`webext-client-ceiling.ts`).
+  shortened `wait` as through the extension (`browser/webext-client-ceiling.ts`).
 - The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
   openbox on it, for programs with a window and no other way in. A turn whose role may drive a browser and run programs
   (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser

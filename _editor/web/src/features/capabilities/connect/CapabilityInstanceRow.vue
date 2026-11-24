@@ -1,32 +1,25 @@
 <!-- One connection: its name, whether it works and what tells it apart, opening in place on its own settings. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
-import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
-import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { Button, ContextMenu, CopyButton, DisclosureRow, type IconName, StatusBadge, toneDot } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { type ConnectionState, machineAway, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
+import { type ConnectionState, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
 import { connectedLinks } from "../../../models/capabilities/credentialGuide";
-import { seedValues } from "../../../models/capabilities/form";
 import { type HubRowView, saveLabel } from "../../../models/hub/connectionHub";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
-import { hostPresets, matchHostPreset } from "../model/previews";
+import { slotsOf } from "../kinds/kindSlots";
+import { KIND_ICONS } from "../../../models/capabilities/kinds/kindIcons";
 
 const t = useT();
 
 const props = defineProps<{
     entry: CapabilityCatalogEntry;
     instance: CapabilitySummary;
-    /** The roster's answer for a host-kind connection: whether it has ever paired, and whether it is up now. */
-    host?: HostSummary | undefined;
-    /** The same, for a webext-kind one: the browser this extension is installed in. */
-    browser?: WebExtSummary | undefined;
-    /** The same, for a phone-kind one: the phone the Intentic Device app runs on. */
-    phone?: PhoneSummary | undefined;
+    /** The roster's answer for a peer's connection (a computer, a browser, a phone): whether it has ever paired. */
+    peer?: { readonly lastSeen?: number | undefined } | undefined;
     /** The state in the reader's words: read from the same place the Connected inventory reads it. */
     state: ConnectionState;
     /** What this connection says about itself: a tunnel's address, a machine's OS, a database's host. */
@@ -49,18 +42,14 @@ const emit = defineEmits<{
     save: [machine: string];
 }>();
 
-// A device connects by running a command on it; a browser, by pasting a code into it; a phone, by scanning a code
-// with it. One that's never checked in is waiting on that step; one that has is merely asleep, which a fresh pairing
-// won't wake.
-const isHost = computed(() => props.entry.kind === `device`);
-const isBrowser = computed(() => props.entry.kind === `webext`);
-const isPhone = computed(() => props.entry.kind === `phone`);
-const pairs = computed(() => isHost.value || isBrowser.value || isPhone.value);
+// A peer pairs through its kind's dialog (kindSlots.ts `pairing`): a device by running a command on it, a browser by
+// pasting a code into it, a phone by scanning a code with it. One that's never checked in is waiting on that step; one
+// that has is merely asleep, which a fresh pairing won't wake.
+const pairing = computed(() => slotsOf(props.entry.kind).pairing);
+const pairs = computed(() => pairing.value !== undefined);
 // The roster's lastSeen starts over when the sandbox restarts, so a machine the daemon still holds paired (its away
 // detail) counts too: its row offers Reconnect, not the first Connect.
-const paired = computed(
-    () => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen ?? props.phone?.lastSeen) || (isHost.value && machineAway(props.instance)),
-);
+const paired = computed(() => Boolean(props.peer?.lastSeen) || pairing.value?.stillPaired?.(props.instance) === true);
 // Working as it should: the row then says nothing about its state but its dot, and asks nothing of the reader.
 const healthy = computed(() => props.state.tone === `success`);
 
@@ -69,7 +58,7 @@ const signsIn = computed(() => signsInByHand(props.entry.kind));
 const connected = computed(() => props.instance.status.state === `active`);
 
 // An ACP agent with a loginCommand signs in interactively: the daemon starts it and the terminal panel opens on it.
-const agentSignIn = computed(() => props.entry.kind === `agent` && props.instance.config[`loginCommand`] !== undefined);
+const agentSignIn = computed(() => slotsOf(props.entry.kind).signsInByCommand?.(props.instance) === true);
 
 // What the card's manifest offers to do next on the service's own site (Discord's invite), once the connection holds
 // what the link is built from.
@@ -87,13 +76,7 @@ const pendingStep = computed(
 const pairingCode = computed(() => props.instance.status.code);
 
 // A computer's access in the words of the form that sets it, so the row answers "what may the agent do there" closed.
-const access = computed(() => {
-    if (!isHost.value) {
-        return undefined;
-    }
-    const preset = matchHostPreset(seedValues(props.entry, props.instance.config, {}));
-    return hostPresets().find((candidate) => candidate.key === preset)?.label ?? t(`capabilities.capabilityInstanceRow.customAccess`);
-});
+const access = computed(() => pairing.value?.access?.(props.entry, props.instance));
 
 // The row's one button, only where the reader has something to do: a connection that can't be used shows the way to
 // fix it; one that works shows nothing, its Reconnect moving into its open settings. A signed-in browser keeps the way
@@ -105,7 +88,7 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
         }
         return {
             label: paired.value ? t(`ui.action.reconnect`) : t(`ui.action.connect`),
-            icon: isBrowser.value ? `globe` : isPhone.value ? `mobile` : `desktop`,
+            icon: KIND_ICONS[props.entry.kind],
             run: () => emit(`connect`),
         };
     }

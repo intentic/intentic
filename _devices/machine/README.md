@@ -172,7 +172,7 @@ flowchart LR
   is not ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), since a new verb here arrives with a new verb there.
   A fetch that fails is logged with its reason and reported in the device's facts (`icOutOfDate`, beside `features`),
   so a stale `ic` explains why logs and saving a shape are missing; the next sandbox action tries again.
-- (2026-10-13) **On Intentic OS** (a machine with `/usr/lib/intentic-os/release.json`; see [_os](../../_os/README.md))
+- (2026-10-13) **On Intentic OS** (a machine with `/usr/lib/intentic-os/release.json`; see [_hosts](../../_hosts/README.md))
   the agent also serves the OS tools ([`tools/os/os.ts`](src/device/tools/os/os.ts)), thin callers of `ic os` with the
   contract's argv and schemas (`icOsUpdateArgs`, `IntenticOsStatusSchema`): `os_status`, read-only and gated like the
   listing; `os_update`, whose `check` is a read too, `stage` downloads for the next boot and `apply` reboots into it;
@@ -341,6 +341,21 @@ flowchart LR
   (`runAgentFlow`, [`device/tools/agent.ts`](src/device/tools/agent.ts)): no agent tool reaches it, and the sandbox
   admits only a maintainer to it, so the owner's maintenance does not wait on the agents' "Run commands" (2026-09-29;
   it rode that switch before, and an owner had to widen what agents may do to update the agent).
+- Adding a tool: a tool is one `tool({ name, description, effect, input, run })` in the `TOOLS` list of
+  [`device/mcp.ts`](src/device/mcp.ts) (or the list of its own module that `TOOLS` spreads in). One whose arguments
+  carry a program (a command line, a program with arguments, a target `open` may spawn, text typed where a terminal
+  could run it) is built with `programTool` instead, which compiles only for a name in the contract's
+  `DEVICE_PROGRAM_TOOLS` table ([`policy/device-programs.ts`](../../_shared/sandbox-contract/src/policy/device-programs.ts)),
+  so add its row there first: the row says where its program is, and it is what the daemon's gate judges.
+  `mcp.integration.test.ts` holds the tools built with `programTool` equal to that table, and makes a `destructive`
+  tool that carries nothing say why in its list of exceptions.
+- Adding a switch: it is one field of `DeviceScopesSchema`
+  ([`schemas/capabilities.ts`](../../_shared/sandbox-contract/src/schemas/capabilities.ts)), with its default. Tests
+  build a grant with `grantWith(["shell", …], extra)` from [`device/device-testing.ts`](src/device/device-testing.ts)
+  (`"agent"` for the six agent switches), and source and daemon tests with the contract's `deviceScopesOn`: both read
+  the schema's keys, so a new switch is off everywhere it is not named and no test needs an edit for it. The daemon's
+  setup grant (`SETUP_HOST_SCOPES`) is the one place spelled out on purpose, and its test fails until someone decides
+  whether a setup-connected machine gets the new switch.
 - Every connection dials out; the only listeners are on loopback. One of them is short-lived: while a sandbox's
   sign-in is open, [`device/loopback-catch.ts`](src/device/loopback-catch.ts) listens on the
   `http://localhost:<port>/…` address the provider redirects to, the one a CLI running here would have held, and
@@ -756,7 +771,7 @@ whose it is.
   ic finishes or undoes an interrupted cutover and rolls a failing new version back; the agent logs what it did.
   The per-record watch runs in every environment, since only the environment that swapped holds the record, and so
   does the sweep: ic answers each environment only for the sandboxes it keeps (`HOST_PLATFORM` on the container,
-  [`ic`'s side.rs](../../_sandbox/ic/src/sandbox/side.rs)).
+  [`ic`'s side.rs](../../_hosts/ic/src/sandbox/side.rs)).
 - **Daily**, in every environment, for the sandboxes it keeps: `ic sandbox backup <slug> --auto --json` for each
   running sandbox, one at a time, twenty to forty minutes after start (a supervised distro half an hour later than the
   root, so the two sides of a PC never read one engine's disks at once) and then every day, then one
@@ -1038,13 +1053,13 @@ unrelated Postgres of the owner's PANICked on ENOSPC and stayed down. Nothing ha
 tools show other disks, each sandbox's disk watch cleans only its own checkouts, and the daily tidy came too late. The
 Windows side's agent now watches that disk
 ([`device/sandbox-rounds/engine-disk.ts`](src/device/sandbox-rounds/engine-disk.ts)). ic does the measuring and the
-clearing ([`ic engine disk`](../../_sandbox/ic/README.md)); this keeps the clock and tells.
+clearing ([`ic engine disk`](../../_hosts/ic/README.md)); this keeps the clock and tells.
 
 - **Every minute**, `ic engine disk --json`: the effective space, limited by the guest disk or the Windows drive holding
   the engine's VHDX, and the level it makes. When the Windows drive is limiting, the line names it and its free space
   (for example, `Windows drive C:\ has 18.5 GB free under the engine's disk (376.0 GB)`). `ok`; `low` under 10% of
   the disk left to write; `critical` under 5%; `full` under the ballast the engine's keeper holds back (2% of the disk,
-  2 to 10 GiB, [engine README](../../_sandbox/ic/engine/README.md#its-disk)), which the keeper gives back the moment the
+  2 to 10 GiB, [engine README](../../_hosts/ic/engine/README.md#its-disk)), which the keeper gives back the moment the
   disk reaches it. "Left to write" is what a process that is not root may still write, which is where a database in a
   container stops. An engine that is not this PC's, a stopped one, or an ic too old to answer is said once and asked
   again every ten minutes. Only the Windows side runs it: the engine is the PC's, and the distros' agents would watch

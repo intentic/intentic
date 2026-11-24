@@ -295,7 +295,7 @@ const mountedOverlayDirs = async (): Promise<ReadonlySet<string>> => {
 };
 
 export interface WarmLayer {
-    // Checkout-relative: the target it lies over (`target`, `_sandbox/ic/target`).
+    // Checkout-relative: the target it lies over (`target`, `_hosts/ic/target`).
     readonly rel: string;
     readonly layer: string;
     // The snapshot it reads through.

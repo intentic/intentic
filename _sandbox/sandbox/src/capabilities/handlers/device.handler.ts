@@ -16,6 +16,7 @@ const DEVICE: PeerHandlerSpec<DeviceConfig> = {
     pairHint: "click Connect and run the one-liner on that device",
     // The editor reads this one as offline rather than as a setup to finish, so it is the contract's word.
     awayHint: DEVICE_AWAY_DETAIL,
+    removal: "that machine's key is revoked and its link to this sandbox cut; nothing on the machine itself is deleted",
     added: (id) => `Added "${id}". Run the one-time command its entry is offering on that device, the agent can work on it from the next turn.`,
     store: (ctx) => ctx.hosts,
     hub: (ctx) => ctx.hostHub,

@@ -32,7 +32,7 @@ import {
 // process was killed without warning. Read while a daemon is up, it says "running": that run. Each write replaces the
 // file whole: a kill in the middle of one would otherwise leave a torn marker, which reads as a first boot and so hides
 // exactly the death it is there to report.
-// The host reads it too: `ic` takes `startedAt` off it to count a daemon's restarts (_sandbox/ic/src/sandbox/probation.rs)
+// The host reads it too: `ic` takes `startedAt` off it to count a daemon's restarts (_hosts/ic/src/sandbox/probation.rs)
 // and reads nothing else, so fields can be added; held to this file's name and shape by system/host-files.test.ts.
 
 export const MARKER_FILE = "daemon-exit.json";

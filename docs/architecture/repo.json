@@ -25,11 +25,9 @@
                 "_sandbox/agent-context",
                 "_sandbox/castd",
                 "_sandbox/cli",
-                "_sandbox/fileq",
                 "_sandbox/netd",
                 "_sandbox/gate",
                 "_sandbox/gate-action",
-                "_sandbox/ic",
                 "_sandbox/issue-sdk",
                 "_sandbox/ocr",
                 "_sandbox/output-cleaners",
@@ -37,8 +35,7 @@
                 "_sandbox/sandbox",
                 "_sandbox/scaffold",
                 "_sandbox/speech",
-                "_sandbox/webchat-widget",
-                "_sandbox/webq"
+                "_sandbox/webchat-widget"
             ]
         },
         {
@@ -87,7 +84,6 @@
                 "_extensions/phones",
                 "_extensions/pi-agent",
                 "_extensions/pipelines",
-                "_extensions/prawo",
                 "_extensions/preview",
                 "_extensions/repo-apps",
                 "_extensions/slack",
@@ -118,21 +114,25 @@
         },
         {
             "accent": "neutral",
-            "id": "os",
-            "name": "Intentic OS",
-            "oneLiner": "A machine that boots straight into Intentic, with the first sandbox managing it.",
+            "id": "hosts",
+            "name": "Hosts",
+            "oneLiner": "What runs on the machine under a sandbox: the host CLI that runs the sandboxes, and an OS that boots straight into Intentic.",
             "packages": [
-                "_os/os-image"
+                "_hosts/ic",
+                "_hosts/os-image"
             ]
         },
         {
             "accent": "4",
-            "id": "search",
-            "name": "Code search",
-            "oneLiner": "The search box's text and file-name search, and the agents' TypeScript rename and diagnostics.",
+            "id": "agent-tools",
+            "name": "Agent tools",
+            "oneLiner": "The tools an agent runs inside a sandbox, and the search box's text and file-name search.",
             "packages": [
-                "_search/lsp",
-                "_search/text-search"
+                "_agent-tools/agent-cli",
+                "_agent-tools/fileq",
+                "_agent-tools/lsp",
+                "_agent-tools/text-search",
+                "_agent-tools/webq"
             ]
         },
         {
@@ -164,7 +164,6 @@
             "name": "Plumbing",
             "oneLiner": "Shared config and test harnesses.",
             "packages": [
-                "_tools/agent-cli",
                 "_tools/base",
                 "_tools/castbench",
                 "_tools/checks",

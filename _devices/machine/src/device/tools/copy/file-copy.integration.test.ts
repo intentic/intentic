@@ -6,6 +6,7 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import { type CopyKind, FILE_COPY_CHUNK_BYTES } from "@intentic/sandbox-contract/schemas/device-files";
 import { ScopeError } from "../../policy.js";
 import { copyFile } from "./file-copy.js";
+import { grantWith } from "../../device-testing.js";
 
 // `devices copy` as the machine sees it, on a real temp tree with one allowed root: what the daemon would send, chunk by
 // chunk, and what lands. A sibling outside the root is where the refusals try to reach.
@@ -16,7 +17,7 @@ const outside = join(base, "outside");
 mkdirSync(root);
 mkdirSync(outside);
 
-const grant: DeviceScopes = { shell: "off", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off", roots: root };
+const grant: DeviceScopes = grantWith(["write"], { roots: root });
 const readOnly: DeviceScopes = { ...grant, write: "off" };
 
 afterAll(() => {

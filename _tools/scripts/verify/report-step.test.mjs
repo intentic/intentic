@@ -12,7 +12,7 @@ const ESC = String.fromCharCode(27);
 
 test("findingsIn reads rustfmt's diffs, rustc's arrows and the checks' own lines", () => {
     const output = [
-        "Diff in /w/_sandbox/ic/src/main.rs:12:",
+        "Diff in /w/_hosts/ic/src/main.rs:12:",
         `${ESC}[31m-fn main(){${ESC}[m`,
         "Diff in /w/old/lib.rs at line 3:",
         "warning: unneeded `return` statement",
@@ -24,7 +24,7 @@ test("findingsIn reads rustfmt's diffs, rustc's arrows and the checks' own lines
         "_tools/x.mjs:4: a finding a check printed",
     ].join("\n");
     assert.deepEqual(findingsIn(output), [
-        { file: "/w/_sandbox/ic/src/main.rs", line: 12, message: "not formatted as rustfmt would (cargo fmt writes it; ci.yml's autofix job pushes it on main)" },
+        { file: "/w/_hosts/ic/src/main.rs", line: 12, message: "not formatted as rustfmt would (cargo fmt writes it; ci.yml's autofix job pushes it on main)" },
         { file: "/w/old/lib.rs", line: 3, message: "not formatted as rustfmt would (cargo fmt writes it; ci.yml's autofix job pushes it on main)" },
         { file: "src/main.rs", line: 2, col: 18, message: "warning: unneeded `return` statement" },
         { file: "src/a.rs", line: 7, col: 9, message: "error: mismatched types" },

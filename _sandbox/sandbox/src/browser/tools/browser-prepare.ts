@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { CAPABILITY_KIND_TRAITS } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { Services } from "../../composition.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import { toolCallIdOf, writeScreenshotProvenance } from "../cast/screenshot-provenance.js";
@@ -23,7 +24,7 @@ export const prepareKnownOwner = async (services: Pick<Services, "capabilities" 
     const capabilities = await services.capabilities.list();
     const known =
         owner === ANONYMOUS_BROWSER_SERVER ||
-        capabilities.some((capability) => (capability.kind === "browser" || capability.kind === "identity") && profileOwner(capability) === owner);
+        capabilities.some((capability) => CAPABILITY_KIND_TRAITS[capability.kind].sandboxBrowser && profileOwner(capability) === owner);
     if (!known) {
         return { refusal: `no browser profile named "${owner}" in this sandbox` };
     }

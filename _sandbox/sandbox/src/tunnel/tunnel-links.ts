@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import type { KindsWhere } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -6,7 +7,8 @@ import { markUp } from "./tunnel-state.js";
 
 /* A TUNNEL is a capability the manifest stores and the machine either holds or does not: a VPN into somewhere of the user's (vpn/), a geo exit (exit/), a mounted network disk (netdisk/). */
 
-export type TunnelKindName = "vpn" | "exit" | "netdisk";
+// The kinds whose row says `tunnel` (policy/capability-kinds.ts).
+export type TunnelKindName = KindsWhere<{ readonly tunnel: true }>;
 
 // A tunnel-kind capability, narrowed: the manifest is a discriminated union over `kind`, so this is the one
 // cast the tunnel modules need and every driver can take its own config without re-checking.

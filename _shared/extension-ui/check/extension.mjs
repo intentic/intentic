@@ -8,7 +8,10 @@
 // - the kit's decided looks (kit-decisions.mjs: a header decision at the call site, a header drawn by hand, a card in a
 //   card, sections nothing spaces, a row's own height, an icon nudged by hand);
 // - a name imported from the kit or the API that the manifest's `engines.intentic` floor does not have, read off the
-//   API's surface record (surface.json), so a bundle never reaches a host whose link would fail.
+//   API's surface record (surface.json), so a bundle never reaches a host whose link would fail;
+// - a @intentic/sandbox-contract subpath outside the slice the extension API versions (`wireExports` in the newest
+//   surface record, extension-api's EXTENSION_WIRE): the contract moves with the product release, so a schema read from
+//   any other subpath can change under a `^1.x` range with nothing saying so.
 // Pure: the caller hands in the files, the manifest and the surface record. check/cli.mjs is the command around it.
 import { extensionUiDeprecated, extensionUiNames, extensionUiRetired } from "../names.mjs";
 import { glyphFindings, sectionFindings } from "./kit-decisions.mjs";
@@ -16,6 +19,7 @@ import { blank } from "./scan.mjs";
 
 const KIT = `@intentic/extension-ui`;
 const API = `@intentic/extension-api`;
+const CONTRACT = `@intentic/sandbox-contract`;
 
 // A finding at a line excused by `allow(kit-check): <reason>` on that line or the one above it, in any comment form.
 const ALLOW = /allow\(kit-check\):\s*\S/u;
@@ -154,13 +158,46 @@ const enginesFindings = (files, range, surface) => {
 };
 
 /**
+ * The @intentic/sandbox-contract specifiers an extension may import, as the newest surface record that has them lists
+ * (`wireExports`, from 2.44.0), or undefined when no record does: an API from before the wire was versioned holds an
+ * extension to nothing, and the intentic repository's own checks hold its list equal to the linter's.
+ */
+export const wireOf = (surface) => {
+    const version = Object.keys(surface ?? {})
+        .filter((entry) => surface[entry]?.wireExports !== undefined)
+        .toSorted(compare)
+        .at(-1);
+    return version === undefined ? undefined : new Set(Object.keys(surface[version].wireExports));
+};
+
+// Every specifier naming the wire contract, from an import, a re-export, a side-effect import or a dynamic one; a
+// type-only import counts too, since a reshaped type is the change the record exists to catch.
+const CONTRACT_SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'](@intentic\/sandbox-contract(?:\/[^"']*)?)["']/gu;
+
+// A wire subpath the extension API does not version, imported.
+const wireFindings = (file, wire) =>
+    wire === undefined
+        ? []
+        : sourceFindings(
+              file,
+              [...file.text.matchAll(CONTRACT_SPECIFIER)]
+                  .filter((match) => !wire.has(match[1]))
+                  .map((match) => ({
+                      index: match.index,
+                      why: `\`${match[1]}\` is a part of ${CONTRACT} the extension API does not version, so it can change under the extension with nothing saying so: import from the subpaths EXTENSION_WIRE lists (${API}/wire), or have it added there`,
+                  })),
+          );
+
+/**
  * Every place an extension's sources leave the kit's decisions or its engines floor, as `{ at: "path:line", why }`.
  * `files` are `{ path, text }` (.vue and .ts/.mts/.js/.mjs; tests and declarations are the caller's to leave out),
  * `manifest` the parsed intentic-extension.json, `surface` the parsed surface.json of the extension API it builds
  * against, or undefined when that cannot be read (the engines rule then says so instead of judging).
  */
-export const extensionFindings = ({ files, manifest, surface }) =>
-    [
+export const extensionFindings = ({ files, manifest, surface }) => {
+    const wire = wireOf(surface);
+    return [
         ...enginesFindings(files, manifest?.engines?.intentic, surface),
-        ...files.flatMap((file) => [...importFindings(file), ...memberFindings(file), ...templateFindings(file)]),
+        ...files.flatMap((file) => [...importFindings(file), ...memberFindings(file), ...templateFindings(file), ...wireFindings(file, wire)]),
     ].toSorted((a, b) => a.at.localeCompare(b.at, undefined, { numeric: true }));
+};

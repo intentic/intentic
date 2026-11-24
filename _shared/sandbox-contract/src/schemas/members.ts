@@ -1,5 +1,6 @@
 // members: the daemon's shared-access roster (GET/POST/DELETE /members), who besides the owner reaches this sandbox
 import { z } from "zod";
+import { kindsWhere } from "../policy/capabilities/capability-kinds.js";
 import type { CapabilityKind } from "./capabilities.js";
 import { entryId } from "./internal.js";
 import { type GrantedTier, GrantedTierSchema, type MemberTier, MemberTierSchema, withLegacyTier } from "./shared.js";
@@ -74,22 +75,9 @@ export type CredentialReach = z.infer<typeof CredentialReachSchema>;
 // it per turn (a mount, a variable, a signature, a gateway request). The rest are the sandbox's own machinery with no
 // value to withhold (Docker, a VPN once dialled, a mounted share, a local model, the wallet's owner-approved cards), so a
 // reach neither lists nor removes them: a switch for one would be a line on a screen.
-export const REACHABLE_CREDENTIAL_KINDS: readonly CapabilityKind[] = [
-    "cli",
-    "mcp",
-    "browser",
-    "identity",
-    "ssh",
-    "device",
-    "phone",
-    "webext",
-    "plugin",
-    "extension",
-    // The owner's account: a person this sandbox works for may be kept from making sandboxes on it.
-    "fleet",
-    // Another of the owner's sandboxes: a person may be kept from handing it work.
-    "link",
-];
+// The owner's account (`fleet`) and another of their sandboxes (`link`) are among them: a person may be kept from
+// making sandboxes on it, or from handing one work.
+export const REACHABLE_CREDENTIAL_KINDS: readonly CapabilityKind[] = kindsWhere((traits) => traits.reachable);
 
 // WHICH AI ACCOUNTS A PERSON'S CONVERSATIONS MAY RUN ON: the model accounts that pay for a turn (a Claude or Codex
 // subscription, a routed provider's sign-in, an API-key endpoint), as distinct from the connections above, which are

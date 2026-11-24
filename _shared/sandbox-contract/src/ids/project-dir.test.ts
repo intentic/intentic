@@ -3,7 +3,7 @@ import { MEMORY_FILE, PUBLIC_DIR, REFERENCE_DIR, WORKSPACE_ROOT } from "@intenti
 import { STARTER_REPO } from "../state/starter.js";
 import { isProjectDirName, projectDirCandidates, projectDirNameFor, projectDirNameOf, projectRemoteDir, RESERVED_PROJECT_DIR_NAMES } from "./project-dir.js";
 
-// The cases `ic` is held to as well (_sandbox/ic/src/sandbox/project_dir.rs), read from the one file both run.
+// The cases `ic` is held to as well (_hosts/ic/src/sandbox/project_dir.rs), read from the one file both run.
 interface ProjectDirCases {
     readonly names: readonly { readonly name: string; readonly valid: boolean }[];
     readonly folders: readonly { readonly folder: string; readonly dirName: string }[];

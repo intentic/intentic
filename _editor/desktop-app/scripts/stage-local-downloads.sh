@@ -124,7 +124,7 @@ if [ "$LINUX" -eq 1 ]; then
 fi
 stage "$WIN_BUNDLES/nsis/*-setup.exe" "Intentic-setup.exe"
 if [ "$WINDOWS" -eq 1 ]; then
-    stage "$ROOT/_sandbox/ic/dist-bin/ic-windows-amd64.exe" "ic-windows-amd64.exe"
+    stage "$ROOT/_hosts/ic/dist-bin/ic-windows-amd64.exe" "ic-windows-amd64.exe"
 fi
 # connect.ps1 checks the ic it downloads against the SHA256SUMS beside it (scripts-kit/ic-fetch.ps1) and refuses one
 # it cannot check, so the local site lists what it serves, as a release does.

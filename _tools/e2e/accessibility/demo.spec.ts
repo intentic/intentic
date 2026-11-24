@@ -93,8 +93,6 @@ const SCREEN_PATHS = {
     capabilities: demoPage(pages.capabilities()),
     "ext/approvals": demoPage(pages.extension(`approvals`)),
     "ext/workflows": demoPage(pages.extension(`workflows`)),
-    "ext/e-urzad/office-ezd": demoPage(pages.extension(`e-urzad`, `office-ezd`)),
-    "ext/e-urzad/office-ed": demoPage(pages.extension(`e-urzad`, `office-ed`)),
 } as const;
 type Screen = keyof typeof SCREEN_PATHS;
 // SAFETY: SCREEN_PATHS is a const literal whose own keys are exactly Screen; Object.keys only widens their type.
@@ -120,9 +118,6 @@ const open = async (page: Page, screen: Screen): Promise<void> => {
         if (screen === `settings/organisation`) {
             await page.getByRole(`button`, { name: /^Transport office demo/ }).click();
             await page.getByRole(`switch`).first().waitFor();
-        }
-        if (screen.startsWith(`ext/e-urzad/`)) {
-            await page.getByRole(`status`).filter({ hasText: /Last read from the office|Ostatni odczyt z urzędu/ }).waitFor();
         }
     }
     await page.evaluate(() => document.fonts.ready);
@@ -283,64 +278,6 @@ for (const width of [1440, 320]) {
     });
 }
 
-test(`office refresh announces waiting, failure, empty results and a successful connection`, async ({ page }) => {
-    await open(page, `ext/e-urzad/office-ezd`);
-    // Replace the refresh and its cached reread after the real demo transport has installed. No office service is contacted.
-    await page.evaluate(() => {
-        const original = globalThis.fetch;
-        let failed = false;
-        let refreshed = false;
-        const empty = () => Response.json({ snapshot: {
-            card: `office-ezd`, service: `ezd-rp`, syncedAt: `2026-10-15T10:00:00.000Z`,
-            cases: [], tasks: [], deliveries: [], proofs: [], actions: [],
-        } });
-        globalThis.fetch = async (input, init) => {
-            const request = new Request(input, init);
-            const path = new URL(request.url).pathname;
-            if (refreshed && path.endsWith(`/x/intentic.e-urzad/accounts/office-ezd/overview`) && request.method === `GET`) {
-                return empty();
-            }
-            if (!path.endsWith(`/x/intentic.e-urzad/accounts/office-ezd/sync`) || request.method !== `POST`) {
-                return original(input, init);
-            }
-            if (!failed) {
-                failed = true;
-                await new Promise<void>((resolve) => document.addEventListener(`a11y-release`, () => resolve(), { once: true }));
-                return Response.json({ error: `The office is temporarily unavailable. Please retry.` }, { status: 503 });
-            }
-            refreshed = true;
-            return empty();
-        };
-    });
-    const refresh = page.getByRole(`button`, { name: `Refresh from the office`, exact: true });
-    const connection = page.getByRole(`button`, { name: `Test connection`, exact: true });
-    await refresh.focus();
-    await page.keyboard.press(`Enter`);
-    await expect(refresh).toBeDisabled();
-    await expect(connection).toBeDisabled();
-    await expect(page.getByRole(`status`).filter({ hasText: `Reading the office…` })).toBeVisible();
-    await page.evaluate(() => document.dispatchEvent(new Event(`a11y-release`)));
-    await expect(page.getByRole(`alert`)).toContainText(`The office is temporarily unavailable. Please retry.`);
-    await expect(refresh).toBeEnabled();
-    await expect(page.getByText(`Organizacja komunikacji miejskiej`, { exact: true })).toBeVisible();
-    await clean(page);
-    await refresh.click();
-    await expect(page.getByRole(`alert`)).toHaveCount(0);
-    await expect(page.getByText(`No cases in progress, or none read yet.`, { exact: true })).toBeVisible();
-    await expect(page.getByText(`No tasks, or none read yet.`, { exact: true })).toBeVisible();
-    await connection.click();
-    await expect(page.getByRole(`status`).filter({ hasText: `Connected` })).toBeVisible();
-    await clean(page);
-});
-
-test.describe(`office calendar dates`, () => {
-    test.use({ timezoneId: `America/Los_Angeles` });
-    test(`deadlines keep their calendar day west of UTC`, async ({ page }) => {
-        await open(page, `ext/e-urzad/office-ezd`);
-        await expect(page.getByText(/KT\.7240\.12\.2026 · JRWA 7240 · due Oct 22, 2026/)).toBeVisible();
-    });
-});
-
 test(`system reduced motion and forced colours preserve keyboard focus`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: `reduce`, forcedColors: `active` });
     await open(page, `agents`);
@@ -360,7 +297,7 @@ test(`system reduced motion and forced colours preserve keyboard focus`, async (
     await clean(page);
 });
 
-const TEXT_SIZE_SCREENS: readonly Screen[] = [`agents`, `sandbox/access`, `ext/approvals`, `ext/e-urzad/office-ezd`];
+const TEXT_SIZE_SCREENS: readonly Screen[] = [`agents`, `sandbox/access`, `ext/approvals`];
 for (const screen of TEXT_SIZE_SCREENS) {
     test(`200% text size: ${screen}`, async ({ page }) => {
         await open(page, screen);
@@ -421,8 +358,6 @@ const REFLOW_SCREENS: readonly Screen[] = [
     `sandbox/access`,
     `sandbox/access?section=areas`,
     `ext/approvals`,
-    `ext/e-urzad/office-ezd`,
-    `ext/e-urzad/office-ed`,
 ];
 for (const locale of [`en`, `pl`] as const) {
     for (const screen of REFLOW_SCREENS) {

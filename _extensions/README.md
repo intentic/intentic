@@ -14,11 +14,11 @@ flowchart LR
 ```
 
 - The manifest is the approval surface: the install dialog shows it, and the host refuses any registration or daemon route it does not declare. Its schema is [extension-manifest](../_shared/extension-manifest), the runtime API is [extension-api](../_shared/extension-api), and [extension-example](../_tools/extension-example) carries one contribution of every kind.
-- An extension depends on six `@intentic/*` packages and their subpaths, never on another: the SDK halves [extension-api](../_shared/extension-api), [extension-ui](../_shared/extension-ui) and [connector-runtime](../_shared/connector-runtime), [extension-manifest](../_shared/extension-manifest), the wire contract [sandbox-contract](../_shared/sandbox-contract), and [base](../_tools/base), the dependency-free helpers extension-manifest itself stands on. Its suites may add [testing](../_tools/testing), as a devDependency. The `no-restricted-imports` override in [.oxlintrc.json](../.oxlintrc.json) holds the imports to that list, and [extension-deps.mjs](../_tools/checks/extension-deps.mjs) holds the manifests to it.
+- An extension depends on six `@intentic/*` packages and their subpaths, never on another: the SDK halves [extension-api](../_shared/extension-api), [extension-ui](../_shared/extension-ui) and [connector-runtime](../_shared/connector-runtime), [extension-manifest](../_shared/extension-manifest), the wire contract [sandbox-contract](../_shared/sandbox-contract) (bare, and only the subpaths extension-api's [`EXTENSION_WIRE`](../_shared/extension-api/src/wire.ts) lists, the slice the extension API versions), and [base](../_tools/base), the dependency-free helpers extension-manifest itself stands on. Its suites may add [testing](../_tools/testing), as a devDependency. The `no-restricted-imports` override in [.oxlintrc.json](../.oxlintrc.json) holds the imports to that list, and [extension-deps.mjs](../_tools/checks/extension-deps.mjs) holds the manifests to it. The kit's `intentic-kit-check`, in every extension's `typecheck`, refuses a contract subpath outside `EXTENSION_WIRE` too, in a standalone repository as here: a subpath an extension needs joins the list with a new extension API minor, recorded in `surface.json`.
 - Nothing outside this area depends on an extension, apart from two hosts: the web app, which compiles the UI extensions into its bundle, and the desktop app's files sidecar ([local-files](../_devices/local-files)), which runs ONLYOFFICE's browser engine for folders on the user's own disk through the one entry the extension exports for it, `@intentic/ext-onlyoffice/local-office`. The engine stays in the extension, which also runs it in a sandbox; `CONSUMERS` in [lib/extension-deps.mjs](../_tools/checks/lib/extension-deps.mjs) holds both hosts to that, and refuses a third.
 - UI extensions compile into the web bundle ([builtins.ts](../_editor/web/src/extension-host/builtins.ts)) and bake only their manifest into the sandbox image, so the Extensions tab lists them beside every other extension with one on/off switch.
 - Data-only packs (cards, skills, Dockerfile fragments) copy into the image as they are. Gateway extensions bake their manifest everywhere and ship their runnable tree in the `messaging` image pack.
-- Optional first-party extensions live in their own repositories and install from the registry like third-party ones: acceptance, deployments, documentation, issues, knowledge, maintenance and workflows (the workflows page; the engine that runs workflows, their release gate and the run cards on the agents board stay in the daemon and the web app). The daemon ([src/extensions](../_sandbox/sandbox/src/extensions)) enumerates baked, git-installed and workspace extensions as one list.
+- Optional first-party extensions live in their own repositories and install from the registry like third-party ones: acceptance, deployments, documentation, e-urzad (EZD RP and e-Doręczenia for Polish public offices, [intentic/extension-e-urzad](https://github.com/intentic/extension-e-urzad)), issues, knowledge, maintenance, prawo (Polish acts and rulings, [intentic/extension-prawo](https://github.com/intentic/extension-prawo)) and workflows (the workflows page; the engine that runs workflows, their release gate and the run cards on the agents board stay in the daemon and the web app). The daemon ([src/extensions](../_sandbox/sandbox/src/extensions)) enumerates baked, git-installed and workspace extensions as one list.
 
 | Package | Role |
 | --- | --- |
@@ -30,7 +30,6 @@ flowchart LR
 | [connectors](connectors) | CLI and browser cards: GitHub, GitLab, Sentry, Postgres and more. |
 | [devices](devices) | Cards pairing the owner's Windows or Linux machine. |
 | [discord](discord) | Discord bot card, message listener and voice-transcribing gateway. |
-| [e-urzad](e-urzad) | EZD RP cases and tasks, e-Doręczenia deliveries and proofs for Polish public offices, and electronic-signature checks. |
 | [git-history](git-history) | Per-repository commit graph with branch, stash and undo actions. |
 | [google-workspace](google-workspace) | `gw` CLI for Gmail, Calendar, Drive, Docs and Sheets, plus a watcher. |
 | [imap](imap) | IMAP inbox card, an `imap` CLI for reading and sending (password or OAuth2), and a mailbox watcher that wakes automations. |
@@ -39,7 +38,6 @@ flowchart LR
 | [phones](phones) | Card pairing the owner's Android phone through the Intentic Device app. |
 | [pi-agent](pi-agent) | The Pi coding agent as a chat provider. |
 | [pipelines](pipelines) | Rail view of CI runs on the workspace repositories' remotes. |
-| [prawo](prawo) | `prawo` CLI quoting Polish acts (Sejm ELI) and court rulings (SAOS), with citations. |
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |
 | [repo-apps](repo-apps) | Per-repository panels for a monorepo's apps, tests and dependencies. |
 | [slack](slack) | Slack card plus a Socket Mode gateway. |

@@ -22,11 +22,35 @@ export type LinkKind = keyof LinkOf;
 const TRANSIENT_POLL_MS = 2000;
 const STEADY_POLL_MS = 15_000;
 
-// Built when read, so the words follow the language on screen.
-const linkWords = (kind: LinkKind, status?: number): { readonly refused: string; readonly failed: string } =>
-    kind === `vpn`
-        ? { refused: t(`sandbox.useLiveLinks.vpnRefused`, { status: String(status) }), failed: t(`sandbox.useLiveLinks.vpnFailed`) }
-        : { refused: t(`sandbox.useLiveLinks.diskRefused`, { status: String(status) }), failed: t(`sandbox.useLiveLinks.diskFailed`) };
+// Each kind's own daemon calls and words, so a link kind is one entry here. Words are built when read, so they follow
+// the language on screen.
+interface LinkCalls {
+    readonly list: ReturnType<typeof rpcQuery<`vpn.list`>> | ReturnType<typeof rpcQuery<`netdisk.list`>>;
+    readonly open: (id: string, otp: string | undefined) => ReturnType<typeof sandboxRpc.vpn.connect>;
+    readonly close: (id: string) => Promise<void>;
+    readonly refused: (status: number | undefined) => string;
+    readonly failed: () => string;
+}
+const LINK_CALLS = {
+    vpn: () => ({
+        list: rpcQuery(`vpn.list`),
+        open: (id, otp) => sandboxRpc.vpn.connect({ id, ...(otp === undefined || otp === `` ? {} : { otp }) }),
+        close: async (id) => {
+            await sandboxRpc.vpn.disconnect({ id });
+        },
+        refused: (status) => t(`sandbox.useLiveLinks.vpnRefused`, { status: String(status) }),
+        failed: () => t(`sandbox.useLiveLinks.vpnFailed`),
+    }),
+    netdisk: () => ({
+        list: rpcQuery(`netdisk.list`),
+        open: (id) => sandboxRpc.netdisk.mount({ id }),
+        close: async (id) => {
+            await sandboxRpc.netdisk.unmount({ id });
+        },
+        refused: (status) => t(`sandbox.useLiveLinks.diskRefused`, { status: String(status) }),
+        failed: () => t(`sandbox.useLiveLinks.diskFailed`),
+    }),
+} satisfies { readonly [K in LinkKind]: () => LinkCalls };
 
 // Parses an exported FortiClient config into addable connections; nothing is stored until the capability add.
 export const importForticlient = async (xml: string): Promise<ForticlientConnection[]> =>
@@ -41,7 +65,8 @@ export function useLiveLinks<K extends LinkKind>(
     close: (id: string) => Promise<void>;
 } {
     const queryClient = useQueryClient();
-    const list = kind === `vpn` ? rpcQuery(`vpn.list`) : rpcQuery(`netdisk.list`);
+    const calls = LINK_CALLS[kind]();
+    const { list } = calls;
     const { query, error } = useSandboxQuery<{ links: (VpnLink | NetdiskLink)[] }>({
         ...list,
         refetchInterval: (state) =>
@@ -62,13 +87,13 @@ export function useLiveLinks<K extends LinkKind>(
 
     // Throws the daemon's own message on an error frame: a refused password or certificate needs reading, not a toast.
     const open = async (id: string, onLine?: (message: string) => void, otp?: string): Promise<void> => {
-        const opening = kind === `vpn` ? sandboxRpc.vpn.connect({ id, ...(otp === undefined || otp === `` ? {} : { otp }) }) : sandboxRpc.netdisk.mount({ id });
+        const opening = calls.open(id, otp);
         const lines = await opening.catch((failure: unknown) => {
-            throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? linkWords(kind, failure.status).refused) : failure;
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? calls.refused(failure.status)) : failure;
         });
         try {
             await untilResult(lines, {
-                failed: () => linkWords(kind).failed,
+                failed: calls.failed,
                 onLine: (line) => {
                     const message = line[`message`];
                     if (typeof message === `string`) {
@@ -83,7 +108,7 @@ export function useLiveLinks<K extends LinkKind>(
     };
 
     const close = async (id: string): Promise<void> => {
-        await (kind === `vpn` ? sandboxRpc.vpn.disconnect({ id }) : sandboxRpc.netdisk.unmount({ id }));
+        await calls.close(id);
         await invalidate();
     };
 

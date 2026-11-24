@@ -1,4 +1,5 @@
 import { endpointProvider, isTrialProvider, loopsOf, TRIAL_LABEL } from "@intentic/sandbox-contract/models/agent-catalog";
+import { ENDPOINT_KINDS, isKindOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { keyProviderFor } from "@intentic/sandbox-contract/models/key-providers";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { providersContract } from "@intentic/sandbox-contract/contracts/providers.contract";
@@ -29,7 +30,7 @@ export const createProvidersRoutes = (services: ProvidersRoutesDeps) => {
                 capability.kind === "agent" ? [{ id: capability.id, label: capability.config.name ?? capability.id }] : [],
             );
             const endpoints = capabilities.flatMap((capability) => {
-                if (capability.kind !== "endpoint" && capability.kind !== "localmodel") {
+                if (!isKindOf(capability, ENDPOINT_KINDS)) {
                     return [];
                 }
                 const id = endpointProvider(capability.id);

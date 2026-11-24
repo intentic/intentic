@@ -3,20 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
+import { grantWith } from "./device-testing.js";
 
 // Decides which sandboxes may drive this device; upsertLink must merge, not overwrite (setup once dropped an existing
 // link when connecting a second sandbox). agentHome reads HOME when config.ts loads, hence the dynamic import below.
 let home: string;
 let config: typeof import("./config.js");
 
-const scopes = (shell: DeviceScopes["shell"]): DeviceScopes => ({
-    shell,
-    write: "off",
-    screen: "off",
-    control: "off",
-    sandboxes: "off",
-    destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-});
+const scopes = (shell: DeviceScopes["shell"]): DeviceScopes => grantWith([], { shell });
 
 const link = (url: string, id: string, shell: DeviceScopes["shell"] = "off") => ({
     sandboxUrl: url,

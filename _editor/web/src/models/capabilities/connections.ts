@@ -1,4 +1,5 @@
 import { capabilityEffects } from "@intentic/capability-catalog";
+import { traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { CapabilityKind, CapabilityState, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { DEVICE_AWAY_DETAIL, environmentName, type HostSummary, machinePresence, type MachinePresence } from "@intentic/sandbox-contract/schemas/hosts";
 import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
@@ -20,8 +21,9 @@ export const awaitingLogin = (instance: CapabilitySummary): boolean =>
 // The one unfinished step a row can't offer itself: login and pairing are already buttons on the row, so only a
 // rebuild (which happens on the Sandbox screen) still needs a link. A function, not a `v-if`, so a signed-in-needed
 // reader is never sent to /sandbox by mistake.
+// A peer (a computer, a browser, a phone) pends on its pairing, which its row offers.
 export const rebuildStep = (kind: CapabilityKind | undefined, instance: CapabilitySummary): boolean =>
-    instance.status.state === `pending` && kind !== `device` && !awaitingLogin(instance);
+    instance.status.state === `pending` && traitsOf(kind ?? ``)?.peer === undefined && !awaitingLogin(instance);
 
 // What identifies a connection, in the order a person would say it. `provider`/`platform` are excluded since the
 // row already names the tile; secrets never reach here (the daemon strips them). `purpose` sits last, the widest
@@ -135,10 +137,9 @@ export const phoneGrants = (instance: CapabilitySummary): string => {
     return grants.length === 0 ? t(`capabilities.connections.nothingUntilSwitch`) : grantList(grants);
 };
 
-// The kinds whose sign-in is a window the user drives themselves, rather than a credential they paste.
-const SIGNS_IN_BY_HAND = new Set<CapabilityKind>([`browser`, `identity`]);
-
-export const signsInByHand = (kind: CapabilityKind | undefined): boolean => kind !== undefined && SIGNS_IN_BY_HAND.has(kind);
+// The kinds whose sign-in is a window the user drives themselves, rather than a credential they paste: a profile in
+// the sandbox's own browser.
+export const signsInByHand = (kind: CapabilityKind | undefined): boolean => traitsOf(kind ?? ``)?.sandboxBrowser === true;
 
 // A machine knows something truer about itself than its stored status: whether it answers, read live off its roster
 // (`presence`, the same `machinePresence` the Devices board and a call's routing read). A card lent to a machine is

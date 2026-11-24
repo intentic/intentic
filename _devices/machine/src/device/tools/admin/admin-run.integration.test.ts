@@ -5,27 +5,14 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import { ScopeError } from "../../policy.js";
 import { ADMIN_NOT_CROSSING, ADMIN_NOT_WINDOWS, type AdminRunSeams, adminRunArgs, adminRunFailure, adminRunVerdict, realAdminRunSeams } from "./admin-run.js";
 import { runCommand } from "../shell.js";
+import { grantWith } from "../../device-testing.js";
 
 // run_command's `admin` (2026-11-23): refused before anything starts where it cannot work, and otherwise the command
 // handed to `intentic-remoted service admin-run`, whose status file says whether it ran. A shell script stands in for
 // remoted here, so the whole path runs on Linux: what reaches remoted, how its status reads, and the answer the agent
 // gets.
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "off",
-    screen: "on",
-    control: "off",
-    sandboxes: "off",
-    destructive: "off",
-    programs: "off",
-    remoteView: "off",
-    remoteControl: "off",
-    remoteTerminal: "off",
-    admin: "on",
-    roots: tmpdir(),
-    ...overrides,
-});
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => grantWith(["shell", "screen", "admin"], { roots: tmpdir(), ...overrides });
 
 const NEVER: AdminRunSeams = {
     binary: () => Promise.reject(new Error("no remoted should be asked for")),

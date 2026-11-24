@@ -5,7 +5,7 @@ import { PreparingUpdateSchema } from "./system.js";
 import { UpdateOutcomeSchema } from "./updates.js";
 
 // The update markers `ic` writes onto /history for the daemon to read, spelled once here: golden/update-outcome.json
-// and golden/update-preparing.json are these examples as JSON, and ic's Rust test (_sandbox/ic/src/sandbox/host_files.rs)
+// and golden/update-preparing.json are these examples as JSON, and ic's Rust test (_hosts/ic/src/sandbox/host_files.rs)
 // holds what it writes to them field for field. Where each file lives is the daemon's to say (its own golden,
 // host-files.json). A change here that the committed file does not carry fails, naming the file;
 // `INTENTIC_WRITE_GOLDEN=1` rewrites them, and the Rust test then says whether ic still writes them.

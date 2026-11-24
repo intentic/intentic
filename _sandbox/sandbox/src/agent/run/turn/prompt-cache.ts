@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 // How long a provider's prompt cache stays warm. No provider publishes an expiry anywhere in a response, so the answer
@@ -33,7 +34,7 @@ export const ttlFromCacheCreation = (buckets: CacheCreationBuckets | undefined):
 // `claude` is the only provider Anthropic itself serves: a translator or minted endpoint wears an Anthropic-shaped API
 // over its own vendor's cache, whose lifetime nobody publishes.
 export const ttlFromCredential = (provider: string, oauth: boolean): number | undefined =>
-    provider !== "claude" ? undefined : oauth ? PROMPT_CACHE_1H_MS : PROMPT_CACHE_5M_MS;
+    !providerHas(provider, "firstPartyAnthropic") ? undefined : oauth ? PROMPT_CACHE_1H_MS : PROMPT_CACHE_5M_MS;
 
 type ContextUsageFrame = Extract<AgentEvent, { kind: "context_usage" }>;
 

@@ -1,3 +1,4 @@
+import type { PeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
 import type { PeerPairingAnswer } from "@intentic/sandbox-contract/schemas/short-codes";
 import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
@@ -140,3 +141,11 @@ export const PHONE_DOOR: PeerDoor<PhoneSummary> = {
         await sandboxRaw(`DELETE /system/phones/{id}`, { params: { id } });
     },
 };
+
+// Every peer kind's door, keyed by the kind its card is (policy/capability-kinds.ts `peer`), so a new peer kind needs
+// its door here before it compiles.
+export const PEER_DOORS = {
+    device: HOST_DOOR,
+    webext: WEBEXT_DOOR,
+    phone: PHONE_DOOR,
+} as const satisfies Record<PeerKind, PeerDoor<PeerSummary>>;

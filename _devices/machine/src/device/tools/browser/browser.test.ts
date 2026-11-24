@@ -1,5 +1,4 @@
 import type { Browser, ConsoleEntry, FramesOptions, PageState, RawFrames } from "@intentic/browser";
-import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../../policy.js";
 import {
     clickElement,
@@ -13,20 +12,11 @@ import {
     screenshotPage,
     snapshotPage,
 } from "./browser.js";
+import { grantWith } from "../../device-testing.js";
 
 // Browser control at the layer that decides what is allowed and what comes back. Same scope split as the other
 // tools: reading is `screen`, clicking/typing is `control`, opening is `shell`. Every action answers with the
 // page after it, so a sequence of calls is one step each.
-
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
 
 const page = (overrides: Partial<PageState> = {}): PageState => ({
     url: "https://example.com/",
@@ -106,31 +96,31 @@ const fakeBrowser = (seen: { console?: readonly ConsoleEntry[]; frames?: RawFram
 
 test("opening a page may start a browser, so it rides the shell grant", async () => {
     const { web, calls } = fakeBrowser();
-    await expect(openPage(web, "example.com", scopes({ shell: "off" }))).rejects.toThrow(/Run commands/);
+    await expect(openPage(web, "example.com", grantWith("agent", { shell: "off" }))).rejects.toThrow(/Run commands/);
     expect(calls).toEqual([]);
-    await openPage(web, "example.com", scopes());
+    await openPage(web, "example.com", grantWith("agent"));
     // A bare host is what people type; refusing over a missing scheme would be pedantry rather than safety.
     expect(calls).toEqual(["open https://example.com"]);
 });
 
 test("a URL that already has a scheme is left alone", async () => {
     const { web, calls } = fakeBrowser();
-    await openPage(web, "http://localhost:3000/admin", scopes());
+    await openPage(web, "http://localhost:3000/admin", grantWith("agent"));
     expect(calls).toEqual(["open http://localhost:3000/admin"]);
 });
 
 test("reading a page is looking, so it needs the screen grant", async () => {
     const { web } = fakeBrowser();
-    await expect(snapshotPage(web, scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
-    await expect(readPage(web, scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
-    expect(await readPage(web, scopes())).toContain("readable text");
+    await expect(snapshotPage(web, grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
+    await expect(readPage(web, grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
+    expect(await readPage(web, grantWith("agent"))).toContain("readable text");
 });
 
 test("acting on a page needs the control grant, not the screen one", async () => {
     const { web, calls } = fakeBrowser();
-    await expect(clickElement(web, "e0", scopes({ control: "off" }))).rejects.toThrow(/mouse and keyboard/);
+    await expect(clickElement(web, "e0", grantWith("agent", { control: "off" }))).rejects.toThrow(/mouse and keyboard/);
     expect(calls).toEqual([]);
-    await clickElement(web, "e0", scopes({ screen: "off" }));
+    await clickElement(web, "e0", grantWith("agent", { screen: "off" }));
     expect(calls).toEqual(["click e0", "settle"]);
 });
 
@@ -138,7 +128,7 @@ test("acting on a page needs the control grant, not the screen one", async () =>
 // spending a round trip finding out what its own action did.
 test("every action answers with the page as it stands afterwards", async () => {
     const { web } = fakeBrowser();
-    const clicked = await clickElement(web, "e0", scopes());
+    const clicked = await clickElement(web, "e0", grantWith("agent"));
     expect(clicked).toContain("Clicked e0");
     expect(clicked).toContain("Page: Example");
     expect(clicked).toContain("[e0] button");
@@ -147,27 +137,27 @@ test("every action answers with the page as it stands afterwards", async () => {
 // A password typed into a login form is a password; it is counted, never echoed back into the transcript.
 test("filling reports a length, never the text", async () => {
     const { web } = fakeBrowser();
-    const said = await fillElement(web, "e0", "hunter2", false, scopes());
+    const said = await fillElement(web, "e0", "hunter2", false, grantWith("agent"));
     expect(said).toContain("7 characters");
     expect(said).not.toContain("hunter2");
 });
 
 test("submitting is stated, because it is the step that sends the form", async () => {
     const { web, calls } = fakeBrowser();
-    const said = await fillElement(web, "e0", "invoice", true, scopes());
+    const said = await fillElement(web, "e0", "invoice", true, grantWith("agent"));
     expect(calls).toEqual(["fill e0 invoice submit", "settle"]);
     expect(said).toContain("and submitted");
 });
 
 test("acting without a reference says where references come from", async () => {
     const { web } = fakeBrowser();
-    await expect(clickElement(web, "", scopes())).rejects.toThrow(/take a snapshot/);
-    await expect(fillElement(web, "", "text", false, scopes())).rejects.toThrow(/\[e…\]/);
+    await expect(clickElement(web, "", grantWith("agent"))).rejects.toThrow(/take a snapshot/);
+    await expect(fillElement(web, "", "text", false, grantWith("agent"))).rejects.toThrow(/\[e…\]/);
 });
 
 test("the tab list marks the one the tools are acting on", async () => {
     const { web } = fakeBrowser();
-    const listed = await listTabs(web, scopes());
+    const listed = await listTabs(web, grantWith("agent"));
     expect(listed).toContain("[T1] Example");
     expect(listed).toContain("[T2] Docs");
     expect(
@@ -181,13 +171,13 @@ test("the tab list marks the one the tools are acting on", async () => {
 // A picture of the agent's own tab is looking, like a snapshot; it is not a capture of the owner's desktop.
 test("a page screenshot needs the screen grant and says what it shows and how it was shrunk", async () => {
     const { web, calls } = fakeBrowser();
-    await expect(screenshotPage(web, "canvas", scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
+    await expect(screenshotPage(web, "canvas", grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
     expect(calls).toEqual([]);
-    const shot = await screenshotPage(web, "canvas", scopes({ control: "off", shell: "off" }));
+    const shot = await screenshotPage(web, "canvas", grantWith("agent", { control: "off", shell: "off" }));
     expect(calls).toEqual(["screenshot canvas"]);
     expect(shot.said).toContain("canvas#game: 1429×804 pixels of 1920×1080 CSS pixels at devicePixelRatio 1.5, shrunk to fit");
     expect(shot.png.toString()).toBe("png");
-    await screenshotPage(web, "", scopes());
+    await screenshotPage(web, "", grantWith("agent"));
     expect(calls.at(-1)).toBe("screenshot page");
 });
 
@@ -199,15 +189,15 @@ test("the console reads oldest first in UTC, counts errors, and can be narrowed 
             entry({ level: "warning", source: "rendering", text: "WebGPU: device lost" }),
         ],
     });
-    await expect(readConsole(web, 100, false, scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
-    const all = await readConsole(web, 100, false, scopes());
+    await expect(readConsole(web, 100, false, grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
+    const all = await readConsole(web, 100, false, grantWith("agent"));
     expect(all.split("\n")).toEqual([
         "3 console messages since these tools attached to this tab (1 error, 1 warning); all below, oldest first, times in UTC.",
         "12:00:01.250 log     frame",
         "12:00:01.250 error   [exception] Uncaught RuntimeError: unreachable  (http://localhost:8080/game.js:1)",
         "12:00:01.250 warning [rendering] WebGPU: device lost",
     ]);
-    const bad = await readConsole(web, 1, true, scopes());
+    const bad = await readConsole(web, 1, true, grantWith("agent"));
     expect(bad.split("\n")).toEqual([
         "3 console messages since these tools attached to this tab (1 error, 1 warning); the newest 1 errors and warnings below, oldest first, times in UTC.",
         "12:00:01.250 warning [rendering] WebGPU: device lost",
@@ -215,8 +205,8 @@ test("the console reads oldest first in UTC, counts errors, and can be narrowed 
 });
 
 test("an empty console, or one with nothing wrong, says so in words", async () => {
-    expect(await readConsole(fakeBrowser().web, 100, false, scopes())).toBe("The page's console is empty since these tools attached to this tab.");
-    expect(await readConsole(fakeBrowser({ console: [entry()] }).web, 100, true, scopes())).toBe(
+    expect(await readConsole(fakeBrowser().web, 100, false, grantWith("agent"))).toBe("The page's console is empty since these tools attached to this tab.");
+    expect(await readConsole(fakeBrowser({ console: [entry()] }).web, 100, true, grantWith("agent"))).toBe(
         "No errors or warnings among the 1 console messages since these tools attached to this tab.",
     );
 });
@@ -224,16 +214,16 @@ test("an empty console, or one with nothing wrong, says so in words", async () =
 // A script in the page can click, submit and send as the signed-in owner would: it is control, not looking.
 test("running a script in the page needs the control grant", async () => {
     const { web, calls } = fakeBrowser();
-    await expect(evaluateInPage(web, "document.title", 5000, scopes({ control: "off" }))).rejects.toThrow(/mouse and keyboard/);
-    await expect(evaluateInPage(web, " ", 5000, scopes())).rejects.toThrow(/"expression" is required/);
+    await expect(evaluateInPage(web, "document.title", 5000, grantWith("agent", { control: "off" }))).rejects.toThrow(/mouse and keyboard/);
+    await expect(evaluateInPage(web, " ", 5000, grantWith("agent"))).rejects.toThrow(/"expression" is required/);
     expect(calls).toEqual([]);
-    expect(await evaluateInPage(web, "window.game.ready", 5000, scopes({ screen: "off" }))).toBe("true");
+    expect(await evaluateInPage(web, "window.game.ready", 5000, grantWith("agent", { screen: "off" }))).toBe("true");
     expect(calls).toEqual(["evaluate window.game.ready 5000"]);
 });
 
 test("frame timing answers the percentiles and names the GPU that drew them", async () => {
     const { web, framesAsked } = fakeBrowser();
-    const said = await measurePageFrames(web, { count: 5, until: undefined, waitMs: 30_000 }, scopes({ control: "off" }));
+    const said = await measurePageFrames(web, { count: 5, until: undefined, waitMs: 30_000 }, grantWith("agent", { control: "off" }));
     expect(framesAsked).toEqual([{ count: 5, until: undefined, waitMs: 30_000, measureMs: 60_000 }]);
     expect(said.split("\n")).toEqual([
         "5 frames: median 16 ms (63 fps) · p95 50 ms (20 fps) · worst 50 ms (20 fps) · mean 43.5 fps · 1 hitch (frames over twice the median)",
@@ -247,8 +237,8 @@ test("frame timing answers the percentiles and names the GPU that drew them", as
 // The condition is the agent's own expression, run in the page: the same grant as browser_evaluate.
 test("waiting on a condition before measuring also needs the control grant", async () => {
     const { web, framesAsked } = fakeBrowser();
-    await expect(measurePageFrames(web, { count: 5, until: "game.ready", waitMs: 1000 }, scopes({ control: "off" }))).rejects.toThrow(/mouse and keyboard/);
-    await expect(measurePageFrames(web, { count: 5, until: undefined, waitMs: 1000 }, scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
+    await expect(measurePageFrames(web, { count: 5, until: "game.ready", waitMs: 1000 }, grantWith("agent", { control: "off" }))).rejects.toThrow(/mouse and keyboard/);
+    await expect(measurePageFrames(web, { count: 5, until: undefined, waitMs: 1000 }, grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
     expect(framesAsked).toEqual([]);
 });
 
@@ -268,7 +258,7 @@ test("software rendering, a hidden tab and a condition that never came true are 
             },
         }),
     });
-    const said = await measurePageFrames(web, { count: 5, until: "game.ready", waitMs: 30_000 }, scopes());
+    const said = await measurePageFrames(web, { count: 5, until: "game.ready", waitMs: 30_000 }, grantWith("agent"));
     expect(said).toContain("No frames were timed.");
     expect(said).toContain("`until` was still not true after 30.0 s, so nothing was measured. It last threw: ReferenceError: game is not defined");
     expect(said).toContain("No animation frame came for 5 s: the tab is hidden");

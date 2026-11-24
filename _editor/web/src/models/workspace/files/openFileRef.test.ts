@@ -261,12 +261,12 @@ describe(`a reference that is not simply one file`, () => {
     });
 
     it(`opens a card saying nothing matched, with what it may have meant, instead of a file that never existed`, async () => {
-        resolve.mockResolvedValue({ nearby: [`intentic/_os/installer/bib-config.toml`] });
+        resolve.mockResolvedValue({ nearby: [`intentic/_hosts/installer/bib-config.toml`] });
         clickFileLink(surface("The installer config `installer/config.toml` is ready."));
         await waitFor(() => expect(inputs()).toEqual([{ path: `installer/config.toml`, missing: true }]));
         expect(arrivalOf({ path: `installer/config.toml`, missing: true })).toEqual({
             asked: `installer/config.toml`,
-            nearby: [`intentic/_os/installer/bib-config.toml`],
+            nearby: [`intentic/_hosts/installer/bib-config.toml`],
         });
     });
 
@@ -278,10 +278,10 @@ describe(`a reference that is not simply one file`, () => {
     });
 
     it(`opens a renamed file where it went and remembers the name it was asked by`, async () => {
-        resolve.mockResolvedValue({ path: `_os/installer/bib-config.toml`, renamedFrom: `_os/installer/config.toml` });
+        resolve.mockResolvedValue({ path: `_hosts/installer/bib-config.toml`, renamedFrom: `_hosts/installer/config.toml` });
         clickFileLink(surface("See `installer/config.toml`."));
-        await waitFor(() => expect(inputs()).toEqual([{ path: `_os/installer/bib-config.toml` }]));
-        expect(arrivalOf({ path: `_os/installer/bib-config.toml` })?.renamedFrom).toBe(`_os/installer/config.toml`);
+        await waitFor(() => expect(inputs()).toEqual([{ path: `_hosts/installer/bib-config.toml` }]));
+        expect(arrivalOf({ path: `_hosts/installer/bib-config.toml` })?.renamedFrom).toBe(`_hosts/installer/config.toml`);
     });
 
     it(`says nothing extra about a reference that named exactly one file`, async () => {

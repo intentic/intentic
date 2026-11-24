@@ -1,4 +1,5 @@
 import { upgradeWebSocket } from "@hono/node-server";
+import { isKindOf, SANDBOX_BROWSER_KINDS } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { errorMessage } from "@intentic/base/errors";
 import type { WSContext } from "hono/ws";
 import type { Page } from "playwright";
@@ -117,7 +118,7 @@ const createBrowserProfileRoute = (services: Services) =>
             // to open.
             const requested = url.searchParams.get("capability") ?? "";
             const capability = await services.capabilities.get(requested);
-            if (capability === undefined || (capability.kind !== "browser" && capability.kind !== "identity")) {
+            if (capability === undefined || !isKindOf(capability, SANDBOX_BROWSER_KINDS)) {
                 ws.close(1008, "invalid capability");
                 return;
             }

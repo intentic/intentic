@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { HandedOff, HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
@@ -27,7 +28,7 @@ interface TrimOutcome<T> {
 const coldTrimReaches = (turn: TurnInput, held: boolean): boolean => {
     const { agent, harness } = withRuntimeDefaults(turn);
     return (
-        agent === "claude" &&
+        providerHas(agent, "firstPartyAnthropic") &&
         capabilitiesOf(agent, harness).runtime === "claude-code" &&
         turn.sessionId !== undefined &&
         turn.conversationId !== undefined &&

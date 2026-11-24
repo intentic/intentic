@@ -24,6 +24,8 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     // What the entry says of an enrolled peer not holding a socket right now.
     readonly awayHint: string;
     readonly added: (id: string) => string;
+    // What removing the card costs, said in the plan for removing the extension that supplied it.
+    readonly removal: string;
     readonly store: (ctx: CapabilityCtx) => Pick<PeerStore<unknown>, "enrolled" | "relabelCard" | "revokeCard">;
     readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes" | "rekey">;
     // Every field is a permission, none secret: the entry renders the grant back to the owner.
@@ -82,6 +84,7 @@ export const refreshPeerSkill = async <Scopes extends { readonly platform: strin
 
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
     echo: (config) => spec.echo(config as Scopes),
+    removal: () => spec.removal,
     // THE NAME IS A LABEL. Enrollment travels with it, no re-pairing needed: every enrollment the card holds (each OS
     // install of a machine) is relabelled in one write, each keeping its own token, and each live connection is held
     // under its new id with its socket untouched. The grant is the card's config, which a rename does not change, so

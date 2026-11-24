@@ -299,7 +299,7 @@ describe(`hostedShapeFor`, () => {
     });
 });
 
-// The cases `ic` and the desktop app are held to (_sandbox/ic/src/sandbox/project_dir.rs, setup_link.rs), read from the
+// The cases `ic` and the desktop app are held to (_hosts/ic/src/sandbox/project_dir.rs, setup_link.rs), read from the
 // one file every side runs.
 interface ProjectDirCases {
     readonly names: readonly { readonly name: string; readonly valid: boolean }[];

@@ -38,24 +38,13 @@ import {
     wifiList,
     wifiRadio,
 } from "./settings.js";
+import { grantWith } from "../../device-testing.js";
 
 // The settings tools are thin callers of `ic os`, like the OS tools (os.test.ts): what they may do is the device's
 // switches, what they run is the contract's argv, what they answer is ic's JSON read as the contract's, and ic's own
 // exit codes come back in words. ic is a fake here that records what it was asked, and what it was given on stdin.
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "off",
-    programs: "off",
-    remoteView: "off",
-    remoteControl: "off",
-    remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => grantWith(["shell", "write", "screen", "control", "sandboxes"], overrides);
 
 // The contract's example of every answer, the file ic's Rust is held to.
 const GOLDEN_PATH = join(repoRoot(import.meta.url), "_shared/sandbox-contract/golden/intentic-os.json");

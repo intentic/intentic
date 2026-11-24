@@ -4,23 +4,12 @@ import { ScopeError } from "../../policy.js";
 import { intenticOsLine } from "../describe.js";
 import { intenticOsFactsOf, type OsDeps, osChannel, osReboot, osRollback, osStatus, osUpdate } from "./os.js";
 import type { IcRun } from "../sandboxes.js";
+import { grantWith } from "../../device-testing.js";
 
 // The os_* tools are thin callers of `ic os`: what they may do is the device's switches, what they run is the contract's
 // argv, and what they answer is ic's JSON read as the contract's. ic is a fake here that records what it was asked.
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "off",
-    programs: "off",
-    remoteView: "off",
-    remoteControl: "off",
-    remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => grantWith(["shell", "write", "screen", "control", "sandboxes"], overrides);
 
 // What `ic os status --json` prints on a box with an update staged (the contract's golden/intentic-os.json, second case).
 const STATUS: IntenticOsStatus = {

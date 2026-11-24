@@ -64,7 +64,7 @@ docker cp "$SHIPPED" "$HOST_CONTAINER:$SCRIPT_IN_HOST"
 # what lets the binary run in the Alpine dind host.
 echo "==> building ic from this checkout"
 bash "$ROOT/_tools/scripts/build/build-ic.sh" linux-x64
-docker cp "$ROOT/_sandbox/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
+docker cp "$ROOT/_hosts/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
 in_host chmod +x /root/ic
 
 echo "==> running the shipped connect.sh (image: $SANDBOX_IMAGE)"

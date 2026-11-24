@@ -14,7 +14,6 @@
     "dependencies": {
         "@intentic/api-contract": "workspace:*",
         "@intentic/contract-serve": "workspace:*",
-        "@intentic/ext-e-urzad": "workspace:*",
         "@intentic/web": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "fflate": "catalog:"

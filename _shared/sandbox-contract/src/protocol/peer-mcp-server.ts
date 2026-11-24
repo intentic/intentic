@@ -29,6 +29,9 @@ export interface McpTool<Ctx> {
     // JSON Schema for `tools/list`, derived from the zod schema once at module load, not per request.
     readonly inputSchema: Record<string, unknown>;
     readonly annotations: ReturnType<typeof toolAnnotations>;
+    // Whether a call's arguments carry a program (policy/device-programs.ts): the machine's own check, never sent in
+    // `tools/list`, which only the daemon's table speaks for.
+    readonly carriesProgram: boolean;
     readonly call: (args: unknown, ctx: Ctx) => Promise<Record<string, unknown>>;
 }
 
@@ -61,6 +64,8 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
     readonly name: string;
     readonly description: string;
     readonly effect: ToolEffect;
+    // Its arguments carry a program; a device marks it through a wrapper that takes only names in that table.
+    readonly program?: true;
     readonly input: Schema;
     readonly run: (args: z.output<Schema>, ctx: Ctx) => Promise<Record<string, unknown>>;
 }): McpTool<Ctx> => {
@@ -70,6 +75,7 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
         description: spec.description,
         inputSchema: converterReadable(inputSchema) as Record<string, unknown>,
         annotations: toolAnnotations(spec.effect),
+        carriesProgram: spec.program === true,
         call: async (args, ctx) => {
             const parsed = spec.input.safeParse(args);
             // Readable enough for a model to fix its own call: which field, and what was expected.

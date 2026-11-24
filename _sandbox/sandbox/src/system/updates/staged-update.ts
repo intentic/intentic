@@ -11,7 +11,7 @@ import { readJsonMarker } from "../../store/plain-files/json-marker.js";
 // Whether an update is already downloaded, reported by the only thing that can know: `ic sandbox prepare` writes this
 // marker when it finishes, and removes it once a swap consumes it. The swap re-derives everything from the host record
 // and refuses the fast path if anything drifted.
-// Written by ic (_sandbox/ic/src/sandbox/staged.rs), its plan the pre-flight's line verbatim; declared so its shape is
+// Written by ic (_hosts/ic/src/sandbox/staged.rs), its plan the pre-flight's line verbatim; declared so its shape is
 // frozen like every other stored file, and a change to it that an older marker would not satisfy fails the typecheck.
 // Not the boot step's to look for: ic writes and removes it.
 export const stagedUpdateDocument = defineDocument({
@@ -24,7 +24,7 @@ export const stagedUpdateDocument = defineDocument({
 });
 
 // A download of the next update running on the host right now, with its step and how far the pull has got: `ic
-// sandbox prepare` rewrites it every few seconds while it works (_sandbox/ic/src/sandbox/preparing.rs) and removes it
+// sandbox prepare` rewrites it every few seconds while it works (_hosts/ic/src/sandbox/preparing.rs) and removes it
 // when it ends. Declared for the same reasons as the staged marker, and like it never written here.
 export const updatePreparingDocument = defineDocument({
     root: "history",
@@ -37,7 +37,7 @@ export const updatePreparingDocument = defineDocument({
 });
 
 // What the host last did about this sandbox's version: an update that took, one it gave up on, and until when the
-// version before stays ready. Written by ic (_sandbox/ic/src/sandbox/outcome.rs) on the volume both containers share,
+// version before stays ready. Written by ic (_hosts/ic/src/sandbox/outcome.rs) on the volume both containers share,
 // so the version that ends up running reads what happened to the other one. Declared for the same reasons as the
 // staged marker, and like it never written here.
 export const updateOutcomeDocument = defineDocument({

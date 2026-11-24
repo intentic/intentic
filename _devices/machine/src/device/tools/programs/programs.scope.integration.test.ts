@@ -6,12 +6,13 @@ import { ScopeError } from "../../policy.js";
 import { runCommand } from "../shell.js";
 import { sandboxRunsDir } from "./artifacts.js";
 import { appStatus, appStop, startApp } from "./programs.js";
+import { grantWith } from "../../device-testing.js";
 
 // What app_start and app_stop may do under the device's switches. `suites` gives this run a throwaway HOME, so the runs
 // folder is a temp one.
 
 const SANDBOX = "https://sandbox-0a1b2c3d4e5f.example.dev";
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
+const off: DeviceScopes = grantWith();
 // The default card: "Run commands" on, "Run destructive commands" off.
 const shellOnly: DeviceScopes = { ...off, shell: "on", roots: process.env["HOME"] ?? "/tmp" };
 const programs: DeviceScopes = { ...off, programs: "on" };

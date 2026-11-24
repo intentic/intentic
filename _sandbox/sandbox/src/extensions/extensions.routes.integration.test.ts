@@ -126,8 +126,8 @@ test("a workspace extension waits for approval, then lists like any other and se
 test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {
     const client = clientFor(createApp(services({ workspace: workspacePaths(mkdtempSync(join(tmpdir(), "ext-list-"))) })));
     const ids = (await client.extensions.list()).extensions.map((extension) => extension.id).toSorted();
-    // The INCLUDED set only. acceptance, deployments, documentation, issues, knowledge, maintenance, logs and workflows
-    // are first-party extensions in their own repositories, listed in the registry: a sandbox is itself without them.
+    // The INCLUDED set only. acceptance, deployments, documentation, e-urzad, issues, knowledge, maintenance, logs, prawo
+    // and workflows are first-party extensions in their own repositories, listed in the registry: a sandbox is itself without them.
     expect(ids).toEqual([
         "intentic.acp-agents",
         "intentic.activity",
@@ -137,7 +137,6 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.connectors",
         "intentic.devices",
         "intentic.discord",
-        "intentic.e-urzad",
         "intentic.git-history",
         "intentic.google-workspace",
         "intentic.imap",
@@ -146,7 +145,6 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.phones",
         "intentic.pi-agent",
         "intentic.pipelines",
-        "intentic.prawo",
         "intentic.preview",
         "intentic.repo-apps",
         "intentic.slack",

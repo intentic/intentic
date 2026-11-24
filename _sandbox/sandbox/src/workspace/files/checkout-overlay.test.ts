@@ -10,17 +10,17 @@ describe("overlayOf", () => {
             {
                 repo: "intentic",
                 changes: [
-                    { path: "_os/README.md", status: "added" },
+                    { path: "_hosts/README.md", status: "added" },
                     { path: "src/kept.ts", status: "modified" },
                     { path: "src/dropped.ts", status: "deleted" },
-                    { path: "_os/installer/bib-config.toml", status: "renamed", from: "_os/installer/config.toml" },
+                    { path: "_hosts/installer/bib-config.toml", status: "renamed", from: "_hosts/installer/config.toml" },
                 ],
             },
             { repo: "root", changes: [{ path: "notes.md", status: "added" }] },
         ]);
-        expect(overlay.added).toEqual(["intentic/_os/README.md", "intentic/_os/installer/bib-config.toml", "notes.md"]);
-        expect([...overlay.gone]).toEqual(["intentic/src/dropped.ts", "intentic/_os/installer/config.toml"]);
-        expect([...overlay.renamed]).toEqual([["intentic/_os/installer/config.toml", "intentic/_os/installer/bib-config.toml"]]);
+        expect(overlay.added).toEqual(["intentic/_hosts/README.md", "intentic/_hosts/installer/bib-config.toml", "notes.md"]);
+        expect([...overlay.gone]).toEqual(["intentic/src/dropped.ts", "intentic/_hosts/installer/config.toml"]);
+        expect([...overlay.renamed]).toEqual([["intentic/_hosts/installer/config.toml", "intentic/_hosts/installer/bib-config.toml"]]);
     });
 });
 

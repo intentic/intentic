@@ -1,5 +1,5 @@
 //! sway's IPC for the shell, on the session's own socket (`SWAYSOCK`, which the session hands this app). The framing
-//! is the one copy this app and `ic`'s screen service share (`_sandbox/ic/sway-ipc`).
+//! is the one copy this app and `ic`'s screen service share (`_hosts/ic/sway-ipc`).
 
 use std::io;
 use std::os::unix::net::UnixStream;

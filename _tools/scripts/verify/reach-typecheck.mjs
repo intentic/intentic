@@ -167,7 +167,7 @@ export const scopedResultOf = ({ code, late, output }) => {
 
 /**
  * A dependent whose typecheck is vue-tsc, checked over its own files that import what the change edited
- * (`lsp diag --from`, _search/lsp/src/vue-check.ts) instead of its whole source: the editor's full check takes 418-571 s
+ * (`lsp diag --from`, _agent-tools/lsp/src/vue-check.ts) instead of its whole source: the editor's full check takes 418-571 s
  * and 6.8 GB (measured 2026-10-26), so inside this budget it never finished, and only cost the machine its memory until
  * it was killed. Run from source with bun, so it is the tree's own lsp and never a stale build of it.
  */
@@ -176,7 +176,7 @@ export const scopedTypecheck = async (root, task, changed, ms, env) => {
     if (files.length === 0) {
         return { status: "passed", output: "" };
     }
-    const cli = join(root, "_search/lsp/src/cli.ts");
+    const cli = join(root, "_agent-tools/lsp/src/cli.ts");
     const ran = await runGroup("bun", ["--conditions=@intentic/src", cli, "diag", "--from", join(root, task.directory), ...files], { cwd: root, ms, env });
     return scopedResultOf(ran);
 };

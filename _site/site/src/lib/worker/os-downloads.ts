@@ -1,5 +1,5 @@
 // INTENTIC OS DOWNLOADS: the installer ISO and VM disk, served from the R2 bucket os.yml publishes to
-// (_os/os-image/publish-download.sh). The ISO is past a GitHub release asset's 2 GB cap, so unlike the desktop
+// (_hosts/os-image/publish-download.sh). The ISO is past a GitHub release asset's 2 GB cap, so unlike the desktop
 // routes these are not release redirects: the worker streams the bucket's objects itself, ranges included, so a
 // download that drops resumes.
 //

@@ -26,6 +26,7 @@ import { markBoot } from "../../app/perf/boot";
 import { onceAccountEntered } from "../../lib/accounts/accountBoundary";
 import { localFace } from "../../app/environments/local";
 import { reloadOnHotUpdate } from "../../app/hotReload";
+import { dropSandboxScope } from "./scope/perSandbox";
 
 // Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
 // truth for each daemon's URL/lastSeenAt; `reachable` stays browser-owned since only this browser knows if it
@@ -386,6 +387,8 @@ const remove = async (id: string): Promise<LeaveOutcome | undefined> => {
     }
     await removal;
     removing.delete(id);
+    // What this window kept for it by id (scope/perSandbox.ts) is no reader's any more.
+    dropSandboxScope(id);
     // Removed on purpose, so not something to offer back if a later list lacks it (recovery/deviceDirectory.ts).
     if (target.daemonUrl !== null) {
         forgetAddress(target.daemonUrl);

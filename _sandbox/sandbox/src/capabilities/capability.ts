@@ -97,6 +97,9 @@ export interface CapabilityHandler {
     // The config to store once apply has succeeded, for a kind whose install learns something the entry must keep (the
     // commit a plugin's branch resolved to); absent stores the config as applied.
     readonly installed?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<unknown>;
+    // What tearing one connection of this kind down costs, in the kind's own terms, for the plan an owner reads before
+    // removing the extension that supplied its card (extensions/extension-removal.ts); absent says it generically.
+    readonly removal?: (config: unknown) => string;
 }
 
 // Builds the handler context from full Services, wrapping the platform calls as closures.

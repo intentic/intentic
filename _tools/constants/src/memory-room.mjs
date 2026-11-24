@@ -49,7 +49,7 @@ export const SIZE_BYTES = Object.freeze({
     // 6.8 GiB at its peak (measured 2026-10-26, cold and warm alike), under the 8 GiB heap its script gives it.
     "editor-typecheck": 7 * GIB,
     // `lsp diag` on a Vue package: `vue-tsc` over the files a change touches and their direct importers
-    // (_search/lsp/src/vue-check.ts). Measured 2026-10-27 on `_editor/web`, no build info: 3.9 GiB at its peak for
+    // (_agent-tools/lsp/src/vue-check.ts). Measured 2026-10-27 on `_editor/web`, no build info: 3.9 GiB at its peak for
     // AgentsView.vue (1 changed file, 8 importers, about 1,800 files loaded), 2.0 GiB for ChatPermissionCard.vue; with
     // the build info a run leaves, 2.4 and 1.0 GiB.
     "scoped-typecheck": 4 * GIB,

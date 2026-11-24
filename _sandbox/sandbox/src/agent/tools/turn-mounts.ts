@@ -1,4 +1,5 @@
 import { opt } from "../../opt.js";
+import { isPeerKind, type PeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { createHash, randomBytes } from "node:crypto";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
@@ -111,7 +112,7 @@ export interface TurnMounts {
     readonly resolve: (token: string | undefined, name: string) => MountReach;
     // Whether a live turn of this conversation holds a mount on exactly this target: how a shell route the agent calls
     // (not its MCP door) is held to what the turn was planned to reach, role and all.
-    readonly reaches: (conversationId: string, target: { readonly kind: "device" | "webext" | "phone"; readonly id: string }) => boolean;
+    readonly reaches: (conversationId: string, target: { readonly kind: PeerKind; readonly id: string }) => boolean;
     readonly closeAll: () => void;
 }
 
@@ -197,7 +198,7 @@ const targetReaches = (target: MountTarget, wanted: Parameters<TurnMounts["reach
     if (target.kind === "devices") {
         return wanted.kind === "device" && target.ids.includes(wanted.id);
     }
-    return (target.kind === "device" || target.kind === "webext" || target.kind === "phone") && target.kind === wanted.kind && target.id === wanted.id;
+    return isPeerKind(target.kind) && "id" in target && target.kind === wanted.kind && target.id === wanted.id;
 };
 
 // Whether a live turn of the conversation holds a mount on exactly this peer (TurnMounts.reaches).

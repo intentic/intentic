@@ -8,7 +8,7 @@ import { ADDRESSABLE_SLUG, runIc } from "../sandboxes.js";
 // `inspect_sandbox`: another sandbox's conversations, transcripts and diagnostics, read through `ic sandbox inspect` and
 // that sandbox's own `agents` and `diagnostics` commands, in place of an agent's own `docker exec` through run_command
 // (one once read another sandbox's /history as root that way). Like every sandbox tool here (sandboxes.ts) it is a
-// caller of ic, which owns the list of reads (_sandbox/ic/src/sandbox/inspect.rs); the same list is checked here too, so
+// caller of ic, which owns the list of reads (_hosts/ic/src/sandbox/inspect.rs); the same list is checked here too, so
 // a model reads the refusal before anything runs. `--on` reads a linked sandbox instead and `--out` writes a file, so
 // both are refused wherever they stand. The names and numbers are exported for the MCP tool's schema.
 

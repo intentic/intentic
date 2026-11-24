@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf, fastAllowed, loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { computed, type Ref } from "vue";
@@ -29,7 +30,7 @@ export const defaultRunSettings = (): { effort: string; thinking: boolean; fast:
 });
 
 // Extended thinking is a Claude knob; nothing else publishes one to turn off.
-export const thinkingOfferedFor = (provider: AgentProvider): boolean => provider === `claude`;
+export const thinkingOfferedFor = (provider: AgentProvider): boolean => providerHas(provider, `thinkingToggle`);
 
 const badgesFor = (provider: AgentProvider, modelId: string | undefined) =>
     (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.badges;

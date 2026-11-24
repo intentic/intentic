@@ -6,7 +6,6 @@ import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capab
 import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
 import { deskEdition, freshEdition } from "../mode";
 import { DESK_REPOS } from "./desk";
-import { officeCapabilities } from "./offices/office";
 import { linkCapabilities } from "./devices";
 
 // The installed extensions moved to daemon/extensionList.ts, beside their lifecycle; the bundle route still reads here.
@@ -87,7 +86,6 @@ const CODE_PANELS: PanelSummary[] = [
 // One capability per system the agents operate. `config` is the secret-stripped echo the daemon returns; `secrets`
 // names the stripped keys so a form can show dots for them.
 export const demoCapabilities = (): CapabilitySummary[] => [
-    ...officeCapabilities,
     ...linkCapabilities,
     // A phone added and never paired, so its row offers Connect and the pairing dialog draws its QR code (it shows
     // only where the phones extension is switched on).

@@ -13,11 +13,12 @@ import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import type { CapabilityForm } from "./capabilityForm";
 import { rememberSecrets } from "./model/devSecrets";
 import { buildConfig } from "../../models/capabilities/form";
-import { pushWalletPolicy } from "./model/walletPolicy";
+import { type KindSlots, type SaveContext, slotsOf } from "./kinds/kindSlots";
 import type { useSetupWalk } from "./setupWalk";
 
-// The form's submit: adding and editing are one streamed write, because the daemon's is one upsert; the wallet's caps
-// are a second write, to the platform; and a saved form either hands over the step it still waits on or moves on.
+// The form's submit: adding and editing are one streamed write, because the daemon's is one upsert; a kind's own checks
+// and second write (the wallet's caps, to the platform) are its slots (kindSlots.ts); and a saved form either hands over
+// the step it still waits on or moves on.
 
 // What a saved form does next. A pending connection has not finished, so it hands over its missing step under its own
 // row (an add's new row closes into the row it became, an edit's stays open); a saved edit closes its row; an add
@@ -57,25 +58,16 @@ export interface SubmitHost {
     readonly ownsSandbox: Readonly<Ref<boolean>>;
 }
 
-// The platform refused the wallet's caps after the daemon took the tile: said apart from a refused add, since the tile
-// itself was saved.
-class WalletCapsRefused extends Error {
-    constructor(readonly reason: unknown) {
-        super(`wallet caps refused`);
+// A kind's second write (the wallet's caps, to the platform) refused after the daemon took the tile: said apart from a
+// refused add, since the tile itself was saved.
+class AfterSaveRefused extends Error {
+    constructor(
+        readonly reason: unknown,
+        readonly title: string,
+    ) {
+        super(`a save's second write was refused`);
     }
 }
-
-/* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its tile is two writes (model/walletPolicy.ts). */
-const pushWalletCaps = async (entry: CapabilityCatalogEntry, config: Record<string, string>): Promise<void> => {
-    if (entry.kind !== `wallet`) {
-        return;
-    }
-    try {
-        await pushWalletPolicy(config);
-    } catch (caught) {
-        throw new WalletCapsRefused(caught);
-    }
-};
 
 // THE SAVE IS THE TILE'S, NOT THE PAGE'S. An install can take minutes and the daemon refuses a second write over one
 // still applying, so the write and how it ended live in the operations ledger under the tile: a reader who opens
@@ -84,20 +76,28 @@ const pushWalletCaps = async (entry: CapabilityCatalogEntry, config: Record<stri
 // is still showing that tile.
 export const saveKey = (entry: string): string => `capabilities/${entry}/save`;
 
-// The GPU switch is refused on a host whose device request ran and failed: Docker would otherwise rebuild into a runtime
-// that refuses every GPU container, and the reader would learn why only from the install's log. A check that could not
-// run (`checked: false`, no device to ask) saves, and the launch's own preflight decides.
-const wantsGpu = (input: AddCapabilityInput): boolean => input.kind === `docker` && input.config[`gpu`] === `on`;
-const proveGpu = async (input: AddCapabilityInput, { hosted, preflight = probeCapability, capture = track }: SubmitHost): Promise<void> => {
-    const answer = await preflight(input);
-    if (answer.checked && !answer.ok) {
-        capture(`gpu_capability_blocked`, { hosted: hosted?.value ?? false });
-        throw new Error(answer.message);
+// What a kind's own checks before and after the write read, with the daemon's preflight and the analytics capture
+// unless a suite hands its own.
+const saveContext = (host: SubmitHost): SaveContext => ({
+    hosted: host.hosted?.value ?? false,
+    ownsSandbox: host.ownsSandbox.value,
+    preflight: host.preflight ?? probeCapability,
+    capture: host.capture ?? track,
+});
+
+const afterSave = async ({ afterSave: second }: KindSlots, config: Record<string, string>): Promise<void> => {
+    if (second === undefined) {
+        return;
+    }
+    try {
+        await second.run(config);
+    } catch (caught) {
+        throw new AfterSaveRefused(caught, second.refused());
     }
 };
 
 export const useCapabilitySubmit = (host: SubmitHost) => {
-    const { selected, editing, capabilities, form, add, walk, handOff, stopEditing, error, ownsSandbox } = host;
+    const { selected, editing, capabilities, form, add, walk, handOff, stopEditing, error } = host;
     const save = useOperation(() => saveKey(selected.value?.id ?? ``));
     let showing = true;
     if (getCurrentScope() !== undefined) {
@@ -132,12 +132,13 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
             form.refuse(entry);
             return;
         }
+        const slots = slotsOf(entry.kind);
+        const context = saveContext(host);
         // Refused before either write, so the tile never shows caps the signer does not enforce.
-        if (entry.kind === `wallet` && !ownsSandbox.value) {
-            error.value = { tone: `warning`, title: t(`capabilities.capabilitySubmit.walletOwnerOnly`) };
+        error.value = slots.refuseSave?.(context) ?? null;
+        if (error.value !== null) {
             return;
         }
-        error.value = null;
         const config = buildConfig(entry, form.values, form.keptSecrets.value);
         const input: AddCapabilityInput = { id: form.savedName.value, kind: entry.kind, config };
         // Taken at the press: the form may be reseeded or gone by the time the write lands.
@@ -152,13 +153,15 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
         const ended = await save.run({
             what: wasEditing ? t(`capabilities.capabilitySubmit.saving`, { name: input.id }) : t(`capabilities.capabilitySubmit.adding`, { name: input.id }),
             failed: (caught) =>
-                caught instanceof WalletCapsRefused
-                    ? noticeFrom(caught.reason, t(`capabilities.capabilitySubmit.walletCapsNotSaved`))
+                caught instanceof AfterSaveRefused
+                    ? noticeFrom(caught.reason, caught.title)
                     : noticeFrom(caught, wasEditing ? t(`capabilities.capabilitySubmit.couldNotSave`) : t(`capabilities.capabilitySubmit.couldNotAdd`)),
             task: async () => {
-                // Only a GPU ask waits on the host: every other add starts its write in the press's own tick.
-                if (wantsGpu(input)) {
-                    await proveGpu(input, host);
+                // Only a check that may refuse it (a GPU ask on the host) waits: every other add starts its write in the
+                // press's own tick.
+                const checking = slots.beforeSave?.(input, context);
+                if (checking !== undefined) {
+                    await checking;
                 }
                 await add(input, (line) => {
                     // The install's own terminal tab: progress is the real commands, not a separate summary retelling them.
@@ -167,7 +170,7 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
                     }
                 });
                 rememberSecrets(entry, answered);
-                await pushWalletCaps(entry, config);
+                await afterSave(slots, config);
             },
         });
         if (ended?.state !== `done`) {

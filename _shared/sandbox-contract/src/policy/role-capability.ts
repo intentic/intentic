@@ -1,3 +1,5 @@
+import { traitsOf } from "./capabilities/capability-kinds.js";
+
 // WHETHER A ROLE LETS A TURN ACT THROUGH ONE CONNECTED CAPABILITY. Pure and shared, because the daemon mounts a turn's
 // tools on this answer (roles/roles.ts `turnRole`) and the Sandbox ▸ Map view draws who reaches what from it,
 // and two implementations would disagree at exactly the boundary that matters.
@@ -17,7 +19,7 @@ export interface CapabilityRef {
  * 2026-10-25, and it fell through to "passes untouched": an X-only role's unattended run reached the owner's Brave,
  * and an unpinned wake that lost every sandbox account kept it.
  */
-export const isSignedInAccount = (kind: string): boolean => kind === "browser" || kind === "identity" || kind === "webext";
+export const isSignedInAccount = (kind: string): boolean => traitsOf(kind)?.signedInAccount === true;
 
 /**
  * Whether a role speaking through these accounts (its `capabilities`) may act through a capability. Granting an

@@ -8968,6 +8968,7 @@
             "desktopSyncStopped": "Desktop-Synchronisierung auf {devices} gestoppt, sein Ordner wird nicht synchronisiert",
             "environmentBuilding": "Die neue Umgebung Ihrer Sandbox wird gebaut",
             "extensionsWaiting": "{count} Erweiterung wartet auf Ihre Freigabe | {count} Erweiterungen warten auf Ihre Freigabe",
+            "extensionMoved": "{reason}: Installieren Sie sie von dort, um sie weiter zu nutzen",
             "filesOnlyOnCloudMachine": "Die Dateien liegen nur auf der Cloud-Maschine, keine Kopie auf diesem Computer",
             "newSandboxVersionAvailable": "Eine neue Sandbox-Version ist verfügbar",
             "noAiAccountConnected": "Kein KI-Konto verbunden, der Agent kann keinen Zug ausführen",

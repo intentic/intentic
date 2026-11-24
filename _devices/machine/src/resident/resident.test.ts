@@ -2,12 +2,13 @@ import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import type { HostLink } from "../device/config.js";
 import type { MarkedLink } from "../device/connection.js";
 import { type KeptCheck, linkReading, reconcileLinks, redialSandbox, stillKeeping } from "./resident.js";
+import { grantWith } from "../device/device-testing.js";
 
 const link = (url: string, token = `token-for-${url}`): HostLink => ({
     sandboxUrl: url,
     id: `device-for-${url}`,
     token,
-    scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" },
+    scopes: grantWith(),
 });
 
 // A stand-in socket per dial, recording whether it was closed or told to dial at once: the test reads which sandboxes are

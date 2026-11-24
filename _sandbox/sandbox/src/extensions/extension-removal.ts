@@ -33,26 +33,10 @@ import { existingExtensionDirs, forgetExtensionDirs } from "./runtime/extension-
 // its skill file and (for a cli) its environment. So those entries are torn down through their own handlers, and the
 // plan names every one of them before anything happens.
 
-// What tearing one connection down actually costs, in the kind's own terms; the plan says this per connection rather
-// than once for the list, since a browser account and an enrolled machine lose very different things.
-const effectOf = (capability: Capability): string => {
-    switch (capability.kind) {
-        case "cli":
-            return "its environment variables leave the agent's shell and the skill file teaching this tool is deleted";
-        case "browser":
-            return capability.config.identity === undefined
-                ? "its signed-in browser profile is deleted, so nothing can act as that account again without signing in"
-                : "it stops being one of that identity's accounts; the shared browser profile itself stays signed in";
-        case "device":
-            return "that machine's key is revoked and its link to this sandbox cut; nothing on the machine itself is deleted";
-        case "webext":
-            return "that browser's pairing is revoked; the extension installed over there stays, disconnected";
-        case "phone":
-            return "that phone's pairing is revoked; the app installed on it stays, disconnected";
-        default:
-            return "its configuration is torn down and its stored values deleted";
-    }
-};
+// What tearing one connection down actually costs, in the kind's own terms (its handler's `removal`); the plan says this
+// per connection rather than once for the list, since a browser account and an enrolled machine lose very different things.
+const effectOf = (capability: Capability): string =>
+    registry[capability.kind].removal?.(capability.config) ?? "its configuration is torn down and its stored values deleted";
 
 // Configured entries that came from one of this extension's cards, matched on the card's own discriminator — the same
 // join the capability list uses to render a contributed row, so an entry and its card can never disagree here. An

@@ -3,12 +3,12 @@ import { WEBEXT_CHATGPT_SEND_TOOL, WEBEXT_FILE_TICKET_TTL_MS, WEBEXT_UPLOAD_TOOL
 import { z } from "zod";
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import type { PeerCallRoute } from "../peers/peer-routes.js";
-import { releasable, type ShelfFile } from "./media-shelf.js";
+import { releasable, type ShelfFile } from "../browser/cast/media-shelf.js";
 
 // A sandbox file put into a page in the owner's own browser (`upload_file`, and `chatgpt_send`'s `files`, one ticket
 // each into its `tickets` in the same order), released only for a call an agent's turn
 // actually made. The extension never asks for a file by path: the daemon sees the agent's call on its way to the
-// browser, checks the path is a file on the artifacts shelf (media-shelf.ts), and adds a one-time ticket to the call's
+// browser, checks the path is a file on the artifacts shelf (browser/cast/media-shelf.ts), and adds a one-time ticket to the call's
 // arguments; the extension presents that ticket at its own door (POST /system/webext/file, on its enrollment token) and
 // the bytes come back on that answer. So a leaked extension token reads no file at all, and an agent cannot name a file
 // off the shelf. What the person sees before anything reaches the site (its name and size, asked on the page) is the

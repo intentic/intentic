@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { CAPABILITY_KIND_TRAITS } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import { sdk } from "../../engines/claude-sdk.js";
@@ -68,7 +69,7 @@ export interface AccountsDeps {
 // open_account, must be visible to the very next call.
 const turnEntry = async (deps: AccountsDeps, id: string): Promise<Capability | undefined> => {
     const capability = await deps.capabilities.get(id);
-    if (capability === undefined || (capability.kind !== "browser" && capability.kind !== "identity")) {
+    if (capability === undefined || !CAPABILITY_KIND_TRAITS[capability.kind].sandboxBrowser) {
         return undefined;
     }
     if (deps.accounts.includes(id)) {

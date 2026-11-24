@@ -5,17 +5,8 @@ import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
 import { DEVICE_PROGRAM_TOOLS } from "@intentic/sandbox-contract/policy/device-programs";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { auditDetail, handleMcpMessage } from "./mcp.js";
-
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
+import { auditDetail, handleMcpMessage, machineTools } from "./mcp.js";
+import { grantWith } from "./device-testing.js";
 
 // `text` is the first block, the one a program reading a tool's answer takes; `texts` is every block, in order.
 const call = async (
@@ -31,7 +22,7 @@ const call = async (
 };
 
 test("initialize advertises tools and identifies the agent", async () => {
-    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "initialize" }, scopes())) as {
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "initialize" }, grantWith("agent"))) as {
         result: { capabilities: Record<string, unknown>; serverInfo: { name: string } };
     };
     expect(response.result.capabilities).toHaveProperty("tools");
@@ -39,16 +30,22 @@ test("initialize advertises tools and identifies the agent", async () => {
 });
 
 // The contract's one table of which tools carry a program (policy/device-programs.ts) is what the daemon's gate and this
-// machine's own switches both read. A tool added here that can run something has to be added there, or it is a door the
-// gate does not know: this names every tool that can do harm and says where it is judged.
-test("every tool that carries a program is in the contract's table, and the table names only tools this device serves", async () => {
+// machine's own switches both read. A tool that can run something is built with `programTool`, which only takes a name in
+// that table, and this holds the marked tools equal to the table, so neither side can name a tool the other does not; a
+// destructive tool that is neither marked nor listed below fails here too.
+test("the tools marked as carrying a program are exactly the contract's table", async () => {
     // SAFETY: tools/list always answers { result: { tools } }, each tool with the annotations toolAnnotations gives it.
-    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as {
-        result: { tools: { name: string; annotations: { destructiveHint: boolean } }[] };
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, grantWith("agent"))) as {
+        result: { tools: { name: string; annotations: { destructiveHint: boolean }; carriesProgram?: unknown }[] };
     };
-    const served = new Set(response.result.tools.map((tool) => tool.name));
-    const carried = DEVICE_PROGRAM_TOOLS.map((carrier) => carrier.tool);
-    expect(carried.filter((name) => !served.has(name))).toEqual([]);
+    const carried: readonly string[] = DEVICE_PROGRAM_TOOLS.map((carrier) => carrier.tool);
+    const marked = machineTools()
+        .filter((tool) => tool.carriesProgram)
+        .map((tool) => tool.name);
+    expect(new Set(marked)).toEqual(new Set(carried));
+    expect(marked).toHaveLength(carried.length);
+    // The mark is the machine's own: tools/list says nothing of it.
+    expect(response.result.tools.filter((tool) => "carriesProgram" in tool)).toEqual([]);
 
     // Destructive tools that carry no program, each with why: a new destructive tool that is in neither list fails here.
     const carryNone = new Map([
@@ -66,7 +63,7 @@ test("every tool that carries a program is in the contract's table, and the tabl
 });
 
 test("tools/list is the machine's whole surface, and there is no delete", async () => {
-    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as { result: { tools: { name: string }[] } };
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, grantWith("agent"))) as { result: { tools: { name: string }[] } };
     const names = response.result.tools.map((tool) => tool.name);
     expect(names).toEqual([
         "describe",
@@ -135,7 +132,7 @@ const closedTuple = (value: unknown): boolean =>
 // Every tool publishes the schema its arguments are checked against. Asserted structurally so a tool added
 // without a schema fails here instead of being advertised as taking anything.
 test("tools/list publishes each tool's argument schema, which is the one an arriving call is held to", async () => {
-    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as {
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, grantWith("agent"))) as {
         result: { tools: { name: string; description: string; inputSchema: Record<string, unknown> }[] };
     };
     for (const entry of response.result.tools) {
@@ -154,83 +151,83 @@ test("tools/list publishes each tool's argument schema, which is the one an arri
 });
 
 test("an argument the schema does not accept is a readable result, and nothing is looked at", async () => {
-    const badOp = await call("manage_sandbox", { op: "kill", slug: "work" }, scopes());
+    const badOp = await call("manage_sandbox", { op: "kill", slug: "work" }, grantWith("agent"));
     expect(badOp.isError).toBe(true);
     expect(badOp.text).toMatch(/op/);
-    const badSwap = await call("swap_sandbox", { op: "remove", slug: "work" }, scopes());
+    const badSwap = await call("swap_sandbox", { op: "remove", slug: "work" }, grantWith("agent"));
     expect(badSwap.isError).toBe(true);
     // Past the published ceiling, refused rather than quietly trimmed.
-    const tooMany = await call("sandbox_logs", { slug: "work", lines: 9000 }, scopes());
+    const tooMany = await call("sandbox_logs", { slug: "work", lines: 9000 }, grantWith("agent"));
     expect(tooMany.isError).toBe(true);
     expect(tooMany.text).toMatch(/lines/);
     // A slug reaches ic's command line as a positional: one ic would read as a flag is refused before ic runs.
-    const flagSlug = await call("diagnose_sandbox", { slug: "--help" }, scopes());
+    const flagSlug = await call("diagnose_sandbox", { slug: "--help" }, grantWith("agent"));
     expect(flagSlug.isError).toBe(true);
     expect(flagSlug.text).toBe('"--help" is not a sandbox slug; list_sandboxes names them.');
     // A read inspect_sandbox does not run is refused, naming what it does run, before ic is asked.
-    const notARead = await call("inspect_sandbox", { slug: "work", command: "agents", args: ["message", "glad-falcon-puep", "hi"] }, scopes());
+    const notARead = await call("inspect_sandbox", { slug: "work", command: "agents", args: ["message", "glad-falcon-puep", "hi"] }, grantWith("agent"));
     expect(notARead.isError).toBe(true);
     expect(notARead.text).toMatch(/does not run agents message.*Allowed: agents ls, show, find or bundle/);
-    const notACommand = await call("inspect_sandbox", { slug: "work", command: "sh", args: ["-c", "id"] }, scopes());
+    const notACommand = await call("inspect_sandbox", { slug: "work", command: "sh", args: ["-c", "id"] }, grantWith("agent"));
     expect(notACommand.isError).toBe(true);
     expect(notACommand.text).toMatch(/command/);
-    const tooManyWords = await call("inspect_sandbox", { slug: "work", command: "agents", args: Array.from({ length: 25 }, () => "x") }, scopes());
+    const tooManyWords = await call("inspect_sandbox", { slug: "work", command: "agents", args: Array.from({ length: 25 }, () => "x") }, grantWith("agent"));
     expect(tooManyWords.isError).toBe(true);
-    const noPath = await call("read_file", { path: "" }, scopes());
+    const noPath = await call("read_file", { path: "" }, grantWith("agent"));
     expect(noPath.isError).toBe(true);
 });
 
 // The stack tools hold their arguments to the contract's own schemas and their switches before docker is asked
 // anything, so none of these reaches an engine.
 test("the stack tools take only the contract's ops and arguments, and name the switch that is off", async () => {
-    const down = await call("stack_action", { name: "shop", op: "down" }, scopes());
+    const down = await call("stack_action", { name: "shop", op: "down" }, grantWith("agent"));
     expect(down.isError).toBe(true);
     expect(down.text).toMatch(/op/);
-    const flagName = await call("stack_logs", { name: "-v" }, scopes());
+    const flagName = await call("stack_logs", { name: "-v" }, grantWith("agent"));
     expect(flagName.isError).toBe(true);
     expect(flagName.text).toMatch(/name/);
-    const tooMany = await call("stack_logs", { name: "shop", tail: 5001 }, scopes());
+    const tooMany = await call("stack_logs", { name: "shop", tail: 5001 }, grantWith("agent"));
     expect(tooMany.isError).toBe(true);
     expect(tooMany.text).toMatch(/tail/);
     const deploy = { source: "/tmp/x", name: "shop", composeFile: "compose.yaml", commit: "a".repeat(40) };
-    const extra = await call("deploy_stack", { ...deploy, cwd: "/" }, scopes({ programs: "on" }));
+    const extra = await call("deploy_stack", { ...deploy, cwd: "/" }, grantWith("agent", { programs: "on" }));
     expect(extra.isError).toBe(true);
     expect(extra.text).toMatch(/cwd/);
-    const climbing = await call("deploy_stack", { ...deploy, composeFile: "../compose.yaml" }, scopes({ programs: "on" }));
+    const climbing = await call("deploy_stack", { ...deploy, composeFile: "../compose.yaml" }, grantWith("agent", { programs: "on" }));
     expect(climbing.isError).toBe(true);
     expect(climbing.text).toMatch(/composeFile/);
 
-    const unread = await call("list_stacks", {}, scopes({ shell: "off" }));
+    const unread = await call("list_stacks", {}, grantWith("agent", { shell: "off" }));
     expect(unread.isError).toBe(true);
     expect(unread.text).toMatch(/Run commands.*switched off/);
-    const unsent = await call("deploy_stack", deploy, scopes());
+    const unsent = await call("deploy_stack", deploy, grantWith("agent"));
     expect(unsent.isError).toBe(true);
     expect(unsent.text).toMatch(/Run programs this sandbox sends.*switched off/);
 });
 
 // A notification expects no answer; replying to one is a protocol violation the client reports as noise.
 test("a notification is handled and answered with nothing", async () => {
-    expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, scopes())).toBeUndefined();
+    expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, grantWith("agent"))).toBeUndefined();
 });
 
 test("an unsupported method is a JSON-RPC error, not a crash", async () => {
-    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 3, method: "resources/list" }, scopes())) as { error: { code: number } };
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 3, method: "resources/list" }, grantWith("agent"))) as { error: { code: number } };
     expect(response.error.code).toBe(-32601);
 });
 
 test("a refused scope comes back as a readable tool RESULT, not a transport error", async () => {
-    const refused = await call("run_command", { command: "whoami" }, scopes({ shell: "off" }));
+    const refused = await call("run_command", { command: "whoami" }, grantWith("agent", { shell: "off" }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/Run commands.*switched off/);
     // A diagnosis is a way of seeing, like the logs: either switch opens it, neither refuses it before ic runs.
-    const undiagnosed = await call("diagnose_sandbox", { slug: "work" }, scopes({ shell: "off", sandboxes: "off" }));
+    const undiagnosed = await call("diagnose_sandbox", { slug: "work" }, grantWith("agent", { shell: "off", sandboxes: "off" }));
     expect(undiagnosed.isError).toBe(true);
     expect(undiagnosed.text).toMatch(/Manage sandboxes on this device.*switched off/);
     // Reading another sandbox's records is a way of seeing too, gated the same way.
     const uninspected = await call(
         "inspect_sandbox",
         { slug: "work", command: "diagnostics", args: ["errors"] },
-        scopes({ shell: "off", sandboxes: "off" }),
+        grantWith("agent", { shell: "off", sandboxes: "off" }),
     );
     expect(uninspected.isError).toBe(true);
     expect(uninspected.text).toMatch(/Manage sandboxes on this device.*switched off/);
@@ -238,7 +235,7 @@ test("a refused scope comes back as a readable tool RESULT, not a transport erro
 
 test("writing outside the allowed folders is refused", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const refused = await call("write_file", { path: "/etc/intentic-test", content: "x" }, scopes({ roots: root }));
+    const refused = await call("write_file", { path: "/etc/intentic-test", content: "x" }, grantWith("agent", { roots: root }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/outside the folders/);
 });
@@ -246,15 +243,15 @@ test("writing outside the allowed folders is refused", async () => {
 test("a write says whether it created or replaced, and replacing takes the revision a read answered with", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "notes", "todo.txt");
-    const created = await call("write_file", { path, content: "hello" }, scopes({ roots: root }));
+    const created = await call("write_file", { path, content: "hello" }, grantWith("agent", { roots: root }));
     expect(created.text).toMatch(/^Created /);
-    const blind = await call("write_file", { path, content: "hello again" }, scopes({ roots: root }));
+    const blind = await call("write_file", { path, content: "hello again" }, grantWith("agent", { roots: root }));
     expect(blind.isError).toBe(true);
     expect(blind.text).toMatch(/already exists\. Read it first/);
-    const revision = /Revision ([0-9a-f]{16})/.exec((await call("read_file", { path }, scopes({ roots: root }))).texts[1] ?? "")?.[1];
-    const overwritten = await call("write_file", { path, content: "hello again", revision }, scopes({ roots: root }));
+    const revision = /Revision ([0-9a-f]{16})/.exec((await call("read_file", { path }, grantWith("agent", { roots: root }))).texts[1] ?? "")?.[1];
+    const overwritten = await call("write_file", { path, content: "hello again", revision }, grantWith("agent", { roots: root }));
     expect(overwritten.text).toMatch(/^Overwrote /);
-    expect((await call("read_file", { path }, scopes({ roots: root }))).text).toBe("hello again");
+    expect((await call("read_file", { path }, grantWith("agent", { roots: root }))).text).toBe("hello again");
 });
 
 // The setup import reads files through this tool from the sandbox (migrations/host-scan.ts) and takes the first text
@@ -263,7 +260,7 @@ test("read_file answers with the file's text alone in its first block, and the n
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "config.yaml");
     await writeFile(path, "model: big\n");
-    const read = await call("read_file", { path }, scopes({ roots: root }));
+    const read = await call("read_file", { path }, grantWith("agent", { roots: root }));
     expect(read.isError).toBe(false);
     expect(read.texts).toEqual(["model: big\n", expect.stringMatching(/^All 1 line\. Revision [0-9a-f]{16}: /)]);
 });
@@ -272,18 +269,18 @@ test("edit_file changes one exact piece of a file, on the revision it was read a
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "app.ts");
     await writeFile(path, "const port = 3000;\n");
-    const revision = /Revision ([0-9a-f]{16})/.exec((await call("read_file", { path }, scopes({ roots: root }))).texts[1] ?? "")?.[1];
-    const edited = await call("edit_file", { path, old_string: "3000", new_string: "4000", revision }, scopes({ roots: root }));
+    const revision = /Revision ([0-9a-f]{16})/.exec((await call("read_file", { path }, grantWith("agent", { roots: root }))).texts[1] ?? "")?.[1];
+    const edited = await call("edit_file", { path, old_string: "3000", new_string: "4000", revision }, grantWith("agent", { roots: root }));
     expect(edited.text).toMatch(/^Edited /);
     expect(await readFile(path, "utf8")).toBe("const port = 4000;\n");
-    const refused = await call("edit_file", { path, old_string: "4000", new_string: "5000", revision }, scopes({ write: "off", roots: root }));
+    const refused = await call("edit_file", { path, old_string: "4000", new_string: "5000", revision }, grantWith("agent", { write: "off", roots: root }));
     expect(refused.text).toMatch(/Create and change files/);
 });
 
 // What a runtime may run side by side (read-only) and what it must treat as able to lose something. Every other tool
 // is a `write`: it changes something that can be put back.
 test("every tool says what a call can do to the device", async () => {
-    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as {
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, grantWith("agent"))) as {
         result: { tools: { name: string; annotations: { readOnlyHint: boolean; destructiveHint: boolean } }[] };
     };
     const tools = response.result.tools;
@@ -339,7 +336,7 @@ test("trash moves the file somewhere recoverable instead of deleting it", async 
     const root = mkdtempSync(join(home, "test-trash-"));
     const path = join(root, "doomed.txt");
     await writeFile(path, "keep me");
-    const trashed = await call("trash_file", { path }, scopes({ roots: root }));
+    const trashed = await call("trash_file", { path }, grantWith("agent", { roots: root }));
     const moved = /to (.+?)\. It is recoverable/.exec(trashed.text)?.[1];
     try {
         expect(trashed.isError, trashed.text).toBe(false);
@@ -359,35 +356,35 @@ test("trashing needs the write permission, like any other change to the user's f
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "doomed.txt");
     await writeFile(path, "keep me");
-    const refused = await call("trash_file", { path }, scopes({ write: "off", roots: root }));
+    const refused = await call("trash_file", { path }, grantWith("agent", { write: "off", roots: root }));
     expect(refused.isError).toBe(true);
     expect(await readFile(path, "utf8")).toBe("keep me");
 });
 
 test("a command that fails is a result with its exit code, not a tool error", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const result = await call("run_command", { command: "exit 3", cwd: root }, scopes({ roots: root }));
+    const result = await call("run_command", { command: "exit 3", cwd: root }, grantWith("agent", { roots: root }));
     expect(result.isError).toBe(false);
     expect(result.text).toMatch(/Exit code 3 \(failed\)/);
 });
 
 test("a command's output comes back on the stream it was written to", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const result = await call("run_command", { command: "echo out; echo err 1>&2", cwd: root }, scopes({ roots: root }));
+    const result = await call("run_command", { command: "echo out; echo err 1>&2", cwd: root }, grantWith("agent", { roots: root }));
     expect(result.text).toContain("--- stdout ---\nout");
     expect(result.text).toContain("--- stderr ---\nerr");
 });
 
 test("a command cannot escape the allowed folders by its working directory", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const refused = await call("run_command", { command: "ls", cwd: "/etc" }, scopes({ roots: root }));
+    const refused = await call("run_command", { command: "ls", cwd: "/etc" }, grantWith("agent", { roots: root }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/outside the folders/);
 });
 
 test("a command waiting for input dies on the timeout with an explanation instead of hanging", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const result = await call("run_command", { command: "read -r line", cwd: root, timeoutMs: 1500 }, scopes({ roots: root }));
+    const result = await call("run_command", { command: "read -r line", cwd: root, timeoutMs: 1500 }, grantWith("agent", { roots: root }));
     // Either the shell reads EOF from the closed stdin (fast, exit code) or the deadline kills it: both are
     // answers the agent can act on, neither is a hang.
     expect(result.text).toMatch(/Exit code|killed after/);
@@ -395,13 +392,13 @@ test("a command waiting for input dies on the timeout with an explanation instea
 
 test("run_command takes Bash's `timeout` as its timeoutMs, in milliseconds", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const result = await call("run_command", { command: "sleep 5", cwd: root, timeout: 300 }, scopes({ roots: root }));
+    const result = await call("run_command", { command: "sleep 5", cwd: root, timeout: 300 }, grantWith("agent", { roots: root }));
     expect(result.text).toMatch(/was stopped after/);
 });
 
 test("describe names the shell, the home and the boundary: what the agent needs before its first command", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
-    const described = await call("describe", {}, scopes({ roots: root }));
+    const described = await call("describe", {}, grantWith("agent", { roots: root }));
     expect(described.text).toContain("Shell for run_command:");
     expect(described.text).toContain(root);
     expect(described.text).toMatch(/Permissions: run commands on/);
@@ -409,21 +406,21 @@ test("describe names the shell, the home and the boundary: what the agent needs 
 
 // Decided on this machine before adb or a phone is looked for, so these hold on a computer with neither.
 test("the Android tools answer a switched-off scope, or a command that would lose something, as a readable refusal", async () => {
-    const shell = await call("android_shell", { command: "pm uninstall com.example.app" }, scopes({ destructive: "off", programs: "off" }));
+    const shell = await call("android_shell", { command: "pm uninstall com.example.app" }, grantWith("agent", { destructive: "off", programs: "off" }));
     expect(shell.isError).toBe(true);
     expect(shell.text).toMatch(/^Refused: on the phone this command would uninstall an app, and "Run destructive commands" is switched off/);
-    const driven = await call("android_act", { action: "home" }, scopes({ control: "off" }));
+    const driven = await call("android_act", { action: "home" }, grantWith("agent", { control: "off" }));
     expect(driven.isError).toBe(true);
     expect(driven.text).toMatch(/Use the mouse and keyboard/);
-    const watched = await call("android_screenshot", {}, scopes({ screen: "off" }));
+    const watched = await call("android_screenshot", {}, grantWith("agent", { screen: "off" }));
     expect(watched.text).toMatch(/See the screen/);
-    const badAction = await call("android_act", { action: "power" }, scopes());
+    const badAction = await call("android_act", { action: "power" }, grantWith("agent"));
     expect(badAction.isError).toBe(true);
     expect(badAction.text).toMatch(/action/);
 });
 
 test("an unknown tool answers plainly rather than throwing", async () => {
-    const missing = await call("format_c_drive", {}, scopes());
+    const missing = await call("format_c_drive", {}, grantWith("agent"));
     expect(missing.isError).toBe(true);
     expect(missing.text).toMatch(/no tool called/);
 });
@@ -433,23 +430,23 @@ test("an unknown tool answers plainly rather than throwing", async () => {
 test("reshape_sandbox refuses an empty ask as a readable result, not a transport fault", async () => {
     // A call with nothing in it once meant "apply what is saved now", a restart nobody asked for by name. It changes
     // nothing now, and says what to send instead.
-    const empty = await call("reshape_sandbox", { slug: "work" }, scopes());
+    const empty = await call("reshape_sandbox", { slug: "work" }, grantWith("agent"));
     expect(empty.isError).toBe(true);
     expect(empty.text).toMatch(/Nothing was changed: give at least one field/);
     // A field without `when` (an older model's `later`, which the schema no longer carries) is refused the same way,
     // rather than read as "now".
-    const untimed = await call("reshape_sandbox", { slug: "work", memoryGib: 12, later: true }, scopes());
+    const untimed = await call("reshape_sandbox", { slug: "work", memoryGib: 12, later: true }, grantWith("agent"));
     expect(untimed.isError).toBe(true);
     expect(untimed.text).toMatch(/Nothing was changed/);
-    const tangled = await call("reshape_sandbox", { slug: "work", memoryGib: 12, forget: true }, scopes());
+    const tangled = await call("reshape_sandbox", { slug: "work", memoryGib: 12, forget: true }, grantWith("agent"));
     expect(tangled.isError).toBe(true);
     expect(tangled.text).toMatch(/`forget` drops what is saved and takes nothing else/);
     // A malformed cap is caught by the schema before the machine is touched: whole GiB, whole cores.
-    const fractional = await call("reshape_sandbox", { slug: "work", cpus: 1.5 }, scopes());
+    const fractional = await call("reshape_sandbox", { slug: "work", cpus: 1.5 }, grantWith("agent"));
     expect(fractional.isError).toBe(true);
     expect(fractional.text).toMatch(/cpus/i);
     // Scope refusal names the switch, like every other sandbox tool.
-    const refused = await call("reshape_sandbox", { slug: "work", memoryGib: 12, when: "nextRestart" }, scopes({ sandboxes: "off" }));
+    const refused = await call("reshape_sandbox", { slug: "work", memoryGib: 12, when: "nextRestart" }, grantWith("agent", { sandboxes: "off" }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/Manage sandboxes on this device/);
 });

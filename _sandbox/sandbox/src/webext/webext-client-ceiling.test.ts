@@ -1,5 +1,5 @@
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
-import { fitToClient } from "./webext-client-ceiling.js";
+import { fitToClient } from "../browser/webext-client-ceiling.js";
 import { fittedToClient } from "./webext-peer.js";
 
 // A browser call for a runtime whose MCP client gives up at 60 s (Cursor): wait_for is cut to fit and says so, and

@@ -42,6 +42,12 @@ jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
 const disk = shallowRef<DiskPressure | undefined>();
 jest.mock(`./storage/useDiskPressure`, () => ({ useDiskPressure: () => ({ pressure: disk }) }));
 
+// What the Capabilities page recommends for the Extension tile: nothing unless a test offers a moved extension.
+const extensionOffer = shallowRef<{ entry: string; evidence: string; reason: string; prefill: Record<string, string> } | undefined>();
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({
+    useCapabilities: () => ({ recommendationFor: (tile: string) => (tile === `extension` ? extensionOffer.value : undefined) }),
+}));
+
 const TRIAL_ENDPOINT = { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` } as const;
 
 // A sandbox that has finished reading both halves and holds no credential of any kind: the state a new workspace
@@ -54,6 +60,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    extensionOffer.value = undefined;
     delete gpu.pausedFor;
     disk.value = undefined;
     pending.value = undefined;
@@ -203,4 +210,20 @@ it(`heads the list with a nearly full disk, saying what went and what holds the 
 it(`says nothing of a disk the sandbox is still clearing by itself`, async () => {
     disk.value = { level: `reaping`, freeBytes: 120, totalBytes: 1000, measuredAt: 1, using: [] };
     expect((await attention()).needs.value.map((item) => item.action)).not.toContain(`clean`);
+});
+
+// 2026-11-23: e-urzad and prawo left the image for their own repositories. A sandbox that used one is told where its
+// install waits, on the Extension tile, rather than finding the tool gone.
+it(`points an extension that moved out at the Extension tile's prefilled install`, async () => {
+    extensionOffer.value = {
+        entry: `extension`,
+        evidence: `capability office-ezd (ezd-rp)`,
+        reason: `e-Urząd moved to its own repository`,
+        prefill: { url: `https://github.com/intentic/extension-e-urzad`, ref: `8ed58cf0cfa230e4301382007866e10101d66fa9` },
+    };
+    const row = (await attention()).needs.value.find((item) => item.message.startsWith(`e-Urząd moved`));
+    expect([row?.message, row?.to]).toEqual([
+        `e-Urząd moved to its own repository: install it from there to keep using it`,
+        insidePath(BOX, page.capabilities(`extension`)),
+    ]);
 });

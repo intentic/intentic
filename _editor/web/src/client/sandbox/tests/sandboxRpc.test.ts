@@ -341,6 +341,20 @@ it(`never sends the correlation header to another box, whose support this daemon
     resetSandboxScope();
 });
 
+// A scope of the active sandbox names its id (scope/useSandboxScope.ts): the same call as one naming none, so its refusal
+// gets this daemon's reading and it carries the correlation header.
+it(`treats a call aimed at the active sandbox by its id as a call to it`, async () => {
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
+    const fetchMock = jest.fn(async (_request: Request) => json(404, { message: `Not Found` }));
+    stubGlobal(`fetch`, fetchMock);
+    const refused = await sandboxRpc.vpn.list(undefined, { context: { at: `s1` } }).catch((error: unknown) => error);
+    const request = fetchMock.mock.calls[0]![0];
+    expect(request.url).toBe(`https://daemon.test/vpn`);
+    expect(request.headers.get(REQUEST_ID_HEADER)).toEqual(expect.stringMatching(/\S/));
+    expect(refused).toMatchObject({ status: 404, message: expect.stringMatching(/^This sandbox is too old for this part of the app \(VPN: vpn\.list\)\./u) });
+    resetSandboxScope();
+});
+
 it(`asks for a credential quietly on a background call, and fails like an unreachable box without one`, async () => {
     authState.token = `session-token`;
     authState.asked = [];

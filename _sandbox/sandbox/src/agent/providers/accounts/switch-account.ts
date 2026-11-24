@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { SwitchAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -72,7 +73,7 @@ export const switchAccount = async (
     }
     const state = services.conversations.state(conversationId);
     const carry = carriesSession(input, state);
-    if (entry.profile.provider === "claude") {
+    if (providerHas(entry.profile.provider, "seatProbe")) {
         void services.claudeSeatCheck.recheck(account, { force: true });
     }
     const held = rerun === true ? state?.resume.held : undefined;

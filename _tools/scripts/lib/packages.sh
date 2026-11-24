@@ -15,10 +15,10 @@
 # (base, local-agent, sandbox-contract) all come earlier.
 # webq and fileq close it: fileq depends on webq and on workspace-ignore, and nothing here depends on them. Both
 # were bootstrapped at 1.317.0 by hand.
-PUB=(_tools/base _tools/constants _tools/agent-cli _shared/sandbox-run \
+PUB=(_tools/base _tools/constants _agent-tools/agent-cli _shared/sandbox-run \
      _shared/extension-manifest _shared/registry _shared/sandbox-contract _shared/extension-api _shared/extension-ui _devices/local-agent _devices/desktop-automation _devices/browser _devices/keyring _devices/machine _devices/acp-bridge _sandbox/gate _sandbox/scaffold _sandbox/cli \
      _shared/workspace-ignore _tools/registry-scan \
-     _sandbox/webq _sandbox/fileq)
+     _agent-tools/webq _agent-tools/fileq)
 
 # Every dir that carries the release version = the published set plus the two private packages that put the
 # version into an artifact rather than onto a registry: the sandbox image bakes it, and the browser extension

@@ -8,7 +8,8 @@ import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch
 import { trackPerf } from "../../app/perf/perf";
 import { answerParseOptions } from "./daemon/answerParse";
 import { uuid } from "../../lib/uuid";
-import { routeRefusalText, staleDaemonReason, supportsRoute } from "./useDaemonRoutes";
+import { routeRefusalText, staleDaemonReason, supportsRouteAt } from "./useDaemonRoutes";
+import { useSandbox } from "./useSandbox";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
@@ -23,7 +24,7 @@ import { refusedUnforeseen } from "./access/forecast";
 
 // How one call reaches its daemon, beside its input.
 export interface SandboxCallContext {
-    // Another sandbox by id; absent means the active one. Only the active daemon's refusals get a route-drift reading:
+    // Another sandbox by id; absent, or the active one's own id, means the active one, the same call either way. Only the active daemon's refusals get a route-drift reading:
     // this browser's fingerprint of its own daemon says nothing about another box's build.
     readonly at?: string | undefined;
     readonly gitView?: GitView | undefined;
@@ -50,10 +51,15 @@ type ProcedureNamed<N extends ProcedureName> = N extends `${infer G extends keyo
 export type ProcedureInput<N extends ProcedureName> = InferClientInputs<ProcedureNamed<N>>;
 export type ProcedureOutput<N extends ProcedureName> = InferClientOutputs<ProcedureNamed<N>>;
 
+// The sandbox a call is aimed elsewhere than the active one, or undefined for the active one: named by id or not at all,
+// a call to the active sandbox is the same call (its target, its request id, its drift reading).
+const elsewhere = ({ at }: SandboxCallContext): string | undefined => (at === undefined || at === useSandbox().activeSandboxId.value ? undefined : at);
+
 // The daemon a call is aimed at, resolved per request so a sandbox switch or a relocated daemon applies to the very
 // next call.
 const targetOf = (context: SandboxCallContext): SandboxTarget => {
-    const target = context.at === undefined ? currentSandboxTarget() : targetFor(context.at);
+    const at = elsewhere(context);
+    const target = at === undefined ? currentSandboxTarget() : targetFor(at);
     if (target === undefined) {
         throw new SandboxUnaddressedError();
     }
@@ -110,7 +116,7 @@ const linkOptions: OpenAPILinkOptions<SandboxCallContext> = {
     // still applies. Timed on the same rpc.request span as the raw client, session renewal included.
     fetch: (request, _init, { context }) => {
         // Correlates this call with the daemon's own http.request line; this sandbox's only, whose CORS accepts the header.
-        const requestId = context.at === undefined ? uuid() : undefined;
+        const requestId = elsewhere(context) === undefined ? uuid() : undefined;
         const headers = new Headers(request.headers);
         if (requestId !== undefined) {
             headers.set(REQUEST_ID_HEADER, requestId);
@@ -131,7 +137,7 @@ const linkOptions: OpenAPILinkOptions<SandboxCallContext> = {
 // until the route turns out to be hot (daemon/answerParse.ts).
 const answered: NonNullable<OpenAPILinkOptions<SandboxCallContext>[`interceptors`]>[number] = async ({ path, context, next }) => {
     const answer = await next().catch((error: unknown) => {
-        throw refusalOf(error, context.at === undefined ? path.join(`.`) : undefined);
+        throw refusalOf(error, elsewhere(context) === undefined ? path.join(`.`) : undefined);
     });
     const schema = (await loadContract()).sandboxAnswerSchema(path);
     return schema === undefined ? answer : schema.parse(answer, answerParseOptions(path.join(`.`)));
@@ -150,7 +156,10 @@ const onceLoaded = <T extends ClientContext>(build: (contract: ContractModule) =
             // SAFETY: every client built here carries a SandboxCallContext, whose gitView is a GitView or absent.
             scoped.view = (options.context[`gitView`] as GitView | undefined) ?? scoped.view;
             const view = scoped.view;
-            if ((view?.agent !== undefined || view?.branch !== undefined) && !supportsRoute(`git.viewChanges`)) {
+            // Asked of the daemon the call is aimed at, not the active one.
+            // SAFETY: every client built here carries a SandboxCallContext, as `gitView` above.
+            const aimedAt = elsewhere(options.context as SandboxCallContext);
+            if ((view?.agent !== undefined || view?.branch !== undefined) && !supportsRouteAt(aimedAt, `git.viewChanges`)) {
                 throw new Error(`This sandbox needs an update before Git can operate in a selected checkout.`);
             }
             return link.call(path, view === undefined ? input : scoped, options);

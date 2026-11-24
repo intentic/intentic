@@ -14,6 +14,7 @@ import {
     keyringType,
     type KeyringLink,
 } from "./relay.js";
+import { grantWith } from "../device/device-testing.js";
 
 // The keyring* procedures against a keyring that answers from a script on a real socket: what reaches the pipe, which
 // sandbox it is asked for, and what a missing keyring or a refusal becomes on the contract's side.
@@ -117,7 +118,7 @@ describe("the answers with no room for a refusal", () => {
 });
 
 describe("through the device router", () => {
-    const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
+    const scopes: DeviceScopes = grantWith();
 
     it("names the sandbox from the link the call came in on, and the answer passes the contract's own output check", async () => {
         const client = createRouterClient(

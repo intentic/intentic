@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { providerHas, providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { Button, ui } from "@intentic/ui";
@@ -76,7 +77,7 @@ const hint = computed<string | undefined>(() => {
     }
     // Reassurance differs per no-paste flow (Grok: code's already there; others: nothing comes back; Meta: where to
     // type its shown code). Read off the flow's own fields, not the provider, so a new sign-in needs no new branch.
-    if (provider === `grok`) {
+    if (providerHas(provider, `signInCodePrefilled`)) {
         return t(`sandbox.connectFlow.alreadyFilledIn`);
     }
     return flow.value?.code ? t(`sandbox.connectFlow.enterCodeFinishesRest`) : t(`sandbox.connectFlow.signInFinishesRest`);
@@ -87,7 +88,7 @@ const hint = computed<string | undefined>(() => {
 // into another language's sentence.
 // Devin's page hands over what it calls "an authentication token for Devin CLI", so here it is a token too: a reader told
 // to paste a code, holding a token the page said to use only in Devin CLI, had a reason to stop (UX review 2026-10-18, F09).
-const token = computed(() => provider === `devin` && !redirectFlow.value);
+const token = computed(() => providerTraits(provider)?.pasteBack === `token` && !redirectFlow.value);
 const pasteLabel = computed(() => {
     if (redirectFlow.value) {
         return t(`sandbox.connectFlow.pasteAddress`, { destination: destination.value });

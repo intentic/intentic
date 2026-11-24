@@ -15,7 +15,7 @@ import { SLEEP_SOCKET_PATH } from "./sleep/sleep-socket.js";
 // The files the host and this daemon share across the container's edge, spelled once here: `ic` writes some for the
 // daemon to read and reads the rest, by path and field name, from Rust. golden/host-files.json is each one's path in
 // the container and, for the ones whose shape is defined here, an example as JSON; ic's test
-// (_sandbox/ic/src/sandbox/host_files.rs) holds its own paths, what it writes and what it reads to it. The update
+// (_hosts/ic/src/sandbox/host_files.rs) holds its own paths, what it writes and what it reads to it. The update
 // markers' shapes are the contract's, so their examples are its golden files. A change here that the committed file
 // does not carry fails, naming the file; `INTENTIC_WRITE_GOLDEN=1` rewrites it, and ic's test then says whether ic still
 // agrees.

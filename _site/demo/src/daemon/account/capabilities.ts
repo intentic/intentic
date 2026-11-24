@@ -1,4 +1,5 @@
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
+import { CAPABILITY_KIND_TRAITS } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type {
     Capability,
     CapabilityProbe,
@@ -78,8 +79,12 @@ const summarize = (capability: Capability, status: CapabilityStatus) => {
     return { summary, credential };
 };
 
-// The kinds that wait on a person after the apply: a machine or phone to pair, a browser to sign in once.
+// The kinds that wait on a person after the apply: a machine or phone to pair, a sandbox browser profile (a site account
+// or an identity, as the daemon's browser and identity handlers report) to sign in once.
 const statusAfterApply = (capability: Capability): CapabilityStatus => {
+    if (CAPABILITY_KIND_TRAITS[capability.kind].sandboxBrowser) {
+        return { state: `pending`, detail: `sign in once in its browser` };
+    }
     switch (capability.kind) {
         case `device`:
             return { state: `pending`, detail: `run the pairing command on that computer` };
@@ -87,8 +92,6 @@ const statusAfterApply = (capability: Capability): CapabilityStatus => {
             return { state: `pending`, detail: `click Connect and scan the code with that phone's camera` };
         case `webext`:
             return { state: `pending`, detail: `click Connect and install the extension in that browser` };
-        case `browser`:
-            return { state: `pending`, detail: `sign in once in its browser` };
         default:
             return { state: `active` };
     }

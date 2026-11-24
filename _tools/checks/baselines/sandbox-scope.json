@@ -1,0 +1,562 @@
+{
+    "_editor/web/src/app/projectScope.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/app/storage/activeSandbox.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/app/storage/browserStorage.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/components/LinkPairing.vue": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/agents/board/cards/LaneSkeleton.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/agents/board/useAgentFilter.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/agents/fleet/synthesizeSessions.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/agents/review/AgentDetail.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/browsers/bookmarks/useBookmarks.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/browsers/browsersQuery.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/browsers/omnibox/browsingSource.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/browsers/tabVerbs.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/capabilities/capabilityPairing.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/capabilities/connect/hosts/AppRecreateButton.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/capabilities/connect/hosts/HostRecreate.vue": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/capabilities/connect/hosts/swapLanding.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/capabilities/connect/MicrosoftSignInField.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/capabilities/connect/secrets/useKeyrings.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/drafts/localHandoffArrival.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/drafts/localTaskArrival.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/panel/capacity/capacityMemory.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/panel/ChatShareDialog.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/panel/endings/ChatWayOutStrip.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/panel/fleet/fleetAdvice.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/panel/pane/composerKeys.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/panel/pane/HomeDoor.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/panel/privacy/useShieldedWords.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/routing/chatRoute.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/transcript/cards/ChatBrowserHelpCard.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/chat/transcript/pages/pageDocument.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/transcript/pages/usePageActions.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/transcript/prompt/ChatSystemPrompt.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/chat/wake/WakeListener.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/desktop/desktopQuery.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/desktop/DesktopTab.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/extensions/useExtensionSettings.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/gettingStarted/gettingStartedChoices.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/gettingStarted/useGettingStarted.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/home/HomeChat.vue": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/home/HomeSandboxes.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/home/MasterHomeView.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/organisations/useOrgPolicy.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/preview/usePreviewPass.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/preview/usePreviewTargets.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/access/parts/useRosterWrites.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/access/previews/usePreviewGuard.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/access/profiles/useServices.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/access/ReachPicker.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/access/useAccessInventory.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/access/useStandingGrants.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/agent-settings/behaviour/AgentVoice.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/agent-settings/behaviour/offload/AgentOffload.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/agent-settings/skills/AgentInstructions.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/agent-settings/skills/SkillPage.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/ai-literacy/AiLiteracyNotice.vue": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/ai-literacy/AiLiteracySettings.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/analytics/analyticsGate.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/audit/useAudit.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/data-protection/useCompliance.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/devices/FolderPicker.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/DeviceRunners.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/deviceWork.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/devices/sync/syncSetup.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/devices/useDeviceReturns.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/diagnosis/FixCommand.vue": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/diagnosis/useDiagnosis.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/environment/rebuild/useDevRebuild.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/environment/useSafetyPolicy.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/environment/useSkills.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/extensions/ExtensionDetail.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/extensions/useManifestProblems.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/fence/networkFence.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/gates/removal/RemoveSandboxDialog.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/gates/SandboxSwitcher.vue": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/gates/SignInWall.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/gates/workspaceShown.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/live/restartWatch.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/live/systemEvents.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/live/useDeviceRelays.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/map/useReachMap.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/models/HostServerRows.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/models/useLocalModelFit.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/overview/backup/useUnbackedWork.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/overview/offerTimezone.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/overview/storage/useCheckoutSizes.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/overview/storage/useDiskPressure.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/overview/storage/useSandboxStorage.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/overview/useSandboxLiveness.ts": {
+        "count": 7,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/overview/version/autoUpdateWatch.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/overview/version/SandboxBehindCard.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/overview/version/useAutoUpdate.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/roles/useRoleKit.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/SandboxHub.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/secrets/SandboxSecrets.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/secrets/useWants.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/switching/sandboxScope.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/sandbox/usage/useSavings.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/sandbox/usage/useUsage.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/terminal/terminalScrollback.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/terminal/useTerminal.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/tour/tourMarks.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/workspace/changes/commit/commitMessage.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/workspace/changes/MainLineBanner.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/workspace/directory-ui/useDirectoryUi.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/workspace/explorer/useAddRepo.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/workspace/files/derivedText.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/workspace/files/downloadEntries.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/features/workspace/health/useModules.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/features/workspace/home/gallery/galleryChoice.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/lib/markdown/pictureSizes.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/lib/routes/links.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/lib/skeletonPersistence.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/capabilities/generateCertificateRequest.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/capabilities/generateSshKey.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/capabilities/signIn/mcpSignIn.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/capabilities/useCapabilities.ts": {
+        "count": 9,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/capabilities/useSecrets.ts": {
+        "count": 12,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/changes/indexRuns.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/changes/useChanges.ts": {
+        "count": 11,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/changes/useHistory.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/accounts/keyBalance.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/conversations/accounts/useChat-accounts.ts": {
+        "count": 8,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/accounts/useChat-catalog.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/drafts/composerDrafts.ts": {
+        "count": 6,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/run/chatChannel.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/run/chatEcho.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/run/chatRun.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/conversations/run/useChat-connect.ts": {
+        "count": 8,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/run/useChat-sessions.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/conversations/seal/useSealHouse.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/session/conversation.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/session/turnPost.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/conversations/tabs/useChat-tabs.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/conversations/transcript/transcriptCache.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/extensions/useExtensions.ts": {
+        "count": 12,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/extensions/usePanels.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/agentActions.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/board/metricsCards.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/fleet/fleetScope.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/openRun.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/fleet/presses/familyStop.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/fleet/presses/sealPresses.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/subagentRoster.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/fleet/useAgents-actions.ts": {
+        "count": 9,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/useAgents-archive.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/useAgents-fleet.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/fleet/useAgents-registry.ts": {
+        "count": 9,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/useLoopDesigns.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/useLoops.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/fleet/useWorkflowRuns.ts": {
+        "count": 6,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/hub/useConnectionHub.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/needs/useNeeds.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/preview/runnerPreviews.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/providers/capacity/daemonPlacement.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/runners/runnerViews.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/runs/useRunTargets.ts": {
+        "count": 6,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/access/useAccessProfiles.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/access/useAreas.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/devices/remote/remoteApi.ts": {
+        "count": 8,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/devices/remote/screenPlaces.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/sandbox/devices/useDevices.ts": {
+        "count": 5,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/devices/useLiveLinks.ts": {
+        "count": 7,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/environment/usePorts.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/sandbox/environment/useRepoChecks.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/live/acrossSandboxes.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/liveMetrics.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/sandbox/roles/projectRole.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/roles/useRoles.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/sandboxScreen.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/useCommitIdentity.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/usePrivacyLeaks.ts": {
+        "count": 7,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/usePrivacyShield.ts": {
+        "count": 9,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/useSandboxSettings.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/useSandboxSharedAccess.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/sandbox/useSandboxVersion.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/terminal/deviceTerminals.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/terminal/portPreview.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/terminal/runnerTerminals.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/terminal/terminalMeta.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/terminal/terminalsQuery.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/terminal/useBackgroundProcesses.ts": {
+        "count": 4,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/workspace/files/fileWindow.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/files/mediaUrl.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/files/resolveFileRef.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/files/useFollowCheckout.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/home/cardPreview.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/home/mediaBoxes.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/push/usePublicOutbox.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/push/usePushRun.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/workspace/search/useWorkspaceSearch.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/workspace/tabs/useWorkspaceTabs.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/workspace/tree/lazyListings.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/tree/useRepos.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/models/workspace/tree/useWorkspaceTree.ts": {
+        "count": 11,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/models/workspace/viewers/servedPreview.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/parts/workspace/FileRefPeek.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/parts/workspace/scope/useBranchChoices.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/workbench/browsers/browsersSurface.ts": {
+        "count": 3,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/workbench/hub/hubWork.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/workbench/operations/operations.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/workbench/presence/usePresence.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/workbench/push/usePushNotifications.ts": {
+        "count": 10,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    },
+    "_editor/web/src/workbench/side/sideTabs.ts": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
+    "_editor/web/src/workbench/window/useLayout.ts": {
+        "count": 2,
+        "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
+    }
+}

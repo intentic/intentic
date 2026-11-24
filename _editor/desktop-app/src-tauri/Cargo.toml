@@ -55,10 +55,10 @@ tokio = { version = "1.53.3", features = ["time"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring"] }
 # The time-limited child every short read here goes through, shared with `ic` so a fix to it reaches both.
-intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
+intentic-bounded = { path = "../../../_hosts/ic/bounded" }
 # What docker's refusals mean and where Docker Desktop lives, the one reading `ic` makes too (a broken engine is told
 # from a slow one the same way in both, and Docker Desktop is found wherever `ic`'s probe would find it).
-intentic-docker-host = { path = "../../../_sandbox/ic/docker-host" }
+intentic-docker-host = { path = "../../../_hosts/ic/docker-host" }
 # A big drop on the workspace, streamed as one tar archive into `docker cp -` (src/drop_copy.rs). Already in the graph
 # at this version through the updater, so this names what is compiled rather than adding a download.
 tar = { version = "0.4.46", default-features = false }
@@ -112,7 +112,7 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
 # a window's own content webview. The version webkit2gtk and tao already build against.
 gtk = "=0.18.2"
 # sway's IPC for Intentic OS's shell (src/shell/), the copy `ic`'s screen service uses too.
-intentic-sway-ipc = { path = "../../../_sandbox/ic/sway-ipc" }
+intentic-sway-ipc = { path = "../../../_hosts/ic/sway-ipc" }
 
 [dev-dependencies]
 # A port bound without listening (src/machine_face.rs's offline test): it refuses every connection and, held, no other

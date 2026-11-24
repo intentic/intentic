@@ -8968,6 +8968,7 @@
             "desktopSyncStopped": "Synchronisation du bureau arrêtée sur {devices}, son dossier ne se synchronise plus",
             "environmentBuilding": "Le nouvel environnement de votre sandbox est en cours de construction",
             "extensionsWaiting": "{count} extension attend votre approbation | {count} extensions attendent votre approbation",
+            "extensionMoved": "{reason} : installez-la depuis cet endroit pour continuer à l'utiliser",
             "filesOnlyOnCloudMachine": "Ses fichiers ne sont que sur la machine cloud, aucune copie sur cet ordinateur",
             "newSandboxVersionAvailable": "Une nouvelle version du sandbox est disponible",
             "noAiAccountConnected": "Aucun compte d'IA connecté, l'agent ne peut pas exécuter de tour",

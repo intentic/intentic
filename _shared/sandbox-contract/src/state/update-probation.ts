@@ -1,7 +1,7 @@
 // THE POLICY AN UPDATE IS HELD TO AFTER IT TOOK, one policy on two substrates.
 //
 // A new version of a sandbox that came up is not yet a version that works. On a machine `ic` runs, the old container stays
-// parked and ready while a watch looks at the new one (_sandbox/ic/src/sandbox/probation.rs), and puts the old one back
+// parked and ready while a watch looks at the new one (_hosts/ic/src/sandbox/probation.rs), and puts the old one back
 // by itself if it keeps failing. On Fly the platform's api does the same job over the image the machine's row keeps as
 // its way back (_platform/api/src/sandbox/hosted/gate/hosted-probation.ts). The two cannot share code (one looks through
 // Docker, the other through Fly's exec), so they share what decides: the numbers below, and `judgeProbation` /

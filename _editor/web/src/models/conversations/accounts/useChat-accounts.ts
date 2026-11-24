@@ -1,3 +1,4 @@
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { loopDoors } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -33,11 +34,11 @@ export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => pr
 // The manage card's accounts, which follow the card's own provider rather than any conversation's.
 export const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
 
-// Providers with no native account, authenticating only through the translator's subscription. Grok is excluded by name
-// (OpenCode holds its xAI sign-in), and so is any whose own CLI loop signs in through a door of its own (Kimi CLI): both
-// hold both, and which one gates depends on the harness.
+// Providers with no native account, authenticating only through the translator's subscription. Grok is excluded by its
+// `ownSignInLoop` (OpenCode holds its xAI sign-in), and so is any whose own CLI loop signs in through a door of its own
+// (Kimi CLI): both hold both, and which one gates depends on the harness.
 export const subscriptionOnly = (p: AgentProvider): p is KeyedProvider =>
-    p !== `grok` && providerSpec(p)?.auth.kind === `translator` && loopDoors(p).length === 0;
+    providerTraits(p)?.ownSignInLoop === undefined && providerSpec(p)?.auth.kind === `translator` && loopDoors(p).length === 0;
 
 // Where the card was when the last sandbox's scope ended; unset until the first switch.
 let cardWas: AgentProvider | undefined;

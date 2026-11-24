@@ -21,13 +21,13 @@ import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
 import { page, routeSandbox, toHome } from "../../lib/routes/links";
 import { masterRail } from "../../models/home/masterRail";
-import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
+import InSandbox from "../../components/InSandbox.vue";
+import HomeTileBadge from "./HomeTileBadge.vue";
 import { RUNNING_MARK_CLASS } from "../../workbench/views/viewBadge";
 import TileMark from "../../components/TileMark.vue";
 import { useFaceProcesses } from "../../models/processes/faceProcesses";
 import { sandboxRunOf } from "../../models/processes/processTiles";
 import { processNote } from "../../models/processes/processWords";
-import type { ViewBadge } from "@intentic/extension-api";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import { desktopApp, openThisComputer } from "../../app/environments/desktop";
 import { commandShortcut } from "../../workbench/commands/useCommands";
@@ -122,15 +122,9 @@ const openTileMenu = (event: MouseEvent, id: string): void => {
 // Before the first sandbox the + wears getting started's beacon, a quiet second way to the press the page itself leads
 // with (HomeNoSandbox.vue). No coach mark beside it any more: the page says what it would have said, and a popover over
 // a page that already asks for the same press is two voices for one thing.
+// Each tile's badge reads its own sandbox's count through the sandbox it stands in (HomeTileBadge.vue), from the same
+// cache entry these readings fill.
 const readings = useHomeAttention();
-const badgeOf = (id: string): ViewBadge | undefined => {
-    const count = readings.value.get(id)?.needsYou ?? 0;
-    if (count > 0) {
-        return { count, tooltip: t(`home.sandboxAttention`, { name: boxes.value.find((box) => box.id === id)?.name ?? ``, count }) };
-    }
-    // Made while its reader was in another sandbox's chat: it says it is ready until it is opened.
-    return readySandboxes.value.has(id) ? { mark: `check`, tone: `info` } : undefined;
-};
 // A run about a sandbox that has its tile (its setup still finishing, a sync, a recreate) turns on that tile, with its line
 // in the hover, rather than standing as a second tile with the same letters (processTiles.ts `foldedOnSandbox`).
 const { list: processes } = useFaceProcesses();
@@ -228,7 +222,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             >
                 <SandboxLogo :size="36" :image="box.image ?? null" :name="box.name" />
                 <span class="min-w-0 flex-1 truncate">{{ box.name }}</span>
-                <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
+                <InSandbox :sandbox-id="box.id"><HomeTileBadge class="text-[0.625rem]" /></InSandbox>
             </button>
             <button
                 v-if="!homeOnly"
@@ -313,7 +307,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
                     <span class="icon-rail-picture pointer-events-none flex items-center justify-center overflow-hidden rounded-md">
                         <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-md" />
                     </span>
-                    <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
+                    <InSandbox :sandbox-id="box.id"><HomeTileBadge class="icon-rail-mark absolute right-0.5 top-0.5" /></InSandbox>
                     <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
                 </template>
             </button>

@@ -60,27 +60,27 @@ test("answers nothing for a path the workspace has no file for", async () => {
 
 test("finds a file the conversation created, written as the repo-relative path an agent uses", async () => {
     // The checkout holds a repo (`intentic/`) below the workspace root; the agent names files from inside it.
-    const files = ["intentic/_os/os-image/README.md", "intentic/_os/os-image/installer/bib-config.toml"];
-    expect(await resolve("_os/os-image/README.md", files)).toEqual({ path: "intentic/_os/os-image/README.md" });
+    const files = ["intentic/_hosts/os-image/README.md", "intentic/_hosts/os-image/installer/bib-config.toml"];
+    expect(await resolve("_hosts/os-image/README.md", files)).toEqual({ path: "intentic/_hosts/os-image/README.md" });
 });
 
 describe("a file the conversation renamed", () => {
-    const renamed = new Map([["intentic/_os/installer/config.toml", "intentic/_os/installer/bib-config.toml"]]);
+    const renamed = new Map([["intentic/_hosts/installer/config.toml", "intentic/_hosts/installer/bib-config.toml"]]);
     // The shared tree still holds the old name: the view says it exists, which is exactly the trap.
-    const files = ["intentic/_os/installer/bib-config.toml", "intentic/_os/installer/config.toml"];
+    const files = ["intentic/_hosts/installer/bib-config.toml", "intentic/_hosts/installer/config.toml"];
 
     test("opens the file where it went, even though the old name still exists in the shared tree", async () => {
-        expect(await resolveReference("intentic/_os/installer/config.toml", WORKSPACE_ROOT, viewOf(files, renamed))).toEqual({
-            path: "intentic/_os/installer/bib-config.toml",
-            renamedFrom: "intentic/_os/installer/config.toml",
+        expect(await resolveReference("intentic/_hosts/installer/config.toml", WORKSPACE_ROOT, viewOf(files, renamed))).toEqual({
+            path: "intentic/_hosts/installer/bib-config.toml",
+            renamedFrom: "intentic/_hosts/installer/config.toml",
         });
     });
 
     test("follows it from the short form an agent writes too", async () => {
-        const moved = ["intentic/_os/installer/bib-config.toml"];
+        const moved = ["intentic/_hosts/installer/bib-config.toml"];
         expect(await resolveReference("installer/config.toml", WORKSPACE_ROOT, viewOf(moved, renamed))).toEqual({
-            path: "intentic/_os/installer/bib-config.toml",
-            renamedFrom: "intentic/_os/installer/config.toml",
+            path: "intentic/_hosts/installer/bib-config.toml",
+            renamedFrom: "intentic/_hosts/installer/config.toml",
         });
     });
 });
@@ -88,14 +88,14 @@ describe("a file the conversation renamed", () => {
 describe("a reference nothing matches", () => {
     test("offers the file renamed in place: the folder it named still holds a name containing the old one", async () => {
         // Created and renamed within one turn, so git has no rename to follow: only the folder's contents say it.
-        const files = ["intentic/_os/os-image/installer/bib-config.toml", "intentic/_os/os-image/installer/ks.cfg", "intentic/_os/os-image/disk.sh"];
-        expect(await resolve("installer/config.toml", files)).toEqual({ nearby: ["intentic/_os/os-image/installer/bib-config.toml"] });
+        const files = ["intentic/_hosts/os-image/installer/bib-config.toml", "intentic/_hosts/os-image/installer/ks.cfg", "intentic/_hosts/os-image/disk.sh"];
+        expect(await resolve("installer/config.toml", files)).toEqual({ nearby: ["intentic/_hosts/os-image/installer/bib-config.toml"] });
     });
 
     test("offers the same name elsewhere, closest to where it was first", async () => {
-        const files = ["a/b/zz/config.toml", "far/away/config.toml", "intentic/_os/os-image/x/config.toml"];
-        const { nearby } = await resolve("_os/os-image/installer/config.toml", files);
-        expect(nearby?.[0]).toBe("intentic/_os/os-image/x/config.toml");
+        const files = ["a/b/zz/config.toml", "far/away/config.toml", "intentic/_hosts/os-image/x/config.toml"];
+        const { nearby } = await resolve("_hosts/os-image/installer/config.toml", files);
+        expect(nearby?.[0]).toBe("intentic/_hosts/os-image/x/config.toml");
         expect(nearby).toHaveLength(3);
     });
 
@@ -106,9 +106,9 @@ describe("a reference nothing matches", () => {
 
     test("tries the most specific form of the folder that still exists, not every folder of that name", async () => {
         const seen: string[] = [];
-        const files = ["intentic/_os/os-image/installer/bib-config.toml", "elsewhere/installer/my-config.toml"];
+        const files = ["intentic/_hosts/os-image/installer/bib-config.toml", "elsewhere/installer/my-config.toml"];
         const { nearby } = await resolve("os-image/installer/config.toml", files, seen);
-        expect(nearby).toEqual(["intentic/_os/os-image/installer/bib-config.toml"]);
+        expect(nearby).toEqual(["intentic/_hosts/os-image/installer/bib-config.toml"]);
         expect(seen).toContain("**/os-image/installer/*");
         expect(seen).not.toContain("**/installer/*");
     });

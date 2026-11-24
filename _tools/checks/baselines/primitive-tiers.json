@@ -32,7 +32,7 @@
     "_extensions/onlyoffice/src/server/listener.ts": 1,
     "_extensions/whatsapp/src/media.ts": 1,
     "_sandbox/agent-context/src/workspace-map.ts": 1,
-    "_sandbox/fileq/src/lib/derive.ts": 1,
+    "_agent-tools/fileq/src/lib/derive.ts": 1,
     "_sandbox/scaffold/src/inject-template.ts": 1,
     "_shared/extension-api/src/runtime.ts": 1,
     "_tools/desktop-smoke-windows/src/harness.ts": 1,

@@ -1,4 +1,4 @@
-// THE IMAGE'S TOP, as an environment build replays it (ic, _sandbox/ic/src/sandbox/layered.rs). An overlay used to be
+// THE IMAGE'S TOP, as an environment build replays it (ic, _hosts/ic/src/sandbox/layered.rs). An overlay used to be
 // built FROM the whole sandbox image, so every commit's daemon, which changes the image's digest, invalidated every one
 // of its layers, and a sandbox re-ran its whole recipe on each update (rog, 2026-11-19: 16 minutes of a 30-minute
 // rebuild). ic now builds it FROM the image's `tools` stage and puts the `runtime` stage back on top by copying its paths
@@ -20,7 +20,7 @@ import { basename, posix } from "node:path";
 export const RUNTIME_STAGE = "FROM tools AS runtime";
 
 // The label carrying the replay, and the one naming the `tools` image (set at build time, build-sandbox-image.sh and
-// publish-images.sh, since the stage's image exists only once built). ic reads both: _sandbox/ic/src/sandbox/layered.rs.
+// publish-images.sh, since the stage's image exists only once built). ic reads both: _hosts/ic/src/sandbox/layered.rs.
 export const IMAGE_TOP_LABEL = "dev.intentic.image-top";
 export const TOOLS_LABEL = "dev.intentic.tools";
 

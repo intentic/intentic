@@ -27,7 +27,8 @@ import {
     submitWord,
 } from "../../models/capabilities/form";
 import { cleanedPaste, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "../../models/capabilities/normalize";
-import { answersSummary, hostPresets } from "./model/previews";
+import { slotsOf } from "./kinds/kindSlots";
+import { hostPresets } from "./model/previews";
 import { versionReadToken } from "./model/refs";
 import { openingName, suggestName } from "../../models/capabilities/tiles";
 import type { PairedLink } from "../../components/linkPairing";
@@ -163,7 +164,7 @@ export const addsByItself = (
     editing: CapabilitySummary | undefined,
     foldOpen: boolean,
     values: Readonly<FormValues>,
-): boolean => (entry?.kind === `link` || entry?.kind === `fleet`) && editing === undefined && !foldOpen && (values[`token`] ?? ``) === ``;
+): boolean => slotsOf(entry?.kind).addsByItself === true && editing === undefined && !foldOpen && (values[`token`] ?? ``) === ``;
 
 // A tile's fields on one side of the Advanced fold, less those this kind of machine cannot offer (a GPU on a hosted one).
 const fieldsOf = (entry: CapabilityCatalogEntry, values: FormValues, on: { advanced: boolean; hosted: boolean }): readonly CapabilityField[] =>
@@ -354,7 +355,7 @@ export const useCapabilityForm = (host: FormHost) => {
         advancedFields: (entry: CapabilityCatalogEntry) => fieldsOf(entry, values, { advanced: true, hosted: host.hosted?.value === true }),
         versionToken: computed(() => versionReadToken(values, keptSecrets.value)),
         // What the answers compose into (a spending policy, a RAM bill), kept current with what submit agrees to.
-        formSummary: computed(() => answersSummary(selected.value?.kind, values)),
+        formSummary: computed(() => slotsOf(selected.value?.kind).answersSummary?.(values)),
         liveEffects: computed(() => (selected.value === undefined ? [] : formEffects(selected.value, values, name.value, contributionOf, manifestOf))),
         hostPresetOptions,
         applyHostPreset: (key: string): void => {

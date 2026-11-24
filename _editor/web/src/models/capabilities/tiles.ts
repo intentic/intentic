@@ -6,6 +6,7 @@ import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { entryDescription, entryHint, entryName, withFieldWords } from "./catalogCopy";
 import { cleanName } from "./form";
+import { kindIcon } from "./kinds/kindIcons";
 
 // A tile's facts and which live connections came from it: the catalog and connected-inventory questions both join a
 // catalog entry to matching instances. That join's rules (which field distinguishes two tiles of one kind, a free
@@ -26,16 +27,9 @@ export const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
     extend: `th-large`,
 };
 
-// Fallback glyph tier when a tile has no logo (or it fails to load): a kind's own icon, never bare initials, since
-// the kind is always known. No entry here falls to the bolt.
-const KIND_ICONS: Readonly<Record<string, IconName>> = {
-    plugin: `th-large`,
-    browser: `globe`,
-    identity: `user`,
-    agent: `sparkles`,
-};
-
-export const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? KIND_ICONS[entry.kind] ?? `bolt`;
+// Fallback glyph tier when a tile has no logo (or it fails to load): a kind's own icon (kindIcons.ts), never bare
+// initials, since the kind is always known.
+export const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? kindIcon(entry.kind);
 
 // Tiles the enabled extensions contribute, first declaration of a kind+id winning (contributionRegistry's
 // precedent). Enabled, not installed: a switched-off extension still lists so its switch is reachable, but its

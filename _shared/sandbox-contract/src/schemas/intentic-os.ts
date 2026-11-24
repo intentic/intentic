@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// INTENTIC OS (2026-10-13): the immutable Linux that boots straight into Intentic (_os/README.md). Everything that changes
+// INTENTIC OS (2026-10-13): the immutable Linux that boots straight into Intentic (_hosts/README.md). Everything that changes
 // the OS goes through `ic os`, and everything that calls it reads ic's JSON rather than bootc's. This is that JSON as the
 // TypeScript side reads it, and the argv every caller spells it with: the machine agent's os_* tools run it, and a page
 // that cannot reach the machine can print it for a person to type. golden/intentic-os.json holds an example of each
@@ -130,7 +130,7 @@ export const icOsRebootArgs = (): string[] => ["os", "reboot"];
 export const icOsChannelArgs = (channel: IntenticOsChannel): string[] => ["os", "channel", IntenticOsChannelSchema.parse(channel)];
 
 // THE MACHINE'S OWN SETTINGS (2026-10-16): the network, the sound, the screen, the keyboard and the drives a person plugs
-// in, each a verb of `ic os` (_os/README.md, "Settings"). The desktop app's This computer cards, its status bar and the
+// in, each a verb of `ic os` (_hosts/README.md, "Settings"). The desktop app's This computer cards, its status bar and the
 // machine agent's tools all read these shapes, so a person and the agent in the machine's own sandbox change the same
 // things the same way ("connect to the guest Wi-Fi"). ic reads NetworkManager, WirePlumber, sway and udisks for them:
 // nothing that calls ic speaks to those.

@@ -1,3 +1,4 @@
+import { providerHas, providerTraits } from "./providers/provider-traits.js";
 import { ACP, type AgentCapabilities, CLAUDE_CODE, CODEX, MUSE, OPENCODE, PI } from "./agent-runtimes.js";
 import { type LoopTerms, type NativeProvider, PROVIDER_SPECS, type ProviderAccess, type ProviderLoops, providerSpec } from "./provider-specs.js";
 import type { AgentHarness, AgentLoop, AgentProvider, PermissionMode } from "../schemas/agent.js";
@@ -257,7 +258,7 @@ export const EFFORT_TIERS: readonly string[] = ["minimal", "low", "medium", "hig
 // Filters exactly one pair: Claude's `max` with thinking explicitly false, the one combination Anthropic's API refuses
 // (400). Absent thinking is not off; the model's own default answers, every other tier or provider passes through.
 export const effortAllowed = (effort: string, provider: AgentProvider, thinking: boolean | undefined): boolean =>
-    effort !== "max" || provider !== "claude" || thinking !== false;
+    effort !== "max" || providerTraits(provider)?.effortScale !== "anthropic" || thinking !== false;
 
 // The same rule applied as a repair, not a filter: a route, extension, restored tab or pinned model can all bypass the
 // picker. The tier moves, not the thinking setting, since turning thinking off was the user's own deliberate choice.
@@ -273,4 +274,4 @@ export const sendableThinking = (effort: string | undefined, thinking: boolean |
 // false). The Claude Code loop also needs a first-party route, since it serves translated and non-Anthropic endpoints
 // that refuse it; any other loop that can ask speaks to its own vendor, whose catalog is where the badge came from.
 export const fastAllowed = (capabilities: AgentCapabilities, provider: AgentProvider, badges: readonly ModelBadge[] | undefined): boolean =>
-    capabilities.fastMode && (capabilities.runtime !== "claude-code" || provider === "claude") && (badges ?? []).includes("fast");
+    capabilities.fastMode && (capabilities.runtime !== "claude-code" || providerHas(provider, "firstPartyAnthropic")) && (badges ?? []).includes("fast");

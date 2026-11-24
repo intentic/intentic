@@ -17,11 +17,10 @@ import {
     connectionRows,
     deviceConnectionRow,
     groupConnections,
-    hostFacts,
     liveState,
-    phoneFacts,
     tileRowFacts,
 } from "./connectionRows";
+import { hostFacts, phoneFacts } from "./rowFacts";
 import type { DeviceConnection } from "./deviceConnections";
 import { type CatalogTile, catalogTiles } from "./slices";
 import { entryIcon } from "../../../models/capabilities/tiles";
@@ -187,6 +186,16 @@ describe(`a row's facts`, () => {
         // A browser that never reported: its stored facts, as any other row.
         expect(tileRowFacts(`webext`, own, sources())).toBe(`work profile`);
         expect(tileRowFacts(`ssh`, box, sources())).toBe(`ops.acme.dev · ada`);
+    });
+
+    // The Connected slice and the tile's own list read one facts line: a browser said its sites on its tile but only its
+    // stored config in the inventory until 2026-11-23.
+    it(`says a browser's sites in the Connected slice, as its tile's own row does`, () => {
+        const own = instance(`chrome`, `webext`, { platform: `chrome`, purpose: `work profile` });
+        const live = sources({ browsers: [browser(`chrome`, 2)] });
+
+        expect(connectionRow(tileOf(CHROME, [own]), own, live).detail).toBe(`Chrome 141 on Windows · 2 sites allowed`);
+        expect(connectionRow(tileOf(CHROME, [own]), own, live).detail).toBe(tileRowFacts(`webext`, own, live));
     });
 });
 

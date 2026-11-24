@@ -6,7 +6,6 @@
     "_editor/web/src/app/clientDiagnostics.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_editor/web/src/features/chat/transcript/cards/ChatChildAgentAsk.vue": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_editor/web/src/features/sandbox/recovery/useRecovery.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
-    "_extensions/e-urzad/src/signatures/engine.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_extensions/git-history/src/useAsyncAction.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_extensions/onlyoffice/editor/src/guards/x2t-worker.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_extensions/telegram/src/listener.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",

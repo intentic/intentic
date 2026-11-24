@@ -1,4 +1,5 @@
 import { accessSync, constants } from "node:fs";
+import { type KindsWhere, traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { z } from "zod";
 import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract/schemas/data-protection";
 import type { AgentDomainPolicy, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
@@ -32,7 +33,7 @@ export interface ConnectorFact {
 
 export interface EndpointFact {
     readonly id: string;
-    readonly kind: "endpoint" | "localmodel";
+    readonly kind: KindsWhere<{ readonly provider: "endpoint" }>;
     // Where it is reached; a local model the daemon serves itself has none of its own.
     readonly baseUrl: string | undefined;
     readonly model: string | undefined;
@@ -166,7 +167,7 @@ export const gatherFacts = async (services: FactsServices): Promise<ComplianceFa
         services.agentDomainPolicy.get(),
         providerReadiness(services),
     ]);
-    const endpointIds = new Set(capabilities.filter((entry) => entry.kind === "endpoint" || entry.kind === "localmodel").map((entry) => `endpoint/${entry.id}`));
+    const endpointIds = new Set(capabilities.filter((entry) => traitsOf(entry.kind)?.provider === "endpoint").map((entry) => `endpoint/${entry.id}`));
     const readyIds = new Set(Object.entries(ready).flatMap(([id, connected]) => (connected ? [id] : [])));
     const providers = privacyProviders(capabilities).map((provider) => ({
         ...provider,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HUB_PROVIDERS } from "../models/providers/provider-traits.js";
 import { KEYRING_NAME_RE } from "./keyring.js";
 
 // THE CONNECTIONS HUB: the keyring on one of the owner's computers as the place their connections live, so a sandbox can
@@ -31,8 +32,9 @@ export const HubCardKindSchema = z.enum(["cli", "mcp", "endpoint"]);
 export type HubCardKind = z.infer<typeof HubCardKindSchema>;
 
 // The model providers whose account is a key that does not rotate: what a sign-in there would write is the whole
-// account: Cursor and Devin keys, and the minted Z.ai and Meta keys. (Endpoints are cards, above.)
-export const HUB_ACCOUNT_PROVIDERS = ["cursor", "devin", "zai", "meta"] as const;
+// account: Cursor and Devin keys, and the minted Z.ai and Meta keys. (Endpoints are cards, above.) Read off the providers'
+// `hubAccount` trait (models/providers/provider-traits.ts).
+export const HUB_ACCOUNT_PROVIDERS = HUB_PROVIDERS;
 export const HubAccountProviderSchema = z.enum(HUB_ACCOUNT_PROVIDERS);
 export type HubAccountProvider = z.infer<typeof HubAccountProviderSchema>;
 

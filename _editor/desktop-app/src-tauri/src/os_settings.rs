@@ -1,6 +1,6 @@
 //! THIS COMPUTER'S OWN SETTINGS, ON INTENTIC OS (2026-10-16): the network, the sound, the screens, the keyboard and the
 //! drives a person plugs in, as This device's This computer cards show and change them (src/device/intenticOs/). Each is
-//! a verb of the OS's own `ic os` (_os/README.md, "Settings"), read as the JSON the contract pins
+//! a verb of the OS's own `ic os` (_hosts/README.md, "Settings"), read as the JSON the contract pins
 //! (_shared/sandbox-contract/src/schemas/intentic-os.ts, "THE MACHINE'S OWN SETTINGS"). This app never speaks to
 //! NetworkManager, WirePlumber, sway or udisks itself, so a person here and the agent in the machine's own sandbox change
 //! the same things the same way. Like os.rs, it runs the OS's own `ic` (`/usr/bin/ic`), never the one beside this app.

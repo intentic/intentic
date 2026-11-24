@@ -1,6 +1,6 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { DeviceStacksSchema, STACK_LOG_TAIL_DEFAULT, StackOpSchema } from "@intentic/sandbox-contract/schemas/device-stacks";
-import { dockerAnswered, fakeDocker } from "../../device-testing.js";
+import { dockerAnswered, fakeDocker, grantWith } from "../../device-testing.js";
 import { ScopeError } from "../../policy.js";
 import {
     combinedStatus,
@@ -204,7 +204,7 @@ test("a docker that is not there, one stopped before it finished, and a failed r
     );
 });
 
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
+const off: DeviceScopes = grantWith();
 const shell: DeviceScopes = { ...off, shell: "on" };
 
 test("the listing needs 'Run commands', and answers the contract's JSON with the stacks root", async () => {

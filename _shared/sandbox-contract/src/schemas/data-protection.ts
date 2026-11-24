@@ -104,7 +104,7 @@ export type AuditSettings = z.infer<typeof AuditSettingsSchema>;
 // channel. Email sending is the key the IMAP extension's sender consults (_extensions/imap/src/send.ts); the three
 // `microsoft365.*` keys are what `m365` consults before sending, changing a calendar or uploading
 // (_extensions/microsoft-365/src/actions.ts); the `ezdrp.*` and `edoreczenia.*` keys are the office acts the e-urzad
-// extension's guard consults (_extensions/e-urzad/src/core/guard.ts): registering mail and adding files in EZD RP, sending
+// extension's guard consults (src/core/guard.ts in intentic/extension-e-urzad): registering mail and adding files in EZD RP, sending
 // an e-Doręczenia delivery, and opening one, the one read here with legal effect (it can make the delivery received).
 // One list for the public-office preset, which holds every one of them, and the editor's Guardrails page, which sets them.
 export const OUTWARD_ACTION_KEYS = [

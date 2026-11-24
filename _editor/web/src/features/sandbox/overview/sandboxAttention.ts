@@ -22,6 +22,7 @@ import { t } from "@intentic/ui/i18n";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 import { here, page } from "../../../lib/routes/links";
 import { useExtensions } from "../../../models/extensions/useExtensions";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useAccessRequests } from "../../../client/sandbox/access/accessRequest";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
@@ -149,6 +150,10 @@ export function useSandboxAttention() {
     // Extensions an agent wrote into this workspace, which run nothing until a maintainer approves the powers they ask
     // for. They were a row in the Needs you inbox until 2026-10-12; the Extensions tab is where the yes is given.
     const { pending: waitingExtensions } = useExtensions();
+    // A first-party extension this sandbox used that left the image for its own repository (the daemon's
+    // capabilities/offers/moved-extensions.ts): the Extension tile holds its install, prefilled, for the owner to approve.
+    const { recommendationFor } = useCapabilities();
+    const movedExtension = computed(() => recommendationFor(`extension`));
     const rebuilding = useRebuildUnderWay(pending);
     const { updateAvailable, updateStaged } = useSandboxVersion();
     const { stoppedOn, heldPorts } = useSyncHealth();
@@ -225,6 +230,16 @@ export function useSandboxAttention() {
                     message: t(`sandbox.sandboxAttention.extensionsWaiting`, { count: waitingExtensions.value.length }, waitingExtensions.value.length),
                     to: here(page.sandboxSettings(`extensions`)),
                     count: waitingExtensions.value.length,
+                    kind: `needs`,
+                },
+            },
+            {
+                when: movedExtension.value !== undefined && tierAtLeast(tier.value, `maintainer`),
+                item: {
+                    icon: `sliders-h`,
+                    tone: `info`,
+                    message: t(`sandbox.sandboxAttention.extensionMoved`, { reason: movedExtension.value?.reason ?? `` }),
+                    to: here(page.capabilities(`extension`)),
                     kind: `needs`,
                 },
             },

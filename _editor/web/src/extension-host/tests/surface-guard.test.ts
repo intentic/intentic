@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
+import { EXTENSION_WIRE } from "@intentic/extension-api/wire";
 import { extensionUiDeprecated, extensionUiNames, extensionUiRetired } from "@intentic/extension-ui/names";
 import {
     CONTRIBUTION_POINTS,
@@ -12,6 +13,7 @@ import {
     manifestJsonSchema,
     serializeManifestJsonSchema,
 } from "@intentic/extension-manifest";
+import { z } from "zod";
 
 // extensionApiVersion is an author's only signal for host compatibility; the snapshot in surface.json fails when the
 // live surface changes without a new versioned entry.
@@ -62,6 +64,16 @@ interface RecordedSurface {
     // retired (names.mjs), each as `<what> → <use instead>`, recorded from 2.33.0 on. Nothing links differently, so no
     // other grain sees it, and a bundle built against an older kit keeps the retired look with nothing saying so.
     readonly uiKitDeprecated?: readonly string[];
+    // The wire contract an extension may read (extension-api's EXTENSION_WIRE), recorded from 2.44.0 on: per allowed
+    // @intentic/sandbox-contract specifier, its runtime export names and a sha256 of every zod schema it exports as JSON
+    // Schema. The contract is versioned with the product release, so this is what tells an extension under `^1.x` that a
+    // schema it parses was reshaped.
+    readonly wireExports?: Readonly<Record<string, WireModule>>;
+}
+
+interface WireModule {
+    readonly exports: readonly string[];
+    readonly schemas: string;
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
@@ -105,6 +117,41 @@ const nestedMembers = (block: string, file = `src/api.ts`): string[] => {
     return [...text.slice(open + 1, end).matchAll(/^ {8}(?:readonly )?(\w+)\??[(:<]/gm)].map((match) => match[1] ?? ``).toSorted();
 };
 
+// One schema as canonical JSON text: keys in order, so a digest moves only when a schema does (the canonical form
+// contract.lock.json takes, dialect banner dropped).
+const SORTED_KEYS = (_key: string, value: object | string | number | boolean | null): object | string | number | boolean | null =>
+    value === null || Array.isArray(value) || !(value instanceof Object) ? value : Object.fromEntries(Object.entries(value).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+
+// A zod schema from whichever zod instance the contract resolved, told by zod 4's own internals slot.
+const isSchema = (value: object | null): value is z.ZodType => value instanceof Object && `_zod` in value;
+
+const jsonSchemaText = (schema: z.ZodType): string => {
+    try {
+        const { $schema: _dialect, ...rest } = z.toJSONSchema(schema, { unrepresentable: `any` });
+        return JSON.stringify(rest, SORTED_KEYS);
+    } catch {
+        // Holds a place, as the lock does: a schema becoming serializable, or ceasing to, is still a change.
+        return `"<unserializable>"`;
+    }
+};
+
+const wireModule = async (specifier: string): Promise<WireModule> => {
+    // SAFETY: a module namespace object holds the module's exports by name, and only an object one is a schema.
+    const loaded = (await import(specifier)) as Readonly<Record<string, object | null>>;
+    const exports = Object.keys(loaded)
+        .filter((name) => name !== `default`)
+        .toSorted();
+    const schemas = exports.flatMap((name) => {
+        const value = loaded[name] ?? null;
+        return isSchema(value) ? [`${JSON.stringify(name)}:${jsonSchemaText(value)}`] : [];
+    });
+    return { exports, schemas: createHash(`sha256`).update(`{${schemas.join(`,`)}}`).digest(`hex`) };
+};
+
+const liveWire = Object.fromEntries(
+    await Promise.all([...EXTENSION_WIRE].toSorted().map(async (specifier) => [specifier, await wireModule(specifier)] as const)),
+);
+
 const liveSurface = (): RecordedSurface => ({
     manifest: Object.keys(ExtensionManifestSchema.shape).toSorted(),
     // Read off the registry, not the schema: a broken point then shows as missing here, not invisible everywhere.
@@ -135,6 +182,7 @@ const liveSurface = (): RecordedSurface => ({
         .toSorted(),
     uiKitExports: [...extensionUiNames].toSorted(),
     uiKitDeprecated: kitChangesAt(extensionApiVersion),
+    wireExports: liveWire,
 });
 
 test(`the surface this version promises is the surface it has`, () => {
@@ -247,6 +295,11 @@ test(`the names a bundle links against move only as semver allows`, () => {
     const live = liveSurface();
     expect(linkedNameProblems(grain(`uiKitExports`), extensionApiVersion, live.uiKitExports ?? [], extensionUiDeprecated)).toEqual([]);
     expect(linkedNameProblems(grain(`moduleExports`), extensionApiVersion, live.moduleExports ?? [], apiDeprecated)).toEqual([]);
+    // The wire subpaths an extension may import move the same way: one joins in a minor, and none leaves outside a major.
+    const wire = Object.fromEntries(
+        Object.entries(recorded).map(([version, surface]) => [version, surface.wireExports === undefined ? undefined : Object.keys(surface.wireExports)]),
+    );
+    expect(linkedNameProblems(wire, extensionApiVersion, Object.keys(live.wireExports ?? {}), [])).toEqual([]);
 });
 
 test(`each version records what an author must change as of it, and no change is dated to a version nobody recorded`, () => {

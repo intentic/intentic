@@ -5,23 +5,12 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import { ScopeError } from "../../policy.js";
 import { type OsDeps, osTools, readIntenticOs } from "./os.js";
 import type { IcRun } from "../sandboxes.js";
+import { grantWith } from "../../device-testing.js";
 
 // Whether this machine is Intentic OS is whether its release.json exists, and that alone decides whether the os_* tools
 // are offered: anywhere else `ic os` refuses, and a tool that can only fail is a tool a model wastes a call on.
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "off",
-    programs: "off",
-    remoteView: "off",
-    remoteControl: "off",
-    remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => grantWith(["shell", "write", "screen", "control", "sandboxes"], overrides);
 
 const RELEASE = { name: "Intentic OS", edition: "server", version: "2026.10.13.0", channel: "stable", repository: "ghcr.io/intentic/os" };
 

@@ -16,7 +16,7 @@ export const packageDir = (name) => `${SANDBOX_ROOT}/node_modules/${name}`;
 export const DEV_CHECKOUT = `${SANDBOX_ROOT}/dev-checkout`;
 
 // Maps every workspace package's declared name to its directory, read from package.json rather than assumed (e.g.
-// `@intentic/lsp` lives in `_search/lsp`). Package groups are discovered: every `_`-prefixed root directory is one.
+// `@intentic/lsp` lives in `_agent-tools/lsp`). Package groups are discovered: every `_`-prefixed root directory is one.
 export const workspacePackages = () => {
     const found = new Map();
     const groups = readdirSync(REPO_ROOT, { withFileTypes: true })

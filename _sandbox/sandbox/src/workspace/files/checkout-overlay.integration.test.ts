@@ -71,26 +71,26 @@ const resolverFor = (work: string, worktrees: AgentWorktrees, conversation: Conv
 };
 
 test("a file the conversation created resolves from the short path its agent writes, though the shared tree's listing never holds it", async () => {
-    const { work, worktrees, conversation } = await setup(["_os/os-image/disk.sh"]);
-    await write(conversation.cwd, "_os/os-image/installer/bib-config.toml");
+    const { work, worktrees, conversation } = await setup(["_hosts/os-image/disk.sh"]);
+    await write(conversation.cwd, "_hosts/os-image/installer/bib-config.toml");
     const resolve = resolverFor(work, worktrees, conversation);
-    expect(await resolve("os-image/installer/bib-config.toml")).toEqual({ path: "_os/os-image/installer/bib-config.toml" });
+    expect(await resolve("os-image/installer/bib-config.toml")).toEqual({ path: "_hosts/os-image/installer/bib-config.toml" });
 });
 
 test("a file created and renamed in one turn is offered where it went, since git never saw the first name", async () => {
-    const { work, worktrees, conversation } = await setup(["_os/os-image/disk.sh"]);
-    await write(conversation.cwd, "_os/os-image/installer/bib-config.toml");
+    const { work, worktrees, conversation } = await setup(["_hosts/os-image/disk.sh"]);
+    await write(conversation.cwd, "_hosts/os-image/installer/bib-config.toml");
     const resolve = resolverFor(work, worktrees, conversation);
-    expect(await resolve("installer/config.toml")).toEqual({ nearby: ["_os/os-image/installer/bib-config.toml"] });
+    expect(await resolve("installer/config.toml")).toEqual({ nearby: ["_hosts/os-image/installer/bib-config.toml"] });
 });
 
 test("a file the conversation renamed opens where it went, not as the stale copy the shared tree still holds", async () => {
-    const { work, worktrees, conversation } = await setup(["_os/installer/config.toml", "src/app.ts"]);
-    await sh(conversation.cwd, "mv", "_os/installer/config.toml", "_os/installer/bib-config.toml");
+    const { work, worktrees, conversation } = await setup(["_hosts/installer/config.toml", "src/app.ts"]);
+    await sh(conversation.cwd, "mv", "_hosts/installer/config.toml", "_hosts/installer/bib-config.toml");
     await commit(conversation.cwd, "rename");
     const resolve = resolverFor(work, worktrees, conversation);
-    const moved = { path: "_os/installer/bib-config.toml", renamedFrom: "_os/installer/config.toml" };
-    expect(await resolve("_os/installer/config.toml")).toEqual(moved);
+    const moved = { path: "_hosts/installer/bib-config.toml", renamedFrom: "_hosts/installer/config.toml" };
+    expect(await resolve("_hosts/installer/config.toml")).toEqual(moved);
     expect(await resolve("installer/config.toml")).toEqual(moved);
     // An untouched file still answers from the shared tree, as before.
     expect(await resolve("src/app.ts")).toEqual({ path: "src/app.ts" });
@@ -115,16 +115,16 @@ describe("overlaidView on real folders", () => {
     });
 
     test("answers for the conversation's own files, which the shared tree does not hold", async () => {
-        await write(checkout, "intentic/_os/README.md");
+        await write(checkout, "intentic/_hosts/README.md");
         const view = overlaidView({
             checkout,
             shared,
-            overlay: overlayOf([{ repo: "intentic", changes: [{ path: "_os/README.md", status: "added" }] }]),
+            overlay: overlayOf([{ repo: "intentic", changes: [{ path: "_hosts/README.md", status: "added" }] }]),
             matching: async () => [],
         });
-        expect(view.exists("intentic/_os/README.md")).toBe(true);
-        expect(await view.endingWith("_os/README.md", 10)).toEqual(["intentic/_os/README.md"]);
-        expect(await view.inFolder("_os", 10)).toEqual(["intentic/_os/README.md"]);
+        expect(view.exists("intentic/_hosts/README.md")).toBe(true);
+        expect(await view.endingWith("_hosts/README.md", 10)).toEqual(["intentic/_hosts/README.md"]);
+        expect(await view.inFolder("_hosts", 10)).toEqual(["intentic/_hosts/README.md"]);
     });
 
     test("drops a rename whose old name the checkout holds again: that is a file of its own", async () => {

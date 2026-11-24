@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { providerHas, providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
@@ -140,6 +141,8 @@ const routedAccounts = computed(() => (keyed.value === undefined ? [] : (transla
 const estate = ref<string | undefined>(undefined);
 // Asked only of a reader who may sign in to one.
 const offersEstates = computed(() => mayStart.value.native && (mintedVariants(provider)?.length ?? 0) > 1);
+// The loop that holds this provider's one default sign-in at its own door (Grok's xAI account, held by OpenCode), if any.
+const ownSignInLoop = computed(() => providerTraits(provider)?.ownSignInLoop);
 // The loops this provider's own door signs in with a program of their own (Grok Build, Kimi CLI), each a separate sign-in
 // from the provider's default one; a row says which by its variant. Only those this sandbox's daemon runs: an older one
 // has no door to sign them in through.
@@ -147,9 +150,9 @@ const doors = computed(() => loopDoors(provider).filter((door) => offeredLoops(p
 const doorOf = (account: Pick<OauthAccount, `variant`>) => doors.value.find((door) => door.door === account.variant);
 // Whether the provider's own door holds a default sign-in beside its loop doors: every native provider's, and Grok's
 // xAI account (OpenCode's); Kimi's default credential is the translator's subscription, its own door only its CLI's.
-const hasDefaultNative = computed(() => hasNative.value && (provider === `grok` || spec.value?.auth.kind !== `translator`));
+const hasDefaultNative = computed(() => hasNative.value && (ownSignInLoop.value !== undefined || spec.value?.auth.kind !== `translator`));
 // Grok holds a single default account (OpenCode owns the xAI credential); its "add another" goes once it is linked.
-const canAddDefault = computed(() => provider !== `grok` || nativeAccounts.value.every((account) => doorOf(account) !== undefined));
+const canAddDefault = computed(() => ownSignInLoop.value === undefined || nativeAccounts.value.every((account) => doorOf(account) !== undefined));
 
 // Who is reading, as far as changing an account goes (accountRows.ts): Full access changes every row, someone given AI
 // accounts of their own only the ones they connected, and anyone else none. Below Full access the rest of the list is
@@ -167,7 +170,7 @@ const mayStart = computed(() => ({
 // No two rows may read the same; distinguished in order: the identity the provider reports, the name (renamable in
 // place), and failing both, when it was connected. Grok is exempt from renaming: OpenCode owns its one account.
 const renameOf = (account: OauthAccount): ((label: string) => Promise<void>) | undefined =>
-    provider === `grok` && doorOf(account) === undefined ? undefined : (label: string) => renameAccount(account.id, label, provider);
+    ownSignInLoop.value !== undefined && doorOf(account) === undefined ? undefined : (label: string) => renameAccount(account.id, label, provider);
 
 // Which loop a row's sign-in serves, said where the provider holds sign-ins for more than one: a loop door's own, or
 // the default one's loop beside them.
@@ -241,7 +244,7 @@ const stateLine = (state: AccountState, account: { readonly id: string; readonly
     if (signedOut) {
         return t(`sandbox.aiAccountSection.signedOutReconnectTo`);
     }
-    return provider === `gemini` && state.fix === `reconnect`
+    return providerHas(provider, `needsProject`) && state.fix === `reconnect`
         ? t(`sandbox.aiAccountSection.geminiFinishSetup`, { reason: state.reason })
         : state.reason;
 };

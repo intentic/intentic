@@ -229,7 +229,7 @@ test("the door hands a peer its message with the conversation the bearer belongs
 });
 
 // Cursor's client gives up at 60 s and cannot be told longer: the lease says so, and a peer is handed it with each call
-// to fit what it does to it (webext/webext-client-ceiling.ts).
+// to fit what it does to it (browser/webext-client-ceiling.ts).
 test("the door hands a peer the turn's client ceiling, when its runtime has one", async () => {
     const { mounts, send, device } = doorFor();
     const { token } = mounts.lease("conv-a", { clientCeilingMs: 60_000 }).open({ name: "laptop", target: { kind: "device", id: "laptop" } });

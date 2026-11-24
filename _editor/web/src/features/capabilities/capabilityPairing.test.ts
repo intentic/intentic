@@ -56,19 +56,19 @@ describe(`the step a pending add still waits on`, () => {
         { platform: `reddit` },
         { state: `pending`, detail: `rebuild the sandbox to install the browser` },
     );
-    const cases: [string, CapabilityKind, CapabilitySummary, HostSummary | undefined, WebExtSummary | undefined, ReturnType<typeof handOffOf>][] = [
-        [`a machine that never checked in`, `device`, connection(`linux`, `device`, {}), undefined, undefined, `pair-device`],
-        [`a machine that checked in and sleeps`, `device`, connection(`linux`, `device`, {}), host(`linux`, NOW), undefined, undefined],
-        [`a browser that never checked in`, `webext`, connection(`chrome`, `webext`, {}), undefined, browser(`chrome`, undefined), `pair-browser`],
-        [`a browser that checked in`, `webext`, connection(`chrome`, `webext`, {}), undefined, browser(`chrome`, NOW), undefined],
-        [`a site account waiting on its login`, `browser`, signIn, undefined, undefined, `sign-in`],
-        [`a site account waiting on a rebuild`, `browser`, rebuild, undefined, undefined, undefined],
-        [`an identity waiting on its login`, `identity`, connection(`ada`, `identity`, {}), undefined, undefined, `sign-in`],
-        [`a connector still applying`, `mcp`, connection(`tools`, `mcp`, {}), undefined, undefined, undefined],
+    const cases: [string, CapabilityKind, CapabilitySummary, HostSummary | WebExtSummary | undefined, ReturnType<typeof handOffOf>][] = [
+        [`a machine that never checked in`, `device`, connection(`linux`, `device`, {}), undefined, `pair`],
+        [`a machine that checked in and sleeps`, `device`, connection(`linux`, `device`, {}), host(`linux`, NOW), undefined],
+        [`a browser that never checked in`, `webext`, connection(`chrome`, `webext`, {}), browser(`chrome`, undefined), `pair`],
+        [`a browser that checked in`, `webext`, connection(`chrome`, `webext`, {}), browser(`chrome`, NOW), undefined],
+        [`a site account waiting on its login`, `browser`, signIn, undefined, `sign-in`],
+        [`a site account waiting on a rebuild`, `browser`, rebuild, undefined, undefined],
+        [`an identity waiting on its login`, `identity`, connection(`ada`, `identity`, {}), undefined, `sign-in`],
+        [`a connector still applying`, `mcp`, connection(`tools`, `mcp`, {}), undefined, undefined],
     ];
-    for (const [what, kind, added, onHost, onBrowser, step] of cases) {
+    for (const [what, kind, added, peer, step] of cases) {
         it(`is ${String(step)} for ${what}`, () => {
-            expect(handOffOf(kind, added, onHost, onBrowser)).toBe(step);
+            expect(handOffOf(kind, added, peer)).toBe(step);
         });
     }
 });
@@ -83,9 +83,9 @@ describe(`a phone's pending add`, () => {
         ...(lastSeen === undefined ? {} : { lastSeen }),
     });
     it(`waits on its code being scanned until the phone has checked in`, () => {
-        expect(handOffOf(`phone`, added, undefined, undefined, undefined)).toBe(`pair-phone`);
-        expect(handOffOf(`phone`, added, undefined, undefined, summary(undefined))).toBe(`pair-phone`);
-        expect(handOffOf(`phone`, added, undefined, undefined, summary(NOW))).toBeUndefined();
+        expect(handOffOf(`phone`, added, undefined)).toBe(`pair`);
+        expect(handOffOf(`phone`, added, summary(undefined))).toBe(`pair`);
+        expect(handOffOf(`phone`, added, summary(NOW))).toBeUndefined();
     });
 });
 
@@ -153,38 +153,44 @@ const pairing = (rosters: { hosts?: readonly HostSummary[]; browsers?: readonly 
     };
     const scope = effectScope();
     scopes.push(scope);
-    return { state, pair: scope.run(() => useCapabilityPairing(state))! };
+    const { hosts, browsers, phones, ...rest } = state;
+    return { state, pair: scope.run(() => useCapabilityPairing({ ...rest, peers: { device: hosts, webext: browsers, phone: phones } }))! };
 };
 
 describe(`the device dialog`, () => {
+    it(`is drawn under the row it pairs, and closing it ends the pairing`, () => {
+        const { pair } = pairing();
+        pair.openPairing(DEVICE, connection(`linux`, `device`, { platform: `linux` }));
+        expect(pair.dialog.value).toMatchObject({ id: `linux`, props: { visible: true, inline: true, id: `linux`, platform: `linux` } });
+        // A computer's dialog may take the machine's own name, so it is told to follow it.
+        expect(pair.dialog.value?.props).toHaveProperty(`onRenamed`);
+
+        pair.closePairing();
+        expect([pair.pairing.value, pair.dialog.value]).toEqual([undefined, undefined]);
+    });
+
     it(`opens on the machine with its platform, its grant in its tile's words, and whether it still wears the tile's name`, () => {
         const { pair } = pairing();
 
         pair.openPairing(DEVICE, connection(`linux-2`, `device`, { platform: `linux`, shell: `on`, write: `on` }));
-        expect([pair.connectVisible.value, pair.connectId.value, pair.connectPlatform.value, pair.connectUnnamed.value]).toEqual([
-            true,
-            `linux-2`,
-            `linux`,
-            true,
-        ]);
-        expect(pair.connectPermissions.value).toBe(`run commands, read files, write and trash files, capture the screen`);
+        expect(pair.pairing.value).toEqual({
+            kind: `device`,
+            id: `linux-2`,
+            props: { platform: `linux`, permissions: `run commands, read files, write and trash files, capture the screen`, unnamed: true, renamed: false },
+        });
 
         pair.openPairing(DEVICE, connection(`build-box`, `device`, {}));
-        expect([pair.connectId.value, pair.connectPlatform.value, pair.connectUnnamed.value, pair.connectRenamed.value]).toEqual([
-            `build-box`,
-            `linux`,
-            false,
-            false,
-        ]);
+        expect(pair.pairing.value).toMatchObject({ id: `build-box`, props: { platform: `linux`, unnamed: false, renamed: false } });
     });
 
     it(`follows a machine renamed to its hostname, and re-reads the roster and the list`, () => {
         const { state, pair } = pairing();
         pair.openPairing(DEVICE, connection(`linux`, `device`, { platform: `linux` }));
 
-        pair.onHostRenamed(`radarsu-rog`);
-        expect([pair.connectId.value, pair.connectUnnamed.value, pair.connectRenamed.value]).toEqual([`radarsu-rog`, false, true]);
-        pair.onHostConnected();
+        pair.renamed(`radarsu-rog`);
+        expect(pair.pairing.value).toMatchObject({ id: `radarsu-rog`, props: { unnamed: false, renamed: true } });
+        expect(pair.dialog.value).toMatchObject({ id: `radarsu-rog`, props: { id: `radarsu-rog`, visible: true, inline: true, renamed: true } });
+        pair.paired();
         expect([state.hosts.refresh.mock.calls.length, state.refetch.mock.calls.length]).toEqual([2, 2]);
     });
 });
@@ -194,15 +200,15 @@ describe(`the browser dialog`, () => {
         const { state, pair } = pairing();
 
         pair.openPairing(CHROME, connection(`chrome`, `webext`, { platform: `chrome`, screenshot: `on` }));
-        expect([pair.browserConnectVisible.value, pair.browserConnectId.value, pair.browserInstall.value, pair.browserPermissions.value]).toEqual([
-            true,
-            `chrome`,
-            STORE,
-            `read the pages you allow, click and type on them, take screenshots`,
-        ]);
-        expect(pair.connectVisible.value).toBe(false);
+        expect(pair.pairing.value).toEqual({
+            kind: `webext`,
+            id: `chrome`,
+            props: { install: STORE, permissions: `read the pages you allow, click and type on them, take screenshots` },
+        });
+        // A browser's dialog takes no new name, so it is not told to follow one.
+        expect(pair.dialog.value?.props).not.toHaveProperty(`onRenamed`);
 
-        pair.onBrowserExtConnected();
+        pair.paired();
         expect([state.browsers.refresh.mock.calls.length, state.refetch.mock.calls.length]).toEqual([1, 1]);
     });
 
@@ -210,7 +216,7 @@ describe(`the browser dialog`, () => {
         const { pair } = pairing();
 
         pair.openPairing(CHROME, connection(`edge`, `webext`, { platform: `edge` }));
-        expect(pair.browserInstall.value).toBe(``);
+        expect(pair.pairing.value?.props).toMatchObject({ install: `` });
     });
 });
 
@@ -272,11 +278,11 @@ describe(`a pending add`, () => {
     it(`hands over the device command, the browser code or the sign-in window, on the connection just added`, () => {
         const device = pairing();
         device.pair.handOff(DEVICE, connection(`linux`, `device`, { platform: `linux` }));
-        expect([device.pair.connectVisible.value, device.pair.connectId.value]).toEqual([true, `linux`]);
+        expect(device.pair.pairing.value).toMatchObject({ kind: `device`, id: `linux` });
 
         const own = pairing();
         own.pair.handOff(CHROME, connection(`chrome`, `webext`, { platform: `chrome` }));
-        expect([own.pair.browserConnectVisible.value, own.pair.browserConnectId.value]).toEqual([true, `chrome`]);
+        expect(own.pair.pairing.value).toMatchObject({ kind: `webext`, id: `chrome` });
 
         const account = pairing();
         account.pair.handOff(REDDIT, connection(`reddit-2`, `browser`, { platform: `reddit` }, { state: `pending`, detail: `log in` }));
@@ -291,7 +297,7 @@ describe(`a pending add`, () => {
         const { pair } = pairing({ hosts: [host(`linux`, NOW)] });
 
         pair.handOff(DEVICE, connection(`linux`, `device`, { platform: `linux` }));
-        expect([pair.connectVisible.value, pair.browserConnectVisible.value, pair.profileVisible.value]).toEqual([false, false, false]);
+        expect([pair.pairing.value, pair.profileVisible.value]).toEqual([undefined, false]);
     });
 });
 
@@ -300,9 +306,7 @@ it(`a Wear OS watch's Connect opens the same dialog knowing it is a watch, whose
     const watch = connection(`wrist`, `phone`, { platform: `wearos`, screen: `on`, control: `off`, apps: `on` });
     const WEAROS: CapabilityCatalogEntry = { id: `wearos`, name: `Wear OS watch`, kind: `phone`, category: `devices`, description: ``, fields: [] };
     pair.openPairing(WEAROS, watch);
-    expect(pair.phoneConnectVisible.value).toBe(true);
-    expect(pair.phoneConnectId.value).toBe(`wrist`);
-    expect(pair.phonePlatform.value).toBe(`wearos`);
+    expect(pair.pairing.value).toMatchObject({ kind: `phone`, id: `wrist`, props: { platform: `wearos` } });
 });
 
 it(`a phone's Connect opens the phone dialog with its install link and grant, and its revoke reaches the phone roster`, async () => {
@@ -317,11 +321,11 @@ it(`a phone's Connect opens the phone dialog with its install link and grant, an
         fields: [],
     } as unknown as CapabilityCatalogEntry;
     pair.openPairing(ANDROID, pixel);
-    expect(pair.phoneConnectVisible.value).toBe(true);
-    expect(pair.phoneConnectId.value).toBe(`pixel`);
-    expect(pair.phonePlatform.value).toBe(`android`);
-    expect(pair.phonePermissions.value).toBe(`see the screen, tap, swipe and type in the apps you allow, open apps and links`);
-    expect(pair.connectVisible.value).toBe(false);
+    expect(pair.pairing.value).toEqual({
+        kind: `phone`,
+        id: `pixel`,
+        props: { install: ``, platform: `android`, permissions: `see the screen, tap, swipe and type in the apps you allow, open apps and links` },
+    });
     await pair.removePairedAccess(ANDROID, `pixel`);
     expect(state.phones.revoke).toHaveBeenCalledWith(`pixel`);
     expect(state.hosts.revoke).not.toHaveBeenCalled();

@@ -421,7 +421,7 @@ export const BuildStampSchema = z.object({
 
 // GET /health: the "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's loopback probe,
 // the platform's hosted gate, the onboarding lane), served raw before any authentication. `ic` reads it too, in Rust
-// (_sandbox/ic/src/health.rs), which cannot import this and reads only `boot`, `state` and `announce` loosely.
+// (_hosts/ic/src/health.rs), which cannot import this and reads only `boot`, `state` and `announce` loosely.
 export const DaemonHealthSchema = z.object({
     ok: z.literal(true),
     // The sandbox id, so a loopback probe can confirm it reached this daemon and not an unrelated process. Absent on a

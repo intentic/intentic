@@ -6,39 +6,27 @@ import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
 import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { type Ref, ref } from "vue";
+import { computed, type Ref, ref } from "vue";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import type { usePeerConnect } from "../../models/sandbox/devices/usePeerConnect";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
-import { awaitingLogin, browserGrants, machineGrants, phoneGrants, signsInByHand } from "../../models/capabilities/connections";
-import { type ContributionOf, contributionFor } from "./model/effects";
-import { isDefaultName } from "../../models/capabilities/tiles";
+import { isPeerKind, type PeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
+import { awaitingLogin, signsInByHand } from "../../models/capabilities/connections";
+import { type Bound, slotsOf } from "./kinds/kindSlots";
+import type { ContributionOf } from "./model/effects";
 
-// The windows a connection is finished in: a live browser signed into by hand, a one-time command run on a device of
-// the user's own, a one-time code pasted into a browser of theirs, a code their phone scans. This page owns which is open and on what; rosters
-// and revokes live in the shared peer composable.
+// The windows a connection is finished in: a live browser signed into by hand, or the pairing dialog of a peer of the
+// user's own (a one-time command run on a device, a one-time code pasted into a browser, a code a phone scans), each
+// peer kind's named in kindSlots.ts. This page owns which is open and on what; rosters and revokes live in the shared
+// peer composable.
 
 // The step a pending add still waits on, opened at once rather than left for its row to name.
-export type HandOff = `pair-device` | `pair-browser` | `pair-phone` | `sign-in`;
+export type HandOff = `pair` | `sign-in`;
 
-export const handOffOf = (
-    kind: CapabilityKind,
-    added: CapabilitySummary,
-    host: HostSummary | undefined,
-    browser: WebExtSummary | undefined,
-    phone?: PhoneSummary | undefined,
-): HandOff | undefined => {
-    // A machine that's never checked in is waiting on the one-liner; one that has is merely asleep.
-    if (kind === `device` && host?.lastSeen === undefined) {
-        return `pair-device`;
-    }
-    // A browser that's never checked in is waiting on the pairing code.
-    if (kind === `webext` && browser?.lastSeen === undefined) {
-        return `pair-browser`;
-    }
-    // A phone that's never checked in is waiting on its code to be scanned.
-    if (kind === `phone` && phone?.lastSeen === undefined) {
-        return `pair-phone`;
+export const handOffOf = (kind: CapabilityKind, added: CapabilitySummary, peer: { readonly lastSeen?: number } | undefined): HandOff | undefined => {
+    // A peer that's never checked in is waiting on its pairing (the one-liner, the code); one that has is merely asleep.
+    if (slotsOf(kind).pairing !== undefined && peer?.lastSeen === undefined) {
+        return `pair`;
     }
     // An identity's sign-in is a manual login: open the window immediately, as for a fresh account.
     return signsInByHand(kind) && awaitingLogin(added) ? `sign-in` : undefined;
@@ -49,36 +37,32 @@ type Peers<Summary extends { readonly id: string; readonly online: boolean }> = 
     `peerFor` | `revoke` | `refresh`
 >;
 
+// Each peer kind's roster, keyed by the kind its card is.
+export interface PairingPeers {
+    readonly device: Peers<HostSummary>;
+    readonly webext: Peers<WebExtSummary>;
+    readonly phone: Peers<PhoneSummary>;
+}
+
 export interface PairingHost {
-    readonly hosts: Peers<HostSummary>;
-    readonly browsers: Peers<WebExtSummary>;
-    readonly phones: Peers<PhoneSummary>;
+    readonly peers: PairingPeers;
     readonly contributionOf: ContributionOf;
     // Re-reads the capability list: a finished pairing or sign-in flips a connection from pending to active.
     readonly refetch: () => unknown;
     readonly error: Ref<NoticeModel | null>;
 }
 
-// A phone of the user's own pairs by a code its camera scans, or a link opened on it; a Wear OS watch (`platform`
-// `wearos`) by a code the phone beside it scans and sends on.
-const usePhoneConnect = (contributionOf: ContributionOf) => {
-    const phoneConnectVisible = ref(false);
-    const phoneConnectId = ref(``);
-    const phoneInstall = ref(``);
-    const phonePermissions = ref(``);
-    const phonePlatform = ref(``);
-    const openPhoneConnect = (instance: CapabilitySummary): void => {
-        const contribution = contributionFor(contributionOf, instance.kind, instance.config);
-        phoneConnectId.value = instance.id;
-        phonePlatform.value = String(instance.config[`platform`] ?? `android`);
-        phoneInstall.value = (contribution?.kind === `phone` ? contribution.install : undefined) ?? ``;
-        phonePermissions.value = phoneGrants(instance);
-        phoneConnectVisible.value = true;
-    };
-    return { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, openPhoneConnect };
-};
+// The one pairing under way: on which connection, of which kind, and what its dialog was opened with.
+export interface OpenPairing {
+    readonly kind: PeerKind;
+    readonly id: string;
+    readonly props: object;
+}
 
-export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, refetch, error }: PairingHost) => {
+const peersOf = (peers: PairingPeers, kind: PeerKind): Peers<{ readonly id: string; readonly online: boolean; readonly lastSeen?: number }> =>
+    peers[kind];
+
+export const useCapabilityPairing = ({ peers, contributionOf, refetch, error }: PairingHost) => {
     // The live-browser window, a signed-in session rather than a token, opened on one connection: a tile holds several.
     const profileVisible = ref(false);
     const profileCapability = ref(``);
@@ -91,41 +75,50 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
         profileVisible.value = true;
     };
 
-    // A device of the user's own is unreachable from here, so connecting it is a one-time command run on that machine.
-    const connectVisible = ref(false);
-    const connectId = ref(``);
-    const connectPlatform = ref(``);
-    const connectPermissions = ref(``);
-    // Still wearing its tile's name (`linux`, `linux-2`): the dialog may then offer the machine's own hostname instead.
-    const connectUnnamed = ref(false);
-    // The panel took the machine's hostname as its name, and follows it to the row under that name, where there is
-    // nothing more to mint: the machine reconnects under it by itself.
-    const connectRenamed = ref(false);
-    const openConnect = (instance: CapabilitySummary): void => {
-        connectId.value = instance.id;
-        connectRenamed.value = false;
-        connectPlatform.value = String(instance.config[`platform`] ?? `linux`);
-        connectUnnamed.value = isDefaultName(connectPlatform.value, instance.id);
-        // In the machine's own words, shared with the Devices tab, which opens this dialog on a machine gone quiet.
-        connectPermissions.value = machineGrants(instance);
-        connectVisible.value = true;
+    // A peer of the user's own is unreachable from here, so it pairs through its kind's dialog (kindSlots.ts `pairing`):
+    // a command run on a computer, a code pasted into a browser, a code a phone scans. One is open at a time.
+    const pairing = ref<OpenPairing | undefined>();
+    const openPairing = (instance: CapabilitySummary): void => {
+        const slot = slotsOf(instance.kind).pairing;
+        if (slot !== undefined && isPeerKind(instance.kind)) {
+            pairing.value = { kind: instance.kind, id: instance.id, props: slot.props(instance, { contributionOf }) };
+        }
     };
-
-    // A browser of the user's own may be another browser at the far end, so it pairs by a pasted code, not a command.
-    const browserConnectVisible = ref(false);
-    const browserConnectId = ref(``);
-    const browserInstall = ref(``);
-    const browserPermissions = ref(``);
-    const openBrowserConnect = (instance: CapabilitySummary): void => {
-        const contribution = contributionFor(contributionOf, instance.kind, instance.config);
-        browserConnectId.value = instance.id;
-        // The install link comes off the tile that declared this browser family; empty while it has no listing yet.
-        browserInstall.value = (contribution?.kind === `webext` ? contribution.install : undefined) ?? ``;
-        browserPermissions.value = browserGrants(instance);
-        browserConnectVisible.value = true;
+    // A finished pairing flips the connection pending -> active; the roster and the list re-read so the tile follows.
+    const paired = (): void => {
+        if (pairing.value !== undefined) {
+            void peersOf(peers, pairing.value.kind).refresh();
+        }
+        void refetch();
     };
-
-    const { openPhoneConnect, ...phoneConnect } = usePhoneConnect(contributionOf);
+    // The dialog took the machine's own name: it now watches that id, and the row under it moved, where there is
+    // nothing more to mint (the machine reconnects under it by itself).
+    const renamed = (to: string): void => {
+        if (pairing.value !== undefined) {
+            pairing.value = { ...pairing.value, id: to, props: { ...pairing.value.props, unnamed: false, renamed: true } };
+        }
+        paired();
+    };
+    const closePairing = (): void => {
+        pairing.value = undefined;
+    };
+    // The dialog under the row whose pairing is under way, bound to answer back here.
+    const dialog = computed<(Bound & { readonly id: string }) | undefined>(() => {
+        const open = pairing.value;
+        const slot = open === undefined ? undefined : slotsOf(open.kind).pairing;
+        if (open === undefined || slot === undefined) {
+            return undefined;
+        }
+        const bound = {
+            visible: true,
+            inline: true,
+            id: open.id,
+            ...open.props,
+            "onUpdate:visible": (visible: boolean) => (visible ? undefined : closePairing()),
+            onConnected: paired,
+        };
+        return { id: open.id, is: slot.dialog, props: slot.renames === true ? { ...bound, onRenamed: renamed } : bound };
+    });
 
     return {
         profileVisible,
@@ -133,17 +126,11 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
         profileLabel,
         profileMode,
         openBrowser,
-        connectVisible,
-        connectId,
-        connectPlatform,
-        connectPermissions,
-        connectUnnamed,
-        connectRenamed,
-        browserConnectVisible,
-        browserConnectId,
-        browserInstall,
-        browserPermissions,
-        ...phoneConnect,
+        pairing,
+        dialog,
+        paired,
+        renamed,
+        closePairing,
         // An ACP agent's interactive sign-in: starts loginCommand in the capability's job session and opens its terminal.
         startAgentLogin: async (id: string): Promise<void> => {
             try {
@@ -153,51 +140,28 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
                 error.value = noticeFrom(caught, t(`capabilities.capabilityPairing.signInCouldNotStart`));
             }
         },
-        // Which of the three pairing dialogs a row's Connect means; the row itself draws one button for every kind.
-        openPairing: (entry: CapabilityCatalogEntry, instance: CapabilitySummary): void =>
-            entry.kind === `webext` ? openBrowserConnect(instance) : entry.kind === `phone` ? openPhoneConnect(instance) : openConnect(instance),
+        // The pairing a row's Connect means; the row itself draws one button for every peer kind.
+        openPairing: (_entry: CapabilityCatalogEntry, instance: CapabilitySummary): void => openPairing(instance),
         removePairedAccess: async (entry: CapabilityCatalogEntry, id: string): Promise<void> => {
+            const { kind } = entry;
+            if (!isPeerKind(kind)) {
+                return;
+            }
             try {
-                await (entry.kind === `webext` ? browsers.revoke(id) : entry.kind === `phone` ? phones.revoke(id) : hosts.revoke(id));
+                await peersOf(peers, kind).revoke(id);
             } catch (caught) {
                 // A refused revoke leaves the access in place; the row must not read as removed.
                 error.value = noticeFrom(caught, t(`capabilities.capabilityPairing.accessNotRemoved`));
             }
             void refetch();
         },
-        onBrowserExtConnected: (): void => {
-            void browsers.refresh();
-            void refetch();
-        },
-        onPhoneConnected: (): void => {
-            void phones.refresh();
-            void refetch();
-        },
-        // A machine coming online flips the capability pending -> active; refetch so the tile follows.
-        onHostConnected: (): void => {
-            void hosts.refresh();
-            void refetch();
-        },
-        // The dialog took the machine's hostname as the name: the dialog now watches that id, and the row under it moved.
-        onHostRenamed: (to: string): void => {
-            connectId.value = to;
-            connectUnnamed.value = false;
-            connectRenamed.value = true;
-            void hosts.refresh();
-            void refetch();
-        },
         // A pending add has not finished: the dialog-based steps open at once; a rebuild step only links to the Sandbox
         // screen, from its row.
         handOff: (entry: CapabilityCatalogEntry, added: CapabilitySummary): void => {
-            const step = handOffOf(entry.kind, added, hosts.peerFor(added.id), browsers.peerFor(added.id), phones.peerFor(added.id));
-            if (step === `pair-device`) {
-                openConnect(added);
-            }
-            if (step === `pair-browser`) {
-                openBrowserConnect(added);
-            }
-            if (step === `pair-phone`) {
-                openPhoneConnect(added);
+            const { kind } = entry;
+            const step = handOffOf(kind, added, isPeerKind(kind) ? peersOf(peers, kind).peerFor(added.id) : undefined);
+            if (step === `pair`) {
+                openPairing(added);
             }
             if (step === `sign-in`) {
                 openBrowser(added.id, added.id);

@@ -1,4 +1,4 @@
-// Tier 4: Intentic's own container engine (a dockerd in a WSL distro of ours, _sandbox/ic/engine) on this Windows machine,
+// Tier 4: Intentic's own container engine (a dockerd in a WSL distro of ours, _hosts/ic/engine) on this Windows machine,
 // beside the Docker Desktop the other tiers use. Installed from the rootfs this checkout built; a port a container
 // publishes on 127.0.0.1 reached from Windows, which is what every sandbox's local address rides on and what WSL's
 // mirrored networking broke until the engine's keeper learned of it (2026-10-09); and, on a deep run, a sandbox made on

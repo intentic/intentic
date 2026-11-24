@@ -153,3 +153,26 @@ test(`a range the host cannot read, a name the kit lacks and an unreadable surfa
 test(`a finding that is right to keep says so in place`, () => {
     assert.deepEqual(judge(view(`// allow(kit-check): kept for the desktop entry\nimport { SkeletonSnapshot } from "@intentic/extension-ui";`)), []);
 });
+
+test(`a sandbox-contract subpath the extension API does not version is refused, once a record lists the wire`, () => {
+    const wired = { ...SURFACE, "2.44.0": { ...SURFACE["2.34.0"], wireExports: { "@intentic/sandbox-contract": {}, "@intentic/sandbox-contract/time": {} } } };
+    const source = [
+        `import { STATE_DIR } from "@intentic/sandbox-contract";`,
+        `import type { Zone } from "@intentic/sandbox-contract/time";`,
+        `import type { Internal } from "@intentic/sandbox-contract/schemas/internal";`,
+        `export { x } from "@intentic/sandbox-contract/policy/agent-tools";`,
+        `const late = await import("@intentic/sandbox-contract/state/x");`,
+    ].join(`\n`);
+    const found = extensionFindings({ files: [{ path: `src/a.ts`, text: source }], manifest: { engines: { intentic: `^2.34.0` } }, surface: wired });
+    assert.deepEqual(
+        found.map((finding) => finding.at),
+        [`src/a.ts:3`, `src/a.ts:4`, `src/a.ts:5`],
+    );
+    assert.match(found[0].why, /`@intentic\/sandbox-contract\/schemas\/internal` is a part of @intentic\/sandbox-contract the extension API does not version/u);
+    // An API from before the wire was versioned holds an extension to nothing.
+    assert.deepEqual(extensionFindings({ files: [{ path: `src/a.ts`, text: source }], manifest: { engines: { intentic: `^2.34.0` } }, surface: SURFACE }), []);
+    assert.deepEqual(
+        extensionFindings({ files: [{ path: `src/a.ts`, text: `// allow(kit-check): read once at boot\nimport { y } from "@intentic/sandbox-contract/schemas/internal";\n` }], manifest: undefined, surface: wired }),
+        [],
+    );
+});

@@ -10,6 +10,7 @@ import {
     type UiElement,
     type WindowInfo,
 } from "@intentic/desktop-automation";
+import { type DeviceScopes, deviceScopesOn, type DeviceSwitch } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ExecResult } from "../sync/exec.js";
 import type { IndicatorDeps } from "./indicator.js";
 import type { AdbOutput, AdbRunner } from "./tools/android.js";
@@ -18,6 +19,18 @@ import type { Docker } from "./tools/stacks/stacks.js";
 // The fake desktop the tool tests drive (this repo's `testing.ts` convention, excluded from the build), so both
 // tool suites share one double. @intentic/desktop-automation's methods move a real cursor on a real screen and
 // can only be exercised by hand; this records instead of acting.
+
+// The switches an agent's own work is behind, what most tool tests turn on together: the people's remote switches,
+// `programs` and `admin` stay off unless a test names them.
+const AGENT_SWITCHES: readonly DeviceSwitch[] = ["shell", "write", "screen", "control", "sandboxes", "destructive"];
+
+/**
+ * A grant for a test: `on` names the switches on ("agent" for the six above), every other switch is off, a switch
+ * added later included, and `extra` is laid over it (`roots`, an override). Built from the schema's own keys, so adding a
+ * switch edits no test that does not care about it.
+ */
+export const grantWith = (on: readonly DeviceSwitch[] | "agent" = [], extra: Partial<DeviceScopes> = {}): DeviceScopes =>
+    deviceScopesOn(on === "agent" ? AGENT_SWITCHES : on, extra);
 
 export interface FakeDesktop {
     readonly desktop: Desktop;

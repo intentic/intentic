@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 // The daemon's state engine as the host reads it, in two documents a Rust binary (`ic`) parses by these field names:
-// the update pre-flight's one line (the target image's state-plan.ts, read by _sandbox/ic/src/sandbox/preflight.rs and
-// embedded verbatim in the staged-update marker), and the `state` of `/health` (read by _sandbox/ic/src/health.rs). The
+// the update pre-flight's one line (the target image's state-plan.ts, read by _hosts/ic/src/sandbox/preflight.rs and
+// embedded verbatim in the staged-update marker), and the `state` of `/health` (read by _hosts/ic/src/health.rs). The
 // golden files beside the contract (golden/) are this schema's examples, and the Rust tests assert against them.
 
 export const PlanStepSchema = z.object({

@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, deviceScopesOn } from "@intentic/sandbox-contract/schemas/capabilities";
 import { FULL_ACCESS_ROLE, NO_ACCOUNTS_ROLE, type Role, VISITOR_CHAT_ROLE } from "@intentic/sandbox-contract/schemas/roles";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import {
@@ -30,19 +30,7 @@ const connector = (id: string): Capability => ({ id, kind: "cli", config: { prov
 const device = (id: string): Capability => ({
     id,
     kind: "device",
-    config: {
-        platform: "linux",
-        shell: "on",
-        write: "on",
-        screen: "off",
-        control: "off",
-        sandboxes: "off",
-        destructive: "off",
-        programs: "off",
-        remoteView: "off",
-        remoteControl: "off",
-        remoteTerminal: "off", admin: "off",
-    },
+    config: { ...deviceScopesOn(["shell", "write"]), platform: "linux" },
 });
 const mcp = (id: string): Capability => ({ id, kind: "mcp", config: { url: "https://a/mcp" } });
 

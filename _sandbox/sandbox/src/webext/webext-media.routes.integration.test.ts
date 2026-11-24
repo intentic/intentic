@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import type { Presented } from "../peers/enrollment.js";
 import { createFileTickets } from "./file-tickets.js";
-import { CHROME_MEDIA_REL, safeStem } from "./media-shelf.js";
+import { CHROME_MEDIA_REL, safeStem } from "../browser/cast/media-shelf.js";
 import { createWebExtFileRoute, createWebExtMediaRoute } from "./webext.routes.js";
 
 // The two doors a file crosses between the owner's own browser and this sandbox, on the browser's enrollment token:

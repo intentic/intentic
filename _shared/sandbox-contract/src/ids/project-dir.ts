@@ -4,7 +4,7 @@ import { STARTER_REPO } from "../state/starter.js";
 // A PROJECT SANDBOX is made for one folder on the owner's computer, synced live into `/work/<name>` rather than into
 // /work itself: the workspace root is the daemon's own, where it keeps its state, seeds its starter repo and serves
 // `public/` to anyone with a link. `<name>` is derived from the folder's name once, on the owner's side, and every
-// later reader (the sync agent, `ic`, the daemon) only validates it. `_sandbox/ic/src/sandbox/project_dir.rs` holds the
+// later reader (the sync agent, `ic`, the daemon) only validates it. `_hosts/ic/src/sandbox/project_dir.rs` holds the
 // validation again for the host side; `project-dir.fixture.json` is the one set of cases both run.
 
 // Top-level names the daemon treats as its own, so a project can never land on one: the public outbox, the reference

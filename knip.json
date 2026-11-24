@@ -135,9 +135,9 @@
             "entry": [
                 "src/main.ts",
                 "src/state-plan.ts",
-                // Run by path in a target image by `ic` before a swap onto it (_sandbox/ic composition.rs).
+                // Run by path in a target image by `ic` before a swap onto it (_hosts/ic composition.rs).
                 "src/environment/compose-overlay.ts",
-                // Run by path inside the container, through `docker exec`, by `ic sandbox session` (_sandbox/ic session.rs).
+                // Run by path inside the container, through `docker exec`, by `ic sandbox session` (_hosts/ic session.rs).
                 "src/auth/host/host-session-cli.ts",
                 "src/**/*-worker.ts",
                 "src/extensions/backend/backend-host-main.ts",
@@ -162,10 +162,10 @@
                 "pino-pretty"
             ]
         },
-        "_sandbox/webq": {
+        "_agent-tools/webq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.{ts,mts,mjs}"]
         },
-        "_sandbox/fileq": {
+        "_agent-tools/fileq": {
             "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_sandbox/cli": {
@@ -179,7 +179,7 @@
         "_sandbox/gate-action": {
             "entry": ["src/main.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
-        "_search/lsp": {
+        "_agent-tools/lsp": {
             "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_site/site": {
@@ -190,9 +190,6 @@
         },
         "_extensions/discord": {
             "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
-        },
-        "_extensions/e-urzad": {
-            "entry": ["src/server/server.ts", "src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/imap": {
             "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
@@ -211,9 +208,6 @@
         },
         "_extensions/google-workspace": {
             "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
-        },
-        "_extensions/prawo": {
-            "entry": ["src/main.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/deployments": {
             "entry": ["src/server/server.ts", "src/**/*.test.{ts,mts,mjs}"]
@@ -297,7 +291,7 @@
         "_shared/*": {
             "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
-        "_search/*": {
+        "_agent-tools/*": {
             "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         // Its tsconfig.test.json extends the shared base.

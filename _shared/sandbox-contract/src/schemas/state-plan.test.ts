@@ -5,7 +5,7 @@ import { packageRoot } from "@intentic/constants/node";
 import { STATE_PLAN_FORMAT, type StatePlan, StatePlanSchema, type StateStatus, StateStatusSchema } from "./state-plan.js";
 
 // The documents `ic` reads by field name, spelled once here: each golden file under golden/ is one of these examples
-// as JSON, and the Rust tests (_sandbox/ic/src/sandbox/preflight.rs, health.rs) parse the same files. A change here
+// as JSON, and the Rust tests (_hosts/ic/src/sandbox/preflight.rs, health.rs) parse the same files. A change here
 // that the committed file does not carry fails, naming the file; `INTENTIC_WRITE_GOLDEN=1` rewrites them, and the Rust
 // tests then say whether ic still reads them.
 

@@ -1,4 +1,5 @@
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import { traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { type SecretInventoryEntry, SECRET_KEY_RE } from "@intentic/sandbox-contract/schemas/secrets";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { capabilityTile } from "../../../models/capabilities/tiles";
@@ -112,7 +113,7 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
         editable: true,
         removable: false,
         gateSubject: instance.id,
-        mountedForTurn: instance.kind === `browser` || instance.kind === `identity` || instance.kind === `mcp`,
+        mountedForTurn: traitsOf(instance.kind)?.credentialMount === true,
         // A connection's credential is spent by its connection, never typed by hand.
         typeable: false,
         programsHere: false,

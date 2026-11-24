@@ -2,6 +2,11 @@
 // `_extensions/**` no-restricted-imports override in .oxlintrc.json, which holds the imports (extension-deps.test.mjs
 // keeps the two in step): the extension SDK, what it declares, the wire contract, and @intentic/base, which has no
 // dependencies of its own and which extension-manifest itself stands on.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { wireOf } from "../../../_shared/extension-ui/check/extension.mjs";
+import { root } from "./repo.mjs";
+
 export const SHIPPED = [
     "@intentic/base",
     "@intentic/connector-runtime",
@@ -10,6 +15,12 @@ export const SHIPPED = [
     "@intentic/extension-ui",
     "@intentic/sandbox-contract",
 ];
+
+// Of @intentic/sandbox-contract, the specifiers an extension may import: extension-api's EXTENSION_WIRE, read off the
+// newest surface record's `wireExports` (surface-guard.test.ts holds the two equal) so no build is needed. Every other
+// SHIPPED package is allowed with all its subpaths; this one only bare and with these.
+export const CONTRACT = "@intentic/sandbox-contract";
+export const WIRE = [...wireOf(JSON.parse(readFileSync(join(root, "_shared/extension-api/src/surface.json"), "utf8")))].sort();
 
 // What a build or a suite stands on and nothing ships: the test kit and the shared compiler settings.
 export const BUILD_ONLY = ["@intentic/testing", "@intentic/tsconfig"];
@@ -54,8 +65,6 @@ const EXTENSION = /^@intentic\/ext-[^/]+$/;
 export const CONSUMERS = new Map([
     ["_editor/web", { extensions: undefined, specifiers: undefined }],
     ["_devices/local-files", { extensions: new Set(["@intentic/ext-onlyoffice"]), specifiers: new Set(["@intentic/ext-onlyoffice/local-office"]) }],
-    // The real editor demo hosts the office view; its backend fixture shares only the snapshot wire shape.
-    ["_site/demo", { extensions: new Set(["@intentic/ext-e-urzad"]), specifiers: new Set(["@intentic/ext-e-urzad/snapshot"]) }],
     // The desktop app mounts the Passwords app on this computer's own vault, over its Tauri port. The package is no
     // extension any more (no sandbox hosts Passwords), but stays on the extension SDK, and this is its one entry.
     ["_editor/desktop-app", { extensions: new Set(["@intentic/ext-passwords"]), specifiers: new Set(["@intentic/ext-passwords/app"]) }],

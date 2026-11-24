@@ -1,5 +1,5 @@
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityGuide, coreFields, localModelGb } from "@intentic/capability-catalog";
-import { type CapabilityKind, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type CapabilityKind, CapabilityKindSchema, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract/schemas/exit";
 import { activeLocale, BASE_LOCALE, t } from "@intentic/ui/i18n";
 
@@ -143,7 +143,8 @@ const BUILT_IN_FIELDS: ReadonlyMap<string, ReadonlyMap<string, Field>> = new Map
     CAPABILITY_CATALOG.map((entry) => [entry.id, slotted(entry.fields)]),
 );
 
-const CORE_KINDS: readonly CapabilityKind[] = [`device`, `phone`, `browser`];
+// The kinds the core adds fields to a contributed tile of.
+const CORE_KINDS: readonly CapabilityKind[] = CapabilityKindSchema.options.filter((kind) => coreFields(kind).length > 0);
 const CORE_FIELDS: ReadonlyMap<string, ReadonlyMap<string, Field>> = new Map(
     CORE_KINDS.map((kind) => [kind, new Map(coreFields(kind).map((field) => [field.key, field]))]),
 );

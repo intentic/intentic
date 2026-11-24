@@ -1,4 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { kindsWhere } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { CredentialGrants } from "./credential-grants.js";
@@ -8,7 +9,7 @@ import type { CredentialGrants } from "./credential-grants.js";
 // takes effect from the next turn; `cli` is the exception, gated per use like a secret.
 
 // Kinds whose credential is a mount (signed in/exported/running before the turn), not a value at an exit.
-const MOUNTED_KINDS = new Set<Capability["kind"]>(["browser", "identity", "mcp"]);
+const MOUNTED_KINDS = new Set<Capability["kind"]>(kindsWhere((traits) => traits.credentialMount));
 
 export interface GatedCapabilities {
     // The manifest with gated mounts removed; mutable, the list every arm's preflight gets.

@@ -1,20 +1,9 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../../policy.js";
 import { type DeviceLog, deviceLogs, filterLines, icLogDir, listingText } from "./logs.js";
+import { grantWith } from "../../device-testing.js";
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "off",
-    screen: "off",
-    control: "off",
-    sandboxes: "off",
-    destructive: "off",
-    programs: "off",
-    remoteView: "off",
-    remoteControl: "off",
-    remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => grantWith(["shell"], overrides);
 
 test("ic's log folder is found where ic itself writes it: INTENTIC_LOG_DIR first, else ~/.intentic/logs", () => {
     expect(icLogDir({ INTENTIC_LOG_DIR: "/srv/ic-logs" }, "/home/me")).toBe("/srv/ic-logs");

@@ -49,6 +49,10 @@ export const browserHandler: CapabilityHandler = {
         };
     },
     fragment: () => packFragment("browser"),
+    removal: (config) =>
+        (config as BrowserConfig).identity === undefined
+            ? "its signed-in browser profile is deleted, so nothing can act as that account again without signing in"
+            : "it stops being one of that identity's accounts; the shared browser profile itself stays signed in",
     // The marker always moves with the entry; the profile and its passkeys move only for a standalone account, the one
     // that owns them. Same split as `remove`.
     rename: {

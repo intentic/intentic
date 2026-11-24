@@ -719,7 +719,7 @@ mod tests {
         assert!(progress.sync_unfinished);
         assert_eq!(progress.reason(), None);
         // The sentence is ic's own: held to its source, so a reworded warning cannot go unheard.
-        let connect = include_str!("../../../../_sandbox/ic/src/sandbox/connect.rs");
+        let connect = include_str!("../../../../_hosts/ic/src/sandbox/connect.rs");
         assert!(connect.contains(&format!("folder {SYNC_UNFINISHED}")));
         assert!(!Progress::new(true, true).sync_unfinished);
     }

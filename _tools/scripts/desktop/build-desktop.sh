@@ -152,7 +152,7 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     fi
     # The ic CLI the installers put beside the app (tauri.conf.json's second `externalBin`), for exactly the targets
     # this run bundles. A release stages the very binaries it attaches for the shims to download, which build-ic.sh
-    # already wrote into _sandbox/ic/dist-bin at this version (release.yml's ic-build artifact) and which this never
+    # already wrote into _hosts/ic/dist-bin at this version (release.yml's ic-build artifact) and which this never
     # rebuilds; any other build reuses a fresh one there or builds it. stage-desktop-ic.sh has the rules.
     ic_mode=(--bundle)
     if [ "$VERSION" != "0.0.0" ]; then

@@ -19,7 +19,7 @@ flowchart LR
 - `postgres` and `mysql` are not spoken to over HTTP, so their `probe` names `connect` instead of a URL: the daemon signs in as their command-line clients would, before the client tool is even installed, and says whether pg_hba, a grant, the password or the network stood in the way.
 - The manifest also offers automation templates tied to these cards: push webhooks for GitHub and GitLab, and Sentry alerts.
 - Baked into every sandbox image; switching it off on the Extensions tab removes exactly these cards.
-- The EZD RP and e-Doręczenia cards for Polish public offices live in [e-urzad](../e-urzad), beside the CLI, tools and view that use them.
+- The EZD RP and e-Doręczenia cards for Polish public offices live in the e-urzad extension ([intentic/extension-e-urzad](https://github.com/intentic/extension-e-urzad)), beside the CLI, tools and view that use them.
 
 ## Key files
 

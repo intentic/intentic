@@ -156,7 +156,7 @@ test("the files read: the scoped trees' .ts, .mts and .vue, less the tables, tes
         "_editor/web/src/router/index.test.ts",
         "_editor/web/src/a.spec.ts",
         "_editor/web/src/lib/testing.ts",
-        "_extensions/prawo/src/fixtures/case.ts",
+        "_extensions/discord/src/fixtures/case.ts",
         "_site/demo/src/fixture/home/x.ts",
         "_shared/sandbox-contract/src/app-routes/paths.ts",
         "_editor/web/src/a.js",

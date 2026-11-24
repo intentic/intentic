@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync } from "node:fs";
+import { CAPABILITY_KIND_TRAITS } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
@@ -442,7 +443,7 @@ export const browserServersOf = async (
             ...opt("coveredHosts", Object.keys(coveredHosts).length > 0 ? coveredHosts : undefined),
         });
     }
-    const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
+    const granted = capabilities.filter((capability) => CAPABILITY_KIND_TRAITS[capability.kind].sandboxBrowser);
     const owners = new Set(granted.map((capability) => profileOwner(capability)).filter((owner) => !isProfileOpen(owner)));
     if (owners.size === 0) {
         return { ...NO_BROWSER_TOOLS, servers, ports };

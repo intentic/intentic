@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { translatorContract } from "@intentic/sandbox-contract/contracts/translator.contract";
@@ -14,6 +15,9 @@ export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "log
 
 // How long a redirect sign-in's landing is watched for; the translator's own attempt lives about as long.
 const REDIRECT_WATCH_MS = 15 * 60_000;
+
+// A device sign-in that may end on a loopback redirect instead, where a paired computer can catch it (ChatGPT's).
+const loopbackSignIn = (provider: string): boolean => providerTraits(provider)?.translatorSignIn === "device-or-loopback";
 
 // oRPC replaces a non-ORPCError throw's message with a generic 'Internal server error'; these handlers rethrow the
 // translator's own message instead. 502 marks a failure from the bundled proxy itself, not the daemon.
@@ -81,7 +85,7 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
                 }
             }
             // A connected device's capability says nothing about this attempt's callback port being available.
-            const redirect = input.provider === "codex" && loopbackWatchers(services).length > 0;
+            const redirect = loopbackSignIn(input.provider) && loopbackWatchers(services).length > 0;
             const login = await upstream(services.cliProxy.connect(input.provider, redirect ? { redirect: true } : undefined));
             const loopback = login.flow === "redirect" ? loopbackRedirectOf(login.url) : undefined;
             if (loopback === undefined) {
@@ -111,7 +115,7 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
             const catchers = await caught.ready;
             if (catchers.length === 0) {
                 unwatch(login.state);
-                if (input.provider === "codex") {
+                if (loopbackSignIn(input.provider)) {
                     return { ...(await upstream(services.cliProxy.connect(input.provider))), catchers: [] };
                 }
             }

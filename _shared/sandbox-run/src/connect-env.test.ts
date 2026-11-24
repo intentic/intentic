@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { REPLAY_ENV } from "./index.js";
 
-// Parses the Rust source of the ic host-side connect flow (_sandbox/ic) and pins its env keys against the contract's
+// Parses the Rust source of the ic host-side connect flow (_hosts/ic) and pins its env keys against the contract's
 // replay allowlist, the one place the two languages must agree.
 
-const connectSource = readFileSync(join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/connect.rs"), "utf8");
+const connectSource = readFileSync(join(repoRoot(import.meta.url), "_hosts/ic/src/sandbox/connect.rs"), "utf8");
 
 // The env pairs connect.rs frames for `sandbox run-command`: the ("KEY", value) tuples of its `fresh` list (the first one in
 // the file; the test module's own come after it), including the ones rustfmt breaks over several lines.

@@ -1,6 +1,6 @@
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { fieldApplies } from "@intentic/extension-manifest";
-import { type Capability, type CapabilityKind, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, type CapabilityKind, CapabilitySchema, deviceScopesOn } from "@intentic/sandbox-contract/schemas/capabilities";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { partitionSecretValues, pastedSecret, secretFieldsOf } from "./secret-fields.js";
 import { generateSshKey } from "./ssh-keys.js";
@@ -132,20 +132,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
         {
             id: "laptop",
             kind: "device",
-            config: {
-                platform: "linux",
-                shell: "on",
-                write: "on",
-                screen: "on",
-                control: "off",
-                sandboxes: "off",
-                destructive: "off",
-                programs: "off",
-                remoteView: "off",
-                remoteControl: "off",
-                remoteTerminal: "off", admin: "off",
-                roots: "/home/me/code",
-            },
+            config: { ...deviceScopesOn(["shell", "write", "screen"], { roots: "/home/me/code" }), platform: "linux" },
         },
     ],
     // Every webext field is a permission, not a credential; the echo must be total or a switch is vaulted.

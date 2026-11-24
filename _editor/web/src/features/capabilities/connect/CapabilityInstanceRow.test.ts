@@ -26,16 +26,16 @@ const render = (
         entry = ENTRY,
         config = {},
         hub,
-        host,
+        peer,
         open = false,
-    }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`]; hub?: HubRowView; host?: HostSummary; open?: boolean } = {},
+    }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`]; hub?: HubRowView; peer?: HostSummary; open?: boolean } = {},
 ): string => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const instance = { id: entry.id, kind: entry.kind, status, config } as unknown as CapabilitySummary;
     const app = createApp({
         render: () =>
-            h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678`, hub, host, open }, { default: () => h(`p`, `the settings form`) }),
+            h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678`, hub, peer, open }, { default: () => h(`p`, `the settings form`) }),
     });
     app.use(PrimeVue);
     // Globally registered in the real app; a bare span is enough for these assertions.
@@ -125,7 +125,7 @@ const SEEN: HostSummary = { id: `linux`, platform: `linux`, environments: [{ key
 
 it("a working computer says what the agent may do there, and asks nothing until it is opened", () => {
     const online: ConnectionState = { label: `online`, tone: `success`, rank: 3 };
-    const closed = render({ state: `active` }, online, { entry: LINUX, config: OPERATE, host: SEEN });
+    const closed = render({ state: `active` }, online, { entry: LINUX, config: OPERATE, peer: SEEN });
 
     expect(closed).toContain(`Operate`);
     // Its state is the dot; the word would only repeat what green already says.
@@ -134,7 +134,7 @@ it("a working computer says what the agent may do there, and asks nothing until 
     expect(closed).not.toContain(`the settings form`);
 
     // Open, its settings come first and its verbs after them, Reconnect among them, Remove apart.
-    const opened = render({ state: `active` }, online, { entry: LINUX, config: OPERATE, host: SEEN, open: true });
+    const opened = render({ state: `active` }, online, { entry: LINUX, config: OPERATE, peer: SEEN, open: true });
     expect(opened.indexOf(`the settings form`)).toBeLessThan(opened.indexOf(`Reconnect`));
     for (const verb of [`Reconnect`, `Revoke access`, `Rename…`, `Remove`]) {
         expect(opened).toContain(verb);
@@ -143,7 +143,7 @@ it("a working computer says what the agent may do there, and asks nothing until 
 
 it("a broken computer says so beside its name and offers the fix on the row itself", () => {
     const offline: ConnectionState = { label: `offline`, tone: `danger`, rank: 0 };
-    const html = render({ state: `active` }, offline, { entry: LINUX, config: { ...OPERATE, write: `on` }, host: { ...SEEN, online: false } });
+    const html = render({ state: `active` }, offline, { entry: LINUX, config: { ...OPERATE, write: `on` }, peer: { ...SEEN, online: false } });
 
     expect(html).toContain(`offline`);
     expect(html).toContain(`Reconnect`);

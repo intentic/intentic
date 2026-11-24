@@ -393,7 +393,7 @@ watch has no USB debugging to speak of, so it is reached over wireless debugging
   watch itself with \`am start\` or from its app list.
 - **A phone and a watch attached together** are two devices: pass \`serial\` to every call.`;
 
-// (2026-10-13) The section a device on Intentic OS adds (_os/README.md): the box boots straight into Intentic, and the
+// (2026-10-13) The section a device on Intentic OS adds (_hosts/README.md): the box boots straight into Intentic, and the
 // sandbox reading this may be the one that looks after it. Only for a machine whose facts say so (DeviceFacts.intenticOs),
 // since the os_* tools exist nowhere else.
 const INTENTIC_OS_NOTE = `## This device is an Intentic OS box, and you may be its steward

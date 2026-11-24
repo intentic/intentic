@@ -23,12 +23,12 @@ ic_from_checkout() {
     [ -z "$IC" ] || return 0
     CHECKOUT="$(checkout_root)"
     [ -n "$CHECKOUT" ] || return 0
-    ic_manifest="$CHECKOUT/_sandbox/ic/Cargo.toml"
+    ic_manifest="$CHECKOUT/_hosts/ic/Cargo.toml"
     if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
         kit_step fetching-ic "building the checkout's ic CLI…" "Build ic from the checkout"
         kit_suspend
         if cargo build --quiet --manifest-path "$ic_manifest"; then
-            IC="$CHECKOUT/_sandbox/ic/target/debug/ic"
+            IC="$CHECKOUT/_hosts/ic/target/debug/ic"
         else
             kit_warn "the checkout's ic did not build, so the released ic runs instead."
         fi

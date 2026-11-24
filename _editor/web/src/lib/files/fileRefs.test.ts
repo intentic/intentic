@@ -137,9 +137,9 @@ describe(`resolveInTree`, () => {
 
     it(`resolves in the copy it is asked about, never in another copy that happens to be held`, () => {
         // The conversation's checkout has a file the shared tree has never had, and the shared tree a same-named one.
-        seed(treeOf(WORKSPACE_ROOT, `intentic/_os/installer/bib-config.toml`, `other/installer/config.toml`));
-        seed(treeOf(WORKSPACE_ROOT, `intentic/_os/installer/bib-config.toml`, `intentic/_os/installer/config.toml`), `c-1`);
-        expect(resolveInTree(`installer/config.toml`, { agent: `c-1` })).toBe(`intentic/_os/installer/config.toml`);
+        seed(treeOf(WORKSPACE_ROOT, `intentic/_hosts/installer/bib-config.toml`, `other/installer/config.toml`));
+        seed(treeOf(WORKSPACE_ROOT, `intentic/_hosts/installer/bib-config.toml`, `intentic/_hosts/installer/config.toml`), `c-1`);
+        expect(resolveInTree(`installer/config.toml`, { agent: `c-1` })).toBe(`intentic/_hosts/installer/config.toml`);
         expect(resolveInTree(`installer/config.toml`, { agent: undefined })).toBe(`other/installer/config.toml`);
         // A copy whose tree was never fetched answers nothing, leaving the daemon to look in the right place.
         expect(resolveInTree(`installer/config.toml`, { agent: `c-2` })).toBeUndefined();

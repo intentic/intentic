@@ -1,7 +1,7 @@
 //! INTENTIC OS (2026-10-13): this computer as the OS itself reports it, when it is Intentic OS, and the changes the
 //! reader makes to it from This device (src/device/intenticOs/): an update downloaded and staged for the next boot, the
 //! previous version queued instead, the other channel, the restart into what is waiting. Every answer and every change
-//! is `ic os`'s own (_os/README.md, "The host interface"): this app runs it and reads what it prints, never bootc or
+//! is `ic os`'s own (_hosts/README.md, "The host interface"): this app runs it and reads what it prints, never bootc or
 //! systemctl. It runs the OS's own `ic` (`/usr/bin/ic`, baked into the image), never the one beside this app: the two
 //! can be at different versions, and only the OS's is sure to know `ic os`.
 //!

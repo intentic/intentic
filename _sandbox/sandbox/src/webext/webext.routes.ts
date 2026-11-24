@@ -18,7 +18,7 @@ import { bearerPeer } from "../peers/peer-store.js";
 import { DESCRIBE_TIMEOUT_MS } from "./webext-peer.js";
 import { ticketTag } from "./secret-tickets.js";
 import { exportBrowserSession } from "./session-export.js";
-import { readShelfFile, storeMedia } from "./media-shelf.js";
+import { readShelfFile, storeMedia } from "../browser/cast/media-shelf.js";
 import { importBrowserSession } from "./session-import.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { readBoundedBytes } from "../http/bounded-body.js";
@@ -124,7 +124,7 @@ const decodedName = (header: string | undefined): string => {
 };
 
 // A picture, video or file the agent saved from a page in the owner's browser (`save_media`, or a download its click
-// started), as the raw body: stored on the artifacts shelf under `chrome/` (media-shelf.ts), and answered with where it
+// started), as the raw body: stored on the artifacts shelf under `chrome/` (browser/cast/media-shelf.ts), and answered with where it
 // now is, which the extension passes on to the agent. The extension checked the bytes against their type and its own
 // cap; this door holds the same cap on its own, since the token, not the extension's build, is what it can trust.
 export const createWebExtMediaRoute =

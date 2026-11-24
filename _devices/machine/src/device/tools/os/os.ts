@@ -26,7 +26,7 @@ import { prettifyError, z } from "zod";
 import { assertScope } from "../../policy.js";
 import { type IcRun, runIc } from "../sandboxes.js";
 
-// THE MACHINE'S OWN OS, on Intentic OS (2026-10-13, _os/README.md): the immutable Linux that boots straight into
+// THE MACHINE'S OWN OS, on Intentic OS (2026-10-13, _hosts/README.md): the immutable Linux that boots straight into
 // Intentic, where the first sandbox is the box's steward and manages it through these tools. They are thin callers of
 // `ic os …`, exactly as sandboxes.ts is of `ic sandbox …`: the same ic, found and kept current the same way (runIc), argv
 // spelled by the contract, JSON read as the contract's. ic owns the OS: it stages with bootc, leaves every sandbox its

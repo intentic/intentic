@@ -110,7 +110,7 @@ fn matches_name(pattern: &str, name: &str) -> bool {
 }
 
 /// Top-level names the sandbox keeps for itself: `RESERVED_PROJECT_DIR_NAMES` in
-/// `_shared/sandbox-contract/src/ids/project-dir.ts`, as `_sandbox/ic/src/sandbox/project_dir.rs` holds them too.
+/// `_shared/sandbox-contract/src/ids/project-dir.ts`, as `_hosts/ic/src/sandbox/project_dir.rs` holds them too.
 const RESERVED: [&str; 12] = [
     "public",
     "refs",
@@ -1868,7 +1868,7 @@ mod tests {
     #[test]
     fn cargo_s_profile_folders_stay_here_at_any_depth_and_under_a_target_triple() {
         assert!(not_synced("target/debug"));
-        assert!(not_synced("_sandbox/ic/target/release"));
+        assert!(not_synced("_hosts/ic/target/release"));
         assert!(not_synced(
             "src-tauri/target/x86_64-pc-windows-msvc/release"
         ));

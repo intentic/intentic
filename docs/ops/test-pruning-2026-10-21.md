@@ -148,7 +148,7 @@ Security and compatibility checks remain, including deployed sign-in and microph
 
 **Available file history:** `4ea80c217c refactor!: drop GrantRevokeSchema properties from the wire contract`; `01572c8c8b refactor: simplify sandbox internals and strengthen lifecycle handling`; `cdd21d419c feat(gemini): add GeminiCatalog.select using googleModelAvailability from cliProxy`.
 
-### `_sandbox/fileq/src/lib/derivers/load-cost.test.ts`
+### `_agent-tools/fileq/src/lib/derivers/load-cost.test.ts`
 
 **Decision:** Remove the suite. Counts exact import spellings rather than measuring loaded modules; renaming or factoring a loader breaks it.
 
@@ -159,7 +159,7 @@ Security and compatibility checks remain, including deployed sign-in and microph
 
 **Available file history:** `cdd21d419c feat(gemini): add GeminiCatalog.select using googleModelAvailability from cliProxy`.
 
-### `_tools/agent-cli/src/run.test.ts`
+### `_agent-tools/agent-cli/src/run.test.ts`
 
 **Decision:** Remove the suite. Regex enforces an import style; never runs a CLI with a broken dependency.
 

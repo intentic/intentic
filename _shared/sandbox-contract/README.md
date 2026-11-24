@@ -85,13 +85,21 @@ flowchart LR
   (`src/schemas/agent-next.ts`): the lane, the card's corner and the chat read it rather than the hold, the queue or an
   answer it came from (2026-10-20).
 - So are the rules the daemon and a device must agree on about the owner's machine. `DEVICE_PROGRAM_TOOLS` in
-  `src/policy/device-programs.ts` says which device tools carry a program and how to read it, and
+  `src/policy/device-programs.ts` says which device tools carry a program and how to read it, keyed by tool name so
+  `DeviceProgramTool` is the type the machine's `programTool` takes (a tool marked there with `tool({ program: true })`
+  shows as `McpTool.carriesProgram`, never in `tools/list`), and
   `sandboxPowerCommands` in `src/policy/sandbox-power.ts` recognises a command that starts, stops or replaces a
   sandbox, or (2026-10-13) changes what an Intentic OS machine boots (`ic os …`, `bootc`). The rules `ic`'s Rust must
   agree with are here too, each pinned to it by a golden file under `golden/`: the update probation policy
   (`src/state/update-probation.ts`), the one shape of `restart-intent.json` (`src/schemas/restart-intent.ts`), the
   answer of `ic sandbox swaps --json` (`src/schemas/device-swaps.ts`), and what `ic os status --json` and
   `ic os update --check --json` answer, with the argv of every `ic os` verb (`src/schemas/intentic-os.ts`).
+- What each capability kind is lives in one table, `CAPABILITY_KIND_TRAITS` in `src/policy/capabilities/capability-kinds.ts`
+  (2026-11-23): its Map group, whether a reach can hold it back, whether it is a signed-in account, a sandbox browser
+  profile, a mounted credential, a turn-start mount, a peer, a tunnel or a model provider, whether its id names an MCP
+  server, and whether its tile is a catalog entry or a contributed card. `isSignedInAccount`,
+  `REACHABLE_CREDENTIAL_KINDS` and `MCP_SERVER_MINTING_KINDS` read it, as do the daemon's and the editor's kind lists,
+  so a new kind is one row the compiler makes complete.
 - Which build a sandbox is, and every comparison between two of them, is `src/state/sandbox-build.ts`: a pending
   rebuild, runner parity, and (2026-10-20) whether a swap landed. `/info` reports what answers (`running`: the build
   and when its daemon started), and `swapVerdict` says landed, came back unmoved, or still waiting. A page used to

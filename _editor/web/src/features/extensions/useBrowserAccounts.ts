@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../models/extensions/useExtensions";
 
@@ -25,10 +26,11 @@ export function useBrowserAccounts() {
     const { contributionOf } = useExtensions();
 
     // The owner's own browser (a `webext` card) is listed beside the site accounts: a role reaches it only by naming
-    // it, the way it names an account (policy/role-capability.ts), so the picker has to offer it.
+    // it, the way it names an account (policy/role-capability.ts), so the picker has to offer it. Both are signed-in
+    // accounts an extension's card supplies; an identity, from the built-in catalog, is not listed here.
     const accounts = computed<BrowserAccount[]>(() =>
         capabilities.value
-            .filter((capability) => capability.kind === `browser` || capability.kind === `webext`)
+            .filter((capability) => traitsOf(capability.kind)?.signedInAccount === true && traitsOf(capability.kind)?.tile === `card`)
             .map((capability) => {
                 const platform = typeof capability.config[`platform`] === `string` ? (capability.config[`platform`] as string) : capability.id;
                 const card = contributionOf(capability.kind === `webext` ? `webext` : `browser`, platform)?.catalog;

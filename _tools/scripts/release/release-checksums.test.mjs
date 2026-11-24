@@ -22,7 +22,7 @@ test("lists the agents, the keyring, ic and the launcher beside the installers, 
         "_devices/machine/dist-bin/intentic-machine-linux-amd64": "agent",
         "_devices/keyring/dist-bin/intentic-keyring-linux-amd64": "keyring",
         "_devices/win-launcher/dist-bin/intentic-launch-windows-amd64.exe": "launcher",
-        "_sandbox/ic/dist-bin/ic-linux-amd64": "ic",
+        "_hosts/ic/dist-bin/ic-linux-amd64": "ic",
         "_editor/desktop-app/dist-bin/Intentic-1.338.0-x64-setup.exe": "installer",
         "_editor/desktop-app/dist-bin/latest.json": "{}",
     });
@@ -34,7 +34,7 @@ test("lists the agents, the keyring, ic and the launcher beside the installers, 
 
 test("leaves out the sums and their signature, dotfiles, directories, and a directory that is not there", () => {
     const root = tree({
-        "_sandbox/ic/dist-bin/ic-linux-amd64": "ic",
+        "_hosts/ic/dist-bin/ic-linux-amd64": "ic",
         "_editor/desktop-app/dist-bin/SHA256SUMS": "old",
         "_editor/desktop-app/dist-bin/SHA256SUMS.sig": "old",
         "_editor/desktop-app/dist-bin/.SHA256SUMS": "partial",
@@ -47,7 +47,7 @@ test("leaves out the sums and their signature, dotfiles, directories, and a dire
 });
 
 test("refuses two assets with one name, which the Release could hold only one of", () => {
-    const root = tree({ "_sandbox/ic/dist-bin/same": "a", "_editor/desktop-app/dist-bin/same": "b" });
+    const root = tree({ "_hosts/ic/dist-bin/same": "a", "_editor/desktop-app/dist-bin/same": "b" });
     assert.throws(() => releaseAssets(root), /same is in both/);
 });
 

@@ -6,7 +6,7 @@ import { z } from "zod";
 // shell, and the input tools put text where a terminal could run it. The daemon's gate used to know two of those by
 // name, the machine's own checks a different few, and `app_start program=powershell args=[…]` slipped past the judge, the
 // card and the unattended refusal. This is the one table both ends read: the tool, and how to lift the command line
-// out of its arguments. A device tool that carries a program is added here, or the machine's test says it is missing.
+// out of its arguments. A device tool that carries a program is added here and built with the machine's `programTool`, or the machine's test says it is missing.
 
 /**
  * What a call's program is, which decides how it is read:
@@ -39,11 +39,14 @@ export const ProgramArgumentsSchema = z.looseObject({
 });
 export type ProgramArguments = z.infer<typeof ProgramArgumentsSchema>;
 
-interface ProgramCarrier {
-    readonly tool: string;
+interface CarrierReading {
     /** In words: where the program is in the arguments. */
     readonly carries: string;
     readonly read: (args: ProgramArguments) => Omit<ProgramReading, "tool"> | undefined;
+}
+
+interface ProgramCarrier extends CarrierReading {
+    readonly tool: DeviceProgramTool;
 }
 
 const present = (value: string | undefined): string | undefined => (value === undefined || value.trim() === "" ? undefined : value);
@@ -68,8 +71,7 @@ const ADB_SERIAL = /^[\w.:-]+$/;
 // A URL, or `www.`/`mailto:` which the machine opens the same way (desktop-automation's looksLikeUrl).
 const URL_TARGET = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|mailto:)/i;
 
-const typedBy = (tool: string, action: string, field: "text" | "value"): ProgramCarrier => ({
-    tool,
+const typedBy = (action: string, field: "text" | "value"): CarrierReading => ({
     carries: `${field}, when action is ${action}`,
     read: (args) => {
         const typed = args.action === action ? present(args[field]) : undefined;
@@ -77,18 +79,17 @@ const typedBy = (tool: string, action: string, field: "text" | "value"): Program
     },
 });
 
-/** Every device tool that carries a program. */
-export const DEVICE_PROGRAM_TOOLS: readonly ProgramCarrier[] = [
-    {
-        tool: "run_command",
+// Keyed by tool name, so the name is a type: the machine marks each of its tools that carries a program with
+// `programTool`, which takes only a name in this table, and its test holds the marked set equal to the table.
+const CARRIERS = {
+    run_command: {
         carries: "command",
         read: ({ command }) => {
             const line = present(command);
             return line === undefined ? undefined : { kind: "command", commandLine: line };
         },
     },
-    {
-        tool: "android_shell",
+    android_shell: {
         carries: "command, run as `adb [-s serial] shell <command>`",
         read: ({ command, serial }) => {
             const line = present(command);
@@ -98,8 +99,7 @@ export const DEVICE_PROGRAM_TOOLS: readonly ProgramCarrier[] = [
             return { kind: "phone-command", commandLine: `adb ${serial !== undefined && ADB_SERIAL.test(serial) ? `-s ${serial} ` : ""}shell ${line}` };
         },
     },
-    {
-        tool: "app_start",
+    app_start: {
         carries: "program and args",
         read: ({ program, args }) => {
             const started = present(program);
@@ -111,8 +111,7 @@ export const DEVICE_PROGRAM_TOOLS: readonly ProgramCarrier[] = [
             return { kind: args === undefined || args.length === 0 ? "app-launch" : "command", commandLine: commandLineOf(started, args ?? []) };
         },
     },
-    {
-        tool: "open",
+    open: {
         carries: "target",
         read: ({ target }) => {
             const opened = present(target);
@@ -124,11 +123,21 @@ export const DEVICE_PROGRAM_TOOLS: readonly ProgramCarrier[] = [
             return { kind: URL_TARGET.test(opened) || !/\s/.test(opened.trim()) ? "app-launch" : "command", commandLine: opened };
         },
     },
-    typedBy("device", "type", "text"),
-    typedBy("android_act", "type", "text"),
-    typedBy("clipboard", "write", "text"),
-    typedBy("ui_act", "set_value", "value"),
-];
+    device: typedBy("type", "text"),
+    android_act: typedBy("type", "text"),
+    clipboard: typedBy("write", "text"),
+    ui_act: typedBy("set_value", "value"),
+} satisfies Record<string, CarrierReading>;
+
+/** The name of a device tool that carries a program. */
+export type DeviceProgramTool = keyof typeof CARRIERS;
+
+/** Every device tool that carries a program. */
+export const DEVICE_PROGRAM_TOOLS: readonly ProgramCarrier[] = Object.entries(CARRIERS).map(([tool, carrier]) => ({
+    // SAFETY: Object.entries of CARRIERS yields exactly its own keys.
+    tool: tool as DeviceProgramTool,
+    ...carrier,
+}));
 
 /** The program a `tools/call` of `tool` carries, or undefined for a tool that carries none or a call with nothing in the place the table looks. */
 export const programInCall = (tool: string, args: ProgramArguments): ProgramReading | undefined => {

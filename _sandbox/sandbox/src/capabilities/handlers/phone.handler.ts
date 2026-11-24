@@ -10,6 +10,7 @@ export const phoneHandler = peerHandler<PhoneConfig>({
     note: PHONE_TOOLS_NOTE,
     pairHint: "click Connect and scan the code with that phone's camera",
     awayHint: "asleep; the agent's first call wakes it",
+    removal: "that phone's pairing is revoked; the app installed on it stays, disconnected",
     added: (id) =>
         `Added "${id}". Install Intentic Device on that phone and scan the code its entry is offering; the agent can work on it from the next turn.`,
     store: (ctx) => ctx.phones,

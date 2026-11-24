@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ALLOWED, BUILD_ONLY, CONSUMERS, consumerFindings, manifestFindings, SHIPPED, specifierFindings } from "./lib/extension-deps.mjs";
+import { ALLOWED, BUILD_ONLY, CONSUMERS, CONTRACT, consumerFindings, manifestFindings, SHIPPED, specifierFindings, WIRE } from "./lib/extension-deps.mjs";
 import { root } from "./lib/repo.mjs";
 
 const manifest = (fields) => JSON.stringify({ name: "@intentic/ext-probe", ...fields }, null, 4);
@@ -40,23 +40,27 @@ test("a name that only starts like an allowed one is refused", () => {
     ]);
 });
 
-// The linter's `_extensions/**` override and its test-file twin allow each name bare and with a subpath; the manifests
-// are held to the same names, so a package added to one list and not the other fails here.
+// The linter's `_extensions/**` override and its test-file twin allow each name bare and with a subpath, the wire
+// contract with only the subpaths extension-api's EXTENSION_WIRE lists; the manifests are held to the same names, so a
+// package added to one list and not the other fails here, as does a wire subpath the linter and the record disagree on.
 const allowedByLinter = (filesLine) => {
     const config = readFileSync(join(root, ".oxlintrc.json"), "utf8");
     const at = config.indexOf(filesLine);
     assert.notEqual(at, -1, `.oxlintrc.json has no override ${filesLine}`);
     const group = /"group":\s*\[([^\]]*)\]/.exec(config.slice(at))[1];
     const negated = [...group.matchAll(/"!(@intentic\/[^"]+)"/g)].map((match) => match[1]);
-    const bare = negated.filter((name) => !name.endsWith("/**")).sort();
+    const wire = negated.filter((name) => name.startsWith(`${CONTRACT}/`)).sort();
+    const packages = negated.filter((name) => !name.startsWith(`${CONTRACT}/`));
+    const bare = packages.filter((name) => !name.endsWith("/**")).sort();
     assert.deepEqual(
-        negated
+        packages
             .filter((name) => name.endsWith("/**"))
             .map((name) => name.slice(0, -3))
             .sort(),
-        bare,
-        "each allowed name is allowed with its subpaths too",
+        bare.filter((name) => name !== CONTRACT),
+        "each allowed name but the wire contract is allowed with all its subpaths too",
     );
+    assert.deepEqual(wire, WIRE.filter((name) => name !== CONTRACT), "the wire subpaths allowed are EXTENSION_WIRE's");
     return bare;
 };
 

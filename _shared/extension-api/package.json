@@ -62,6 +62,17 @@
                 "default": "./dist/testing.js"
             }
         },
+        "./wire": {
+            "types": "./dist/wire.d.ts",
+            "import": {
+                "@intentic/src": "./src/wire.ts",
+                "default": "./dist/wire.js"
+            },
+            "require": {
+                "@intentic/src": "./src/wire.ts",
+                "default": "./dist/wire.js"
+            }
+        },
         "./surface.json": "./src/surface.json"
     },
     "scripts": {

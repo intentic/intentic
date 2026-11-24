@@ -14,6 +14,7 @@ import {
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { SandboxResourcesAskFieldsSchema, SandboxShapeWhenSchema } from "@intentic/sandbox-contract/schemas/devices";
 import { createMcpServer, type McpAuditEntry, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
+import type { DeviceProgramTool } from "@intentic/sandbox-contract/policy/device-programs";
 import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
@@ -156,6 +157,12 @@ const appWaitInput = {
         .describe(`How long waitFor or untilExit may wait, in ms. Default ${DEFAULT_APP_WAIT_MS}, maximum ${MAX_APP_WAIT_MS}; the answer says when it ran out.`),
 };
 
+// A tool whose arguments carry a program: only a name in the contract's table (policy/device-programs.ts) compiles here,
+// and mcp.integration.test.ts holds the tools built this way equal to that table, so the daemon's gate reads every one.
+const programTool = <Name extends DeviceProgramTool, Schema extends z.ZodType>(
+    spec: Omit<Parameters<typeof tool<Schema, DeviceScopes>>[0], "name" | "program"> & { readonly name: Name },
+): McpTool<DeviceScopes> => tool<Schema, DeviceScopes>({ ...spec, program: true });
+
 const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "describe",
@@ -165,7 +172,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await describeText(scopes)),
     }),
-    tool({
+    programTool({
         name: "run_command",
         description:
             'Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user\'s login shell elsewhere (see describe). On a Windows PC with WSL, `in: "wsl:<distro>"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: "windows"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. At the deadline the command is stopped together with everything it started. The call returns once the command itself exits: a process it leaves running in the background keeps running, but nothing it prints after that is collected, so start one with its output redirected to a file (`> out.log 2>&1`). Work that may outlast the deadline (a build, a large copy, a backup) goes to app_start instead, with a shell as its program (`pwsh -NoProfile -Command …`, `sh -c …`), and app_status with `untilExit` waits for it to end: never a loop of `sleep` and checks inside run_command, which holds the call and still ends at the deadline. A file or a folder to or from the sandbox moves with the sandbox\'s `devices copy`, not `docker cp` or base64 through here. Very long output comes back as its start and its end, with the middle cut and counted. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device\'s "Run destructive commands" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. On Windows, `admin: true` runs the command as this computer\'s administrator with no UAC prompt, its output coming back as usual: it needs the "Run commands as administrator" switch, and each run waits for the owner\'s yes on a card in chat, so say in `why` what it is for. Use it for what needs an administrator instead of Start-Process -Verb RunAs, whose prompt waits for someone at the computer and whose output never comes back. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody\'s laptop.',
@@ -306,7 +313,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         input: z.object({ id: required }),
         run: async ({ id }, scopes) => textResult(await focusWindow(screenOf(), id, scopes)),
     }),
-    tool({
+    programTool({
         name: "open",
         description:
             "Start an application, or open a URL or file with whatever this device has registered for it: the usual first step of a task ('open the browser at this page'). Use this rather than working out the platform's own incantation. Requires the 'Run commands' permission.",
@@ -315,7 +322,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         input: z.object({ target: required.describe("An application name, a file path, or a URL.") }),
         run: async ({ target }, scopes) => textResult(await openTarget(screenOf(), target, scopes)),
     }),
-    tool({
+    programTool({
         name: "clipboard",
         description:
             "Read or replace this device's clipboard: the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
@@ -340,7 +347,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     }),
     // browser_open … browser_frames: the agent's own browser on this device, by element and by what its GPU drew (tools/browser/tools.ts).
     ...browserTools(web),
-    tool({
+    programTool({
         name: "device",
         description:
             "Use this device's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LATEST SCREENSHOT, whatever it showed (the whole desktop, one display, a window or a zoomed region): take one first, read them off it, and pass its id as `frame`. Better still, point at an element ref from ui_elements, which needs no coordinate at all. Every action answers with a fresh screenshot of the same part of the screen, or says the screen did not change. Typing a command that would delete needs the 'Run destructive commands' switch, as running it would, and keys that lock or leave the desktop are refused. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
@@ -422,7 +429,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         }),
         run: async ({ window, query }, scopes) => textResult(await listElements(screenOf(), { window, query }, scopes, elementRefs, frames)),
     }),
-    tool({
+    programTool({
         name: "ui_act",
         description:
             "Act on an element from ui_elements without the pointer: invoke (press a button, follow a link), set_value (replace a field's text), toggle (a checkbox), expand/collapse (a menu, tree item or combo box), select (a list or tab item), or focus. Works on a background window and leaves the mouse where the user has it. An element offers only the actions ui_elements lists beside it. Answers with a fresh screenshot. Requires the 'Use the mouse and keyboard' permission.",
@@ -464,7 +471,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         }),
         run: async ({ serial, query }, scopes) => textResult(await android.uiElements({ serial, query }, scopes)),
     }),
-    tool({
+    programTool({
         name: "android_act",
         description:
             "Touch the attached Android phone through adb: tap, long_press or swipe at an element ref from android_ui_elements (`element`) or at [x, y] in the newest phone screenshot (`coordinate`, with its id as `frame`); type text into the focused field; press a key (an Android key code like ENTER, BACK, VOLUME_UP, or its number); back, home and recents; scroll a list (`direction`, `amount` swipes, at an element or the middle of the screen). `type` carries printable ASCII only (a newline presses Enter); other characters are refused by name. Keys that turn the screen off or lock the phone (POWER, SLEEP) are refused: nothing here can unlock it again. Typing a command that would delete needs the 'Run destructive commands' switch, as on the desktop. On a Wear OS watch, scroll up or down turns the crown (at an element or coordinate it swipes there), home always ends on the watch face, recents presses the side button, and a screen that has dimmed is woken first. Every action answers with a fresh phone screenshot, or says the screen did not change. Requires the 'Use the mouse and keyboard' permission.",
@@ -488,7 +495,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         }),
         run: async (input, scopes) => await android.act(input, scopes),
     }),
-    tool({
+    programTool({
         name: "android_shell",
         description:
             "Run a command in the attached Android phone's own shell (`adb shell`), as the shell user, and get back its exit code, stdout and stderr: `pm list packages`, `am start -n <package>/<activity>`, `dumpsys battery`, `getprop`, `ls /sdcard`. Commands that lose something the phone does not give back need the 'Run destructive commands' switch, which is off unless its owner turned it on: deleting recursively, `pm uninstall`, `pm clear`, `settings put`, `svc`, `reboot`, a wipe. Note that `svc wifi disable` over wireless debugging cuts the link you are using. There is no terminal: a command that waits for input is stopped at the deadline. Requires the 'Run commands' permission.",
@@ -534,7 +541,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         run: async ({ serial, lines, package: app, tag, priority }, scopes) =>
             textResult(await android.logcat({ serial, lines, package: app, tag, priority }, scopes)),
     }),
-    tool({
+    programTool({
         name: "app_start",
         description:
             'Start a program on this device and keep it running after the call returns: an app to look at, click through and read the output of, which run_command (it waits, and stops the command at its deadline) is wrong for. Pass the path `devices push <this device> <build>` printed in the sandbox shell, or the program inside a pushed folder; a program the sandbox pushed needs this device\'s "Run programs this sandbox sends" switch, any other program "Run commands". Its stdout and stderr go to a log of its own (app_logs). A program that falls over within a second or two is answered with its exit code, said in words (a missing DLL, an architecture mismatch), and its last output. Answers with the run id the other app_* tools take.',
@@ -757,6 +764,9 @@ export const auditDetail = (name: string, args: McpAuditEntry["args"]): string =
     const safe = typed["password"] === undefined ? typed : { ...typed, password: `<${String(typed["password"]).length} characters>` };
     return JSON.stringify(safe).slice(0, 500);
 };
+
+// The tools this device serves, for its tests to read what `tools/list` does not say (which carry a program).
+export const machineTools = (): readonly McpTool<DeviceScopes>[] => TOOLS;
 
 // Handle one JSON-RPC message against the grant as it stands at that moment.
 export const handleMcpMessage = createMcpServer<DeviceScopes>({

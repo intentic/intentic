@@ -1,6 +1,7 @@
 import { useQuery, type QueryFunction, type UseQueryOptions } from "@tanstack/vue-query";
 import { useLoaded } from "@intentic/extension-api";
-import { computed, type MaybeRefOrGetter, shallowRef, toValue, watch } from "vue";
+import { computed, hasInjectionContext, inject, type MaybeRefOrGetter, shallowRef, toValue, watch } from "vue";
+import { SANDBOX_SCOPE } from "./scope/sandboxScopeKey";
 import { queryClient } from "../../lib/queryPersistence";
 import { reportQueryFreshness } from "./freshness/queryFreshness";
 import { readFailure } from "./useDaemonRoutes";
@@ -16,11 +17,26 @@ import { type AccessReason, accessReasonOf } from "./access/accessReason";
 
 const { reachable } = useSandbox();
 
+// A read that names no sandbox reads the active one, even inside an `<InSandbox>` for another (scope/useSandboxScope.ts):
+// it is never quietly moved there, since its key and its call would then disagree with what it was written against. A
+// development build says so, which is the moment to move the read onto `useSandboxScope()`.
+const warnUnaimedInScope = (aimedAt: MaybeRefOrGetter<string | undefined> | undefined): void => {
+    if (!import.meta.env.DEV || toValue(aimedAt) !== undefined || !hasInjectionContext()) {
+        return;
+    }
+    const scope = inject(SANDBOX_SCOPE, undefined);
+    const elsewhere = scope?.at();
+    if (elsewhere !== undefined) {
+        console.warn(`useSandboxQuery: a read that names no sandbox runs inside the scope of ${elsewhere}, and reads the active sandbox instead; aim it with useSandboxScope()`);
+    }
+};
+
 // When `aimedAt` names another sandbox, the active daemon's reachability is irrelevant: the read is simply
 // issued for that box. A ref/getter, since the aim can change under a mounted panel.
 // `select` narrows what the cache holds to what a reader wants (a count out of a list): the entry stays the procedure's
 // own, shared with every other reader of it, and only this reader's `data` is the narrowed one.
 export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Error, Selected>, aimedAt?: MaybeRefOrGetter<string | undefined>) {
+    warnUnaimedInScope(aimedAt);
     const resolved = toValue(options);
     // Every daemon-backed read is timed here rather than at each call site, so none can skip it. `queryKey`'s first
     // element groups the table entry; the rest of the key varies per call and isn't part of the op name.

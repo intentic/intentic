@@ -4,7 +4,7 @@ import { packageRoot } from "@intentic/constants/node";
 import { DeviceSwapsSchema } from "./device-swaps.js";
 
 // The rows `ic sandbox swaps --json` answers, as examples: golden/swap-verdicts.json holds each of ic's records and the
-// row it gives (the Rust test, _sandbox/ic/src/sandbox/swaps.rs, builds every one; the machine agent's fallback is held
+// row it gives (the Rust test, _hosts/ic/src/sandbox/swaps.rs, builds every one; the machine agent's fallback is held
 // to the same rows). This is the TS half: the rows ic gives are the rows the contract reads, to the field.
 
 interface VerdictCase {

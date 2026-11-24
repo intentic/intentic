@@ -27,7 +27,7 @@ node _tools/checks/publish-set.mjs "${PUB[@]}"
 # would ship agents that report the wrong version forever. The chmod is not cosmetic: Actions artifacts do
 # not preserve file modes, so the downloaded binaries arrive non-executable — harmless to the Release (the
 # install one-liners chmod what they download), fatal to this probe without it.
-for probe in _devices/machine/dist-bin/intentic-machine-linux-amd64 _devices/keyring/dist-bin/intentic-keyring-linux-amd64 _devices/remoted/dist-bin/intentic-remoted-linux-amd64 _sandbox/ic/dist-bin/ic-linux-amd64; do
+for probe in _devices/machine/dist-bin/intentic-machine-linux-amd64 _devices/keyring/dist-bin/intentic-keyring-linux-amd64 _devices/remoted/dist-bin/intentic-remoted-linux-amd64 _hosts/ic/dist-bin/ic-linux-amd64; do
   if [ ! -f "$probe" ]; then
     echo "error: $probe is missing — the linux-build artifact did not arrive" >&2
     exit 1

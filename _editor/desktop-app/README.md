@@ -169,7 +169,7 @@ flowchart LR
   new sandbox's Connect offers them. Nothing found leaves the computer
   except those ids.
 - **The OS shell.** Linux kiosk sessions use `src-tauri/src/shell/`: sway's IPC over `$SWAYSOCK`, through the
-  framing `ic`'s screen service shares (`_sandbox/ic/sway-ipc`), subscribes to sway’s bindings, workspace focus and
+  framing `ic`'s screen service shares (`_hosts/ic/sway-ipc`), subscribes to sway’s bindings, workspace focus and
   windows. Super+1–9 opens the account’s roster in order, Super+0 This computer; the visible face moves
   into that Space. Sandbox windows are matched only by sway’s `sandbox_engine=dev.intentic.sandbox` and the attested
   `sandbox_app_id` (the security context’s app id), then the slug’s `ic sandbox list --json` platform id. Unknown ids stay where they opened. Holding those
@@ -328,8 +328,8 @@ flowchart LR
   `/work` and `/history` stay recoverable for a week (`ic sandbox restore`), as they do from every other door. The
   confirmation says so, in place of the kit's "cannot be undone". The app reads nothing off `docker inspect`; the
   short children it waits on (Docker probes, the listing, the agent's status) share `ic`'s time-limited capture
-  crate, `_sandbox/ic/bounded`, and read docker's refusals and find Docker Desktop with `ic`'s own readings,
-  `_sandbox/ic/docker-host`: an engine that answers every request with an error stops a start's wait after 20 seconds
+  crate, `_hosts/ic/bounded`, and read docker's refusals and find Docker Desktop with `ic`'s own readings,
+  `_hosts/ic/docker-host`: an engine that answers every request with an error stops a start's wait after 20 seconds
   as `broken` (quit Docker Desktop and open it again) instead of running out the five minutes as `tookTooLong`, and
   a Docker Desktop installed per user or in a folder of its own is found where `ic`'s probe finds it. A removal also has this machine's sync let go of the sandbox: `intentic-machine sync
   forget <slug>`, or, from an agent older than that verb, `sync uninstall --sandbox <id>` with the platform id this app
@@ -804,7 +804,7 @@ flowchart LR
   under an install that said it completed, and the command stayed missing._ Linux gets no
   launcher: the deb and rpm put `intentic-desktop` itself on PATH, and it reads the same path arguments.
 - **Intentic OS** ([src-tauri/src/os.rs](src-tauri/src/os.rs), 2026-10-13), the immutable Linux whose desktop edition
-  boots into this app ([_os](../../_os/README.md)). Where `/usr/lib/intentic-os/release.json` exists, Devices draws
+  boots into this app ([_hosts](../../_hosts/README.md)). Where `/usr/lib/intentic-os/release.json` exists, Devices draws
   a This system card (`src/device/intenticOs/`): edition, version and channel from `ic os status --json`, the boot's
   health with each failed check, how sandboxes are isolated, and, with an update staged or a rollback queued, "Restart
   to update" or "Restart into the previous version", confirmed first: every sandbox restarts with the computer and its
@@ -1052,7 +1052,7 @@ bundle:
 - `intentic-ic`, the `ic` CLI every script the app runs installs (as `ic`, in `~/.intentic/ic/bin`), staged by
   [stage-desktop-ic.sh](../../_tools/scripts/desktop/stage-desktop-ic.sh) (`pnpm stage:ic`). A release stages the
   binaries `build-ic.sh --version <v>` made for the GitHub Release (release.yml's `ic-build` job hands them to both
-  desktop builds) and refuses any other version. Any other bundle reuses a fresh build in `_sandbox/ic/dist-bin` or
+  desktop builds) and refuses any other version. Any other bundle reuses a fresh build in `_hosts/ic/dist-bin` or
   runs `build-ic.sh` itself, and fails when it cannot. `test:rust`, `lint:rust` and `dev` stage a debug cargo build
   for this host, or a placeholder the script warns about when there is none, since `cargo clippy` and `cargo test`
   only need the file to exist.

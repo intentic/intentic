@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
@@ -73,7 +74,7 @@ export const offBlockedAccount = async (
         return KEEP;
     }
     // Access an admin turned back on is found here, when the probe is due; the turn then runs where it was routed.
-    const probed = provider === "claude";
+    const probed = providerHas(provider, "seatProbe");
     if (probed && (await deps.claudeSeatCheck.recheck(remembered))) {
         return SERVABLE;
     }

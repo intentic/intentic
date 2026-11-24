@@ -1,0 +1,797 @@
+# ic
+
+The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, gets Docker there first, and takes Intentic off it again.
+
+```mermaid
+flowchart LR
+    shim["connect.sh · connect.ps1<br/>setup one-liner"] --> ic(["ic"])
+    fixshim["fix.sh · fix.ps1<br/>recovery panel's command"] --> ic
+    uninstallshim["uninstall.sh · uninstall.ps1<br/>Windows uninstaller"] --> ic
+    desktop["Desktop app"] --> ic
+    machine["Machine agent<br/>sandbox tools"] --> ic
+    hosted["Platform<br/>hosted overlay builds"] --> ic
+    osunits["Intentic OS<br/>greenboot · systemd units"] --> ic
+    ic --> docker["Docker<br/>sandbox containers"]
+    ic --> image["Sandbox image<br/>run contract"]
+    ic --> claim["Platform<br/>setup-code claim"]
+    ic --> report["Platform<br/>host report"]
+    ic --> bootc["bootc<br/>Intentic OS image"]
+```
+
+- Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
+  The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
+  (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own) and the uninstall shim, which uses any ic that
+  knows `uninstall`; the desktop app and the machine agent call the
+  installed one. An agent reaches it through a connected device's sandbox tools. A download replaces nothing until it
+  matches the release's `SHA256SUMS` (the shims, by `sha256sum`, `shasum` or `Get-FileHash`), and the machine agent
+  also checks the release key's signature over those sums before it puts its own release's ic in place.
+- `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. The claim names this
+  machine and its side (`host`, `os`: `windows`, `linux/archlinux`), and a code already redeemed on another machine, or
+  on the other side of this one, is refused with the platform's own sentence instead of starting a second copy
+  (2026-10-05). It pulls the published image even when it is cached, so the moving `stable` tag runs the newest
+  release: seconds when the copy here is current, only the new layers when it is not, and the copy itself when the
+  registry cannot be reached. The desktop app's setups used to start on the copy the machine held
+  (`INTENTIC_REUSE_IMAGE=1`), which put a fresh install's first sandbox on whatever release an earlier one left
+  (2026-10-25). A pull, or a load of the image fetched ahead, whose engine went
+  away (Docker Desktop quit, Intentic's engine stopped) stops at once rather than retrying against nothing, and the
+  setup report says which engine stopped and how to start it again in its `remedy`; a transfer that broke on the
+  network is still tried three times, and its report now carries a fix too (2026-10-12).
+  On Windows its preflight takes the shim's word for the facts
+  `ic docker prepare` passed on a moment before (`INTENTIC_PREPARED=1`, connect.ps1) rather than probing the PC a second
+  time. Connect refuses a sandbox this machine already has, running, stopped or parked, even with `-y`, and points to
+  `fix`, `rollback` and `rebuild` instead (2026-10-07). With `--replace` it reinstalls it under the sandbox's lock,
+  keeping what it was set up as: its image, logins volume, dev mounts, web origin, machine name and side, and the
+  device it connected (no second pairing). The claim's own values still win. The old container is parked, and put back
+  if the new one does not answer and become ready. The machine agent's Reconnect passes `--replace`. `update`, `prepare`,
+  `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
+  moves the data to a trash that `restore` brings back and `purge` empties early. Before any restart or recreate of a
+  running sandbox ic writes the daemon's resume ask (`/history/restart-resume.json`, `{"askedAt": <ms>}` on the
+  container's clock, `resume.rs`), so the agent turns it cuts run again after it; `--no-resume` on `update`, `rollback`,
+  `rebuild`, `dev`, `reshape`, `shape`, `start` and `restart` leaves them for a person (2026-10-05). Before it stops,
+  restarts or recreates a sandbox (a power verb, a swap, a sleep, a connect `--replace`, the probation going back, a
+  fix's repair, a repair that restarts the engine) ic also says why on its volume, within three seconds and never at the
+  act's expense: `/history/logs/restart-intent.json` (`intent.rs`: `at` as ISO-8601 UTC, `by` `ic` or `keeper`, `host`,
+  `side` `windows|wsl|linux|mac`, `action`, `reason` with the failed check and its finding, `checks`). `ic sandbox doctor
+  --json` puts the last one beside the container's last exit (code, OOM kill, times) as `lastDown`. `remove` takes the
+  sandbox's lock, sends the platform its removal notice a few times within 20 seconds, and retires its folder-sync
+  pairings through `intentic-machine sync forget <slug>` when the agent is installed; it no longer deletes
+  `~/.intentic/machine`, which holds restore points and the audit log (2026-10-05). A purge keeps the trash entry until
+  every volume of the sandbox is gone, and a failed first setup removes the volumes it made.
+- **Stored credentials are encrypted at rest by default** (`at_rest.rs`, 2026-10-16). The daemon encrypts the files
+  that hold credentials (pasted secrets, the capability and extension vaults, the privacy vault, AI-provider accounts)
+  whenever it is given a 32-byte key, and every sandbox ic sets up, replaces or starts as a runner gets one, as does
+  any older sandbox on its next recreate (an update, rollback, rebuild or reshape), whose daemon then encrypts the plain
+  files as it boots. A sandbox Docker Compose runs (Komodo included) is the exception: ic gives it no key of its own,
+  since Compose's next `up` starts it from Compose's file, which mounts no key ic adds, and the daemon could not open
+  what it encrypted (2026-10-27). One that has a key keeps it, and every ic swap of it says that Compose's file must
+  mount the key file at `/run/secrets/intentic-at-rest-key` and set `INTENTIC_AT_REST_KEY_FILE` to that path. The key is mounted read-only at `/run/secrets/intentic-at-rest-key`, and
+  `INTENTIC_AT_REST_KEY_FILE` tells the daemon where it is.
+  - Unless you bring your own, ic makes the key once, from the operating system's random source, at
+    `~/.intentic/keys/at-rest-<slug>.key` (`%USERPROFILE%\.intentic\keys` on Windows). On Linux and macOS only you
+    can read it; on Windows it has your profile folder's permissions. That folder is never mounted into a sandbox, so
+    the sandbox can read its key but not change it, and a copy of its volume does not contain it. ic's own backups
+    carry it sealed under the backup key (see Backups below), so a backup and its key restore anywhere. A key that exists is never made again: every later update, rollback and reinstall reuses it. Dev sandboxes
+    that share a logins volume (`INTENTIC_AGENT_AUTH_VOLUME`) keep their credentials in that volume, so they share
+    one key for it, `~/.intentic/keys/at-rest-shared/<volume>.key`; when ic makes it, it names the sibling sandboxes
+    that cannot read those credentials until their own next update gives them the same key.
+  - **Losing the key loses the stored credentials.** The files stay on the volume, but nothing can open them, and the
+    sandbox's connections, secrets and AI sign-ins have to be set up again. Keep a copy of the key wherever you keep
+    copies of this machine.
+  - To use your own key, set `INTENTIC_AT_REST_KEY_HOST_FILE` to the absolute path of a file outside every sandbox
+    volume holding 32 random bytes (or 64 hex digits, or base64 of 32 bytes), when you set the sandbox up, or on the
+    next update of a sandbox that has no key yet. It wins over ic's. A sandbox that has a key keeps it: changing it is
+    a rotation, `ic sandbox connect --replace` with the new key in `INTENTIC_AT_REST_KEY_HOST_FILE` and the old one in
+    `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE`, then once more with `INTENTIC_AT_REST_DROP_PREVIOUS_KEY=1` after it has
+    restarted and been backed up ([the self-host guide](../../_tools/selfhost/platform/README.md) has the details).
+  - To opt out, for example because the disk is already encrypted, set `INTENTIC_AT_REST=off` when the sandbox is set
+    up, or on the update that would give it its first key. The container remembers the choice, so later updates keep
+    it, and `INTENTIC_AT_REST=on` on an update turns encryption on. Turning it off never takes away a key a sandbox
+    already has, since its credentials may be encrypted with it.
+  - A removed sandbox's key stays while its data is in the trash, and is deleted with the data when that is deleted
+    for good. If this machine still holds backups of the sandbox, the key stays until tidy deletes them (30 days after
+    the sandbox went). A shared key goes when its logins volume is removed. Your own key file is never deleted.
+  - Going back to a version from before encryption at rest (2026-10-13) is allowed, with a warning: that version
+    cannot read the encrypted credentials until the sandbox is updated again. `backup-restore` of one sandbox's backup
+    into another brings its credentials along when the backup carries its key (every backup since 2026-11-11), handing
+    that key to the target as its previous key so the target re-encrypts them under its own as it starts; an older backup
+    leaves them out (`/work/.intentic/secrets/auth`) and the target keeps its own. `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE`
+    is read by `connect` alone: the restore hands its key to the one recreate it runs, and an update, rebuild, rollback
+    or reshape replays the previous key the container already mounts, whatever the environment says. A container that was given a key it no longer mounts, and not one of ic's, is
+    left as it is, with a stop that asks for the key file in `INTENTIC_AT_REST_KEY_HOST_FILE`.
+- A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
+  is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
+  tells the container `SANDBOX_PROJECT_DIR`, which the run contract replays across every later swap.
+  The folder's sync is set up as soon as the daemon answers inside the container, before the public address is
+  checked (`verifying`): it reaches the daemon over this machine's Docker and its loopback, so a large folder's first
+  copy runs while the edge's DNS and URL are checked, which can take up to two minutes (2026-10-21). With a setup code
+  a failed check still fails the run, and its message says the folder already syncs.
+- _(2026-10-21)_ `SYNC_PROJECTS_HOST=1`, the desktop app's one sandbox per computer that folders attached to, is
+  refused before anything starts, with a sentence saying every folder now gets a sandbox of its own: a sandbox made for
+  it would be one no folder ever reaches. A container that was made as one keeps its `SANDBOX_PROJECTS_HOST=1` until
+  its next recreate, which no longer replays it.
+- **ic is the one host authority for what runs and what should run.** Every door onto a sandbox's container (the
+  machine agent, the desktop app, the web's pasted fallback lines) calls ic's verbs rather than docker: `start`,
+  `stop` and `restart` power the tunnel sidecar with its sandbox, and `ic sandbox list --json` answers each
+  sandbox's state, its share as docker enforces it, the shape it runs with, the shape saved for its next restart and
+  the update staged for it, in the sandbox contract's `DeviceSandbox` shape.
+- **Held and asleep.** `ic sandbox stop` marks the sandbox `held` in its channel record: stopped on purpose, so
+  `ic sandbox fix` only starts it again after a yes. `ic sandbox sleep [<slug>]` stops it the same way but marks it
+  `asleep` instead, never both; `--idle <minutes>` (the machine agent's keeper) never sleeps a runner (nobody opens
+  one, so nothing would wake it), and sleeps only the sandboxes this side keeps whose daemon confirms through the private `/run/intentic/sleep.sock` that it has been quiet for that long,
+  with nothing working, no `keepAwake` (settings or an enabled, unexpired webhook/listener automation) and no `nextWakeAt` due within the alarm's
+  lead and five minutes, and never one mid-update, parked, held or locked by another ic run. A sandbox the alarm woke
+  that no person has used since (the signal's `personAt`) needs five minutes of quiet rather than the whole limit. A dev sandbox (one whose container carries `SANDBOX_DEV_ROOT`) first asks that checkout's
+  `_sandbox/sandbox/scripts/dev-before-sleep.mjs <slug>` through a login shell, with a one-minute limit. Exit 75 keeps
+  it awake, with the script's last line as the reason, while the script rebuilds an image that lacks a dependency the
+  checkout's daemon needs. Any other answer lets it sleep once the daemon's fresh answer agrees. The heartbeat screens
+  first, so only a sandbox it would sleep has node started inside it; a failed answer leaves it awake, and a daemon
+  from before the socket sleeps on its heartbeat. A person's `ic sandbox sleep` takes the heartbeat's alarm when the
+  daemon cannot answer, rather than refusing. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
+  because a booking saved after it could lose its alarm.) Each sleep posts a host report with `asleep: true`, tried again twice while the platform does not answer (2026-10-29: a lost one left a sleeping sandbox reading as broken until the platform learned to read the sleep off the asks below too). `ic sandbox wakes` (polled by the agent while anything
+  sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
+  `POST /host-report/wakes`, every platform at once, and starts each one somebody has opened as soon as its own
+  platform answers, as a person's start, reporting `fixing` then `done` around it, both with `waking: true` so the page
+  says it is waking rather than that the machine is fixing it (2026-11-17); `--json` ends on `{"asleep": n}`,
+  with `"held": true` beside it when a platform held the ask. `--wait <seconds>` (2026-10-19, up to 25) lets each
+  platform hold the ask open until somebody asks for a wake, cut to the soonest alarm and dropped while one is due. A
+  record left saying asleep for a sandbox that is gone stops saying so: the trash clears it, and a run that still finds
+  sleepers lists the engine's sandbox containers once, after its starts, and clears every one with neither its
+  container nor a parked one. **The alarm** (2026-10-18): a sleep stores the signal's
+  `nextWakeAt` (the soonest moment the daemon promised, crons included) as the record's `wake_at`, and `wakes`, before
+  asking the platform anything, starts each sleeper whose `wake_at` is within its lead (`"for":"alarm"` on its line):
+  twice the record's `wake_cost` (what its plain starts from sleep took, the slower of the newest and three quarters
+  of the last) plus a minute, between two and ten minutes, and all ten for a start that will apply a saved shape. Such
+  a start is stamped `alarm_woke_at`. Every other start, stop or sleep clears both marks. `start`, `restart` and every recreate clear both marks, and so
+  does the fix engine when it finds the container running. The keeper's `fix --auto` reads a sandbox asleep as
+  healthy and skips its daemon, registration and tunnel checks; an attended `fix` starts it. `ic sandbox list` says
+  `asleep` (`"asleep": true` in `--json`).
+- (2026-11-11) One active host per sandbox. `ic sandbox claim [slug]` ("run it here") writes the takeover marker
+  `/history/.ic/takeover.json` (`{v, at, by: claim|move, machineId, host}`, `takeover.rs`, `mark`) and starts the
+  sandbox, or restarts it, so its daemon announces the takeover now; the platform makes this copy the active one and
+  every other copy goes on standby at its next announce. `fix` (and the keeper's `fix --auto`) settles a copy whose
+  history holds `/history/.ic/standby.json` as `elsewhere`, stops it as `ic sandbox stop` does (held) and never starts
+  it, unless a takeover is waiting (`fix/away.rs`). An unattended run never starts a stopped container Docker Compose
+  owns: it reports it `elsewhere`, managed by Compose, with the folder its `working_dir` label names (2026-11-10:
+  Compose's stop ends in a SIGKILL after 10 s, an exit 137 the keeper read as a crash and undid).
+- Before a swap touches the running container, it pre-flights the target image's state conversions against
+  read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
+  contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;
+  `--skip-preflight` overrides. A planner that ran and could not answer (it crashed, printed nothing, or printed what
+  is not a plan) refuses a move onto that image too, as the hosted gate does: the planner is the daemon's own code, and
+  an image that cannot load it will not boot. A rollback only warns, since it is the way off a failing version, and
+  so does whatever the image cannot be blamed for: a probe docker would not run, a hang, a kill, an image from before
+  the planner, a plan format only a newer ic reads. (2026-10-06: a daemon importing a package its image never
+  installed crashed the planner, which then read as "no plan", and the swap went ahead onto a daemon that crashed on
+  every start.) `prepare` records the staged image's plan in the marker it leaves the sandbox, the planner's line
+  verbatim (a refusal naming the planner for an image that could not run it, which auto-update never takes), so the
+  update card says what an update converts before anyone accepts it. While it runs it
+  also keeps `update-preparing.json` there (`preparing.rs`): its step and how far the pull has got, rewritten every
+  few seconds and removed when it ends, so the card draws the download in progress instead of a button for it. It also refuses a
+  run line that would put the sandbox on other storage than it has (`storage.rs`: a renamed or dropped volume would
+  otherwise boot a healthy-looking sandbox on empty volumes).
+- **A running sandbox can be written out as a Compose folder.** `ic sandbox compose <slug> [--out <dir>]`
+  (`compose_out.rs`) writes `compose.yaml`, its `.env` (0600) and `at-rest.key` (0400, a copy of the key the container
+  mounts, which the file binds as `./at-rest.key`) into `~/.intentic/compose/<slug>/` by default, and refuses a folder
+  holding another sandbox's file. The file is not ic's: ic asks the sandbox's own image for it
+  (`intentic sandbox run-command --format compose`), handing it the container's env, the approved recipe, where the key
+  sits and the side stamps, the way it asks for a run line. So the file carries what the run line does: the 30 s stop
+  grace, the caps, the directives and their stamps, the overlay as a `build:` with `SANDBOX_ENVIRONMENT_HASH`, and
+  HOST_PLATFORM/HOST_LABEL/HOST_ENV, without which every ic reads the container as its own. Credentials go only into
+  the `.env`. The volumes and the network are `external: true`: they already exist, and `compose down` must never
+  delete a workspace. To hand the sandbox over, stop it through ic, `docker rm` its container (the volumes stay), then
+  run `docker compose up -d` in the folder, or point a Komodo stack at it (files on host). `write_folder` is the same
+  thing as a library call, for a move to another device. An image from before the format is refused with "update
+  first". (2026-11-11: the "translations" move from rog to z440 needed every one of those lines written by hand.)
+- **A sandbox moves to another of the owner's computers in one stream (2026-11-11).** `ic sandbox move-out` and
+  `ic sandbox move-in` (`sandbox/device_move/`) are the two halves `sandboxes move` drives through the machine agents;
+  nothing else touches the bytes. The source plans first (`--plan-only`: image, base and its registry digest, the
+  overlay recipe whose hash the image's tag names, each volume's size, the at-rest key's id; never the env), and the
+  target prepares from that plan while the sandbox still runs: docker, free disk (the data plus 2 GiB), no sandbox,
+  volume or different at-rest key of that name, the base pulled by digest, the overlay built from the recipe under the
+  very tag it runs (`needs_carrying`: an image neither a registry nor a recipe can make rides the stream instead). It
+  then listens and prints an ephemeral X25519 public key; the source's key reaches it through the daemon
+  (`move-in --peer`, a file the waiting run reads). The source dials the target's LAN addresses, or listens on loopback
+  for the calling sandbox's relay; a greeting naming any other key is dropped before agreement. HKDF-SHA256 over the
+  shared secret, salted with the move id and bound to both keys, gives one AES-256-GCM key per direction; records are
+  ≤ 1 MiB, sealed under their counter as nonce, and a stream ends with an authenticated END naming its record count,
+  so a cut, tampered or reordered stream fails rather than arriving short (`wire.rs`; no new crate, `ring` already
+  builds). Only after the target says it is ready does the source stop the sandbox (held), then send the manifest (the
+  whole inspect, env included, and the channel record), the keys, the image when asked, and each volume as a tar
+  checked against `engine/moves.rs`'s file manifest. The target makes it with this machine's side stamps (HOST_PLATFORM,
+  HOST_ENV, HOST_ENGINE and the side label dropped, HOST_LABEL this machine's), through the run contract (a stopped
+  placeholder and a reshape, as an engine move does) or as a Compose folder (`compose_out::write_folder_as` and
+  `docker compose up -d`), writes the takeover marker (`takeover.rs`, `/history/.ic/takeover.json`, shared with the
+  one-active-host work) before its first boot, starts it and waits for its tunnel. Only its verdict lets the source
+  rename its copy `<container>.moved`, recorded in `moves.json` as `from: "device"` and removed after `KEEP_DAYS` by
+  the same cleanup an engine move's copies are (now on every platform for these). Any failure before that undoes both
+  halves, each on its own; each run journals itself with a heartbeat in `~/.intentic/device-moves.json`, and the next
+  `move-*` or `ic sandbox tidy` settles a run that died (removes a target's partial copy, starts a source it stopped).
+  A source that sent everything and never heard the verdict stays stopped and says so: the target may be up, and two
+  copies must not run. Not carried: the dind deploy target container older setups stood up beside a Windows sandbox
+  (its volume goes if the sandbox mounts it), and host bind mounts other than the key. Advertised as the `sandbox-move` feature.
+- **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version
+  that never answers, never commits its state journal, reports its conversion failed, or keeps crashing is undone at
+  once. Crashing is netd's word (`health.rs`): three restarts of the daemon in ten minutes with it down again, read off
+  netd's vitals on its address, else off the file netd keeps them in (`/run/intentic/vitals.json`), else off netd's
+  own log for a netd from before the file, with the error the daemon last died on where that log holds it; docker's
+  restart count never sees them, since netd and the container stay up while netd restarts the daemon inside it. The
+  container put back is then waited for the same way, and the flow ends on where the sandbox stands: a dev sandbox's previous container runs the same compiled checkout as the new one, so when
+  neither comes up, the message names that code and the two commands that fix it. (2026-10-06: a swap onto a daemon
+  that could not load a package said "Your previous sandbox was restored" over a restored container that crashed the
+  same way.) After that
+  first check the old container stays parked for a 24-hour probation (`probation.rs`), except on a sandbox Docker Compose
+  runs (Komodo's stacks included), which keeps no parked copy once the new one is up. There the replacement inherits the
+  old container's `com.docker.compose.*` labels, `SANDBOX_MANAGER=compose` and `SANDBOX_COMPOSE_CREDENTIALS` when it
+  has one (`compose.rs`), so Compose's next `up`
+  keeps it as the service's container. A parked copy with the same labels would be a second container of that service,
+  and Compose 5.6.1 then removed the live one or failed on the name. A recreate without the labels is what used to
+  break the stack: "The container name … is already in use". Elsewhere, `ic sandbox watch`, which the
+  machine agent runs every minute while a probation is on, puts it back by itself (a rename and a start, nothing
+  downloaded or built) when the new version keeps crashing, never becomes ready, or loses the tunnel the old one had.
+  A sandbox its owner stopped is waited for rather than judged, and a start or restart made through ic (noted in the
+  ledger before it is made) is not counted as a crash (2026-10-06). The same look finishes or undoes a swap that died halfway (Ctrl-C, a dropped SSH session, an agent restart, a
+  reboot): the channel record names the swap in flight before anything stops. What happened is written to the
+  sandbox's `/history/update-outcome.json` (`outcome.rs`), which its daemon shows the owner. The dogfood `dev` loop
+  keeps no probation: its daemon runs the checkout's compiled trees, which a parked container would mount too, so its
+  way back is netd's, inside the container (the last build that booted, `_sandbox/netd`). `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
+  The probation's numbers and rule are the contract's `update-probation.ts`, which the platform's watch over hosted
+  sandboxes also uses; `golden/update-probation.json` pins ic to it. `ic sandbox swaps --json` (`swaps.rs`) answers,
+  without Docker, whether each swap's cutover is being done right now (its heartbeat is fresh). The machine agent
+  defers its own restarts and the keeper on that answer rather than reading the records itself.
+- **A container is there, is not, or Docker did not say** (`docker.rs` `Presence`, 2026-11-03). Absence is only
+  Docker's own "No such container"; a timeout (every read has the 20-second `READ_LIMIT`) or any other engine error is
+  Unknown. The probation watch judges nothing on Unknown: no verdict, no strike, the record untouched, and it looks
+  again next round. Going back because the new version's container is gone needs it gone twice, ten seconds apart, with
+  `docker ps -a` agreeing (`container_gone`), and the health exec counts against the new version only when the engine
+  answered it. Every other decision that destroys something on absence (tidy and `remove` trashing orphan volumes, a
+  purge, a removal moving a sandbox to the trash, `prepare`/`update` and `connect --replace` putting a parked container
+  back) asks `container_absent` or the three-way answer and leaves things as they are when Docker did not say; plain
+  reads keep `container_exists`, where Unknown reads as not there. Rejected: one bool. On 2026-10-31 at 23:35 rog's
+  engine stalled ("running but stuck"), the watch's `docker inspect` failed, that read as "the new version's container
+  is gone", and a healthy 1.380.0 was rolled back to 1.378.2, killing every turn in flight.
+- **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again). Nothing older is kept
+  behind it since 2026-11-18 (`record::MAX_KEPT`): each kept build is a whole base and environment image pair, and on
+  rog four of them held ~101 GB. Raised again, the extra builds are kept only when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
+  keeps its data on is read directly, where the check used to skip; since 2026-11-04 the intentic engine's own disk
+  instead, whenever it is the engine in use and answers, since sandboxes on it never write to C:), and
+  `ic sandbox versions` lists them for
+  `rollback --to <version>`. A release nothing kept is downloaded by its version tag, and so is a pin whose image was
+  pruned outside ic; a pin with neither its image nor a version is no longer offered (`versions.rs`, 2026-10-05). A
+  rollback remembers the version it left (`rolled_back_from`), as the watch's own going back does, so the background
+  download never stages it again, even once a rollback onto a release tag follows the registry (2026-10-06). Every
+  build a swap leaves is pinned under a tag no other flow writes, chosen by image identity (`identity.rs`): an
+  environment overlay is labelled with the base it was built on, since its base tag moves whenever anything on the
+  machine pulls it. The environment build the sandbox ran on that base is pinned beside it
+  (`intentic-sandbox-rollback-<slug>:env-<id>`, with its hash in the record), and a rollback runs that build as it is.
+  It rebuilds today's approved recipe on the old base only when that build is gone, so a recipe that no longer builds
+  does not block the way back (2026-10-07). `ic sandbox list --json` lists only the ways back a rollback can reach
+  (2026-10-19), and `ic features` says so (`reachable-ways-back`), so the editor offers an older ic's rows less what that
+  ic could never reach, and a current ic's rows as they are.
+- **The overlay a swap builds is the target's composition** (`composition.rs`, 2026-10-20). An update, a rollback that
+  rebuilds and the dev loop ask the image they move onto to compose the sandbox's environment: its own
+  `compose-overlay.js` runs like the state pre-flight (`target_probe.rs`: read-only data mounts, no network, the
+  container's runner-set environment and its at-rest key, read-only), and ic builds and stamps exactly what it prints.
+  So a release or a dev rebuild that changed the daemon's own pack steps (a pack the new base bakes, a pack's steps
+  edited) leaves nothing pending: the new daemon composes the same overlay on its first boot. Before, ic built the
+  overlay the running daemon had composed for its own base, and the Environment card asked for one more rebuild after
+  every such swap. An image from before the composer gets the running daemon's overlay rebased onto it, as every swap
+  did before; a composer that fails says why and does the same. A prepared update is taken only while its base still
+  composes what it was built from. A plain rebuild still builds the approved file by its reviewed hash, since the
+  running daemon is the target. `ic features [--json]` lists the optional ops this ic implements in the contract's words
+  (`features.rs`, golden `ic-features.json`), which the machine agent advertises in its facts.
+- **An overlay is built in layers where its base says how** (`layered.rs`, 2026-11-19). The sandbox image has two
+  stages: `tools` (the OS, the CLIs, the feature packs) and the per-commit `runtime` on it. An image built from a
+  checkout or released since names the image of its `tools` stage in its `dev.intentic.tools` label, and carries a
+  replay of `runtime` in `dev.intentic.image-top` (one `COPY --link --parents` of every path it writes, out of the image
+  itself, and the RUNs that link them in; `_tools/scripts/image/image-top.mjs` composes it). `build_overlay` then builds
+  the recipe's leading steps FROM `tools`, the replay after them, and the rest of the recipe above it, so a swap onto a
+  new daemon keeps every recipe layer cached while `tools` is unchanged. Before, every commit's daemon invalidated the
+  whole overlay: on rog, 2026-11-19, a dev rebuild spent 16 of its 30 minutes re-installing an unchanged Android SDK,
+  Flutter and JDK. A step goes below the replay only if it names no path the replay writes, no command its RUNs install
+  and no variable its ENVs set; the first that does stays above, with every step after it. The replay is not free (a
+  copy of the ~3 GB per-commit stage on every new daemon, about three minutes with its export, kept unpacked in each
+  environment), so only a recipe heavier than it is built this way: one whose last build (the image the sandbox runs,
+  less its base) holds more than the base holds beyond its tools image (`worth_layering`). A first build, a light recipe,
+  an image without the labels (published before them, the core profile), a recipe whose first step must stay above, or
+  a tools image that cannot be pulled builds FROM the whole image as before. The overlay's content, hash and stamp are the composed recipe's either
+  way, and the build carries the base's labels, which FROM `tools` it would not inherit. Hosted rebuilds still build
+  FROM the whole image.
+- **One record, one run at a time.** The channel record is fsynced, and copied onto the sandbox's own `/history`
+  volume so every `ic` that drives the same Docker engine (the Windows side and a WSL distro, `sudo`) reads the same one
+  (`mirror.rs`). A per-sandbox lock (`lock.rs`) orders ic runs from a terminal, the desktop app and the machine agent;
+  a background run skips a busy sandbox instead of waiting. Swaps, power, backups, `remove`, `restore`, `purge`, the
+  trash sweep, a saved shape (read, changed and written under the lock, then mirrored) and tidy's deletions all take it
+  (2026-10-05: tidy, remove, restore, purge and the shape save took none). A record names the side that keeps its
+  sandbox (`side=`), so a run with Docker down only counts this side's own (`fix/mod.rs`).
+- **Each side keeps its own sandboxes** (`side.rs`). On a Windows PC, ic on Windows and ic in each WSL distro drive one
+  engine; a container carries the side that created it, as `HOST_PLATFORM` (`windows`/`linux`) and `HOST_ENV`
+  (`windows`, the distro's name, `linux`, `macos`), and only that side's unattended verbs act on it. (2026-10-05)
+  `HOST_ENV` is put on the run line by ic itself, since the published run contract replays only the names it lists; a
+  container stamped with the platform alone is compared on the platform alone, and one with no stamp is stamped by the
+  side that next recreates it. Ownership is a lease: the keeper's `ic sandbox fix --auto` (and its backup and prepare
+  rounds) writes `/history/.ic/keeper.json` (`{side, env, machineId, at}`, the container's clock), and when it is
+  missing or 30 minutes old, `fix --auto`, `prepare --auto`, `backup --auto`, the watch sweep, tidy and `list --json`
+  treat the sandbox as this side's for that run and say `adopted: …` (in `--json`: `adopted`, or `adoptedFrom` and
+  `keeperSilentSince` in the listing, which then leaves out `keptElsewhere`). Everything ic creates carries Docker labels
+  (`labels.rs`): `dev.intentic.sandbox`, `dev.intentic.kind`, `dev.intentic.side` (`linux/archlinux`) and
+  `dev.intentic.ic`; objects made before keep working by name.
+- **Backups outside Docker.** `ic sandbox backup` copies `/work` and `/history` into an encrypted, incremental restic
+  repository in `~/.intentic/backups/<slug>/`, keyed by `~/.intentic/keys/backup-<slug>.key` (64 hex digits from the
+  operating system's random source; `backup.rs`), so a Docker reset or a lost WSL disk does not take the sandbox with it.
+  The machine agent runs it daily (`--auto`); every swap takes a quick one of the state an update converts first.
+  `backups` lists them and names the repository, and `backup-restore` puts one into a folder or back into a sandbox's
+  volumes.
+  - **Self-contained** (2026-11-11). Every snapshot also holds the sandbox's at-rest key, sealed under a key derived from
+    the backup key (HKDF-SHA256, AES-256-GCM; `backup_seal.rs`), as `/src/ic/at-rest-key.sealed.json` in the same
+    snapshot (`restic dump <id> /src/ic/at-rest-key.sealed.json` shows it). The repository and its backup key are all a
+    restore needs; the plain key is only ever written to `~/.intentic/keys`. A sandbox with encryption at rest off
+    carries none. The key travels only in backups and in moves: never to the platform or a keyring.
+  - **Elsewhere.** `ic sandbox backup --repo <where>` sends the sandbox's backups to an absolute folder (a NAS share,
+    another disk) or a restic URL (`sftp:`, `s3:`, `rest:`, `b2:`, `azure:`, `gs:`, `swift:`), and keeps that choice in
+    `~/.intentic/backups/<slug>/repo.json`, so the daily `--auto` run and the pre-update backup go there too
+    (`--repo default` goes back to this disk; `backup_repo.rs`). ic stores no credential for it: restic reads them from
+    the environment ic runs in, whose `RESTIC_*`, `AWS_*`, `B2_*` and `AZURE_*` variables are passed to the restic
+    container by name only, and a URL with a password in it is refused. An sftp repository uses your `~/.ssh`.
+    `repo.json` also keeps the NAMES of those variables set when `--repo` was given (`needs`). A run missing any of
+    them never reaches restic: run by hand it stops and names them; the unattended ones (the daily `--auto`, the
+    backup before a swap) back up to this machine's disk for that run instead and say so, the daily one as
+    `result: "fell-back"` with the reason in its `--json` answer, so a sandbox does not silently stop being backed up.
+    Which repository the last full backup went into is kept with it (`last-full-backup`, `{at, repo}`), so a newly
+    chosen repository is not taken for one that already has backups; `ic sandbox backups` on a repository with none
+    (restic exit 10) says there are none yet.
+  - **Restore anywhere.** `ic sandbox backup-restore <slug> --snapshot <id> --into <target>` takes `--repo` and
+    `--key-file` for a repository this machine does not keep (copied from another machine, on a NAS, in a bucket). The
+    target must exist (set it up first, under any name). Into the same slug, the carried key is written back to
+    `~/.intentic/keys/at-rest-<slug>.key` if none is there (never over one); if the sandbox mounts another key, or the
+    target is another sandbox, ic writes the carried key to `~/.intentic/keys/at-rest-previous-<target>.key`, restarts
+    the target once with it as its previous key, then restores, and the daemon re-encrypts the restored stores under the
+    target's own key as it boots. Only a backup carrying no key leaves another sandbox's credentials out, as before; a
+    snapshot that cannot be read to tell (a repository that does not answer) stops the restore before anything changes.
+    `<slug>` names the backup, so it is matched exactly (or as `sandbox-<id>` for a bare id), never by a sandbox's name:
+    it may be another machine's. `--into`, a sandbox here, may be given by its name as `ic sandbox list` shows it.
+  - Each backup says so on the sandbox's volume (`/history/.ic/backup.json`,
+  `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
+  (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).
+- `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
+  environment builds and the ones a rebuild left dangling, build cache no build has used in a week (cache mounts: 30
+  days) and then the least recently used past 40 GB of it, layers before cache mounts, the trash past its window) and names volumes and networks that belong to no sandbox (all four families,
+  `intentic-{workspace,history,docker,dind-docker}-<slug>`, and the network; never a runner's). Unattended (`--auto`,
+  or no terminal: the machine agent's daily round) it moves a set nothing claims (no container, no record here, no
+  trash entry, not labelled by another side) into the trash, which
+  starts the same seven-day window a removal does: it never deletes a volume itself. Records of gone sandboxes, and
+  report-only records of another side's, move to `records-archive/`, kept 90 days. It removes this side's backups of a
+  sandbox gone 30 days (counted from the later of its record's archiving and the last backup), or of one another side
+  keeps whose `/history/.ic/backup.json` is newer than this side's copy; never the only copy of a live sandbox, and
+  every decision is in the tidy log. (2026-10-05: none of these had a retention rule; rog held a 40.9 GB duplicate.)
+  Build cache goes by `docker builder prune --force --filter until=168h --filter type=<type>` on the builder `docker
+  build` uses, once for each of layers, build contexts and git checkouts: a rebuild onto a newer base matches none of the
+  old layers, and what a rebuild does reuse was used within days. Cache mounts (`RUN --mount=type=cache`: apt's and npm's
+  downloads, a recipe's toolchain archive) go after 30 days instead (`until=720h --filter type=exec.cachemount`): a mount
+  is touched only when its step runs, which is when its layer missed, so a week's bound took exactly what the next miss
+  needed (rog, 2026-11-19: the Android SDK's 8.6 GB and Flutter's 2.5 GB downloaded again). The 40 GB cap is two prunes,
+  `--max-used-space` filtered to `type=regular` first, then not, so old layers go before any cache mount. Without `--all`
+  it keeps cache an image shares, which would free nothing. A dry run adds up the same records from `docker buildx du
+  --verbose`, since `du` ignores `until`, and a docker that cannot read or prune its cache skips that step, never the
+  tidy. (2026-11: rog held 39.45 GB of build cache, all of it reclaimable.)
+  `ic sandbox reset-owner <slug>` moves an unreadable owner file aside, the one way back in for an owner the daemon
+  locks out because it cannot read who owns it.
+- **This machine's sandboxes with no network** (2026-10-16, [`loopback.rs`](src/sandbox/loopback.rs)).
+  `ic sandbox list --json` rows also carry `sandboxId` (the 12-hex id of the connect token, null without one),
+  `localPort` (the host port the loopback listener is published on, from the binding docker holds, null when it
+  publishes none), `platformId` (the platform's id for the row, read off the sandbox's `/history/platform-row.json`,
+  null before an announce named one), and `displayName` and `logo`: the owner's name for the sandbox and its logo as
+  the daemon last heard them from the platform, read off `/history/presentation.json` beside the row's id, so the
+  desktop app still shows them while the platform is down (2026-11-09). `displayName` is the file's `name` when not
+  empty, `logo` its `image` only when that is a `data:image/` URL; a missing or unreadable file makes both null and is
+  never an error. Each file is one `docker cp`, every one of them at once. The text listing shows the same name after
+  the slug (`running   sandbox-3c469e9d6c58  Work`), and every verb that names a sandbox on this device takes that
+  name in place of its slug (2026-11-11, `sandbox::slug_for`): a slug (in any case), a 12-hex id or the container name
+  (`intentic-sandbox-<slug>`, 2026-11-16) still wins, the name matches whatever its case, and a name two sandboxes share
+  is refused with both slugs. A name nothing answers to is refused listing every slug here, each with its name. `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
+  prints one line `{"slug","sandboxId","platformId","localPort","email","token","expiresAt"}`: a daemon session for
+  the bound owner, minted by `docker exec`ing the image's `host-session-cli.js` (the daemon's README says why the machine is
+  a proof). It refuses a sandbox nobody has signed in to yet, and one too old to have the script (update it). The token
+  goes to stdout and to `~/.intentic/sessions/<slug>.json` (folder 0700, file 0600), never to a log.
+  `ic sandbox attention --json` ([`attention.rs`](src/sandbox/attention.rs)) asks every running sandbox's
+  `GET /agents/attention` on `http://127.0.0.1:<localPort>` at once (1 s to connect, 3 s in all), with the cached
+  session, minted again when missing, near its end or refused, and prints
+  `{"needsYou","working","sandboxes":[{"slug","name","sandboxId","platformId","needsYou","working","reachable"}]}`; a
+  sandbox asleep, stopped or silent is `reachable: false` with zeros.
+- A sandbox's **shape** is the owner's own ask for memory, CPUs, privileged and GPU, always whole
+  ([`shape.rs`](src/shape.rs)). `ic sandbox shape <slug> … --when now` restarts onto it; `--when next-restart` checks
+  it against the image's run contract (a bad value is refused here, not by the next update) and saves it as the
+  channel record's `desired_*` keys, next to what `prepare` staged. The next restart through ic applies it and drops
+  it in the same record write that names the new image: `start`, `restart`, an update, a rollback, a rebuild or a
+  `reshape`. Docker restarting the container by itself (`--restart unless-stopped`) does not. `--forget` drops it.
+  Programs pass the shape as the sandbox contract's own object, one `--set FIELD=JSON` per field (`--set
+  memoryGib=12 --set cpus=null`), and `--when` takes the contract's `nextRestart` too, so no caller spells a flag per
+  field and a field ic does not know is refused. `--memory`/`--cpus`/`--privileged`/`--gpus` on `shape`, and the
+  `reshape` verb with `--later`/`--forget`, are the older spellings, kept for machine agents released before
+  `--set`: a shim fetches a fresh ic on every run, so an older agent can be driving this one. They can go once no
+  agent older than the release carrying `--set` is left; a `sandbox-<slug>.shape` delta an older ic saved is
+  converted into the record the first time it is read, then deleted.
+- The shape's fifth field is the **swap** (2026-11-05, `--set swapGib=4`, `--swap 4g`, whole GiB and at least 1;
+  `null`/`default` for the default, a quarter of the memory cap rounded up, at least 1 and at most 4 GiB, and of the
+  machine's memory for a sandbox with no cap): how much the sandbox's `workload` cgroup may page into, the swap alone. The default is never carried; a swap the owner set rides on
+  the container as `SANDBOX_SWAP=<n>g`, which the run contract replays and sizes `--memory-swap` (the cap plus the swap)
+  by; an image whose contract predates it drops the variable, so ic stamps it on the run line itself when the contract
+  left it off. Changed alone with `--when now`, it is written into the running sandbox instead of restarting it:
+  `/run/intentic/workload-bounds.json` (which the sandbox reads its bounds from), the leaf's `memory.swap.max`, and a
+  best-effort `docker update --memory-swap`; the shape it runs with is then read from that file, and the next recreate
+  carries it in the env. A default set live is sized from what the sandbox sizes it from, read inside the container
+  (its cgroup's `memory.max`, else the machine's `MemTotal`), since the file pins whatever number it holds: sized from
+  docker's cap of 0, an uncapped sandbox's default came to 1 GiB where the sandbox holds up to 4. A record an older ic wrote has the four other `desired_*` keys and reads with the default
+  swap. `ic sandbox list --json` rows carry the bound in force as read inside the running container
+  ([`containment.rs`](src/sandbox/containment.rs)): `resources.swapMaxBytes` (the container) and
+  `resources.workloadSwapMaxBytes` (its work), bytes or null for none, and left out for a sandbox that is stopped or
+  does not answer within 5 s. They are read inside because on an engine without swap-limit support docker's own
+  `MemorySwap` says -1 whatever it was asked. After a launch that engine warns about, ic says once that it ignores
+  `--memory-swap`.
+- A sandbox's **egress** is what it may reach on the networks around this machine ([`sandbox/egress/`](src/sandbox/egress/),
+  the contract's `egress.ts`). `ic sandbox egress <slug> --policy <JSON>` sets the whole policy: `open` (nothing fenced,
+  no rules at all) or `internet-only`, which refuses every private, link-local, shared and multicast range and the
+  machine itself except the `allow` entries (an address or prefix, a hostname resolved on the host at every apply, or
+  the word `host`, each with optional ports and protocol). It is read as strictly as the contract writes it (an unknown
+  field is refused), kept in the channel record as `egress_policy`, and applied at once when the sandbox runs; a policy
+  whose rules cannot be put in is not saved, and the command says why. `ic sandbox egress <slug> [--json]` prints the
+  contract's `EgressStatus` (its `revision` is the sha256 of the canonical policy, `none` when nothing is held), and the
+  rows of `ic sandbox list --json` carry the same as `egress`. The machine's own word over every sandbox is
+  `/etc/intentic/os.json`'s `egress` on Intentic OS, else `~/.intentic/egress.json`: `minimum` lifts every profile,
+  `neverAllow` is refused before any allow entry. ic checks no signature and no tightening: its caller here is the
+  machine's owner, and the machine agent is the gate for a change from anywhere else.
+  - **The rules** are one nftables table of ic's own, `inet intentic_egress`, never Docker's chains. Each fenced sandbox
+    owns two base chains in it, on the forward hook (the LAN and the internet) and the input hook (the host's own
+    addresses, which on Windows include every WSL distro's services at the bridge gateway), each in order: replies to
+    connections already allowed, IPv6 neighbour discovery, peers on its own networks, the machine's `neverAllow`, DNS to
+    the private resolvers docker forwards to, the allow entries, then the private ranges, counted into an hour-long
+    dynamic set and rejected. The goldens are [`golden/`](src/sandbox/egress/golden/); the ranges are held to the
+    contract's `golden/egress-private.json` by a test on each side.
+  - **The match.** A sandbox on the network ic made for it is fenced by that network's subnets, from its first packet
+    (`match: network`). One on a network something else made (Compose) is fenced by that network's subnet less the
+    addresses of every other container on it (`match: address`), so a sandbox recreated onto a new address is fenced
+    from its first packet too, and its sibling services are not fenced. What can go wrong instead is on the sibling's
+    side: a container that starts on the shared network after the rules were drawn is, until `--follow` (within a
+    fraction of a second) or the next watch adds it to the exclusions, refused the private ranges and the host. Its own
+    subnet peers and the internet stay reachable the whole time. A sandbox whose container is gone keeps its fence on
+    the shared networks ic last fenced it on (remembered with what it applied, `~/.intentic/egress/<slug>.json`), less
+    everything on them now, until its policy goes open, it is removed, or the network goes: Compose's recreate removes
+    the container before it makes the next, and the next is inside a fenced subnet from its first packet. (2026-10-27,
+    measured on a WSL engine: matching the sandbox's own addresses left a recreate unfenced for 6.8 s under `--follow`,
+    and dropping the chains of a removed container still let the first request through.) A sandbox on the host's own
+    network cannot be fenced at all.
+  - **Putting them in.** A helper container on the engine's host network, `docker run --rm -i --network host --cap-drop
+    ALL --cap-add NET_ADMIN --pull never --entrypoint nft <image> -f -`, from an image the engine already holds (the
+    sandbox's own, which ships `nft`; `IC_EGRESS_IMAGE` names another). That reaches the right namespace wherever
+    docker runs: a Linux server, ic's WSL engine, Intentic OS, Docker Desktop's VM, a remote engine.
+  - **When.** After every start, restart, recreate and setup ic performs; on every `ic sandbox watch` (the machine
+    agent's minute), which also reads the counters and writes the status into the sandbox at `/run/intentic/egress.json`
+    (a report: changing it changes no rule); and, for starts ic did not perform (Compose's `up`, Docker's restart
+    policy), `ic sandbox egress --follow`, which follows `docker events` (container starts, network connects and
+    disconnects) and runs until stopped. Each burst of events costs one `nft -f`, through a helper the follower keeps
+    running on the host network (`docker run -d … --entrypoint sleep <image> infinity`, labelled ic's, one per side of
+    the computer by name) and `docker exec -i <helper> nft -f -`, with the host's resolvers read once at its start and
+    every ten minutes. A helper someone removed is started again, waiting out a removal docker has not finished; one a
+    killed follower left behind is taken by the next; the follower removes it when it ends. A follower that cannot have
+    its helper puts the change in the one-shot way, so losing the helper never fails a sandbox closed while its rules
+    are in the kernel (2026-10-27: a restart that raced the removal stopped a fenced sandbox). A removed sandbox's
+    rules go with it, and the table goes with the last; `ic engine remove` drops it before the engine goes.
+  - **Fail closed.** A running sandbox with a policy other than open whose rules cannot be put in is stopped, the reason
+    left in its restart intent, held so nothing restarts it unfenced, and its status is `failed` with the same reason.
+    An engine that cannot take rules at all (no nf_tables in its kernel, no image with nft) is `unsupported`: the policy
+    is held and nothing enforces it. A privileged sandbox under runc is the host's root and can step around any rule on
+    the host, so its status says `advisory: true`; under Kata it does not.
+  - (2026-10-27) Decisions. **One transaction per change, per sandbox, rather than the table rewritten whole:** on a
+    Windows PC, ic on Windows and ic in a WSL distro drive one engine and each holds the policies of the sandboxes it
+    keeps (side.rs), so a whole-table replace from one side would drop the other's fences until its next round. Each
+    `nft -f` adds and deletes a sandbox's chains and declares them again, so it lands whole or not at all, and keeps the
+    sets, so the counts survive the minute's reapply. A side changes only the sandboxes it keeps, and takes out the
+    chains of sandboxes the engine no longer has. **Reject, never drop:** TCP gets a reset (refused at once, and never
+    rate-limited by the kernel the way ICMP errors are), everything else ICMP administratively-prohibited, so an agent
+    sees the refusal at once instead of a timeout. **The policy home holds always stands:** the record's copy on the
+    sandbox's own volume (mirror.rs) is the sandbox's to write, so it never replaces a policy home holds, and is taken
+    only by a home that holds none. **DNS through private resolvers** (a LAN router, Docker Desktop's 192.168.65.7,
+    WSL's 10.255.255.254) is allowed on port 53 to exactly those, read from the engine host's own resolv.conf and the
+    container's `--dns`, since docker's resolver forwards from the container's side of the fence.
+- `ic sandbox logs [<slug>] [--tail N]` prints the tail of a sandbox's own log, both streams: what the machine
+  agent's Logs button and `sandbox_logs` tool read.
+- `ic sandbox inspect <slug> <agents|diagnostics> [args…]` ([inspect.rs](src/sandbox/inspect.rs)) reads a sandbox's
+  conversations, transcripts and diagnostics through its own `agents` and `diagnostics` commands, run by `docker exec`
+  as argv (no shell) with a 60-second deadline; their output and exit code are its own. Only reads run: `agents ls`,
+  `show`, `find` and `bundle`, every `diagnostics` verb (`errors`, `slow`, `turns`, `resources`, `restarts`,
+  `timeline`), or either one's `--help`. Every other verb, `--on` (a linked sandbox) and `--out` (a file) are refused,
+  wherever they stand. The exec carries no conversation, so the sandbox answers it as an unstamped caller: only about
+  conversations that are nobody's home and not private. A stopped or sleeping sandbox is said as such, and an image
+  older than the command is told to update. It is what the machine agent's `inspect_sandbox` tool runs, in place of an
+  agent's own `docker exec` through `run_command`, which is how one once read another sandbox's /history as root.
+  Put `--` before the command's words when the first is a flag (`ic sandbox inspect work agents -- --help`).
+- `ic sandbox fix [<slug>]` ([src/sandbox/fix/mod.rs](src/sandbox/fix/mod.rs)) checks every layer between this
+  machine and a sandbox in order, each with a deadline: Windows prerequisites, Docker Desktop, the engine, WSL, disk,
+  the container, its daemon, its registration, the network, the tunnel and the machine agent. It applies the fixes that
+  are safe unasked (starting Docker Desktop, tidying, starting a sandbox nobody stopped, finishing a cut-off swap,
+  restarting one whose registration gave up), asks on the terminal before the rest, and re-checks after each. Docker
+  Desktop is looked for by the one discovery `ic docker prepare`'s probe, its start and the desktop app all run
+  (`docker-host/src/desktop_app.rs`: the registry, the uninstall entry, the CLI on PATH, the Start-menu shortcuts);
+  from inside WSL it is asked through interop and the Windows path it answers translated to this distro's mount,
+  rather than assumed at `/mnt/c/Program Files` (2026-10-06). Every
+  automatic restart is busy-aware (agents mid-turn mean a yes first), and the repairs made through ic are counted on
+  the sandbox's volume (`/history/.ic/repairs.json`, `ledger.rs`, reported as `repairs` in `--json`): after three
+  automatic restarts in two hours the keeper stops and asks instead. A daemon netd keeps restarting (`health.rs`'s
+  crash loop) is never restarted with its container, which would put the same code back: the daemon check names the
+  crash and the error it last died on, and offers the version before the last update, or the log when there is none;
+  connect's postflight (`doctor.rs`) settles on the same finding instead of waiting it out. A container a person stopped outside ic (Docker
+  Desktop's Stop button: Exited, `unless-stopped`, exit 0 or 143, the stop in the engine's event log) is recorded as
+  held and left for a yes, and a stopped tunnel container from an older setup is removed rather than started. An
+  unattended run on a side that keeps no sandbox names the machine's trouble and repairs none of it (2026-10-05: a
+  device-only PC had the Docker Desktop its owner quit started every sweep). Docker Desktop's start at sign-in counts
+  as on when its settings or the HKCU Run key say so, and a source that cannot be read leaves it unknown, never a
+  finding (2026-10-05: the verdict flapped every few minutes). Its reports name this side's environment (`env`). Exit 0
+  is healthy or fixed, 1 something is left, 3 a fix needed a yes nobody could give, 4 Windows has to restart or sign
+  out first. `--auto` is the machine agent's run (safe fixes only, nothing asked), `--yes` and `--accept <ids>` give
+  consent in advance, and `--json` prints machine lines for the desktop app. Given the code the browser's recovery
+  panel minted (`--code`, or `FIX_CODE` through the `/fix` shim), or holding a sandbox's report key, it posts its
+  progress to the platform's host report, which the page mirrors. The platform never sends it anything. A finished
+  report also carries the machine agent's last upkeep pass (`~/.intentic/machine/upkeep.json`, summed, with the agent's
+  version), so the platform can tell whether a release brought machines to the current shape (2026-10-05).
+  `ic sandbox doctor` is the same engine, read-only. It also says what would hold a runaway in each sandbox
+  (`containment.rs`, warnings at worst, printed under the rows and carried as `containment` beside the report in its
+  `--json`): no swap bound at the container or its work, an engine reporting no swap-limit support, the machine's swap
+  more than twice the sandbox's cap, an out-of-memory killer (earlyoom, systemd-oomd, nohang) running in a WSL distro
+  other than the engine's, where it cannot see the sandbox's processes, and a daemon outside its own `/daemon` cgroup.
+- The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
+  writing one, so a flag change ships with the image.
+- **Sandbox windows on Intentic OS desktop.** No sandbox may draw until the owner allows it (`ic os screen allow|deny
+  <slug>`, or This computer's card; `/var/lib/intentic-os/screen-allowed.json`). `ic os screen serve` runs inside
+  sway's session and registers one security-context-v1 listener per running runc sandbox the owner allowed
+  (`os/screen.rs`). It watches sway's window events through the shared [sway-ipc](sway-ipc) crate and holds every
+  sandbox window to its rules itself: fullscreen is taken back, the windows of a sandbox no longer allowed are
+  closed, and no socket is served while the watch is down or on a sway older than 1.11. It uses engine `dev.intentic.sandbox`,
+  the slug as app id and the full container id as instance id, never an unrestricted Wayland socket. A held close
+  endpoint revokes new connections when the container stops or the service dies. Missing sockets and replacement
+  containers get fresh listeners. `ic os screen status --json` returns `{available, reason, sandboxes: [{slug,
+  allowed, socket}]}` and checks the service's live file lock, so stale files do not claim availability. On desktop
+  edition only, `os/policy.rs` creates `/run/user/1990/intentic/screen/<slug>` (0700, intentic) before Docker and
+  mounts the directory read-only at `/run/intentic/screen` in connect, recreate and runner run lines, so allowing a
+  sandbox later needs no recreate. Kata skips it (with a warning when the owner allowed it) because a Unix socket
+  cannot cross the VM boundary; `screen::shares_sockets` is the one answer the policy and the service both use. Windows
+  and macOS compile without the Linux-only Wayland dependencies. See the [OS image's protocol restrictions](../../_hosts/os-image/README.md#sandbox-window-boundary).
+- **Intentic OS (2026-10-13).** On a machine whose image carries `/usr/lib/intentic-os/release.json`
+  ([_hosts/README.md](../../_hosts/README.md)), `ic os` is the one door through which the OS changes, and its callers read
+  its JSON rather than bootc's. Anywhere else every verb stops with exit 3 and one sentence. `status --json` maps
+  `bootc status --json`, release.json, the boot's health verdict and the policy into the contract's
+  `IntenticOsStatusSchema` (a test rebuilds each of `golden/intentic-os.json`'s examples field for field); a bootc
+  that does not answer leaves the three deployments null and says why on stderr. `update`
+  stages the newest image of the channel for the next boot: `--check --json` only asks (`{available, version,
+  digest}`), and `--scheduled`, the daily timer's run, checks nothing under `updates: off`. `rollback` queues the
+  other deployment, and `channel <name>` switches to `<repository>:<name>`. bootc and `systemctl reboot` go through
+  `sudo -n` when ic is not root. `update --apply`, `rollback --apply` and `reboot` reboot the orderly way: each
+  running sandbox gets the resume ask and the restart intent (`--no-resume` as elsewhere), `ic os record` writes
+  which sandboxes run to `/var/lib/intentic-os/expected-running.json`, then systemd reboots. `health [--wait 600]`,
+  greenboot's required check, waits for docker and every recorded sandbox's daemon, writes
+  `/run/intentic-os/health.json`, and exits 0 green or 1 red with each failed check named. `pair` is first boot:
+  while the machine has no sandbox it takes a setup code typed on the console or pasted on a page it serves on the
+  network (port 80, else 8080; it answers only to the machine's own names and refuses a form posted from another
+  site), reads the code out of a whole setup command, runs `ic sandbox connect <code> -y` as its own process with
+  the output on both, and leaves `/var/lib/intentic-os/paired` once that succeeds. `INTENTIC_OS_ROOT` puts every
+  one of these paths under another folder, for tests.
+  On the desktop edition, `ic os bar` streams i3bar JSON with optional attention, network, sound and update
+  readers; clicks only navigate through `intentic://shell`. `ic os lock status --json`, `set-pin`, `off` and
+  `idle <minutes>` control the optional screen lock. A PIN of 4–12 digits arrives on stdin and is kept as a salted
+  PBKDF2 hash in `/var/lib/intentic-os/screen-lock/` (the `intentic` user's alone), never as an account password
+  and never in the settings. `ic os lock check` is what the lock screen asks, through pam_exec in
+  `/etc/pam.d/swaylock`: four misses in a row are free, and the fifth and each one after start a wait (30 s, doubling to an
+  hour) during which no PIN is checked. A session that starts with a PIN set begins locked. Turning it off forgets
+  the PIN and opens a lock screen that is up. The idle delay is 1–240 minutes, initially 5.
+- **Isolation on Intentic OS.** The policy is `/usr/lib/intentic-os/os.json` with `/etc/intentic/os.json` over it,
+  key by key: `isolation` (`auto`, `vm`, `container`; a word nobody knows is `auto`, said), `pairOnLan`, `updates`
+  (`stage`, `off`). Connect, every recreate and `runner up` pass the sandbox's run line through `os/policy.rs`. Off
+  Intentic OS it is unchanged. On it, `--runtime=kata` goes in right after `run` when the policy asks for a microVM
+  (`auto`: a sandbox started `--privileged`; `vm`: every one) and dockerd has the `kata` runtime. The line stays on
+  runc, with one line saying why, when dockerd has no `kata` or the line asks for what a microVM cannot give: the
+  host's network, PID, IPC or UTS namespace, the Docker socket, a GPU, another runtime. The tunnel sidecar is never
+  changed, and a policy change reaches a sandbox at its next recreate.
+- **Taking Intentic off a device** (`ic uninstall`, [src/uninstall/](src/uninstall/)). Every way out runs it: the
+  `uninstall` one-liner, the Windows uninstaller's page and the desktop app's **Uninstall Intentic…**. Unlike the other
+  shims, `uninstall.sh` and `uninstall.ps1` look for an ic already on the device before they download one
+  (`~/.intentic/ic/bin`, `/usr/local/bin`, PATH, then the `intentic-ic` the desktop app carries), so removing Intentic
+  needs no network, and they pass on whatever flags the person adds. It takes stock, then offers
+  two outcomes, the first preselected: remove everything (sandboxes and runners with their data, the keyring's saved
+  passwords, the intentic engine, the machine agent, folder sync, the app, caches and logs, and ic last, since it is
+  what is running), or keep the sandboxes, which also keeps what runs them (engine, agent, ic, keyring) and removes
+  only the app, folder sync and caches.
+  - There is no third outcome that keeps the data but removes what runs it: a removed sandbox's volumes, its trash and
+    its at-rest key are readable only through ic, so that data would be a leftover nobody can open.
+  - Data is never deleted unattended. `--yes` means keep the sandboxes when there is data, and deleting it takes
+    `--delete-data` with `--confirm <n>` (sandboxes and runners, recoverable ones counted) or the count typed. Docker
+    Desktop, WSL, the docker group, synced folders' files and `~/intentic/local` always stay.
+  - `--dry-run` reports what is here (`--ini <path>` for the Windows uninstaller page's ReadINIStr), and a plain run's
+    human lines fill that uninstaller's details list. _(2026-10-21) The desktop app's own "Uninstall Intentic…" went:
+    the system's uninstaller is the one way to remove the app, so the `--json` inventory and the `intentic-uninstall:`
+    markers that dialog read went with it._ The app uninstaller ic starts gets `INTENTIC_UNINSTALL=done`, so its own hook does not call ic back. The person's
+    page is [/docs/uninstall/](../../_site/site/src/pages/docs/uninstall.astro).
+- `ic docker prepare` checks and, with consent, installs what Docker needs; `ic runner up` starts a runner container for
+  a parent sandbox.
+- On Windows, `ic docker prepare` ends every piped run with one `intentic-prepare-summary: {json}` line (ready,
+  needsSetup, or cantRun; engine choice; download size and time estimates; machine facts; what is already fine in
+  `met`). Each `intentic-requirement:` row carries `"admin"` and `"ours"`. New checks: physical memory (under 7 GiB is
+  blocked), Windows S mode, and on PCs without Docker Desktop the Intentic engine rows (`engine`, `engine-start`) instead
+  of Docker Desktop's. With consent, every step that needs administrator runs in one elevated PowerShell pass (one UAC
+  prompt). A restart is never forced on a pre-consented caller: everything that can finish first does (including engine
+  prefetch), then exit 4 with `restart: true` in the summary; in a terminal, restart is offered with `shutdown /r /t 0`
+  only after the reader confirms and is warned to save work elsewhere. PCs that already have Docker Desktop keep the
+  per-user install path, the 600 MB download beside WSL2 setup, and the docker-users rules from before (2026-10-09).
+- `ic image prefetch` downloads the sandbox image's layers over HTTPS into `~/.intentic/image-cache/` before Docker
+  exists, resumable and locked against a second fetcher, printing `intentic-prefetch: {json}` readings. The desktop app
+  starts it while Docker is being set up. `ic sandbox connect`, at its pull, finishes that cache (waiting for a prefetch
+  still running) and loads it with `docker load`, then deletes it; with no cache, or one it cannot use, it pulls as
+  before (2026-10-08). Where Docker's engine already answers (any OS), it pulls the image into Docker itself ahead of
+  the first setup (`pull_ahead`), with the same readings counted off docker's layer lines against the registry's sizes,
+  so the desktop app's first-launch download gets it there before anyone presses anything (2026-10-21: the median first
+  setup waited 96 s on that pull, 199 s at p90). Docker installed with its engine down still skips it. A cache is
+  dropped once Docker has the image by any route, and one untouched for two weeks is swept. Measured on a fresh
+  Windows 11 VM at about 50 MB/s: the 1.8 GB finished before the restart; loading it took 237 s where a pull took 192 s,
+  since `docker load` takes the archive in before it unpacks while a pull overlaps the two, so the prefetch pays off on
+  links slow enough that the download outlasts the unpacking. See [src/image_cache.rs](src/image_cache.rs).
+- **Our engine on Windows without Docker Desktop.** `ic engine fetch` downloads the WSL rootfs tarball, the Windows
+  static `docker.exe` and its `buildx` plugin into `~/.intentic/engine-cache/` (same `intentic-prefetch:` readings as `ic image prefetch`).
+  `ic engine install` imports the `intentic-engine` WSL2 distro under `%LOCALAPPDATA%\Intentic\engine`, generates TLS
+  inside the distro, copies client material to `%USERPROFILE%\.intentic\engine\tls\`, installs `docker.exe` under
+  `%USERPROFILE%\.intentic\engine\bin\` and `docker-buildx.exe` into `%USERPROFILE%\.docker\cli-plugins\` (unless the
+  CLI already finds one there or in Docker Desktop's plugin folder: the static zip has none, and Docker 29's `docker
+  build` refuses to run without it; an engine installed before that gets it before its next image build), writes `%USERPROFILE%\.intentic\engine\engine.json`, registers
+  `HKCU\…\Run\IntenticEngine` to run `ic engine start --quiet` at sign-in, and starts a hidden keeper
+  (`wsl.exe -d intentic-engine --exec /usr/local/bin/intentic-engine <port>`). Nothing of either is a window
+  (2026-10-13): the keeper gets a console of its own with no window rather than none, since the Store WSL's `wsl.exe`
+  that System32's hands it to was given a new console by Windows, which Windows Terminal showed as a tab running the
+  engine; and the Run value starts ic under `conhost.exe --headless`, since a console program Explorer starts at sign-in
+  gets a window for as long as it runs. Not the machine agent's `intentic-launch.exe`, which a PC with ic alone does
+  not have. Every start rewrites a Run value an older ic registered. Every `ic` run calls `engine::adopt()`
+  first so `DOCKER_HOST`, `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, and the bundled `docker.exe` apply to this process
+  only — nothing is added to the user's PATH. `ic engine status --json` answers for the desktop app; `ic sandbox fix`
+  can start a stopped intentic engine automatically. Build: [engine/](engine/); implementation: [src/engine/](src/engine/).
+  - **Installed is not in use (2026-10-09).** `engine.json` has an `active` switch: only an active record points
+    `docker` at our engine (ic, the desktop app, the machine agent alike). A PC's setup installs it active; on a PC
+    whose sandboxes are still on Docker Desktop, it installs it inactive and switches nothing, since those sandboxes
+    would otherwise vanish from every `docker` this account runs: the setup's next step moves them, and the move switches.
+  - **Moving between engines.** `ic engine move --to intentic|docker-desktop` carries every sandbox this side of the
+    PC keeps: stopped and set aside as `<name>.moved`, its exact image across by `docker save | docker load`, each
+    volume by a tar stream checked against a list of every file and its size, then made again by the ordinary reshape
+    (run contract, health waits). Volume and image archive streams reach our engine directly over TLS; other commands
+    keep using its named pipe. The relay could end a tar stream early despite docker exiting successfully
+    (2026-10-26, nightly 40291565927). A mounted encryption key must still be a host file: a missing key or a directory is
+    refused before any sandbox is stopped, and must be restored from the original key. The PC switches only once all
+    are across; any failure puts every sandbox back as it was. Each volume and placeholder a move creates on the target is
+    recorded in `moves.json` (`made`) before it is created and forgotten once the move finishes or its undo removed it, so
+    what a move cut off or an undo the engine refused leaves behind is the next move's to replace; a same-named volume
+    with no record is replaced only when it is empty, and refused otherwise (2026-11-20). Long silent steps (sizing and
+    hashing a volume, the reshape) keep the move's heartbeat fresh, so no other `ic` reads a move still working as dead.
+    The old copies stay for 7 days in
+    `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
+    removes them; after a move's copies are due (or with `--now`), cleanup also removes unused sandbox images marked by
+    the Intentic source label or sandbox image repository and stopped `egress-helper` containers left on the old engine
+    when their sandboxes are gone. It never removes volumes, images used by any container, or unmarked images. No listing
+    names a moved copy as a sandbox (`ic sandbox list` skips `<name>.moved`), and a `docker system
+    prune` on that engine can take one sooner, since it is a stopped container. Sandboxes kept by a WSL-side `ic` stay
+    on Docker Desktop. Measured on omen: 1.47 GB of volumes
+    with checksums matching in 61 s once the image was there (about 70 MB/s onto our engine, 26 MB/s back); the
+    8.75 GB image crossed as its 2.36 GB export at about 45 MB/s. See [src/engine/moves.rs](src/engine/moves.rs).
+  - **A move cut off part-way (2026-11-20, intentic#48).** A move is running only while its process is alive and its
+    heartbeat is under 10 minutes old; a dead pid is proof it ended, a live one is not proof it runs (Windows reuses
+    pids). Before each step that changes the source (stop, rename, commit) the move writes what it is about to do into
+    `moving.progress` in `moves.json`, beside its `from` and its `log`. An interrupted move (its ic killed: the desktop
+    app quit mid-copy ends ic's whole process tree) is rolled back with the same steps as a failed move's undo: the
+    source's containers get their names back and run again if they ran, and what was made on the target is removed,
+    what the engine refuses staying in `made`. If the device had already switched, every sandbox was across, and the move
+    is recorded as finished instead. The rollback adds a line to the move's own log and clears `moving`; an entry left
+    while the source engine does not answer stays for the next try. `ic engine move --abort` does it on its own (refused
+    while a move runs); every `ic engine move` and `ic docker prepare` does it first, so Prepare this PC heals itself.
+    Other verbs that change sandboxes are refused (exit 3) while an interrupted move is not undone; reads go ahead, and
+    `ic engine status --json` says `moves.interrupted: true`. An entry from ic 1.429.0 or older records no steps: it
+    is undone by names alone, renaming back and starting only `<name>.moved` containers ic's own naming made for this
+    side's sandboxes whose own name is free and which no finished move keeps, and deleting nothing.
+  - **Which engine.** [src/engine/choice.rs](src/engine/choice.rs): ours, on every Windows PC, since 2026-10-13.
+    Only `IC_ENGINE=docker-desktop` (a test or CI run) puts a setup on Docker Desktop. Nothing the PC holds keeps it
+    there: sandboxes still on Docker Desktop are carried across by the setup's `engine-move` step
+    ([src/prepare/plan.rs](src/prepare/plan.rs)), and `ic engine prefer docker-desktop` (the desktop app's "Not now")
+    only stops the move being offered. Until a PC's sandboxes are moved, the Docker Desktop (or Rancher Desktop) they
+    run on is the person's own: checked, never installed, started or repaired (bring your own Docker). A GPU sandbox
+    cannot move yet, so a setup that meets one stops and says so.
+  - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
+    the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
+    `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.
+  - **A VHDX WSL cannot reattach.** If Windows ran out of drive space under the engine disk, WSL can keep a broken
+    attachment after `ic engine start` or a plain `ic engine restart`. They try the ordinary start first and report
+    when guest errors match the disk failure. `ic engine restart --wsl` then consents to `wsl --shutdown` and starts
+    the engine again; before shutdown it requires at least 5 GiB free on the drive containing the VHDX. This restarts
+    Docker Desktop and every other WSL distro too. `ic sandbox fix` offers the same machine-wide repair as a consented
+    step. Free space first when the drive is nearly full.
+  - **Compacting the engine disk.** `ic engine compact` measures the guest's used blocks and the VHDX size, and skips
+    an estimated reclaim below 5 GiB unless `--force` is passed. It trims the running guest, then asks before stopping
+    the engine and its workloads (or accepts `--yes`). Once the VHDX is released it uses DiskPart's read-only attach and
+    compact steps through one administrator prompt; `--wsl` consents to `wsl --shutdown` if WSL still holds the file,
+    restarting Docker Desktop and every other distro. `--json` returns the before/after VHDX size and Windows drive
+    free space for a machine agent. It uses DiskPart on Windows Home, which does not include Optimize-VHD.
+  - **A disk that is never sparse (2026-10-30).** `.wslconfig`'s `sparseVhd=true` makes every VHDX WSL creates sparse,
+    the engine's included, and a sparse VHDX turns each block the guest trims into a hole in the NTFS file whose refill
+    takes a fragment of its own. Under a sandbox's churn rog's 909 GB disk reached 1.08 million fragments, NTFS refused
+    the writes that fill a hole, and after a WSL restart the engine could neither mount its disk
+    (`ERROR_FILE_CORRUPT`) nor replay its journal. The import, and every start of a stopped engine, turn the disk back
+    with `wsl --manage <distro> --set-sparse false`: a dynamic VHDX that is not sparse reuses what a trim frees inside
+    itself and fragments only as it grows, at the cost of no longer handing that space back to Windows. One that
+    cannot be changed (the distro already running, a disk too fragmented to fill its holes) starts as it is, with a note.
+  - **Its disk, watched (2026-11-03).** Every sandbox and every compose project on the engine writes to its one ext4
+    disk. On rog one sandbox's history volume (462 GB of Rust `target/`) filled it and an unrelated Postgres of the
+    owner's PANICked on ENOSPC, with nothing said: WSL's and Windows' own `df` show other disks, a sandbox's disk watch
+    cleans only its own checkouts, and tidy runs daily. `ic engine disk` ([src/engine/disk.rs](src/engine/disk.rs))
+    reads it with one `df` through `wsl.exe --exec`, only while the distro runs (`wsl -d` would start a stopped one), and
+    answers a level off what a process that is not root may still write, since ext4 keeps 5% back for root (54 GB on
+    rog) and a database in a container is not root: `ok`, `low` under 10% of the disk (the sandboxes' own watch says low
+    at the same share), `critical` under 5%, `full` under the size of the ballast the keeper holds back
+    ([engine/README.md](engine/README.md#its-disk)). `--json` is the machine agent's.
+    On Windows, ic also measures the Windows drive holding the engine's VHDX and caps Available to the space that can
+    actually be written there, accounting for blocks already allocated by the dense VHDX. When that drive is the limit,
+    the total and level use the capped figures and human output names the drive; JSON keeps the effective
+    `totalBytes`/`availableBytes`, adds raw `diskTotalBytes`/`diskAvailableBytes`, `limitedBy`, and the `host` drive and
+    backing file details. Each reading refreshes `~/.intentic/host/disk-<engine>.json` atomically. Windows sandbox
+    containers and generated Compose files bind that folder read-only at `/run/intentic/host`; Linux and macOS hosts do
+    not add the bind. A missing or failed hint leaves the guest disk reading usable.
+    `--consumers` names what takes the space and whose it is
+    ([src/engine/disk_consumers.rs](src/engine/disk_consumers.rs)): ic's labels and volume and image families name a
+    sandbox, `com.docker.compose.project` a compose project, images count only the space no other image shares. It is
+    one `docker system df -v`, which sizes every volume by walking it (a minute once on rog, not done after ten minutes
+    under load the next time), so it is kept in `~/.intentic/engine/disk-consumers.json` for `--max-age` minutes and
+    bounded at thirty; `--kept` answers from the kept one at any age and never measures. `--relieve` clears what is
+    nobody's data, more at each level: dangling build cache and dangling images when low, all unused build cache when
+    critical, and when full first the ballast, then the same. Never a volume, never an image with a name (tidy decides
+    those), and never during a move between engines (the read still runs). Rejected: telling from the sandboxes alone.
+    Each one sees this disk through its own volume and says low, but it can neither name the owner's compose database
+    nor clear the engine's cache.
+  - **A network of its own.** WSL's distros share one network namespace, and Docker Desktop keeps its engine in its
+    own; since rootfs 1.1.0 ours does too. The keeper (written into the distro by every start, from
+    [engine/rootfs/](engine/rootfs/)) runs dockerd in the namespace `intentic`, with pasta for the way out, a
+    loopback-only forward from the distro's 127.0.0.1 for each port listening inside (the API and every port a sandbox
+    publishes), and `host.docker.internal` reaching the host. Nothing of the engine's shows in another distro's network,
+    and a person's own Docker Engine in WSL no longer clashes with it. Where the namespace cannot be made, the keeper
+    falls back to the shared network as before (and there refuses to start beside another engine owning `docker0`);
+    `ic engine status` names the mode (`network`). One keeper per distro, by a lock.
+  - **A named pipe, as Docker Desktop has.** docker.exe reads a TCP endpoint at a fraction of the speed it reads a
+    pipe (36–40 against 284 MB/s on omen), so `ic engine start` keeps a relay running (`ic engine relay`,
+    [src/engine/relay.rs](src/engine/relay.rs)) that serves the engine on `\\.\pipe\<distro>.<user>` and carries
+    each connection to the TLS endpoint. `engine.json` names it (`pipe`), and ic, the desktop app and the machine agent
+    use it while it is there and TLS on TCP otherwise. See [engine/README.md](engine/README.md#its-named-pipe).
+  - **WSL distros, and what they keep.** `ic engine wsl enable <distro>` makes the engine a WSL distro's Docker as
+    Docker Desktop's integration does (its socket, its `/home` paths for bind mounts, `docker` with compose and
+    buildx, a systemd unit that redoes it at every start; beside Docker Desktop's integration, a docker context instead
+    of the socket); `ic engine copy` carries what a move leaves alone (a distro's
+    own volumes, images and stopped containers), also from inside WSL between the two sockets. See
+    [engine/README.md](engine/README.md#wsl-distros).
+  - **Tests and CI.** `IC_ENGINE_DISTRO` names another distro (its own disk folder and Run key value),
+    `IC_ENGINE_AUTOSTART=0` registers no sign-in start, and `INTENTIC_ENGINE_TARBALL` hands in a rootfs built from the
+    checkout. The Windows smoke's tier 4 (`_tools/desktop-smoke-windows`) runs it on the CI machine.
+
+## Key files
+
+- [src/main.rs](src/main.rs) — every command and flag, with its help text.
+- [src/sandbox/compose.rs](src/sandbox/compose.rs) — keeps a sandbox Docker Compose runs Compose's across a swap.
+- [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup one-liner's flow after Docker: claim, launch, reachability.
+- [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — every image swap (update, prepare, rollback, rebuild, reshape) as one flow.
+- [src/sandbox/probation.rs](src/sandbox/probation.rs) — the watch that finishes interrupted swaps and rolls a failing new version back.
+- [src/sandbox/side.rs](src/sandbox/side.rs) — which side of the computer keeps a sandbox, and the keeper's lease;
+  [src/sandbox/inside.rs](src/sandbox/inside.rs) reads and writes the files every side shares under `/history/.ic/`.
+- [src/sandbox/egress/](src/sandbox/egress/) — `ic sandbox egress`: the policy, the match, the nftables rules and
+  their goldens, the status.
+- [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command, or its Compose file (`compose_out.rs`).
+- [src/os/](src/os/) — `ic os`: Intentic OS's status, updates, orderly reboots, boot health and first-boot pairing;
+  [src/os/policy.rs](src/os/policy.rs) is the isolation policy every sandbox run line passes through.
+- [src/sandbox/host_files.rs](src/sandbox/host_files.rs) — holds every file ic and the daemon share inside the
+  container (the restart ask, the update markers, the boot failure, the boot marker, the work signal) to the daemon's
+  own path and shape: its `golden/host-files.json` and the contract's `golden/update-*.json`.
+- [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
+- [src/image_cache.rs](src/image_cache.rs) — `ic image prefetch` and the cache `connect` loads; [src/fetch.rs](src/fetch.rs)
+  is the resumable download both it and the Docker Desktop installer use.
+
+## Commands
+
+```sh
+cargo test --manifest-path _hosts/ic/Cargo.toml --workspace   # ic, and the two crates the desktop app shares (bounded, docker-host)
+bash _tools/scripts/build/build-ic.sh linux-x64   # release binaries into _hosts/ic/dist-bin/
+```

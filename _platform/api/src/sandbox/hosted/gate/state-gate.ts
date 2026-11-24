@@ -103,7 +103,7 @@ export const readPlanAnswer = (answer: FlyExecAnswer): HostedPlanVerdict => {
     if (answer.exitCode !== 0) {
         // The planner's own path, quoted, as node names the module it could not find: a module the planner imports and the
         // image lacks names that module instead (`Cannot find module '…/x.js' imported from …/state-plan.js`), and that
-        // image is broken, not old (_sandbox/ic/src/sandbox/preflight.rs predates_engine).
+        // image is broken, not old (_hosts/ic/src/sandbox/preflight.rs predates_engine).
         if (answer.stderr.includes(`Cannot find module '${STATE_PLANNER}'`)) {
             return { kind: `unknown`, reason: `the image predates the state-conversion engine` };
         }

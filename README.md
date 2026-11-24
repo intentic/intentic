@@ -193,11 +193,12 @@ Questions go to [Discord](https://discord.gg/3veuzYp32T), bugs to [Issues](https
 | Area | What lives there |
 | --- | --- |
 | [_editor](_editor) | The web app you look at, plus desktop and mobile shells and the UI kit |
-| [_sandbox](_sandbox) | The daemon that owns a project's sandbox, and the CLIs agents use inside it |
+| [_sandbox](_sandbox) | The daemon that owns a project's sandbox, and the libraries and services around it |
 | [_platform](_platform) | The hosted plane: sign-in, sandbox registry, tunnels, database |
 | [_extensions](_extensions) | Bundled extensions: agents, connectors, automations, viewers |
 | [_shared](_shared) | Contracts and SDKs more than one part is written against |
-| [_search](_search) | `lsp` for agents, and the editor search box's ripgrep searches |
+| [_agent-tools](_agent-tools) | The CLIs agents run inside a sandbox (`lsp`, `fileq`, `webq`), and the editor search box's ripgrep searches |
+| [_hosts](_hosts) | What runs on the machine under a sandbox: the `ic` host CLI and the Intentic OS image |
 | [_devices](_devices) | What runs on your own machines: device agent, browser extension |
 | [_site](_site) | intentic.dev and the interactive demo |
 | [_tools](_tools) | Shared config, checks, test harnesses, maintainer scripts |

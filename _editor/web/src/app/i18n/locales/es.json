@@ -8968,6 +8968,7 @@
             "desktopSyncStopped": "La sincronización de escritorio se detuvo en {devices}; su carpeta no se está sincronizando",
             "environmentBuilding": "Se está construyendo el nuevo entorno de tu sandbox",
             "extensionsWaiting": "{count} extensión espera tu aprobación | {count} extensiones esperan tu aprobación",
+            "extensionMoved": "{reason}: instálala desde allí para seguir usándola",
             "filesOnlyOnCloudMachine": "Sus archivos solo están en la máquina en la nube, sin copia en este ordenador",
             "newSandboxVersionAvailable": "Hay una versión nueva del sandbox",
             "noAiAccountConnected": "No hay ninguna cuenta de IA conectada, el agente no puede ejecutar un turno",

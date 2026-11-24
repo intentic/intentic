@@ -17,19 +17,22 @@ import {
     useDevice,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { isPeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LiveLinkRows from "./LiveLinkRows.vue";
 import { useExtensions } from "../../models/extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../../models/sandbox/devices/useDevices";
-import { HOST_DOOR, PHONE_DOOR, usePeerConnect, WEBEXT_DOOR } from "../../models/sandbox/devices/usePeerConnect";
+import { PEER_DOORS, usePeerConnect } from "../../models/sandbox/devices/usePeerConnect";
 import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 import { useTier } from "../../client/sandbox/useTier";
 import { useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
-import { useCapabilityPairing } from "./capabilityPairing";
+import { type PairingPeers, useCapabilityPairing } from "./capabilityPairing";
+import { slotsOf } from "./kinds/kindSlots";
 import { useCapabilityProbe } from "./capabilityProbe";
 import { useCapabilityRoute } from "./capabilityRoute";
 import { here, page as pages } from "../../lib/routes/links";
@@ -43,14 +46,10 @@ import CapabilitySetupForm from "./connect/CapabilitySetupForm.vue";
 import CatalogDetail from "../../components/CatalogDetail.vue";
 import CatalogTile from "../../components/CatalogTile.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
-import BrowseExtensionsLink from "./connect/BrowseExtensionsLink.vue";
 import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import { useFieldStandIns } from "./model/fieldStandIns";
-import HostConnectDialog from "./connect/hosts/HostConnectDialog.vue";
 import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
-import WebExtConnectDialog from "./connect/WebExtConnectDialog.vue";
-import PhoneConnectDialog from "./connect/PhoneConnectDialog.vue";
 import { registerWakeOnce } from "./connect/phoneWake";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useConnectionActions } from "./connectionActions";
@@ -80,13 +79,18 @@ const { rows: processRows, busy: processBusy, start: startProcess, stop: stopPro
 // Desktop sync, the other door a machine arrives through, holds no tile; read off the Devices tab's list, never polled here.
 const { devices: fleet, readAt: fleetReadAt, refetch: refetchFleet } = useDevices({ poll: false });
 const { mobile } = useDevice();
-// Devices (host-kind), browsers (webext-kind) and phones (phone-kind) of the user's own, each paired through its own door.
-const hosts = usePeerConnect(HOST_DOOR);
-const browsers = usePeerConnect(WEBEXT_DOOR);
-const phones = usePeerConnect(PHONE_DOOR);
+// Devices (host-kind), browsers (webext-kind) and phones (phone-kind) of the user's own, each paired through its own
+// door, read from the one table every peer kind must have a door in.
+const hosts = usePeerConnect(PEER_DOORS.device);
+const browsers = usePeerConnect(PEER_DOORS.webext);
+const phones = usePeerConnect(PEER_DOORS.phone);
 const { peerFor: hostFor } = hosts;
 const { peerFor: browserFor } = browsers;
 const { peerFor: phoneFor } = phones;
+const peers: PairingPeers = { device: hosts, webext: browsers, phone: phones };
+// The roster's answer for a peer's connection: whether it has ever paired, and whether it is up now.
+const peerOf = (kind: CapabilityKind, id: string): { readonly lastSeen?: number | undefined } | undefined =>
+    isPeerKind(kind) ? peers[kind].peerFor(id) : undefined;
 // Counts from whatever the registry cache already holds (`read: false`); absent until something has actually browsed.
 const { entries: publishedExtensions } = useRegistry({ read: false });
 
@@ -150,11 +154,9 @@ const { savedName, values, liveEffects } = form;
 const probe = useCapabilityProbe({ selected, form });
 const standIns = useFieldStandIns({ selected, editing, values, kept: form.keptSecrets, alarm: form.fieldAlarm });
 
-const pairing = useCapabilityPairing({ hosts, browsers, phones, contributionOf, refetch, error });
+const pairing = useCapabilityPairing({ peers, contributionOf, refetch, error });
 const { profileVisible, profileCapability, profileLabel, profileMode, openBrowser, startAgentLogin, openPairing, removePairedAccess } = pairing;
-const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, connectRenamed, onHostConnected, onHostRenamed } = pairing;
-const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
-const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, onPhoneConnected } = pairing;
+const { dialog: pairingDialog, handOff } = pairing;
 const saving = useCapabilitySubmit({
     hosted,
     selected,
@@ -218,17 +220,9 @@ const toggleRow = (id: string, open: boolean): void => (open ? openEdit(id) : st
 // listed mid-write, which would otherwise take the form away while it is still writing.
 const draftOpen = computed(() => adding.value || (saving.submitting.value && editing.value === undefined && selected.value?.singleton !== true));
 // VPN tunnels and network disks list their live links too: their rows dial and mount from the list.
-const liveKind = computed(() => (selected.value?.kind === `vpn` || selected.value?.kind === `netdisk` ? selected.value.kind : undefined));
-// Which pairing is under way under a row: the device command, the browser code or the phone's code.
-const pairingUnder = (id: string): `host` | `browser` | `phone` | undefined => {
-    if (connectVisible.value && connectId.value === id) {
-        return `host`;
-    }
-    if (browserConnectVisible.value && browserConnectId.value === id) {
-        return `browser`;
-    }
-    return phoneConnectVisible.value && phoneConnectId.value === id ? `phone` : undefined;
-};
+const liveKind = computed(() => slotsOf(selected.value?.kind).liveLinks);
+// What the tile's own kind adds above its list (where extensions are found, on the tile people arrive at wanting one).
+const headerExtra = computed(() => slotsOf(selected.value?.kind).headerExtra?.({ publishedCount: publishedCount.value, verifiedCount: verifiedCount.value }));
 // What the tile does and how to get its credential: beside an open form on a wide pane, else folded under the list.
 const contextOpen = ref(false);
 watch(
@@ -319,8 +313,8 @@ onBeforeUnmount(() => {
                             }}{{ t(`capabilities.capabilities.finishSetup`) }}
                         </RouterLink>
 
-                        <!-- Where extensions are found, on the tile people arrive at wanting one. -->
-                        <BrowseExtensionsLink v-if="selected.kind === 'extension'" :published-count="publishedCount" :verified-count="verifiedCount" />
+                        <!-- What the tile's kind adds above its list: where extensions are found, on the tile people arrive at wanting one. -->
+                        <component v-if="headerExtra" :is="headerExtra.is" v-bind="headerExtra.props" />
 
                         <!-- Nothing listed yet: what the tile does and how to get its credential lead, before the new row's form
                              (on a wide pane the side column carries them), on the page rather than boxed inside the row. -->
@@ -394,9 +388,7 @@ onBeforeUnmount(() => {
                                 :key="instance.id"
                                 :entry="selected"
                                 :instance="instance"
-                                :host="hostFor(instance.id)"
-                                :browser="browserFor(instance.id)"
-                                :phone="phoneFor(instance.id)"
+                                :peer="peerOf(selected.kind, instance.id)"
                                 :state="rowState(selected, instance)"
                                 :facts="cardRowFacts(instance)"
                                 :open="editing?.id === instance.id"
@@ -420,39 +412,8 @@ onBeforeUnmount(() => {
                                     v-on="formEvents"
                                 />
                                 <!-- The pairing a Connect or a fresh add started, under the row it pairs rather than over the page. -->
-                                <template v-if="pairingUnder(instance.id) === `host`" #pairing>
-                                    <HostConnectDialog
-                                        v-model:visible="connectVisible"
-                                        :inline="true"
-                                        :id="connectId"
-                                        :platform="connectPlatform"
-                                        :permissions="connectPermissions"
-                                        :unnamed="connectUnnamed"
-                                        :renamed="connectRenamed"
-                                        @connected="onHostConnected"
-                                        @renamed="onHostRenamed"
-                                    />
-                                </template>
-                                <template v-else-if="pairingUnder(instance.id) === `browser`" #pairing>
-                                    <WebExtConnectDialog
-                                        v-model:visible="browserConnectVisible"
-                                        :inline="true"
-                                        :id="browserConnectId"
-                                        :install="browserInstall"
-                                        :permissions="browserPermissions"
-                                        @connected="onBrowserExtConnected"
-                                    />
-                                </template>
-                                <template v-else-if="pairingUnder(instance.id) === `phone`" #pairing>
-                                    <PhoneConnectDialog
-                                        v-model:visible="phoneConnectVisible"
-                                        :inline="true"
-                                        :id="phoneConnectId"
-                                        :install="phoneInstall"
-                                        :permissions="phonePermissions"
-                                        :platform="phonePlatform"
-                                        @connected="onPhoneConnected"
-                                    />
+                                <template v-if="pairingDialog?.id === instance.id" #pairing>
+                                    <component :is="pairingDialog.is" v-bind="pairingDialog.props" />
                                 </template>
                             </CapabilityInstanceRow>
                             <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this tile would give commands, files and screen. -->

@@ -8,7 +8,7 @@ import { repoRoot } from "@intentic/constants/node";
 // Runs this checkout's own ic binary, not the wizard's fetch-latest-release one, so this lane tests this branch, not
 // the last release. Checked in order, all from this checkout:
 // - IC_BIN: handed in by CI, cross-built with the Rust toolchain; named and missing, it fails rather than stands down.
-// - _sandbox/ic/dist-bin/…: what build-ic.sh left, for a developer who already built one.
+// - _hosts/ic/dist-bin/…: what build-ic.sh left, for a developer who already built one.
 // - target/release/ic: a previous cargo build --release in this tree.
 // - cargo: build it now, if the toolchain is here.
 // With none found, stands down with an actionable message rather than failing, since this tier blocks releases.
@@ -17,9 +17,9 @@ const run = promisify(execFile);
 const root = repoRoot(import.meta.url);
 
 // What `build-ic.sh linux-x64` writes: a static musl binary, same artifact shipped via IC_BIN.
-const BUILT = join(root, `_sandbox/ic/dist-bin/ic-linux-amd64`);
-const CARGO_BUILT = join(root, `_sandbox/ic/target/release/ic`);
-const MANIFEST = join(root, `_sandbox/ic/Cargo.toml`);
+const BUILT = join(root, `_hosts/ic/dist-bin/ic-linux-amd64`);
+const CARGO_BUILT = join(root, `_hosts/ic/target/release/ic`);
+const MANIFEST = join(root, `_hosts/ic/Cargo.toml`);
 
 export type IcBinary = { readonly path: string } | { readonly standDown: string };
 
@@ -59,7 +59,7 @@ export const findIcBinary = async (): Promise<IcBinary> => {
         return {
             standDown:
                 `the CLI lane needs this checkout's ic binary and found none: no IC_BIN, nothing at ` +
-                `_sandbox/ic/dist-bin/ic-linux-amd64, and no cargo to build one. Build it with ` +
+                `_hosts/ic/dist-bin/ic-linux-amd64, and no cargo to build one. Build it with ` +
                 `bash _tools/scripts/build/build-ic.sh linux-x64, or point IC_BIN at one.`,
         };
     }

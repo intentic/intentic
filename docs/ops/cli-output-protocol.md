@@ -15,7 +15,7 @@ flowchart LR
 
 Everything a person sees comes from one of three places, and all three draw the same shapes:
 
-- [`_sandbox/ic/src/ui.rs`](../../_sandbox/ic/src/ui.rs) for `ic`;
+- [`_hosts/ic/src/ui.rs`](../../_hosts/ic/src/ui.rs) for `ic`;
 - [`_devices/local-agent/src/ui.ts`](../../_devices/local-agent/src/ui.ts) for `intentic-machine`;
 - the shim kit pasted into every install script, for the few lines a script prints before it hands over to one of those binaries.
 

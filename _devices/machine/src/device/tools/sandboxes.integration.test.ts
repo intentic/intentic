@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import type { DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
-import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../policy.js";
 import {
     createSandbox,
@@ -32,16 +31,7 @@ import {
     tailSandboxLogs,
 } from "./sandboxes.js";
 import { checkPerIcFile, featuresFrom, fetchIc, icAssetName, icCandidates, icFeaturesFrom, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
-
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
+import { grantWith } from "../device-testing.js";
 
 // What ic prints for `ic sandbox list --json`, verbatim from its listing (listing.rs's own test builds the same object):
 // the agent parses it against the contract rather than re-deriving any of it from docker.
@@ -144,12 +134,12 @@ test("a sandbox is found by its id, its container name or the owner's name, and 
 });
 
 test("listing is refused only when NEITHER grant covers it, naming the manage switch", async () => {
-    await expect(listSandboxes(scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(ScopeError);
-    await expect(listSandboxes(scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(listSandboxes(grantWith("agent", { shell: "off", sandboxes: "off" }))).rejects.toThrow(ScopeError);
+    await expect(listSandboxes(grantWith("agent", { shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 test("managing is refused by the sandboxes switch alone: a full shell does not imply it", async () => {
-    await expect(manageSandbox("stop", "work", scopes({ sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(manageSandbox("stop", "work", grantWith("agent", { sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 // ---- the flows that run `ic` ----
@@ -205,18 +195,18 @@ test("a reconnect with no claim is refused rather than run as a bare connect", (
 // The claim is single-use: a create that would land on a name already taken has to refuse BEFORE ic runs, or the
 // owner pays a round trip to the platform for a code that bought nothing.
 test("a create with no claim is refused before the fleet is even read", async () => {
-    await expect(createSandbox("reviewer", undefined, "https://api.intentic.dev", scopes(), () => {})).rejects.toThrow(/setupCode.*required/i);
+    await expect(createSandbox("reviewer", undefined, "https://api.intentic.dev", grantWith("agent"), () => {})).rejects.toThrow(/setupCode.*required/i);
 });
 
 // Left to its default, ic redeems at production, which answers a dev platform's code with "invalid or expired".
 test("a create or reconnect that does not name the minting platform is refused before the fleet is even read", async () => {
-    await expect(createSandbox("reviewer", "code-abc", undefined, scopes(), () => {})).rejects.toThrow(/platformUrl.*required/i);
-    await expect(reconnectSandbox("work", "code-abc", undefined, scopes(), () => {})).rejects.toThrow(/platformUrl.*required/i);
-    await expect(createSandbox("reviewer", "code-abc", "  ", scopes(), () => {})).rejects.toThrow(/platformUrl.*required/i);
+    await expect(createSandbox("reviewer", "code-abc", undefined, grantWith("agent"), () => {})).rejects.toThrow(/platformUrl.*required/i);
+    await expect(reconnectSandbox("work", "code-abc", undefined, grantWith("agent"), () => {})).rejects.toThrow(/platformUrl.*required/i);
+    await expect(createSandbox("reviewer", "code-abc", "  ", grantWith("agent"), () => {})).rejects.toThrow(/platformUrl.*required/i);
 });
 
 test("creating is refused by the sandboxes switch, like every other verb that runs ic", async () => {
-    await expect(createSandbox("reviewer", "code-abc", "https://api.intentic.dev", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+    await expect(createSandbox("reviewer", "code-abc", "https://api.intentic.dev", grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(
         /Manage sandboxes on this device/,
     );
 });
@@ -249,19 +239,19 @@ test("the old reshape op maps onto the shape verb, the forget, or the restart th
 });
 
 test("a shape that sets nothing is refused before ic is asked, so it can never restart anything", async () => {
-    await expect(shapeSandbox("work", {}, "now", scopes(), () => {})).rejects.toThrow(/has to set something/);
-    await expect(shapeSandbox("work", { memoryGib: undefined }, "nextRestart", scopes(), () => {})).rejects.toThrow(/has to set something/);
+    await expect(shapeSandbox("work", {}, "now", grantWith("agent"), () => {})).rejects.toThrow(/has to set something/);
+    await expect(shapeSandbox("work", { memoryGib: undefined }, "nextRestart", grantWith("agent"), () => {})).rejects.toThrow(/has to set something/);
 });
 
 test("setting and forgetting a shape are refused by the sandboxes switch, like every verb that runs ic", async () => {
-    await expect(shapeSandbox("work", { cpus: 4 }, "nextRestart", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+    await expect(shapeSandbox("work", { cpus: 4 }, "nextRestart", grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(
         /Manage sandboxes on this device/,
     );
-    await expect(forgetShape("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(forgetShape("work", grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 test("reshaping is refused by the sandboxes switch, like the swaps it shares a door with", async () => {
-    await expect(reshapeSandbox("work", { memoryGib: 12 }, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+    await expect(reshapeSandbox("work", { memoryGib: 12 }, grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(
         /Manage sandboxes on this device/,
     );
 });
@@ -293,7 +283,7 @@ test("a runner start with no way home is refused before anything is spawned", ()
 });
 
 test("both runner ops ride the sandboxes switch", async () => {
-    const off = scopes({ sandboxes: "off" });
+    const off = grantWith("agent", { sandboxes: "off" });
     await expect(runnerFlow("runner-up", "rig", "https://x", "p", {}, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
     await expect(runnerFlow("runner-remove", "rig", undefined, undefined, {}, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
 });
@@ -524,7 +514,7 @@ test("a machine with no home still tries the rest", () => {
 });
 
 test("swapping is refused by the sandboxes switch, like managing", async () => {
-    await expect(swapSandbox("update", "work", undefined, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(swapSandbox("update", "work", undefined, grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 test("an update that found the current image reports no restart", () => {
@@ -537,8 +527,8 @@ test("an update that found the current image reports no restart", () => {
 // One switch for the whole lifecycle: a fleet the owner may manage is one the owner may clean up, and the refusal
 // they get for trying names the switch the card actually has.
 test("removal is refused by the sandboxes switch, like every other verb", async () => {
-    await expect(removeSandbox("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(ScopeError);
-    await expect(removeSandbox("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(removeSandbox("work", grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(ScopeError);
+    await expect(removeSandbox("work", grantWith("agent", { sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 // A retry after an answer that never arrived must not be refused: ic's own "already removed" is the removal done.
@@ -550,15 +540,15 @@ test("a removal of a sandbox already in the trash answers as done, not as refuse
 });
 
 test("removal refuses a slug ic would read as a flag, before running anything", async () => {
-    await expect(removeSandbox("--all", scopes(), () => {})).rejects.toThrow(/is not a sandbox slug/);
+    await expect(removeSandbox("--all", grantWith("agent"), () => {})).rejects.toThrow(/is not a sandbox slug/);
 });
 
 test("reading a log is covered by either grant, like listing", async () => {
-    await expect(sandboxLogs("work", 50, scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(sandboxLogs("work", 50, grantWith("agent", { shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 // The Devices view's Logs button reaches the same reading through the flow door, gated the same way: this one
 // is a READ travelling a route whose other seven ops write.
 test("the log flow is gated exactly like the log tool it shares a reading with", async () => {
-    await expect(tailSandboxLogs("work", scopes({ shell: "off", sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(tailSandboxLogs("work", grantWith("agent", { shell: "off", sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });

@@ -1,0 +1,275 @@
+# intentic-engine rootfs
+
+Small WSL2 distro (`intentic-engine`) that runs the open-source Docker engine for Intentic sandboxes on Windows PCs.
+Every new setup gets it as its engine, Docker Desktop installed or not (since 2026-10-10); sandboxes already on Docker
+Desktop come over when their owner moves them (`ic engine move --to intentic`).
+
+## What it contains
+
+- Alpine minirootfs (pinned in `pins.toml`)
+- Static `dockerd`, `containerd`, `runc`, and helpers from Docker's static Linux bundle (29.9.0 since rootfs 1.2.0).
+  A new engine keeps its images in the containerd image store, as Docker Desktop does: overlay2's graph driver refuses
+  an image of more than 125 layers, and a released sandbox image is 113 before its environment's overlay (a dev
+  sandbox's was 137). It costs disk, every image kept twice (compressed and unpacked), as on Docker Desktop. An engine
+  that already holds images on overlay2 keeps that store.
+- `iptables`, `ip6tables`, `openssl`, `ca-certificates`, `passt` (pasta) and `socat` from Alpine
+- `/usr/local/bin/intentic-engine` — foreground keeper started by `ic engine start`; on a PC with an NVIDIA GPU it also
+  writes a CDI spec for it ([below](#the-nvidia-gpu)), and it holds the disk's ballast ([below](#its-disk))
+- `/etc/wsl.conf` — no Windows PATH append; automount stays on, at `/mnt/`, which is where `ic` and the desktop app
+  point a bind mount of a Windows folder (`docker-host/src/wsl_path.rs`)
+
+`ic` writes [rootfs/intentic-engine](rootfs/intentic-engine) into the distro before every start, and
+[rootfs/teardown](rootfs/teardown) before a removal, so a change to either ships with `ic` and reaches every installed
+engine without a new rootfs.
+
+## Its own network
+
+Every WSL distro on a PC runs in one VM and, by default, one network namespace: a `dockerd` there puts its bridge, its
+routes and its iptables chains into every distro's network (seen from the CI fleet's distro on omen, 2026-10-09), and a
+person's own dockerd in another distro flushes them. Docker Desktop keeps its engine in a namespace of its own, and since
+2026-10-10 (rootfs 1.1.0) so does this one. The keeper runs `dockerd` in the network namespace `intentic`
+(`/run/netns/intentic`) and:
+
+- gives it the PC's network from user space with pasta (passt): ordinary sockets of this distro, so nothing is routed or
+  NATed in the shared namespace and no firewall rule there is touched;
+- forwards every TCP port listening inside the namespace (the engine's API, each port a sandbox publishes) from the same
+  port on this distro's `127.0.0.1`, which WSL hands to Windows' own `127.0.0.1`, rescanning every second. Loopback
+  only: pasta's own forwarding binds every address, and under mirrored networking that is the LAN;
+- maps `169.254.231.1` to this distro's loopback and starts dockerd with `--host-gateway-ip` set to it, so
+  `host.docker.internal` reaches the host as on Docker Desktop;
+- keeps the bridge on `192.168.239.1/24` and the networks it makes on `192.168.240.0/20`, since pasta copies the PC's
+  routes into the namespace and Docker's own `172.17.0.0/16` is the range VPNs and office networks most often route;
+- on its first start in a distro that ran an older engine, clears what that one left in the shared namespace (its
+  loopback rule, its bridges, Docker's chains when `docker0` was ours).
+
+Only one keeper runs per distro (`flock` on `/run/intentic-engine/keeper.lock`): a second ends at once with exit 4, and
+`ic engine start` waits for the first. One that finds a killed keeper's helpers or dockerd still running stops them first.
+
+The keeper caps BuildKit's build cache at 80 GB (GC keeps at least 20 GB) through `/etc/intentic-engine/daemon.json`,
+which it writes and passes as `--config-file`. Without the cap, BuildKit sizes its limit from the distro's sparse disk,
+which reports 1 TB: on rog the cache reached 396 GB and the engine's VHDX 810 GB. When `/etc/docker/daemon.json`
+exists, the keeper leaves it in charge and writes no cap.
+
+Before it starts `dockerd`, the keeper switches the memory controller on for the children of the distro's cgroup root
+(2026-11-05). `dockerd` decides once, as it starts, whether it can bound a container's swap: it looks for
+`memory.swap.max` in its own cgroup (`/non-systemd`), which is there only once that controller is on. Nothing turned it
+on before `dockerd` looked; runc does when the first container starts, too late. So rog's engine reported
+`SwapLimit: false`, dropped every sandbox's `--memory-swap` (`Memory limited without swap` at `docker run`,
+`MemorySwap: -1` on the container), and one sandbox paged 33 GB into the WSL VM's swap. The keeper's log says at each
+start whether `dockerd` will find the file. Read on rog without a restart; that it turns the check true is confirmed only
+at the engine's next start. Each sandbox also bounds its own work's swap, whatever the engine does, and
+`ic sandbox doctor` warns when the engine reports no swap-limit support.
+
+A PC where the namespace cannot be set up (no `/dev/net/tun`, no pasta or socat and no network to fetch them on an
+engine imported from 1.0.0) runs `dockerd` in the shared namespace as before 1.1.0 rather than not at all. There the
+keeper leaves Windows' connections to `127.0.0.1` to `docker-proxy` (mirrored networking otherwise loses them), and does
+not start beside another Docker engine in WSL that owns `docker0`: two daemons there flush each other's iptables chains,
+and `ic engine start` says which address it found and what to do. The mode in use is in
+`/run/intentic-engine/network` and in `ic engine status` (`network`: `isolated` or `shared`); setting
+`INTENTIC_ENGINE_NETWORK=shared` for the keeper forces the fallback (from Windows: that variable and
+`WSLENV=INTENTIC_ENGINE_NETWORK/u` in the environment of `ic engine restart`). Logs: `/var/log/intentic-engine.log` (keeper and
+dockerd), `/var/log/intentic-pasta.log`, `/var/log/intentic-forwards.log`.
+
+Measured on omen, 2026-10-10 (mirrored networking; the namespace against the shared network on the same machine within
+the hour, and against Docker Desktop):
+
+| | Intentic's engine, own namespace | shared network | Docker Desktop |
+| --- | --- | --- | --- |
+| 1 GiB download from a published port | 540–570 MB/s | | 510–540 MB/s |
+| 1 GiB `docker cp` into a container | 60–74 MB/s | 69–85 MB/s | |
+| 1 GiB piped into `docker run -i` (how a move writes a volume) | 71–73 MB/s | 79–80 MB/s | |
+| 1 GiB `docker cp` out of a container, over TCP | 36–39 MB/s | 40–42 MB/s | 140–143 MB/s |
+| drop copy's mounted route, 2000 files of 8 KiB / one of 1 GiB, warm | 3.2 s / 16.4 s | | 3.1 s / 17.0 s |
+
+WSL's own loopback relay carries uploads from Windows at about 90 MB/s with or without the forward. `docker cp` out
+trailed Docker Desktop in either network over TCP; the docker CLI's reading of TCP was the cause, and the engine's named
+pipe ([below](#its-named-pipe)) takes it past Docker Desktop. A sandbox moved from
+Docker Desktop answered `/health` from Windows, reached the internet, and ran Docker in Docker. Two starts at once ended
+with one keeper and both `ic engine start`s answered in 3.6 s; a start after the keeper was killed stopped the dockerd
+and pasta it left and answered in 7.7 s; the desktop app's keeper brought a killed engine back in 34 s.
+
+## Its disk
+
+(2026-11-03) Every sandbox and every compose project on the engine writes to the distro's one ext4 disk (a VHDX that
+reads as about 1 TB). On rog one sandbox's history volume, 462 GB of Rust build output, filled it, and an unrelated
+Postgres of the owner's PANICked on ENOSPC and stayed down. `ic engine disk` reads and relieves the disk from Windows
+and the machine agent watches it every minute ([ic README](../README.md), `src/engine/disk.rs`). The keeper's own part
+is the ballast: some of the disk held back so that it can be given back at the last moment.
+
+On Windows, `ic engine disk` also checks the drive containing `ext4.vhdx`. The Windows host disk hint is refreshed at
+`%USERPROFILE%\.intentic\host\disk-intentic.json`, and ic bind-mounts the hint directory read-only into each sandbox
+at `/run/intentic/host`. The effective Available count is the smaller of ext4's Available and the drive's free space
+plus space the already allocated VHDX can reuse; this prevents a dense VHDX from appearing to have more writable space
+than its Windows drive does. The same hint is written for Docker Desktop when one of its supported VHDX paths exists.
+
+- **What.** One file, `/var/lib/intentic-engine/ballast`, of 2% of the disk, within 2 and 10 GiB (10 GiB on a 1 TB
+  disk). It is made with `fallocate`: its blocks are reserved and nothing is written, so the VHDX under it does not grow
+  and making it costs no I/O. It sits outside Docker's data root, so nothing Docker does counts or removes it.
+- **When it goes.** The moment less than its own size is left to write (and never later than the disk's critical
+  line, 5%), the keeper deletes it, so a database can checkpoint, git can finish a pack, and the sandboxes' reapers and
+  `ic engine disk --relieve` have room to work. Given back any earlier, it would be spent before the disk was full.
+  `ic engine disk --relieve` deletes it too when it finds the disk full, should the keeper's loop not have.
+- **When it comes back.** Only while 10% of the disk and its own size are left to write, so holding it back never
+  makes the disk short: made at a start with room, and made again once that much is free again. A filesystem that
+  refuses `fallocate` gets no ballast, said once in the log; writing one out in zeros was rejected, since that grows the
+  VHDX by its size.
+- "Left to write" is `df`'s Available: what a process that is not root may still write. ext4 keeps 5% of the disk back
+  for root (54 GB of rog's), and a database in a container writes as its own user, so that is where it stops.
+- The keeper looks every ten seconds, in either network mode (`keep_disk`, stopped with the other helpers), and logs
+  each ballast it makes or gives back to `/var/log/intentic-engine.log`. The numbers are the same ones ic reads the
+  disk by: a test in `src/engine/disk.rs` reads them off the keeper's text.
+
+## Compacting the Windows VHDX
+
+The engine VHDX is deliberately kept dense and is never touched while WSL has it attached read-write. `ic engine compact`
+first reads ext4's used bytes with `df` while the distro runs and compares them with the VHDX file size. If the estimated
+reclaim is under 5 GiB it skips the interruption unless `--force` is given. It then names running Intentic sandboxes
+and asks before stopping the engine; `--yes` answers that confirmation for an unattended caller.
+
+Compaction runs `fstrim -v /` in the guest, stops the engine through the same held-stop path as `ic engine stop`, and
+tries an exclusive file open to verify WSL released the VHDX. When WSL still holds it, `--wsl` consents to
+`wsl --shutdown`; this also stops Docker Desktop and every other WSL distro. DiskPart then selects the VHDX, attaches it
+read-only, compacts it, and detaches it. Windows shows one administrator prompt; DiskPart is used because Windows Home
+does not include Optimize-VHD. Its output is saved under `%USERPROFILE%\.intentic\logs\`. ic starts the engine again and
+reports the VHDX size and Windows drive free space before and after. `--json` returns those readings as one document for
+the machine agent.
+
+The same machine-wide shutdown repairs the stuck attachment left when Windows ran out of space under a VHDX. A normal
+`ic engine start` or `ic engine restart` tries the ordinary WSL path and points to `ic engine restart --wsl` when it sees
+the stable WSL/guest failure signatures. That flag checks for at least 5 GiB free on the drive holding the engine VHDX
+before `wsl --shutdown`; `ic sandbox fix` offers the shutdown as a consented repair. Both routes restart Docker Desktop
+and every other WSL distro too.
+
+## Leftovers after a move
+
+`ic engine cleanup` removes an old move's stopped containers, volumes and images once their keep period expires;
+`--now` makes all unremoved move copies due immediately. At the same time, on each engine a due move left behind, it
+removes images only when they have the Intentic source label (`org.opencontainers.image.source`), the published sandbox
+repository (`ghcr.io/intentic/sandbox`), or an `intentic-sandbox-*` repository name, and no container uses the image.
+It also removes stopped `egress-helper` containers carrying ic's `dev.intentic.kind` label when their sandbox is gone
+(side-wide old helpers are only removed when that engine has no Intentic sandbox containers). It never removes a volume
+or an image used by a container, and never considers unmarked images. Cleanup waits for due copies or `--now`; it does
+not sweep an engine merely because a move happened recently.
+
+## The NVIDIA GPU
+
+A sandbox whose GPU switch is on runs with `--gpus=all`. Before 2026-10-28 this engine had no NVIDIA runtime, so ic's
+probe dropped the GPU and the editor said "this computer has no NVIDIA container runtime" (rog, RTX 5080). WSL gives
+every distro the Windows driver: `/dev/dxg`, plus the user-mode libraries and `nvidia-smi` in `/usr/lib/wsl/lib`.
+Docker 29 serves `--gpus=all` through CDI, but only when dockerd finds `nvidia-cdi-hook` on its PATH at start.
+Otherwise it falls through to AMD's CDI driver ("failed to discover GPU vendor from CDI", "AMD CDI spec not found").
+
+So on a PC with an NVIDIA GPU (`/dev/dxg`, `libcuda.so.1` and `nvidia-smi` under `/usr/lib/wsl/lib`), the keeper
+writes two files before dockerd starts:
+
+- `/etc/cdi/intentic-nvidia-wsl.yaml` declares `nvidia.com/gpu=all`. It is what `nvidia-ctk cdi generate --mode=wsl`
+  writes, minus its hooks: the device node, `/usr/lib/wsl` mounted read-only at the same path, and `nvidia-smi` at
+  `/usr/bin/nvidia-smi`. It names where the driver libraries are (`INTENTIC_GPU_LIBRARY_PATH=/usr/lib/wsl/lib`) and
+  leaves the container's `LD_LIBRARY_PATH` alone, and the `nvidia-smi` it mounts is `/etc/intentic-engine/nvidia-smi`,
+  a wrapper that puts the libraries on its own library path and runs the driver's binary.
+- `/usr/local/bin/nvidia-cdi-hook` is a stub that exits 0, marked as the keeper's. It exists only so that dockerd
+  registers the NVIDIA driver; the spec never calls it.
+
+Until 2026-11-03 the spec set `LD_LIBRARY_PATH=/usr/lib/wsl/lib` for the whole container, as nvidia-ctk's does. Every
+process in a GPU sandbox then found Mesa's d3d12 driver: the daemon, every agent shell and its browsers rendered on the
+owner's display GPU without asking for it (65 conversations on rog), and on 2026-11-02 a browser one agent started
+with GPU flags hung the GPU (LiveKernelEvent 0x141) and powered the PC off. The GPU is still the whole GPU (the same
+device node and libraries, nothing throttled); a sandbox hands the library path to the one command that asks for it,
+`gpu-run <command>` (`_sandbox/sandbox/bin/gpu-run`), or to all of an agent's commands where the owner's settings say
+so. Rejected: keeping the variable and unsetting it in the sandbox. A container nobody unsets it in (another image,
+`docker exec` of a shell) is back on the GPU, and the engine is the one place that serves every container.
+
+If another file in `/etc/cdi` or `/var/run/cdi` already declares `nvidia.com/gpu` (someone installed the real toolkit),
+the keeper writes neither file and removes its stub: CDI refuses a device that two specs declare. On a PC with no NVIDIA
+GPU, it removes both. Measured on rog, 2026-10-28: `docker run --gpus=all --entrypoint=nvidia-smi <sandbox image> -L`
+listed the RTX 5080 Laptop GPU, which is the line ic's probe looks for.
+
+## Its named pipe
+
+`docker cp` out of our engine ran at 36–40 MB/s, a quarter of Docker Desktop. Measured on omen, 2026-10-10, the
+engine was not the cause: dockerd hands out the archive at ~356 MB/s inside the distro, and curl.exe and .NET pulled it
+from Windows over the same TCP forward at 290–313 MB/s. docker.exe was: any version of it, Docker's signed build
+included, read the TCP endpoint at 36–40 MB/s, and read Docker Desktop at 38 MB/s too once Docker Desktop was put
+behind a TCP proxy on Windows' own loopback. Over a named pipe, the same docker.exe read our engine at 284–286 MB/s.
+Docker Desktop's CLI talks to a named pipe; ours talked TCP. (omen runs FortiClient's network filter, which may make
+TCP worse there than elsewhere; the pipe is the way Docker Desktop goes on every PC, so ours goes it too.)
+
+So `ic engine start` keeps a relay running (`ic engine relay`, [src/engine/relay.rs](../src/engine/relay.rs)): it
+serves the engine on `\\.\pipe\<distro>.<user>` and carries each connection to the TLS endpoint with the account's
+client certificate. The pipe lets in only this account and SYSTEM and refuses remote clients; it is message mode, as
+Docker's own pipes are, so a client's end of stdin reaches the engine. The relay runs from a copy of ic named by its hash
+(`~/.intentic/engine/relay/`), so the ic the machine agent updates is never locked, and a newer ic's start hands the
+pipe over to its own copy. `engine.json` names the pipe (`pipe`); ic, the desktop app and the machine agent use it while
+it is there and the TLS endpoint otherwise (`intentic_docker_host::engine_pipe`), so a relay that is not running costs
+speed, not commands. `ic engine stop`, `hold` and `remove` end it; `ic engine status` shows it (`pipe`).
+
+Measured on omen the same evening, runs interleaved on a laptop busy with other work (1 GiB each):
+
+| | Through the pipe | TCP + TLS | Docker Desktop |
+| --- | --- | --- | --- |
+| `docker cp` out of a container | 141–163 MB/s | 31–34 MB/s | 53–106 MB/s |
+| piped into `docker run -i` | 36–53 MB/s | 38–39 MB/s | 13–26 MB/s |
+
+`ic engine remove` runs the teardown first: what an engine in the shared namespace left there. The namespace itself,
+pasta and the forwards end with the distro.
+
+## WSL distros
+
+`ic engine wsl enable <distro>` makes the engine a WSL distro's Docker, as Docker Desktop's WSL integration does, for
+the developer who runs a sandbox from a checkout inside WSL (its dev mode bind-mounts the build output from the
+checkout, and the local platform's database is a `docker compose` service). Code:
+[src/engine/wsl_integration.rs](../src/engine/wsl_integration.rs) and [rootfs/integrate](rootfs/integrate).
+
+- The keeper serves the API on `/mnt/wsl/<engine>/docker.sock` too (`/mnt/wsl` is one tmpfs every distro mounts,
+  shared); the distro links it as its `/run/docker.sock`, in its docker group (the keeper gives the socket that gid).
+- The distro's `/home` is bind-mounted to `/mnt/wsl/<engine>/distros/<distro>/home`, and the keeper links each
+  `/home/<user>` in the engine's distro to it, so `docker run -v ~/project:/x` resolves by the same path. Paths under
+  `/mnt/<drive>` are the same everywhere already; other paths of the distro are not shared.
+- The static `docker` from the pinned bundle and pinned `compose` and `buildx` go to `/usr/local/lib/intentic/docker`,
+  linked onto PATH and into `/usr/local/lib/docker/cli-plugins` unless the distro's own packages installed them. The
+  two plugins are also linked into the default user's `~/.docker/cli-plugins`, which the CLI searches first. Docker
+  Desktop's integration rewrites the system links each time it starts, and they point at nothing once it stops. Without
+  the user's own links, the CLI lost buildx and every build failed until the next restart.
+- A systemd unit (`intentic-engine-integration.service`) redoes the distro's part at its every start, and
+  `ic engine start` once the engine is up; a distro without systemd gets it from the next start of the engine.
+  `ic engine start --quiet` (the sign-in start, the desktop app's keeper) keeps the engine up while any distro uses
+  it, whichever engine the Windows side's sandboxes are on.
+- Docker Desktop may keep serving the same distro (its integration's proxy holds `/run/docker.sock` there while it
+  runs), and so may a dockerd of the distro's own. Neither is taken over: the distro's default user gets the docker
+  context `intentic-engine` (our socket), made current, so that user's `docker` and `docker compose` reach our engine
+  and `docker --context default` the other one. Nothing of Docker Desktop's is changed, and what still lives there
+  stays reachable. A program that opens `/var/run/docker.sock` itself, not through the CLI, still reaches the other
+  engine. `ic engine wsl disable` removes the context with the rest.
+
+What a distro's own containers kept on Docker Desktop come across with `ic engine copy`: named volumes, images and
+stopped containers (each carried as a placeholder the ordinary recreate makes the container from), checked as a move
+checks them. From inside WSL it runs between the two sockets (`--from-host
+unix:///mnt/wsl/docker-desktop/shared-sockets/guest-services/docker.proxy.sock --to-host
+unix:///mnt/wsl/intentic-engine/docker.sock`), with no Windows hop: 2 GB in 9 s on omen, against 37 s from Windows.
+
+Measured on omen, 2026-10-10, with a throwaway Arch distro (systemd, a user, a project under `/home`): `docker`
+29.9.0 with compose 5.6.0 and buildx 0.38.0, a bind mount from the project, a compose Postgres with a named volume and
+a port reached from the distro and from Windows, a BuildKit build from `/home`; the same after the distro restarted (its
+unit put the socket back) and after the engine restarted (the socket kept the distro's group).
+
+## Build
+
+```sh
+bash _hosts/ic/engine/build.sh _hosts/ic/dist-bin
+# or
+bash _tools/scripts/build/build-intentic-engine.sh
+```
+
+Output: `intentic-engine-<version>-x86_64.tar.gz` and a `.sha256` sidecar beside it (about 53 MB). The release attaches
+both to the GitHub release next to the `ic` binaries; CI's and the nightly's Windows build put it into the artifact the
+Windows smoke's tier 4 runs.
+
+## Update policy
+
+`ic engine update` replaces only the static Linux docker binaries inside an existing distro so `/var/lib/docker` in the
+distro VHDX is kept, and the Windows CLI and its buildx plugin beside them; the keeper itself is refreshed by every start. An engine whose
+record names an older `engine_version` gets the same at its next start from down (it is not serving then): on omen
+an engine installed at 1.1.0 (docker 27.5.1) came up on 29.9.0 in 64 s with its container and volume as they were. The
+cache names each download by its version, so an older one is never resumed into a newer one. When `engine_version` in `pins.toml` changes, the
+build produces a new rootfs tarball; installs use `wsl --import` (first setup) or a documented remove/reinstall if the
+rootfs layout must change.

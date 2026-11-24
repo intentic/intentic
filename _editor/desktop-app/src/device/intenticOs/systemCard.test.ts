@@ -21,7 +21,7 @@ import {
 
 // This system as the card reads it: what waits for the next boot and the change that restarts into it, the boot's
 // health, isolation, the channel the next boot runs, a check's answer, and a change's lines as every window hears them.
-// The statuses are the shapes of _os/README.md's `ic os status --json`.
+// The statuses are the shapes of _hosts/README.md's `ic os status --json`.
 
 const BOOTED: IntenticOsStatus = {
     os: `intentic-os`,

@@ -1,3 +1,4 @@
+import { providerHas } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { Context } from "hono";
 import type { Logger } from "pino";
 import { answerCovers } from "@intentic/sandbox-contract/models/plan-pools";
@@ -269,7 +270,7 @@ const outgoingOf = async (c: Context<AppEnv>, translatorUrl: string, session: st
         url: `${translatorUrl.replace(/\/$/u, "")}${restOf(c, session)}`,
         method: c.req.method,
         headers,
-        raw: raw !== undefined && provider === "gemini" ? withoutGoogleBlockedPhrases(raw) : raw,
+        raw: raw !== undefined && providerHas(provider, "refusesClaudeCodeMentions") ? withoutGoogleBlockedPhrases(raw) : raw,
         signal: c.req.raw.signal,
     };
 };

@@ -165,6 +165,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [silent-catch](silent-catch.mjs) | a new handler that throws an error away unnarrowed |
 | [code-shape](code-shape.mjs) | a new file over 600 lines, or a file, a function over 100 lines or a function over the complexity caps growing past its baseline (ratcheted: `baselines/code-shape.json`) |
 | [daemon-doors](daemon-doors.mjs) | the editor reaching the daemon's JSON routes around `sandboxRaw`: a path spelled to `sandboxJson`/`sandboxRequest`, or a fetch of a `rawRouteUrl` path (ratcheted: `baselines/daemon-doors.json`, empty) |
+| [sandbox-scope](sandbox-scope.mjs) | an editor file above the client reading the active sandbox without naming it: `activeSandboxId`, a `sandboxRpc` call with no `context: { at }`, an `rpcQuery` with no `at`, where `useSandboxScope()` names the sandbox the component stands in (ratcheted per file: `baselines/sandbox-scope.json`; `sandbox-scope.mjs --allow <file> --reason "<why>"` records one) |
 | [process-tiers](process-tiers.mjs) | a daemon process started by hand instead of through `runCheck`, `spawnAs` or `@intentic/base/git`'s `exec` (ratcheted: `baselines/process-tiers.json`) |
 | [quote-splices](quote-splices.mjs) | a value spliced into a command between bare quotes instead of through `@intentic/sandbox-run/quote`, or a file carrying secrets to a host that stopped importing it |
 | [home-dir](home-dir.mjs) | `homedir()` in the device agent (`_devices/machine/src`) instead of `homeDir()` from `@intentic/local-agent` |

@@ -1,15 +1,17 @@
 import { errorMessage } from "@intentic/base/errors";
-import { sandboxRef } from "@intentic/extension-api";
+import { sandboxShallowRef } from "@intentic/extension-api";
 import type { Hello } from "@intentic/sandbox-contract/events/system-events";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { contractModule } from "./daemon/contract";
+import { onSandboxDropped } from "./scope/perSandbox";
 import { contractUncompiled } from "./contractFreshness";
 import { routeArea } from "./daemon/routeAreas";
 import type { RefusalWords } from "./sandboxHttpError";
 
-// What the active daemon can do, from its /events hello frame. A newer browser than daemon is normal, not an
+// What each daemon can do, from its /events hello frame; every export below speaks of the active one. A newer browser than daemon is normal, not an
 // error; this turns a silent 404 into a named gap, so features can gate on `supportsRoute` instead of finding out
 // by breaking. Two kinds of gap: a route the daemon lacks, or one it shapes differently; both are non-blocking.
 
@@ -28,64 +30,145 @@ let sidecarHello: { readonly routes: ReadonlySet<string> | undefined; readonly s
 // advertised on fields of their own, so every check below has to know which of the two it is holding.
 const isRawRoute = (name: string): boolean => name.includes(` `);
 
-// Route names the daemon advertises; undefined means unknown (not connected yet, no hello read) and is read as fully
-// supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
-// another.
-const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => sidecarHello?.routes);
+// One daemon's hello, as everything below reads it. Every field undefined means unknown (not connected yet, no hello read)
+// and is read as fully supported.
+export interface DaemonSurfaceRecord {
+    // Route names the daemon advertises.
+    readonly routes: ReadonlySet<string> | undefined;
+    // Per-route shape fingerprint from the daemon's build; undefined (route or whole map) means no evidence, not
+    // mismatch.
+    readonly shapes: Readonly<Record<string, string>> | undefined;
+    // The daemon's hand-written routes and their fingerprints, advertised on fields of their own since a browser older
+    // than the daemon reads an unfamiliar name in `routes` as evidence about which side is stale. Undefined is a daemon
+    // from before those fields, and reads as assume-supported exactly like an unknown procedure surface. A folder's
+    // sidecar sends neither: it lists what few raw routes it serves among `routes`, and ships in one build with this page.
+    readonly raw: ReadonlySet<string> | undefined;
+    readonly rawPrints: Readonly<Record<string, string>> | undefined;
+    // Every route's second print, `[wire, core]` (sandbox-contract protocol/routes.ts `RoutePrints`), from a daemon recent
+    // enough to send it. With it a route both sides shape differently splits in two: a different core may misbehave, and a
+    // different wire over the same core is only an optional part one side lacks. Undefined is a daemon from before the
+    // field, compared on the first print alone, as before.
+    readonly prints: Readonly<Record<string, readonly [string, string]>> | undefined;
+    readonly surface: DaemonSurface;
+}
 
-// Per-route shape fingerprint from the daemon's build; undefined (route or whole map) means no evidence, not
-// mismatch.
-const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined>(() => sidecarHello?.shapes);
+// What a window knows before any hello of its own: nothing, or what the folder sidecar last said (above).
+const unheard = (): DaemonSurfaceRecord => ({
+    routes: sidecarHello?.routes,
+    shapes: sidecarHello?.shapes,
+    raw: undefined,
+    rawPrints: undefined,
+    prints: undefined,
+    surface: sidecarHello === undefined ? `sandbox` : `folder`,
+});
 
-// The daemon's hand-written routes and their fingerprints, advertised on fields of their own since a browser older
-// than the daemon reads an unfamiliar name in `routes` as evidence about which side is stale. Undefined is a daemon
-// from before those fields, and reads as assume-supported exactly like an unknown procedure surface. A folder's
-// sidecar sends neither: it lists what few raw routes it serves among `routes`, and ships in one build with this page.
-const advertisedRaw = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
-const advertisedRawPrints = sandboxRef<Readonly<Record<string, string>> | undefined>(() => undefined);
+// Each sandbox's last hello, by id. Sandbox-scoped like the rest of the window's state: emptied on every switch (and
+// the active one's entry with a workspace replaced under its id, perSandbox.ts), so one sandbox's surface is never
+// attributed to another, and a sandbox switched back to is unknown until its own hello again, as before.
+const surfaces = sandboxShallowRef<ReadonlyMap<string, DaemonSurfaceRecord>>(() => new Map());
+onSandboxDropped({
+    drop: (id) => {
+        if (surfaces.value.has(id)) {
+            const next = new Map(surfaces.value);
+            next.delete(id);
+            surfaces.value = next;
+        }
+    },
+    clear: () => {
+        surfaces.value = new Map();
+    },
+});
 
-// Every route's second print, `[wire, core]` (sandbox-contract protocol/routes.ts `RoutePrints`), from a daemon recent
-// enough to send it. With it a route both sides shape differently splits in two: a different core may misbehave, and a
-// different wire over the same core is only an optional part one side lacks. Undefined is a daemon from before the
-// field, compared on the first print alone, as before.
-const advertisedPrints = sandboxRef<Readonly<Record<string, readonly [string, string]>> | undefined>(() => undefined);
+// The active sandbox's record: its entry, or, before its hello (and with no sandbox chosen), what the window held when
+// its scope began. Captured at the scope's start like every sandboxRef, so the sidecar's carry-over is read once per switch.
+const unheardActive = sandboxShallowRef<DaemonSurfaceRecord>(unheard);
+const activeSurface = computed((): DaemonSurfaceRecord => {
+    const id = activeSandboxId.value;
+    return (id === undefined ? undefined : surfaces.value.get(id)) ?? unheardActive.value;
+});
 
-const advertisedSurface = sandboxRef<DaemonSurface>(() => (sidecarHello === undefined ? `sandbox` : `folder`));
+const recordOf = (
+    routes: readonly string[] | undefined,
+    shapes: Readonly<Record<string, string>> | undefined,
+    surface: DaemonSurface | undefined,
+    raw: Pick<Hello, `rawRoutes` | `rawFingerprints` | `prints`> | undefined,
+): DaemonSurfaceRecord => ({
+    routes: routes === undefined ? undefined : new Set(routes),
+    shapes,
+    raw: raw?.rawRoutes === undefined ? undefined : new Set(raw.rawRoutes),
+    rawPrints: raw?.rawFingerprints,
+    prints: raw?.prints,
+    surface: surface ?? `sandbox`,
+});
 
-// Called on every hello frame; nothing advertised leaves the assume-supported state. A hello that names no surface is
-// a daemon's, from before the field.
-export const setDaemonRoutes = (
+// Called on every hello frame of sandbox `id`; nothing advertised leaves the assume-supported state. A hello that names
+// no surface is a daemon's, from before the field.
+export const setDaemonRoutesFor = (
+    id: string | undefined,
     routes: readonly string[] | undefined,
     shapes?: Readonly<Record<string, string>>,
     surface?: DaemonSurface,
     raw?: Pick<Hello, `rawRoutes` | `rawFingerprints` | `prints`>,
 ): void => {
-    advertised.value = routes === undefined ? undefined : new Set(routes);
-    advertisedShapes.value = shapes;
-    advertisedRaw.value = raw?.rawRoutes === undefined ? undefined : new Set(raw.rawRoutes);
-    advertisedRawPrints.value = raw?.rawFingerprints;
-    advertisedPrints.value = raw?.prints;
-    advertisedSurface.value = surface ?? `sandbox`;
-    sidecarHello = surface === `folder` ? { routes: advertised.value, shapes } : undefined;
+    const record = recordOf(routes, shapes, surface, raw);
+    // With no sandbox chosen yet, the window's one connection is the one that answered: what it says is the active
+    // surface, as it always was.
+    if (id === undefined || activeSandboxId.value === undefined) {
+        unheardActive.value = record;
+    }
+    if (id !== undefined) {
+        surfaces.value = new Map(surfaces.value).set(id, record);
+    }
+    sidecarHello = surface === `folder` ? { routes: record.routes, shapes } : undefined;
 };
 
+// The active sandbox's hello.
+export const setDaemonRoutes = (
+    routes: readonly string[] | undefined,
+    shapes?: Readonly<Record<string, string>>,
+    surface?: DaemonSurface,
+    raw?: Pick<Hello, `rawRoutes` | `rawFingerprints` | `prints`>,
+): void => setDaemonRoutesFor(activeSandboxId.value, routes, shapes, surface, raw);
+
+// What sandbox `id` last said of its routes; undefined for one whose hello this window has not read.
+export const routeSurfaceOf = (id: string): DaemonSurfaceRecord | undefined =>
+    id === activeSandboxId.value ? activeSurface.value : surfaces.value.get(id);
+
+const advertised = computed(() => activeSurface.value.routes);
+const advertisedShapes = computed(() => activeSurface.value.shapes);
+const advertisedRaw = computed(() => activeSurface.value.raw);
+const advertisedRawPrints = computed(() => activeSurface.value.rawPrints);
+const advertisedPrints = computed(() => activeSurface.value.prints);
+
 // True for a window on a folder of this computer (the desktop app's local face).
-export const folderSurface = computed(() => advertisedSurface.value === `folder`);
+export const folderSurface = computed(() => activeSurface.value.surface === `folder`);
 
 // Which set names routes of this one's kind: a folder lists the few raw routes it serves among `routes`, a daemon
 // advertises them apart. Undefined either way means the surface was never stated.
-const advertisedFor = (name: string): ReadonlySet<string> | undefined =>
-    isRawRoute(name) && !folderSurface.value ? advertisedRaw.value : advertised.value;
+const advertisedIn = (record: DaemonSurfaceRecord, name: string): ReadonlySet<string> | undefined =>
+    isRawRoute(name) && record.surface !== `folder` ? record.raw : record.routes;
+const advertisedFor = (name: string): ReadonlySet<string> | undefined => advertisedIn(activeSurface.value, name);
 
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
 // A route a daemon from before a rename advertises under its old name, at the same address: personas became roles on
 // 2026-11-18 (roles.contract.ts keeps the paths), so `roles.list` is served by a daemon that says `personas.list`.
 const formerNameOf = (name: string): string | undefined => (name.startsWith(`roles.`) ? `personas.${name.slice(`roles.`.length)}` : undefined);
 
-export const supportsRoute = (name: string): boolean => {
-    const known = advertisedFor(name);
+const supportedIn = (known: ReadonlySet<string> | undefined, name: string): boolean => {
     const former = formerNameOf(name);
     return known === undefined || known.has(name) || (former !== undefined && known.has(former));
+};
+
+export const supportsRoute = (name: string): boolean => supportedIn(advertisedFor(name), name);
+
+// The same question of sandbox `id`; the active one (or none named) as `supportsRoute`, and a sandbox whose hello this
+// window never read as supported, as an unknown daemon is.
+export const supportsRouteAt = (id: string | undefined, name: string): boolean => {
+    if (id === undefined || id === activeSandboxId.value) {
+        return supportsRoute(name);
+    }
+    const record = surfaces.value.get(id);
+    return record === undefined || supportedIn(advertisedIn(record, name), name);
 };
 
 // Only on positive evidence: the daemon's hello named the route. For a read that stands in for a judgement this window can

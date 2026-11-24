@@ -2,8 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { fakeAdb, fakeIndicatorDeps, phonePng, SETTINGS_DUMP, uiDump, uiNode } from "../device-testing.js";
+import { fakeAdb, fakeIndicatorDeps, phonePng, SETTINGS_DUMP, uiDump, uiNode, grantWith } from "../device-testing.js";
 import { createIndicator } from "../indicator.js";
 import { ScopeError } from "../policy.js";
 import { adbMissing, NO_DEVICE } from "./android-parse.js";
@@ -12,16 +11,6 @@ import { type AdbOutput, adbRunner, createAndroid, scrollSwipe } from "./android
 /* The Android tools driven against a fake adb that answers by argv, so every rule is checked without a phone: which
    switch each needs, which phone a call lands on, how a coordinate becomes a phone pixel, and what is refused before
    anything is sent. */
-
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
 
 const SERIAL = "R58M12ABCDE";
 const ONE_PHONE = `List of devices attached\n${SERIAL}            device usb:1-1 product:o1sxxx model:SM_G991B device:o1s transport_id:1\n`;
@@ -103,17 +92,17 @@ test("every tool asks for its switch before adb is even looked for", async () =>
         indicator: () => createIndicator(fakeIndicatorDeps().deps),
         settle: async () => {},
     });
-    await expect(android.devices(scopes({ shell: "off" }))).rejects.toThrow(/"Run commands" is switched off/);
-    await expect(android.screenshot(undefined, scopes({ screen: "off" }))).rejects.toThrow(/"See the screen" is switched off/);
-    await expect(android.uiElements({}, scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
-    await expect(android.act({ action: "home" }, scopes({ control: "off" }))).rejects.toThrow(/"Use the mouse and keyboard" is switched off/);
-    await expect(android.shell({ command: "ls" }, scopes({ shell: "off" }))).rejects.toThrow(ScopeError);
-    await expect(android.install({ path: "/tmp/app.apk" }, scopes({ write: "off" }))).rejects.toThrow(/"Create and change files" is switched off/);
-    await expect(android.logcat({}, scopes({ shell: "off" }))).rejects.toThrow(ScopeError);
+    await expect(android.devices(grantWith("agent", { shell: "off" }))).rejects.toThrow(/"Run commands" is switched off/);
+    await expect(android.screenshot(undefined, grantWith("agent", { screen: "off" }))).rejects.toThrow(/"See the screen" is switched off/);
+    await expect(android.uiElements({}, grantWith("agent", { screen: "off" }))).rejects.toThrow(ScopeError);
+    await expect(android.act({ action: "home" }, grantWith("agent", { control: "off" }))).rejects.toThrow(/"Use the mouse and keyboard" is switched off/);
+    await expect(android.shell({ command: "ls" }, grantWith("agent", { shell: "off" }))).rejects.toThrow(ScopeError);
+    await expect(android.install({ path: "/tmp/app.apk" }, grantWith("agent", { write: "off" }))).rejects.toThrow(/"Create and change files" is switched off/);
+    await expect(android.logcat({}, grantWith("agent", { shell: "off" }))).rejects.toThrow(ScopeError);
     expect(looked).toBe(0);
     // Past the switch, a computer with no adb is told how to get it.
-    await expect(android.devices(scopes())).rejects.toThrow(adbMissing("linux"));
-    await expect(android.act({ action: "home" }, scopes())).rejects.toThrow(adbMissing("linux"));
+    await expect(android.devices(grantWith("agent"))).rejects.toThrow(adbMissing("linux"));
+    await expect(android.act({ action: "home" }, grantWith("agent"))).rejects.toThrow(adbMissing("linux"));
 });
 
 test("android_devices lists each phone with its Android version and screen, and what to do about one not ready", async () => {
@@ -124,7 +113,7 @@ test("android_devices lists each phone with its Android version and screen, and 
                 : undefined,
     });
     phone.devices = TWO_PHONES;
-    const listed = await phone.android.devices(scopes());
+    const listed = await phone.android.devices(grantWith("agent"));
     const [head = "", ...json] = listed.split("\n");
     expect(head).toBe("2 Android devices are attached to this computer: pass `serial` to the other android_* tools to say which one.");
     expect(JSON.parse(json.join("\n"))).toEqual([
@@ -150,26 +139,26 @@ test("android_devices lists each phone with its Android version and screen, and 
     ]);
     // Nothing attached is an answer, not a failure.
     phone.devices = "List of devices attached\n\n";
-    expect(await phone.android.devices(scopes())).toBe(NO_DEVICE);
+    expect(await phone.android.devices(grantWith("agent"))).toBe(NO_DEVICE);
 });
 
 test("a call lands on the only phone, and is refused when there is none or several and none is named", async () => {
     const phone = harness();
     phone.devices = "List of devices attached\n";
-    await expect(phone.android.screenshot(undefined, scopes())).rejects.toThrow(NO_DEVICE);
+    await expect(phone.android.screenshot(undefined, grantWith("agent"))).rejects.toThrow(NO_DEVICE);
     phone.devices = TWO_PHONES;
-    await expect(phone.android.act({ action: "home" }, scopes())).rejects.toThrow(/2 Android devices are attached .*pass `serial`/);
-    await expect(phone.android.act({ action: "home", serial: "192.168.1.20:37005" }, scopes())).rejects.toThrow(/not ready \(unauthorized\)/);
-    await phone.android.act({ action: "home", serial: SERIAL }, scopes({ screen: "off" }));
+    await expect(phone.android.act({ action: "home" }, grantWith("agent"))).rejects.toThrow(/2 Android devices are attached .*pass `serial`/);
+    await expect(phone.android.act({ action: "home", serial: "192.168.1.20:37005" }, grantWith("agent"))).rejects.toThrow(/not ready \(unauthorized\)/);
+    await phone.android.act({ action: "home", serial: SERIAL }, grantWith("agent", { screen: "off" }));
     expect(sent(phone)).toEqual([`-s ${SERIAL} shell input keyevent KEYCODE_HOME`]);
 });
 
 test("a phone screenshot is a frame of its own: coordinates are read in it and mapped to the phone's pixels", async () => {
     const phone = harness();
-    await expect(phone.android.act({ action: "tap", coordinate: [10, 10] }, scopes())).rejects.toThrow(
+    await expect(phone.android.act({ action: "tap", coordinate: [10, 10] }, grantWith("agent"))).rejects.toThrow(
         /There is no screenshot of R58M12ABCDE \(SM G991B\) yet: take android_screenshot/,
     );
-    const shot = await phone.android.screenshot(undefined, scopes());
+    const shot = await phone.android.screenshot(undefined, grantWith("agent"));
     const id = frameIdOf(shot);
     expect(texts(shot)).toEqual([
         expect.stringMatching(
@@ -180,22 +169,22 @@ test("a phone screenshot is a frame of its own: coordinates are read in it and m
         "<image>",
     ]);
     // The middle of the image is the middle of the phone.
-    const tapped = await phone.android.act({ action: "tap", coordinate: [327, 728], frame: id }, scopes());
+    const tapped = await phone.android.act({ action: "tap", coordinate: [327, 728], frame: id }, grantWith("agent"));
     expect(sent(phone).at(-2)).toBe(`-s ${SERIAL} shell input tap 540 1200`);
     // Nothing changed on the fake's screen, so the confirming look is a sentence, and the frame still stands.
     expect(texts(tapped)).toEqual([
         `Tapped (327, 728). The phone's screen did not change: phone screenshot ${id} is still exactly what it shows, so its coordinates still hold. If something should have happened, it did not.`,
     ]);
     // A desktop screenshot's id is another screen.
-    await expect(phone.android.act({ action: "tap", coordinate: [1, 1], frame: "a1b2-3" }, scopes())).rejects.toThrow(
+    await expect(phone.android.act({ action: "tap", coordinate: [1, 1], frame: "a1b2-3" }, grantWith("agent"))).rejects.toThrow(
         /"a1b2-3" is not a phone screenshot: .*never in a screenshot of this computer's desktop/,
     );
     // Off the image is refused, not clamped.
-    await expect(phone.android.act({ action: "tap", coordinate: [700, 10], frame: id }, scopes())).rejects.toThrow(/outside screenshot/);
+    await expect(phone.android.act({ action: "tap", coordinate: [700, 10], frame: id }, grantWith("agent"))).rejects.toThrow(/outside screenshot/);
     phone.shade = 90;
-    const newer = frameIdOf(await phone.android.screenshot(undefined, scopes()));
+    const newer = frameIdOf(await phone.android.screenshot(undefined, grantWith("agent")));
     expect(newer).not.toBe(id);
-    await expect(phone.android.act({ action: "tap", coordinate: [1, 1], frame: id }, scopes())).rejects.toThrow(
+    await expect(phone.android.act({ action: "tap", coordinate: [1, 1], frame: id }, grantWith("agent"))).rejects.toThrow(
         new RegExp(`Phone screenshot ${id} is out of date, or of another phone: the newest of R58M12ABCDE \\(SM G991B\\) is ${newer}`),
     );
 });
@@ -209,12 +198,12 @@ test("an action that changed the screen answers with the new screenshot", async 
             return undefined;
         },
     });
-    await phone.android.screenshot(undefined, scopes());
-    const result = await phone.android.act({ action: "back" }, scopes());
+    await phone.android.screenshot(undefined, grantWith("agent"));
+    const result = await phone.android.act({ action: "back" }, grantWith("agent"));
     expect(texts(result)).toEqual(["Pressed Back.", expect.stringMatching(/^Phone screenshot phone-/), "<image>"]);
     // Driven but not watched: no screenshot, and no capture either.
     const before = phone.calls.length;
-    expect(texts(await phone.android.act({ action: "recents" }, scopes({ screen: "off" })))).toEqual([
+    expect(texts(await phone.android.act({ action: "recents" }, grantWith("agent", { screen: "off" })))).toEqual([
         'Pressed Recents. (No screenshot: "See the screen" is off for this device.)',
     ]);
     expect(phone.calls.slice(before)).toEqual(["devices -l", `-s ${SERIAL} shell input keyevent KEYCODE_APP_SWITCH`]);
@@ -222,7 +211,7 @@ test("an action that changed the screen answers with the new screenshot", async 
 
 test("the screen's elements are listed with refs, placed in screenshot pixels, and a ref is tapped at its centre", async () => {
     const phone = harness();
-    const listing = await phone.android.uiElements({}, scopes());
+    const listing = await phone.android.uiElements({}, grantWith("agent"));
     expect(listing.split("\n")).toEqual([
         "R58M12ABCDE (SM G991B): 6 elements on screen (com.example.app).",
         "Positions are pixels in a phone screenshot of this screen (655×1456). Pass a ref as `element` to android_act to tap it where it is; refs hold until the next listing, so list again after the screen changes.",
@@ -233,14 +222,14 @@ test("the screen's elements are listed with refs, placed in screenshot pixels, a
         "e5 EditText id=search at 328,346 [clickable focusable focused]",
         'e6 TextView "Version 1.0" at 133,443',
     ]);
-    await phone.android.act({ action: "tap", element: "e3" }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "tap", element: "e3" }, grantWith("agent", { screen: "off" }));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell input tap 970 460`);
-    await phone.android.act({ action: "long_press", element: "e2" }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "long_press", element: "e2" }, grantWith("agent", { screen: "off" }));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell input swipe 540 300 540 300 800`);
-    await expect(phone.android.act({ action: "tap", element: "e99" }, scopes())).rejects.toThrow(/"e99" is not in the latest list .* \(e1 to e6\)/);
+    await expect(phone.android.act({ action: "tap", element: "e99" }, grantWith("agent"))).rejects.toThrow(/"e99" is not in the latest list .* \(e1 to e6\)/);
     // Once a screenshot is taken, positions name it.
-    const id = frameIdOf(await phone.android.screenshot(undefined, scopes()));
-    expect((await phone.android.uiElements({ query: "version" }, scopes())).split("\n").slice(0, 3)).toEqual([
+    const id = frameIdOf(await phone.android.screenshot(undefined, grantWith("agent")));
+    expect((await phone.android.uiElements({ query: "version" }, grantWith("agent"))).split("\n").slice(0, 3)).toEqual([
         'R58M12ABCDE (SM G991B): 1 element matching "version" (com.example.app).',
         expect.stringContaining(`Positions are pixels in phone screenshot ${id}.`),
         'e1 TextView "Version 1.0" at 133,443',
@@ -264,7 +253,7 @@ test("a dump the phone cannot send to the terminal is read through a file it the
             return undefined;
         },
     });
-    expect(await phone.android.uiElements({}, scopes())).toContain('e1 Button "OK"');
+    expect(await phone.android.uiElements({}, grantWith("agent"))).toContain('e1 Button "OK"');
     expect(sent(phone)).toEqual([
         `-s ${SERIAL} exec-out uiautomator dump /dev/tty`,
         `-s ${SERIAL} shell uiautomator dump /sdcard/window_dump.xml`,
@@ -275,26 +264,26 @@ test("a dump the phone cannot send to the terminal is read through a file it the
     const stuck = harness({
         respond: (args) => (args.join(" ").includes("uiautomator") ? { stdout: Buffer.from("ERROR: could not get idle state.\n") } : undefined),
     });
-    await expect(stuck.android.uiElements({}, scopes())).rejects.toThrow(
+    await expect(stuck.android.uiElements({}, grantWith("agent"))).rejects.toThrow(
         /could not get idle state\.\)\. A screen that never stops moving .*android_screenshot/,
     );
 });
 
 test("typed text is sent so the phone types exactly it, and what it cannot type or must not is refused before anything is sent", async () => {
     const phone = harness();
-    await phone.android.act({ action: "type", text: "it's 50% done\n" }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "type", text: "it's 50% done\n" }, grantWith("agent", { screen: "off" }));
     expect(sent(phone)).toEqual([`-s ${SERIAL} shell input text 'it'\\''s%s50%%sdone' && input keyevent 66`]);
     const before = phone.calls.length;
-    await expect(phone.android.act({ action: "type", text: "rm -rf ~\n" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
+    await expect(phone.android.act({ action: "type", text: "rm -rf ~\n" }, grantWith("agent", { destructive: "off", programs: "off" }))).rejects.toThrow(
         /Typing a command is running it, so the same switch decides/,
     );
-    await expect(phone.android.act({ action: "type", text: "naïve" }, scopes())).rejects.toThrow(/plain ASCII only/);
-    await expect(phone.android.act({ action: "key", text: "POWER" }, scopes())).rejects.toThrow(
+    await expect(phone.android.act({ action: "type", text: "naïve" }, grantWith("agent"))).rejects.toThrow(/plain ASCII only/);
+    await expect(phone.android.act({ action: "key", text: "POWER" }, grantWith("agent"))).rejects.toThrow(
         /^Refused: KEYCODE_POWER turns the phone's screen off/,
     );
-    await expect(phone.android.act({ action: "key" }, scopes())).rejects.toThrow(/"text" is required to press a key/);
+    await expect(phone.android.act({ action: "key" }, grantWith("agent"))).rejects.toThrow(/"text" is required to press a key/);
     expect(phone.calls.length).toBe(before);
-    await phone.android.act({ action: "key", text: "Return" }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "key", text: "Return" }, grantWith("agent", { screen: "off" }));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell input keyevent KEYCODE_ENTER`);
 });
 
@@ -336,39 +325,39 @@ const watchHarness = (options: { front?: string; dim?: boolean } = {}): Harness 
 
 test("android_devices says a watch is one, and acting on it then needs no second look at what it is", async () => {
     const watch = watchHarness();
-    const listed = await watch.android.devices(scopes());
+    const listed = await watch.android.devices(grantWith("agent"));
     expect(JSON.parse(listed.split("\n").slice(1).join("\n"))).toEqual([
         expect.objectContaining({ serial: WATCH, transport: "emulator", form: "watch", ready: true, screen: "454×454" }),
     ]);
     const before = watch.calls.length;
-    await watch.android.act({ action: "back" }, scopes({ screen: "off" }));
+    await watch.android.act({ action: "back" }, grantWith("agent", { screen: "off" }));
     expect(watch.calls.slice(before)).toEqual(["devices -l", `-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_BACK`]);
 });
 
 test("on a watch a scroll turns the crown, Recents is the side button, and a dimmed screen is woken first", async () => {
     const watch = watchHarness();
-    expect(texts(await watch.android.act({ action: "scroll" }, scopes({ screen: "off" })))).toEqual([
+    expect(texts(await watch.android.act({ action: "scroll" }, grantWith("agent", { screen: "off" })))).toEqual([
         'Turned the crown to scroll down. (No screenshot: "See the screen" is off for this device.)',
     ]);
     // Read once, on the first action, then remembered.
     expect(watch.calls.filter((call) => call.endsWith(FORM_READ))).toHaveLength(1);
     expect(sent(watch).at(-1)).toBe(`-s ${WATCH} shell ${WAKE}input rotaryencoder scroll --axis SCROLL,-2`);
-    await watch.android.act({ action: "scroll", direction: "up", amount: 2 }, scopes({ screen: "off" }));
+    await watch.android.act({ action: "scroll", direction: "up", amount: 2 }, grantWith("agent", { screen: "off" }));
     expect(sent(watch).at(-1)).toBe(
         `-s ${WATCH} shell ${WAKE}input rotaryencoder scroll --axis SCROLL,2 && input rotaryencoder scroll --axis SCROLL,2`,
     );
     // Sideways, or at a place named on the screen, it is still a swipe.
-    await watch.android.screenshot(undefined, scopes());
-    await watch.android.act({ action: "scroll", direction: "left" }, scopes({ screen: "off" }));
+    await watch.android.screenshot(undefined, grantWith("agent"));
+    await watch.android.act({ action: "scroll", direction: "left" }, grantWith("agent", { screen: "off" }));
     expect(sent(watch).at(-1)).toMatch(new RegExp(`^-s ${WATCH} shell .*input swipe \\d+ 227 \\d+ 227 400$`));
-    await watch.android.act({ action: "scroll", coordinate: [227, 227] }, scopes({ screen: "off" }));
+    await watch.android.act({ action: "scroll", coordinate: [227, 227] }, grantWith("agent", { screen: "off" }));
     expect(sent(watch).at(-1)).toMatch(new RegExp(`^-s ${WATCH} shell .*input swipe 227 \\d+ 227 \\d+ 400$`));
-    expect(texts(await watch.android.act({ action: "recents" }, scopes({ screen: "off" })))).toEqual([
+    expect(texts(await watch.android.act({ action: "recents" }, grantWith("agent", { screen: "off" })))).toEqual([
         'Pressed the side button, which opens the recent apps. (No screenshot: "See the screen" is off for this device.)',
     ]);
     expect(sent(watch).at(-1)).toBe(`-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_STEM_PRIMARY`);
     const dim = watchHarness({ dim: true });
-    expect(texts(await dim.android.act({ action: "key", text: "ENTER" }, scopes({ screen: "off" })))).toEqual([
+    expect(texts(await dim.android.act({ action: "key", text: "ENTER" }, grantWith("agent", { screen: "off" })))).toEqual([
         'Pressed KEYCODE_ENTER. The watch\'s screen had dimmed, so it was woken first. (No screenshot: "See the screen" is off for this device.)',
     ]);
 });
@@ -377,7 +366,7 @@ test("Home on a watch lands on the watch face whether it started on the face, in
     // From the face, one press opens the app list: it is pressed once more.
     const fromFace = watchHarness();
     fromFace.front.now = APP_LIST;
-    expect(texts(await fromFace.android.act({ action: "home" }, scopes({ screen: "off" })))).toEqual([
+    expect(texts(await fromFace.android.act({ action: "home" }, grantWith("agent", { screen: "off" })))).toEqual([
         'Went to the watch face. (No screenshot: "See the screen" is off for this device.)',
     ]);
     expect(sent(fromFace)).toEqual([
@@ -387,14 +376,14 @@ test("Home on a watch lands on the watch face whether it started on the face, in
     ]);
     // From an app or the app list, one press already lands there.
     const fromApp = watchHarness({ front: WATCH_FACE });
-    await fromApp.android.act({ action: "home" }, scopes({ screen: "off" }));
+    await fromApp.android.act({ action: "home" }, grantWith("agent", { screen: "off" }));
     expect(sent(fromApp)).toEqual([`-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_HOME`, `-s ${WATCH} shell dumpsys window | grep mCurrentFocus=`]);
 });
 
 test("a phone is driven as it always was, and a serial handed to another device is looked at afresh", async () => {
     const phone = harness();
-    await phone.android.act({ action: "scroll" }, scopes({ screen: "off" }));
-    await phone.android.act({ action: "home" }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "scroll" }, grantWith("agent", { screen: "off" }));
+    await phone.android.act({ action: "home" }, grantWith("agent", { screen: "off" }));
     expect(sent(phone)).toEqual([
         `-s ${SERIAL} exec-out screencap -p`,
         `-s ${SERIAL} shell input swipe 540 1740 540 660 400`,
@@ -404,15 +393,15 @@ test("a phone is driven as it always was, and a serial handed to another device 
     // The same emulator serial, now a watch: what it is is read again.
     const watch = watchHarness();
     watch.devices = ONE_PHONE.replace(SERIAL, WATCH);
-    await watch.android.act({ action: "back" }, scopes({ screen: "off" }));
+    await watch.android.act({ action: "back" }, grantWith("agent", { screen: "off" }));
     watch.devices = ONE_WATCH;
-    await watch.android.act({ action: "back" }, scopes({ screen: "off" }));
+    await watch.android.act({ action: "back" }, grantWith("agent", { screen: "off" }));
     expect(watch.calls.filter((call) => call.endsWith(FORM_READ))).toHaveLength(2);
 });
 
 test("input is refused while the person at the computer has paused the agent", async () => {
     const phone = harness({ paused: true });
-    await expect(phone.android.act({ action: "home" }, scopes())).rejects.toThrow(/paused by the person at this computer/);
+    await expect(phone.android.act({ action: "home" }, grantWith("agent"))).rejects.toThrow(/paused by the person at this computer/);
     expect(sent(phone)).toEqual([]);
 });
 
@@ -431,13 +420,13 @@ test("a scroll drags the content the other way, in the screen's middle band; a s
         { x: 297, y: 1200 },
     ]);
     const phone = harness();
-    const id = frameIdOf(await phone.android.screenshot(undefined, scopes()));
-    await phone.android.act({ action: "scroll", amount: 2 }, scopes({ screen: "off" }));
+    const id = frameIdOf(await phone.android.screenshot(undefined, grantWith("agent")));
+    await phone.android.act({ action: "scroll", amount: 2 }, grantWith("agent", { screen: "off" }));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell input swipe 540 1740 540 660 400 && input swipe 540 1740 540 660 400`);
-    await phone.android.act({ action: "swipe", coordinate: [100, 1000], to: [100, 200], frame: id }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "swipe", coordinate: [100, 1000], to: [100, 200], frame: id }, grantWith("agent", { screen: "off" }));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell input swipe 165 1649 165 330 300`);
-    await expect(phone.android.act({ action: "swipe", coordinate: [100, 1000] }, scopes())).rejects.toThrow(/swipe needs `to`/);
-    await expect(phone.android.act({ action: "tap" }, scopes())).rejects.toThrow(/tap needs `element`/);
+    await expect(phone.android.act({ action: "swipe", coordinate: [100, 1000] }, grantWith("agent"))).rejects.toThrow(/swipe needs `to`/);
+    await expect(phone.android.act({ action: "tap" }, grantWith("agent"))).rejects.toThrow(/tap needs `element`/);
 });
 
 test("android_shell runs on the phone, and refuses what would lose something unless the destructive switch is on", async () => {
@@ -456,27 +445,27 @@ test("android_shell runs on the phone, and refuses what would lose something unl
             return undefined;
         },
     });
-    expect(await phone.android.shell({ command: "dumpsys battery" }, scopes())).toBe(
+    expect(await phone.android.shell({ command: "dumpsys battery" }, grantWith("agent"))).toBe(
         "On R58M12ABCDE (SM G991B): Exit code 0 (success).\n--- stdout ---\nCurrent Battery Service state:\n  level: 81",
     );
-    expect(await phone.android.shell({ command: "ls /nope" }, scopes())).toContain(
+    expect(await phone.android.shell({ command: "ls /nope" }, grantWith("agent"))).toContain(
         "Exit code 1 (failed).\n--- stderr ---\nls: /nope: No such file or directory",
     );
-    expect(await phone.android.shell({ command: "sleep 999", timeoutMs: 5_000 }, scopes())).toContain("The command was stopped after 5s");
+    expect(await phone.android.shell({ command: "sleep 999", timeoutMs: 5_000 }, grantWith("agent"))).toContain("The command was stopped after 5s");
     const before = phone.calls.length;
-    await expect(phone.android.shell({ command: "pm uninstall com.example.app" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
+    await expect(phone.android.shell({ command: "pm uninstall com.example.app" }, grantWith("agent", { destructive: "off", programs: "off" }))).rejects.toThrow(
         'Refused: on the phone this command would uninstall an app, and "Run destructive commands" is switched off for this device.',
     );
     // The shared classifier and the phone's own list name a recursive delete once.
-    await expect(phone.android.shell({ command: "rm -rf /sdcard/Download/old" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
+    await expect(phone.android.shell({ command: "rm -rf /sdcard/Download/old" }, grantWith("agent", { destructive: "off", programs: "off" }))).rejects.toThrow(
         /would delete files recursively, and "Run destructive commands"/,
     );
-    await expect(phone.android.shell({ command: "settings put system screen_off_timeout 10" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
+    await expect(phone.android.shell({ command: "settings put system screen_off_timeout 10" }, grantWith("agent", { destructive: "off", programs: "off" }))).rejects.toThrow(
         ScopeError,
     );
-    await expect(phone.android.shell({ command: "input keyevent 26" }, scopes())).rejects.toThrow(/^Refused: input keyevent 26 \(KEYCODE_POWER\)/);
+    await expect(phone.android.shell({ command: "input keyevent 26" }, grantWith("agent"))).rejects.toThrow(/^Refused: input keyevent 26 \(KEYCODE_POWER\)/);
     expect(phone.calls.length).toBe(before);
-    await phone.android.shell({ command: "pm uninstall com.example.app" }, scopes());
+    await phone.android.shell({ command: "pm uninstall com.example.app" }, grantWith("agent"));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell pm uninstall com.example.app`);
 });
 
@@ -497,7 +486,7 @@ test("android_install takes an APK inside the allowed folders and says what the 
                           }
                     : undefined,
         });
-        const grant = scopes({ roots: root });
+        const grant = grantWith("agent", { roots: root });
         expect(await phone.android.install({ path: apk }, grant)).toBe(
             `Installed ${apk} on R58M12ABCDE (SM G991B), replacing the app's earlier version if it had one (its data is kept).`,
         );
@@ -507,7 +496,7 @@ test("android_install takes an APK inside the allowed folders and says what the 
         await expect(phone.android.install({ path: join(root, "notes.txt") }, grant)).rejects.toThrow(/is not an \.apk/);
         await expect(phone.android.install({ path: join(root, "missing.apk") }, grant)).rejects.toThrow(/There is no file/);
         await expect(phone.android.install({ path: "/etc/app.apk" }, grant)).rejects.toThrow(/outside the folders this device allows/);
-        await expect(phone.android.install({ path: apk }, scopes({ roots: root, shell: "off" }))).rejects.toThrow(/"Run commands" is switched off/);
+        await expect(phone.android.install({ path: apk }, grantWith("agent", { roots: root, shell: "off" }))).rejects.toThrow(/"Run commands" is switched off/);
     } finally {
         await rm(root, { recursive: true, force: true });
     }
@@ -529,17 +518,17 @@ test("android_logcat reads the tail of the log, narrowed to an app's process, a 
             return undefined;
         },
     });
-    expect(await phone.android.logcat({ package: "com.example.app" }, scopes())).toBe(
+    expect(await phone.android.logcat({ package: "com.example.app" }, grantWith("agent"))).toBe(
         "Up to the last 200 lines of R58M12ABCDE (SM G991B)'s log from com.example.app (pid 4321):\n10-05 12:00:00.000  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main",
     );
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} logcat -d -t 200 --pid=4321`);
-    await phone.android.logcat({ tag: "AndroidRuntime", priority: "E", lines: 50 }, scopes());
+    await phone.android.logcat({ tag: "AndroidRuntime", priority: "E", lines: 50 }, grantWith("agent"));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} logcat -d -t 50 AndroidRuntime:E *:S`);
-    await phone.android.logcat({ priority: "W" }, scopes());
+    await phone.android.logcat({ priority: "W" }, grantWith("agent"));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} logcat -d -t 200 *:W`);
-    await expect(phone.android.logcat({ package: "com.example.gone" }, scopes())).rejects.toThrow(/com\.example\.gone is not running on R58M12ABCDE/);
-    await expect(phone.android.logcat({ package: "com.x; reboot" }, scopes())).rejects.toThrow(/is not an Android package name/);
-    await expect(phone.android.logcat({ tag: "a b" }, scopes())).rejects.toThrow(/is not a log tag/);
+    await expect(phone.android.logcat({ package: "com.example.gone" }, grantWith("agent"))).rejects.toThrow(/com\.example\.gone is not running on R58M12ABCDE/);
+    await expect(phone.android.logcat({ package: "com.x; reboot" }, grantWith("agent"))).rejects.toThrow(/is not an Android package name/);
+    await expect(phone.android.logcat({ tag: "a b" }, grantWith("agent"))).rejects.toThrow(/is not a log tag/);
 });
 
 /* The real runner, over this test's own runtime standing in for adb: what a phone sends back is bytes (a screenshot),

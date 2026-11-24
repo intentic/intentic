@@ -2,6 +2,126 @@
   "edges": [
     {
       "dev": false,
+      "from": "_agent-tools/agent-cli",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/agent-cli",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/agent-cli",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/agent-cli",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/fileq",
+      "to": "_agent-tools/agent-cli"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/fileq",
+      "to": "_agent-tools/webq"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/fileq",
+      "to": "_shared/workspace-ignore"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/fileq",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/fileq",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/fileq",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/fileq",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/lsp",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/lsp",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/lsp",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/text-search",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/text-search",
+      "to": "_shared/workspace-ignore"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/text-search",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/text-search",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/text-search",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/text-search",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/webq",
+      "to": "_agent-tools/agent-cli"
+    },
+    {
+      "dev": false,
+      "from": "_agent-tools/webq",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/webq",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_agent-tools/webq",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
       "from": "_devices/acp-bridge",
       "to": "_devices/local-agent"
     },
@@ -109,16 +229,16 @@
       "dev": true,
       "from": "_devices/local-agent",
       "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_devices/local-files",
+      "to": "_agent-tools/fileq"
     },
     {
       "dev": false,
       "from": "_devices/local-files",
       "to": "_extensions/onlyoffice"
-    },
-    {
-      "dev": false,
-      "from": "_devices/local-files",
-      "to": "_sandbox/fileq"
     },
     {
       "dev": false,
@@ -368,11 +488,6 @@
     {
       "dev": false,
       "from": "_editor/web",
-      "to": "_extensions/e-urzad"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
       "to": "_extensions/git-history"
     },
     {
@@ -601,46 +716,6 @@
       "to": "_tools/tsconfig"
     },
     {
-      "dev": true,
-      "from": "_extensions/e-urzad",
-      "to": "_shared/connector-runtime"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/e-urzad",
-      "to": "_shared/extension-api"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/e-urzad",
-      "to": "_shared/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/e-urzad",
-      "to": "_shared/extension-ui"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/e-urzad",
-      "to": "_shared/sandbox-contract"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/e-urzad",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/e-urzad",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/e-urzad",
-      "to": "_tools/tsconfig"
-    },
-    {
       "dev": false,
       "from": "_extensions/git-history",
       "to": "_shared/extension-api"
@@ -833,31 +908,6 @@
     {
       "dev": true,
       "from": "_extensions/pipelines",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/prawo",
-      "to": "_shared/connector-runtime"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/prawo",
-      "to": "_shared/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/prawo",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/prawo",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/prawo",
       "to": "_tools/tsconfig"
     },
     {
@@ -1126,41 +1176,6 @@
       "to": "_tools/tsconfig"
     },
     {
-      "dev": false,
-      "from": "_sandbox/fileq",
-      "to": "_sandbox/webq"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/fileq",
-      "to": "_shared/workspace-ignore"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/fileq",
-      "to": "_tools/agent-cli"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/fileq",
-      "to": "_tools/base"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/fileq",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/fileq",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/fileq",
-      "to": "_tools/tsconfig"
-    },
-    {
       "dev": true,
       "from": "_sandbox/gate",
       "to": "_shared/sandbox-contract"
@@ -1268,6 +1283,26 @@
     {
       "dev": false,
       "from": "_sandbox/sandbox",
+      "to": "_agent-tools/fileq"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_agent-tools/lsp"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_agent-tools/text-search"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_agent-tools/webq"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
       "to": "_devices/desktop-automation"
     },
     {
@@ -1279,11 +1314,6 @@
       "dev": false,
       "from": "_sandbox/sandbox",
       "to": "_sandbox/agent-context"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/fileq"
     },
     {
       "dev": false,
@@ -1319,21 +1349,6 @@
       "dev": false,
       "from": "_sandbox/sandbox",
       "to": "_sandbox/webchat-widget"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_sandbox/webq"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_search/lsp"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sandbox",
-      "to": "_search/text-search"
     },
     {
       "dev": false,
@@ -1468,71 +1483,6 @@
     {
       "dev": true,
       "from": "_sandbox/webchat-widget",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/webq",
-      "to": "_tools/agent-cli"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/webq",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/webq",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/webq",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_search/lsp",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_search/lsp",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_search/lsp",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_search/text-search",
-      "to": "_shared/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_search/text-search",
-      "to": "_shared/workspace-ignore"
-    },
-    {
-      "dev": false,
-      "from": "_search/text-search",
-      "to": "_tools/base"
-    },
-    {
-      "dev": false,
-      "from": "_search/text-search",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_search/text-search",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_search/text-search",
       "to": "_tools/tsconfig"
     },
     {
@@ -1808,11 +1758,6 @@
     {
       "dev": false,
       "from": "_site/demo",
-      "to": "_extensions/e-urzad"
-    },
-    {
-      "dev": false,
-      "from": "_site/demo",
       "to": "_shared/api-contract"
     },
     {
@@ -1893,26 +1838,6 @@
     {
       "dev": true,
       "from": "_site/site-content",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_tools/agent-cli",
-      "to": "_tools/base"
-    },
-    {
-      "dev": false,
-      "from": "_tools/agent-cli",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_tools/agent-cli",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_tools/agent-cli",
       "to": "_tools/tsconfig"
     },
     {
@@ -2162,6 +2087,201 @@
     }
   ],
   "entries": [
+    {
+      "anchors": [
+        {
+          "path": "_agent-tools/agent-cli/src/run.ts",
+          "what": "runAgentCli: the process contract every rule above lives in."
+        },
+        {
+          "path": "_agent-tools/agent-cli/src/output.ts",
+          "what": "capsule and clip, the capsule-then-content shape these CLIs print."
+        },
+        {
+          "path": "_agent-tools/agent-cli/src/env.ts",
+          "what": "toolHome and toolOutDir, where a tool's own files go."
+        },
+        {
+          "path": "_agent-tools/agent-cli/src/testing.ts",
+          "what": "captureCli, the in-process runner the tools' suites drive."
+        },
+        {
+          "path": "_agent-tools/agent-cli/src/flags.ts",
+          "what": "countParser, which refuses negative, infinite and NaN budgets."
+        }
+      ],
+      "behind": 0,
+      "component": "agent-tools",
+      "dir": "_agent-tools/agent-cli",
+      "files": 10,
+      "hasTests": true,
+      "loc": 338,
+      "name": "@intentic/agent-cli",
+      "oneLiner": "The process contract, budgeted output and in-process test runner that the agent-facing CLIs fileq and webq share, so a failure never reads as an empty answer.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_agent-tools/fileq/src/app.ts",
+          "what": "the command routes and the --help text an agent reads."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/derive.ts",
+          "what": "ensureSidecar and renderByContent: the pipeline read and derive both run."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/content-cache.ts",
+          "what": "renderings keyed by content hash and deriver stamp."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/ocr-slots.ts",
+          "what": "how many OCR readers run at once across the machine."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/formats.ts",
+          "what": "detectFormat: magic bytes first, extension as fallback."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/sidecar.ts",
+          "what": "sidecar paths, front matter, the freshness rule and the source stat."
+        },
+        {
+          "path": "_agent-tools/fileq/bin/fileq-rg-pre",
+          "what": "ripgrep's preprocessor for documents; fileq ripgrep-config wires it."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/check/check.ts",
+          "what": "fileq check: which formats have a checker; each format's rules sit beside it."
+        },
+        {
+          "path": "_agent-tools/fileq/src/lib/render/render.ts",
+          "what": "fileq render: conversion, rasterizing and the render cache."
+        }
+      ],
+      "behind": 0,
+      "component": "agent-tools",
+      "dir": "_agent-tools/fileq",
+      "files": 64,
+      "hasTests": true,
+      "loc": 9163,
+      "name": "@intentic/fileq",
+      "oneLiner": "A CLI that shows an agent the contents of binary workspace files (Office documents, PDFs, images, audio, archives) as budgeted markdown, cached by content, and checks and draws the documents an…",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_agent-tools/lsp/src/cli.ts",
+          "what": "the two verbs and their exit codes."
+        },
+        {
+          "path": "_agent-tools/lsp/src/rename.ts",
+          "what": "symbol anchoring and the language-server rename."
+        },
+        {
+          "path": "_agent-tools/lsp/src/checker.ts",
+          "what": "one compiler run per project, and when it refuses."
+        },
+        {
+          "path": "_agent-tools/lsp/src/client.ts",
+          "what": "diagnose, the pooled entry point the sandbox hook uses."
+        },
+        {
+          "path": "_agent-tools/lsp/src/report.ts",
+          "what": "parsing compiler output into diagnostics and refusals."
+        },
+        {
+          "path": "_agent-tools/lsp/src/vue-check.ts",
+          "what": "a Vue package's changed-files check: what it covers, when it refuses, the run."
+        }
+      ],
+      "behind": 0,
+      "component": "agent-tools",
+      "dir": "_agent-tools/lsp",
+      "files": 18,
+      "hasTests": true,
+      "loc": 2486,
+      "name": "@intentic/lsp",
+      "oneLiner": "The lsp CLI, which renames a TypeScript symbol across its project and reports compiler diagnostics by running the native TypeScript compiler, or a Vue package's own vue-tsc, once per question.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_agent-tools/text-search/src/text-search.ts",
+          "what": "findText and scanText: the walk, the per-file cap, the ceiling and the pattern recoveries."
+        },
+        {
+          "path": "_agent-tools/text-search/src/file-search.ts",
+          "what": "findFiles: the file listing and its ranking."
+        },
+        {
+          "path": "_agent-tools/text-search/src/floor.ts",
+          "what": "what no search can ever surface."
+        },
+        {
+          "path": "_agent-tools/text-search/src/glob.ts",
+          "what": "how a files-to-include pattern is read, as ripgrep's -g reads it."
+        }
+      ],
+      "behind": 0,
+      "component": "agent-tools",
+      "dir": "_agent-tools/text-search",
+      "files": 11,
+      "hasTests": true,
+      "loc": 823,
+      "name": "@intentic/text-search",
+      "oneLiner": "The searches behind the editor's search box: text in files and file names, each one a ripgrep walk of the tree as it is on disk, with no index to build or keep.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_agent-tools/webq/src/app.ts",
+          "what": "the commands and the --help text an agent reads."
+        },
+        {
+          "path": "_agent-tools/webq/src/lib/page.ts",
+          "what": "one URL to one PageResult: cache, static fetch, browser fallback, notes."
+        },
+        {
+          "path": "_agent-tools/webq/src/lib/prune.ts",
+          "what": "scores elements and drops navigation and page chrome."
+        },
+        {
+          "path": "_agent-tools/webq/src/lib/markdown.ts",
+          "what": "DOM to markdown with absolute links, and markdownTable, the table writer fileq shares."
+        },
+        {
+          "path": "_agent-tools/webq/src/lib/crawl.ts",
+          "what": "bounded crawl, breadth-first or query-steered, with skip counts."
+        },
+        {
+          "path": "_agent-tools/webq/src/cli.integration.test.ts",
+          "what": "the CLI end to end against a loopback fixture site."
+        }
+      ],
+      "behind": 0,
+      "component": "agent-tools",
+      "dir": "_agent-tools/webq",
+      "files": 28,
+      "hasTests": true,
+      "loc": 2517,
+      "name": "@intentic/webq",
+      "oneLiner": "A CLI that fetches web pages for an agent as pruned, token-budgeted markdown and crawls a site into files, over one shared cache.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
     {
       "anchors": [
         {
@@ -2469,12 +2589,12 @@
       "dir": "_devices/machine",
       "files": 362,
       "hasTests": true,
-      "loc": 68334,
+      "loc": 68185,
       "name": "@intentic/machine",
       "oneLiner": "intentic-machine, the one agent on a user's own computer: it lets a paired sandbox work on the device under scopes enforced locally, and mirrors a sandbox's folder and ports onto it.",
-      "readmeRev": "a8a368abff4bf338f06eb928a68d017452acd1ce",
+      "readmeRev": "fb52b92bccdb5160338d53f5fc74e07baee5e058",
       "stale": false,
-      "updatedAt": 1795428280000
+      "updatedAt": 1795475620000
     },
     {
       "anchors": [
@@ -2885,7 +3005,7 @@
           "what": "and src/device/intenticOs/ThisComputer.vue — Intentic OS: this computer's network, sound, screens, keyboard and drives as ic os reports them, the changes the This computer cards make, and the thread that watches the drives."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 164,
@@ -2894,7 +3014,7 @@
       "name": "@intentic/desktop-app",
       "oneLiner": "The Tauri app for Windows and Linux that opens on the hosted workspace's Home from the first launch, opens the editor on a folder of the user's own computer with no account, runs sandboxes on that…",
       "readmeRev": "e0dd5b4648675d64a0f1e52cfd7b136445a22959",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1795303315000
     },
@@ -2938,14 +3058,14 @@
           "what": "what a local window may call, why its documents cannot, and why the workspace gets nothing."
         }
       ],
-      "behind": 18,
+      "behind": 19,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 72,
       "hasTests": true,
       "loc": 52242,
       "oneLiner": "The Rust crate behind the desktop app, owning its windows, tray, intentic:// links, script runs and self-update.",
       "readmeRev": "e45a380bf17260f086e12f01ffd0b5e128ae4873",
-      "reason": "18 commits have touched this package since its README was written",
+      "reason": "19 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794245570000
     },
@@ -3087,18 +3207,18 @@
           "what": "the <Button> tiers and how each maps onto PrimeVue."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 256,
+      "files": 257,
       "hasTests": false,
-      "loc": 32047,
+      "loc": 32205,
       "name": "@intentic/ui",
       "oneLiner": "The design system every editor surface mounts, holding the Vue components, composables, icons, theme tokens, translations and the product's one markdown engine.",
-      "readmeRev": "1d8b6d80ae73f99c54f219d046c1534b10b84412",
-      "reason": "1 commit has touched this package since its README was written",
+      "readmeRev": "fb0e561a39400c2e9c21f33770c4ba6582d31536",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1795343261000
+      "updatedAt": 1795457858000
     },
     {
       "anchors": [
@@ -3127,18 +3247,18 @@
           "what": "the persistent shell, split by form factor."
         }
       ],
-      "behind": 1,
+      "behind": 4,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 3601,
+      "files": 3673,
       "hasTests": true,
-      "loc": 504716,
+      "loc": 511821,
       "name": "@intentic/web",
       "oneLiner": "The Vue app the user works in, with files, chat, terminals and agents, talking to the platform for the account and straight to the sandbox daemon for everything else.",
-      "readmeRev": "b795576aa7e1f6826dd28190620578e2386808d6",
-      "reason": "1 commit has touched this package since its README was written",
+      "readmeRev": "d0ae4155ea5878c59ed557a5c40aaefbd6f0b25c",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1795432689000
+      "updatedAt": 1795475620000
     },
     {
       "anchors": [
@@ -3352,9 +3472,9 @@
       "loc": 0,
       "name": "@intentic/ext-connectors",
       "oneLiner": "A data-only extension that adds the first-party connection cards for developer and business services, from GitHub and Sentry to Postgres and Stripe, each with its agent skill.",
-      "readmeRev": "2bcfe3dd8db9ec1c11616f79c84de3f41f105938",
+      "readmeRev": "4036738a5b8f1149094c6afa8db5eab744f2211e",
       "stale": false,
-      "updatedAt": 1794412062000
+      "updatedAt": 1795477928000
     },
     {
       "anchors": [
@@ -3423,44 +3543,6 @@
       "loc": 2715,
       "name": "@intentic/ext-discord",
       "oneLiner": "The Discord connection: a bot-token card and skill for the agent, plus a gateway process that turns a mention into a thread the agent works in, and voice calls into automation events.",
-      "readmeRev": "2bcfe3dd8db9ec1c11616f79c84de3f41f105938",
-      "stale": false,
-      "updatedAt": 1794412062000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_extensions/e-urzad/intentic-extension.json",
-          "what": ": the two cards, the view, the bin, the per-card tools."
-        },
-        {
-          "path": "_extensions/e-urzad/src/core/guard.ts",
-          "what": "and src/server/perform.ts: holding an office act under its action-rule key, and the one place an approved act is carried out, with the checks it makes first."
-        },
-        {
-          "path": "_extensions/e-urzad/src/actions.ts",
-          "what": ": each office act as a proposal, and the one function that performs it."
-        },
-        {
-          "path": "_extensions/e-urzad/src/ezd/integrator.ts",
-          "what": "and src/ed/mailbox.ts: the two API clients, with the documents they follow."
-        },
-        {
-          "path": "_extensions/e-urzad/src/signatures/verify.ts",
-          "what": ": the verifier's entry; src/signatures/report.ts says why integrity, trust and qualification are kept apart."
-        },
-        {
-          "path": "_extensions/e-urzad/skills/e-urzad/SKILL.md",
-          "what": ": what the agent reads once a card is connected."
-        }
-      ],
-      "behind": 0,
-      "dir": "_extensions/e-urzad",
-      "files": 61,
-      "hasTests": true,
-      "loc": 6455,
-      "name": "@intentic/ext-e-urzad",
-      "oneLiner": "EZD RP (the government's document management system) and e-Doręczenia (registered electronic delivery) for a Polish public office, plus electronic-signature checks, as an agent CLI, per-card MCP…",
       "readmeRev": "2bcfe3dd8db9ec1c11616f79c84de3f41f105938",
       "stale": false,
       "updatedAt": 1794412062000
@@ -3662,18 +3744,17 @@
           "what": "when the page exports and writes the document, and the conflict it holds for the owner."
         }
       ],
-      "behind": 5,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/onlyoffice",
       "files": 80,
       "hasTests": true,
-      "loc": 13008,
+      "loc": 13013,
       "name": "@intentic/ext-onlyoffice",
       "oneLiner": "Opens Word, spreadsheet and presentation files from the workspace in an ONLYOFFICE editor, running either in the owner's browser from a bundle the sandbox downloads once, or as a document server…",
-      "readmeRev": "3e98d7e643cd82e83316d501a461ff96f0ca836b",
-      "reason": "5 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1794232285000
+      "readmeRev": "830f652b1b27e57114e9a7322eab5073d5d7d580",
+      "stale": false,
+      "updatedAt": 1795434615000
     },
     {
       "anchors": [
@@ -3804,50 +3885,6 @@
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794560802000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_extensions/prawo/src/cli.ts",
-          "what": "the commands and their flags, errors on stdout with exit 2."
-        },
-        {
-          "path": "_extensions/prawo/src/law/law.ts",
-          "what": "status, the choice of text, amendments after it, the cache in front of the sources."
-        },
-        {
-          "path": "_extensions/prawo/src/law/citation.ts",
-          "what": "journal addresses and the Polish citation forms."
-        },
-        {
-          "path": "_extensions/prawo/src/sources/eli.ts",
-          "what": "and src/sources/saos.ts — the two APIs, with the"
-        },
-        {
-          "path": "_extensions/prawo/src/text",
-          "what": "PDF text and HTML into articles and units."
-        },
-        {
-          "path": "_extensions/prawo/skills/prawo/SKILL.md",
-          "what": "what the agent is told: find, check status, quote, cite."
-        },
-        {
-          "path": "_extensions/prawo/src/fixtures",
-          "what": "trimmed real answers of both APIs and real fileq output, for the tests."
-        }
-      ],
-      "behind": 1,
-      "component": "extensions",
-      "dir": "_extensions/prawo",
-      "files": 18,
-      "hasTests": true,
-      "loc": 2818,
-      "name": "@intentic/ext-prawo",
-      "oneLiner": "Polish law for the agent: one card that gives it prawo, a CLI that finds acts in the Sejm's database, says whether they are in force, quotes the current text article by article with the citation to…",
-      "readmeRev": "c5ea221ab60af345d04e0ec05bf2075ffa75145a",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1792927378000
     },
     {
       "anchors": [
@@ -4141,49 +4178,190 @@
     {
       "anchors": [
         {
-          "path": "_os/os-image/Containerfile",
+          "path": "_hosts/ic/src/main.rs",
+          "what": "every command and flag, with its help text."
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/compose.rs",
+          "what": "keeps a sandbox Docker Compose runs Compose's across a swap."
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/connect.rs",
+          "what": "the setup one-liner's flow after Docker: claim, launch, reachability."
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/recreate.rs",
+          "what": "every image swap (update, prepare, rollback, rebuild, reshape) as one flow."
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/probation.rs",
+          "what": "the watch that finishes interrupted swaps and rolls a failing new version back."
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/side.rs",
+          "what": "which side of the computer keeps a sandbox, and the keeper's lease;"
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/egress/",
+          "what": "ic sandbox egress: the policy, the match, the nftables rules and"
+        },
+        {
+          "path": "_hosts/ic/src/contract.rs",
+          "what": "asks the image for its docker run command, or its Compose file (composeout.rs)."
+        },
+        {
+          "path": "_hosts/ic/src/os/",
+          "what": "ic os: Intentic OS's status, updates, orderly reboots, boot health and first-boot pairing;"
+        },
+        {
+          "path": "_hosts/ic/src/sandbox/host_files.rs",
+          "what": "holds every file ic and the daemon share inside the"
+        },
+        {
+          "path": "_hosts/ic/src/prepare/mod.rs",
+          "what": "ic docker prepare: facts, plan, fixes."
+        },
+        {
+          "path": "_hosts/ic/src/image_cache.rs",
+          "what": "ic image prefetch and the cache connect loads; src/fetch.rs"
+        }
+      ],
+      "behind": 0,
+      "component": "hosts",
+      "dir": "_hosts/ic",
+      "files": 137,
+      "hasTests": false,
+      "loc": 88189,
+      "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, gets Docker there first, and takes Intentic off it again.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_hosts/ic/bounded/src/lib.rs",
+          "what": "the capture, the two reaches, and the process-group and window helpers."
+        },
+        {
+          "path": "_hosts/ic/bounded/Cargo.toml",
+          "what": "why the crate takes no dependencies."
+        },
+        {
+          "path": "_hosts/ic/Cargo.toml",
+          "what": "the workspace that holds it, and why it is a crate of its own."
+        }
+      ],
+      "behind": 0,
+      "dir": "_hosts/ic/bounded",
+      "files": 1,
+      "hasTests": false,
+      "loc": 365,
+      "oneLiner": "Run a child process with a time limit and keep everything it printed: the one copy ic and the desktop app share.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_hosts/ic/docker-host/src/refusal.rs",
+          "what": "the three kinds of engine refusal, and whether any engine was reached, read off"
+        },
+        {
+          "path": "_hosts/ic/docker-host/src/desktop_app.rs",
+          "what": "the one Docker Desktop discovery script, the default install folders, and"
+        },
+        {
+          "path": "_hosts/ic/docker-host/src/powershell.rs",
+          "what": "the -EncodedCommand form both binaries hand a script to PowerShell in."
+        },
+        {
+          "path": "_hosts/ic/docker-host/src/lib.rs",
+          "what": "why the crate exists, and what stays with each caller."
+        }
+      ],
+      "behind": 0,
+      "dir": "_hosts/ic/docker-host",
+      "files": 6,
+      "hasTests": false,
+      "loc": 905,
+      "oneLiner": "What docker's refusals mean and where Docker Desktop lives on a PC: the readings ic and the desktop app share, so the two binaries answer those questions the same way.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_hosts/ic/sway-ipc/src/lib.rs",
+          "what": "the framing, the message and event types, and the request, command and subscribe calls."
+        },
+        {
+          "path": "_hosts/ic/sway-ipc/Cargo.toml",
+          "what": "why it takes serdejson and nothing else."
+        }
+      ],
+      "behind": 0,
+      "dir": "_hosts/ic/sway-ipc",
+      "files": 1,
+      "hasTests": false,
+      "loc": 240,
+      "oneLiner": "sway's IPC, i3's framing over a Unix socket, for the few messages Intentic OS's desktop needs: the one copy ic and the desktop app share.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
+          "path": "_hosts/os-image/Containerfile",
           "what": "the server edition: packages, ic, units, policy, sudo rules."
         },
         {
-          "path": "_os/os-image/Containerfile.desktop",
+          "path": "_hosts/os-image/Containerfile.desktop",
           "what": "the desktop edition on top of it."
         },
         {
-          "path": "_os/os-image/rootfs/usr/lib/systemd/system/intentic-pair.service",
+          "path": "_hosts/os-image/rootfs/usr/lib/systemd/system/intentic-pair.service",
           "what": "first-boot pairing."
         },
         {
-          "path": "_os/os-image/rootfs/usr/libexec/intentic-os/tpm-enroll",
+          "path": "_hosts/os-image/rootfs/usr/libexec/intentic-os/tpm-enroll",
           "what": "the disk bound to the TPM, the recovery key."
         },
         {
-          "path": "_os/os-image/rootfs/usr/share/polkit-1/rules.d/50-intentic.rules",
+          "path": "_hosts/os-image/rootfs/usr/share/polkit-1/rules.d/50-intentic.rules",
           "what": "what the intentic user may change without an administrator: Wi-Fi, removable drives."
         },
         {
-          "path": "_os/os-image/build.sh",
+          "path": "_hosts/os-image/build.sh",
           "what": ", disk.sh, smoke.sh — build an image, make a disk or installer, boot and check it."
         },
         {
-          "path": "_os/os-image/install-test.sh",
+          "path": "_hosts/os-image/install-test.sh",
           "what": "the installer end to end, with a software TPM and Secure Boot."
         },
         {
-          "path": "_os/os-image/publish-download.sh",
+          "path": "_hosts/os-image/metal.sh",
+          "what": ", metal-box.sh, Containerfile.dev, checks.sh — install, update and check a physical test machine, with the dev layer its images carry and the checks it shares with smoke.sh."
+        },
+        {
+          "path": "_hosts/os-image/publish-download.sh",
           "what": "a release's ISO and VM disk, up to the R2 bucket intentic.dev/os serves."
         }
       ],
       "behind": 0,
-      "component": "os",
-      "dir": "_os/os-image",
+      "component": "hosts",
+      "dir": "_hosts/os-image",
       "files": 0,
       "hasTests": false,
       "loc": 0,
       "name": "@intentic/os-image",
       "oneLiner": "The Intentic OS images: a bootc container image of Fedora that boots straight into Docker, ic and a first sandbox that manages the machine, plus the scripts that build it, turn it into a disk or an…",
-      "readmeRev": "935fb3299f176016918d8ef13490bcf964290c60",
+      "readmeRev": "",
       "stale": false,
-      "updatedAt": 1795016814000
+      "updatedAt": 0
     },
     {
       "anchors": [
@@ -4220,16 +4398,17 @@
           "what": "the hostname and signed grant each sandbox gets."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "platform",
       "dir": "_platform/api",
       "files": 215,
       "hasTests": true,
-      "loc": 42793,
+      "loc": 42796,
       "name": "@intentic/api",
       "oneLiner": "The platform's HTTP server (@intentic/api): sign-in, the registry of sandboxes and their addresses, hosted Fly machines, the hosted plan and the agent wallet.",
       "readmeRev": "797a99d1942b13fb0e393bafcc131a7bc5a1703f",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1795227653000
     },
     {
@@ -4331,18 +4510,17 @@
           "what": "display names, tool kinds, and the search, listing and file-work predicates."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/agent-context",
       "files": 13,
       "hasTests": true,
-      "loc": 2412,
+      "loc": 2410,
       "name": "@intentic/agent-context",
-      "oneLiner": "What a coding agent is told as a session opens, and the per-session readings that show whether it helped, shared by the sandbox daemon and the Claude Code plugin.",
-      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795012866000
+      "oneLiner": "What a coding agent is told as a session opens, and the per-session readings that show whether it helped, read by the sandbox daemon and its benches.",
+      "readmeRev": "5b4945edfd3a7c4d314d849f88127c2f4777f4e9",
+      "stale": false,
+      "updatedAt": 1795461644000
     },
     {
       "anchors": [
@@ -4537,57 +4715,6 @@
     {
       "anchors": [
         {
-          "path": "_sandbox/fileq/src/app.ts",
-          "what": "the command routes and the --help text an agent reads."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/derive.ts",
-          "what": "ensureSidecar and renderByContent: the pipeline read and derive both run."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/content-cache.ts",
-          "what": "renderings keyed by content hash and deriver stamp."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/ocr-slots.ts",
-          "what": "how many OCR readers run at once across the machine."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/formats.ts",
-          "what": "detectFormat: magic bytes first, extension as fallback."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/sidecar.ts",
-          "what": "sidecar paths, front matter, the freshness rule and the source stat."
-        },
-        {
-          "path": "_sandbox/fileq/bin/fileq-rg-pre",
-          "what": "ripgrep's preprocessor for documents; fileq ripgrep-config wires it."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/check/check.ts",
-          "what": "fileq check: which formats have a checker; each format's rules sit beside it."
-        },
-        {
-          "path": "_sandbox/fileq/src/lib/render/render.ts",
-          "what": "fileq render: conversion, rasterizing and the render cache."
-        }
-      ],
-      "behind": 0,
-      "component": "sandbox",
-      "dir": "_sandbox/fileq",
-      "files": 64,
-      "hasTests": true,
-      "loc": 9163,
-      "name": "@intentic/fileq",
-      "oneLiner": "A CLI that shows an agent the contents of binary workspace files (Office documents, PDFs, images, audio, archives) as budgeted markdown, cached by content, and checks and draws the documents an…",
-      "readmeRev": "1bd87a26eee2e489d9cdf997a493844497f368dc",
-      "stale": false,
-      "updatedAt": 1795424719000
-    },
-    {
-      "anchors": [
-        {
           "path": "_sandbox/gate/src/cli.ts",
           "what": "the process: read stdin, one exchange, print the verdict, exit."
         },
@@ -4651,144 +4778,6 @@
       "readmeRev": "c5ea221ab60af345d04e0ec05bf2075ffa75145a",
       "stale": false,
       "updatedAt": 1792927378000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/ic/src/main.rs",
-          "what": "every command and flag, with its help text."
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/compose.rs",
-          "what": "keeps a sandbox Docker Compose runs Compose's across a swap."
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/connect.rs",
-          "what": "the setup one-liner's flow after Docker: claim, launch, reachability."
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/recreate.rs",
-          "what": "every image swap (update, prepare, rollback, rebuild, reshape) as one flow."
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/probation.rs",
-          "what": "the watch that finishes interrupted swaps and rolls a failing new version back."
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/side.rs",
-          "what": "which side of the computer keeps a sandbox, and the keeper's lease;"
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/egress/",
-          "what": "ic sandbox egress: the policy, the match, the nftables rules and"
-        },
-        {
-          "path": "_sandbox/ic/src/contract.rs",
-          "what": "asks the image for its docker run command, or its Compose file (composeout.rs)."
-        },
-        {
-          "path": "_sandbox/ic/src/os/",
-          "what": "ic os: Intentic OS's status, updates, orderly reboots, boot health and first-boot pairing;"
-        },
-        {
-          "path": "_sandbox/ic/src/sandbox/host_files.rs",
-          "what": "holds every file ic and the daemon share inside the"
-        },
-        {
-          "path": "_sandbox/ic/src/prepare/mod.rs",
-          "what": "ic docker prepare: facts, plan, fixes."
-        },
-        {
-          "path": "_sandbox/ic/src/image_cache.rs",
-          "what": "ic image prefetch and the cache connect loads; src/fetch.rs"
-        }
-      ],
-      "behind": 0,
-      "component": "sandbox",
-      "dir": "_sandbox/ic",
-      "files": 137,
-      "hasTests": false,
-      "loc": 88189,
-      "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, gets Docker there first, and takes Intentic off it again.",
-      "readmeRev": "dfb767bb2e5aee4327379e70faf6592e3276e001",
-      "stale": false,
-      "updatedAt": 1795350421000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/ic/bounded/src/lib.rs",
-          "what": "the capture, the two reaches, and the process-group and window helpers."
-        },
-        {
-          "path": "_sandbox/ic/bounded/Cargo.toml",
-          "what": "why the crate takes no dependencies."
-        },
-        {
-          "path": "_sandbox/ic/Cargo.toml",
-          "what": "the workspace that holds it, and why it is a crate of its own."
-        }
-      ],
-      "behind": 1,
-      "dir": "_sandbox/ic/bounded",
-      "files": 1,
-      "hasTests": false,
-      "loc": 365,
-      "oneLiner": "Run a child process with a time limit and keep everything it printed: the one copy ic and the desktop app share.",
-      "readmeRev": "3b22a8b9e928475013f891963a1b8a72c0cc9354",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1792182619000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/ic/docker-host/src/refusal.rs",
-          "what": "the three kinds of engine refusal, and whether any engine was reached, read off"
-        },
-        {
-          "path": "_sandbox/ic/docker-host/src/desktop_app.rs",
-          "what": "the one Docker Desktop discovery script, the default install folders, and"
-        },
-        {
-          "path": "_sandbox/ic/docker-host/src/powershell.rs",
-          "what": "the -EncodedCommand form both binaries hand a script to PowerShell in."
-        },
-        {
-          "path": "_sandbox/ic/docker-host/src/lib.rs",
-          "what": "why the crate exists, and what stays with each caller."
-        }
-      ],
-      "behind": 0,
-      "dir": "_sandbox/ic/docker-host",
-      "files": 6,
-      "hasTests": false,
-      "loc": 905,
-      "oneLiner": "What docker's refusals mean and where Docker Desktop lives on a PC: the readings ic and the desktop app share, so the two binaries answer those questions the same way.",
-      "readmeRev": "42c7701c4a4d8a49abadef73c22440df5593e333",
-      "stale": false,
-      "updatedAt": 1791831682000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/ic/sway-ipc/src/lib.rs",
-          "what": "the framing, the message and event types, and the request, command and subscribe calls."
-        },
-        {
-          "path": "_sandbox/ic/sway-ipc/Cargo.toml",
-          "what": "why it takes serdejson and nothing else."
-        }
-      ],
-      "behind": 0,
-      "dir": "_sandbox/ic/sway-ipc",
-      "files": 1,
-      "hasTests": false,
-      "loc": 240,
-      "oneLiner": "sway's IPC, i3's framing over a Unix socket, for the few messages Intentic OS's desktop needs: the one copy ic and the desktop app share.",
-      "readmeRev": "949a8dec8c37648c356ae91ca6c1f5fd2fc7b41e",
-      "stale": false,
-      "updatedAt": 1792228921000
     },
     {
       "anchors": [
@@ -4869,8 +4858,8 @@
           "what": "where the tunnel stands for Node and the vitals, and"
         },
         {
-          "path": "_sandbox/netd/crates/netd/src/devices.rs",
-          "what": "connected computers' uplinks: who may dial, one yamux"
+          "path": "_sandbox/netd/crates/netd/src/uplinks.rs",
+          "what": "connected computers' and runners' uplinks: who may dial, one yamux"
         },
         {
           "path": "_sandbox/netd/crates/netd/src/term/mod.rs",
@@ -4889,17 +4878,16 @@
           "what": "the real binary on real ports: routing, preview relay, TLS, upgrades."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/netd",
       "files": 0,
       "hasTests": false,
       "loc": 0,
       "oneLiner": "The sandbox's network daemon, named the Unix way (like sshd): a Rust binary that owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and keeps the daemon…",
-      "readmeRev": "0528a02ca967ebc2715991e82de8d53ca1b97d29",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1795212815000
+      "readmeRev": "37438303dd6e725a0980bfa02e7686888bd051f5",
+      "stale": false,
+      "updatedAt": 1795452327000
     },
     {
       "anchors": [
@@ -4916,14 +4904,14 @@
           "what": "where netd answers the vitals this crate shapes."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "dir": "_sandbox/netd/crates/browser-wire",
       "files": 1,
       "hasTests": false,
-      "loc": 1405,
+      "loc": 1443,
       "oneLiner": "Everything a browser sees of a sandbox's netd and of the edge in front of it outside the daemon's oRPC contract: the terminal socket, the browser view socket, netd's vitals, the WebTransport path…",
       "readmeRev": "0528a02ca967ebc2715991e82de8d53ca1b97d29",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1795212815000
     },
@@ -4962,8 +4950,12 @@
           "what": "dials the edge and serves a stream per request."
         },
         {
-          "path": "_sandbox/netd/crates/netd/src/devices.rs",
-          "what": "connected computers' uplinks, which their screens and terminals are carried down."
+          "path": "_sandbox/netd/crates/netd/src/uplinks.rs",
+          "what": "connected computers' and runners' uplinks, which their screens, terminals and"
+        },
+        {
+          "path": "_sandbox/netd/crates/netd/src/parent.rs",
+          "what": "on a runner, the uplink it dials to its parent and serves as Listener::Parent."
         },
         {
           "path": "_sandbox/netd/crates/netd/tests/routes.rs",
@@ -4972,13 +4964,13 @@
       ],
       "behind": 0,
       "dir": "_sandbox/netd/crates/netd",
-      "files": 39,
+      "files": 41,
       "hasTests": true,
-      "loc": 18961,
+      "loc": 20952,
       "oneLiner": "The binary of the sandbox's network daemon: it owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and runs Node as its child across restarts.",
-      "readmeRev": "0528a02ca967ebc2715991e82de8d53ca1b97d29",
+      "readmeRev": "37438303dd6e725a0980bfa02e7686888bd051f5",
       "stale": false,
-      "updatedAt": 1795212815000
+      "updatedAt": 1795452327000
     },
     {
       "anchors": [
@@ -4995,14 +4987,15 @@
           "what": "where netd sets the environment named here on each Node it starts."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "dir": "_sandbox/netd/crates/netd-wire",
       "files": 1,
       "hasTests": false,
-      "loc": 818,
+      "loc": 1010,
       "oneLiner": "The control socket between intentic-netd and the Node daemon: length-prefixed JSON frames over one Unix socket, with netd owning every socket and byte and Node making every decision about them.",
       "readmeRev": "0528a02ca967ebc2715991e82de8d53ca1b97d29",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1795212815000
     },
     {
@@ -5125,12 +5118,12 @@
       "dir": "_sandbox/output-cleaners",
       "files": 30,
       "hasTests": true,
-      "loc": 6476,
+      "loc": 6466,
       "name": "@intentic/output-cleaners",
       "oneLiner": "Trims a coding agent's Bash output before the model reads it, keeps the raw text retrievable, and ledgers what each cleaner saved.",
-      "readmeRev": "c594082d8a164604f6f0e58575c1b0a20d705b05",
+      "readmeRev": "5b4945edfd3a7c4d314d849f88127c2f4777f4e9",
       "stale": false,
-      "updatedAt": 1795362355000
+      "updatedAt": 1795461644000
     },
     {
       "anchors": [
@@ -5206,18 +5199,18 @@
           "what": "provider and harness adapter selection."
         }
       ],
-      "behind": 2,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 3762,
+      "files": 3806,
       "hasTests": true,
-      "loc": 605659,
+      "loc": 612236,
       "name": "@intentic/sandbox",
       "oneLiner": "The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.",
-      "readmeRev": "1bd87a26eee2e489d9cdf997a493844497f368dc",
-      "reason": "2 commits have touched this package since its README was written",
+      "readmeRev": "2a0311c128a1e26a567a184f0a368f8b235cac3f",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1795424719000
+      "updatedAt": 1795477765000
     },
     {
       "anchors": [
@@ -5325,117 +5318,6 @@
     {
       "anchors": [
         {
-          "path": "_sandbox/webq/src/app.ts",
-          "what": "the commands and the --help text an agent reads."
-        },
-        {
-          "path": "_sandbox/webq/src/lib/page.ts",
-          "what": "one URL to one PageResult: cache, static fetch, browser fallback, notes."
-        },
-        {
-          "path": "_sandbox/webq/src/lib/prune.ts",
-          "what": "scores elements and drops navigation and page chrome."
-        },
-        {
-          "path": "_sandbox/webq/src/lib/markdown.ts",
-          "what": "DOM to markdown with absolute links, and markdownTable, the table writer fileq shares."
-        },
-        {
-          "path": "_sandbox/webq/src/lib/crawl.ts",
-          "what": "bounded crawl, breadth-first or query-steered, with skip counts."
-        },
-        {
-          "path": "_sandbox/webq/src/cli.integration.test.ts",
-          "what": "the CLI end to end against a loopback fixture site."
-        }
-      ],
-      "behind": 6,
-      "component": "sandbox",
-      "dir": "_sandbox/webq",
-      "files": 28,
-      "hasTests": true,
-      "loc": 2517,
-      "name": "@intentic/webq",
-      "oneLiner": "A CLI that fetches web pages for an agent as pruned, token-budgeted markdown and crawls a site into files, over one shared cache.",
-      "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "6 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791278385000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_search/lsp/src/cli.ts",
-          "what": "the two verbs and their exit codes."
-        },
-        {
-          "path": "_search/lsp/src/rename.ts",
-          "what": "symbol anchoring and the language-server rename."
-        },
-        {
-          "path": "_search/lsp/src/checker.ts",
-          "what": "one compiler run per project, and when it refuses."
-        },
-        {
-          "path": "_search/lsp/src/client.ts",
-          "what": "diagnose, the pooled entry point the sandbox hook uses."
-        },
-        {
-          "path": "_search/lsp/src/report.ts",
-          "what": "parsing compiler output into diagnostics and refusals."
-        },
-        {
-          "path": "_search/lsp/src/vue-check.ts",
-          "what": "a Vue package's changed-files check: what it covers, when it refuses, the run."
-        }
-      ],
-      "behind": 1,
-      "component": "search",
-      "dir": "_search/lsp",
-      "files": 18,
-      "hasTests": true,
-      "loc": 2486,
-      "name": "@intentic/lsp",
-      "oneLiner": "The lsp CLI, which renames a TypeScript symbol across its project and reports compiler diagnostics by running the native TypeScript compiler, or a Vue package's own vue-tsc, once per question.",
-      "readmeRev": "e3c88bcd893524a74b316893a71ded0e04d2f242",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1793133793000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_search/text-search/src/text-search.ts",
-          "what": "findText and scanText: the walk, the per-file cap, the ceiling and the pattern recoveries."
-        },
-        {
-          "path": "_search/text-search/src/file-search.ts",
-          "what": "findFiles: the file listing and its ranking."
-        },
-        {
-          "path": "_search/text-search/src/floor.ts",
-          "what": "what no search can ever surface."
-        },
-        {
-          "path": "_search/text-search/src/glob.ts",
-          "what": "how a files-to-include pattern is read, as ripgrep's -g reads it."
-        }
-      ],
-      "behind": 0,
-      "component": "search",
-      "dir": "_search/text-search",
-      "files": 11,
-      "hasTests": true,
-      "loc": 823,
-      "name": "@intentic/text-search",
-      "oneLiner": "The searches behind the editor's search box: text in files and file names, each one a ripgrep walk of the tree as it is on disk, with no index to build or keep.",
-      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
-      "stale": false,
-      "updatedAt": 1795012866000
-    },
-    {
-      "anchors": [
-        {
           "path": "_shared/api-contract/src/index.ts",
           "what": "apiContract: every platform route, grouped by domain, with who may call it."
         },
@@ -5492,16 +5374,16 @@
           "what": "which effects each kind discloses."
         }
       ],
-      "behind": 3,
+      "behind": 5,
       "component": "shared",
       "dir": "_shared/capability-catalog",
-      "files": 10,
+      "files": 11,
       "hasTests": true,
-      "loc": 2184,
+      "loc": 2143,
       "name": "@intentic/capability-catalog",
       "oneLiner": "The catalog of capability tiles an owner can connect, with each tile's add form and the side effects connecting it has, shared by the editor and the daemon.",
       "readmeRev": "936dcdd845e48328c67b031f36d95320d943656c",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794958579000
     },
@@ -5662,14 +5544,14 @@
       "behind": 0,
       "component": "shared",
       "dir": "_shared/extension-api",
-      "files": 19,
+      "files": 20,
       "hasTests": true,
-      "loc": 2576,
+      "loc": 2645,
       "name": "@intentic/extension-api",
       "oneLiner": "The versioned public API an intentic extension compiles against: IntenticApi for its browser half, ExtensionServerApi for its backend half, and the helpers both halves share.",
-      "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
+      "readmeRev": "60df4fb6f491585efac95b7daa0b668ab77211d6",
       "stale": false,
-      "updatedAt": 1795025063000
+      "updatedAt": 1795475620000
     },
     {
       "anchors": [
@@ -5698,7 +5580,7 @@
           "what": "the generated authoring schema."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "shared",
       "dir": "_shared/extension-manifest",
       "files": 32,
@@ -5707,7 +5589,7 @@
       "name": "@intentic/extension-manifest",
       "oneLiner": "The schema of intentic-extension.json: what an extension declares it contributes and may reach, which the install dialog shows and the host holds every registration to.",
       "readmeRev": "2bcfe3dd8db9ec1c11616f79c84de3f41f105938",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1794412062000
     },
@@ -5734,16 +5616,16 @@
           "what": "where the shell publishes its instances to extension bundles."
         }
       ],
-      "behind": 8,
+      "behind": 9,
       "component": "shared",
       "dir": "_shared/extension-ui",
       "files": 12,
       "hasTests": false,
-      "loc": 1504,
+      "loc": 1541,
       "name": "@intentic/extension-ui",
       "oneLiner": "The UI kit extensions render with: a curated slice of the editor's design system that the host supplies at runtime, so extension views use the shell's own component instances.",
       "readmeRev": "dc51096a61352ddecef3e6f4c530be5b1395dccd",
-      "reason": "8 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1792539105000
     },
@@ -5845,18 +5727,18 @@
           "what": "a narrow entry point, one of several that keep small bundles off the barrel."
         }
       ],
-      "behind": 27,
+      "behind": 2,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
-      "files": 532,
+      "files": 538,
       "hasTests": true,
-      "loc": 74972,
+      "loc": 75842,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire contract between the editor and the sandbox daemon: every route, its schemas and its access policy, as one oRPC contract both ends compile against.",
-      "readmeRev": "790451ced52868a02877ed726943aa8840d79895",
-      "reason": "27 commits have touched this package since its README was written",
+      "readmeRev": "fb52b92bccdb5160338d53f5fc74e07baee5e058",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1795115196000
+      "updatedAt": 1795475620000
     },
     {
       "anchors": [
@@ -6102,14 +5984,14 @@
       "behind": 0,
       "component": "site",
       "dir": "_site/demo",
-      "files": 304,
+      "files": 303,
       "hasTests": false,
-      "loc": 33545,
+      "loc": 33598,
       "name": "@intentic/demo",
       "oneLiner": "The interactive demo at intentic.dev/demo/: the real editor built from @intentic/web source, with its network replaced by an in-browser world of the platform, the sandbox daemons and the services…",
-      "readmeRev": "eb9c157d839c1480d5df9900ca103ca1e9d7557b",
+      "readmeRev": "4036738a5b8f1149094c6afa8db5eab744f2211e",
       "stale": false,
-      "updatedAt": 1795430963000
+      "updatedAt": 1795477928000
     },
     {
       "anchors": [
@@ -6138,16 +6020,16 @@
           "what": "the schema, limits and link allowlist for the live document."
         }
       ],
-      "behind": 6,
+      "behind": 10,
       "component": "site",
       "dir": "_site/site",
-      "files": 65,
+      "files": 66,
       "hasTests": true,
-      "loc": 9923,
+      "loc": 9979,
       "name": "@intentic/site",
       "oneLiner": "The Astro site behind intentic.dev, prerendered to static pages and served by a Cloudflare Worker that adds redirects, versionless downloads and a live notice.",
       "readmeRev": "83899a72bd8bcaaa2a70ae9a64fac54fe7e04cee",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "10 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1795025063000
     },
@@ -6182,53 +6064,18 @@
           "what": "the home page's \"Who reaches what\" band: its words and the sample sandbox it draws, held to the daemon's access rules by site/site/src/lib/access-lighting.test.ts."
         }
       ],
-      "behind": 6,
+      "behind": 9,
       "component": "site",
       "dir": "_site/site-content",
-      "files": 26,
+      "files": 27,
       "hasTests": false,
-      "loc": 7138,
+      "loc": 7377,
       "name": "@intentic/site-content",
       "oneLiner": "The words, documentation trees and page metadata of intentic.dev as typed TypeScript data, kept apart from the Astro markup that lays them out.",
       "readmeRev": "6ac1ee9c48ca6d8e28854549844bfd32e9735887",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1793059988000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_tools/agent-cli/src/run.ts",
-          "what": "runAgentCli: the process contract every rule above lives in."
-        },
-        {
-          "path": "_tools/agent-cli/src/output.ts",
-          "what": "capsule and clip, the capsule-then-content shape these CLIs print."
-        },
-        {
-          "path": "_tools/agent-cli/src/env.ts",
-          "what": "toolHome and toolOutDir, where a tool's own files go."
-        },
-        {
-          "path": "_tools/agent-cli/src/testing.ts",
-          "what": "captureCli, the in-process runner the tools' suites drive."
-        },
-        {
-          "path": "_tools/agent-cli/src/flags.ts",
-          "what": "countParser, which refuses negative, infinite and NaN budgets."
-        }
-      ],
-      "behind": 0,
-      "component": "tools",
-      "dir": "_tools/agent-cli",
-      "files": 10,
-      "hasTests": true,
-      "loc": 338,
-      "name": "@intentic/agent-cli",
-      "oneLiner": "The process contract, budgeted output and in-process test runner that the agent-facing CLIs fileq and webq share, so a failure never reads as an empty answer.",
-      "readmeRev": "d58c0ba9ce7392a7a8a34c954d2f8a8b47de9f5d",
-      "stale": false,
-      "updatedAt": 1795012866000
     },
     {
       "anchors": [
@@ -6529,16 +6376,17 @@
           "what": "shared WCAG 2.1 A/AA axe scan and per-rule summaries."
         }
       ],
-      "behind": 0,
+      "behind": 2,
       "component": "tools",
       "dir": "_tools/e2e",
       "files": 47,
       "hasTests": true,
-      "loc": 5518,
+      "loc": 5455,
       "name": "@intentic/e2e",
       "oneLiner": "Playwright harnesses that drive the real web app in Chromium: the sign-in gate, the N-1 check against the released sandbox, the local-stack browser tier, the post-deploy sign-in smoke, the mobile…",
       "readmeRev": "d9f6a417d9e7e6fef9c020d7c3602459edf12205",
-      "stale": false,
+      "reason": "2 commits have touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1795432115000
     },
     {
@@ -6840,7 +6688,7 @@
       "updatedAt": 1792927378000
     }
   ],
-  "generatedAt": 1795434093954,
+  "generatedAt": 1795479457462,
   "orphans": [],
   "repo": "intentic",
   "undocumented": []

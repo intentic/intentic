@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, deviceScopesOn } from "@intentic/sandbox-contract/schemas/capabilities";
 import { stubEnv } from "@intentic/testing/bun";
 import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 import { enrolledFleet, enrollSyncKey } from "../../peers/desktop-sync.js";
@@ -52,19 +52,7 @@ const host: ExtensionHost = {
 const laptop: Capability = {
     id: "my-laptop",
     kind: "device",
-    config: {
-        platform: "windows",
-        shell: "on",
-        write: "off",
-        screen: "on",
-        control: "off",
-        sandboxes: "off",
-        destructive: "off",
-        programs: "off",
-        remoteView: "off",
-        remoteControl: "off",
-        remoteTerminal: "off", admin: "off",
-    },
+    config: { ...deviceScopesOn(["shell", "screen"]), platform: "windows" },
 };
 const skillPath = (root: string): string => join(root, ".agents", "skills", "my-laptop", "SKILL.md");
 
@@ -167,19 +155,7 @@ test("every contributed OS pack carries both halves' placeholders", async () => 
 test("echoConfig renders the grant back and host holds no manifest secret", () => {
     // Every field is a permission and none is a credential: the enrollment token lives on /history, so rotating
     // it is re-running the installer, not an edit in /secrets.
-    expect(echoConfig(laptop, new Map())).toEqual({
-        platform: "windows",
-        shell: "on",
-        write: "off",
-        screen: "on",
-        control: "off",
-        sandboxes: "off",
-        destructive: "off",
-        programs: "off",
-        remoteView: "off",
-        remoteControl: "off",
-        remoteTerminal: "off", admin: "off",
-    });
+    expect(echoConfig(laptop, new Map())).toEqual({ ...deviceScopesOn(["shell", "screen"]), platform: "windows" });
     expect(secretField(laptop, new Map())).toBeUndefined();
 });
 

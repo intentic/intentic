@@ -9,7 +9,7 @@ import { join } from "node:path";
 // - <SID>.door.json: where the service listens and the token that lets this user's programs in, readable by that user;
 // - <SID>.hardened: the marker that the service is on for that user, which intentic-machine reads. The name is from
 //   when the service was an optional "hardened mode" (until 2026-10-19): kept, so a PC set up before still reads as set
-//   up, and the uninstaller's inventory (_sandbox/ic) finds it.
+//   up, and the uninstaller's inventory (_hosts/ic) finds it.
 
 export const SID_RE = /^S-1-\d+(-\d+)+$/u;
 

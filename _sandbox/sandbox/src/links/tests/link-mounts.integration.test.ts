@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, deviceScopesOn } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import { z } from "zod";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
@@ -16,7 +16,7 @@ const ops: Capability = { id: "ops", kind: "link", config: { url: "https://sandb
 const laptop: Capability = {
     id: "laptop",
     kind: "device",
-    config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" },
+    config: { ...deviceScopesOn(["shell", "write"]), platform: "linux" },
 };
 
 const AnswerSchema = z.object({

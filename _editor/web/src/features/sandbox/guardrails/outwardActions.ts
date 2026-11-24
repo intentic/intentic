@@ -18,6 +18,7 @@ const SERVICE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
     [`whatsapp`, `intentic.whatsapp`],
     [`imap`, `intentic.imap`],
     [`microsoft365`, `intentic.microsoft-365`],
+    // intentic.e-urzad ships from its own repository (intentic/extension-e-urzad), not this one: plain data, by id.
     [`ezdrp`, `intentic.e-urzad`],
     [`edoreczenia`, `intentic.e-urzad`],
 ]);

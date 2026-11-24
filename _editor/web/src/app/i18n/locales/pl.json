@@ -8431,6 +8431,7 @@
             "desktopSyncStopped": "Synchronizacja z pulpitem zatrzymała się na {devices}, jej folder się nie synchronizuje",
             "environmentBuilding": "Trwa budowanie nowego środowiska Twojego sandboxa",
             "extensionsWaiting": "{count} rozszerzenie czeka na Twoją zgodę | {count} rozszerzenia czekają na Twoją zgodę | {count} rozszerzeń czeka na Twoją zgodę",
+            "extensionMoved": "{reason}: zainstaluj je stamtąd, aby dalej z niego korzystać",
             "filesOnlyOnCloudMachine": "Pliki są tylko na maszynie w chmurze, bez kopii na tym komputerze",
             "newSandboxVersionAvailable": "Jest nowa wersja sandboxa",
             "noAiAccountConnected": "Nie podłączono konta AI, agent nie może wykonać tury",

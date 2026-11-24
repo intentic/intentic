@@ -348,11 +348,6 @@
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_extensions/e-urzad/src/actions.ts": {
-        "count": 2,
-        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
-    },
-    "_extensions/e-urzad/src/server/perform.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
     "_extensions/onlyoffice/src/server/browser-engine.ts": "standing when the check arrived (2026-10-16)",
     "_extensions/onlyoffice/src/server/docker.ts": "standing when the check arrived (2026-10-16)",
     "_extensions/onlyoffice/src/server/document-server.ts": {
@@ -415,10 +410,10 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/trial/trial-ladder.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/fileq/src/commands/derive.command.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/fileq/src/lib/check/package.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/fileq/src/lib/derivers/pptx.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/fileq/src/lib/render/render.ts": {
+    "_agent-tools/fileq/src/commands/derive.command.ts": "standing when the check arrived (2026-10-16)",
+    "_agent-tools/fileq/src/lib/check/package.ts": "standing when the check arrived (2026-10-16)",
+    "_agent-tools/fileq/src/lib/derivers/pptx.ts": "standing when the check arrived (2026-10-16)",
+    "_agent-tools/fileq/src/lib/render/render.ts": {
         "count": 3,
         "why": "standing when the check arrived (2026-10-16)"
     },

@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
+    "references": [{ "path": "../agent-cli" }, { "path": "../../_tools/base" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

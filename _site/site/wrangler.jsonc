@@ -33,7 +33,7 @@
         "run_worker_first": true,
     },
     // The Intentic OS installer ISO and VM disk (src/lib/worker/os-downloads.ts), which os.yml publishes with
-    // _os/os-image/publish-download.sh. R2, not a release asset: the ISO is past GitHub's 2 GB cap. The bucket has to
+    // _hosts/os-image/publish-download.sh. R2, not a release asset: the ISO is past GitHub's 2 GB cap. The bucket has to
     // exist before a deploy carrying this binding, or the deploy fails.
     "r2_buckets": [{ "binding": "OS_DOWNLOADS", "bucket_name": "intentic-os" }],
 }

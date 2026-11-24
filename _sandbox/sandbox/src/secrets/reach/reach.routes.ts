@@ -1,4 +1,5 @@
 import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
+import { isKindOf, PEER_KINDS, type PeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { type Capability, LinkConfigSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
 import type { InboundLinkSummary } from "@intentic/sandbox-contract/schemas/links";
@@ -23,7 +24,9 @@ import { whereThisRuns } from "../../system/boot/announce.js";
 
 type LinkCard = Extract<Capability, { kind: "link" }>;
 type DeviceCard = Extract<Capability, { kind: "device" }>;
-type HandheldCard = Extract<Capability, { kind: "phone" | "webext" }>;
+// The peers that are not a computer: a phone and one of the owner's own browsers.
+const HANDHELD_KINDS = PEER_KINDS.filter((kind) => kind !== "device");
+type HandheldCard = Extract<Capability, { kind: Exclude<PeerKind, "device"> }>;
 type Hello = Awaited<ReturnType<typeof linkHello>>;
 
 const HELLO_DEADLINE_MS = 4_000;
@@ -132,7 +135,7 @@ const devicesOf = (cards: readonly Capability[], hosts: readonly HostSummary[], 
         if (card.kind === "device") {
             return [computerOf(card, hosts)];
         }
-        return card.kind === "phone" || card.kind === "webext" ? [handheldOf(card, services)] : [];
+        return isKindOf(card, HANDHELD_KINDS) ? [handheldOf(card, services)] : [];
     });
 
 const serversOf = (cards: readonly Capability[]): ReachFacts["servers"] =>

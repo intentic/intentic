@@ -1,3 +1,4 @@
+import { traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import {
     type Capability,
     type EndpointConfig,
@@ -36,9 +37,8 @@ export const localModelEndpointConfig = (id: string): EndpointConfig => ({
 export const endpointConfigOf = (capability: Capability): EndpointConfig | undefined =>
     capability.kind === "endpoint" ? capability.config : capability.kind === "localmodel" ? localModelEndpointConfig(capability.id) : undefined;
 
-// Whether a capability kind mints an `endpoint/<id>` provider; derived from endpointConfigOf rather than a separate
-// kind list.
-export const mintsEndpointProvider = (kind: Capability["kind"]): boolean => kind === "endpoint" || kind === "localmodel";
+// Whether a capability kind mints an `endpoint/<id>` provider, read off the kind's row (policy/capability-kinds.ts).
+export const mintsEndpointProvider = (kind: Capability["kind"]): boolean => traitsOf(kind)?.provider === "endpoint";
 
 // Resolved from the card's two fields: a curated pick is a Hugging Face path, `custom` defers to `url`, and `file` is
 // the shared cache key. Undefined is a refusal, not a fallback; no default model is substituted.

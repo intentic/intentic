@@ -30,4 +30,8 @@
 // names where a 200 answer says it worked. Additive. The recorded surface grows the manifest schema.
 // 2.43.0 names the signed-in user's trust tier `api.sandbox.tier()`. `role()` answers the same and is deprecated until
 // 3.0.0: personas were renamed roles. Additive. The recorded surface grows `sandboxApi`.
-export const extensionApiVersion = "2.43.0";
+// 2.44.0 versions the slice of @intentic/sandbox-contract an extension may read: `EXTENSION_WIRE`
+// (@intentic/extension-api/wire) names the bare package and the subpaths an extension may import, and the lint and
+// `intentic-kit-check` refuse any other. Additive. The recorded surface grows `wireExports`: each allowed subpath's export
+// names and a digest of its zod schemas, so a schema an extension parses cannot change without a new entry.
+export const extensionApiVersion = "2.44.0";

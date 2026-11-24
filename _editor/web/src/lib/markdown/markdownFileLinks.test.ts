@@ -184,9 +184,9 @@ describe(`links into a conversation's own copy of the workspace`, () => {
             return { root: WORKSPACE_ROOT, tree: paths.map(file) };
         };
         // A file only the conversation's checkout has, and a same-tailed one only the shared tree has.
-        seed(nested(`intentic/_os/installer/bib-config.toml`), `c-1`);
+        seed(nested(`intentic/_hosts/installer/bib-config.toml`), `c-1`);
         seed(nested(`elsewhere/installer/bib-config.toml`));
-        expect(linkTo(renderAs(`c-1`, "Now `installer/bib-config.toml`."), `intentic/_os/installer/bib-config.toml`)).toEqual(expect.any(Object));
+        expect(linkTo(renderAs(`c-1`, "Now `installer/bib-config.toml`."), `intentic/_hosts/installer/bib-config.toml`)).toEqual(expect.any(Object));
         expect(linkTo(renderMarkdown("Now `installer/bib-config.toml`."), `elsewhere/installer/bib-config.toml`)).toEqual(expect.any(Object));
     });
 

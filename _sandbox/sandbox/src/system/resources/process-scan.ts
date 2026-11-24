@@ -178,7 +178,7 @@ const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama|speech-wo
 const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u;
 const LANGUAGE_SERVER =
     /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u;
-const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])(?:tsgo|tsc)([ .]|$)/u;
+const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_agent-tools[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])(?:tsgo|tsc)([ .]|$)/u;
 const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
 const EXTENSION = /extension-backend|extension-host|backend-host-main|backend-supervisor/u;
 const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;

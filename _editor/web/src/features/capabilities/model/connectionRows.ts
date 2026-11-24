@@ -1,89 +1,29 @@
-import { t } from "@intentic/ui/i18n";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { Device } from "@intentic/sandbox-contract/schemas/devices";
-import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
-import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
-import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
-import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
-import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
-import {
-    type ConnectionState,
-    connectionFacts,
-    connectionState,
-    hostPresence,
-    netdiskFacts,
-    phoneSystem,
-    vpnFacts,
-} from "../../../models/capabilities/connections";
-import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
+import { type ConnectionState, connectionState, hostPresence } from "../../../models/capabilities/connections";
+import type { DeviceConnection } from "./deviceConnections";
+import { type ConnectionSources, rowFactsOf } from "./rowFacts";
 import { categoryLabel, entryName } from "../../../models/capabilities/catalogCopy";
 import type { CatalogTile } from "./slices";
 import { entryIcon } from "../../../models/capabilities/tiles";
+
+export type { ConnectionSources } from "./rowFacts";
 
 // What a connection's row says beyond its stored config: its state and its facts line, on the tile that made it and
 // in the Connected slice, the inventory of every live connection plus each machine desktop sync alone reaches. Pure
 // over the live sources the page reads.
 
-// The live answers no stored config holds: the machine and browser rosters, tunnels and disks as the kernel has them,
-// and the daemon's one device registry.
-export interface ConnectionSources {
-    readonly host: (id: string) => HostSummary | undefined;
-    readonly browser: (id: string) => WebExtSummary | undefined;
-    readonly phone: (id: string) => PhoneSummary | undefined;
-    readonly vpn: readonly VpnLink[];
-    readonly netdisk: readonly NetdiskLink[];
-    readonly devices: readonly Device[];
-}
-
 // A connection's state, with a machine's presence read off the roster where it is one.
 export const liveState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary, sources: ConnectionSources): ConnectionState =>
     connectionState(entry.kind, instance, entry.kind === `device` ? hostPresence(sources.host(instance.id)) : undefined);
 
-// A phone names itself and its Android release (a watch, its Wear OS), and says when it cannot be woken yet: asleep is its usual state, so
-// "can't be woken" is the one thing worth the owner's attention.
-export const phoneFacts = (instance: CapabilitySummary, sources: ConnectionSources): string => {
-    const phone = sources.phone(instance.id);
-    if (phone?.facts === undefined) {
-        return connectionFacts(instance);
-    }
-    const wake =
-        phone.wake === `ready`
-            ? ``
-            : phone.wake === `register`
-              ? t(`capabilities.connections.wakeNotSetUp`)
-              : t(`capabilities.connections.answersWhileAppOpen`);
-    return [phoneSystem(phone.facts), phone.facts.paused ? t(`capabilities.connections.pausedOnPhone`) : ``, wake]
-        .filter((fact) => fact !== ``)
-        .join(` · `);
-};
-
-// A device's facts line: its OS, and the other doors onto the same PC when it has any, so two ids that are one
-// computer read as one on this screen too.
-export const hostFacts = (instance: CapabilitySummary, sources: ConnectionSources): string =>
-    [sources.host(instance.id)?.facts?.os ?? connectionFacts(instance), sameMachineNote(sources.devices, instance.id)]
-        .filter((fact): fact is string => fact !== undefined && fact !== ``)
-        .join(` · `);
-
-// A row on the tile's own list, which states what only a live source knows for a machine or a browser. VPN and disk
-// rows are drawn by <LiveLinkRows>, since a link's facts change live.
-export const tileRowFacts = (kind: CapabilityKind | undefined, instance: CapabilitySummary, sources: ConnectionSources): string => {
-    if (kind === `device`) {
-        return hostFacts(instance, sources);
-    }
-    if (kind === `phone`) {
-        return phoneFacts(instance, sources);
-    }
-    // A browser names itself and how many sites it may work on; no stored config can answer either.
-    if (kind === `webext`) {
-        const facts = sources.browser(instance.id)?.facts;
-        return facts === undefined
-            ? connectionFacts(instance)
-            : t(`capabilities.connectionRows.sitesAllowed`, { browser: facts.browser, count: facts.grants.length }, facts.grants.length);
-    }
-    return connectionFacts(instance);
-};
+// A row's facts line, on the tile's own list and in the Connected slice alike: the kind's own live facts where it has
+// them (rowFacts.ts `ROW_FACTS`), else what its stored config says. Tunnel and disk rows on their tile are drawn by
+// <LiveLinkRows>, which reads the live link itself. Not read through kindSlots.ts: the Sandbox map imports this file,
+// and the slot registry would bring every pairing dialog into the map's graph.
+export const tileRowFacts = (kind: CapabilityKind | undefined, instance: CapabilitySummary, sources: ConnectionSources): string =>
+    rowFactsOf(kind, instance, sources);
 
 // One row per live connection, carrying its category (for grouping) and a haystack of what a reader would actually
 // search for: the name they gave it and the address they typed, neither in any tile's prose.
@@ -97,14 +37,7 @@ const searchedNames = (entry: CatalogTile[`entry`]): string => {
 
 export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, sources: ConnectionSources): ConnectionRow => {
     const state = liveState(tile.entry, instance, sources);
-    const facts =
-        (tile.entry.kind === `vpn` ? vpnFacts(instance.id, sources.vpn) : undefined) ??
-        (tile.entry.kind === `netdisk` ? netdiskFacts(instance.id, sources.netdisk) : undefined) ??
-        (tile.entry.kind === `device`
-            ? hostFacts(instance, sources)
-            : tile.entry.kind === `phone`
-              ? phoneFacts(instance, sources)
-              : connectionFacts(instance));
+    const facts = tileRowFacts(tile.entry.kind, instance, sources);
     // An unnamed connection took the tile's id; the tile is then the name, and the line below is free for facts.
     const named = instance.id !== tile.entry.id;
     const name = entryName(tile.entry);

@@ -327,7 +327,7 @@ jobs:
       - name: Build the CLI lane's ic
         run: |
           bash _tools/scripts/build/build-ic.sh linux-x64
-          echo "IC_BIN=$GITHUB_WORKSPACE/_sandbox/ic/dist-bin/ic-linux-amd64" >> "$GITHUB_ENV"
+          echo "IC_BIN=$GITHUB_WORKSPACE/_hosts/ic/dist-bin/ic-linux-amd64" >> "$GITHUB_ENV"
       # THE LIBRARIES THE SUITE IMPORTS, BUILT. Playwright resolves @intentic/base, /constants and /prisma through
       # their `dist/`, and `pnpm --filter` below skips the `^build` that every turbo e2e task depends on. So
       # without this step the suite runs against whatever dist an earlier run left in this `clean: false`
@@ -494,8 +494,8 @@ jobs:
       - run: |
           . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
-          cp _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
-          cp _sandbox/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
+          cp _hosts/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp _hosts/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
           if [ "$ENGINE_ONLY" != "true" ]; then
             cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" windows-artifacts/
           fi

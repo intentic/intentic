@@ -1024,7 +1024,7 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: bash _tools/scripts/desktop/stage-local-files.sh
       # The ic CLI, the app's second `externalBin`, for the same reason. Nothing here bundles, so this is a debug cargo
-      # build of _sandbox/ic, or a placeholder the script says it staged (stage-desktop-ic.sh).
+      # build of _hosts/ic, or a placeholder the script says it staged (stage-desktop-ic.sh).
       - id: stage-ic
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: bash _tools/scripts/desktop/stage-desktop-ic.sh
@@ -1041,7 +1041,7 @@ jobs:
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (explorer-menu)" --keep-status -- cargo xwin clippy --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --target x86_64-pc-windows-msvc
 
-  # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_sandbox/ic), the binary
+  # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_hosts/ic), the binary
   # behind the connect/recreate bootstrap shims, and the Windows launcher stub
   # (_devices/win-launcher) the machine-side agents register at logon. Same cargo gate as the desktop crate —
   # fmt and clippy reported as desktop-check's comment says, tests — in the same image (it bakes the rust toolchain); no webkit/tauri in
@@ -1076,9 +1076,9 @@ jobs:
           persist-credentials: false
           clean: false
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (ic)" -- cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (ic)" -- cargo fmt --manifest-path _hosts/ic/Cargo.toml --all --check
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (ic)" --keep-status -- cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (ic)" --keep-status -- cargo clippy --manifest-path _hosts/ic/Cargo.toml --all-targets
       # THE WINDOWS TARGET, because half of what this crate does for Windows is not compiled on Linux at all.
       # `prepare/` — the WSL2 + Docker Desktop setup, the largest single thing ic does on the platform it does
       # the most for — is one `#[cfg(windows)]` block, so the three steps above type-check straight past it. On
@@ -1092,9 +1092,9 @@ jobs:
       # steady tax for no defect caught. The compile error is what this is here for, and check catches it in
       # about the time clippy took.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo xwin check --manifest-path _sandbox/ic/Cargo.toml --target x86_64-pc-windows-msvc
+        run: cargo xwin check --manifest-path _hosts/ic/Cargo.toml --target x86_64-pc-windows-msvc
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo test --manifest-path _sandbox/ic/Cargo.toml
+        run: cargo test --manifest-path _hosts/ic/Cargo.toml
       # The launcher stub. The Windows target is not an extra here, it is the ONLY target the shipped binary is
       # ever built for: everything this crate does past argument parsing sits behind `#[cfg(windows)]`, so the
       # Linux fmt/clippy/test steps see the parser and nothing else. clippy on the Linux side (the crate is small
@@ -1294,7 +1294,7 @@ jobs:
         with:
           lockfile-drift: measure
       # ic FIRST: the installer carries it beside the app (tauri.conf.json `externalBin`), and build-desktop.sh stages
-      # the fresh binary this leaves in _sandbox/ic/dist-bin rather than cross-building a second one. The same file is
+      # the fresh binary this leaves in _hosts/ic/dist-bin rather than cross-building a second one. The same file is
       # what the Windows tier hands the shim through IC_BIN below.
       - run: bash _tools/scripts/build/build-ic.sh windows-x64
       # Intentic's own engine (the WSL distro ic installs on a PC without Docker Desktop), from this checkout, for the
@@ -1311,8 +1311,8 @@ jobs:
       - run: |
           . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
-          cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
-          cp _sandbox/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
+          cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _hosts/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp _hosts/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: windows-desktop-artifacts

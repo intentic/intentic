@@ -32,7 +32,6 @@ import {
     knowledgeSearch,
     saveKnowledgeNote,
 } from "../fixture/knowledge";
-import { officeResponse } from "../fixture/offices/office";
 import { vendoredBundle } from "../fixture/sandbox";
 import { demoSelf } from "../floors";
 import { json } from "../transport";
@@ -226,8 +225,8 @@ export const raw = {
             failed: ids.filter((id) => !known.includes(id)).map((id) => ({ id, error: `that key is no longer on a connected device` })),
         });
     },
-    // The two office cards and knowledge share the same namespace their real backends use.
-    "ALL /x/*": (context) => officeResponse(context.request, context.url) ?? knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
+    // Knowledge shares the same namespace its real backend uses.
+    "ALL /x/*": (context) => knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
     // Each area's routes from a file of its own (`<area>/<name>.routes.ts`), so they can be answered without touching this table.
     ...workspaceRoutes,
     ...webchatRoutes,

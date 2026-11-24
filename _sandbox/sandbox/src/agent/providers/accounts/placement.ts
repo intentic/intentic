@@ -1,3 +1,4 @@
+import { isModelPlaced, type ModelPlacedProvider, providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import { AgentHarnessSchema, type AgentHarness, type AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { accountServesLoop, loopDoor, loopOf, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
@@ -113,7 +114,7 @@ export const unnamedPlacement = async <T extends { readonly id: string }>(
 // it places the turn (Claude's CLI runs it; Cursor's turn asks for it, cursor-provider.ts planCursorTurn). Asked with no
 // model, the rule answers whether SOME turn can run, and an account whose only full pool is the default model's own
 // slice would win a pick it then loses. Every other runtime places a turn naming none on that question, as asked.
-const pickModelOf = async (services: Pick<Services, "providerCatalogs">, provider: "claude" | "cursor", model: string | undefined): Promise<ModelRef | undefined> => {
+const pickModelOf = async (services: Pick<Services, "providerCatalogs">, provider: ModelPlacedProvider, model: string | undefined): Promise<ModelRef | undefined> => {
     if (model !== undefined && model !== "") {
         return { id: model };
     }
@@ -130,14 +131,20 @@ export const claudePickModel = (services: Pick<Services, "providerCatalogs">, mo
     pickModelOf(services, "claude", model);
 
 const turnModelOf = async (services: Pick<Services, "providerCatalogs">, provider: AgentProvider, model: string | undefined): Promise<string | undefined> =>
-    provider === "claude" || provider === "cursor" ? (await pickModelOf(services, provider, model))?.id : model;
+    isModelPlaced(provider) ? (await pickModelOf(services, provider, model))?.id : model;
+
+// Whether this loop spends the provider's own default sign-in rather than the translator's (ownSignInLoop: Grok on OpenCode).
+const spendsOwnSignIn = (provider: AgentProvider, harness: AgentHarness): boolean => {
+    const own = providerTraits(provider)?.ownSignInLoop;
+    return own !== undefined && own === loopOf(provider, harness);
+};
 
 // The provider whose subscriptions a turn on this loop spends, each request pinned by the gateway, rather than an account
 // of the provider's own door; undefined for a door's. Grok on OpenCode runs on its own xAI sign-in. The editor reads the
 // same split (access.ts subscriptionProviderOn).
 const pinnedPerRequest = (provider: AgentProvider, harness: AgentHarness): KeyedProvider | undefined => {
     const keyed = KeyedProviderSchema.safeParse(provider);
-    return keyed.success && loopDoor(provider, harness) === undefined && !(provider === "grok" && loopOf(provider, harness) === "opencode") ? keyed.data : undefined;
+    return keyed.success && loopDoor(provider, harness) === undefined && !spendsOwnSignIn(provider, harness) ? keyed.data : undefined;
 };
 
 // The accounts a turn on this loop is placed among, in the provider's own order: Claude's from its store, any other's

@@ -1,3 +1,4 @@
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { EndpointConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
@@ -123,7 +124,7 @@ const wireOf = (loop: AgentLoop, provider: AgentProvider, endpointProtocol?: "op
             if (endpointProtocol !== undefined) {
                 return endpointProtocol === "anthropic" ? "anthropic-messages" : "openai-chat";
             }
-            return provider === "codex" ? "openai-responses" : "openai-chat";
+            return providerTraits(provider)?.opencodeWire ?? "openai-chat";
         default:
             return undefined;
     }
@@ -141,9 +142,10 @@ const NO_ROUTE = (provider: AgentProvider, loop: AgentLoop): RouteRefusal => ({
 const translatorRefusal = async (services: Pick<Services, "cliProxy" | "config">, provider: TranslatorProvider, loop: AgentLoop): Promise<RouteRefusal | undefined> => {
     if (services.config.translator.url === "") {
         if (loop === "claude-code") {
-            // Codex/Grok fall back to their own loop; Kimi has none, so this is only an image problem for it.
+            // Codex/Grok fall back to their own default loop; one whose default is Claude Code (Kimi) has none, so this is
+            // only an image problem for it.
             const fallback =
-                provider === "kimi"
+                providerSpec(provider)?.loops.default === "claude-code"
                     ? "Run a sandbox built from the published image."
                     : "Use the provider's native harness, or run a sandbox built from the published image.";
             return {

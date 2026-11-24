@@ -1,4 +1,5 @@
 import { noteAudit } from "../audit/audit-http.js";
+import { CAPABILITY_KIND_TRAITS } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { errorMessage } from "@intentic/base/errors";
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
@@ -274,9 +275,9 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 if (capability === undefined) {
                     throw new ORPCError("NOT_FOUND", { message: `nothing is connected under the id "${input.subject}"` });
                 }
-                // Browser, identity and mcp mount for a turn, so the route forces `conversation` scope, not the
-                // input's.
-                const forced = capability.kind === "browser" || capability.kind === "identity" || capability.kind === "mcp";
+                // A mounted credential (a browser profile, an identity's, an mcp server) is held for a whole turn, so
+                // the route forces `conversation` scope, not the input's.
+                const forced = CAPABILITY_KIND_TRAITS[capability.kind].credentialMount;
                 const gate = { ...input, ...(forced ? { scope: "conversation" as const } : {}) };
                 await guardApprovers(gate.approvers);
                 await services.credentialGates.set(gate);

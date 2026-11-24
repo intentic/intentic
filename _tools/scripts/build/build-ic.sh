@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cross-build explicitly requested ic targets into _sandbox/ic/dist-bin/ic-<os>-<arch>[.exe]; --version stamps release builds.
+# Cross-build explicitly requested ic targets into _hosts/ic/dist-bin/ic-<os>-<arch>[.exe]; --version stamps release builds.
 # Linux uses static musl via cargo-zigbuild; Windows uses cargo-xwin/MSVC. Missing toolchains have idempotent developer fallbacks.
 # Darwin uses Zig libSystem stubs and ad-hoc signing without an SDK; the xcrun SDK warning is expected unless frameworks are added.
 # Unstamped builds report the source sentinel 0.0.0. Do not publish targets the setup cards cannot support.
@@ -20,13 +20,13 @@ export IC_VERSION="$VERSION"
 
 [ $# -ge 1 ] || { echo "usage: build-ic.sh [--version <v>] <target>... (linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64)" >&2; exit 2; }
 
-MANIFEST="_sandbox/ic/Cargo.toml"
-OUT="_sandbox/ic/dist-bin"
+MANIFEST="_hosts/ic/Cargo.toml"
+OUT="_hosts/ic/dist-bin"
 # Where cargo actually WRITES the binaries. The release job points CARGO_TARGET_DIR at the shared /ci-cache
 # store, and cargo obeys that over the crate-local target/ — so the hardcoded spelling finds nothing there and
-# nothing else: `cp: cannot stat '_sandbox/ic/target/…/ic'`, passing everywhere a developer runs it. build-desktop.sh
+# nothing else: `cp: cannot stat '_hosts/ic/target/…/ic'`, passing everywhere a developer runs it. build-desktop.sh
 # carries the identical line after learning it the same way.
-TARGET_DIR="${CARGO_TARGET_DIR:-_sandbox/ic/target}"
+TARGET_DIR="${CARGO_TARGET_DIR:-_hosts/ic/target}"
 mkdir -p "$OUT"
 
 # --- toolchain fallback (idempotent; CI images bake all of this) ---

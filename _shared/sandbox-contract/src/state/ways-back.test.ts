@@ -4,7 +4,7 @@ import { packageRoot } from "@intentic/constants/node";
 import { DeviceFeatureSchema } from "../schemas/hosts.js";
 import { waysBack } from "./ways-back.js";
 
-// What `ic features --json` answers (_sandbox/ic/src/features.rs holds the same list to this golden).
+// What `ic features --json` answers (_hosts/ic/src/features.rs holds the same list to this golden).
 // SAFETY: the golden is this package's own file; the assertions below fail on any field it lacks.
 const IC_FEATURES = JSON.parse(readFileSync(join(packageRoot(import.meta.url), "golden", "ic-features.json"), "utf8")) as { readonly features: readonly string[] };
 

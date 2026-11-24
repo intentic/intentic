@@ -25,9 +25,9 @@ flowchart TB
 
 ## What it is
 
-On a PC, a sandbox sits on Windows, WSL's VM and Intentic's engine distro ([`_sandbox/ic/engine`](../../_sandbox/ic/engine)).
+On a PC, a sandbox sits on Windows, WSL's VM and Intentic's engine distro ([`_hosts/ic/engine`](../../_hosts/ic/engine)).
 Intentic OS removes everything under the engine: the machine boots a bootc image of Fedora
-([`_os/os-image`](../../_os/os-image)) whose `/usr` is the image, read-only, with `/etc` and `/var` kept across
+([`_hosts/os-image`](../../_hosts/os-image)) whose `/usr` is the image, read-only, with `/etc` and `/var` kept across
 updates. Docker is a plain systemd unit, `ic` is in `/usr/bin`, and the machine agent runs as the `intentic` user's
 systemd user service, started at boot rather than at a login.
 
@@ -112,7 +112,7 @@ flowchart TB
   sandbox, `on-screen <program>` runs a program there. The agent cannot see that screen and checks its work on its own
   virtual desktop first. `ic`'s run policy mounts every sandbox's (empty, read-only) socket folder when it is made,
   so turning a sandbox on or off takes effect within seconds. Under Kata a socket cannot cross the VM boundary, so a
-  microVM sandbox draws nothing. The [os-image README](../../_os/os-image/README.md) lists the withheld protocols as
+  microVM sandbox draws nothing. The [os-image README](../../_hosts/os-image/README.md) lists the withheld protocols as
   checked against Fedora 44's sway.
 - **Settings are verbs first** (below): This computer's cards and the steward's device tools run the same `ic os`
   verbs. A USB drive plugged in raises a notification, and the Drives card copies it into the sandbox chosen.
@@ -141,7 +141,7 @@ in front of those verbs, not a rewrite.
 ## The machine's settings
 
 A person and the steward change the machine the same way. The Wi-Fi, the sound, the screens, the keyboard layout and
-the USB drives plugged in are each an `ic os` verb (the [host interface](../../_os/README.md#settings)); the desktop app's
+the USB drives plugged in are each an `ic os` verb (the [host interface](../../_hosts/README.md#settings)); the desktop app's
 This computer cards run them, and every one is also a device tool, so "connect to the guest Wi-Fi" or "copy the stick
 into my sandbox" is something the steward can do. ic does them as the `intentic` user through the tools any Linux
 desktop's settings use (NetworkManager, WirePlumber, sway, udisks), and a polkit rule lets that user change exactly
@@ -156,24 +156,24 @@ machine between them, within intentic's own repositories (the sudo rule allows n
 
 A release starts the stable build by dispatching `os.yml` at its tag (`dispatch-publish.sh`): a Release published with
 GITHUB_TOKEN starts no workflow by itself. Once the installer ISO has installed and booted (below),
-[`publish-download.sh`](../../_os/os-image/publish-download.sh) puts it and the qcow2 VM disk in the `intentic-os` R2
+[`publish-download.sh`](../../_hosts/os-image/publish-download.sh) puts it and the qcow2 VM disk in the `intentic-os` R2
 bucket, since the ISO is past a GitHub release asset's 2 GB cap. The site worker serves them as `intentic.dev/os/iso`
 and `/os/qcow2`, which the [download page](../../_site/site/src/pages/download.astro) links to, from the bucket's
 `os/stable.json`. The newest three versions are kept.
 
 ## How it is checked
 
-[`smoke.sh`](../../_os/os-image/smoke.sh) boots the server edition in a VM and checks Docker, the Kata runtime, the
+[`smoke.sh`](../../_hosts/os-image/smoke.sh) boots the server edition in a VM and checks Docker, the Kata runtime, the
 pairing page, `ic os status` and a green `ic os health` under greenboot; `os.yml` runs it before every push.
-[`install-test.sh`](../../_os/os-image/install-test.sh) runs the installer ISO onto a blank disk with Secure Boot and a
+[`install-test.sh`](../../_hosts/os-image/install-test.sh) runs the installer ISO onto a blank disk with Secure Boot and a
 software TPM, then checks that the first boot opens the encrypted root by itself; `os.yml` runs it for every release.
 What neither can reach: a real pairing (it needs a setup code from an account), a sandbox under Kata (the VMs these run
-in are nested), and physical hardware. [`metal.sh`](../../_os/os-image/metal.sh) covers the last two on a test
+in are nested), and physical hardware. [`metal.sh`](../../_hosts/os-image/metal.sh) covers the last two on a test
 machine on the local network: it keeps a controller OS on a disk of its own, first in the firmware's boot order, and
 boots Intentic OS from a second disk for one boot at a time, so a bad image falls back to the controller, which
 reinstalls with nobody at the machine. Its images carry a dev layer that is never released (root's SSH key, the
-local registry, the hardware watchdog), and its checks are smoke.sh's own ([`checks.sh`](../../_os/os-image/checks.sh))
-plus the booted digest and a Kata container. The [os-image README](../../_os/os-image/README.md) keeps the table of
+local registry, the hardware watchdog), and its checks are smoke.sh's own ([`checks.sh`](../../_hosts/os-image/checks.sh))
+plus the booted digest and a Kata container. The [os-image README](../../_hosts/os-image/README.md) keeps the table of
 machines tried.
 
 ## Not done yet

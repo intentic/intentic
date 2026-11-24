@@ -19,8 +19,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "_os/**"
-      - "_sandbox/ic/**"
+      - "_hosts/**"
       - ".github/workflows/os.yml"
   workflow_dispatch:
     inputs:
@@ -87,17 +86,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          mkdir -p _sandbox/ic/dist-bin _editor/desktop-app/dist-bin
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern ic-linux-amd64 --dir _sandbox/ic/dist-bin
+          mkdir -p _hosts/ic/dist-bin _editor/desktop-app/dist-bin
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern ic-linux-amd64 --dir _hosts/ic/dist-bin
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*x86_64.rpm' --dir _editor/desktop-app/dist-bin
-          chmod +x _sandbox/ic/dist-bin/ic-linux-amd64
+          chmod +x _hosts/ic/dist-bin/ic-linux-amd64
 
       - name: ic, from this commit
         if: steps.plan.outputs.channel != 'stable'
         run: |
-          cargo build --release --locked --manifest-path _sandbox/ic/Cargo.toml
-          mkdir -p _sandbox/ic/dist-bin
-          cp _sandbox/ic/target/release/ic _sandbox/ic/dist-bin/ic-linux-amd64
+          cargo build --release --locked --manifest-path _hosts/ic/Cargo.toml
+          mkdir -p _hosts/ic/dist-bin
+          cp _hosts/ic/target/release/ic _hosts/ic/dist-bin/ic-linux-amd64
 
       - name: KVM for the boot test
         run: |
@@ -109,19 +108,19 @@ jobs:
         env:
           CHANNEL: ${{ steps.plan.outputs.channel }}
           VERSION: ${{ steps.plan.outputs.version }}
-        run: bash _os/os-image/build.sh --edition server --channel "$CHANNEL" --version "$VERSION"
+        run: bash _hosts/os-image/build.sh --edition server --channel "$CHANNEL" --version "$VERSION"
 
       - name: Boot it
         env:
           CHANNEL: ${{ steps.plan.outputs.channel }}
-        run: bash _os/os-image/smoke.sh --image "ghcr.io/intentic/os:$CHANNEL"
+        run: bash _hosts/os-image/smoke.sh --image "ghcr.io/intentic/os:$CHANNEL"
 
       - name: Build the desktop edition
         env:
           CHANNEL: ${{ steps.plan.outputs.channel }}
           VERSION: ${{ steps.plan.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash _os/os-image/build.sh --edition desktop --channel "$CHANNEL" --version "$VERSION"
+        run: bash _hosts/os-image/build.sh --edition desktop --channel "$CHANNEL" --version "$VERSION"
 
       - uses: ./.github/actions/ghcr-login
         if: steps.plan.outputs.push == 'true'
@@ -142,9 +141,9 @@ jobs:
           export REGISTRY_AUTH_FILE="$HOME/.docker/config.json"
           for repo in ghcr.io/intentic/os ghcr.io/intentic/os-desktop; do
             name="${repo##*/}"
-            skopeo copy --digestfile "$RUNNER_TEMP/$name.digest" "oci:_os/os-image/out/oci/$name" "docker://$repo:$CHANNEL"
+            skopeo copy --digestfile "$RUNNER_TEMP/$name.digest" "oci:_hosts/os-image/out/oci/$name" "docker://$repo:$CHANNEL"
             if [ "$CHANNEL" = stable ]; then
-              skopeo copy "oci:_os/os-image/out/oci/$name" "docker://$repo:$VERSION"
+              skopeo copy "oci:_hosts/os-image/out/oci/$name" "docker://$repo:$VERSION"
             fi
             echo "$name=$(cat "$RUNNER_TEMP/$name.digest")" >> "$GITHUB_OUTPUT"
           done
@@ -166,15 +165,15 @@ jobs:
       - name: Installer and VM disk
         if: steps.plan.outputs.channel == 'stable'
         run: |
-          bash _os/os-image/disk.sh --type anaconda-iso --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/iso"
-          bash _os/os-image/disk.sh --type qcow2 --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/qcow2"
+          bash _hosts/os-image/disk.sh --type anaconda-iso --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/iso"
+          bash _hosts/os-image/disk.sh --type qcow2 --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/qcow2"
           sudo chown -R "$(id -u)" "$RUNNER_TEMP/iso" "$RUNNER_TEMP/qcow2"
 
       # The installer as a person meets it: a blank disk, Secure Boot and a TPM (software ones), an unattended install,
       # then a first boot that must unlock its encrypted root by itself.
       - name: Install from the ISO
         if: steps.plan.outputs.channel == 'stable'
-        run: bash _os/os-image/install-test.sh --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --out "$RUNNER_TEMP/install-test"
+        run: bash _hosts/os-image/install-test.sh --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --out "$RUNNER_TEMP/install-test"
 
       # THE DOWNLOAD. The ISO is past a release asset's 2 GB cap, so both files go to the R2 bucket the site worker
       # binds (_site/site/wrangler.jsonc), under os/<version>/, with os/stable.json written last: the worker reads that
@@ -191,10 +190,10 @@ jobs:
           # R2 takes the CRC checksums newer AWS CLIs add to every upload only partly; ask for them where required.
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
-        run: bash _os/os-image/publish-download.sh --version "$VERSION" --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --qcow2 "$RUNNER_TEMP/qcow2/qcow2/disk.qcow2"
+        run: bash _hosts/os-image/publish-download.sh --version "$VERSION" --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --qcow2 "$RUNNER_TEMP/qcow2/qcow2/disk.qcow2"
 
       - name: Boot log
         if: always()
         run: |
-          sudo cat _os/os-image/out/smoke/serial.log 2>/dev/null | tail -n 200 || true
-          sudo cat _os/os-image/out/smoke/journal.txt 2>/dev/null || true
+          sudo cat _hosts/os-image/out/smoke/serial.log 2>/dev/null | tail -n 200 || true
+          sudo cat _hosts/os-image/out/smoke/journal.txt 2>/dev/null || true

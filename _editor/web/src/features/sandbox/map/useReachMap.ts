@@ -32,6 +32,7 @@ import type { ModelSource, ModelSourceStanding } from "../models/modelSources";
 import { useRoles } from "../../../models/sandbox/roles/useRoles";
 import { useAccessProfiles } from "../../../models/sandbox/access/useAccessProfiles";
 import { buildReachMap, type NodeTone, type ReachCapability, type ReachInput, type ReachModelSource } from "./reachModel";
+import { kindIcon } from "../../../models/capabilities/kinds/kindIcons";
 
 // EVERY READ THE MAP IS DRAWN FROM, gathered into the one input reachModel.ts works over. Each is a cache entry its own
 // page already holds (the capabilities board, Access, Areas, Roles, Secrets, Models, Browsers), so opening the map
@@ -44,16 +45,8 @@ import { buildReachMap, type NodeTone, type ReachCapability, type ReachInput, ty
 
 const TONES = { success: `success`, warning: `warning`, danger: `danger`, info: `info`, neutral: `neutral`, primary: `info` } as const satisfies Record<Tone, NodeTone>;
 
-// A connection with no tile to draw it is marked by what kind of thing it is, and named by what its card was added as.
-const KIND_MARKS = new Map<CapabilitySummary[`kind`], string>([
-    [`browser`, `globe`],
-    [`identity`, `user`],
-    [`device`, `desktop`],
-    [`phone`, `mobile`],
-    [`webext`, `browsers`],
-    [`link`, `link`],
-]);
-const markOfKind = (kind: CapabilitySummary[`kind`]): string => KIND_MARKS.get(kind) ?? `bolt`;
+// A connection with no tile to draw it is marked by what kind of thing it is (kindIcons.ts), and named by what its card
+// was added as.
 const addedAs = (instance: CapabilitySummary): string | undefined => {
     const named = String(instance.config[`provider`] ?? instance.config[`platform`] ?? ``);
     return named === `` || named === instance.id ? undefined : named;
@@ -84,7 +77,7 @@ const reachCapabilities = (
                 kind: instance.kind,
                 title: instance.id,
                 tile: addedAs(instance),
-                icon: markOfKind(instance.kind),
+                icon: kindIcon(instance.kind),
                 state: state.label,
                 tone: TONES[state.tone],
                 identity: identityOf(instance),

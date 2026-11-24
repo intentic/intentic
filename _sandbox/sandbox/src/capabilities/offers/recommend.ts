@@ -6,6 +6,7 @@ import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { parseRemote, remoteUrlsOf } from "../../git/remote/remote-urls.js";
 import { discoverRepos, hasGitEntry } from "../../workspace/layout/repo-discovery.js";
 import type { DismissedRecommendation } from "./dismissals-store.js";
+import { movedExtensionRecommendations } from "./moved-extensions.js";
 
 // Scans /work for capabilities a workspace already implies (a compose file, a git remote), not a model turn, since a
 // scan is free, checkable evidence and works before any AI account exists. Every rule names the artifact it read;
@@ -114,11 +115,11 @@ interface MemoisedRecommendations {
 let memo: MemoisedRecommendations | undefined;
 
 // Connectors are listed before docker, since docker's fix costs a sandbox restart and the rest cost only a token.
-export const capabilityRecommendations = async (
+const workspaceRecommendations = async (
     root: string,
     active: readonly Capability[],
     dismissed: readonly DismissedRecommendation[],
-    git: GitRunner = defaultGit,
+    git: GitRunner,
 ): Promise<CapabilityRecommendation[]> => {
     const wanted = ["github", "gitlab", "komodo", "docker"].filter((entry) => !isConnected(active, entry));
     if (wanted.length === 0) {
@@ -178,4 +179,16 @@ export const capabilityRecommendations = async (
     // Stamped with the scan's start time, not its finish, since that's when workspace staleness begins.
     memo = { at: now, fingerprint, result };
     return [...result];
+};
+
+// What the workspace implies, then an extension that left the image and this sandbox used (moved-extensions.ts): that
+// one reads a few of the sandbox's own files rather than the workspace, so it stays out of the memo.
+export const capabilityRecommendations = async (
+    root: string,
+    active: readonly Capability[],
+    dismissed: readonly DismissedRecommendation[],
+    git: GitRunner = defaultGit,
+): Promise<CapabilityRecommendation[]> => {
+    const [scanned, moved] = await Promise.all([workspaceRecommendations(root, active, dismissed, git), movedExtensionRecommendations(root, active, dismissed)]);
+    return [...scanned, ...moved];
 };

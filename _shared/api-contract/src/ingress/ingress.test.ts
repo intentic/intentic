@@ -183,16 +183,16 @@ describe("callers in other languages spell the contract's values", () => {
     const source = (path: string): string => readFileSync(join(repoRoot(import.meta.url), path), "utf8");
 
     it("`ic` sends the connect token in the contract's header", () => {
-        const sent = [...source("_sandbox/ic/src/platform.rs").matchAll(/\.header\("(x-intentic-[a-z-]+)"/gu)].map((match) => match[1]);
+        const sent = [...source("_hosts/ic/src/platform.rs").matchAll(/\.header\("(x-intentic-[a-z-]+)"/gu)].map((match) => match[1]);
         expect(sent).toContain(CONNECT_TOKEN_HEADER);
     });
 
     it("`ic` calls the contract's paths", () => {
-        const platform = source("_sandbox/ic/src/platform.rs");
+        const platform = source("_hosts/ic/src/platform.rs");
         expect(platform).toContain(`{platform_url}${PLATFORM_INGRESS.setupClaim.path}"`);
         expect(platform).toContain(`{platform_url}${PLATFORM_INGRESS.setupReport.path}"`);
         expect(platform).toContain(`{from_host}${PLATFORM_INGRESS.farewell.path}"`);
-        const report = source("_sandbox/ic/src/sandbox/fix/report.rs");
+        const report = source("_hosts/ic/src/sandbox/fix/report.rs");
         expect(report).toContain(`{platform_url}${PLATFORM_INGRESS.hostReportClaim.path}"`);
         expect(report).toContain(`{}${PLATFORM_INGRESS.hostReport.path}"`);
     });

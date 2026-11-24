@@ -1092,7 +1092,7 @@ mod tests {
     #[test]
     fn the_platform_default_is_the_one_the_connect_flow_picks_for_itself() {
         let connect = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../_sandbox/ic/src/sandbox/connect.rs");
+            .join("../../../_hosts/ic/src/sandbox/connect.rs");
         let source = std::fs::read_to_string(connect).expect("ic's connect.rs is readable");
 
         assert!(

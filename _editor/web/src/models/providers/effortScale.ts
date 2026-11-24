@@ -1,3 +1,4 @@
+import { providerTraits } from "@intentic/sandbox-contract/models/providers/provider-traits";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf, type CatalogOption, effortAllowed, EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
@@ -23,7 +24,7 @@ const EFFORT_LABELS: Record<string, () => string> = {
 // Default floor tiers, deliberately without 'max' (a provider must claim it); Claude's is the exception.
 const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`];
 const CLAUDE_EFFORTS: readonly string[] = [...STATIC_EFFORTS, `max`];
-const floorFor = (provider: AgentProvider): readonly string[] => (provider === `claude` ? CLAUDE_EFFORTS : STATIC_EFFORTS);
+const floorFor = (provider: AgentProvider): readonly string[] => (providerTraits(provider)?.effortScale === `anthropic` ? CLAUDE_EFFORTS : STATIC_EFFORTS);
 
 // The sign-in whose ladder a provider's models climb: a native provider's own, and for a vendor's API key the sign-in it
 // is sold beside, since the key reaches the same models (an Anthropic key runs Claude's, so it climbs Claude's ladder,

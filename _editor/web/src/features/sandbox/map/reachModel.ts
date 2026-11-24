@@ -1,4 +1,5 @@
 import type { ControlScope, ControlTokenSummary } from "@intentic/sandbox-contract/policy/control-scopes";
+import { traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import { type Fence, fenceIntersection, pathInsideFolder } from "@intentic/sandbox-contract/policy/fence-paths";
 import { isSignedInAccount, roleAllowsCapability } from "@intentic/sandbox-contract/policy/role-capability";
 import { fenceHoldsRole } from "@intentic/sandbox-contract/policy/role-home";
@@ -142,31 +143,9 @@ export interface ReachInput {
     readonly now: number;
 }
 
-// Which outward group a connection stands in; a kind not named here is a service.
-const GROUP_OF_KIND = new Map<CapabilityKind, GroupKey>([
-    [`cli`, `services`],
-    [`mcp`, `services`],
-    [`plugin`, `services`],
-    [`extension`, `services`],
-    [`agent`, `services`],
-    [`wallet`, `services`],
-    [`identity`, `accounts`],
-    [`browser`, `accounts`],
-    [`webext`, `accounts`],
-    [`device`, `machines`],
-    [`phone`, `machines`],
-    [`ssh`, `machines`],
-    [`docker`, `machines`],
-    [`link`, `sandboxes`],
-    [`fleet`, `sandboxes`],
-    [`vpn`, `network`],
-    [`netdisk`, `network`],
-    [`exit`, `network`],
-    [`endpoint`, `models`],
-    [`localmodel`, `models`],
-]);
-
-const groupOfKind = (kind: CapabilityKind): GroupKey => GROUP_OF_KIND.get(kind) ?? `services`;
+// Which outward group a connection stands in: its kind's row (policy/capability-kinds.ts). A kind this build does not
+// know (a newer daemon's) has no row and stands with the services.
+const groupOfKind = (kind: CapabilityKind): GroupKey => traitsOf(kind)?.group ?? `services`;
 
 export const REST_ID = `rest`;
 export const areaId = (id: string): string => `area:${id}`;

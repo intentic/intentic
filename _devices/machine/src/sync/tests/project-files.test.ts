@@ -78,7 +78,7 @@ describe("the project ignore list, as Mutagen reads it", () => {
 
     // Cargo's profile folders, natively and under a target triple; `*` stands for one folder there and never crosses one.
     it("leaves out Cargo's build output at any depth, and keeps a folder that is only named target", () => {
-        for (const path of ["target/debug/app", "_sandbox/ic/target/release/ic", "src-tauri/target/x86_64-pc-windows-msvc/release/app.exe"]) {
+        for (const path of ["target/debug/app", "_hosts/ic/target/release/ic", "src-tauri/target/x86_64-pc-windows-msvc/release/app.exe"]) {
             expect([path, ignored(path)]).toEqual([path, true]);
         }
         for (const path of ["target/CACHEDIR.TAG", "src/target/index.ts", "target/a/b/debug", "mytarget/debug/x", "target/debugger.ts"]) {

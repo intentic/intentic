@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertPath, ScopeError } from "./policy.js";
+import { grantWith } from "./device-testing.js";
 
 // Roots judged on a real temp tree with real symlinks: an allowed folder, a sibling outside it, and links between.
 
@@ -18,15 +19,7 @@ symlinkSync(outside, join(root, "outside-link"));
 symlinkSync(join(root, "notes.txt"), join(root, "notes-link"));
 symlinkSync(root, join(base, "allowed-link"));
 
-const grant = (roots: string): DeviceScopes => ({
-    shell: "off",
-    write: "on",
-    screen: "off",
-    control: "off",
-    sandboxes: "off",
-    destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    roots,
-});
+const grant = (roots: string): DeviceScopes => grantWith(["write"], { roots });
 
 afterAll(() => {
     rmSync(base, { recursive: true, force: true });

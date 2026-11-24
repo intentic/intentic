@@ -4,6 +4,7 @@ import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspac
 import { join } from "node:path";
 import { ownerGrantsDocument } from "../roles/owner-grants.js";
 import { DEFINITION_SOURCES, DEFINITION_WORKSPACE, definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift, unreadableDefinition } from "./definition.js";
+import { deviceScopesOn } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // Round-trip promises: emit then parse is byte-identical, emission is deterministic, and a bad document fails naming
 // the field.
@@ -191,7 +192,7 @@ describe("a definition from an earlier release", () => {
                 id: "laptop",
                 kind: "device",
                 // A switch added since reads as its default: off.
-                config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" },
+                config: { ...deviceScopesOn(["shell", "write"]), platform: "linux" },
             },
         ]);
     });

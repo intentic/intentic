@@ -10,7 +10,7 @@ import { constants, createGzip } from "node:zlib";
 import { repoRoot } from "../../constants/src/node.mjs";
 
 /** The directories of binaries a device downloads; the desktop installers are compressed formats already. */
-export const BINARY_DIRS = ["_devices/machine/dist-bin", "_devices/keyring/dist-bin", "_devices/win-launcher/dist-bin", "_devices/remoted/dist-bin", "_sandbox/ic/dist-bin"];
+export const BINARY_DIRS = ["_devices/machine/dist-bin", "_devices/keyring/dist-bin", "_devices/win-launcher/dist-bin", "_devices/remoted/dist-bin", "_hosts/ic/dist-bin"];
 
 /** The binaries in `dirs` that get a copy: every regular file but a copy, the sums, their signature or a dotfile. */
 export const binariesIn = (root, dirs = BINARY_DIRS) =>

@@ -41,6 +41,24 @@ flowchart LR
   through `sandboxRpc`, with a daemon-minted session that a proof establishes (`sandboxSession.ts`). The platform is not
   in that path. The daemon is reached over its tunnel, or over a certified loopback name when it runs on this machine
   (`client/endpoint/endpoint.ts`).
+- **Which sandbox a piece of the editor speaks of.** A window has one active sandbox (`app/storage/activeSandbox.ts`), and
+  every door written before the scope reads it by default: `sandboxRpc` aims there, `rpcKey` keys there, `supportsRoute`
+  answers for its daemon. `client/sandbox/scope/useSandboxScope.ts` names a sandbox once and hands out the same doors aimed
+  at it (`SandboxScope`: `id`, `at()`, `rpc`, `query`, `key`, `supportsRoute`, `summary`, `reachable`). `useSandboxScope()`
+  answers the nearest `<InSandbox :sandbox-id>`'s (`components/InSandbox.vue`), else `activeSandboxScope`;
+  `sandboxScopeOf(id)` is one cached scope per id for module code. A scope of the active id aims nowhere (`at()` is
+  undefined) and keys as `rpcKey` does, so one read stays one entry and one call, and `sandboxRpc` treats a call aimed at
+  the active id as unaimed. Each daemon's hello is held per sandbox (`setDaemonRoutesFor`, `supportsRouteAt`), the
+  exports of `useDaemonRoutes.ts` still speaking of the active one. State kept per id lives in `scope/perSandbox.ts`,
+  dropped when a workspace is replaced, a sandbox leaves the account, or the account leaves the browser. The
+  `sandbox-scope` check ratchets what still reads the active sandbox unnamed above the client (`activeSandboxId`, a
+  `sandboxRpc` call or `rpcQuery` with no `at`; `baselines/sandbox-scope.json`, which may only shrink). To move a
+  composable: take `const scope = useSandboxScope()` and move its reads and its writes together (`scope.query` and
+  `scope.at` into `useSandboxQuery`, `scope.rpc` for calls, `scope.key` for invalidation), since a read moved without the
+  write that invalidates it keeps the active sandbox's entry fresh and the other stale; then run
+  `node _tools/checks/sandbox-scope.mjs --tighten <file>`. A read that names no sandbox inside another sandbox's scope is
+  never moved there by itself: a development build warns. `models/home/useAttentionMine.ts` and
+  `features/home/HomeTileBadge.vue` are the first migrated pair.
 - **Addresses an element loads.** A few sandbox URLs are not fetched by the editor but handed to the browser: a media
   file's `src`, a served page's frame, a running app's preview, a download link. Each passes through one seam last,
   `client/endpoint/elementAddress.ts`, where a host whose sandbox is reached through a channel elements cannot use names a

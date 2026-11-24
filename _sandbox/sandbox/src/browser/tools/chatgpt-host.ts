@@ -10,7 +10,7 @@ import { CHATGPT_PAGE, type ChatgptHost, type ChatgptVoice, KitRefusal, type Mem
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { statePath, stateRelPath } from "../../state-paths.js";
 import { cacheFile } from "../../store/open-document.js";
-import { releasable, type ShelfFile, storeMediaIn } from "../../webext/media-shelf.js";
+import { releasable, type ShelfFile, storeMediaIn } from "../cast/media-shelf.js";
 import { evaluated } from "./evaluate-answer.js";
 
 // THE CHATGPT KIT'S SANDBOX HOST (2026-11-14): a sandbox account's own signed-in Chromium, driven through its

@@ -18,7 +18,7 @@ import { webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/
 import { accountCovering, accountHostsOf, signedInDoor } from "../browser/tools/account-hosts.js";
 import { WEBEXT_CALL_TIMEOUT_MS } from "../peers/webext-call-deadline.js";
 import { TICKETED_TOOLS } from "./file-tickets.js";
-import { fitToClient, withNote } from "./webext-client-ceiling.js";
+import { fitToClient, withNote } from "../browser/webext-client-ceiling.js";
 
 // The user's own browser as a peer door, through the extension that dials this sandbox and serves `webextContract`.
 // Heartbeat stays under an MV3 service worker's 30s idle kill, and facts are re-asked per read since allowed sites and

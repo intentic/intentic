@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT="$(repo_root)"
 BINARIES="$ROOT/_editor/desktop-app/src-tauri/binaries"
-CRATE="$ROOT/_sandbox/ic"
+CRATE="$ROOT/_hosts/ic"
 DIST="$CRATE/dist-bin"
 
 MODE=check

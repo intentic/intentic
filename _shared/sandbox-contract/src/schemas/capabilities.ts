@@ -165,6 +165,7 @@ export type IdentityConfig = z.infer<typeof IdentityConfigSchema>;
 // machine, never here, so a compromised sandbox can't exceed what the owner ticked.
 // on/off, not boolean: capability configs arrive from the form as strings, and a select renders an enum.
 const hostScope = z.enum(["on", "off"]);
+type HostScope = z.infer<typeof hostScope>;
 export const DeviceScopesSchema = z.object({
     // Run commands in a real shell (PowerShell on Windows, the login shell on Linux). Off ⇒ files/screen only.
     shell: hostScope.default("on"),
@@ -201,6 +202,23 @@ export const DeviceScopesSchema = z.object({
     roots: z.string().optional(),
 });
 export type DeviceScopes = z.infer<typeof DeviceScopesSchema>;
+/** A device permission switch: every scope but `roots`, which is folders, not on/off. */
+export type DeviceSwitch = Exclude<keyof DeviceScopes, "roots">;
+/** Every device switch, in the schema's order, so a new switch reaches whatever reads this without an edit. */
+export const DEVICE_SWITCHES: readonly DeviceSwitch[] = DeviceScopesSchema.keyof().options.filter((key): key is DeviceSwitch => key !== "roots");
+/**
+ * A grant with exactly `on` switched on and every other switch off, a new switch included; `extra` is laid over it.
+ * Not `DeviceScopesSchema.parse({})`, whose defaults turn `shell` and `screen` on.
+ */
+export const deviceScopesOn = <Extra extends Partial<DeviceScopes> = Record<never, never>>(
+    on: readonly DeviceSwitch[] = [],
+    extra?: Extra,
+): Record<DeviceSwitch, HostScope> & Extra => ({
+    // SAFETY: one entry for every switch, each "on" or "off".
+    ...(Object.fromEntries(DEVICE_SWITCHES.map((name) => [name, on.includes(name) ? "on" : "off"])) as Record<DeviceSwitch, HostScope>),
+    // SAFETY: an absent extra adds nothing, which is what the default Extra says.
+    ...(extra ?? ({} as Extra)),
+});
 export const DeviceConfigSchema = DeviceScopesSchema.extend({ platform: z.string().min(1) });
 // An ACP agent served as a chat provider: the daemon spawns `command` as a long-lived JSON-RPC subprocess, and the
 // capability id becomes the provider id. `env` is a pasted KEY=VALUE block, the whole secret field; `loginCommand` runs

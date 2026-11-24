@@ -29,14 +29,14 @@ flowchart LR
 
 1. **Everything carries its owner.** Each object says who made it and for what, and an unattended actor touches only
    what it owns.
-   - Containers: `HOST_PLATFORM` plus `HOST_ENV`, and `dev.intentic.*` labels ([`ic`'s side.rs](../../_sandbox/ic/src/sandbox/side.rs), [labels.rs](../../_sandbox/ic/src/sandbox/labels.rs)).
+   - Containers: `HOST_PLATFORM` plus `HOST_ENV`, and `dev.intentic.*` labels ([`ic`'s side.rs](../../_hosts/ic/src/sandbox/side.rs), [labels.rs](../../_hosts/ic/src/sandbox/labels.rs)).
    - Mutagen sessions: `intentic-owner` labels ([`mutagen.ts`](../../_devices/machine/src/sync/mutagen.ts)).
    - Daemon children: `INTENTIC_DAEMON_GEN` ([`workload-stamp.ts`](../../_sandbox/sandbox/src/seams/workload-stamp.ts)).
    - Tunnels: an instance id ([`identity.rs`](../../_sandbox/netd/crates/tunnel/src/identity.rs)).
 2. **Ownership is a lease.**
    - The environment that keeps a sandbox writes `/history/.ic/keeper.json` inside it on every keeper pass. The
      other side of a PC adopts the sandbox when that heartbeat has been silent for half an hour
-     ([`inside.rs`](../../_sandbox/ic/src/sandbox/inside.rs)).
+     ([`inside.rs`](../../_hosts/ic/src/sandbox/inside.rs)).
    - The ingress holds one instance per sandbox while its carrier is heard, and lets a new instance from the same
      place replace it ([`registry.rs`](../../_platform/ingress/src/registry.rs)).
 3. **Deletion is a record.** A consumer retires its own state only on a positive "gone": a tombstone, the edge's
@@ -60,7 +60,7 @@ flowchart LR
    - `/history/trash`, parked refs and git objects;
    - dind data, and the desktop app's run logs.
 6. **Destroy only on positive evidence.** A side `ic` cannot read is Unknown, never "mine"
-   ([`side.rs`](../../_sandbox/ic/src/sandbox/side.rs)). A listing docker would not give is a failure, not an empty
+   ([`side.rs`](../../_hosts/ic/src/sandbox/side.rs)). A listing docker would not give is a failure, not an empty
    machine. A hosted app without a tombstone is `forgotten`, reported and left standing.
 
 ## Where a release reaches an old install

@@ -3,7 +3,7 @@
 <script setup lang="ts">
 import type { CapabilityCatalogEntry, AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { Button, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { startAgent } from "../../../models/fleet/agentActions";
@@ -11,23 +11,18 @@ import { advancedLabel, inlineField } from "../../../models/capabilities/form";
 import CapabilityFieldRow from "../../../parts/capabilities/CapabilityFieldRow.vue";
 import FieldHint from "../../../parts/capabilities/FieldHint.vue";
 import HubTakeOffer from "../../../parts/sandbox/HubTakeOffer.vue";
-import LinkPairing from "../../../components/LinkPairing.vue";
 import type { HubWant } from "@intentic/sandbox-contract/schemas/connection-hub";
 import CapabilityFormStatus from "../CapabilityFormStatus.vue";
-import GpuHostedNote from "../GpuHostedNote.vue";
 import { addsByItself, type CapabilityForm, takenNameWords } from "../capabilityForm";
+import { type FormSlotContext, slotsOf } from "../kinds/kindSlots";
 import type { useCapabilityProbe } from "../capabilityProbe";
 import type { useCapabilitySubmit } from "../capabilitySubmit";
 import { auditPrompt } from "../model/audit";
 import type { useFieldStandIns } from "../model/fieldStandIns";
-import { matchHostPreset } from "../model/previews";
 import { picksVersion } from "../model/refs";
 import CapabilityContext from "./CapabilityContext.vue";
 import FieldStandIn from "./FieldStandIn.vue";
-import FleetAllow from "./FleetAllow.vue";
-import ForticlientImport from "./ForticlientImport.vue";
 import GitRefField from "./GitRefField.vue";
-import PluginRegistryBrowse from "./PluginRegistryBrowse.vue";
 
 const t = useT();
 
@@ -40,6 +35,7 @@ const {
     standIns,
     saving,
     hosted = false,
+    save,
     cancellable = false,
     guide = false,
 } = defineProps<{
@@ -74,10 +70,17 @@ const emit = defineEmits<{ notice: [NoticeModel | null]; dismiss: []; cancel: []
 // Stable for the page's life: each is one ref the page created once, so taking them out of the composable keeps them live.
 const { name, nameEdited, savedName, namePreview, nameHeld, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
-const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
-const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, changed } = form;
+const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects } = form;
+const { auditable, updateFrom, submitLabel, changed } = form;
 const { probing, canProbe, runProbe, meter: probeMeter } = probe;
 const { submit, submitting, meter: submitMeter } = saving;
+
+// The parts the tile's kind adds to its form, drawn with what they act on.
+const parts = computed(() => {
+    const slots = slotsOf(entry.kind);
+    const context: FormSlotContext = { entry, editing, sole, form, save, submit, hosted, notice: (notice) => emit(`notice`, notice) };
+    return { lead: slots.formLead?.(context), addLead: slots.addLead?.(context), extra: slots.formExtra?.(context) };
+});
 
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
@@ -94,18 +97,15 @@ const offersCancel = computed(() => cancellable && (editing === undefined || cha
         <!-- Narrow panes only: above @3xl the page's side column carries the same guide beside the form. -->
         <CapabilityContext v-if="guide" :entry="entry" :values="values" :effects="liveEffects" class="@3xl:hidden" />
 
-        <!-- Fills this form from FortiClient's own file, a new connection's or an open one's; keyed on the tile so switching
-             tiles clears the zone. -->
-        <ForticlientImport v-if="entry.kind === 'vpn'" :key="entry.id" @pick="pickForticlient" @notice="emit(`notice`, $event)" />
-        <!-- Ways to fill a new connection's form by doing rather than typing: each fills the fields below it. -->
+        <!-- What the tile's kind leads its form with (kindSlots.ts): FortiClient's own file to fill it from, the fleet's
+             Allow. Keyed on the tile so switching tiles clears it. -->
+        <component v-if="parts.lead" :is="parts.lead.is" :key="entry.id" v-bind="parts.lead.props" />
+        <!-- Ways to fill a new connection's form by doing rather than typing: each fills the fields below it (a linked
+             sandbox's pairing, a plugin registry's browse). -->
         <template v-if="editing === undefined">
-            <!-- Pairs this sandbox with another of the reader's and adds the card; the fields under Advanced are the way by hand. -->
-            <LinkPairing v-if="entry.kind === 'link'" :key="entry.id" @pick="(paired) => (pickLinked(paired), void submit())" @notice="emit(`notice`, $event)" />
-            <!-- Registry browse for plugins only; extensions have their own Browse tab, linked from the page. -->
-            <PluginRegistryBrowse v-if="entry.kind === 'plugin'" :key="entry.id" :kind="entry.kind" @pick="applyRegistryPick" @notice="emit(`notice`, $event)" />
+            <component v-if="parts.addLead" :is="parts.addLead.is" :key="entry.id" v-bind="parts.addLead.props" />
             <HubTakeOffer v-if="hubWant" :want="hubWant" />
         </template>
-        <FleetAllow v-if="entry.kind === 'fleet'" :instance="sole" :save="save" @notice="emit(`notice`, $event)" />
 
         <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (the row's Rename), so a
              second box here would be a lossy shortcut for it. -->
@@ -138,14 +138,8 @@ const offersCancel = computed(() => cancellable && (editing === undefined || cha
             </span>
         </label>
 
-        <!-- A device's access as a posture: the preset sets all switches at once. The switches below say what it grants, so
-             no sentence repeats them here. -->
-        <label v-if="entry.kind === 'device'" class="flex items-center justify-between gap-4">
-            <span class="ui-field-label min-w-0">{{ t(`capabilities.words.access`) }}</span>
-            <SegmentedControl class="shrink-0" :model-value="matchHostPreset(values) ?? ''" :options="hostPresetOptions" @update:model-value="applyHostPreset($event)" />
-        </label>
-
-        <GpuHostedNote v-if="entry.kind === 'docker' && hosted" v-model="values['gpu']" />
+        <!-- What the tile's kind adds before its fields: a device's access as a posture, a hosted machine's GPU note. -->
+        <component v-if="parts.extra" :is="parts.extra.is" v-bind="parts.extra.props" />
         <!-- Main fields first, rarely-changed ones folded behind Advanced. -->
         <template v-for="field in mainFields(entry)" :key="field.key">
             <!-- An extension pins a commit, so that box is answered from the repository rather than typed into. -->

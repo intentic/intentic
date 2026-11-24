@@ -3,6 +3,7 @@ import { clearImprints } from "@intentic/ui/skeleton-store";
 import { announceDesktopRoster } from "../../app/environments/desktop";
 import { clearAccountStorage, clearEveryAccountStorage, sealAccountWrites } from "../../app/storage/browserStorage";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
+import { dropEverySandboxScope } from "../sandbox/scope/perSandbox";
 import { useSandboxSession } from "../session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 
@@ -45,6 +46,8 @@ export const forgetAccountTraces = async (which: Forgotten = {}): Promise<void> 
         bundles,
     ]);
     // Module state that belongs to one sandbox (the open tabs, the roster, set-aside drafts, extensions' badges) is
-    // emptied last, so what refills it on its next read finds the storage already cleared.
+    // emptied last, so what refills it on its next read finds the storage already cleared; what is kept per sandbox id
+    // (sandbox/scope/perSandbox.ts) goes with it.
     resetSandboxScope();
+    dropEverySandboxScope();
 };

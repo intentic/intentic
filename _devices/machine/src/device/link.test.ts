@@ -5,6 +5,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { RPCLink } from "@orpc/client/websocket";
 import { RPCHandler } from "@orpc/server/websocket";
 import { createHostRouter } from "./router.js";
+import { grantWith } from "./device-testing.js";
 
 // Both ends of the socket, over a real oRPC handler and link built from the same `deviceContract`, so a
 // procedure renamed or a schema tightened on one side fails here rather than on somebody's laptop.
@@ -40,18 +41,8 @@ class FakeSocket {
     }
 }
 
-const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
-    shell: "on",
-    write: "on",
-    screen: "on",
-    control: "on",
-    sandboxes: "on",
-    destructive: "on", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    ...overrides,
-});
-
 // The whole wiring: machine hosts the contract, "daemon" holds the client, over one socket, as in production.
-const connectedPair = (initial: DeviceScopes = scopes()) => {
+const connectedPair = (initial: DeviceScopes = grantWith("agent")) => {
     const machineSocket = new FakeSocket();
     const daemonSocket = new FakeSocket();
     machineSocket.peer = daemonSocket;
@@ -86,7 +77,7 @@ test("the daemon can ask a machine what it is", async () => {
 
 // FORBIDDEN is the one refusal the sandbox reads as the "Run commands" switch rather than an agent without the call.
 test("a machine with commands switched off refuses to describe itself, as FORBIDDEN", async () => {
-    const { client } = connectedPair(scopes({ shell: "off" }));
+    const { client } = connectedPair(grantWith("agent", { shell: "off" }));
     const refusal: unknown = await client.report().catch((error: unknown) => error);
     expect(refusal).toBeInstanceOf(ORPCError);
     expect((refusal as ORPCError<string, unknown>).code).toBe("FORBIDDEN");
@@ -96,21 +87,14 @@ test("a pushed grant takes effect on the machine", async () => {
     const { client, scopesNow } = connectedPair();
     expect(await client.setScopes({ shell: "off", write: "off", screen: "on", control: "off" })).toEqual({ ok: true });
     // The schema fills every switch the push left out, and each one it fills is off.
-    expect(scopesNow()).toEqual({
-        shell: "off",
-        write: "off",
-        screen: "on",
-        control: "off",
-        sandboxes: "off",
-        destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off",
-    });
+    expect(scopesNow()).toEqual(grantWith(["screen"]));
 });
 
 test("a grant that does not satisfy the contract is refused before it reaches the machine", async () => {
     const { client, scopesNow } = connectedPair();
     // The whole reason for a typed link: a caller cannot push a scope value the machine has no meaning for.
     await expect(client.setScopes({ shell: "maybe", write: "off", screen: "on", control: "off" } as unknown as DeviceScopes)).rejects.toThrow();
-    expect(scopesNow()).toEqual(scopes());
+    expect(scopesNow()).toEqual(grantWith("agent"));
 });
 
 // A newer sandbox's grant carries switches this agent has never heard of. Refused, the link dropped and the sandbox
@@ -119,7 +103,7 @@ test("a grant carrying a switch this agent does not know is taken, with that swi
     const { client, logged, scopesNow } = connectedPair();
     const pushed = { shell: "off", write: "off", screen: "on", control: "off", network: "on" } as const;
     expect(await client.setScopes(pushed)).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" });
+    expect(scopesNow()).toEqual(grantWith(["screen"]));
     await client.setScopes(pushed);
     expect(logged.filter((line) => line.includes("does not know"))).toEqual([
         "https://sandbox.example.dev: the permissions it pushed include network, which this agent does not know; they stay off here until the agent is updated.",
@@ -193,7 +177,7 @@ test("a notification round-trips as an empty answer rather than an error", async
 // People's remote access, behind the link's own three switches (remote/remote.ts): with all three off the call is refused
 // over the wire as FORBIDDEN, the code the sandbox reads as switches, naming each, before remoted is looked for.
 test("remoteStart with every people switch off is refused as FORBIDDEN, naming the three switches", async () => {
-    const { client } = connectedPair(scopes({ screen: "on", control: "on", shell: "on" }));
+    const { client } = connectedPair(grantWith("agent", { screen: "on", control: "on", shell: "on" }));
     const started = client.remoteStart({ device: "rog", uplinkToken: "secret-token", mediaKey: "k".repeat(43) });
     await expect(started).rejects.toBeInstanceOf(ORPCError);
     await expect(started).rejects.toMatchObject({
@@ -204,7 +188,7 @@ test("remoteStart with every people switch off is refused as FORBIDDEN, naming t
 });
 
 test("remoteStart with a media key that is not 32 bytes of base64url is refused before it reaches the machine", async () => {
-    const { client } = connectedPair(scopes({ remoteTerminal: "on" }));
+    const { client } = connectedPair(grantWith("agent", { remoteTerminal: "on" }));
     await expect(client.remoteStart({ device: "rog", uplinkToken: "secret-token", mediaKey: "too-short" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 });
 

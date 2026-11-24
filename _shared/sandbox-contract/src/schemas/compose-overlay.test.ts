@@ -5,7 +5,7 @@ import { packageRoot } from "@intentic/constants/node";
 import { ComposedOverlayLineSchema } from "./compose-overlay.js";
 
 // The lines a target image's composer prints, as examples: golden/compose-overlay.json, which ic's reader is held to
-// (_sandbox/ic/src/sandbox/composition.rs). This is the TS half: each is a line the contract reads, its hash its overlay's.
+// (_hosts/ic/src/sandbox/composition.rs). This is the TS half: each is a line the contract reads, its hash its overlay's.
 
 interface ComposeCase {
     readonly name: string;

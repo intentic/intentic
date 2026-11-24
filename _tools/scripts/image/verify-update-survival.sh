@@ -52,7 +52,7 @@ start_dind_host "$HOST_CONTAINER"
 
 echo "==> building ic from this checkout"
 bash "$ROOT/_tools/scripts/build/build-ic.sh" linux-x64
-docker cp "$ROOT/_sandbox/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
+docker cp "$ROOT/_hosts/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
 in_host chmod +x /root/ic
 docker cp "$ROOT/_site/site/public/scripts/connect.sh" "$HOST_CONTAINER:/root/connect.sh"
 

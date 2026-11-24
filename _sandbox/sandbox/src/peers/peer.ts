@@ -1,4 +1,5 @@
 import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
+import { CAPABILITY_KIND_TRAITS, PEER_KINDS, type PeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { z } from "zod";
 import type { BurnDocument, CardRule, EnrollmentsDocument } from "./enrollment.js";
 
@@ -68,8 +69,12 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
     readonly expired: string;
 }
 
-// The capability kinds whose card is a peer: a computer, a browser, a phone.
-export type PeerKind = "device" | "webext" | "phone";
+// The capability kinds whose card is a peer: a computer, a browser, a phone (their row's `peer`).
+export type { PeerKind };
 
-// Doors reachable through the MCP bridge, by capability kind, so the turn planner needn't import a door's code.
-export const PEER_BRIDGES = { device: "hosts", webext: "webext", phone: "phones" } as const satisfies Record<PeerKind, PeerSlug>;
+// Doors reachable through the MCP bridge, by capability kind, so the turn planner needn't import a door's code. Read off
+// each kind's row, so a new peer kind names its door there.
+// SAFETY: PEER_KINDS is every kind whose row has a `peer`, so the entries are exactly PeerKind mapped to its row's door.
+export const PEER_BRIDGES = Object.fromEntries(PEER_KINDS.map((kind) => [kind, CAPABILITY_KIND_TRAITS[kind].peer])) as {
+    readonly [K in PeerKind]: (typeof CAPABILITY_KIND_TRAITS)[K]["peer"];
+} satisfies Record<PeerKind, PeerSlug>;

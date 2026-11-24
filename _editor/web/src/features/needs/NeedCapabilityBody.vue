@@ -6,8 +6,7 @@ import { type NoticeModel, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, reactive, ref } from "vue";
 import CapabilityFieldRow from "../../parts/capabilities/CapabilityFieldRow.vue";
-import LinkPairing from "../../components/LinkPairing.vue";
-import FleetAllow from "../capabilities/connect/FleetAllow.vue";
+import { slotsOf } from "../capabilities/kinds/kindSlots";
 import type { PairedLink } from "../../components/linkPairing";
 import { guideParts, guideTokenUrl } from "../../models/capabilities/credentialGuide";
 import SecretField from "../../parts/capabilities/SecretField.vue";
@@ -39,10 +38,9 @@ const entry = computed<CapabilityCatalogEntry | undefined>(() =>
 );
 const instance = computed(() => capabilities.value.find((capability) => capability.id === props.subject.instance));
 
-// The kinds whose form alone finishes the setup: anything that pairs a device, signs a browser in or installs code
-// goes through its own page, where those flows live, with the need's settings carried there.
-const INLINE_KINDS = new Set([`cli`, `mcp`, `ssh`, `endpoint`, `fleet`]);
-const inline = computed(() => entry.value !== undefined && INLINE_KINDS.has(entry.value.kind));
+// The kinds whose form alone finishes the setup (kindSlots.ts `inlineInNeed`): anything that pairs a device, signs a
+// browser in or installs code goes through its own page, where those flows live, with the need's settings carried there.
+const inline = computed(() => entry.value !== undefined && slotsOf(entry.value.kind).inlineInNeed === true);
 
 // A connection's name: the site's when the entry holds one per site, else the one the Capabilities page would pick (a
 // singleton's own id, which it has no box to change).
@@ -156,7 +154,6 @@ const change = async (): Promise<void> => {
 
 // The fleet's Allow, in the card (FleetAllow.vue): the token is minted under the reader's own session and saved as a
 // connect is. A save that did not end connected throws, so Allow takes back the token it minted.
-const allowingFleet = computed(() => props.subject.mode === `connect` && entry.value?.kind === `fleet`);
 const allowFleet = async (input: AddCapabilityInput): Promise<void> => {
     const id = props.need.id;
     const ended = await answer({
@@ -176,7 +173,6 @@ const allowFleet = async (input: AddCapabilityInput): Promise<void> => {
 
 // A linked sandbox, paired in the card: this editor mints the link over there under the reader's own session, and the
 // press that paired it also saves the card, since nothing is left to fill in.
-const linking = computed(() => props.subject.mode === `connect` && entry.value?.kind === `link`);
 const pairingNotice = ref<NoticeModel | null>(null);
 const paired = async (link: PairedLink): Promise<void> => {
     name.value = link.id;
@@ -185,6 +181,20 @@ const paired = async (link: PairedLink): Promise<void> => {
     values[`name`] = link.name;
     await connect();
 };
+
+// A kind added in one press (a linked sandbox's pairing, the fleet's Allow; kindSlots.ts `needLead`), in the card.
+const selfAdd = computed(() =>
+    props.subject.mode !== `connect` || entry.value === undefined
+        ? undefined
+        : slotsOf(entry.value.kind).needLead?.({
+              target: props.subject.target,
+              paired,
+              allow: allowFleet,
+              notice: (raised) => {
+                  pairingNotice.value = raised;
+              },
+          }),
+);
 
 // A removal, done the way the Capabilities page's Remove does it; the daemon meets the need once the connection is gone.
 const removeIt = async (): Promise<void> => {
@@ -229,25 +239,16 @@ const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?
             <li v-for="line in consequences" :key="line" class="flex items-center gap-1.5"><Icon name="exclamation-triangle" />{{ line }}</li>
         </ul>
 
-        <!-- Another of the reader's sandboxes, paired here: the one the agent named is chosen already. -->
-        <div v-if="linking" class="flex flex-col gap-2">
-            <LinkPairing :prefer="subject.target" @pick="paired" @notice="pairingNotice = $event" />
+        <!-- Added in one press: another of the reader's sandboxes, paired here (the one the agent named is chosen
+             already), or the fleet, allowed with nothing to paste. -->
+        <div v-if="selfAdd" class="flex flex-col gap-2">
+            <component :is="selfAdd.is" v-bind="selfAdd.props" />
             <div class="flex flex-wrap items-center gap-2">
                 <ChatDecisionButton tone="secondary" icon="external-link" :to="setupAt">{{ t(`needs.capability.fullForm`) }}</ChatDecisionButton>
                 <slot name="decline" />
             </div>
-            <Notice v-if="pairingNotice" :of="pairingNotice" />
-        </div>
-
-        <!-- The fleet, allowed in one press: nothing to paste. -->
-        <div v-else-if="allowingFleet" class="flex flex-col gap-2">
-            <FleetAllow :save="allowFleet" @notice="pairingNotice = $event" />
-            <div class="flex flex-wrap items-center gap-2">
-                <ChatDecisionButton tone="secondary" icon="external-link" :to="setupAt">{{ t(`needs.capability.fullForm`) }}</ChatDecisionButton>
-                <slot name="decline" />
-            </div>
-            <!-- A refused save is the need's own notice, below; this one is the mint's. -->
-            <Notice v-if="pairingNotice && !notice" :of="pairingNotice" />
+            <!-- Where a refused save is the need's own notice, below, this one is only the mint's. -->
+            <Notice v-if="pairingNotice && !(selfAdd.quietUnderAnswer && notice)" :of="pairingNotice" />
         </div>
 
         <!-- A new connection whose form finishes it: filled in with everything the agent could know, credential empty. -->

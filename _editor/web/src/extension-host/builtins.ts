@@ -5,7 +5,6 @@ import * as activity from "@intentic/ext-activity";
 import * as approvals from "@intentic/ext-approvals";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
-import * as eUrzad from "@intentic/ext-e-urzad";
 import * as gitHistory from "@intentic/ext-git-history";
 import * as onlyoffice from "@intentic/ext-onlyoffice";
 import * as pipelines from "@intentic/ext-pipelines";
@@ -18,8 +17,8 @@ import * as viewers from "@intentic/ext-viewers";
 // /extensions` lists them alongside daemon-side and git-installed ones with one on/off switch. A builtin can only touch
 // the public IntenticApi, never app internals.
 // Only the INCLUDED first-party set: a sandbox is not itself without these. The listed ones (acceptance, documentation,
-// maintenance, knowledge, deployments, issues, workflows) live in their own repositories and arrive blob-loaded like any
-// install.
+// e-urzad, maintenance, knowledge, deployments, issues, prawo, workflows) live in their own repositories and arrive
+// blob-loaded like any install.
 
 // The package namespace of a compiled-in extension: an ExtensionModule that also exports the manifest the daemon lists
 // it under. Typed on the array below so a package that stops exporting one fails here.
@@ -32,7 +31,6 @@ const modules: readonly BuiltinModule[] = [
     pipelines,
     apps,
     gitHistory,
-    eUrzad,
     onlyoffice,
     preview,
     viewers,

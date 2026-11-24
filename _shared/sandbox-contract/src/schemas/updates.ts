@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // WHAT THE HOST LAST DID ABOUT THIS SANDBOX'S VERSION, in the host's own words. Written by `ic` (the swap, its health
-// check and the probation that follows it: _sandbox/ic/src/sandbox/outcome.rs) onto /history as `update-outcome.json`,
+// check and the probation that follows it: _hosts/ic/src/sandbox/outcome.rs) onto /history as `update-outcome.json`,
 // the same volume whichever container runs, so the version that ends up running reads what happened to the other one.
 // Advisory: the swap and its undoing are the host's; this is only how the sandbox and its owner hear about them.
 export const UpdateOutcomeResultSchema = z.enum(["updated", "kept", "restored", "rolled-back"]);

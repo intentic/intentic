@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Everything a person sees in a terminal from intentic draws through one of two renderers: _sandbox/ic/src/ui.rs for
+// Everything a person sees in a terminal from intentic draws through one of two renderers: _hosts/ic/src/ui.rs for
 // `ic`, _devices/local-agent/src/ui.ts for `intentic-machine` (both held to one layout fixture). A `println!` or a
 // `process.stdout.write` beside them is a line in its own voice, which is how fifteen commands came to look like
 // fifteen unrelated scripts. The rules are docs/ops/cli-output-protocol.md. Machine output (a --json document, a marker
@@ -20,9 +20,9 @@ const CHECK = `terminal-output`;
 const SOURCES = [
     {
         about: `ic`,
-        matches: (path) => path.startsWith(`_sandbox/ic/src/`) && path.endsWith(`.rs`),
+        matches: (path) => path.startsWith(`_hosts/ic/src/`) && path.endsWith(`.rs`),
         // The renderer itself, and main.rs, which only defines the crate's println!/eprintln! (rerouted under --json).
-        exempt: (path) => path === `_sandbox/ic/src/ui.rs` || path === `_sandbox/ic/src/main.rs` || /(^|\/)tests?(\.rs|\/)/.test(path),
+        exempt: (path) => path === `_hosts/ic/src/ui.rs` || path === `_hosts/ic/src/main.rs` || /(^|\/)tests?(\.rs|\/)/.test(path),
         print: /\b(?:e?println!|e?print!)\s*\(/g,
         // ic keeps its unit tests in a trailing `#[cfg(test)] mod tests { … }`, which may print what it likes. Only an
         // inline module ends the body: a `#[cfg(test)] mod helpers;` declaration near the top is not the tests.
@@ -70,7 +70,7 @@ for (const { path, source } of files) {
 
 if (allowArg !== undefined) {
     if (allowArg === `` || allowArg.startsWith(`--`)) {
-        console.error(`${CHECK}: --allow needs the file to record, e.g. --allow ${[...found.keys()][0] ?? `_sandbox/ic/src/<file>.rs`}`);
+        console.error(`${CHECK}: --allow needs the file to record, e.g. --allow ${[...found.keys()][0] ?? `_hosts/ic/src/<file>.rs`}`);
         process.exit(2);
     }
     allowOne(CHECK, CHECK, allowArg, found.get(allowArg) ?? 0);

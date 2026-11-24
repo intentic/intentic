@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { plural } from "@intentic/base/format";
 import { explain, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import { deviceScopesOn } from "@intentic/sandbox-contract/schemas/capabilities";
 import { environmentKeyOf, type PeerEnrollmentRequest } from "@intentic/sandbox-contract/schemas/hosts";
 import { PeerEnrollmentAnswerSchema } from "@intentic/sandbox-contract/schemas/peer-enrollment";
 import type { CommandContext } from "@stricli/core";
@@ -102,7 +103,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         sandboxUrl: flags.url,
         id,
         token,
-        scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" },
+        scopes: deviceScopesOn(),
     };
     // Added to the link list, not written over it, or connecting a second sandbox silently disconnects the first.
     const links = await upsertLink(link);

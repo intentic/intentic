@@ -19,8 +19,8 @@ import {
 import { opt } from "../../opt.js";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { WEBEXT_CLIENT_TIMEOUT_MS } from "../../peers/webext-call-deadline.js";
-import type { ShelfFile } from "../../webext/media-shelf.js";
-import { fitToClient, withNote } from "../../webext/webext-client-ceiling.js";
+import type { ShelfFile } from "../cast/media-shelf.js";
+import { fitToClient, withNote } from "../webext-client-ceiling.js";
 import type { McpToolSchema, RouterManifest } from "./browser-router.js";
 import { ANONYMOUS_BROWSER_SERVER } from "./browser-servers.js";
 import { type BackendCall, sandboxChatgptHost, sandboxVoice, type TabHold } from "./chatgpt-host.js";

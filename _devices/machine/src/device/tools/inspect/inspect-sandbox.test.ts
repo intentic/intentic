@@ -1,6 +1,6 @@
 import { icInspectArgs, icLacksInspect, INSPECT_READS, MAX_INSPECT_ARG_LENGTH, MAX_INSPECT_ARGS } from "./inspect-sandbox.js";
 
-// inspect_sandbox runs only reads, and the same list `ic sandbox inspect` holds them to (_sandbox/ic/src/sandbox/inspect.rs
+// inspect_sandbox runs only reads, and the same list `ic sandbox inspect` holds them to (_hosts/ic/src/sandbox/inspect.rs
 // tests the same cases on that side): a refusal here is said before ic is asked, and names what is allowed.
 
 const ALLOWED = "Allowed: agents ls, show, find or bundle; diagnostics errors, slow, turns, resources, restarts, timeline or failures; or either one's --help.";

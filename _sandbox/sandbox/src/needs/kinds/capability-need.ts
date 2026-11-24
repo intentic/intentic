@@ -1,4 +1,5 @@
 import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
+import { kindsWhere } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { Capability, CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
@@ -130,7 +131,7 @@ const raise = (subject: CapabilityNeed): Resolved => ({ kind: "raise", subject, 
 const refused = (code: string, message: string): Resolved => ({ kind: "refused", code, message });
 
 // The kinds whose connection a turn mounts at its start, so a later grant or connection reaches only the next turn.
-const MOUNTED = new Set(["browser", "identity", "device", "webext", "phone", "mcp", "agent", "plugin"]);
+const MOUNTED = new Set<string>(kindsWhere((traits) => traits.turnStartMount));
 
 // A refusal the agent reported is one no probe saw, so no probe sees it end either: once the person says in the chat
 // that the credential is fixed and a retry works, the agent closes the card (`needs done`) rather than leaving it up.

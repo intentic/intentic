@@ -12,11 +12,16 @@ import {
     driftScope,
     folderSurface,
     missingRoutes,
+    routeSurfaceOf,
     setDaemonRoutes,
+    setDaemonRoutesFor,
     staleDaemonReason,
     supportsRoute,
+    supportsRouteAt,
     unknownDaemonRoutes,
 } from "./useDaemonRoutes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { dropSandboxScope } from "./scope/perSandbox";
 import { resetContractFreshness } from "./contractFreshness";
 import { loadContract } from "./daemon/contract";
 
@@ -461,5 +466,43 @@ describe(`the second print`, () => {
         hello(reprinted([], [`vpn.list`]), []);
         resetSandboxScope();
         expect(driftedRoutes.value).toEqual([]);
+    });
+});
+
+// Each sandbox's hello is its own: another sandbox's surface never answers for the active one, and a sandbox this
+// window has heard nothing from reads as supporting everything, as an unknown daemon does.
+describe(`routes per sandbox`, () => {
+    beforeAll(async () => {
+        await loadContract();
+    });
+    beforeEach(() => resetSandboxScope());
+    afterEach(() => {
+        activeSandboxId.value = undefined;
+    });
+
+    it(`answers for the sandbox asked about, and the active one's exports stay its own`, () => {
+        activeSandboxId.value = `a`;
+        setDaemonRoutesFor(`b`, withoutVpn);
+        expect(supportsRouteAt(`b`, `vpn.list`)).toBe(false);
+        expect(supportsRouteAt(`c`, `vpn.list`)).toBe(true);
+        expect(supportsRoute(`vpn.list`)).toBe(true);
+        expect(daemonBehind.value).toBe(false);
+
+        setDaemonRoutes(withoutVpn);
+        expect(routeSurfaceOf(`a`)?.routes?.has(`vpn.list`)).toBe(false);
+        expect(supportsRouteAt(`a`, `vpn.list`)).toBe(false);
+        expect(supportsRouteAt(undefined, `vpn.list`)).toBe(false);
+        expect(daemonBehind.value).toBe(true);
+    });
+
+    it(`forgets a sandbox's hello on a switch, and when its workspace is replaced`, () => {
+        activeSandboxId.value = `a`;
+        setDaemonRoutesFor(`b`, withoutVpn);
+        dropSandboxScope(`b`);
+        expect(routeSurfaceOf(`b`)).toBeUndefined();
+
+        setDaemonRoutesFor(`b`, withoutVpn);
+        resetSandboxScope();
+        expect(supportsRouteAt(`b`, `vpn.list`)).toBe(true);
     });
 });

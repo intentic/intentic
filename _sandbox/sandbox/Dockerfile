@@ -251,7 +251,7 @@ RUN printf '%s\n' '#!/bin/sh' 'exec node "$@"' > /usr/local/bin/tsx \
 # loaded via WEBQ_PLUGIN_DIR (turn-plan.ts), ungated: there is no default tool to displace and no experiment to run,
 # the CLI is simply on PATH and the skill says when it helps. Copied from the build context (the npm package ships
 # only dist/; the plugin lives beside it in the source tree).
-COPY _sandbox/webq/plugin /opt/webq-plugin
+COPY _agent-tools/webq/plugin /opt/webq-plugin
 # Claude Code's managed settings, which load whatever a turn's settingSources say, and the policy mod they run first
 # (_sandbox/sandbox/claude-policy/plugins/intentic-guard). Without it a mod someone installs (Claude Code 2.1.287+)
 # can answer or overturn the daemon's tool-call guards, which are SDK callbacks; with these settings present Claude
@@ -305,7 +305,6 @@ COPY _extensions/telegram/intentic-extension.json /opt/extensions/telegram/
 COPY _extensions/whatsapp/intentic-extension.json /opt/extensions/whatsapp/
 COPY _extensions/google-workspace/intentic-extension.json /opt/extensions/google-workspace/
 COPY _extensions/microsoft-365/intentic-extension.json /opt/extensions/microsoft-365/
-COPY _extensions/prawo/intentic-extension.json /opt/extensions/prawo/
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
 # for the daemon: `GET /extensions` then enumerates EVERY first-party extension through one enumerator (a count
@@ -316,7 +315,7 @@ COPY _extensions/prawo/intentic-extension.json /opt/extensions/prawo/
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".
 #
 # Only the INCLUDED set is here: the work loop, the windows onto engines the daemon runs regardless, and the
-# data packs above. acceptance, documentation, maintenance, knowledge, deployments, issues and workflows are first-party
+# data packs above. acceptance, documentation, e-urzad, maintenance, knowledge, deployments, issues, prawo and workflows are first-party
 # too, but a sandbox is itself without them, so they are listed in the registry and installed from Extensions →
 # Browse (each is its own repository, intentic/extension-<name>); nothing of theirs is baked.
 COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
@@ -334,15 +333,6 @@ COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 # excludes every dist. A manifest here without the dist shows as `absent` on the Extensions tab.
 COPY _extensions/onlyoffice/intentic-extension.json /opt/extensions/onlyoffice/
 COPY --from=trees extensions/onlyoffice/dist /opt/extensions/onlyoffice/dist
-# e-urzad (EZD RP and e-Doręczenia for Polish public offices, and signature checks) is both as well: its rail view is
-# compiled into the web bundle, and the daemon runs its backend (dist/server.js: the EZD RP card's agent tools and the
-# view's routes) while the agent runs its CLI (contributes.bin: bin/e-urzad over dist/cli.js). Both are self-contained
-# bundles from the `trees` context; the manifest, the cards' skill and the launcher come from the repository. Inert
-# until an office connects one of its cards.
-COPY _extensions/e-urzad/intentic-extension.json /opt/extensions/e-urzad/
-COPY _extensions/e-urzad/skills /opt/extensions/e-urzad/skills
-COPY --chmod=755 _extensions/e-urzad/bin /opt/extensions/e-urzad/bin
-COPY --from=trees extensions/e-urzad/dist /opt/extensions/e-urzad/dist
 # ---- packs:post-trees ---- (spliced by compose-image-dockerfile.mjs — packs that read the daemon tree or
 # COPY from the trees context land here, below every tree COPY they depend on)
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The

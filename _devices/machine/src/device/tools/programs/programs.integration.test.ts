@@ -9,6 +9,7 @@ import { listArtifacts, sandboxRunsDir, stageArtifact } from "./artifacts.js";
 import { appLogsAfterWait, appStatusAfterWait } from "./app-wait-tools.js";
 import { appLogs, appStatus, appStop, describeExit, startApp } from "./programs.js";
 import { descendantsOf, parseRows, survivorsOf } from "./process-tree.js";
+import { grantWith } from "../../device-testing.js";
 
 // Pushing a build and running it, on a real temp home as the POSIX user running the suite: the bytes go through the
 // same chunk/commit protocol the daemon drives, and the program is a real process the supervisor starts and stops.
@@ -23,7 +24,7 @@ afterAll(() => {
 });
 
 const SANDBOX = "https://sandbox-abc123.example.dev";
-const off: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" };
+const off: DeviceScopes = grantWith();
 const programs: DeviceScopes = { ...off, programs: "on" };
 const noScreen = (): Desktop => {
     throw new Error("no desktop in this suite");

@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClientRestore, persistQueryClientSave } from "@tanstack/query-persist-client-core";
-import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/vue-query";
+import { defaultShouldDehydrateQuery, QueryCache, QueryClient, type QueryMeta } from "@tanstack/vue-query";
 import { del, get, keys, set } from "idb-keyval";
 import { accountPartition } from "@intentic/ui/storage";
 import { buildId } from "../app/buildEpoch";
@@ -58,9 +58,17 @@ export const readRefusalsWith = (read: (error: Error) => RefusalKind | undefined
 // refuses did not fail (`refusalKindOf`, above): one the editor foresaw is never logged, one the daemon refused that the
 // editor did not foresee is reported under its own name, the trace of a route whose handler holds a tier its
 // declaration does not, and neither is tried again, since its answer cannot change by asking.
+// An AMBIENT read (`meta: AMBIENT_READ`) is neither logged nor reported: a glance at another sandbox (a Home tile, the
+// rail's door to Home, any read through a non-active scope's `scope.query`) fails whenever that sandbox is asleep, an
+// expected state its view already shows, and it carries `retry: false` beside the flag, since its next poll is its retry.
+export const AMBIENT_READ = { ambient: true } as const;
+const isAmbientRead = (meta: QueryMeta | undefined): boolean => meta?.[`ambient`] === true;
 export const queryClient = new QueryClient({
     queryCache: new QueryCache({
         onError: (error, query) => {
+            if (isAmbientRead(query.meta)) {
+                return;
+            }
             const key = JSON.stringify(query.queryKey);
             const refusal = refusalKindOf(error);
             if (refusal === `foreseen`) {

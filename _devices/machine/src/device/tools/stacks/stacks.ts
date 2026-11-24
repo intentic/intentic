@@ -64,7 +64,7 @@ const CONTAINER_FIELDS = {
     service: '(.Label "com.docker.compose.service")',
     workingDir: '(.Label "com.docker.compose.project.working_dir")',
     configFiles: '(.Label "com.docker.compose.project.config_files")',
-    // Set on every container ic makes for a sandbox (_sandbox/ic/src/sandbox/labels.rs).
+    // Set on every container ic makes for a sandbox (_hosts/ic/src/sandbox/labels.rs).
     kind: '(.Label "dev.intentic.kind")',
 } as const;
 export const CONTAINERS_FORMAT = `{${Object.entries(CONTAINER_FIELDS)

@@ -53,8 +53,8 @@ it(`wraps from the first match back to the last`, async () => {
 
 it(`names the file a renamed one was asked by`, async () => {
     const host = await mount({
-        path: `_os/installer/bib-config.toml`,
-        arrival: { asked: `installer/config.toml`, renamedFrom: `_os/installer/config.toml` },
+        path: `_hosts/installer/bib-config.toml`,
+        arrival: { asked: `installer/config.toml`, renamedFrom: `_hosts/installer/config.toml` },
     });
     expect(host.textContent).toContain(`config.toml`);
     expect(host.querySelectorAll(`button`)).toHaveLength(0);

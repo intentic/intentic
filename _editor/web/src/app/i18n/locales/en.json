@@ -8968,6 +8968,7 @@
             "desktopSyncStopped": "Desktop sync stopped on {devices}, its folder isn't syncing",
             "environmentBuilding": "Your sandbox's new environment is building",
             "extensionsWaiting": "{count} extension waiting for your approval | {count} extensions waiting for your approval",
+            "extensionMoved": "{reason}: install it from there to keep using it",
             "filesOnlyOnCloudMachine": "Its files are only on the cloud machine, no copy on this computer",
             "newSandboxVersionAvailable": "A new sandbox version is available",
             "noAiAccountConnected": "No AI account connected, the agent can't run a turn",

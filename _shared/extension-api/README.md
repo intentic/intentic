@@ -54,6 +54,12 @@ flowchart LR
   version (`uiKitDeprecated`: each deprecated kit name and retired prop or recipe member, `<what> → <use instead>`).
   The package exports the record as `./surface.json`, which the kit's `intentic-kit-check` reads to hold an
   extension's `engines.intentic` floor to the names it imports.
+- From 2.44.0 the record also versions the part of `@intentic/sandbox-contract` an extension reads (`wireExports`).
+  The contract moves with the product release, so `EXTENSION_WIRE` (`./wire`, [src/wire.ts](src/wire.ts)) names the
+  bare package and the subpaths an extension may import, and the record holds, per one, its runtime export names and a
+  sha256 of every zod schema it exports as JSON Schema: a reshaped schema an extension parses fails the guard until a
+  new version is recorded. A subpath joins in a minor and leaves only in a major. The `_extensions/**` lint override
+  and `intentic-kit-check` (which reads the list off the newest record, so it needs no build) refuse any other.
   From 2.36.0, settings choices can carry `enumItemLabels` and `enumDescriptions` for their labels and explanations.
 - A bundle links by name both this package's runtime exports (`moduleExports`) and the UI kit's, so those two grains
   are held to semver as well: a version that adds a name is at least a minor, and one that drops a name is a major, for

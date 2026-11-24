@@ -4,12 +4,13 @@ import { join } from "node:path";
 import { sleep } from "@intentic/base/async";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { runCommand } from "./shell.js";
+import { grantWith } from "../device-testing.js";
 
 // Real processes through the login shell, on POSIX, where a command's process group is what a timeout stops. Every
 // command is harmless, and whatever one leaves running is killed by the test that started it.
 
 const root = mkdtempSync(join(tmpdir(), "device-shell-"));
-const grant: DeviceScopes = { shell: "on", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off", roots: root };
+const grant: DeviceScopes = grantWith(["shell"], { roots: root });
 
 afterAll(() => {
     rmSync(root, { recursive: true, force: true });

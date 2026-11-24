@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract/policy/reserved-servers";
-import { CapabilitySchema, stashedMarker } from "@intentic/sandbox-contract/schemas/capabilities";
+import { CapabilitySchema, deviceScopesOn, stashedMarker } from "@intentic/sandbox-contract/schemas/capabilities";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { gitFullHead, gitHead } from "@intentic/base/git";
 
@@ -142,7 +142,7 @@ test("capabilities.add and rename refuse an id that collides with a daemon serve
 // Ids are one namespace across every tile and add is an upsert: a Windows PC added under a Linux PC's name used to be
 // saved over it, re-platforming the machine, and a device added under an SSH connection's name replaced its kind.
 test("capabilities.add refuses an id another tile's connection holds, and still saves an edit of a connection's own", async () => {
-    const scopes = { shell: "on", write: "on", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off" } as const;
+    const scopes = deviceScopesOn(["shell", "write", "screen"]);
     const linux = { id: "z440", kind: "device", config: { ...scopes, platform: "linux" } } as const;
     const capabilities = memoryCapabilitiesStore([linux, { id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } }]);
     const client = clientFor(createApp(services({ workspace: tempWorkspace([]), capabilities })));

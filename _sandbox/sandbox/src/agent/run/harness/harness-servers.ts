@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { CAPABILITY_KIND_TRAITS, isKindOf, type PeerKind } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
 import type { McpSdkServerConfigWithInstance, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentTurn, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -160,7 +161,10 @@ export interface TypistTurn {
     readonly signal: AbortSignal;
 }
 
-const cardsOf = (granted: readonly Capability[], kind: "device" | "webext"): readonly string[] =>
+// The peers a secret can be typed into: a computer and the owner's own browser (a phone has no typist).
+const TYPED_PEERS = ["device", "webext"] as const satisfies readonly PeerKind[];
+
+const cardsOf = (granted: readonly Capability[], kind: (typeof TYPED_PEERS)[number]): readonly string[] =>
     granted.filter((capability) => capability.kind === kind).map((capability) => capability.id);
 
 // The exit for stored secrets into a focused field or window: a sandbox browser's page (scoped to exactly the turn's
@@ -237,7 +241,7 @@ export interface DaemonServerTurn {
 // The secret typist: only when this turn has somewhere to type (a browser, the desktop, a computer or the owner's own
 // browser); those places themselves ride the turn's remote mounts.
 export const secretsServerFor = (deps: HarnessServersDeps, turn: TypistTurn): McpSdkServerConfigWithInstance | undefined =>
-    turn.browser.servers.length > 0 || turn.desktop || turn.granted.some((capability) => capability.kind === "device" || capability.kind === "webext")
+    turn.browser.servers.length > 0 || turn.desktop || turn.granted.some((capability) => isKindOf(capability, TYPED_PEERS))
         ? typistServer(deps, turn)
         : undefined;
 
@@ -317,7 +321,7 @@ export const accountsFactoryFor = (
     granted: readonly Capability[],
 ): AccountsServerFactory | undefined => {
     const accounts = granted
-        .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
+        .filter((capability) => CAPABILITY_KIND_TRAITS[capability.kind].sandboxBrowser)
         .map((capability) => capability.id);
     if (accounts.length === 0) {
         return undefined;

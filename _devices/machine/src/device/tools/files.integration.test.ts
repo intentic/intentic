@@ -5,6 +5,7 @@ import { agentHome } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../policy.js";
 import { editTextFile, readTextFile, trashFile, writeTextFile } from "./files.js";
+import { grantWith } from "../device-testing.js";
 
 // The file tools on a real temp tree, as the POSIX user running the suite: every file is written here, and the one
 // allowed root is `root`. A sibling outside it is what the links try to reach.
@@ -15,7 +16,7 @@ const outside = join(base, "outside");
 mkdirSync(root);
 mkdirSync(outside);
 
-const grant: DeviceScopes = { shell: "off", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", remoteView: "off", remoteControl: "off", remoteTerminal: "off", admin: "off", roots: root };
+const grant: DeviceScopes = grantWith(["write"], { roots: root });
 
 afterAll(() => {
     rmSync(base, { recursive: true, force: true });
