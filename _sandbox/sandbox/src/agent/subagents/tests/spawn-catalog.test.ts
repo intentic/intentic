@@ -189,6 +189,23 @@ describe("a provider's refusal, read in the very next listing", () => {
         expect(spawnCatalogText(codex === undefined ? [] : [codex])).toBe("codex: every model is out of allowance, renews in about 3h");
     });
 
+    // Another of the owner's sandboxes on the same account met it (agent/providers/accounts/pool-signals.ts): out here too, and said so.
+    it("lists an account another sandbox ran out on as spent, saying where it was seen", async () => {
+        const heard: ProviderRefusal = {
+            at: Date.now() - 10 * 60_000,
+            kind: "limit",
+            message: "This account's allowance ran out in another sandbox signed in to it.",
+            account: "codex-user.json",
+            resetsAt: NOW_S + 3 * 3_600,
+            source: "another-sandbox",
+        };
+        const codex = (await spawnableProviders(codexWith(heard))).find((row) => row.id === "codex");
+        expect(codex?.models).toEqual([]);
+        expect(spawnCatalogText(codex === undefined ? [] : [codex])).toBe(
+            "codex: every model is out of allowance, renews in about 3h; ran out in another sandbox on the same account 10 min ago",
+        );
+    });
+
     it("lets the provider back once the instant it named has passed", async () => {
         const refusal: ProviderRefusal = { at: Date.now() - 4 * 3_600_000, kind: "limit", message: "You've hit your usage limit.", resetsAt: NOW_S - 60 };
         const codex = (await spawnableProviders(codexWith(refusal))).find((row) => row.id === "codex");

@@ -39,6 +39,9 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     { path: "sandbox-secrets.json", portability: "secret" },
     { path: "capability-secrets.json", portability: "secret" },
     { path: "extension-secrets.json", portability: "secret" },
+    // The pairing secrets people minted at other sandboxes so this one may route there as them (the daemon's
+    // account-routing/route-secrets.ts).
+    { path: "route-secrets.json", portability: "secret" },
     // The personal data the shield masked, by token, and the pictures it painted over.
     { path: "privacy-vault.json", portability: "secret" },
     { path: "privacy-images/", portability: "secret" },

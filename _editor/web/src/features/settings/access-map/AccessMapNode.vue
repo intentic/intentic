@@ -89,6 +89,13 @@ const fleetTip = computed((): Tip | undefined => {
         note: found.standing === `yours` ? t(`settings.accessMap.glyph.fleetYours`) : t(`settings.accessMap.glyph.fleetOwner`),
     };
 });
+// The projects it answers for: reports from the reader's other sandboxes about them land here.
+const projectsTip = computed((): Tip | undefined => {
+    const projects = sandbox.value?.projects;
+    return projects === undefined
+        ? undefined
+        : { title: t(`settings.accessMap.glyph.projectsTitle`), note: t(`settings.accessMap.glyph.projectsNote`, { projects: projects.join(`, `) }) };
+});
 // A sandbox with no session to read it under: the one press that fills it in, on its own card.
 const readable = computed(() => (sandbox.value?.read === `signin` ? sandbox.value.sandboxId : undefined));
 
@@ -147,6 +154,9 @@ const frame = computed(() => {
                 </span>
                 <span v-if="peopleTip !== undefined" v-tooltip.top="peopleTip" class="flex shrink-0 items-center gap-0.5 text-2xs text-muted">
                     <Icon name="users" />{{ sandbox?.people }}
+                </span>
+                <span v-if="projectsTip !== undefined" v-tooltip.top="projectsTip" class="flex shrink-0 items-center gap-0.5 text-2xs text-muted" data-node-projects>
+                    <Icon name="folder" />{{ sandbox?.projects?.length }}
                 </span>
                 <span v-if="fleetTip !== undefined" v-tooltip.top="fleetTip" class="shrink-0 text-2xs text-muted">
                     <Icon name="key" />

@@ -5,6 +5,8 @@
 // every subsystem, in the boot wiring, on purpose: nothing under a subsystem imports bootstrap/.
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
+import { accountPairingsDocument } from "../account-routing/pairings-store.js";
+import { routeSecretsDocument } from "../account-routing/route-secrets.js";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { burnRatesDocument } from "../agent/run/spend/burn-rates.js";
@@ -63,10 +65,11 @@ import { memberCommitIdentityDocument } from "../git/attribution/commit-attribut
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { connectionHubDocument } from "../hub/hub-store.js";
-import { outboxDocument } from "../issues/account-outbox.js";
+import { accountOutboxDocument, accountOutboxOffWorkspaceStep } from "../issues/account-outbox.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
+import { personTasksDocument } from "../links/person-tasks-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
 import { commandProfilesDocument } from "../offload/command-profiles.js";
@@ -148,6 +151,8 @@ import { heavyCommandsDocument } from "../workload/heavy-commands.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
 const documentsPart1 = (): readonly DocumentSpec[] => [
+    accountPairingsDocument,
+    routeSecretsDocument,
     activityLogDocument,
     claudeSeatsDocument,
     burnRatesDocument,
@@ -197,10 +202,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     choreProbesDocument,
     ciDocument,
     composerDraftsDocument,
-    projectDeliveriesDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
@@ -215,10 +220,11 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     hookRequestsDocument,
     hostSetupSeededDocument,
     connectionHubDocument,
-    outboxDocument,
+    accountOutboxDocument,
     issuesDocument,
     inboundLinksDocument,
     linkedChildrenDocument,
+    personTasksDocument,
     loopDesignsDocument,
     loopsDocument,
     needsDocument,
@@ -250,10 +256,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     safetyLogDocument,
     autostartDocument,
-    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
@@ -318,6 +324,7 @@ export const stateSteps = (): readonly StructuralStep[] =>
         automationsRelocationStep,
         heldWakesOffWorkspaceStep,
         pre1308ImportStep,
+        accountOutboxOffWorkspaceStep,
         roleAccessStep,
         roleKitsFolderStep,
         safetyCardLinesStep,

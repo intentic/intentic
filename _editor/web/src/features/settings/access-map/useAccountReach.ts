@@ -42,6 +42,23 @@ export function useAccountReach() {
         queryClient,
     );
 
+    // Which sandbox answers for which project: the platform's directory, the one tie no daemon describes.
+    const claims = useQuery(
+        {
+            queryKey: [`account`, `projects`],
+            queryFn: async () => (await apiClient.projects.list()).claims,
+            staleTime: REREAD_MS,
+        },
+        queryClient,
+    );
+    const claimsBySandbox = computed(() => {
+        const map = new Map<string, string[]>();
+        for (const claim of claims.data.value ?? []) {
+            map.set(claim.sandboxId, [...(map.get(claim.sandboxId) ?? []), claim.project]);
+        }
+        return map;
+    });
+
     const reads = useQueries(
         {
             queries: computed(() =>
@@ -74,6 +91,7 @@ export function useAccountReach() {
             orgs: orgs.data.value ?? [],
             sandboxes: sandboxes.value,
             reads: readMap.value,
+            claims: claimsBySandbox.value,
         }),
     );
 

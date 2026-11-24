@@ -89,11 +89,19 @@ const graph = buildAccountGraph({
         row(`delta`, `maintainer`),
     ],
     reads,
+    claims: new Map([[`beta`, [`github.com/acme/app`, `github.com/acme/billing`]]]),
 });
 
 const edge = (id: string) => graph.edges.find((candidate) => candidate.id === id);
 
 describe(`buildAccountGraph`, () => {
+    // The platform's directory, the one tie no daemon describes: which sandbox the reader's other sandboxes report to.
+    test(`marks the sandboxes that answer for projects, and only those`, () => {
+        const node = (id: string) => graph.sandboxes.find((sandbox) => sandbox.id === sandboxNodeId(id));
+        expect(node(`beta`)?.projects).toEqual([`github.com/acme/app`, `github.com/acme/billing`]);
+        expect(node(`alpha`)?.projects).toBeUndefined();
+    });
+
     test(`stands the account's own sandboxes first, then those shared with it, then those met only through a link`, () => {
         expect(graph.sandboxes.map((sandbox) => [sandbox.id, sandbox.standing])).toEqual([
             [sandboxNodeId(`alpha`), `yours`],

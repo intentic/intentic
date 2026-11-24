@@ -5547,6 +5547,7 @@
             "lapsed": "reset {resetsAt}, not re-read since",
             "measured": "measured {measuredAt}",
             "missing": "no longer reported since {since}, last figure shown",
+            "ranOutElsewhere": "Ran out in another sandbox signed in to this account {when}.",
             "resets": "resets {resetsAt}",
             "runsOut": "runs out {when} at this pace",
             "uncovered": "No allowance reported for {models}: what they have left is unknown."
@@ -6445,6 +6446,24 @@
             "approve": "Approve",
             "rebuildToFinish": "Approved. {tool} arrives when the sandbox is rebuilt.",
             "openRebuild": "Rebuild"
+        },
+        "claim": {
+            "lead": "Claiming {project} for this sandbox sends here the problems your other sandboxes report about it, into its issues inbox.",
+            "moves": "{sandbox} claims it now; claiming moves it here.",
+            "approve": "Claim for this sandbox",
+            "ownerOnly": "Only the sandbox's owner can claim a project."
+        },
+        "route": {
+            "lead": "Allowing this lets this sandbox act as {person} in {target}: {scopes}, with your own access there.",
+            "approve": "Allow",
+            "personOnly": "Waiting for {person}: only they can allow this sandbox to act as them.",
+            "unreachable": "{target} is not among your sandboxes in this editor: open it once, then allow this here.",
+            "tooOld": "{target} runs a build too old to pair: update it first.",
+            "scopes": {
+                "drop": "drop notes and files into your inbox",
+                "read": "read what you may read",
+                "task": "start work as you"
+            }
         },
         "instruction": {
             "approve": "Add to {file}",
@@ -9000,7 +9019,8 @@
             "diskLow": "The disk is nearly full: {free} free ({percent}%)",
             "diskHostLimit": "Windows drive {drive} under the sandbox's engine has {free} free",
             "diskReaped": "removed {bytes} of build output from {count} finished checkout | removed {bytes} of build output from {count} finished checkouts",
-            "diskUsing": "{category} holds the most ({bytes})"
+            "diskUsing": "{category} holds the most ({bytes})",
+            "dropsReceived": "{count} drop from another sandbox waits for you | {count} drops from other sandboxes wait for you"
         },
         "sandboxBackupCard": {
             "detail": "This sandbox runs in the cloud and nothing on this computer holds a copy of its files. Desktop sync keeps a folder here in step with it, so the work survives anything that happens to the machine.",
@@ -12057,6 +12077,20 @@
             "openConnection": "Open its connection",
             "on": "On",
             "off": "Off"
+        },
+        "sandboxReceivedCard": {
+            "heading": "Received",
+            "whatFor": "Notes and files another sandbox you are in sent here as you. Nothing ran because of them; take the files into a folder to work on them.",
+            "fromAs": "From {sandbox}, as {person}",
+            "crossesOrg": "Comes from another organisation",
+            "noNote": "No note",
+            "files": "No files | {count} file | {count} files",
+            "saidInto": "Also said into {conversation}",
+            "folder": "Folder to take it into",
+            "take": "Take",
+            "delete": "Delete",
+            "taken": "Copied into {folder}: {files}",
+            "failed": "That did not work"
         }
     },
     "settings": {
@@ -12508,6 +12542,7 @@
             "saveFailed": "Couldn't save that."
         },
         "settingsProjects": {
+            "suggested": "In {sandbox}'s repos, not claimed yet",
             "failed": "The project could not be changed",
             "reportsLandIn": "Reports about it land in {sandbox}",
             "release": "Release",
@@ -12652,6 +12687,8 @@
                 "othersNote": "{count} other person's agents too | {count} other people's agents too",
                 "peopleTitle": "Shared sandbox",
                 "peopleNote": "{count} other person signs in | {count} other people sign in",
+                "projectsTitle": "Answers for projects",
+                "projectsNote": "Your other sandboxes report the problems they see in {projects} here.",
                 "fleetTitle": "Makes sandboxes",
                 "fleetYours": "On your account",
                 "fleetOwner": "On its owner's account"

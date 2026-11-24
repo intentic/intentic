@@ -25,6 +25,9 @@ const OnDiskSchema = z.object({
     type: z.string().optional().catch(undefined),
     email: z.string().optional().catch(undefined),
     project_id: z.string().optional().catch(undefined),
+    // Codex's OpenID token, a JWT on disk: its claims name the ChatGPT account and user, which only a fingerprint of
+    // them leaves the sandbox as (agent/providers/accounts/pool-signals.ts).
+    id_token: z.string().optional().catch(undefined),
     disabled: z.boolean().optional().catch(undefined),
     prefix: z.string().optional().catch(undefined),
 });
@@ -46,6 +49,7 @@ const rowOf = (name: string, parsed: OnDisk): TranslatorAuthFile[] => {
             provider: parsed.type,
             ...opt("email", parsed.email),
             ...opt("project_id", parsed.project_id),
+            ...opt("id_token", parsed.id_token),
             ...opt("disabled", parsed.disabled === true ? true : undefined),
             ...opt("prefix", prefix === "" ? undefined : prefix),
         },

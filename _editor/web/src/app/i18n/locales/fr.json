@@ -5547,6 +5547,7 @@
             "lapsed": "réinitialisé {resetsAt}, pas relu depuis",
             "measured": "mesuré {measuredAt}",
             "missing": "plus signalé depuis {since}, dernier chiffre affiché",
+            "ranOutElsewhere": "Épuisé dans une autre sandbox connectée à ce compte {when}.",
             "resets": "réinitialisation {resetsAt}",
             "runsOut": "à ce rythme, épuisé {when}",
             "uncovered": "Aucun quota signalé pour {models} : ce qu'il leur reste est inconnu."
@@ -6445,6 +6446,24 @@
             "approve": "Approuver",
             "rebuildToFinish": "Approuvé. {tool} arrive lors de la reconstruction du sandbox.",
             "openRebuild": "Reconstruire"
+        },
+        "claim": {
+            "lead": "Revendiquer {project} pour ce sandbox envoie ici, dans sa boîte des incidents, les problèmes que vos autres sandboxes signalent à son sujet.",
+            "moves": "{sandbox} le revendique en ce moment ; le revendiquer le déplace ici.",
+            "approve": "Revendiquer pour ce sandbox",
+            "ownerOnly": "Seul le propriétaire du sandbox peut revendiquer un projet."
+        },
+        "route": {
+            "lead": "L'autoriser permet à cette sandbox d'agir en tant que {person} dans {target} : {scopes}, avec ton propre accès là-bas.",
+            "approve": "Autoriser",
+            "personOnly": "En attente de {person} : seule cette personne peut autoriser cette sandbox à agir en son nom.",
+            "unreachable": "{target} ne figure pas parmi tes sandboxes dans cet éditeur : ouvre-la une fois, puis autorise-la ici.",
+            "tooOld": "{target} tourne sur une version trop ancienne pour être appairée : mets-la d'abord à jour.",
+            "scopes": {
+                "drop": "déposer des notes et des fichiers dans ta boîte",
+                "read": "lire ce que tu peux lire",
+                "task": "lancer du travail en ton nom"
+            }
         },
         "instruction": {
             "approve": "Ajouter à {file}",
@@ -9000,7 +9019,8 @@
             "diskLow": "Le disque est presque plein : {free} libres ({percent} %)",
             "diskHostLimit": "Le lecteur Windows {drive} sous le moteur du sandbox dispose de {free} libres",
             "diskReaped": "{bytes} de sorties de build retirés de {count} checkout terminé | {bytes} de sorties de build retirés de {count} checkouts terminés",
-            "diskUsing": "{category} occupe le plus ({bytes})"
+            "diskUsing": "{category} occupe le plus ({bytes})",
+            "dropsReceived": "{count} envoi d'une autre sandbox vous attend | {count} envois d'autres sandboxes vous attendent"
         },
         "sandboxBackupCard": {
             "detail": "Ce bac à sable tourne dans le cloud et rien sur cet ordinateur n'en détient une copie. La synchronisation bureau garde ici un dossier aligné sur lui, pour que le travail survive à tout ce qui peut arriver à la machine.",
@@ -12057,6 +12077,20 @@
             "openConnection": "Ouvrir sa connexion",
             "on": "Activé",
             "off": "Désactivé"
+        },
+        "sandboxReceivedCard": {
+            "heading": "Reçu",
+            "whatFor": "Notes et fichiers qu'une autre sandbox dont vous faites partie a envoyés ici en votre nom. Rien ne s'est lancé à cause d'eux ; prenez les fichiers dans un dossier pour y travailler.",
+            "fromAs": "De {sandbox}, en tant que {person}",
+            "crossesOrg": "Vient d'une autre organisation",
+            "noNote": "Pas de note",
+            "files": "Aucun fichier | {count} fichier | {count} fichiers",
+            "saidInto": "Aussi dit dans {conversation}",
+            "folder": "Dossier où le prendre",
+            "take": "Prendre",
+            "delete": "Supprimer",
+            "taken": "Copié dans {folder} : {files}",
+            "failed": "Cela n'a pas fonctionné"
         }
     },
     "settings": {
@@ -12508,6 +12542,7 @@
             "saveFailed": "Impossible d’enregistrer."
         },
         "settingsProjects": {
+            "suggested": "Dans les dépôts de {sandbox}, pas encore revendiqué",
             "failed": "Le projet n'a pas pu être modifié",
             "reportsLandIn": "Les signalements le concernant arrivent dans {sandbox}",
             "release": "Libérer",
@@ -12652,6 +12687,8 @@
                 "othersNote": "Aussi les agents de {count} autre personne | Aussi les agents de {count} autres personnes",
                 "peopleTitle": "Sandbox partagée",
                 "peopleNote": "{count} autre personne s'y connecte | {count} autres personnes s'y connectent",
+                "projectsTitle": "Répond de projets",
+                "projectsNote": "Vos autres sandboxes signalent ici les problèmes qu'ils voient dans {projects}.",
                 "fleetTitle": "Crée des sandboxes",
                 "fleetYours": "Sur votre compte",
                 "fleetOwner": "Sur le compte du propriétaire"

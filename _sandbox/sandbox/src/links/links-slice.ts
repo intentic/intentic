@@ -10,13 +10,17 @@ import { defineSlice } from "../seams/slice.js";
 import { fileInboundLinks, type InboundLinks, inboundLinksDocument } from "./inbound-links.js";
 import { createLinkedChildren, type LinkedChildren } from "./linked-children.js";
 import { linkedChildrenDocument } from "./linked-children-store.js";
+import { filePersonTasks, type PersonTasksStore, personTasksDocument } from "./person-tasks-store.js";
 import { linkMountsOf } from "./link-mounts.js";
+import { personRoutesOf } from "./person-routes.js";
 
 // LINKED SANDBOXES, both halves: the other sandboxes allowed to hand this one tasks, and the tasks this one handed to
 // others. Either half works without the other; a sandbox is usually one side of a given link and may be both.
 export interface LinksSlice {
     // Inbound: links this sandbox's owner minted for other sandboxes, each with the terms its tasks run under here.
     readonly inboundLinks: InboundLinks;
+    // Inbound too: the tasks other sandboxes routed here as one of their people (person-tasks.ts), keyed by (sandbox, person).
+    readonly personTasks: PersonTasksStore;
     // Outbound: tasks this sandbox's agents handed over through `link` cards, followed until they settle.
     readonly linkedChildren: LinkedChildren;
     // A turn's linked sandboxes as tool servers on its lease, one per granted card, as its computers are mounted.
@@ -33,6 +37,7 @@ const createLinksSlice = ({
     readonly whole: () => Services;
 }): LinksSlice => {
     const inboundLinks = fileInboundLinks(join(historyRoot, inboundLinksDocument.path));
+    const personTasks = filePersonTasks(join(historyRoot, personTasksDocument.path));
     // Read through `whole` at call time: the registry, the turns and the capabilities are composed after this slice.
     const linkedChildren = createLinkedChildren({
         capabilities: () => whole().capabilities.list(),
@@ -49,14 +54,16 @@ const createLinksSlice = ({
             const entry = whole().agents.entry(conversationId);
             return entry === undefined ? undefined : conversationProfile(entry);
         },
-        inboundHops: async (conversationId) => (await inboundLinks.linkOf(conversationId))?.task.hops,
+        // Over a link or routed as a person alike: both count toward LINK_MAX_HOPS (2026-11-24).
+        inboundHops: async (conversationId) => ((await inboundLinks.linkOf(conversationId)) ?? (await personTasks.ownerOf(conversationId)))?.task.hops,
         doors: { turns: { say: (said) => whole().turns.say(said) } },
         logger,
         historyPath: join(historyRoot, linkedChildrenDocument.path),
+        personRoutes: personRoutesOf(whole),
     });
     const linkMounts: LinksSlice["linkMounts"] = (granted, lease, conversationId) =>
         linkMountsOf({ conversations: { holdings: (holding) => whole().conversations.holdings(holding) }, about: linkedChildren.about }, granted, lease, conversationId);
-    return { inboundLinks, linkedChildren, linkMounts };
+    return { inboundLinks, personTasks, linkedChildren, linkMounts };
 };
 
 export const linksSlice = defineSlice<LinksSlice>({

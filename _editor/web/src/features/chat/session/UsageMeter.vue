@@ -9,11 +9,11 @@ import {
     meterTint,
     meterTrack,
     nestPools,
-    type PlanHeadroom,
     type PlanLimitPool,
     usageTone,
 } from "../../../models/providers/usageStatus";
 import { poolResetNote, usageDetail } from "../../../models/providers/usageNotes";
+import type { AccountHeadroom } from "../../../models/providers/capacity/heardRunOut";
 import { poolPace, type PoolPace } from "../../../models/providers/capacity/usagePace";
 import PaceMark from "../../../parts/providers/PaceMark.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -29,7 +29,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { headroom, flank = `right` } = defineProps<{
-    headroom: PlanHeadroom;
+    headroom: AccountHeadroom;
     // Own spend on this account, e.g. '14 turns · 2.1M/40k · $3.12'; reference, so it rides the card, not the row.
     activity?: string;
     // Which way the card spills, away from the rest of the row; flips flank only when its side lacks room.
@@ -226,6 +226,12 @@ onBeforeUnmount(hide);
                     <Section v-if="activity" :label="t(`shared.thisSandbox`)" density="dense" class="mt-1">
                         <p class="text-xs leading-relaxed text-muted">{{ activity }}</p>
                     </Section>
+
+                    <!-- Spent by another of the owner's sandboxes on this account, not by anything run here: said, so the spent
+                         pools above don't read as this sandbox's doing. -->
+                    <p v-if="headroom.heardRunOut !== undefined" class="text-2xs leading-relaxed text-warning">
+                        {{ t(`common.usageRing.ranOutElsewhere`, { when: formatAge(headroom.heardRunOut) }) }}
+                    </p>
 
                     <!-- What this reading cannot vouch for: models with no pool at all, and a model that served after it read spent. -->
                     <p v-if="headroom.uncovered.length > 0" class="text-2xs leading-relaxed text-warning">

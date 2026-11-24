@@ -41,6 +41,9 @@ jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
 // The disk watch's last reading, none unless a test sets one.
 const disk = shallowRef<DiskPressure | undefined>();
 jest.mock(`./storage/useDiskPressure`, () => ({ useDiskPressure: () => ({ pressure: disk }) }));
+// What other sandboxes dropped here for the reader: nothing unless a test says so.
+const received = shallowRef<readonly { id: string }[]>([]);
+jest.mock(`./received/useReceivedDrops`, () => ({ useReceivedDrops: () => ({ drops: received }) }));
 
 // What the Capabilities page recommends for the Extension tile: nothing unless a test offers a moved extension.
 const extensionOffer = shallowRef<{ entry: string; evidence: string; reason: string; prefill: Record<string, string> } | undefined>();
@@ -63,6 +66,7 @@ afterEach(() => {
     extensionOffer.value = undefined;
     delete gpu.pausedFor;
     disk.value = undefined;
+    received.value = [];
     pending.value = undefined;
     hostedBuild.value = undefined;
     unbacked.value = false;
@@ -226,4 +230,12 @@ it(`points an extension that moved out at the Extension tile's prefilled install
         `e-Urząd moved to its own repository: install it from there to keep using it`,
         insidePath(BOX, page.capabilities(`extension`)),
     ]);
+});
+
+// Drops other sandboxes the reader is in sent here as them wait on the Overview's Received card: counted, and pointing
+// at the card itself.
+it(`counts drops waiting for the reader and points at the Received card`, async () => {
+    received.value = [{ id: `a` }, { id: `b` }];
+    const row = (await attention()).needs.value.find((item) => item.icon === `download`);
+    expect([row?.count, row?.to, row?.message]).toEqual([2, settingsAt(undefined, `sandbox-received`), `2 drops from other sandboxes wait for you`]);
 });

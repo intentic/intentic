@@ -25,6 +25,7 @@ import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { entitlementRefusalsDocument, fileEntitlementHistory } from "../../usage/entitlement-history.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { fileRunOutStore, runOutsDocument, type RunOutStore } from "../../usage/run-outs.js";
+import { poolSignalDepsOf, sharingRunOuts } from "./accounts/pool-signals.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
 import { type BurnRates, burnRatesDocument, createBurnRates } from "../run/spend/burn-rates.js";
@@ -141,14 +142,18 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
     return {
         ...built,
         usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
-        providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), {
-            log,
-            history: fileEntitlementHistory(join(historyRoot, entitlementRefusalsDocument.path)),
-            accountsOf: async (provider) => {
-                const known = AgentProviderSchema.safeParse(provider);
-                return known.success ? accountFactsOf(whole(), known.data) : [];
-            },
-        }),
+        // Each spent allowance it files is told to the owner's other sandboxes on the same account (pool-signals.ts).
+        providerRefusals: sharingRunOuts(
+            fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), {
+                log,
+                history: fileEntitlementHistory(join(historyRoot, entitlementRefusalsDocument.path)),
+                accountsOf: async (provider) => {
+                    const known = AgentProviderSchema.safeParse(provider);
+                    return known.success ? accountFactsOf(whole(), known.data) : [];
+                },
+            }),
+            () => poolSignalDepsOf(whole()),
+        ),
         modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path), { log }),
         runOuts: fileRunOutStore(join(historyRoot, runOutsDocument.path)),
         burnRates: createBurnRates({ path: join(historyRoot, burnRatesDocument.path), log: fileReadingsLog(join(historyRoot, readingsLogDocument.path)) }),

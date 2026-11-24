@@ -401,6 +401,15 @@ describe("the token endpoint", () => {
         expect(tokens.email).toBeUndefined();
     });
 
+    // The seat's ids, which only its fingerprint carries anywhere (agent/providers/accounts/pool-signals.ts).
+    it("keeps the account's and the organisation's uuids beside their names", async () => {
+        stubGlobal("fetch", async () =>
+            Response.json({ access_token: "at", account: { email_address: "a@b.c", uuid: "acct-1" }, organization: { name: "Acme", uuid: "org-1" } }),
+        );
+        const tokens = await exchangeCode("code#state", "verifier", "state");
+        expect(tokens).toMatchObject({ email: "a@b.c", organization: "Acme", accountUuid: "acct-1", organizationUuid: "org-1" });
+    });
+
     it("never quotes a 200 that is not JSON, since it could carry a token", async () => {
         stubGlobal("fetch", async () => new Response("access_token=secret-value", { status: 200 }));
         const failure = await exchangeCode("code#state", "verifier", "state").catch((error: unknown) => error);

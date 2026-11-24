@@ -3,6 +3,7 @@ import { type MemberTier, tierAtLeast } from "../schemas/shared.js";
 import { defaultFloor } from "./route-meta.js";
 import { isAttachmentPath } from "../state/workspace-state.js";
 import { sandboxRouteFor } from "../index.js";
+import type { PassScope } from "./doors/pass-scopes.js";
 
 // Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (route-meta.ts). One
 // function for both sides: the daemon's bearer middleware refuses with it right after the caller's tier resolves, and
@@ -53,6 +54,45 @@ export const memberRefusal = (
     // The collaborator floor is driving agents. A person who edits files by hand without running agents holds the
     // writer tier, which clears that floor by rank: their own answer keeps them off it.
     return floor === "collaborator" && caller.agents === "off" ? { error: "running agents is not on for you here", floor, reason: "agents-off" } : undefined;
+};
+
+// The caller's fields every floor reads, as memberRefusal takes them.
+type ReachCaller = Parameters<typeof memberRefusal>[0];
+
+// WHAT A PERSON ROUTED FROM ANOTHER SANDBOX MAY DO HERE (2026-11-24, docs/architecture/account-routing.md), one rule per
+// pass scope, beside memberRefusal so the editor can say before sending what the receiving daemon will answer. Undefined
+// admits. `wake` is a drop that asks to be queued into one of the person's conversations, which starts a turn.
+// - report: anyone on the roster, a guest included: the person is attribution only, and a report starts nothing they own;
+// - drop: collaborator and up, never a guest. Not memberRefusal's floor, whose agents-off rule would refuse a writer who
+//   edits by hand, and a drop runs no agent; one that wakes a conversation is driving one, so it takes that floor too;
+// - read: viewer and up, a guest included, since the reader cuts what they see to what they may read here;
+// - task: whoever may start a turn here. A guest is named apart, as is a home-only member: both reach `POST /agent` on the
+//   guest list (member-reach.test.ts), for their own chat or home, never a conversation another sandbox opens for them.
+export const scopeRefusal = (caller: ReachCaller, scope: PassScope, options: { readonly wake?: boolean } = {}): MemberRefusal | undefined => {
+    switch (scope) {
+        case "report":
+        case "read":
+            return undefined;
+        case "drop": {
+            if (caller.tier === "guest" || !tierAtLeast(caller.tier, "collaborator")) {
+                return { error: "dropping into this sandbox needs collaborator access here", floor: "collaborator", reason: caller.tier === "guest" ? "guest" : "floor" };
+            }
+            return options.wake === true ? taskRefusal(caller) : undefined;
+        }
+        case "task":
+            return taskRefusal(caller);
+    }
+};
+
+// Starting a turn here for a person another sandbox routes: the chat's own floor, a guest and a home-only member aside.
+const taskRefusal = (caller: ReachCaller): MemberRefusal | undefined => {
+    if (caller.tier === "guest") {
+        return { error: "not open to a guest member", floor: "collaborator", reason: "guest" };
+    }
+    if (caller.agents === "home") {
+        return { error: "running agents here is limited to your own home conversation", floor: "collaborator", reason: "agents-off" };
+    }
+    return memberRefusal(caller, "POST", "/agent");
 };
 
 // Whether the caller was given the part of the sandbox this route runs (route-meta.ts `right`).

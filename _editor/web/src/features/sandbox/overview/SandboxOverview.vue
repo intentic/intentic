@@ -34,6 +34,7 @@ import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTre
 import { useSelfResources } from "../../../models/sandbox/devices/useSelfResources";
 import { useTier } from "../../../client/sandbox/useTier";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
+import SandboxReceivedCard from "./received/SandboxReceivedCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import OverviewSettingRow from "./OverviewSettingRow.vue";
@@ -529,6 +530,8 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
         </Card>
 
         <!-- The files here exist nowhere else and the reader is at a computer that could change that; self-hides otherwise. -->
+        <!-- What other sandboxes the reader is in dropped here as them: shown only while something waits. -->
+        <SandboxReceivedCard />
         <SandboxBackupCard />
 
         <!-- A newer sandbox image has shipped; this prompt self-hides otherwise. -->

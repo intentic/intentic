@@ -40,6 +40,9 @@ export interface AccountGraphInput {
     readonly orgs: readonly { readonly id: string; readonly name: string; readonly role: string }[];
     readonly sandboxes: readonly PlatformSandbox[];
     readonly reads: ReadonlyMap<string, ReachRead>;
+    /** The projects each sandbox claims, by its platform id (the platform's directory, projects.list): the account's own
+     *  report routing, which only the platform holds. */
+    readonly claims?: ReadonlyMap<string, readonly string[]> | undefined;
 }
 
 export const YOU_ID = `you`;
@@ -64,6 +67,8 @@ export interface GraphSandbox {
     readonly agents?: boolean | undefined;
     readonly people?: number | undefined;
     readonly org?: { readonly id: string; readonly name: string } | undefined;
+    /** The projects it claims: the reader's other sandboxes report the problems they see in them here. */
+    readonly projects?: readonly string[] | undefined;
     /** Holds a fleet card: its agents may make sandboxes on its owner's account. */
     readonly fleet?: { readonly yours: boolean; readonly others?: number | undefined } | undefined;
     readonly cloud: boolean;
@@ -361,7 +366,7 @@ const EXPOSURE_ORDER: readonly ExposureKind[] = [`fleet`, `inbound`, `machine`, 
 const exposureRank = (exposure: Exposure): number => EXPOSURE_ORDER.indexOf(exposure.kind) * 10_000 - (exposure.others ?? 0);
 
 // One of the account's own rows, as its read left it.
-const sandboxNode = (row: PlatformSandbox, read: ReachRead | undefined): GraphSandbox => {
+const sandboxNode = (row: PlatformSandbox, read: ReachRead | undefined, projects: readonly string[] | undefined): GraphSandbox => {
     const answer = read?.answer;
     const tier = tierOf(row, answer);
     return {
@@ -378,6 +383,7 @@ const sandboxNode = (row: PlatformSandbox, read: ReachRead | undefined): GraphSa
         people: answer?.people,
         org: answer?.self.org,
         fleet: answer?.fleet,
+        projects: projects !== undefined && projects.length > 0 ? projects : undefined,
         cloud: row.hosted !== null && row.hosted !== undefined,
     };
 };
@@ -410,7 +416,7 @@ export const buildAccountGraph = (input: AccountGraphInput): AccountGraph => {
 
     // The account's own rows first, so every tie can find them.
     for (const row of input.sandboxes) {
-        const node = sandboxNode(row, input.reads.get(row.id));
+        const node = sandboxNode(row, input.reads.get(row.id), input.claims?.get(row.id));
         builder.sandboxes.set(node.id, node);
         const acting = node.tier !== `viewer` && node.tier !== `guest`;
         addEdge(builder, { id: `member:${node.id}`, kind: `member`, from: YOU_ID, to: node.id, tier: node.tier, yours: true, acting });

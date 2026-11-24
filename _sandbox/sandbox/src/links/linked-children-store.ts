@@ -21,6 +21,11 @@ const StoredChildSchema = z.object({
     url: z.string().optional(),
     sandbox: z.string(),
     sandboxId: z.string().optional(),
+    // Handed over as the person the parent acts for, on the `/account/task` doors, rather than over a link card
+    // (linked-destinations.ts, 2026-11-24): `link` is then `route:<sandboxId>`, and every later call asks the platform for
+    // a pass naming `person` and carries their pairing secret.
+    via: z.literal("person").optional(),
+    person: z.string().optional(),
     // The far side's conversation: absent only between filing the task and the far side taking it.
     remote: z.string().optional(),
     // The ask as handed over, kept until the far side answers it: a restart in between asks again under the same request

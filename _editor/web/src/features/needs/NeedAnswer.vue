@@ -7,6 +7,8 @@ import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import NeedAutomationBody from "./NeedAutomationBody.vue";
 import NeedCapabilityBody from "./NeedCapabilityBody.vue";
+import NeedClaimBody from "./NeedClaimBody.vue";
+import NeedRouteBody from "./NeedRouteBody.vue";
 import NeedDecline from "./NeedDecline.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
 import NeedGrantBody from "./NeedGrantBody.vue";
@@ -63,6 +65,12 @@ const decline = async (): Promise<void> => {
     <NeedHostPowerBody v-else-if="need.subject.kind === `host-power`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="false" @open="decline" /></template>
     </NeedHostPowerBody>
+    <NeedClaimBody v-else-if="need.subject.kind === `claim`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
+    </NeedClaimBody>
+    <NeedRouteBody v-else-if="need.subject.kind === `route`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
+    </NeedRouteBody>
     <NeedEnvironmentBody v-else :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedEnvironmentBody>

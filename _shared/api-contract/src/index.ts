@@ -279,7 +279,8 @@ export const walletContract = {
 };
 
 /* PROJECT CLAIMS: which of the owner's sandboxes answers for a project, the directory behind account-level report
- * routing (ingress `projectResolve`). Written only by the signed-in owner: a daemon may propose a claim, never make one. */
+ * routing (ingress `projectResolve`). Written only by the signed-in owner: a daemon may propose a claim (the `claim`
+ * need's card, whose press sends `claim` from the owner's browser), never make one. */
 export const ProjectClaimSchema = z.object({
     project: z.string(),
     sandboxId: z.string(),

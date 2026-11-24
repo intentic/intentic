@@ -17,6 +17,7 @@ import {
 import type { LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { DiagnosticsAnswer, DiagnosticsQuery } from "@intentic/sandbox-contract/schemas/diagnostics";
 import { RAW_JSON_ROUTES } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
+import { ROUTE_SECRET_HEADER, SANDBOX_PASS_HEADER } from "@intentic/sandbox-contract/sandbox-pass";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { z } from "zod";
 import { opt } from "../opt.js";
@@ -30,28 +31,62 @@ const CALL_MS = 20_000;
 // What the far side may hold a status read for; it holds no longer than its own ceiling (link-tasks.ts STATUS_WAIT_MAX_S).
 export const LINK_POLL_WAIT_S = 25;
 
-// One link card as the wire needs it.
+// One link card as the wire needs it, or a sandbox reached as a person (2026-11-24, account-routing.md): `doors:
+// "account"` calls the `/account/task` doors with the platform's pass and the person's pairing secret instead of a link
+// token, `config.token` left empty. Everything else about a task (its shapes, its long poll) is the same either way.
 export interface LinkTarget {
     readonly id: string;
     readonly config: LinkConfig;
+    readonly doors?: "link" | "account";
+    readonly pass?: string;
+    readonly secret?: string;
 }
 
 // A call's answer: the far side's parsed answer, or why there is none. `status` 0 is no answer at all (offline, a dead
-// address, a timeout), which says nothing about the link itself.
-export type LinkAnswerOf<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly status: number; readonly message: string };
+// address, a timeout), which says nothing about the link itself. `code` is a pass-admitted door's word for why it refused
+// (admit-route.ts RouteRefusalCode): `pairing` is the person's to allow again.
+export type LinkAnswerOf<T> =
+    | { readonly ok: true; readonly value: T }
+    | { readonly ok: false; readonly status: number; readonly message: string; readonly code?: string };
 
 // What the far side says when it refuses: `{ error }` on every link door, a sentence written for the asking agent.
-const RefusalSchema = z.object({ error: z.string().min(1) });
+const RefusalSchema = z.object({ error: z.string().min(1), code: z.string().optional() });
+
+// The task doors by what they do, as a link's and as a person's: one table, so a call never mixes the two.
+const TASK_DOORS = {
+    link: {
+        ask: () => rawRouteUrl("POST /link/conversations"),
+        status: (id: string) => rawRouteUrl("GET /link/conversations/{id}", { id }),
+        message: (id: string) => rawRouteUrl("POST /link/conversations/{id}/messages", { id }),
+        answer: (id: string) => rawRouteUrl("POST /link/conversations/{id}/answer", { id }),
+        stop: (id: string) => rawRouteUrl("POST /link/conversations/{id}/stop", { id }),
+    },
+    account: {
+        ask: () => rawRouteUrl("POST /account/task"),
+        status: (id: string) => rawRouteUrl("GET /account/task/{id}", { id }),
+        message: (id: string) => rawRouteUrl("POST /account/task/{id}/messages", { id }),
+        answer: (id: string) => rawRouteUrl("POST /account/task/{id}/answer", { id }),
+        stop: (id: string) => rawRouteUrl("POST /account/task/{id}/stop", { id }),
+    },
+} as const;
+const doorsOf = (target: LinkTarget) => TASK_DOORS[target.doors ?? "link"];
+
+// The credential a call carries: the link token, or the pass and the person's pairing secret. Each rides its own header
+// and goes nowhere else.
+const credentialHeaders = (target: LinkTarget): Headers =>
+    target.doors === "account"
+        ? new Headers({ [SANDBOX_PASS_HEADER]: target.pass ?? "", [ROUTE_SECRET_HEADER]: target.secret ?? "" })
+        : new Headers({ [LINK_HEADER]: target.config.token });
 
 // A door the far side's build does not have yet is refused by its sign-in check, before any link door reads the token: a
 // bare "unauthorized", where every link door words its own refusal (link-door.ts). Said as what it is, since "unauthorized"
 // reads as a link that stopped working (knot-xwrx, 2026-11-11: records asked of a sandbox older than records over links).
 const TOO_OLD_FOR_DOOR =
-    "it runs a build too old for this: it refused the call as a sign-in it does not know, which is how a sandbox answers a link door it does not have yet. Updating that sandbox brings it";
+    "it runs a build too old for this: it refused the call as a sign-in it does not know, which is how a sandbox answers a door it does not have yet (a link door, or a task handed over as a person). Updating that sandbox brings it";
 
 const tooOld = (status: number, error: string | undefined): boolean => status === 401 && error === "unauthorized";
 
-const refusalOf = async (response: Response): Promise<string> => {
+const refusalOf = async (response: Response): Promise<{ readonly message: string; readonly code?: string }> => {
     // allow(silent-catch): a refusal whose body cannot be read is still reported, by its status, below.
     const text = await response.text().catch(() => "");
     let body: unknown;
@@ -63,9 +98,9 @@ const refusalOf = async (response: Response): Promise<string> => {
     }
     const refusal = RefusalSchema.safeParse(body);
     if (refusal.success) {
-        return tooOld(response.status, refusal.data.error) ? TOO_OLD_FOR_DOOR : refusal.data.error;
+        return tooOld(response.status, refusal.data.error) ? { message: TOO_OLD_FOR_DOOR } : { message: refusal.data.error, ...opt("code", refusal.data.code) };
     }
-    return response.status === 404 && text.includes("no-tunnel") ? "it is not online" : `it answered ${response.status}`;
+    return { message: response.status === 404 && text.includes("no-tunnel") ? "it is not online" : `it answered ${response.status}` };
 };
 
 const call = async <T>(
@@ -74,7 +109,7 @@ const call = async <T>(
     signal?: AbortSignal,
 ): Promise<LinkAnswerOf<T>> => {
     const deadline = AbortSignal.timeout(CALL_MS + (request.holdS ?? 0) * 1_000);
-    const headers = new Headers({ [LINK_HEADER]: target.config.token });
+    const headers = credentialHeaders(target);
     // A redirect is a refusal from the configured sandbox; its private link header must never travel to another target.
     const init: RequestInit = {
         method: request.method,
@@ -94,7 +129,7 @@ const call = async <T>(
         return { ok: false, status: 0, message: `${why} (${error instanceof Error ? error.message : "no answer"})` };
     }
     if (!response.ok) {
-        return { ok: false, status: response.status, message: await refusalOf(response) };
+        return { ok: false, status: response.status, ...(await refusalOf(response)) };
     }
     // allow(silent-catch): an answer that is not JSON fails the schema, which is reported as the far side being too old.
     const parsed = request.schema.safeParse(await response.json().catch(() => undefined));
@@ -111,7 +146,7 @@ export const linkHello = (target: LinkTarget, signal?: AbortSignal): Promise<Lin
 export const linkAsk = (target: LinkTarget, task: LinkTask): Promise<LinkAnswerOf<LinkTaskStatus>> =>
     call(target, {
         method: "POST",
-        path: rawRouteUrl("POST /link/conversations"),
+        path: doorsOf(target).ask(),
         body: task,
         schema: RAW_JSON_ROUTES["POST /link/conversations"].output,
     });
@@ -131,7 +166,7 @@ export const linkStatus = (
         target,
         {
             method: "GET",
-            path: `${rawRouteUrl("GET /link/conversations/{id}", { id: conversationId })}${query}`,
+            path: `${doorsOf(target).status(conversationId)}${query}`,
             schema: RAW_JSON_ROUTES["GET /link/conversations/{id}"].output,
             ...opt("holdS", hold.after === undefined ? undefined : (hold.waitS ?? LINK_POLL_WAIT_S)),
         },
@@ -143,7 +178,7 @@ export const linkStatus = (
 export const linkMessage = (target: LinkTarget, conversationId: string, message: LinkMessage): Promise<LinkAnswerOf<LinkMessageReceipt>> =>
     call(target, {
         method: "POST",
-        path: rawRouteUrl("POST /link/conversations/{id}/messages", { id: conversationId }),
+        path: doorsOf(target).message(conversationId),
         body: message,
         schema: RAW_JSON_ROUTES["POST /link/conversations/{id}/messages"].output,
     });
@@ -152,7 +187,7 @@ export const linkMessage = (target: LinkTarget, conversationId: string, message:
 export const linkAnswer = (target: LinkTarget, conversationId: string, answer: LinkAnswer): Promise<LinkAnswerOf<{ readonly ok: true }>> =>
     call(target, {
         method: "POST",
-        path: rawRouteUrl("POST /link/conversations/{id}/answer", { id: conversationId }),
+        path: doorsOf(target).answer(conversationId),
         body: answer,
         schema: RAW_JSON_ROUTES["POST /link/conversations/{id}/answer"].output,
     });
@@ -161,7 +196,7 @@ export const linkAnswer = (target: LinkTarget, conversationId: string, answer: L
 export const linkStop = (target: LinkTarget, conversationId: string): Promise<LinkAnswerOf<LinkTaskStatus>> =>
     call(target, {
         method: "POST",
-        path: rawRouteUrl("POST /link/conversations/{id}/stop", { id: conversationId }),
+        path: doorsOf(target).stop(conversationId),
         schema: RAW_JSON_ROUTES["POST /link/conversations/{id}/stop"].output,
     });
 

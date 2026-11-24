@@ -32,7 +32,9 @@ import type { QueueChange, TurnQueue } from "../conversations/actor/conversation
 
 /* WHO ASKED FOR THIS TURN, as the daemon verified it, never as the client said it. */
 export type TurnInput = AgentTurn & {
-    // Who is speaking (seams/turn-speaker.ts); `actor` and `owner` are derived from it at the door that built it.
+    // Who is speaking (seams/turn-speaker.ts); `actor` and `owner` are derived from it at the door that built it. One
+    // door sets an owner a program speaker does not give: a task another sandbox routed here as a person
+    // (links/person-tasks.ts, 2026-11-24) is drawn as that sandbox's words and belongs to the person it acts for.
     readonly speaker?: TurnSpeaker;
     readonly actor?: string;
     // The member the conversation belongs to if this turn is its first; `since` is the registry's to stamp.

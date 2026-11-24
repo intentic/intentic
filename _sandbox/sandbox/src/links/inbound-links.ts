@@ -30,7 +30,7 @@ import { wakeLinkTaskStatus } from "./link-task-status-wait.js";
 const StoredStateSchema = z.enum(["held", "running", "finished", "failed", "declined", "stopped"]);
 type StoredState = z.infer<typeof StoredStateSchema>;
 
-const StoredTaskSchema = z.object({
+export const StoredLinkTaskSchema = z.object({
     // The asking side's own id for the task: asked again under it, the same task answers.
     requestId: z.string(),
     conversationId: z.string(),
@@ -48,7 +48,7 @@ const StoredTaskSchema = z.object({
     askedAt: z.number(),
     updatedAt: z.number(),
 });
-export type StoredLinkTask = z.infer<typeof StoredTaskSchema>;
+export type StoredLinkTask = z.infer<typeof StoredLinkTaskSchema>;
 
 const StoredLinkSchema = z.object({
     id: z.string(),
@@ -59,7 +59,7 @@ const StoredLinkSchema = z.object({
     createdAt: z.number(),
     createdBy: z.string().optional(),
     lastUsedAt: z.number().optional(),
-    tasks: z.array(StoredTaskSchema),
+    tasks: z.array(StoredLinkTaskSchema),
 });
 type StoredLink = z.infer<typeof StoredLinkSchema>;
 const StoredLinksSchema = z.object({ links: z.array(StoredLinkSchema) });
@@ -187,8 +187,8 @@ const summaryOf = (link: StoredLink): InboundLinkSummary => ({
 // A patch's named fields only: one left undefined keeps what is there rather than clearing it.
 const definedOf = (patch: LinkTermsPatch): LinkTermsPatch => Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
 
-// A task as its first ask files it.
-const filedTask = (task: NewLinkTask, now: number): StoredLinkTask => ({
+// A task as its first ask files it; shared with the tasks routed as a person (person-tasks-store.ts).
+export const filedTask = (task: NewLinkTask, now: number): StoredLinkTask => ({
     requestId: task.requestId,
     conversationId: task.conversationId,
     ...opt("title", task.title),
@@ -213,10 +213,26 @@ const unstartedOf = (stored: StoredLinks): { readonly link: ResolvedLink; readon
     );
 
 // The newest TASKS_KEPT, every live one kept whatever its age.
-const pruned = (tasks: readonly StoredLinkTask[]): StoredLinkTask[] => {
+export const pruned = (tasks: readonly StoredLinkTask[]): StoredLinkTask[] => {
     const settled = tasks.filter((task) => !LIVE_STATES.has(task.state)).toSorted((left, right) => right.updatedAt - left.updatedAt);
     const dropped = new Set(settled.slice(Math.max(0, TASKS_KEPT - (tasks.length - settled.length))).map((task) => task.requestId));
     return tasks.filter((task) => !dropped.has(task.requestId));
+};
+
+/** One move of a task, as both task books write it (this file and person-tasks-store.ts). */
+export const movedTask = (task: StoredLinkTask, move: LinkTaskMove, now: number): StoredLinkTask => {
+    const { task: words, error: _error, report: _report, ...rest } = task;
+    return {
+        ...rest,
+        ...opt("task", move.forgetTask === true ? undefined : words),
+        ...opt("state", move.state),
+        // A new turn's report replaces the last; a move that names none keeps it.
+        ...opt("report", move.report?.slice(0, REPORT_KEPT) ?? task.report),
+        // An error belongs to the turn that failed: any other move clears it unless it names one.
+        ...opt("error", move.error),
+        version: task.version + 1,
+        updatedAt: now,
+    };
 };
 
 export const fileInboundLinks = (path: string): InboundLinks => {
@@ -340,18 +356,7 @@ export const fileInboundLinks = (path: string): InboundLinks => {
                     if (task.conversationId !== conversationId) {
                         return task;
                     }
-                    const { task: words, error: _error, report: _report, ...rest } = task;
-                    moved = {
-                        ...rest,
-                        ...opt("task", move.forgetTask === true ? undefined : words),
-                        ...opt("state", move.state),
-                        // A new turn's report replaces the last; a move that names none keeps it.
-                        ...opt("report", move.report?.slice(0, REPORT_KEPT) ?? task.report),
-                        // An error belongs to the turn that failed: any other move clears it unless it names one.
-                        ...opt("error", move.error),
-                        version: task.version + 1,
-                        updatedAt: now,
-                    };
+                    moved = movedTask(task, move, now);
                     return moved;
                 }),
             }));

@@ -1,4 +1,4 @@
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { bindingWindow, gatingWindows, SPENT_UTILIZATION, type ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
@@ -11,6 +11,7 @@ import { modelRunOut, poolName, type RunOut, type RunOuts } from "../../usage/ru
 import { runningOn } from "../run/turn/turn-pulse.js";
 import { childCostOf, forecastBudget } from "../run/spend/budget-planner.js";
 import { forecastWords } from "../run/spend/budget-words.js";
+import { hearPoolSignalsSoon } from "../../usage/pool-signal-hearing.js";
 
 // What a parent may spend on a child right now: connected providers, their models' headroom, and how much. Reads happen
 // once per provider, not per model, and every model is judged on that reading by the one rule the spawn gate, the role
@@ -79,6 +80,9 @@ export interface SpawnableProvider {
     // The fan-out planner's projection for children of its heaviest model, in words (agent/run/spend/budget-words.ts): each
     // account's standing and how many more fit now. Absent for a provider whose accounts read no figure.
     readonly budget?: string;
+    // Epoch ms of the newest spent allowance on one of its accounts that another of the owner's sandboxes on the same
+    // account met, still standing (agent/providers/accounts/pool-signals.ts): said beside the level, since it is no refusal of this one's.
+    readonly heardRunOut?: number;
 }
 
 // A provider's accounts read once and judged on each model of its catalog by the serviceability rule (accountsJudge): the
@@ -203,7 +207,14 @@ const runningByModel = (provider: string): Readonly<Record<string, number>> | un
 export const spawnableProviders = async (services: Services): Promise<readonly SpawnableProvider[]> => {
     // allow(silent-catch): a run-out record that cannot be read only costs the listing its rate, never its levels.
     const runOutsRead = async (): Promise<RunOuts> => services.runOuts.read();
-    const [ready, runOuts] = await Promise.all([services.providerReadiness(), runOutsRead().catch((): RunOuts => ({}))]);
+    // What the owner's other sandboxes ran out of on these accounts, filed first so this listing already judges it.
+    await hearPoolSignalsSoon();
+    // allow(silent-catch): a ledger that cannot be read here costs the listing its "seen in another sandbox" note only.
+    const [ready, runOuts, refusals] = await Promise.all([
+        services.providerReadiness(),
+        runOutsRead().catch((): RunOuts => ({})),
+        services.providerRefusals.onFile().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
+    ]);
     return Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
             const [catalog, judge] = await Promise.all([services.providerCatalogs[provider].models().catch(() => ({ models: [] })), judgeOf(services, provider)]);
@@ -211,9 +222,15 @@ export const spawnableProviders = async (services: Services): Promise<readonly S
             const model = judge.facts.length === 0 ? undefined : budgetModel(services, row);
             const lastRunOut = modelRunOut(runOuts, provider, judge.facts.map((reading) => reading.usage), model);
             const budget = model === undefined ? undefined : await budgetLine(services, row.id, model, judge.accounts({ id: model }));
-            return { ...row, ...opt("lastRunOut", lastRunOut), ...opt("budget", budget) };
+            return { ...row, ...opt("lastRunOut", lastRunOut), ...opt("budget", budget), ...opt("heardRunOut", heardRunOutOf(refusals[provider])) };
         }),
     );
+};
+
+// The newest standing spent allowance another sandbox on the same account met, among a provider's refusals on file.
+const heardRunOutOf = (refusals: readonly ProviderRefusal[] | undefined): number | undefined => {
+    const heard = (refusals ?? []).filter((refusal) => refusal.source === "another-sandbox").map((refusal) => refusal.at);
+    return heard.length === 0 ? undefined : Math.max(...heard);
 };
 
 // The model a budget line is said for: the one this sandbox runs most on the provider now, else the heaviest it lists,
@@ -332,8 +349,11 @@ const runOutText = (runOut: RunOut | undefined, now: number): string => {
     return `; last ran out ${agoWords(runOut.at, now)}${into}${under}`;
 };
 
+// A run-out heard rather than met: no agent of this sandbox spent it, so it is said apart from the rate above.
+const heardText = (at: number | undefined, now: number): string => (at === undefined ? `` : `; ran out in another sandbox on the same account ${agoWords(at, now)}`);
+
 const providerText = (provider: SpawnableProvider, now: number, named: number): string => {
-    const load = `${runningText(provider.running)}${runOutText(provider.lastRunOut, now)}${provider.budget === undefined ? `` : `; ${provider.budget}`}`;
+    const load = `${runningText(provider.running)}${runOutText(provider.lastRunOut, now)}${heardText(provider.heardRunOut, now)}${provider.budget === undefined ? `` : `; ${provider.budget}`}`;
     if (provider.models.length === 0) {
         const renews = provider.reopensAt === undefined ? `` : `, renews ${inWords(provider.reopensAt, now)}`;
         // Two different silences: nothing left to spend, versus nothing to list at all.

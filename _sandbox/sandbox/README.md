@@ -59,7 +59,7 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | --- | --- | --- |
 | foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` `retry/` |
 | host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `roles/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
-| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
+| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `account-routing/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
 | orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
 | composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
@@ -404,7 +404,8 @@ flowchart LR
   set of facts (2026-10-20). The facts are the account rows (a revoked sign-in, a seat mark, a translator bench, the
   polled reading, the models the translator routes to the credential, `agent/providers/translator-models.ts`) and every
   refusal on file in one ledger (`usage/provider-refusals.ts`), each the latest of its kind for
-  the account and model it names. Each usage reader states a window's length where the provider's answer says it
+  the account and model it names. That includes a spent allowance another of the owner's sandboxes on the same account
+  met, heard through the platform (`agent/providers/accounts/pool-signals.ts`, `source: "another-sandbox"`). Each usage reader states a window's length where the provider's answer says it
   (`periodSeconds`: Codex's `limit_window_seconds` and the app-server's minutes in `usage/translator-usage.ts`, Kimi's
   throttle windows, Claude's `session`, `five_hour`, `weekly_*` and `seven_day*` keys in
   `agent/providers/claude/claude-usage.ts`, a Google bucket's `window` or the period its id and name spell in

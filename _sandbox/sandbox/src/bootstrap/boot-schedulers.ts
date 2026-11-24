@@ -3,6 +3,13 @@ import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { onChildSettled,childTurnResult,isWorker,resultWords } from "../agent/subagents/child-records.js";
 import { onJobEnded } from "../agent/tools/jobs/job-ended.js";
 import { linkTaskDepsOf, noteLinkTurnAwaiting, noteLinkTurnSettled, noteLinkTurnStarted, startUnstartedTasks } from "../links/link-tasks.js";
+import {
+    notePersonTurnAwaiting,
+    notePersonTurnSettled,
+    notePersonTurnStarted,
+    personTaskDepsOf,
+    startUnstartedPersonTasks,
+} from "../links/person-tasks.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { afterLanded } from "../agent/subagents/starting/child-after.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
@@ -25,6 +32,7 @@ import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { startAccountOutbox } from "../issues/account-outbox.js";
+import { startPoolSignalsFor } from "../agent/providers/accounts/pool-signals.js";
 import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
 import { ownerStepSettled } from "../ci/owner-steps.js";
 import { createCiPoller } from "../ci/poller.js";
@@ -171,10 +179,16 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
     shutdown.push(services.events.subscribe("run.settled", (settled) => noteLinkTurnSettled(deps, settled)));
     shutdown.push(services.events.subscribe("run.started", (started) => noteLinkTurnStarted(deps, started)));
     shutdown.push(services.events.subscribe("turn.awaiting", noteLinkTurnAwaiting));
+    // The tasks other sandboxes routed here as one of their people, moved by their turns the same way (person-tasks.ts).
+    const routed = { tasks: services.personTasks };
+    shutdown.push(services.events.subscribe("run.settled", (settled) => notePersonTurnSettled(routed, settled)));
+    shutdown.push(services.events.subscribe("run.started", (started) => notePersonTurnStarted(routed, started)));
+    shutdown.push(services.events.subscribe("turn.awaiting", notePersonTurnAwaiting));
     shutdown.push(() => services.linkedChildren.close());
     if (role.container) {
         void services.linkedChildren.resume().catch((error: Error) => logger.warn({ err: error }, "linked tasks: not followed again"));
         void startUnstartedTasks(linkTaskDepsOf(services)).catch((error: Error) => logger.warn({ err: error }, "link: tasks filed before a restart not started"));
+        void startUnstartedPersonTasks(personTaskDepsOf(services)).catch((error: Error) => logger.warn({ err: error }, "route: tasks filed before a restart not started"));
     }
 };
 
@@ -253,6 +267,14 @@ const startCi = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | 
     }
 };
 
+// What crosses to the owner's other sandboxes: reports one could not take yet, retried until they land
+// (issues/account-outbox.ts), and the run-outs they met on the accounts this one holds, heard every five minutes
+// (agent/providers/accounts/pool-signals.ts).
+const startAcrossSandboxes = (services: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
+    shutdown.push(startAccountOutbox(services));
+    shutdown.push(startPoolSignalsFor(services));
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     startAutomations({ role, services, shutdown });
@@ -264,8 +286,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     if (role.container) {
         shutdown.push(inBackground("needs", () => services.needs.start()));
         shutdown.push(inBackground("gpu-watch", () => startGpuWatch(services, logger)));
-        // Reports another sandbox on the account could not take yet, retried until they land (issues/account-outbox.ts).
-        shutdown.push(startAccountOutbox(services));
+        startAcrossSandboxes(services, shutdown);
     }
 
     // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is

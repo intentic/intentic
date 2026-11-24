@@ -26,6 +26,8 @@ import {
     ProjectClaimsSchema,
     ProjectResolveBodySchema,
     ProjectResolvedSchema,
+    RouteResolveBodySchema,
+    RouteResolvedSchema,
     LocalDnsAnswerSchema,
     LocalDnsBodySchema,
     LocalDnsConfirmBodySchema,
@@ -46,6 +48,7 @@ import {
     WalletSignBodySchema,
     WakeAlarmBodySchema,
 } from "./ingress-schemas.js";
+import { PoolSignalBodySchema, PoolSignalsBodySchema, PoolSignalsSchema } from "./pool-signal-schemas.js";
 
 /* Shared root-level machine routes, registered by ingress.ts and called through platform-client.ts; preserve legacy paths and error/status formats.
  * A table supports header auth, forms, plain text and byte passthrough without changing older callers to oRPC's /rpc or error envelope.
@@ -199,6 +202,28 @@ export const PLATFORM_INGRESS = {
         output: WalletSignatureSchema,
     },
 
+    // Run-outs shared across sandboxes: a provider account's pool ran out here, and the run-outs the owner's other
+    // sandboxes saw on the accounts this one holds, each account named by a hash only. A platform from before these
+    // answers 404, which the daemon reads as no signals.
+    poolSignal: {
+        method: "POST",
+        path: "/pool-signals/report",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: PoolSignalBodySchema,
+        output: IngressOkSchema,
+    },
+    poolSignals: {
+        method: "POST",
+        path: "/pool-signals/read",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: PoolSignalsBodySchema,
+        output: PoolSignalsSchema,
+    },
+
     // Account-level report routing: which sandbox on this account owns a project (with a pass to report to it), and the
     // projects the calling sandbox claims itself. The connect token is the only word on who is asking.
     projectResolve: {
@@ -209,6 +234,17 @@ export const PLATFORM_INGRESS = {
         answer: "json",
         input: ProjectResolveBodySchema,
         output: ProjectResolvedSchema,
+    },
+    // Account-level routing as a person (docs/architecture/account-routing.md): a pass for one scope to a sandbox the
+    // named person reaches. Served beside projectResolve, which stays for daemons from before it.
+    routeResolve: {
+        method: "POST",
+        path: "/projects/route",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: RouteResolveBodySchema,
+        output: RouteResolvedSchema,
     },
     projectsMine: {
         method: "POST",

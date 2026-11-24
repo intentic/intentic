@@ -74,6 +74,7 @@ test("a delegating turn with workflow runs lists the workflow tools, and passes 
     expect(listed.result?.tools?.map((tool) => tool.name)).toEqual([
         "providers",
         "spawn",
+        "delegate",
         "send",
         "cancel",
         "answer",

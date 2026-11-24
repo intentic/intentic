@@ -37,6 +37,22 @@ import {
     PhonePasswordsPairSchema,
 } from "../../schemas/phone-passwords.js";
 import { OkSchema } from "../../schemas/shared.js";
+import {
+    DropAcceptedSchema,
+    DropBodySchema,
+    DropFilesSchema,
+    DropSendOutcomeSchema,
+    DropSendSchema,
+    DropTakenSchema,
+    DropTakeSchema,
+    PairingMintedSchema,
+    PairingMintSchema,
+    PairingsListSchema,
+    ReceivedDropSchema,
+    ReceivedDropsSchema,
+    RouteSecretSchema,
+    RoutesListSchema,
+} from "../../schemas/account-routes.js";
 import { PeerPairingAnswerSchema, SyncPairAnswerSchema, SyncPairRequestSchema } from "../../schemas/short-codes.js";
 import { SpeechStatusSchema, SpeechTranscriptSchema, SpeechWakeClaimSchema, SpeechWakeGrantSchema } from "../../schemas/speech.js";
 import {
@@ -198,9 +214,33 @@ export const RAW_JSON_ROUTES = {
     "POST /system/links/{id}/requests/{request}": { input: LinkRequestDecisionSchema, output: InboundLinkSummarySchema },
     // Another sandbox on the owner's account reporting a problem about a project this one claims (schemas/issues.ts).
     "POST /account/report": { input: AccountReportSchema, output: IssueAcceptedSchema },
+    // A task routed as a person: the link doors' own shapes, behind a pass and a pairing instead of a link token.
+    "POST /account/task": { input: LinkTaskSchema, output: LinkTaskStatusSchema },
+    "GET /account/task/{id}": { output: LinkTaskStatusSchema },
+    "POST /account/task/{id}/messages": { input: LinkMessageSchema, output: LinkMessageReceiptSchema },
+    "POST /account/task/{id}/answer": { input: LinkAnswerSchema, output: OkSchema },
+    "POST /account/task/{id}/stop": { output: LinkTaskStatusSchema },
     "POST /account/outbox": { input: AccountSendSchema, output: AccountSendOutcomeSchema },
     "GET /account/outbox": { output: AccountOutboxSchema },
     "GET /account/projects": { output: AccountProjectsSchema },
+    "GET /account/projects/suggest": { output: AccountProjectsSchema },
+    // Routing as a person: the pairings this sandbox keeps for others, and the secrets it holds for itself.
+    "POST /account/pairings": { input: PairingMintSchema, output: PairingMintedSchema },
+    "GET /account/pairings": { output: PairingsListSchema },
+    "DELETE /account/pairings/{from}": { output: OkSchema },
+    "POST /account/routes/secret": { input: RouteSecretSchema, output: OkSchema },
+    "GET /account/routes": { output: RoutesListSchema },
+    // Routing as a person: a drop between daemons, the sending side's loopback send, and the inbox it lands in.
+    "POST /account/drop": { input: DropBodySchema, output: DropAcceptedSchema },
+    "POST /account/drops": { input: DropSendSchema, output: DropSendOutcomeSchema },
+    "GET /account/inbox": { output: ReceivedDropsSchema },
+    "GET /account/inbox/{id}": { output: ReceivedDropSchema },
+    "GET /account/inbox/{id}/files": { output: DropFilesSchema },
+    "POST /account/inbox/{id}/take": { input: DropTakeSchema, output: DropTakenSchema },
+    "DELETE /account/inbox/{id}": { output: OkSchema },
+    // A read as a person answers what the fleet's own reads answer (GET /fleet…, POST /diagnostics).
+    "POST /account/read/diagnostics": { input: DiagnosticsQuerySchema, output: DiagnosticsAnswerSchema },
+    "GET /account/read/agents/{handle}/bundle": { output: ConversationBundleSchema },
     // The link doors, as the asking sandbox's daemon reads them. A status takes `?after=<version>&wait=<seconds>` to
     // be held until it moves past that version.
     "GET /link": { output: LinkHelloSchema },

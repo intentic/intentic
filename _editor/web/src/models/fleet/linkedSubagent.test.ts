@@ -20,6 +20,12 @@ describe(`linkedConversationHref`, () => {
         );
     });
 
+    // 2026-11-24: a task handed over as the person is theirs over there; nothing waits on an owner's Allow.
+    it(`opens a task handed over as the person in its conversation, whatever its status`, () => {
+        const routed = { link: `route:sbx2`, sandbox: `ops`, sandboxId: `sbx2`, conversationId: `route-brave-otter-1`, via: `person` as const };
+        expect(linkedConversationHref({ kind: `linked`, status: `pending`, linked: routed })).toBe(`/?sandbox=sbx2&conversation=route-brave-otter-1`);
+    });
+
     it(`has no address for a spawned or in-process row, or for a link card that never learned its sandbox's id`, () => {
         expect(linkedConversationHref({ kind: `spawned`, status: `pending`, linked: undefined })).toBeUndefined();
         expect(linkedConversationHref({ kind: `subagent`, status: `running`, linked: undefined })).toBeUndefined();

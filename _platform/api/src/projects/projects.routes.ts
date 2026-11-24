@@ -7,6 +7,8 @@ import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import { ingressServer } from "../ingress.js";
 import { identitySigningKeyOf } from "../sign-in.js";
+import { orgCrossing } from "./org-crossing.js";
+import { routeResolveHandler } from "./route-resolve.js";
 
 /* ACCOUNT-LEVEL REPORT ROUTING, the daemon's half: a directory and a notary, never a mailbox. A sandbox asks which
  * sandbox on its own account answers for a project, and gets that sandbox's address and a pass signed with the
@@ -34,7 +36,7 @@ export const projectsHttpRoutes = ({ config, prisma, now = () => new Date() }: P
             ? undefined
             : await prisma.sandbox.findUnique({
                   where: { tokenDigest: sha256Hex(token) },
-                  select: { id: true, ownerId: true, tunnelId: true, name: true },
+                  select: { id: true, ownerId: true, tunnelId: true, name: true, org: { select: { id: true, name: true } } },
               });
 
     ingress(`projectResolve`, async (_c, kit) => {
@@ -49,12 +51,12 @@ export const projectsHttpRoutes = ({ config, prisma, now = () => new Date() }: P
         }
         const claim = await prisma.projectClaim.findUnique({
             where: { ownerId_project: { ownerId: caller.ownerId, project } },
-            select: { sandbox: { select: { id: true, tunnelId: true, name: true, daemonUrl: true } } },
+            select: { sandbox: { select: { id: true, tunnelId: true, name: true, daemonUrl: true, org: { select: { id: true, name: true } } } } },
         });
         if (claim === null) {
             return kit.refuse(
                 404,
-                `no sandbox on your account claims ${project}: its owning sandbox can claim it (\`projects claim ${project}\`), or the owner can on the platform`,
+                `no sandbox on your account claims ${project}: the sandbox that owns it asks its owner to claim it (\`projects claim ${project}\` there raises the card), or the owner claims it in Settings ▸ Projects`,
             );
         }
         const target = claim.sandbox;
@@ -65,12 +67,15 @@ export const projectsHttpRoutes = ({ config, prisma, now = () => new Date() }: P
             return kit.refuse(409, `${target.name}, which claims ${project}, has never come online, so it has no address yet`);
         }
         const issuedAtMs = now().getTime();
+        // Reports cross an organisation's line freely (the owner's choice, 2026-11-24), but never silently.
+        const crossesOrg = orgCrossing(caller.org, target.org);
         const pass = mintSandboxPass(identitySigningKeyOf(config), {
             from: caller.tunnelId,
             fromName: caller.name,
             to: target.tunnelId,
             project,
             issuedAtMs,
+            crossesOrg,
         });
         return kit.answer({
             project,
@@ -79,8 +84,12 @@ export const projectsHttpRoutes = ({ config, prisma, now = () => new Date() }: P
             address: target.daemonUrl,
             pass,
             expiresAt: new Date(issuedAtMs + SANDBOX_PASS_TTL_MS).toISOString(),
+            crossesOrg,
         });
     });
+
+    // Routing as a person (route-resolve.ts): every scope, toward any sandbox the named person reaches.
+    ingress(`routeResolve`, routeResolveHandler({ config, prisma, now }));
 
     ingress(`projectsMine`, async (_c, kit) => {
         const caller = await callerOf(kit.connectToken);

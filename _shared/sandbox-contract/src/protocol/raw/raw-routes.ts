@@ -332,11 +332,49 @@ export const RAW_ROUTES = {
     // claims. Checked in the handler against a pass the platform signed (policy/sandbox-pass.ts); it only ever records
     // into the issues inbox, and wakes an agent only as the inbox's own escalation rule says.
     "POST /account/report": { auth: "door", control: "never" },
+    // Routing as a person, the `task` scope (2026-11-24): another sandbox hands a task to a conversation here that acts
+    // for the one person its pass names. Each door checks the pass and that person's pairing itself (account-routing/
+    // admit-route.ts) and reaches only the conversations that (asking sandbox, person) opened, as a link's doors do.
+    "POST /account/task": { auth: "door", control: "never" },
+    "GET /account/task/{id}": { auth: "door", control: "never" },
+    "POST /account/task/{id}/messages": { auth: "door", control: "never" },
+    "POST /account/task/{id}/answer": { auth: "door", control: "never" },
+    "POST /account/task/{id}/stop": { auth: "door", control: "never" },
     // The sending side, for the `projects` command on the agent's PATH: report a problem to whichever sandbox claims a
     // project (delivered now or kept in the outbox), what is still waiting, and the projects this sandbox claims.
     "POST /account/outbox": { agent: true, control: "never" },
     "GET /account/outbox": { agent: true, control: "never" },
     "GET /account/projects": { agent: true, control: "never" },
+    // The projects this workspace's repos could claim, from their remotes: for Settings ▸ Projects and `projects suggest`.
+    "GET /account/projects/suggest": { floor: "maintainer", agent: true, control: "never" },
+    // Routing as a person (schemas/account-routes.ts). The receiving side: the signed-in person pairs an asking sandbox
+    // with themselves (never a guest, who reaches nothing a pass would open), lists their own pairings, revokes one; the
+    // handler lets a maintainer list and revoke anyone's. The asking side: the same person, signed in here, keeps the
+    // secret they minted over there, and anyone reads what is held, never a secret. No agent and no control token reaches
+    // any of them: a pairing is the person's own word.
+    "POST /account/pairings": { floor: "viewer", control: "never" },
+    "GET /account/pairings": { floor: "viewer", control: "never" },
+    "DELETE /account/pairings/{from}": { floor: "viewer", control: "never" },
+    "POST /account/routes/secret": { floor: "viewer", control: "never" },
+    "GET /account/routes": { floor: "viewer", control: "never" },
+    // Routing as a person, a drop (schemas/account-routes.ts): another sandbox the person is in handing a note and files
+    // into this one's inbox, admitted in the handler by a drop pass beside the person's pairing (admit-route.ts); it starts
+    // no turn. The sending side, for `sandboxes send` on the agent's PATH. The inbox, for the `inbox` command and the
+    // editor's Received list: each shown to the people a drop names and to maintainers, the handler cutting the list.
+    "POST /account/drop": { auth: "door", control: "never", lane: "bulk" },
+    "POST /account/drops": { agent: true, control: "never" },
+    "GET /account/inbox": { floor: "viewer", agent: true, control: "never" },
+    "GET /account/inbox/{id}": { floor: "viewer", agent: true, control: "never" },
+    "GET /account/inbox/{id}/files": { floor: "viewer", agent: true, control: "never", lane: "bulk" },
+    "POST /account/inbox/{id}/take": { floor: "collaborator", agent: true, control: "never" },
+    "DELETE /account/inbox/{id}": { floor: "collaborator", agent: true, control: "never" },
+    // Routing as a person, a read: another sandbox the person is in reading the conversations and records they may read
+    // here, admitted in the handler by a read pass beside their pairing. None can change anything; diagnostics are a
+    // maintainer's, as this sandbox's own logs are.
+    "GET /account/read/agents": { auth: "door", control: "never" },
+    "GET /account/read/agents/{handle}": { auth: "door", control: "never" },
+    "GET /account/read/agents/{handle}/bundle": { auth: "door", control: "never" },
+    "POST /account/read/diagnostics": { auth: "door", control: "never" },
     // The link doors, called by the asking sandbox's daemon: each checks the link token itself (x-intentic-link) and
     // reaches only the conversations that link opened, which is the whole of a link's reach.
     "GET /link": { auth: "door", control: "never" },

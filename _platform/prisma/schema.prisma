@@ -328,6 +328,8 @@ model Sandbox {
     members            SandboxMember[]
     // The projects this sandbox answers for on its owner's account (ProjectClaim below).
     projectClaims      ProjectClaim[]
+    // The run-outs this sandbox reported for a provider account it shares with the owner's other sandboxes.
+    poolSignals        ProviderPoolSignal[]
     // The organisation whose policy this sandbox is held to (Organisation below); null is a personal sandbox, which
     // is every sandbox until an admin of an organisation who owns it binds it. Set null if the organisation goes, so
     // its sandboxes fall back to personal rather than vanishing with it.
@@ -1089,4 +1091,26 @@ model ProjectClaim {
     @@unique([ownerId, project])
     @@index([sandboxId])
     @@map("project_claim")
+}
+
+// A provider account's pool that ran out in one sandbox, for the owner's other sandboxes signed in to the same account
+// (api pool-signals/, docs/architecture/account-routing.md). The account is named only by `fingerprint`, a sha256 the
+// daemon makes from the provider's own account id: the platform learns that two sandboxes share an account, and when
+// it ran out, never which account or any credential. The latest per account and pool; kept eight days (a week, the
+// longest pool any provider sells, and a day of slack), pruned as signals are written.
+model ProviderPoolSignal {
+    id          String    @id @default(cuid())
+    fingerprint String
+    pool        String
+    ranOutAt    DateTime
+    resetsAt    DateTime?
+    // The sandbox that reported it, which a reader skips (it heard its own refusal) and whose owner bounds who reads it.
+    sandboxId   String
+    sandbox     Sandbox   @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+    updatedAt   DateTime  @updatedAt
+
+    @@unique([fingerprint, pool])
+    @@index([sandboxId])
+    @@index([updatedAt])
+    @@map("provider_pool_signal")
 }

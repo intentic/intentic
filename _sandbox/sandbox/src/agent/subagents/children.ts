@@ -128,7 +128,9 @@ export type ChildSpawnResult =
     // `id` is the child's conversation id: also the roster record's id and the wait tool's target. `note` says what the
     // owner changed before allowing it, so the parent's report names the model that actually did the work, or, `held`,
     // that the owner is still being asked.
-    { readonly ok: true; readonly id: string; readonly note?: string; readonly held?: true } | { readonly ok: false; readonly message: string };
+    // `open`, on a refusal, is a need now asking a person for something before it can go (a delegate's pairing card).
+    | { readonly ok: true; readonly id: string; readonly note?: string; readonly held?: true }
+    | { readonly ok: false; readonly message: string; readonly open?: string };
 
 export type ChildActionResult = { readonly ok: true; readonly note?: string } | { readonly ok: false; readonly message: string };
 

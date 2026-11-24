@@ -401,6 +401,7 @@ COPY --chmod=755 \
     _sandbox/sandbox/bin/environment \
     _sandbox/sandbox/bin/needs \
     _sandbox/sandbox/bin/projects \
+    _sandbox/sandbox/bin/inbox \
     _sandbox/sandbox/bin/automations \
     _sandbox/sandbox/bin/instructions \
     _sandbox/sandbox/bin/wallet \

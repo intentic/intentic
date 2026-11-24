@@ -5,6 +5,10 @@
 import type { DaemonRawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import type { Services } from "./composition.js";
 import { mergeRawRoutes, type RawRouteTable } from "./http/raw-route-server.js";
+import { dropRawRoutes } from "./account-routing/drop.routes.js";
+import { inboxRawRoutes } from "./account-routing/inbox.routes.js";
+import { pairingRawRoutes } from "./account-routing/pairing.routes.js";
+import { accountReadRawRoutes } from "./account-routing/read.routes.js";
 import { pageMediaRawRoutes } from "./agent/pages/page-media.routes.js";
 import { translatorGatewayRawRoutes } from "./agent/providers/translator-gateway.routes.js";
 import { childrenRawRoutes } from "./agent/subagents/children.routes.js";
@@ -43,6 +47,7 @@ import { intakeRawRoutes } from "./issues/intake.routes.js";
 import { linkOperateRawRoutes } from "./links/link-operate.js";
 import { linkRecordsRawRoutes } from "./links/link-records.js";
 import { linkRawRoutes } from "./links/links.routes.js";
+import { personTaskRawRoutes } from "./links/person-task.routes.js";
 import { diagnosticsRawRoutes } from "./logs/diagnostics.routes.js";
 import { fleetLoopRawRoutes } from "./loops/fleet-loop.routes.js";
 import { peerDoorRawRoutes } from "./peers/peer-doors.routes.js";
@@ -69,6 +74,10 @@ import { workspaceBytesRawRoutes } from "./workspace/files/workspace-bytes.route
 
 export const appRawRoutes = (services: Services) =>
     mergeRawRoutes(
+        dropRawRoutes(services),
+        inboxRawRoutes(services),
+        pairingRawRoutes(services),
+        accountReadRawRoutes(services),
         pageMediaRawRoutes(services),
         translatorGatewayRawRoutes(services),
         childrenRawRoutes(services),
@@ -107,6 +116,7 @@ export const appRawRoutes = (services: Services) =>
         linkOperateRawRoutes(services),
         linkRecordsRawRoutes(services),
         linkRawRoutes(services),
+        personTaskRawRoutes(services),
         diagnosticsRawRoutes(services),
         fleetLoopRawRoutes(services),
         peerDoorRawRoutes(services),

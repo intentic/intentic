@@ -4,6 +4,8 @@
 import type { StateFile } from "@intentic/sandbox-contract/state/state-portability";
 
 export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
+    { path: "account-outbox/", portability: "carry" },
+    { path: "account-pairings.json", portability: "secret" },
     { path: "account-usage.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
     { path: "approval-decisions.json", portability: "identity", note: "Approve again from Approvals anything that was approved and had not run yet." },
@@ -41,6 +43,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "identity/services.json", portability: "identity", note: "Write the services again on the target's Access page; automations that run as one are skipped until it exists there." },
     { path: "kept-jobs/", portability: "derived" },
     { path: "links/linked-children.json", portability: "carry" },
+    { path: "links/person-tasks.json", portability: "carry" },
     { path: "member-ai-literacy.json", portability: "carry" },
     { path: "member-audience.json", portability: "carry" },
     { path: "member-commit-identity.json", portability: "carry" },

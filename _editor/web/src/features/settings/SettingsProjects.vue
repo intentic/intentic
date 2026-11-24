@@ -5,7 +5,11 @@ import { Button, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
+import { sandboxRaw } from "../../client/sandbox/sandboxRaw";
+import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import { PROJECT_SUGGESTIONS } from "../../lib/queryKeys";
 import { apiClient } from "../../lib/useApi";
 import FactsHint, { type HintFact, type HintStep } from "../../components/FactsHint.vue";
 
@@ -18,8 +22,21 @@ const client = useQueryClient();
 const KEY = [`account`, `projects`];
 
 const claims = useQuery({ queryKey: KEY, queryFn: async (): Promise<ProjectClaim[]> => (await apiClient.projects.list()).claims });
-const { sandboxes } = useSandbox();
+const { sandboxes, active } = useSandbox();
 const owned = computed(() => sandboxes.value.filter((sandbox) => sandbox.tier === `owner`));
+
+// What the open sandbox's repos could claim, from their remotes, less what the account claims already: one press each.
+// Read only from a sandbox the reader owns and whose daemon serves the route; anything else offers none.
+const suggestible = computed(() => active.value?.tier === `owner` && supportsRoute(`GET /account/projects/suggest`));
+const { query: suggestionsQuery } = useSandboxQuery({
+    queryKey: PROJECT_SUGGESTIONS.of(),
+    queryFn: async () => (await sandboxRaw(`GET /account/projects/suggest`)).projects,
+    enabled: suggestible,
+});
+const suggestions = computed(() => {
+    const claimed = new Set((claims.data.value ?? []).map((row) => row.project));
+    return (suggestionsQuery.data.value ?? []).filter((name) => !claimed.has(name));
+});
 
 const project = ref(``);
 // The sandbox a claim goes to: the one picked, else the first the reader owns. The picker shows that default rather than
@@ -61,6 +78,12 @@ const claim = async (): Promise<void> => {
 
 const release = (name: string): Promise<void> => run(() => apiClient.projects.release({ project: name }));
 
+// A suggestion claimed for the sandbox it came from, the open one.
+const claimSuggested = (name: string): Promise<void> => {
+    const here = active.value?.id;
+    return here === undefined || busy.value ? Promise.resolve() : run(() => apiClient.projects.claim({ sandboxId: here, project: name }));
+};
+
 // The (i) beside the group's name: where a report travels, then what a project is and the rules a claim follows.
 const hintSteps = computed<readonly HintStep[]>(() => [
     { icon: `box`, label: t(`settings.settingsProjects.hint.anySandbox`) },
@@ -100,6 +123,19 @@ const notice = computed(() => (failure.value === undefined ? undefined : { tone:
                 >
                     <template #control>
                         <Button :label="t(`settings.settingsProjects.release`)" size="small" tier="quiet" tone="danger" :disabled="busy" @click="release(row.project)" />
+                    </template>
+                </Row>
+            </div>
+            <div v-if="suggestions.length > 0" class="divide-y divide-line-subtle" data-project-suggestions>
+                <Row
+                    v-for="name in suggestions"
+                    :key="name"
+                    icon="folder"
+                    :title="name"
+                    :description="t(`settings.settingsProjects.suggested`, { sandbox: active?.name ?? `` })"
+                >
+                    <template #control>
+                        <Button :label="t(`settings.settingsProjects.claim`)" size="small" tier="quiet" :disabled="busy" @click="claimSuggested(name)" />
                     </template>
                 </Row>
             </div>

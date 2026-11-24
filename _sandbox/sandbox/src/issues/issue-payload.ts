@@ -84,12 +84,19 @@ const trimmed = (brief: { untrusted: { stack?: string; breadcrumbs?: unknown[] }
     });
 };
 
+// A report from another organisation's sandbox, or from a personal one into an organisation's, says so on the board.
+const acrossOrg = (crosses: NonNullable<IssueSummary["sender"]>["crossesOrg"]): string =>
+    crosses === undefined ? "" : ` (${crosses.from?.name ?? "personal"} → ${crosses.to?.name ?? "personal"})`;
+
+// Who the reporting conversation acted for, when the pass named a person this sandbox knows (2026-11-24): "From A for p@x".
+const forPerson = (person: string | undefined): string => (person === undefined ? "" : ` for ${person}`);
+
 // The card's title, the only thing telling two wakes of one automation apart on the board (the prompt is always
 // identical). The count rides along for a recurrence, since "×214" vs "×2" is judged straight off the board.
 const titleFor = (issue: IssueSummary, why: "new" | "recurring" | "asked"): string => {
     const lead =
         issue.sender !== undefined
-            ? `From ${issue.sender.sandboxName}${why === "recurring" ? ` ×${issue.count}` : ""}`
+            ? `From ${issue.sender.sandboxName}${forPerson(issue.sender.person)}${acrossOrg(issue.sender.crossesOrg)}${why === "recurring" ? ` ×${issue.count}` : ""}`
             : issue.kind === "report"
               ? "Reported"
               : why === "recurring"

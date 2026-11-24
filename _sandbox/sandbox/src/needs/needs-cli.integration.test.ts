@@ -274,6 +274,20 @@ describe("the asking commands speak the needs contract", () => {
         }
     });
 
+    // A project claim is the owner's to make, so the command only raises the card; the daemon normalises the project.
+    it("projects claim asks for the project as given, with the agent's case, and refuses anything but one project", async () => {
+        server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+        const asked = await run(server.port, "projects", ["claim", "git@github.com:acme/app.git", "--why", "its bugs are filed from billing"]);
+        expect(asked.code).toBe(3);
+        expect(server.seen.map((seen) => NeedRaiseSchema.parse(seen.body))).toEqual([
+            { ask: { kind: "claim", project: "git@github.com:acme/app.git" }, why: "its bugs are filed from billing" },
+        ]);
+        server.seen.length = 0;
+        expect((await run(server.port, "projects", ["claim"])).code).toBe(2);
+        expect((await run(server.port, "projects", ["claim", "github.com/a/b", "github.com/c/d"])).code).toBe(2);
+        expect(server.seen).toEqual([]);
+    });
+
     // A rule the owner stated, named the way the workspace names its file wherever the shell stands: the shared tree, or a
     // conversation's own checkout under the worktrees root.
     it("instructions propose asks for the rule in the workspace's AGENTS.md, a repository's by its folder, from either tree", async () => {

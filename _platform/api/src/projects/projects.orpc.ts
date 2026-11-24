@@ -8,8 +8,9 @@ import { requireUser } from "../guards.js";
 const os = implement(apiContract).$context<OrpcContext>();
 
 /* The owner's half of account-level report routing (projects.routes.ts is the daemons'): which of their sandboxes
- * answers for which project. Only a signed-in owner writes here; a daemon can propose a claim on a card, which the
- * owner's browser then sends as this call. One sandbox per project per account, so claiming moves it. */
+ * answers for which project. Only a signed-in owner writes here: an agent proposes a claim with `projects claim`, which
+ * raises a card in its chat (sandbox needs/kinds/claim-need.ts), and the owner's press there sends this call from their
+ * own browser, as Settings ▸ Projects does. One sandbox per project per account, so claiming moves it. */
 
 const claimsOf = async (prisma: PrismaClient, ownerId: string): Promise<{ claims: ProjectClaim[] }> => {
     const rows = await prisma.projectClaim.findMany({

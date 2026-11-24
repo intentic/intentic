@@ -126,7 +126,7 @@ describe("the asking side relays `--on <link>` through the card it holds", () =>
         expect(bundle.body).toMatchObject({ kind: "intentic.conversation-bundle", conversation: "fair-sage-ey2r" });
         const timeline = await json(await diagnostics(app, { query: "timeline", conversationId: "fair-sage-ey2r", on: "ops" }));
         expect(timeline).toMatchObject({ status: 200, body: { sandbox: "Ops", text: expect.stringContaining("fair-sage-ey2r") } });
-        expect((await json(await diagnostics(app, { query: "restarts", on: "elsewhere" }))).body).toMatchObject({ message: 'No linked sandbox is called "elsewhere". Linked here: ops.' });
+        expect((await json(await diagnostics(app, { query: "restarts", on: "elsewhere" }))).body).toMatchObject({ message: expect.stringContaining('No linked sandbox is called "elsewhere". Linked here: ops.') });
 
         // Its owner stops sharing: the next read says so, in the far sandbox's own words.
         await taking.services.inboundLinks.update(id, { records: false });

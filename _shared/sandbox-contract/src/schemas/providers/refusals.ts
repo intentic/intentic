@@ -63,6 +63,15 @@ export const ProviderRefusalSchema = z.object({
         .describe(
             "Set by a person rather than by a refused turn, for a plan nothing can read: believed for a day, or until unmarked or a turn on it is answered.",
         ),
+    // Heard from the platform rather than refused here (2026-11-24, docs/architecture/account-routing.md): another of the
+    // owner's sandboxes signed in to the same provider account was refused for a spent allowance. Judged as a limit
+    // refusal like any other, and settled the same way: a turn answered here proves the account has room again.
+    source: z
+        .enum(["another-sandbox"])
+        .optional()
+        .describe(
+            "Where the refusal was seen, when not here: `another-sandbox` for a spent allowance another of the owner's sandboxes on the same account reported. Absent for one this sandbox's own turn met.",
+        ),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 // A routed account's per-model bench as the translator holds it: the provider's own refusal of that account on that

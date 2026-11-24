@@ -27,11 +27,9 @@ import {
     type AccountFacts,
     accountFacts,
     accountState,
-    liveUsage,
-    type PlanHeadroom,
-    planHeadroom,
     routedAccountFacts,
 } from "../../../models/providers/usageStatus";
+import { type AccountHeadroom, accountHeadroom } from "../../../models/providers/capacity/heardRunOut";
 import HubTakeOffer from "../../../parts/sandbox/HubTakeOffer.vue";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
@@ -206,7 +204,7 @@ const saveToHub = ({ target, machines }: { readonly target: HubTarget; readonly 
 
 interface AccountRow<T> {
     account: T;
-    headroom: PlanHeadroom | undefined;
+    headroom: AccountHeadroom | undefined;
     state: AccountState;
     exhausted: boolean;
 }
@@ -222,7 +220,7 @@ const rowsOf = <T,>(accounts: readonly T[], factsOf: (account: T) => AccountFact
         const facts = factsOf(account);
         const state = accountState(provider, facts);
         const waiting = state.kind === `spent` || (state.kind === `blocked` && state.fix === `wait`);
-        const row = { account, headroom: planHeadroom(liveUsage(provider, facts.account)), state, exhausted: waiting };
+        const row = { account, headroom: accountHeadroom(provider, facts.account), state, exhausted: waiting };
         (row.exhausted ? spent : state.kind === `blocked` ? attention : active).push(row);
     }
     return [...attention, ...active, ...spent];
@@ -268,7 +266,7 @@ interface AccountView {
     readonly note: string | undefined;
     readonly description: string | undefined;
     readonly state: AccountState;
-    readonly headroom: PlanHeadroom | undefined;
+    readonly headroom: AccountHeadroom | undefined;
     readonly exhausted: boolean;
     readonly activity: string | undefined;
     readonly rename: ((label: string) => Promise<void>) | undefined;

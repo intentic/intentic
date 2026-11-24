@@ -5,6 +5,7 @@ import {
     LAND_FIX_PREFIX,
     LINKED_PREFIX,
     LINK_CONVERSATION_PREFIX,
+    ROUTE_CONVERSATION_PREFIX,
     looksDrawn,
     SUBAGENT_PREFIX,
     TAIL_ALPHABET,
@@ -79,6 +80,7 @@ test("no word collides with a derived id's prefix or a git name", () => {
         LAND_FIX_PREFIX,
         SUBAGENT_PREFIX,
         LINK_CONVERSATION_PREFIX,
+        ROUTE_CONVERSATION_PREFIX,
         LINKED_PREFIX,
         "a-",
         "wf-",
@@ -127,7 +129,7 @@ test("a drawn id, new or old, looks drawn; a route or a derived id does not", ()
 // A subagent's and a link's conversations are drawn ids under a prefix, and their tails carry no digit about a third
 // of the time, so the prefix must not hide them.
 test("a drawn id under a subagent or link prefix still looks drawn, in either generation", () => {
-    for (const prefix of [SUBAGENT_PREFIX, LINK_CONVERSATION_PREFIX, LINKED_PREFIX]) {
+    for (const prefix of [SUBAGENT_PREFIX, LINK_CONVERSATION_PREFIX, ROUTE_CONVERSATION_PREFIX, LINKED_PREFIX]) {
         expect(looksDrawn(`${prefix}${newConversationId()}`)).toBe(true);
         expect(looksDrawn(`${prefix}otter-kmpq`)).toBe(true);
         expect(looksDrawn(`${prefix}keen-pine-tkjf`)).toBe(true);

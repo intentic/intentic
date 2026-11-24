@@ -51,6 +51,9 @@ const CancelBodySchema = z.object({ child: z.string().min(1) });
 // A task for another of the owner's sandboxes: which link card, the whole task, and its one-line name.
 const DelegateBodySchema = z.object({
     to: z.string().min(1),
+    // A sandbox the person this conversation acts for is in, reached as them rather than over a link card (`agents
+    // delegate --to`, links/linked-destinations.ts).
+    via: z.literal("person").optional(),
     task: z.string().min(1),
     description: z.string().max(200).optional(),
 });
@@ -296,7 +299,7 @@ const createChildrenRoutes = (services: Services) => ({
         const result = await supervisor.answer(child, answers);
         return c.json(result, result.ok ? 200 : 409);
     },
-    /** POST /children/delegate — hand a task to another of the owner's sandboxes over a link card. */
+    /** POST /children/delegate — hand a task to another sandbox: over a link card, or (`via: "person"`) as the person it acts for. */
     delegate: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(services, c);
         if (conversationId === undefined) {
@@ -311,8 +314,9 @@ const createChildrenRoutes = (services: Services) => ({
         if (!parsed.success) {
             return c.json({ ok: false, message: 'Pass JSON like {"to": "<link>", "task": "...", "description": "..."}; `agents links` names the links.' }, 400);
         }
-        const result = await supervisor.delegate({ to: parsed.data.to, task: parsed.data.task, description: parsed.data.description });
-        return c.json(result, result.ok ? 200 : 409);
+        const result = await supervisor.delegate({ to: parsed.data.to, via: parsed.data.via, task: parsed.data.task, description: parsed.data.description });
+        // A refusal that raised a card asking a person (their pairing) is a need left open, as `capabilities request` answers one.
+        return c.json(result, result.ok ? 200 : result.open === undefined ? 409 : 202);
     },
     /** GET /children/links — the linked sandboxes this conversation's turn may hand work to, and whether each answers. */
     links: async (c: Context<AppEnv>): Promise<Response> => {

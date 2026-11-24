@@ -3,17 +3,18 @@ import { KeyringShareModeSchema } from "./keyring.js";
 import { AutomationSchema } from "./automations.js";
 import { HostPowerFindingSchema } from "./host-power.js";
 import { entryId } from "./internal.js";
+import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";
 
 // A need: something an agent cannot finish its task without that only a person can provide (a connection, a secret's
 // value, wider reach, a tool in the image). Unlike a parked card it outlives the turn that raised it: the sandbox keeps
 // it until someone answers, draws it wherever it is waiting, and wakes the conversation when it is met
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
-export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power"] as const;
+export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power", "claim", "route"] as const;
 export const NeedKindSchema = z
     .enum(NEED_KINDS)
     .describe(
-        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, a standing rule written into an AGENTS.md, or power settings changed on the computer this sandbox runs on.",
+        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, a standing rule written into an AGENTS.md, power settings changed on the computer this sandbox runs on, a project claimed for this sandbox so the owner's other sandboxes report its problems here, or a person's leave for this sandbox to act as them in another.",
     );
 export type NeedKind = z.infer<typeof NeedKindSchema>;
 
@@ -206,6 +207,32 @@ export const HostPowerNeedSchema = z.object({
 });
 export type HostPowerNeed = z.infer<typeof HostPowerNeedSchema>;
 
+// A project claimed for this sandbox (docs/architecture/account-routing.md): the owner's other sandboxes then report the
+// problems they see in it here (`projects report`), into this sandbox's issues inbox. Only the owner, signed in to the
+// platform, writes a claim, so the agent proposes it and the owner's press makes it; one sandbox per project on an
+// account, so a claim another sandbox held moves here.
+export const ClaimNeedSchema = z.object({
+    kind: z.literal("claim"),
+    project: z.string().min(1).describe("The project, as its repository: github.com/owner/repo."),
+    heldBy: z.string().optional().describe("The sandbox on the owner's account that claims it now, which a yes moves it from."),
+});
+export type ClaimNeed = z.infer<typeof ClaimNeedSchema>;
+
+// A person's leave for this sandbox to route as them into another one (docs/architecture/account-routing.md, 2026-11-24):
+// every scope but a report needs the pairing secret that person minted at the target and handed here, so the platform's
+// pass alone opens nothing but an inbox. Only that person can press it: their editor, signed in to both sandboxes, mints
+// the secret over there and stores it here. Met once this sandbox holds a secret for (target, person).
+export const RouteNeedSchema = z.object({
+    kind: z.literal("route"),
+    target: z.string().min(1).max(40).describe("The target sandbox's tunnel id."),
+    targetName: z.string().max(120).describe("Its name, as the platform gave it."),
+    person: z.string().min(1).max(254).describe("The one person this sandbox would route as, and the only one who can allow it."),
+    scopes: z.array(z.enum(PASS_SCOPES)).min(1).describe("What the routing is for: drop, read or task."),
+    address: z.string().max(400).optional().describe("The target's address, as the platform gave it, which the card reaches it at."),
+    from: z.string().max(40).optional().describe("This sandbox's own tunnel id, which the target keys the pairing on."),
+});
+export type RouteNeed = z.infer<typeof RouteNeedSchema>;
+
 export const NeedSubjectSchema = z
     .discriminatedUnion("kind", [
         CapabilityNeedSchema,
@@ -216,6 +243,8 @@ export const NeedSubjectSchema = z
         AutomationNeedSchema,
         InstructionNeedSchema,
         HostPowerNeedSchema,
+        ClaimNeedSchema,
+        RouteNeedSchema,
     ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;
@@ -278,6 +307,18 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
         kind: z.literal("instruction"),
         file: z.string().min(1).max(400).describe("The AGENTS.md, relative to the workspace root."),
         text: z.string().trim().min(1).max(INSTRUCTION_MAX).describe("The rule, as it should read in the file."),
+    }),
+    // The project as the agent has it: github.com/owner/repo or any remote URL of it; the daemon normalises it.
+    z.object({ kind: z.literal("claim"), project: z.string().trim().min(1).max(400).describe("The project's repository, or any remote URL of it.") }),
+    // The target as the agent has it (its name or id); the person is the one the raising conversation acts for, never named here.
+    z.object({
+        kind: z.literal("route"),
+        target: z.string().trim().min(1).max(120).describe("The sandbox to route into, by its name or id."),
+        scopes: z
+            .array(z.enum(PASS_SCOPES))
+            .min(1)
+            .optional()
+            .describe("What it is for: drop, read or task (all three when left out)."),
     }),
 ]);
 export type NeedAsk = z.infer<typeof NeedAskSchema>;

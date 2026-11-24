@@ -1,3 +1,4 @@
+import { accountOutboxDocument } from "./issues/account-outbox.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -63,13 +64,20 @@ test("prints one plan line naming its format, conversion set and verdict, and wr
         downgrade: false,
         failures: [],
         steps: [
+            { document: "account-outbox-off-workspace", change: `starts ${accountOutboxDocument.path} on the history volume with nothing waiting` },
             { document: "held-wakes-off-workspace", change: `starts ${heldWakesDocument.path} on the history volume with nothing held` },
             { document: "identity-off-workspace", change: `starts ${membersDocument.path} on the history volume with nobody on it` },
             { document: "passkeys-off-workspace", change: `starts ${passkeysDocument.path} on the history volume with no passkey in it` },
             { document: "safety-card-lines-to-owner-grants", change: `starts ${ownerGrantsDocument.path} with no line in it` },
         ],
         converts: [],
-        files: [join(history, heldWakesDocument.path, ".moved-from-workspace"), join(history, membersDocument.path), join(history, passkeysDocument.path), ownerGrants],
+        files: [
+            join(history, accountOutboxDocument.path, ".moved-from-workspace"),
+            join(history, heldWakesDocument.path, ".moved-from-workspace"),
+            join(history, membersDocument.path),
+            join(history, passkeysDocument.path),
+            ownerGrants,
+        ],
     });
     expect(await readdir(workspace)).toEqual([]);
     expect(await readdir(history)).toEqual([]);

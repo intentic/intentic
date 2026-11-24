@@ -5547,6 +5547,7 @@
             "lapsed": "zresetowano {resetsAt}, od tamtej pory nieodczytane",
             "measured": "zmierzono {measuredAt}",
             "missing": "niezgłaszane od {since}, pokazano ostatnią wartość",
+            "ranOutElsewhere": "Wyczerpane w innym sandboksie zalogowanym na to konto {when}.",
             "resets": "reset {resetsAt}",
             "runsOut": "w tym tempie skończy się {when}",
             "uncovered": "Brak zgłoszonego przydziału dla {models}: nie wiadomo, ile im zostało."
@@ -8471,7 +8472,8 @@
             "diskLow": "Dysk jest prawie pełny: wolne {free} ({percent}%)",
             "diskHostLimit": "Dysk Windows {drive} pod silnikiem sandboxa ma {free} wolnego miejsca",
             "diskReaped": "usunięto {bytes} wyników budowania z {count} zakończonego checkoutu | usunięto {bytes} wyników budowania z {count} zakończonych checkoutów",
-            "diskUsing": "najwięcej zajmuje {category} ({bytes})"
+            "diskUsing": "najwięcej zajmuje {category} ({bytes})",
+            "dropsReceived": "Czeka na Ciebie {count} przesyłka z innego sandboxa | Czekają na Ciebie {count} przesyłki z innych sandboxów | Czeka na Ciebie {count} przesyłek z innych sandboxów"
         },
         "sandboxBackupCard": {
             "detail": "Ten sandbox działa w chmurze, a na tym komputerze nie ma kopii jego plików. Synchronizacja z pulpitem utrzymuje tutejszy folder w zgodzie z nim, więc praca przetrwa wszystko, co stanie się z maszyną.",
@@ -11452,6 +11454,20 @@
             "openConnection": "Otwórz połączenie",
             "on": "Włączona",
             "off": "Wyłączona"
+        },
+        "sandboxReceivedCard": {
+            "heading": "Odebrane",
+            "whatFor": "Notatki i pliki, które inny sandbox, w którym jesteś, wysłał tutaj w Twoim imieniu. Nic się przez nie nie uruchomiło; przenieś pliki do folderu, aby nad nimi pracować.",
+            "fromAs": "Od {sandbox}, jako {person}",
+            "crossesOrg": "Pochodzi z innej organizacji",
+            "noNote": "Brak notatki",
+            "files": "Brak plików | {count} plik | {count} pliki | {count} plików",
+            "saidInto": "Przekazano też do {conversation}",
+            "folder": "Folder, do którego go przenieść",
+            "take": "Przenieś",
+            "delete": "Usuń",
+            "taken": "Skopiowano do {folder}: {files}",
+            "failed": "Nie udało się"
         }
     },
     "settings": {
@@ -11903,6 +11919,7 @@
             "saveFailed": "Nie udało się zapisać."
         },
         "settingsProjects": {
+            "suggested": "W repozytoriach {sandbox}, jeszcze nieprzypisany",
             "failed": "Nie udało się zmienić projektu",
             "reportsLandIn": "Zgłoszenia o nim trafiają do {sandbox}",
             "release": "Zwolnij",
@@ -12047,6 +12064,8 @@
                 "othersNote": "Też agenci {count} innej osoby | Też agenci {count} innych osób | Też agenci {count} innych osób",
                 "peopleTitle": "Wspólny sandbox",
                 "peopleNote": "Loguje się {count} inna osoba | Logują się {count} inne osoby | Loguje się {count} innych osób",
+                "projectsTitle": "Odpowiada za projekty",
+                "projectsNote": "Twoje inne sandboxy zgłaszają tutaj problemy, które widzą w {projects}.",
                 "fleetTitle": "Tworzy sandboksy",
                 "fleetYours": "Na twoim koncie",
                 "fleetOwner": "Na koncie właściciela"
@@ -14091,6 +14110,24 @@
             "approve": "Zatwierdź",
             "rebuildToFinish": "Zatwierdzone. {tool} pojawi się po przebudowie sandboxa.",
             "openRebuild": "Przebuduj"
+        },
+        "claim": {
+            "lead": "Przypisanie {project} do tego sandboxa sprawia, że problemy zgłaszane o nim przez Twoje inne sandboxy trafiają tutaj, do skrzynki zgłoszeń.",
+            "moves": "Teraz przypisany jest do {sandbox}; przypisanie przeniesie go tutaj.",
+            "approve": "Przypisz do tego sandboxa",
+            "ownerOnly": "Tylko właściciel sandboxa może przypisać projekt."
+        },
+        "route": {
+            "lead": "Zezwolenie pozwala tej piaskownicy działać jako {person} w {target}: {scopes}, z twoim własnym dostępem tam.",
+            "approve": "Zezwól",
+            "personOnly": "Czeka na {person}: tylko ta osoba może pozwolić tej piaskownicy działać w jej imieniu.",
+            "unreachable": "{target} nie ma wśród twoich piaskownic w tym edytorze: otwórz ją raz, a potem zezwól tutaj.",
+            "tooOld": "{target} działa na zbyt starej wersji, by ją sparować: najpierw ją zaktualizuj.",
+            "scopes": {
+                "drop": "wrzucać notatki i pliki do twojej skrzynki",
+                "read": "czytać to, co możesz czytać",
+                "task": "zaczynać pracę jako ty"
+            }
         },
         "instruction": {
             "approve": "Dodaj do {file}",

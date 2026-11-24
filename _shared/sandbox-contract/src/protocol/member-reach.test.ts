@@ -1,5 +1,5 @@
 import { ATTACHMENTS_DIR } from "../state/workspace-state.js";
-import { guestReach, memberRefusal, routeFloor } from "./member-reach.js";
+import { guestReach, memberRefusal, routeFloor, scopeRefusal } from "./member-reach.js";
 
 describe("routeFloor", () => {
     test("reads floor at viewer: fleet, transcripts, workspace files, git log", () => {
@@ -273,5 +273,44 @@ describe("a home-only member", () => {
             floor: "viewer",
             reason: "guest",
         });
+    });
+});
+
+describe("scopeRefusal", () => {
+    const guest = { tier: "guest", agents: "chat" } as const;
+    const viewer = { tier: "viewer" } as const;
+    const collaborator = { tier: "collaborator", agents: "run" } as const;
+    const handsOnly = { tier: "writer", agents: "off" } as const;
+    const homeOnly = { tier: "collaborator", agents: "home" } as const;
+
+    test("a report and a read admit anyone on the roster, a guest included", () => {
+        for (const caller of [guest, viewer, collaborator, handsOnly, homeOnly]) {
+            expect(scopeRefusal(caller, "report")).toBeUndefined();
+            expect(scopeRefusal(caller, "read")).toBeUndefined();
+        }
+    });
+
+    test("a drop is the collaborator's and up, never a guest's, and a writer whose agents are off may drop", () => {
+        expect(scopeRefusal(guest, "drop")).toMatchObject({ floor: "collaborator", reason: "guest" });
+        expect(scopeRefusal(viewer, "drop")).toMatchObject({ floor: "collaborator", reason: "floor" });
+        expect(scopeRefusal(collaborator, "drop")).toBeUndefined();
+        expect(scopeRefusal(handsOnly, "drop")).toBeUndefined();
+    });
+
+    test("a drop that wakes a conversation also needs running agents", () => {
+        expect(scopeRefusal(collaborator, "drop", { wake: true })).toBeUndefined();
+        expect(scopeRefusal(handsOnly, "drop", { wake: true })).toMatchObject({ reason: "agents-off" });
+        expect(scopeRefusal(homeOnly, "drop", { wake: true })).toMatchObject({ reason: "agents-off" });
+    });
+
+    test("a task needs running agents here, and neither a guest nor a home-only member gets one", () => {
+        // POST /agent is on the guest list, so memberRefusal alone would admit a guest: the scope names them apart.
+        expect(memberRefusal(guest, "POST", "/agent")).toBeUndefined();
+        expect(scopeRefusal(guest, "task")).toMatchObject({ reason: "guest" });
+        expect(scopeRefusal(homeOnly, "task")).toMatchObject({ reason: "agents-off" });
+        expect(scopeRefusal(viewer, "task")).toMatchObject({ reason: "floor" });
+        expect(scopeRefusal(handsOnly, "task")).toMatchObject({ reason: "agents-off" });
+        expect(scopeRefusal(collaborator, "task")).toBeUndefined();
+        expect(scopeRefusal({ tier: "owner" }, "task")).toBeUndefined();
     });
 });

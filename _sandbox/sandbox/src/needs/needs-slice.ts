@@ -28,6 +28,10 @@ import { capabilityNeed } from "./kinds/capability-need.js";
 import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";
 import { instructionNeed, type InstructionNeedDeps } from "./kinds/instruction-need.js";
+import { claimNeed } from "./kinds/claim-need.js";
+import { routeNeedOf } from "./kinds/route-need.js";
+import { projectOfRemote } from "../issues/account-outbox.js";
+import { claimedHere, holderOf } from "../issues/project-claims.js";
 import { resolveRealWithin } from "../workspace/files/workspace-files-paths.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { refuseInvalidAutomation, saveAutomation } from "../automations/automation-save.js";
@@ -280,6 +284,15 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             // On the main tree, the owner's own copy, never a conversation's checkout.
             instruction: instructionNeed(mainTreeFiles(workspaceRoot, whole)),
             "host-power": hostPowerNeedOf(whole),
+            // The platform's directory, asked over the connect token; the claim itself is the owner's press.
+            claim: claimNeed({
+                normalize: projectOfRemote,
+                claimedHere: () => claimedHere(whole().config),
+                holder: (project) => holderOf(whole().config, project),
+                ownerEmail: () => whole().ownerEmail(),
+            }),
+            // A person's leave to route as them into another sandbox; the pairing itself is their press.
+            route: routeNeedOf(whole),
         },
         logger,
         raisingConversation: (named) => liveRequestRun(whole().conversations)(named)?.conversationId,

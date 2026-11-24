@@ -42,6 +42,7 @@ import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { orgPolicyHttpRoutes } from "./org/org-policy-http.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { projectsHttpRoutes } from "./projects/projects.routes.js";
+import { poolSignalsHttpRoutes } from "./pool-signals/pool-signals.routes.js";
 import { googleConnectHttpRoutes } from "./google-connect/google-connect.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { repairRoutes } from "./repair/repair.routes.js";
@@ -552,8 +553,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
                 try {
                     return await options.next();
                 } catch (error) {
-                    // A client that vanished mid-request aborts the stream; oRPC's decode throws, and nobody is left to
-                    // log it for.
+                    // A client that vanished mid-request aborts the stream; oRPC's decode throws, and nobody is left to log it for.
                     if (options.request.signal?.aborted === true) {
                         throw error;
                     }
@@ -569,14 +569,14 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
     // The free trial's model API, mounted as its own sub-app; off (404s) unless TRIAL_KEYS is set.
     app.route(`/trial`, trialRoutes({ config, prisma }));
     app.route(`/api/repair`, repairRoutes({ config, prisma, auth }));
-
     // The hosted plan's one non-browser route, Stripe's webhook; off (404s) unless its Stripe keys are set.
     app.route(`/hosted-plan`, hostedPlanHttpRoutes({ config, prisma }));
 
-    // Sandbox doors that spend a platform-held key: the wallet (caps re-checked), Connect Google, report passes (projects/).
+    // Sandbox doors: the wallet (caps re-checked), Connect Google, report passes (projects/), shared run-outs (pool-signals/).
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
     app.route(`/google-connect`, googleConnectHttpRoutes({ config, prisma }));
     app.route(`/projects`, projectsHttpRoutes({ config, prisma }));
+    app.route(`/pool-signals`, poolSignalsHttpRoutes({ prisma }));
 
     // The provisioning door: an account-scoped API token rather than a session; rows and claims only, never a hosted machine.
     app.route(`/fleet`, fleetHttpRoutes({ config, prisma }));

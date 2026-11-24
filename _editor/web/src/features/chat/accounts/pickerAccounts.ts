@@ -17,9 +17,7 @@ import {
     accountState,
     formatReset,
     lastRefusalOf,
-    liveUsage,
     PLAN_LIMIT_BANDS,
-    planHeadroom,
     type PlanLimitBand,
     planLimitBand,
     planLimitBandLabel,
@@ -27,6 +25,7 @@ import {
     refusalFor,
     routedAccountFacts,
 } from "../../../models/providers/usageStatus";
+import { accountHeadroom } from "../../../models/providers/capacity/heardRunOut";
 import { accountsOf, refreshConnections, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
 import { useOperation } from "../../../workbench/operations/operations";
 import { mayRunOn, providerWithheld } from "../../../models/providers/aiReach";
@@ -219,7 +218,7 @@ const routedRowsOf = (family: AgentProvider, routed: KeyedProvider, model: Model
         return {
             name: entry.name,
             label: entry.label,
-            headroom: standing.offPlan ? undefined : planHeadroom(liveUsage(family, entry.name, entry.usage, model), model),
+            headroom: standing.offPlan ? undefined : accountHeadroom(family, entry.name, { attached: entry.usage, model }),
             state,
             ...standing,
             // Why it takes no turn where no clock answers it (a sign-in, a seat, a bench with no instant), and why it rests.
@@ -297,8 +296,8 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
             const standing = rowStanding(state, readable);
             return Object.assign({}, entry, standing, {
                 subtitle,
-                // liveUsage, not the streamed map alone: the row's own reading is usually the newer of the two.
-                headroom: standing.offPlan ? undefined : planHeadroom(liveUsage(family.value, entry.id, entry.usage, modelRef.value), modelRef.value),
+                // Its own reading beside the streamed map (liveUsage): the row's is usually the newer of the two.
+                headroom: standing.offPlan ? undefined : accountHeadroom(family.value, entry.id, { attached: entry.usage, model: modelRef.value }),
                 state,
                 // Why no turn runs on it (a lost seat outlives the turn it refused), unless the reconnect button already says
                 // so; any other refusal shows only while it stands, on the account it names.

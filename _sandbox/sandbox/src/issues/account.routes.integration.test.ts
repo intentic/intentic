@@ -15,7 +15,7 @@ import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
-import { automationConfig } from "../harness/route-stores.testing.js";
+import { automationConfig, memoryMembersStore } from "../harness/route-stores.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
@@ -55,7 +55,8 @@ const fakeServices = (root: string, key: string | undefined): Services =>
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
-        members: { list: async () => [], add: async () => {}, remove: async () => {} },
+        members: memoryMembersStore([{ email: "ada@acme.test", tier: "collaborator" }]),
+        ownerEmail: async () => "owner@acme.test",
         pushSender: unstubbed<Services["pushSender"]>("pushSender", {
             notify: async () => ({ delivered: 0, failed: 0 }),
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
@@ -121,6 +122,16 @@ test("a pass signed for this sandbox files the report under the intake, with the
     expect(turns[0]?.prompt).toContain('"reportedBy"');
 });
 
+test("a report across an organisation's line is filed with the line the pass names, and its wake says so", async () => {
+    const { issues, turns, post } = await setup({ automation: intake("bugs") });
+    const crossesOrg = { from: { id: "org_acme", name: "Acme" } };
+    const answer = await post(passFrom(OPS, { crossesOrg }), { report: problem() });
+    expect(answer.status).toBe(200);
+    await settled(() => turns.length === 1);
+    expect(await issues.read(answer.id ?? "")).toMatchObject({ sender: { sandboxId: OPS, crossesOrg } });
+    expect(turns[0]?.prompt).toContain('"crossesOrg"');
+});
+
 test("the same problem from several sandboxes, or folded repeats, is one issue that wakes once", async () => {
     const { issues, turns, post } = await setup({ automation: intake("bugs") });
     const first = await post(passFrom(OPS), { report: problem() });
@@ -163,4 +174,22 @@ test("refuses a missing pass, a pass for another sandbox, another key's pass, an
 test("asks the sender to retry while this sandbox has not learned the platform's key", async () => {
     const { post } = await setup({ key: undefined });
     expect((await post(passFrom(OPS), { report: problem() })).status).toBe(503);
+});
+
+test("a report pass naming a person this sandbox knows files them on the sender, and one it does not know is filed without", async () => {
+    const { issues, turns, post } = await setup({ automation: intake("bugs") });
+    const known = await post(passFrom(OPS, { person: "Ada@Acme.test" }), { report: problem() });
+    expect(known.status).toBe(200);
+    await settled(() => turns.length === 1);
+    expect(await issues.read(known.id ?? "")).toMatchObject({ sender: { sandboxId: OPS, person: "ada@acme.test" } });
+    expect(turns[0]?.title).toContain("From ops for ada@acme.test");
+    const stranger = await post(passFrom(OPS, { person: "eve@elsewhere.test", project: "github.com/acme/site" }), { report: problem() });
+    expect(stranger.status).toBe(200);
+    expect((await issues.read(stranger.id ?? ""))?.sender).not.toHaveProperty("person");
+});
+
+test("a pass for another scope does not open the report door", async () => {
+    const { post } = await setup({ automation: intake("bugs") });
+    const drop = passFrom(OPS, { scope: "drop", project: undefined, person: "ada@acme.test" });
+    expect((await post(drop, { report: problem() })).status).toBe(401);
 });

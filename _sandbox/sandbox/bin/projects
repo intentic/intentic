@@ -4,9 +4,8 @@
 // now, or kept and retried while that sandbox is asleep or offline. It lands in that sandbox's issues inbox, grouped
 // with every other report of the same problem, and wakes its agent only by the inbox's own rule.
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { call, die, parseArgs, refusalOf } from "./needs-cli.mjs";
+import { call, die, parseArgs, raise, refusalOf, WAIT_HELP } from "./needs-cli.mjs";
 
 const COMMAND = "projects";
 
@@ -18,10 +17,20 @@ const USAGE = `projects — report problems to the sandbox on your account that 
                                  remote URL of it). Same problem twice is one issue over there with a count.
   projects outbox                reports still waiting for their sandbox to come back, and why
   projects suggest               the projects this workspace's repos could claim, from their git remotes
+  projects claim <project> [--why "…"] [--wait <seconds>]
+                                 ask the owner, on a card in this chat, to claim <project> for THIS sandbox, so the
+                                 owner's other sandboxes report its problems here. Only the owner's press makes a claim;
+                                 one another sandbox held moves here.
+  projects allow <sandbox> [--scopes drop,read,task] [--why "…"] [--wait <seconds>]
+                                 ask the person this conversation acts for, on a card in this chat, to let THIS sandbox
+                                 act as them in <sandbox> (its name or id). Only their own press pairs the two; a report
+                                 needs no pairing.
 
 A report is delivered now or kept and retried for a week; you need not retry it yourself. It wakes nobody over there
 until it is new or recurs past the inbox's threshold. Report what the owning project must fix (an API answering 500,
-a broken release, wrong docs), not your own task's progress.`;
+a broken release, wrong docs), not your own task's progress.
+
+${WAIT_HELP}`;
 
 const out = (line) => process.stdout.write(`${line}\n`);
 
@@ -37,7 +46,8 @@ const mine = async () => {
     const { projects } = await getJson("/account/projects");
     if (projects.length === 0) {
         out("This sandbox claims no project, so no other sandbox can report to it.");
-        out("The owner claims one in the app (Settings ▸ Projects); `projects suggest` lists this workspace's candidates.");
+        out("`projects claim <project>` asks the owner to claim one on a card here (or they claim it in Settings ▸ Projects);");
+        out("`projects suggest` lists this workspace's candidates.");
         return;
     }
     out("Reports about these projects land in this sandbox's issues inbox:");
@@ -91,65 +101,47 @@ const outbox = async () => {
     }
 };
 
-// A remote here is the credential broker's loopback address, whose payload names the real upstream (the daemon's
-// account-outbox.ts projectOfRemote reads it the same way).
-const unbrokered = (remote) => {
-    const match = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\/(.+)$/.exec(remote.trim());
-    if (match === null) {
-        return remote;
-    }
-    try {
-        const { u } = JSON.parse(Buffer.from(match[1], "base64url").toString("utf8"));
-        return typeof u === "string" ? `${u.replace(/\/+$/, "")}/${match[2]}` : remote;
-    } catch {
-        // allow(silent-catch): an address that is not the broker's keeps its own spelling.
-        return remote;
-    }
-};
-
-// Remotes of the workspace's repos, normalized the way the platform keys claims (github.com/owner/repo).
-const suggest = () => {
-    const root = process.env.INTENTIC_WORKSPACE ?? "/work";
-    let listing = "";
-    try {
-        listing = execFileSync("git", ["-C", root, "submodule", "foreach", "--quiet", "--recursive", "git remote get-url origin || true"], { encoding: "utf8" });
-    } catch {
-        // allow(silent-catch): a workspace that is no repository has no submodules to ask; its own remote is tried below.
-    }
-    const remotes = new Set(listing.split("\n").filter(Boolean));
-    const dirs = execFileSync("find", [root, "-maxdepth", "3", "-name", ".git", "-not", "-path", "*/node_modules/*", "-not", "-path", `${root}/refs/*`], {
-        encoding: "utf8",
-    })
-        .split("\n")
-        .filter(Boolean)
-        .map((dotGit) => dotGit.replace(/\/\.git$/, ""));
-    for (const dir of dirs) {
-        try {
-            remotes.add(execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], { encoding: "utf8" }).trim());
-        } catch {
-            // allow(silent-catch): a repo with no origin has no project id to suggest.
-        }
-    }
-    const projects = [...remotes]
-        .map(unbrokered)
-        .map((remote) =>
-            remote
-                .trim()
-                .replace(/^[^@/\s]+@([^:/\s]+):/, "$1/")
-                .replace(/^[a-z+]+:\/\/([^@/]*@)?/i, "")
-                .replace(/\.git$/i, "")
-                .replace(/\/+$/, "")
-                .toLowerCase(),
-        )
-        .filter((project) => /^[a-z0-9.-]+\.[a-z]{2,}(\/[a-z0-9._~-]+)+$/.test(project));
+// Remotes of the workspace's repos, normalized the way the platform keys claims (github.com/owner/repo), read by the
+// daemon (issues/project-suggestions.ts) so Settings ▸ Projects offers the same list.
+const suggest = async () => {
+    const { projects } = await getJson("/account/projects/suggest");
     if (projects.length === 0) {
         out("No repo in this workspace has a remote to claim.");
         return;
     }
-    out("Projects this workspace's repos could claim (the owner claims one in the app, Settings ▸ Projects):");
-    for (const project of [...new Set(projects)].sort()) {
+    out("Projects this workspace's repos could claim (`projects claim <project>` asks the owner on a card):");
+    for (const project of projects) {
         out(`  ${project}`);
     }
+};
+
+// A claim is the owner's to make (the platform takes it only from their own sign-in), so this raises the card that asks
+// them; the daemon normalises the project and says when it is already this sandbox's.
+const claim = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait"] });
+    const [project, ...extra] = rest;
+    if (project === undefined || extra.length > 0) {
+        return die(COMMAND, `claim takes one project: projects claim github.com/owner/repo\n\n${USAGE}`);
+    }
+    await raise(COMMAND, { kind: "claim", project }, flags);
+};
+
+// Routing as a person into another sandbox needs that person's pairing (account-routing.md), which only their press gives:
+// this raises the card asking them; the daemon names the person (the one this conversation acts for) and the target.
+const SCOPES = new Set(["drop", "read", "task"]);
+const allow = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait", "scopes"] });
+    const [target, ...extra] = rest;
+    if (target === undefined || extra.length > 0) {
+        return die(COMMAND, `allow takes one sandbox: projects allow <name or id>\n\n${USAGE}`);
+    }
+    const { scopes: listed, ...raising } = flags;
+    const scopes = listed === undefined ? undefined : listed.split(",").map((scope) => scope.trim()).filter((scope) => scope !== "");
+    const unknown = (scopes ?? []).filter((scope) => !SCOPES.has(scope));
+    if (unknown.length > 0) {
+        return die(COMMAND, `--scopes takes drop, read and task, not ${unknown.join(", ")}`);
+    }
+    await raise(COMMAND, scopes === undefined ? { kind: "route", target } : { kind: "route", target, scopes }, raising);
 };
 
 const main = async () => {
@@ -169,6 +161,12 @@ const main = async () => {
     }
     if (verb === "suggest") {
         return suggest();
+    }
+    if (verb === "claim") {
+        return claim(args);
+    }
+    if (verb === "allow") {
+        return allow(args);
     }
     die(COMMAND, `unknown command "${verb}"\n\n${USAGE}`);
 };

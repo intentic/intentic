@@ -84,6 +84,8 @@ const harness = (): Harness => {
         automation: handler,
         instruction: handler,
         "host-power": { ...handler, tellsAgent: false },
+        claim: handler,
+        route: handler,
     };
     let next = 0;
     const deps: NeedsDeps = {

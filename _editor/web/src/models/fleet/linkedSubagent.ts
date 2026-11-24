@@ -5,7 +5,9 @@ import { linkedSandboxesHref } from "../sandbox/sandboxNav";
 // lives over there. Its row opens that conversation in the other sandbox (`/?sandbox=<id>&conversation=<id>`, which the
 // router's arrival rule turns into a switch to that sandbox), in a window of its own so this one stays where it was.
 // While it waits for that sandbox's owner to let it start, there is no conversation to read yet: the row opens the
-// Linked sandboxes section of that sandbox's Access page instead, where its Allow and Decline are.
+// Linked sandboxes section of that sandbox's Access page instead, where its Allow and Decline are. One handed over as
+// the person (`via: "person"`, 2026-11-24) never waits there: it is that person's own conversation, which they read in
+// that sandbox, so its row always opens it.
 
 /** The address a linked task's row opens in its own sandbox; undefined for any other row, or one whose sandbox is unknown. */
 export const linkedConversationHref = (session: Pick<SubagentSession, "kind" | "linked" | "status">): string | undefined => {
@@ -13,7 +15,7 @@ export const linkedConversationHref = (session: Pick<SubagentSession, "kind" | "
     if (far?.sandboxId === undefined) {
         return undefined;
     }
-    if (session.status === `pending`) {
+    if (session.status === `pending` && far.via !== `person`) {
         return linkedSandboxesHref(far.sandboxId);
     }
     return `/?${new URLSearchParams({ sandbox: far.sandboxId, conversation: far.conversationId }).toString()}`;

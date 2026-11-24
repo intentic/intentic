@@ -18,6 +18,10 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     instruction: `book`,
     // A computer that would sleep through booked work: the glyph the Devices page gives a sleeping machine.
     "host-power": `moon`,
+    // A project claimed so the owner's other sandboxes report its problems here: the Settings ▸ Projects row's glyph.
+    claim: `folder`,
+    // A person's leave for this sandbox to act as them in another: the glyph linked sandboxes wear.
+    route: `link`,
 };
 
 // The header chip of a need that is no longer waiting; undefined while it is, since the card's own buttons say that.

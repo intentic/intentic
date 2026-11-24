@@ -1,6 +1,6 @@
 ---
 name: links
-description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell) and supervise it like a subagent, read its records, or operate it directly (`mcp__<sandbox>__run_command`, `read_file`, `write_file`) to look into or repair that sandbox itself. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its role) or is that sandbox's own state, not for more hands on this sandbox's own work, which is `spawn`.
+description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell), or to a sandbox the person you work for is in, as them (`delegate(to)`, `agents delegate --to`), and supervise it like a subagent, read its records, or operate it directly (`mcp__<sandbox>__run_command`, `read_file`, `write_file`) to look into or repair that sandbox itself. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its role) or is that sandbox's own state, not for more hands on this sandbox's own work, which is `spawn`.
 ---
 
 # Linked sandboxes
@@ -49,6 +49,11 @@ its inbound link; `agents links` and `about` say whether it does):
 Every conversation but a private one is readable, read-only, and each read is logged over there. A link that does not
 share records answers so; turning it on is that sandbox's owner's, never yours.
 
+With no link by that name, `agents ls|find|show|bundle --on <sandbox>` and `diagnostics … --on <sandbox>` read it as the
+person this conversation acts for instead, when that person is in both sandboxes: you see only what they may read there,
+never a private conversation they are not a reader of, and diagnostics only if they are a maintainer there. The first
+read raises a card asking that person to allow it (`projects allow <sandbox>` asks ahead); nothing is read until they do.
+
 ## Operating it: when the problem is that sandbox itself
 
 A delegated task is the wrong tool for repairing the other sandbox. Its turn works in **a checkout of its own** over
@@ -92,19 +97,46 @@ sandboxes, never yours: say what you would have run there, and why.
 
 ## Limits that hold everywhere
 
-- A task crosses at most **two links**. A task that came here over a link may be handed on once more; past that
-  it is refused on both sides, so two sandboxes cannot pass one task back and forth.
+- A task crosses at most **two links**, a hand-over as the person counting as one. A task that came here over a link
+  or as a person may be handed on once more; past that it is refused on both sides, so two sandboxes cannot pass one
+  task back and forth.
 - A link's tasks reach **only the conversations they opened** over there; its other conversations are readable only
   through its records, while its owner shares them, and its files only through operating it, while its owner allows that.
 - Your role picks linked sandboxes on its **devices** list, beside computers, and handing one work also needs its
   **delegate** shelf, as `spawn` does; a turn started by outside content may not hand work on. The people this
   conversation works for must have been given the link card.
 
-## Reporting a problem is not a task
+## Delegating as the person, with no link
+
+When the person this conversation works for is in the other sandbox too (a member there, or its owner), you can hand it a
+task **as them** without any link: `delegate(to: "<sandbox>", task, description)` on the `subagents` tools, or
+`agents delegate --to <sandbox> --description "…" '<task>'` from a shell.
+
+- It runs over there as **their own conversation**: their access to that sandbox, their folders, their accounts, and it
+  lands by their rules. They read it there. Its id is a `linked-…` subagent like a link's, so `wait`, `send`, `answer`
+  and `cancel` reach it the same way, and a plain question it asks waits for you; any other card waits for them.
+- The **first time** for a sandbox, a card asks the person to allow this sandbox to act as them there. The answer is
+  `open` (exit 3 from the shell) and nothing was sent: carry on with what does not need it, and hand it over again once
+  they have pressed Allow.
+- Only a conversation working for **one** person can do this. One several people share must use a link.
+- It offers no `operate`, which stays a link's, on its owner's terms. Reading that sandbox's records as them is `agents … --on <sandbox>` (below).
+
+Pick a link for unattended work under that sandbox's own role, for a sandbox the person is not in, or to operate
+it; pick `--to` for the person's own work in a sandbox they are already in.
+
+## Reporting a problem or handing over files is not a task
 
 To tell the sandbox that owns a project about something you saw there, use `projects report <project> --title "…"`, not a
 link. It needs no link, starts no turn over there, and folds repeats into one issue in that sandbox's inbox; that
-sandbox's own rule decides when it wakes an agent. A link is for work that needs what only that sandbox has.
+sandbox's own rule decides when it wakes an agent.
+
+To hand a note and files to another sandbox the person you act for is in, use a drop: `sandboxes send <sandbox> [files…]
+--note "…"`. It lands in that sandbox's inbox (`inbox` over there, and its editor's Received list) and starts nothing;
+`--wake <conversation>` also says the note into that person's own conversation there, only while a turn of it runs. Like
+a read as the person, it needs their leave once, on a card (exit 3 while it waits).
+
+So: a report for a problem the owning project must fix, a drop for material someone over there will work on, a link task
+for work that needs what only that sandbox has.
 
 ## When there is no link
 

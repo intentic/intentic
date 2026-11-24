@@ -5547,6 +5547,7 @@
             "lapsed": "se reinició {resetsAt}, sin leer desde entonces",
             "measured": "medido {measuredAt}",
             "missing": "sin informar desde {since}, se muestra la última cifra",
+            "ranOutElsewhere": "Se agotó en otra sandbox con la sesión iniciada en esta cuenta {when}.",
             "resets": "se reinicia {resetsAt}",
             "runsOut": "a este ritmo se agota {when}",
             "uncovered": "No se informa ninguna asignación para {models}: se desconoce cuánto les queda."
@@ -6445,6 +6446,24 @@
             "approve": "Aprobar",
             "rebuildToFinish": "Aprobado. {tool} llega cuando se reconstruya el sandbox.",
             "openRebuild": "Reconstruir"
+        },
+        "claim": {
+            "lead": "Al reclamar {project} para este sandbox, los problemas que tus otros sandboxes informen sobre él llegan aquí, a su bandeja de incidencias.",
+            "moves": "{sandbox} lo reclama ahora; reclamarlo lo trae aquí.",
+            "approve": "Reclamar para este sandbox",
+            "ownerOnly": "Solo el propietario del sandbox puede reclamar un proyecto."
+        },
+        "route": {
+            "lead": "Permitirlo deja que este sandbox actúe como {person} en {target}: {scopes}, con tu propio acceso allí.",
+            "approve": "Permitir",
+            "personOnly": "Esperando a {person}: solo esa persona puede permitir que este sandbox actúe en su nombre.",
+            "unreachable": "{target} no está entre tus sandboxes en este editor: ábrelo una vez y luego permítelo aquí.",
+            "tooOld": "{target} ejecuta una versión demasiado antigua para emparejar: actualízalo primero.",
+            "scopes": {
+                "drop": "dejar notas y archivos en tu bandeja",
+                "read": "leer lo que puedes leer",
+                "task": "iniciar trabajo como tú"
+            }
         },
         "instruction": {
             "approve": "Añadir a {file}",
@@ -9000,7 +9019,8 @@
             "diskLow": "El disco está casi lleno: {free} libres ({percent} %)",
             "diskHostLimit": "La unidad de Windows {drive} bajo el motor del sandbox tiene {free} libres",
             "diskReaped": "se quitaron {bytes} de resultados de compilación de {count} checkout terminado | se quitaron {bytes} de resultados de compilación de {count} checkouts terminados",
-            "diskUsing": "{category} es lo que más ocupa ({bytes})"
+            "diskUsing": "{category} es lo que más ocupa ({bytes})",
+            "dropsReceived": "{count} envío de otro sandbox te espera | {count} envíos de otros sandboxes te esperan"
         },
         "sandboxBackupCard": {
             "detail": "Este sandbox se ejecuta en la nube y nada en este ordenador guarda una copia de sus archivos. La sincronización de escritorio mantiene aquí una carpeta a la par, para que el trabajo sobreviva a lo que le pase a la máquina.",
@@ -12057,6 +12077,20 @@
             "openConnection": "Abrir su conexión",
             "on": "Activada",
             "off": "Desactivada"
+        },
+        "sandboxReceivedCard": {
+            "heading": "Recibido",
+            "whatFor": "Notas y archivos que otro sandbox en el que estás envió aquí en tu nombre. No se ejecutó nada por ellos; lleva los archivos a una carpeta para trabajar con ellos.",
+            "fromAs": "De {sandbox}, como {person}",
+            "crossesOrg": "Viene de otra organización",
+            "noNote": "Sin nota",
+            "files": "Sin archivos | {count} archivo | {count} archivos",
+            "saidInto": "También se dijo en {conversation}",
+            "folder": "Carpeta a la que llevarlo",
+            "take": "Tomar",
+            "delete": "Eliminar",
+            "taken": "Copiado en {folder}: {files}",
+            "failed": "No funcionó"
         }
     },
     "settings": {
@@ -12508,6 +12542,7 @@
             "saveFailed": "No se pudo guardar."
         },
         "settingsProjects": {
+            "suggested": "En los repositorios de {sandbox}, aún sin reclamar",
             "failed": "No se pudo cambiar el proyecto",
             "reportsLandIn": "Los informes sobre él llegan a {sandbox}",
             "release": "Liberar",
@@ -12652,6 +12687,8 @@
                 "othersNote": "También los agentes de {count} persona más | También los agentes de {count} personas más",
                 "peopleTitle": "Sandbox compartido",
                 "peopleNote": "{count} persona más inicia sesión | {count} personas más inician sesión",
+                "projectsTitle": "Responde por proyectos",
+                "projectsNote": "Tus otros sandboxes informan aquí los problemas que ven en {projects}.",
                 "fleetTitle": "Crea sandboxes",
                 "fleetYours": "En tu cuenta",
                 "fleetOwner": "En la cuenta de su dueño"

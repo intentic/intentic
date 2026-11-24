@@ -393,7 +393,42 @@ const spawningTools = (deps: SubagentWaitDeps): ServerTool[] => [
         // Commits a provider's allowance to a new agent, and nothing later gives it back.
         { annotations: toolAnnotations("destructive") },
     ),
+    delegateTool(deps),
 ];
+
+// Handing a task to another sandbox as the person this conversation works for (links/linked-destinations.ts,
+// 2026-11-24): no link card, so it lives here beside spawn; a link card keeps its own `mcp__<card>__delegate`.
+const delegateTool = (deps: SubagentWaitDeps): ServerTool =>
+    sdk().tool(
+        "delegate",
+        "Hand a task to another sandbox the person you work for is in, as them: no link needed. It runs there in a " +
+            "conversation of its own with that person's access to that sandbox, its repos, connections and their accounts, " +
+            "and lands there by their rules, never in your checkout; the person reads it there. Reach for it when the work " +
+            "belongs in that sandbox; for more hands on this one's work, spawn instead, and for unattended work under another " +
+            "sandbox's own terms, or a sandbox the person is not in, use its link's delegate. The first hand-over to a " +
+            "sandbox raises a card asking the person to allow it: the answer is `open`, nothing was sent; carry on and call " +
+            "again once they have. Returns a subagent id at once: supervise it with wait, follow up with send, answer its " +
+            "questions with answer, stop it with cancel. Give it a self-contained task: it sees none of this conversation, " +
+            "and its closing report, read as outside content, is all that comes back.",
+        {
+            to: z.string().min(1).describe("The sandbox's name or id, as the person knows it."),
+            task: z.string().min(1).describe("The whole task, self-contained."),
+            description: z.string().max(200).optional().describe("One line naming the task, for the board on both sides."),
+        },
+        async (args) => {
+            const children = deps.children;
+            if (children === undefined) {
+                return answer({ ok: false, message: "This turn may not hand work on: it was started by outside content, or its role does not delegate." });
+            }
+            const result = await children.delegate({ to: args.to, via: "person", task: args.task, description: args.description });
+            if (result.ok) {
+                return answer({ ok: true, child: result.id, ...opt("note", result.note) });
+            }
+            return answer(result.open === undefined ? { ok: false, message: result.message } : { ok: false, state: "open", need: result.open, message: result.message });
+        },
+        // Starts work in another sandbox, on that person's allowance there, which nothing here can take back.
+        { annotations: toolAnnotations("destructive") },
+    );
 
 // Steering children once they run: words, a stop, an answer, and bringing in or settling their held work.
 const steeringTools = (children: ChildSupervisor): ServerTool[] => [

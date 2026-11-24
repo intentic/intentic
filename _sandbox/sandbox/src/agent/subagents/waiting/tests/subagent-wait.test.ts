@@ -65,6 +65,7 @@ test("a delegating turn's server lists wait, keep and stop beside every supervis
     await expect(toolNames(serverWith(unstubbed<ChildSupervisor>("children", {})))).resolves.toEqual([
         "providers",
         "spawn",
+        "delegate",
         "send",
         "cancel",
         "answer",
@@ -169,6 +170,27 @@ test("a child given a result schema lists a result tool taking that shape, and a
         { ok: true, note: "Recorded: your parent receives this value with your report. End your turn with a short report." },
     ]);
     expect(taken).toEqual([{ verdict: "real" }]);
+});
+
+// 2026-11-24: `delegate` here always routes as the person the conversation works for; a refusal that raised their
+// pairing card answers `open` with the need, as every need-raising call does.
+test("delegate hands the task on as the person, and answers open while their card asks", async () => {
+    const asked: unknown[] = [];
+    const children = unstubbed<ChildSupervisor>("children", {
+        delegate: async (ask) => {
+            asked.push(ask);
+            return asked.length === 1 ? { ok: false, message: "A card asks them now.", open: "need-1" } : { ok: true, id: "linked-x", note: "Handed to ops." };
+        },
+    });
+    const call = await connect(serverWith(children));
+    const first = await call("tools/call", { name: "delegate", arguments: { to: "ops", task: "Check the build." } });
+    expect(first.result?.content?.[0]?.text).toBe(JSON.stringify({ ok: false, state: "open", need: "need-1", message: "A card asks them now." }));
+    const second = await call("tools/call", { name: "delegate", arguments: { to: "ops", task: "Check the build." } });
+    expect(second.result?.content?.[0]?.text).toBe(JSON.stringify({ ok: true, child: "linked-x", note: "Handed to ops." }));
+    expect(asked).toEqual([
+        { to: "ops", via: "person", task: "Check the build.", description: undefined },
+        { to: "ops", via: "person", task: "Check the build.", description: undefined },
+    ]);
 });
 
 test("spawn passes a result schema on, and refuses one that is no JSON object before spawning anything", async () => {

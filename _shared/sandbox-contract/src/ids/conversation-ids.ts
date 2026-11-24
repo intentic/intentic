@@ -52,13 +52,15 @@ const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => pick(TAIL_S
 // A fresh id: `<word>-<tail>`, e.g. `otter-k7mq`; about ten characters against a UUID's thirty-six.
 export const newConversationId = (): string => `${pick(CONVERSATION_WORDS)}-${tail()}`;
 
-// A DRAWN ID WORN UNDER A PREFIX. Three kinds of conversation draw an id like any other and say what they are in front
-// of it: a spawned subagent (`sub-otter-k7mq`), a conversation a link opened here (`link-…`) and the roster entry for a
-// task running on a linked sandbox (`linked-…`). Kept here beside the word list, since no word may read as one of them.
+// A DRAWN ID WORN UNDER A PREFIX. Four kinds of conversation draw an id like any other and say what they are in front
+// of it: a spawned subagent (`sub-otter-k7mq`), a conversation a link opened here (`link-…`), one another sandbox opened
+// here acting for one of its people (`route-…`, 2026-11-24) and the roster entry for a task running on another sandbox
+// (`linked-…`). Kept here beside the word list, since no word may read as one of them.
 export const SUBAGENT_PREFIX = "sub-";
 export const LINK_CONVERSATION_PREFIX = "link-";
+export const ROUTE_CONVERSATION_PREFIX = "route-";
 export const LINKED_PREFIX = "linked-";
-const WRAPPING_PREFIXES = [SUBAGENT_PREFIX, LINK_CONVERSATION_PREFIX, LINKED_PREFIX];
+const WRAPPING_PREFIXES = [SUBAGENT_PREFIX, LINK_CONVERSATION_PREFIX, ROUTE_CONVERSATION_PREFIX, LINKED_PREFIX];
 const unwrapped = (id: string): string => {
     const prefix = WRAPPING_PREFIXES.find((candidate) => id.startsWith(candidate));
     return prefix === undefined ? id : id.slice(prefix.length);

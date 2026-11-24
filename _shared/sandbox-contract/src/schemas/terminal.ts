@@ -402,6 +402,12 @@ export const SubagentSessionSchema = z.object({
             sandbox: z.string().describe("What that sandbox is called."),
             sandboxId: z.string().optional().describe("That sandbox's id on the owner's account, when the card knows it."),
             conversationId: z.string().describe("The conversation it opened there."),
+            via: z
+                .literal("person")
+                .optional()
+                .describe(
+                    "Handed over as the person the asking conversation acts for, not over a link card: that person is in the conversation there and reads it, and nothing waits for that sandbox's owner to allow it.",
+                ),
         })
         .optional()
         .describe("For a task handed to another sandbox: which one, and the conversation it runs in there."),

@@ -1,6 +1,7 @@
 import { OrgPolicySchema } from "@intentic/sandbox-contract/schemas/organisation";
 import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
+import { PASS_SCOPES } from "@intentic/sandbox-contract/protocol/doors/pass-scopes";
 import { TrialStatusSchema } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { z } from "zod";
 
@@ -529,8 +530,52 @@ export const ProjectResolvedSchema = z.object({
     address: HttpsUrlSchema,
     pass: z.string().min(1),
     expiresAt: z.string(),
+    // Present only when the two sandboxes are not in the same organisation: allowed, and said, so each side can label it.
+    crossesOrg: z
+        .object({
+            from: z.object({ id: z.string(), name: z.string() }).optional(),
+            to: z.object({ id: z.string(), name: z.string() }).optional(),
+        })
+        .optional(),
 });
 export type ProjectResolved = z.infer<typeof ProjectResolvedSchema>;
+
+// `POST /projects/route`: account-level routing as a person (docs/architecture/account-routing.md). The sending sandbox
+// (its connect token) asks for a pass to another sandbox, for one scope. `person` is the one person the request routes as,
+// whom the platform must find on the calling sandbox (owner, or an accepted member) and on the target; it is required for
+// every scope but `report`, where it is optional attribution. A report names the `project` (its claim decides the target,
+// among the sandboxes the person reaches, or the caller's owner's when no person is named); every other scope names the
+// target `sandbox` by its tunnel id, its platform id or its name. Several claims of one project across owners answer 409
+// with `candidates`, for the sender to name one.
+export const RouteResolveBodySchema = z.object({
+    scope: z.enum(PASS_SCOPES),
+    person: z.string().trim().toLowerCase().email().max(254).optional(),
+    project: z.string().min(1).max(200).optional(),
+    sandbox: z.string().min(1).max(120).optional(),
+});
+export type RouteResolveBody = z.input<typeof RouteResolveBodySchema>;
+export const RouteResolvedSchema = z.object({
+    scope: z.enum(PASS_SCOPES),
+    project: z.string().optional(),
+    sandboxId: z.string().regex(SANDBOX_ID),
+    name: z.string(),
+    address: HttpsUrlSchema,
+    pass: z.string().min(1),
+    expiresAt: z.string(),
+    crossesOrg: z
+        .object({
+            from: z.object({ id: z.string(), name: z.string() }).optional(),
+            to: z.object({ id: z.string(), name: z.string() }).optional(),
+        })
+        .optional(),
+});
+export type RouteResolved = z.infer<typeof RouteResolvedSchema>;
+// The 409 body when a project is claimed by more than one sandbox the person reaches.
+export const RouteCandidatesSchema = z.object({
+    error: z.string(),
+    candidates: z.array(z.object({ sandboxId: z.string().regex(SANDBOX_ID), name: z.string() })),
+});
+export type RouteCandidates = z.infer<typeof RouteCandidatesSchema>;
 
 // `POST /projects/mine`: the projects the calling sandbox claims, for its own CLI and inbox.
 export const ProjectClaimsSchema = z.object({ projects: z.array(z.string()) });

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { Capability, LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
 import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
-import { LINKED_PREFIX, newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { LINKED_PREFIX, newConversationId, ROUTE_CONVERSATION_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import type { LinkListing } from "./link-listing.js";
@@ -23,10 +23,11 @@ import type { ConversationActors } from "../conversations/actor/conversation-act
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 import { conversationTaintSource, markConversationTaint, taintWords } from "../guard/turn-taint.js";
 import { opt } from "../opt.js";
-import { type LinkAnswerOf, linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop, type LinkTarget } from "../sandboxes/link-client.js";
+import { type LinkAnswerOf, linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop } from "../sandboxes/link-client.js";
 import { askedOf, type AskedChild, childrenFile, type ChildrenFile, type StoredChild } from "./linked-children-store.js";
 import { LINK_CONVERSATION_PREFIX } from "./link-tasks.js";
 import { answeringWire, createLinkBackoff, type LinkBackoff, nextRetry } from "./link-backoff.js";
+import { cardDestination, type Destination, isLinkCard, type PersonRoutes, personDestination, sandboxNameOf, targetFor, unreachedWords } from "./linked-destinations.js";
 
 // THE ASKING SIDE OF A LINK: a task this sandbox's agent handed to another of the owner's sandboxes (`delegate`), kept on
 // the parent's roster as a `linked` subagent so `wait`, `send`, `answer` and `cancel` reach it the way they reach a child
@@ -51,8 +52,10 @@ const HELLO_MS = 8_000;
 const FAMILY_WALK = 32;
 
 export interface DelegateAsk {
-    // The link card's id: the agent's name for the other sandbox.
+    // The link card's id: the agent's name for the other sandbox; with `via: "person"`, a sandbox's name or id that the
+    // person this conversation acts for is in (linked-destinations.ts).
     readonly to: string;
+    readonly via?: "person" | undefined;
     readonly task: string;
     readonly description?: string | undefined;
 }
@@ -84,6 +87,8 @@ export interface LinkedChildrenDeps {
     readonly historyPath: string;
     // The wire, injectable so a test can stand the far sandbox in.
     readonly wire?: LinkWire;
+    // Handing work on as the person a conversation acts for (person-routes.ts); absent, only link cards take tasks.
+    readonly personRoutes?: PersonRoutes;
 }
 
 export interface LinkedChildren {
@@ -111,8 +116,6 @@ interface Live {
     following: AbortController | undefined;
 }
 
-type LinkCard = Extract<Capability, { kind: "link" }>;
-
 // Everything the engine's parts share: its deps, the wire, every task it knows, its file, and whether it has closed.
 interface Engine extends ChildrenFile {
     readonly deps: LinkedChildrenDeps;
@@ -121,12 +124,6 @@ interface Engine extends ChildrenFile {
     readonly live: Map<string, Live>;
     readonly state: { closed: boolean };
 }
-
-const isLinkCard = (capability: Capability): capability is LinkCard => capability.kind === "link";
-
-const targetOf = (card: LinkCard): LinkTarget => ({ id: card.id, config: card.config });
-
-const sandboxNameOf = (card: { readonly id: string; readonly config: LinkConfig }): string => card.config.name ?? card.id;
 
 /** Where a linked task's work goes, in its parent's words. */
 export const linkedLandingWords = (sandbox: string): string =>
@@ -147,19 +144,13 @@ const taintOf = (conversationId: string): string | undefined => {
 const birthOf = (stored: AskedChild, status: LinkedChildBirth["status"], again: boolean): LinkedChildBirth => ({
     id: stored.id,
     ...opt("description", stored.description),
-    linked: { link: stored.link, sandbox: stored.sandbox, ...opt("sandboxId", stored.sandboxId), conversationId: stored.remote },
+    linked: { link: stored.link, sandbox: stored.sandbox, ...opt("sandboxId", stored.sandboxId), conversationId: stored.remote, ...opt("via", stored.via) },
     status,
     ...opt("again", again ? (true as const) : undefined),
 });
 
 const openRecord = (engine: Engine, stored: AskedChild, status: LinkedChildBirth["status"], again: boolean): void =>
     openLinkedChild({ conversationId: stored.parent, conversations: engine.deps.conversations, subagentsDir: undefined }, birthOf(stored, status, again));
-
-// The card a task went through: by its name, else by its address, which a rename leaves alone.
-const cardFor = async (engine: Engine, link: string, url?: string): Promise<LinkCard | undefined> => {
-    const cards = (await engine.deps.capabilities()).filter(isLinkCard);
-    return cards.find((card) => card.id === link) ?? (url === undefined ? undefined : cards.find((card) => card.config.url === url));
-};
 
 // Words into the parent's turn, as the sandbox's and marked as the far side's; where they went, or nowhere.
 const sayToParent = async (engine: Engine, stored: StoredChild, prompt: string, messageId: string): Promise<"said" | "queued" | "none"> => {
@@ -278,25 +269,41 @@ const take = async (engine: Engine, child: Live, status: LinkTaskStatus): Promis
 };
 
 // One look at the far side for the follower: settled (stop following), moved (look again now), or unanswered (wait first).
-const lookOnce = async (engine: Engine, child: Live, signal: AbortSignal): Promise<"settled" | "moved" | "unanswered"> => {
-    const card = await cardFor(engine, child.stored.link, child.stored.url);
-    if (card === undefined) {
-        await settle(engine, child, "failed", "", `The link card "${child.stored.link}" was removed here, so nothing more can be read of it.`);
+// A person route's pass the far side refused is asked for once more before the task is given up (route-client.ts).
+const lookOnce = async (engine: Engine, child: Live, signal: AbortSignal, fresh = false): Promise<"settled" | "moved" | "unanswered"> => {
+    const reached = await targetFor(engine.deps, child.stored, fresh);
+    if (!("target" in reached)) {
+        if ("retry" in reached) {
+            noteSpawnedChild(engine.deps.conversations, child.stored.id, { summary: `${reached.retry}. Asking again.` });
+            return "unanswered";
+        }
+        await settle(engine, child, "failed", "", `${reached.gone}, so nothing more can be read of it.`);
         return "settled";
     }
-    const answer = await engine.wire.status(targetOf(card), child.stored.remote, { ...opt("after", child.last?.version) }, signal);
+    const answer = await engine.wire.status(reached.target, child.stored.remote, { ...opt("after", child.last?.version) }, signal);
     if (answer.ok) {
         return (await take(engine, child, answer.value)) ? "settled" : "moved";
     }
     if (signal.aborted) {
         return "settled";
     }
-    if (answer.status === 401 || answer.status === 404) {
+    if (answer.status === 401 && child.stored.via === "person" && !fresh && answer.code === "pass") {
+        return lookOnce(engine, child, signal, true);
+    }
+    if (answer.status === 401 || answer.status === 403 || answer.status === 404) {
+        await forgetRefusedPairing(engine, child.stored, answer.code);
         await settle(engine, child, "failed", "", `"${child.stored.sandbox}" no longer answers for it: ${answer.message}.`);
         return "settled";
     }
     noteSpawnedChild(engine.deps.conversations, child.stored.id, { summary: `"${child.stored.sandbox}" did not answer: ${answer.message}. Asking again.` });
     return "unanswered";
+};
+
+// The far side no longer holds the person's pairing: the secret here goes too, so the next hand-over raises their card.
+const forgetRefusedPairing = async (engine: Engine, stored: StoredChild, code: string | undefined): Promise<void> => {
+    if (code === "pairing" && stored.person !== undefined && stored.sandboxId !== undefined) {
+        await engine.deps.personRoutes?.forget(stored.sandboxId, stored.person);
+    }
 };
 
 // Follows one task until it settles, the link goes, or the daemon closes. A far side that does not answer is asked
@@ -335,29 +342,14 @@ const hopsOf = async (deps: LinkedChildrenDeps, conversationId: string): Promise
         }
         at = parent;
     }
-    return at.startsWith(LINK_CONVERSATION_PREFIX) ? ((await deps.inboundHops(at)) ?? 0) + 1 : 0;
-};
-
-// Why this turn may not hand work to that card, or undefined when it may.
-const delegateRefusal = async (engine: Engine, parent: ChildParent, ask: DelegateAsk, card: LinkCard | undefined): Promise<string | undefined> => {
-    if (card === undefined) {
-        const names = (await engine.deps.capabilities()).filter(isLinkCard).map((entry) => entry.id);
-        return names.length === 0
-            ? 'This sandbox is linked to no other sandbox. Connecting one is the owner\'s: `capabilities request link --why "…"`.'
-            : `No linked sandbox is called "${ask.to}". Linked here: ${names.join(", ")}.`;
-    }
-    const standing = engine.deps.standingOf(parent.conversationId);
-    if (standing !== undefined && !standing.granted.includes(card.id)) {
-        return `This conversation's turn was not given the "${card.id}" link: its role or the people it works for leave it out. Do the work here, or say what you left undone.`;
-    }
-    return undefined;
+    // A family another sandbox opened here, over a link or routed as a person, counts as one more hop (2026-11-24).
+    return at.startsWith(LINK_CONVERSATION_PREFIX) || at.startsWith(ROUTE_CONVERSATION_PREFIX) ? ((await deps.inboundHops(at)) ?? 0) + 1 : 0;
 };
 
 const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): Promise<ChildSpawnResult> => {
-    const card = await cardFor(engine, ask.to);
-    const refusal = await delegateRefusal(engine, parent, ask, card);
-    if (refusal !== undefined || card === undefined) {
-        return { ok: false, message: refusal ?? `No linked sandbox is called "${ask.to}".` };
+    const where: Destination = await (ask.via === "person" ? personDestination : cardDestination)(engine.deps, parent.conversationId, ask.to);
+    if ("refused" in where) {
+        return { ok: false, message: where.refused, ...opt("open", where.open) };
     }
     const hops = await hopsOf(engine.deps, parent.conversationId);
     if (hops >= LINK_MAX_HOPS) {
@@ -378,10 +370,7 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
     const pending: StoredChild = {
         id,
         parent: parent.conversationId,
-        link: card.id,
-        url: card.config.url,
-        sandbox: sandboxNameOf(card),
-        ...opt("sandboxId", card.config.sandboxId),
+        ...where.filed,
         asking,
         ...opt("description", ask.description ?? ask.task.split("\n")[0]?.slice(0, 120)),
         startedAt: Date.now(),
@@ -389,20 +378,21 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
     // Filed before it is asked: a daemon that stops between the two asks again at boot (reask), rather than leaving a
     // task over there that nobody here follows.
     await engine.put(pending);
-    const asked = await engine.wire.ask(targetOf(card), asking);
+    const asked = await engine.wire.ask(where.target, asking);
     if (!asked.ok) {
         await engine.drop(id);
-        return { ok: false, message: `"${sandboxNameOf(card)}" did not take the task: ${asked.message}.` };
+        await forgetRefusedPairing(engine, pending, asked.code);
+        return { ok: false, message: `"${pending.sandbox}" did not take the task: ${asked.message}.` };
     }
     const child = await adopt(engine, pending, asked.value);
     const { stored } = child;
     const held = asked.value.state === "held";
     await startFollowing(engine, child, asked.value, held ? "pending" : "running");
-    engine.deps.logger.info({ child: id, parent: parent.conversationId, link: card.id, remote: stored.remote }, "linked task: handed over");
-    const where = held
+    engine.deps.logger.info({ child: id, parent: parent.conversationId, link: stored.link, remote: stored.remote }, "linked task: handed over");
+    const note = held
         ? `Handed to "${stored.sandbox}", where it waits for that sandbox's owner to allow it: its Access, Programs, Linked sandboxes has the Allow, and turning off "Ask me first" there lets the link's next tasks start at once.`
-        : `Handed to "${stored.sandbox}", which is working on it in its own conversation. ${linkedLandingWords(stored.sandbox)}`;
-    return { ok: true, id, note: `${where} Supervise it with wait(target: "${id}").` };
+        : `Handed to "${stored.sandbox}", which is working on it in its own conversation${stored.person === undefined ? "" : ` for ${stored.person}, who reads it there`}. ${linkedLandingWords(stored.sandbox)}`;
+    return { ok: true, id, note: `${note} Supervise it with wait(target: "${id}").` };
 };
 
 const listLinks = async (engine: Engine, conversationId: string, only?: string): Promise<readonly LinkListing[]> => {
@@ -412,7 +402,7 @@ const listLinks = async (engine: Engine, conversationId: string, only?: string):
         .filter((card) => (standing === undefined || standing.granted.includes(card.id)) && (only === undefined || card.id === only));
     return Promise.all(
         cards.map(async (card): Promise<LinkListing> => {
-            const hello: LinkAnswerOf<LinkHello> = await engine.wire.hello(targetOf(card), AbortSignal.timeout(HELLO_MS));
+            const hello: LinkAnswerOf<LinkHello> = await engine.wire.hello({ id: card.id, config: card.config }, AbortSignal.timeout(HELLO_MS));
             if (!hello.ok) {
                 return { to: card.id, sandbox: sandboxNameOf(card), online: false, why: hello.message };
             }
@@ -439,11 +429,11 @@ const SENT_NOTES = {
 } as const;
 
 const sendTo = async (engine: Engine, child: Live, message: string): Promise<ChildActionResult> => {
-    const card = await cardFor(engine, child.stored.link, child.stored.url);
-    if (card === undefined) {
-        return { ok: false, message: `The link card "${child.stored.link}" was removed here, so the task cannot be reached any more.` };
+    const reached = await targetFor(engine.deps, child.stored);
+    if (!("target" in reached)) {
+        return { ok: false, message: `${unreachedWords(reached)}, so the task cannot be reached now.` };
     }
-    const sent = await engine.wire.message(targetOf(card), child.stored.remote, { message, ...opt("tainted", taintOf(child.stored.parent)) });
+    const sent = await engine.wire.message(reached.target, child.stored.remote, { message, ...opt("tainted", taintOf(child.stored.parent)) });
     if (!sent.ok) {
         return { ok: false, message: `"${child.stored.sandbox}" did not take it: ${sent.message}.` };
     }
@@ -468,20 +458,20 @@ const answerTo = async (engine: Engine, child: Live, answers: Record<string, str
             message: parked ? `It waits on a card only the owner of "${child.stored.sandbox}" may answer, not on a question for you.` : "It is not waiting on a question.",
         };
     }
-    const card = await cardFor(engine, child.stored.link, child.stored.url);
-    if (card === undefined) {
-        return { ok: false, message: `The link card "${child.stored.link}" was removed here.` };
+    const reached = await targetFor(engine.deps, child.stored);
+    if (!("target" in reached)) {
+        return { ok: false, message: `${unreachedWords(reached)}.` };
     }
-    const answered = await engine.wire.answer(targetOf(card), child.stored.remote, { requestId: question.requestId, answers });
+    const answered = await engine.wire.answer(reached.target, child.stored.remote, { requestId: question.requestId, answers });
     return answered.ok ? { ok: true, note: "Answered: it carries on over there with your picks." } : { ok: false, message: answered.message };
 };
 
 const cancelOf = async (engine: Engine, child: Live): Promise<ChildActionResult> => {
-    const card = await cardFor(engine, child.stored.link, child.stored.url);
-    if (card === undefined) {
-        return { ok: false, message: `The link card "${child.stored.link}" was removed here.` };
+    const reached = await targetFor(engine.deps, child.stored);
+    if (!("target" in reached)) {
+        return { ok: false, message: `${unreachedWords(reached)}.` };
     }
-    const stopped = await engine.wire.stop(targetOf(card), child.stored.remote);
+    const stopped = await engine.wire.stop(reached.target, child.stored.remote);
     if (!stopped.ok) {
         return { ok: false, message: `"${child.stored.sandbox}" did not stop it: ${stopped.message}.` };
     }
@@ -513,16 +503,16 @@ const startFollowing = async (engine: Engine, child: Live, status: LinkTaskStatu
 const reask = async (engine: Engine, pending: StoredChild & { asking: LinkTask }): Promise<void> => {
     let retryMs = RETRY_FIRST_MS;
     while (!engine.state.closed) {
-        const card = await cardFor(engine, pending.link, pending.url);
-        const asked = card === undefined ? undefined : await engine.wire.ask(targetOf(card), pending.asking);
+        const reached = await targetFor(engine.deps, pending);
+        const asked = "target" in reached ? await engine.wire.ask(reached.target, pending.asking) : undefined;
         if (asked?.ok === true) {
             await startFollowing(engine, await adopt(engine, pending, asked.value), asked.value, asked.value.state === "held" ? "pending" : "running");
             engine.deps.logger.info({ child: pending.id, remote: asked.value.conversationId }, "linked task: handed over after a restart");
             return;
         }
-        if (asked === undefined || (asked.status >= 400 && asked.status < 500)) {
+        if ("gone" in reached || (asked !== undefined && asked.status >= 400 && asked.status < 500)) {
             await engine.drop(pending.id);
-            engine.deps.logger.warn({ child: pending.id, why: asked?.message ?? "its link card was removed" }, "linked task: not taken over there after a restart");
+            engine.deps.logger.warn({ child: pending.id, why: asked?.message ?? unreachedWords(reached) }, "linked task: not taken over there after a restart");
             return;
         }
         retryMs = await nextRetry(engine.backoff, pending.link, { ms: retryMs, first: RETRY_FIRST_MS, max: RETRY_MAX_MS });

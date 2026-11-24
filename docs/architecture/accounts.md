@@ -26,6 +26,7 @@ Nothing holds the whole graph, on purpose. Each edge is known, and enforced, whe
 | A sandbox hands work to another | the asking daemon (its `link` card) and the taking daemon (its inbound link and terms) | both reach answers, joined |
 | A sandbox's agents reach a computer, phone or browser | that daemon's `device`, `phone`, `webext` cards and enrollments; the machine enforces its own switches | the reach answer's `devices` |
 | A sandbox's agents sign in to a server | that daemon's `ssh` card | the reach answer's `servers` |
+| A sandbox answers for a project, so the owner's other sandboxes report its problems there | the platform's `ProjectClaim`, which only the owner writes ([account-routing.md](account-routing.md)) | `projects.list`, joined by the editor; a folder mark on the sandbox's card |
 | A sandbox may make sandboxes on its owner's account | that daemon's `fleet` card and the platform's `ApiToken` | the reach answer's `fleet` |
 | A sandbox runs on a computer or in the cloud | the daemon's host label, the platform's host report, the hosted machine row | the reach answer's `self.runsOn`, `sandbox.list`'s `hostReport` and `hosted` |
 

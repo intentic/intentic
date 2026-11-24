@@ -7,6 +7,7 @@ import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/
 import type { Logger } from "pino";
 import { z } from "zod";
 import { accountFiles } from "../accounts/account-files.js";
+import { opt } from "../../../opt.js";
 
 // Claude subscription OAuth (PKCE) against the public Claude Code client; the sandbox owns these credentials, not the
 // platform. The constants mirror claude setup-token and are unofficial. Two redirects, the two Claude Code itself uses:
@@ -118,6 +119,12 @@ const TokenSetSchema = z.object({
     scope: z.string().optional(),
     email: z.string().optional(),
     organization: z.string().optional(),
+    // Anthropic's own ids for the seat (2026-11-24): never shown, only hashed together into the fingerprint another of
+    // the owner's sandboxes signed in to the same seat knows it by (agent/providers/accounts/pool-signals.ts). Both, because one
+    // organisation uuid covers every seat of a Team org and each seat is metered on its own. Absent on an account
+    // stored before, until its next refresh.
+    accountUuid: z.string().optional(),
+    organizationUuid: z.string().optional(),
 });
 export type TokenSet = z.infer<typeof TokenSetSchema>;
 
@@ -157,8 +164,8 @@ const tokenResponseSchema = z.object({
     refresh_token: z.string().optional().catch(undefined),
     expires_in: z.number().optional().catch(undefined),
     scope: z.string().optional().catch(undefined),
-    account: z.object({ email_address: z.string().optional().catch(undefined) }).optional().catch(undefined),
-    organization: z.object({ name: z.string().optional().catch(undefined) }).optional().catch(undefined),
+    account: z.object({ email_address: z.string().optional().catch(undefined), uuid: z.string().optional().catch(undefined) }).optional().catch(undefined),
+    organization: z.object({ name: z.string().optional().catch(undefined), uuid: z.string().optional().catch(undefined) }).optional().catch(undefined),
 });
 type TokenResponse = z.infer<typeof tokenResponseSchema>;
 
@@ -197,9 +204,12 @@ export class TokenRequestError extends Error {
 
 // Identity fields are undocumented, so a shape change may cost the name, never the credential. Keys are omitted rather
 // than set to undefined, since an empty key would erase an identity a refresh already knew.
-const readIdentity = (json: TokenResponse): Pick<TokenSet, "email" | "organization"> => ({
-    ...(typeof json.account?.email_address === "string" && json.account.email_address !== "" ? { email: json.account.email_address } : {}),
-    ...(typeof json.organization?.name === "string" && json.organization.name !== "" ? { organization: json.organization.name } : {}),
+const nonEmpty = (value: string | undefined): string | undefined => (value === "" ? undefined : value);
+const readIdentity = (json: TokenResponse): Pick<TokenSet, "email" | "organization" | "accountUuid" | "organizationUuid"> => ({
+    ...opt("email", nonEmpty(json.account?.email_address)),
+    ...opt("organization", nonEmpty(json.organization?.name)),
+    ...opt("accountUuid", nonEmpty(json.account?.uuid)),
+    ...opt("organizationUuid", nonEmpty(json.organization?.uuid)),
 });
 
 // Timeout for the token endpoint; fetch has no timeout of its own, and callers here must never hang.

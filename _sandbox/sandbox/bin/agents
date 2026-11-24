@@ -180,6 +180,11 @@ SPAWN AND SUPERVISE
                                        sandbox's repos, connections and credentials, under the terms its owner
                                        set (role, approval, turns an hour), and lands there, never in your
                                        checkout. wait, send, answer and cancel reach it like any subagent
+  agents delegate --to <sandbox> [--description "one line"] '<task>'
+                                       hand a task to another sandbox the person this conversation works for
+                                       is in, as them, with no link: it runs there with their access and
+                                       their accounts, and they read it there. The first time, a card asks
+                                       them to allow it (exit 3: carry on, ask again once they have)
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a subagent needs input or finishes (default: either,
                                        whichever comes first); no id means whichever subagent moves first.
@@ -1053,15 +1058,30 @@ const links = async () => {
     }
 };
 
+// A pairing card the hand-over raised: the need is open, as a `capabilities request` leaves one (needs-cli.mjs EXIT_OPEN).
+const EXIT_OPEN = 3;
+
 const delegate = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["description"]);
-    const [to, ...words] = positional;
+    const { flags, positional } = parseFlags(argv, ["description", "to"]);
+    // `--to <sandbox>`: a sandbox the person this conversation works for is in, reached as them, no link card needed.
+    const [to, ...words] = flags.to === undefined ? positional : [flags.to, ...positional];
     const task = words.join(" ").trim();
     if (to === undefined || task === "") {
-        return die(`agents: delegate needs a link and a task: agents delegate <link> '<task>' (\`agents links\` names them)`);
+        return die(
+            `agents: delegate needs a sandbox and a task: agents delegate <link> '<task>' (\`agents links\` names them), or agents delegate --to <sandbox> '<task>'`,
+        );
     }
-    const body = JSON.stringify({ to, task, ...(flags.description !== undefined ? { description: flags.description } : {}) });
+    const body = JSON.stringify({
+        to,
+        task,
+        ...(flags.to !== undefined ? { via: "person" } : {}),
+        ...(flags.description !== undefined ? { description: flags.description } : {}),
+    });
     const { status, text } = await call("POST", "/children/delegate", body);
+    if (status === 202) {
+        process.stdout.write(`${refusalOf(text)}\n`);
+        process.exit(EXIT_OPEN);
+    }
     if (status !== 200) {
         return die(`agents: ${refusalOf(text)}`);
     }

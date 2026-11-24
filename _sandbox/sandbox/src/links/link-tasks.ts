@@ -109,7 +109,7 @@ const refusal = (refused: LinkRefusal["refused"], message: string): LinkRefusal 
 // What a link whose terms take no tasks says to one: it was minted for reading records or operating only.
 const NO_TASKS = "This link takes no tasks: its owner allowed it only to read records or operate. They can turn tasks on in its terms.";
 
-const nowOf = (deps: LinkTaskDeps): number => (deps.now ?? Date.now)();
+const nowOf = (deps: Pick<LinkTaskDeps, "now">): number => (deps.now ?? Date.now)();
 
 // True, and booked, when the link may start one more turn this hour.
 const spendTurn = (deps: LinkTaskDeps, link: ResolvedLink): Promise<boolean> => deps.starts.spend(`link:${link.id}`, link.terms.turnsPerHour, nowOf(deps));
@@ -167,7 +167,7 @@ const turnOf = (
 
 // The card a live run is parked on, newest first: a question the asking agent may answer, or anything else, which is this
 // sandbox's owner's.
-const parkedOf = (rows: readonly TranscriptRow[]): { readonly question?: LinkQuestion; readonly waitingOn?: string } | undefined => {
+const parkedOf = (rows: readonly TranscriptRow[], waitsFor: string): { readonly question?: LinkQuestion; readonly waitingOn?: string } | undefined => {
     for (let index = rows.length - 1; index >= 0; index -= 1) {
         const row = rows[index];
         if (row === undefined) {
@@ -177,16 +177,19 @@ const parkedOf = (rows: readonly TranscriptRow[]): { readonly question?: LinkQue
             return { question: { requestId: row.question.requestId, questions: row.question.questions } };
         }
         if (isAwaitingDecision(row)) {
-            return { waitingOn: "a card only this sandbox's owner may answer (a permission, a plan, a sign-in or a payment); it waits for them" };
+            return { waitingOn: `a card only ${waitsFor} may answer (a permission, a plan, a sign-in or a payment); it waits for them` };
         }
     }
     return undefined;
 };
 
-/** Where a task stands, its stored state joined with what its live run is parked on. */
-export const statusOf = (deps: Pick<LinkTaskDeps, "conversations">, task: StoredLinkTask): LinkTaskStatus => {
+/**
+ * Where a task stands, its stored state joined with what its live run is parked on. `waitsFor` names who answers a card
+ * that is not a plain question: this sandbox's owner for a link's task, the person for one routed as them.
+ */
+export const statusOf = (deps: Pick<LinkTaskDeps, "conversations">, task: StoredLinkTask, waitsFor = "this sandbox's owner"): LinkTaskStatus => {
     const live = task.state === "running" ? liveRunOf(deps.conversations, task.conversationId) : undefined;
-    const parked = live === undefined ? undefined : parkedOf(live.rows);
+    const parked = live === undefined ? undefined : parkedOf(live.rows, waitsFor);
     // Four per stored move, so a parking or an unparking, which writes nothing, still moves the version a poll waits on.
     const liveBit = parked?.question !== undefined ? 1 : parked === undefined ? 0 : 2;
     return {
@@ -346,7 +349,7 @@ export const messageTask = async (
 };
 
 /** Picks for the question the task is parked on; a permission, a plan or anything else stays the owner's. */
-export const answerTask = async (deps: LinkTaskDeps, task: StoredLinkTask, answer: LinkAnswer): Promise<LinkRefusal | undefined> => {
+export const answerTask = async (deps: Pick<LinkTaskDeps, "conversations" | "turns">, task: StoredLinkTask, answer: LinkAnswer): Promise<LinkRefusal | undefined> => {
     const status = statusOf(deps, task);
     if (status.question?.requestId !== answer.requestId) {
         return refusal(
@@ -385,15 +388,24 @@ export const statusAfter = async (
     after: number | undefined,
     waitS: number,
     signal: AbortSignal,
+): Promise<LinkTaskStatus | undefined> => heldStatus(deps, () => deps.links.task(link.id, { conversationId }), conversationId, { after, waitS }, signal);
+
+/** `statusAfter` over any task book: a link's, or the tasks routed here as a person (person-tasks.ts). */
+export const heldStatus = async (
+    deps: Pick<LinkTaskDeps, "conversations" | "now">,
+    read: () => Promise<StoredLinkTask | undefined>,
+    conversationId: string,
+    { after, waitS, waitsFor }: { readonly after: number | undefined; readonly waitS: number; readonly waitsFor?: string },
+    signal: AbortSignal,
 ): Promise<LinkTaskStatus | undefined> => {
     const deadline = nowOf(deps) + Math.min(Math.max(waitS, 0), STATUS_WAIT_MAX_S) * 1_000;
     for (;;) {
         const mark = linkTaskStatusMark(conversationId);
-        const task = await deps.links.task(link.id, { conversationId });
+        const task = await read();
         if (task === undefined) {
             return undefined;
         }
-        const status = statusOf(deps, task);
+        const status = statusOf(deps, task, waitsFor);
         if (after === undefined || status.version !== after || nowOf(deps) >= deadline || signal.aborted) {
             return status;
         }

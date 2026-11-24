@@ -18,6 +18,7 @@ import { WORDS_SAID, wordsSaid } from "./work-wait.js";
 export const PARENT_RUN_TOOLS: ReadonlySet<string> = new Set([
     "providers",
     "spawn",
+    "delegate",
     "send",
     "cancel",
     "answer",

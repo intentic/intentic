@@ -90,6 +90,20 @@ export const IssueSenderSchema = z.object({
     sandboxName: z.string().max(120).describe("Its name on your account."),
     project: z.string().max(200).describe("The project it reported about, as this sandbox claims it."),
     conversationId: z.string().max(120).optional().describe("The conversation over there that reported it."),
+    person: z
+        .string()
+        .max(254)
+        .optional()
+        .describe("The person that conversation acts for, as the platform signed it and this sandbox's roster knows them: attribution only."),
+    crossesOrg: z
+        .object({
+            from: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional(),
+            to: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional(),
+        })
+        .optional()
+        .describe(
+            "Set when the reporting sandbox and this one are not in the same organisation, as the platform signed it: `from` is the reporter's organisation, `to` this sandbox's; a side in none is absent.",
+        ),
 });
 export type IssueSender = z.infer<typeof IssueSenderSchema>;
 

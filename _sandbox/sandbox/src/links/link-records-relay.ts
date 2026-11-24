@@ -8,6 +8,7 @@ import { liveTurnConversations, soleLiveConversation } from "../conversations/ac
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { type LinkRecordsBody, linkRecordsDiagnostics, linkRecordsRead, type LinkTarget } from "../sandboxes/link-client.js";
 import { provesOwner } from "../seams/workload-stamp.js";
+import { routedDiagnostics, routedFleetRead, type RoutedReadDeps } from "./account-records-relay.js";
 
 // THE ASKING SIDE OF A LINK'S RECORDS: this sandbox's agent reading another of the owner's sandboxes' conversations, logs
 // and diagnostics with `--on <link>` (`agents ls|find|show|bundle`, `diagnostics`) or its link's tool server
@@ -21,7 +22,7 @@ export type LinkReach =
     | { readonly ok: true; readonly target: LinkTarget; readonly sandbox: string }
     | { readonly ok: false; readonly status: 403 | 404; readonly message: string };
 
-export type LinkReachDeps = Pick<Services, "capabilities" | "conversations">;
+export type LinkReachDeps = Pick<Services, "capabilities" | "conversations"> & RoutedReadDeps;
 
 const readableCard = (capability: Capability): capability is LinkCard => capability.kind === "link";
 
@@ -74,6 +75,11 @@ const linkReach = async (deps: LinkReachDeps, c: Context<AppEnv>, name: string):
     return { ok: true, target: { id: card.id, config: card.config }, sandbox: card.config.name ?? card.id };
 };
 
+// No link card has that name: a turn reads it as its person instead, a sandbox they are in (account-records-relay.ts). A
+// person signed in here reads only through a link: their own editor reads the other sandbox as them directly.
+const routesAsPerson = (c: Context<AppEnv>, reach: Extract<LinkReach, { ok: false }>): boolean =>
+    reach.status === 404 && c.get("identity") === undefined;
+
 // What a far refusal says, in the `message` the agent's commands read: the link doors word theirs as `error`.
 const relayedBody = (body: LinkRecordsBody, status: number): LinkRecordsBody =>
     status < 400 || body.message !== undefined ? body : { ok: false, message: body.error ?? `it answered ${status}` };
@@ -87,7 +93,9 @@ const unreachable = (sandbox: string, message: string) => ({ ok: false, message:
 export const relayFleetRead = async (deps: LinkReachDeps, c: Context<AppEnv>, name: string): Promise<Response> => {
     const reach = await linkReach(deps, c, name);
     if (!reach.ok) {
-        return json({ ok: false, message: reach.message }, reach.status);
+        return routesAsPerson(c, reach)
+            ? routedFleetRead(deps, c, { sandbox: name, unlinked: reach.message })
+            : json({ ok: false, message: reach.message }, reach.status);
     }
     const url = new URL(c.req.url);
     url.searchParams.delete("on");
@@ -100,7 +108,9 @@ export const relayFleetRead = async (deps: LinkReachDeps, c: Context<AppEnv>, na
 export const relayDiagnostics = async (deps: LinkReachDeps, c: Context<AppEnv>, name: string, query: DiagnosticsQuery): Promise<Response> => {
     const reach = await linkReach(deps, c, name);
     if (!reach.ok) {
-        return json({ ok: false, message: reach.message }, reach.status);
+        return routesAsPerson(c, reach)
+            ? routedDiagnostics(deps, c, { sandbox: name, unlinked: reach.message }, query)
+            : json({ ok: false, message: reach.message }, reach.status);
     }
     const answer = await linkRecordsDiagnostics(reach.target, query);
     if (answer.ok) {

@@ -25,8 +25,10 @@
 // end. Its answer streams one JSON object a line (sandboxes/sandboxes.routes.ts), progress then the outcome, since a
 // copy takes as long as the sandbox is big.
 
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { request } from "node:http";
+import { basename, resolve } from "node:path";
+import { call as provenCall, EXIT_OPEN, parseArgs, refusalOf as needsRefusalOf } from "./needs-cli.mjs";
 
 const TOKEN_PATH = "/run/intentic/agent.token";
 const PORT = process.env.SANDBOX_PORT ?? "8787";
@@ -66,6 +68,15 @@ const USAGE = `sandboxes — the owner's sandboxes, and how a new one is made
                                        --to        the connected computer it goes to
                                        --manager   what runs it there: ic (the default), or docker compose
                                        --why       your one-line case for it, shown on the card
+
+  sandboxes send <sandbox> [files…] --note "…" [--wake <conversation id>]
+                                       hand a note and up to 20 files (10 MB in all) to another sandbox the person
+                                       this conversation acts for is in, as them. It lands in that sandbox's inbox
+                                       (its \`inbox\` command, its editor's Received list) and starts no turn there.
+                                       --wake      also say the note into that person's own conversation there,
+                                                   only while a turn of it is running
+                                       Exit 3: that person has not allowed this sandbox to act as them there yet;
+                                       a card asks them now. Send again once they allow it; do not poll.
 
 The create holds its connection while the owner decides and while the machine builds: minutes, both halves.
 Hold it open rather than timing it out. A declined or expired ask answers with a sentence to act on —
@@ -281,8 +292,61 @@ const move = (args) =>
         req.end(body);
     });
 
+// ROUTING AS A PERSON, a drop (2026-11-24, docs/architecture/account-routing.md): the files are read here, as the
+// agent, and carried in the body, so the daemon never opens a path an agent names. It goes through needs-cli.mjs's call,
+// which sends the turn's proof: the daemon routes only as the person a proven conversation acts for.
+const MAX_FILES = 20;
+const MAX_BYTES = 10 * 1024 * 1024;
+const fileOf = (path) => {
+    const full = resolve(path);
+    const stat = lstatSync(full, { throwIfNoEntry: false });
+    if (stat === undefined || !stat.isFile()) {
+        return die(`sandboxes: ${path} is not a regular file (a drop carries files, not folders or links)`);
+    }
+    return { name: basename(full), data: readFileSync(full).toString("base64"), size: stat.size };
+};
+
+const send = async (args) => {
+    const { flags, rest } = parseArgs("sandboxes", args, { values: ["note", "wake"] });
+    const [target, ...paths] = rest;
+    if (target === undefined || (paths.length === 0 && (flags.note ?? "").trim() === "")) {
+        return die(`sandboxes: send names a sandbox and carries a note or files\n\n${USAGE}`);
+    }
+    if (paths.length > MAX_FILES) {
+        return die(`sandboxes: a drop carries at most ${MAX_FILES} files`);
+    }
+    const files = paths.map(fileOf);
+    if (files.reduce((sum, file) => sum + file.size, 0) > MAX_BYTES) {
+        return die("sandboxes: a drop carries at most 10 MB of files");
+    }
+    const body = {
+        sandbox: target,
+        files: files.map(({ name, data }) => ({ name, data })),
+        ...(flags.note === undefined ? {} : { note: flags.note }),
+        ...(flags.wake === undefined ? {} : { wake: flags.wake }),
+    };
+    const { status, text } = await provenCall("sandboxes", "POST", "/account/drops", JSON.stringify(body));
+    if (status !== 200) {
+        return die(`sandboxes: ${needsRefusalOf(text)}`);
+    }
+    const outcome = JSON.parse(text);
+    if (outcome.state === "delivered") {
+        process.stdout.write(`Delivered to ${outcome.to}: it waits in that sandbox's inbox as ${outcome.id}.\n`);
+        return;
+    }
+    if (outcome.state === "queued") {
+        process.stdout.write(`Kept for later: ${outcome.reason}. It is retried by itself for a week; do not resend it.\n`);
+        return;
+    }
+    process.stdout.write(`Not sent: ${outcome.reason}\n`);
+    process.exit(outcome.state === "asked" ? EXIT_OPEN : 1);
+};
+
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
+    if (command === "send") {
+        return send(rest);
+    }
     if (command === "ls") {
         return ls(rest);
     }

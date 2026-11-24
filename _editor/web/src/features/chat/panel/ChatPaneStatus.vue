@@ -11,7 +11,8 @@ import { contextPct } from "../../../models/agent-status/agentStatus-meta";
 import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import { cacheAlive, cacheCooling, keptWarm } from "../../../models/fleet/promptCache";
 import { useAgents } from "../../../models/fleet/useAgents";
-import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatusFor } from "../../../models/providers/usageStatus";
+import { formatRemaining, formatReset, remainingFigure } from "../../../models/providers/usageStatus";
+import { accountHeadroom } from "../../../models/providers/capacity/heardRunOut";
 import { balanceLabel, balanceLow, balanceTip, useKeyBalance } from "../../../models/conversations/accounts/keyBalance";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { readsAsContinuing } from "../../../models/conversations/run/turnRequest";
@@ -171,7 +172,7 @@ const usageChip = computed(() => {
     // The account the next turn runs on: a hand pick while it stands, else the one the daemon has the conversation on
     // (bindSession); a chat still on auto has none to show yet.
     const modelRef = model.value === `` ? undefined : { id: model.value };
-    const headroom = planHeadroom(usageStatusFor(provider.value, account.value, modelRef), modelRef);
+    const headroom = accountHeadroom(provider.value, account.value, { model: modelRef });
     // No binding pool means nothing measured or everything reset; stays hidden rather than pinning a false "100% left".
     if (headroom?.binding === undefined || (account.value !== undefined && railCarries.value === `${provider.value}:${account.value}`)) {
         return undefined;
