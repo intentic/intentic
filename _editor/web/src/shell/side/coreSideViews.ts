@@ -23,6 +23,7 @@ import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { navigation } from "../../workbench/navigation/navigation";
 import { SKILL_SIDE_VIEW, SkillSideInputSchema } from "../../features/sandbox/agent-settings/skills/skillSide";
+import { MEMORY_SIDE_VIEW, memoryFolderOf, MemorySideInputSchema } from "../../features/sandbox/agent-settings/memory/memorySide";
 import { here, isPage, page } from "../../lib/routes/links";
 import { screenRoute, selectedKey } from "../../models/sandbox/devices/deviceLinks";
 import { SCREEN_SIDE_VIEW, ScreenAtSchema } from "../../models/sandbox/devices/remote/screenPlaces";
@@ -112,6 +113,32 @@ const registerSkillSideView = (): Disposable =>
         component: async () => (await import(`./SideSkill.vue`)).default,
     });
 
+// One of the agent's memory files (an AGENTS.md), written beside whatever section is open (opened from Settings ▸ Agent ▸
+// Instructions), and in the Workspace's own editor by "Open in Workspace". Its tab reads like that file's tab would.
+const registerMemorySideView = (): Disposable =>
+    registerSideView({
+        id: MEMORY_SIDE_VIEW,
+        owner: `builtin`,
+        get label() {
+            return t(`sandbox.agentMemory.memory`);
+        },
+        describe: (input) => {
+            const path = MemorySideInputSchema.safeParse(input).data?.path ?? ``;
+            const folder = memoryFolderOf(path);
+            return {
+                title: path,
+                icon: iconForEntry(basename(path), `file`),
+                iconClass: explorerColorClass(basename(path), `file`, false),
+                tip: { title: folder === `` ? t(`sandbox.agentMemory.everyTurn`) : t(`sandbox.agentMemory.turnsInsideFolder`, { folder }) },
+            };
+        },
+        home: (input) => {
+            const path = MemorySideInputSchema.safeParse(input).data?.path;
+            return path === undefined ? undefined : { label: useVocabulary().value.workspace, open: () => void openInWorkspace(path, undefined, agentScope(undefined)) };
+        },
+        component: async () => (await import(`./SideMemory.vue`)).default,
+    });
+
 // The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
 // chat). Each names its home, the section its thing belongs to, so a peek can be moved there whole.
 
@@ -199,5 +226,5 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         lent: () => browsersSlot.value !== null,
     });
 
-    return [file, browsers, registerScreenSideView(), registerSkillSideView()];
+    return [file, browsers, registerScreenSideView(), registerSkillSideView(), registerMemorySideView()];
 };

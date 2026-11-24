@@ -54,6 +54,9 @@ export const PUBLIC_DIR = "public";
 // turn's instructions itself, so no loop's own discovery decides which rules a turn ran under. One per folder, read
 // from the workspace root down to where the turn starts.
 export const MEMORY_FILE = "AGENTS.md";
+// Ceiling in characters (~4/token) over all of a turn's memory files together, since every turn of the session pays for
+// it. A file that would cross it is dropped whole and named, deepest first; the editor draws each file against it.
+export const MEMORY_MAX_CHARS = 20_000;
 
 // Per-service state root on a provisioned host reached over ssh, as opposed to inside a sandbox container.
 export const HOST_STATE_ROOT = "/opt/intentic";

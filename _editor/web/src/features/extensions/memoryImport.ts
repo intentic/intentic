@@ -20,6 +20,9 @@ Output only the Markdown: no preamble or closing remarks.`;
 const START = `<!-- intentic:imported-memory:start -->`;
 const END = `<!-- intentic:imported-memory:end -->`;
 
+// Whether an earlier import is in the file, so the next one is said to replace it.
+export const hasImportedMemory = (existing: string): boolean => existing.includes(START);
+
 // Replaces the managed block if present, else appends it: re-importing overwrites instead of duplicating, and memory
 // outside the block is preserved.
 export const mergeMemory = (existing: string, imported: string): string => {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { insideRel } from "@intentic/base/contained";
-import { MEMORY_FILE } from "@intentic/constants";
+import { MEMORY_FILE, MEMORY_MAX_CHARS } from "@intentic/constants";
 import { MEMORY_NOTE_HEADER } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // The owner's standing instructions, composed by the daemon instead of left to each runtime's own discovery: the loops
@@ -11,9 +11,8 @@ import { MEMORY_NOTE_HEADER } from "../../sessions/vocabulary/prompt-envelope.js
 // runtimes/pi/pi-rpc.ts), so it reads them once, here. Read root first, then every folder down to where the turn starts, so a nested repo's file adds to the
 // workspace's rather than replacing it.
 
-// Ceiling in characters (~4/token) over the whole block, since every turn of the session pays for it. A file that
-// would cross it is dropped whole and named, deepest first: half a rule still reads as a rule.
-const MAX_MEMORY_CHARS = 20_000;
+// The ceiling (MEMORY_MAX_CHARS) is over the whole block. A file that would cross it is dropped whole and named, deepest
+// first: half a rule still reads as a rule. Settings draws each file against the same number (memoryFiles.ts).
 
 interface MemoryFile {
     // Root-relative, forward-slashed: what the agent sees, not where the daemon read it from.
@@ -57,7 +56,7 @@ const withinBudget = (files: readonly MemoryFile[]): { readonly kept: readonly M
     const dropped: string[] = [];
     let spent = 0;
     for (const file of files) {
-        if (spent + file.text.length > MAX_MEMORY_CHARS) {
+        if (spent + file.text.length > MEMORY_MAX_CHARS) {
             dropped.push(file.path);
             continue;
         }

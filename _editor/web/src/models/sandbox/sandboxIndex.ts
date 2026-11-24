@@ -125,15 +125,8 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         part: `instructions`,
         partLabel: () => t(`sandbox.words.instructions`),
         title: () => t(`sandbox.agentMemory.memory`),
-        terms: () => [t(`sandbox.search.agentMemory`)],
-    },
-    {
-        id: `agent-memory-import`,
-        slug: `agent`,
-        part: `instructions`,
-        partLabel: () => t(`sandbox.words.instructions`),
-        title: () => t(`sandbox.agentMemory.bringMemoryOverAnother`),
-        terms: () => [t(`sandbox.agentMemory.addToMemory`), t(`sandbox.search.agentMemoryImport`)],
+        // Bringing memory over is this group's own dialog, so a search for it lands here.
+        terms: () => [t(`sandbox.search.agentMemory`), t(`sandbox.agentMemory.bringMemoryOver`), t(`sandbox.search.agentMemoryImport`)],
     },
     // Tools, in the page's order: how it answers you (pages, voice), what it can find (documents, code), what a turn
     // costs (command output, what every request carries), how its edits are checked, how far it may delegate, and where

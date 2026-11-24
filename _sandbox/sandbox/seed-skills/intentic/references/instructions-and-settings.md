@@ -3,9 +3,12 @@
 ## Where instructions live
 
 **Memory: `AGENTS.md` at the workspace root.** This is the file meant when the owner asks for "Intentic's
-AGENTS.md". Edited on Sandbox ▸ Agent ▸ Instructions, **Memory** (`/sandbox/agent?section=instructions`; **Open
-file** opens `/workspace/AGENTS.md`), or as any file. **Bring memory over from another assistant** on the same page
-merges an export from another AI into a marked block of that file. The daemon reads it itself, plus an `AGENTS.md`
+AGENTS.md". Sandbox ▸ Agent ▸ Instructions, **Memory** (`/sandbox/agent?section=instructions`) lists every
+`AGENTS.md` in the workspace as a chip, the root's under **Every turn** and each folder's under **Turns inside**, with
+a ring for how much of the 20,000-character ceiling it takes (red when turns leave it out). Pressing one opens it in
+the side panel to edit, with **Open in Workspace** on the tab; **Write memory** appears when the root file does not
+exist yet. **Import** beside it opens a dialog that brings memory over from another assistant (ChatGPT, Claude,
+Gemini, Grok or any other) and merges the answer into a marked block of the root file. The daemon reads it itself, plus an `AGENTS.md`
 in each folder on the way down to where the turn starts (a role's **Starts in**), root first, and composes them
 into the turn's instructions under "Standing instructions for this workspace" on every runtime; no loop's own file
 discovery decides. The whole block is capped at 20,000 characters: a file that would cross it is left out whole and

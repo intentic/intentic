@@ -17,8 +17,7 @@ import AgentToolLoading from "../agent-settings/behaviour/AgentToolLoading.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentDiskSpace from "../agent-settings/behaviour/AgentDiskSpace.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
-import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
-import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
+import AgentMemory from "../agent-settings/memory/AgentMemory.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentNightHours from "../agent-settings/behaviour/AgentNightHours.vue";
 import AgentProceed from "../agent-settings/behaviour/AgentProceed.vue";
@@ -152,7 +151,6 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <AgentInstructions />
                 <AgentSkills />
                 <AgentMemory />
-                <AgentMemoryImport />
             </template>
 
             <!-- Simplest and most-met first, deepest last: how it answers you (pages, voice), what it can find (documents, then

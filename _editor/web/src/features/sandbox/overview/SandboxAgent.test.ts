@@ -24,8 +24,7 @@ const stub = (name: string) => ({ default: defineComponent({ render: () => h(`se
 jest.mock(`../agent-settings/models/AgentModels.vue`, () => stub(`Jobs`));
 jest.mock(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instructions`));
 jest.mock(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
-jest.mock(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
-jest.mock(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
+jest.mock(`../agent-settings/memory/AgentMemory.vue`, () => stub(`Memory`));
 jest.mock(`../agent-settings/behaviour/AgentChatPages.vue`, () => stub(`Chat pages`));
 jest.mock(`../agent-settings/behaviour/AgentVoice.vue`, () => stub(`Voice`));
 jest.mock(`../agent-settings/behaviour/AgentDocumentSearch.vue`, () => stub(`Document search`));
@@ -53,7 +52,6 @@ const EVERY_GROUP = [
     `Instructions`,
     `Skills`,
     `Memory`,
-    `Memory import`,
     `Chat pages`,
     `Voice`,
     `Document search`,

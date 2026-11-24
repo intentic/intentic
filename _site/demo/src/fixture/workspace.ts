@@ -23,6 +23,7 @@ import { DESK_AGENT_DELTAS, DESK_CHANGES, DESK_DIFFS, DESK_ORIGIN_AGENTS, DESK_R
 import { HANDOVER_CHANGE, HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_PATH } from "./document";
 import { documentationFiles } from "./docs";
 import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
+import { memoryFiles } from "./memory";
 
 // acme-shop: a two-repo sandbox (web front end, api) with a handful of dirty files for the Changes review, attributed
 // to three agents. Small on purpose: forty nodes prove what four thousand wouldn't. The desk recording (fixture/desk.ts)
@@ -711,7 +712,7 @@ const FILES = new Map<string, string | number>(
         ? []
         : deskEdition
           ? DESK_SOURCES
-          : [...SOURCES, ...acceptanceFiles(RECORDED_AT), ...documentationFiles(RECORDED_AT), ...choreFiles(RECORDED_AT)],
+          : [...SOURCES, ...memoryFiles(), ...acceptanceFiles(RECORDED_AT), ...documentationFiles(RECORDED_AT), ...choreFiles(RECORDED_AT)],
 );
 
 // Daemon's ignore scope; node_modules stays listed since a tree without it looks uninstalled.
