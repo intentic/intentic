@@ -155,19 +155,20 @@ pub fn run_relay() -> Result<()> {
 /// `ic engine mode [always|when-open|off]`: when the engine runs (background.rs), shown, or set and carried out.
 pub fn run_mode(word: Option<&str>, json: bool) -> Result<()> {
     if let Some(word) = word {
-        let mode = super::background::Mode::parse(word).ok_or_else(|| {
-            Fail(format!(
-                "{word} is not a mode: always, when-open or off."
-            ))
-        })?;
+        let mode = super::background::Mode::parse(word)
+            .ok_or_else(|| Fail(format!("{word} is not a mode: always, when-open or off.")))?;
         if !json {
-            ui::act(&format!("Setting the intentic engine to run {}", mode.sentence()));
+            ui::act(&format!(
+                "Setting the intentic engine to run {}",
+                mode.sentence()
+            ));
         }
         super::set_mode(mode).map_err(Fail::from)?;
     }
     let Some(mode) = super::mode() else {
         return Err(Fail(
-            "when the engine runs is set on Windows, where Intentic runs its own engine.".to_string(),
+            "when the engine runs is set on Windows, where Intentic runs its own engine."
+                .to_string(),
         ));
     };
     if json {

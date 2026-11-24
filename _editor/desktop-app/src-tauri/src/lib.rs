@@ -570,17 +570,21 @@ pub(crate) fn offer_workspace(app: &AppHandle) {
 
 /// The tray's rows for the engine (engine_keeper.rs `TrayEngine`): what runs, Stop or Start, and "Keep running" with the
 /// setting's three choices. Their words are put right by `refresh_tray` as soon as the menu is up.
-fn engine_tray_rows(app: &AppHandle) -> tauri::Result<(engine_keeper::TrayEngine, tauri::menu::Submenu<Wry>)> {
+fn engine_tray_rows(
+    app: &AppHandle,
+) -> tauri::Result<(engine_keeper::TrayEngine, tauri::menu::Submenu<Wry>)> {
     let status = MenuItemBuilder::with_id("engine-status", "Sandboxes…")
         .enabled(false)
         .build(app)?;
-    let toggle = MenuItemBuilder::with_id(engine_keeper::ROW_TOGGLE, "Stop sandboxes and engine").build(app)?;
+    let toggle = MenuItemBuilder::with_id(engine_keeper::ROW_TOGGLE, "Stop sandboxes and engine")
+        .build(app)?;
     let always = CheckMenuItemBuilder::with_id(engine_keeper::ROW_ALWAYS, "Always")
         .checked(false)
         .build(app)?;
-    let when_open = CheckMenuItemBuilder::with_id(engine_keeper::ROW_WHEN_OPEN, "When Intentic is open")
-        .checked(false)
-        .build(app)?;
+    let when_open =
+        CheckMenuItemBuilder::with_id(engine_keeper::ROW_WHEN_OPEN, "When Intentic is open")
+            .checked(false)
+            .build(app)?;
     let off = CheckMenuItemBuilder::with_id(engine_keeper::ROW_OFF, "Off")
         .checked(false)
         .build(app)?;

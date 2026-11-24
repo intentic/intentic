@@ -844,7 +844,9 @@ mod tests {
             workspace_seen: Mutex::new(
                 read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
             ),
-            quit_engine_told: Mutex::new(read_json(&config_dir.join(QUIT_ENGINE_TOLD)).unwrap_or(false)),
+            quit_engine_told: Mutex::new(
+                read_json(&config_dir.join(QUIT_ENGINE_TOLD)).unwrap_or(false),
+            ),
             last_face: Mutex::new(face_or_first(read_json(&config_dir.join("last-face.json")))),
             account_seen: Mutex::new(
                 read_json(&config_dir.join("account-seen.json")).unwrap_or(false),

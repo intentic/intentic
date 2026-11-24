@@ -1368,11 +1368,20 @@ mod tests {
         // The background setting is said as a setting, with where to change it, never as a fault to repair.
         let off = intentic_engine_down(&down, Some(HoldKind::Off), &never);
         assert_eq!(off.who(), Some(Who::You));
-        assert!(off.problem.as_deref().is_some_and(|p| p.contains("set to Off")));
-        assert!(off.remedy.as_deref().is_some_and(|r| r.contains("ic engine mode always")));
+        assert!(off
+            .problem
+            .as_deref()
+            .is_some_and(|p| p.contains("set to Off")));
+        assert!(off
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.contains("ic engine mode always")));
         let closed = intentic_engine_down(&down, Some(HoldKind::Closed), &never);
         assert_eq!(closed.who(), Some(Who::You));
-        assert!(closed.problem.as_deref().is_some_and(|p| p.contains("app is closed")));
+        assert!(closed
+            .problem
+            .as_deref()
+            .is_some_and(|p| p.contains("app is closed")));
     }
 
     #[test]

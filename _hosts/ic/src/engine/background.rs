@@ -211,7 +211,10 @@ mod tests {
 
     #[test]
     fn a_hold_says_its_kind_and_an_old_one_is_a_persons_stop() {
-        assert_eq!(HoldKind::of("stopped by `ic engine stop`"), HoldKind::Stopped);
+        assert_eq!(
+            HoldKind::of("stopped by `ic engine stop`"),
+            HoldKind::Stopped
+        );
         assert_eq!(HoldKind::of("held by a move"), HoldKind::Stopped);
         for kind in [HoldKind::Off, HoldKind::Closed, HoldKind::Stopped] {
             assert_eq!(HoldKind::of(&kind.text("why")), kind);
@@ -223,20 +226,35 @@ mod tests {
     fn a_background_start_follows_the_setting_and_the_hold() {
         use QuietStart::*;
         // The sign-in start, with no app asking.
-        assert_eq!(quiet_start(Mode::Always, None, false), Start { lift_closed: false });
+        assert_eq!(
+            quiet_start(Mode::Always, None, false),
+            Start { lift_closed: false }
+        );
         assert_eq!(quiet_start(Mode::WhenOpen, None, false), Skip);
         assert_eq!(quiet_start(Mode::Off, None, false), Skip);
         // The app open.
-        assert_eq!(quiet_start(Mode::WhenOpen, None, true), Start { lift_closed: false });
-        assert_eq!(quiet_start(Mode::Always, None, true), Start { lift_closed: false });
+        assert_eq!(
+            quiet_start(Mode::WhenOpen, None, true),
+            Start { lift_closed: false }
+        );
+        assert_eq!(
+            quiet_start(Mode::Always, None, true),
+            Start { lift_closed: false }
+        );
         assert_eq!(quiet_start(Mode::Off, None, true), Skip);
         // The app's next start lifts its own hold; nobody else's.
         assert_eq!(
             quiet_start(Mode::WhenOpen, Some(HoldKind::Closed), true),
             Start { lift_closed: true }
         );
-        assert_eq!(quiet_start(Mode::Always, Some(HoldKind::Closed), false), Skip);
-        assert_eq!(quiet_start(Mode::Always, Some(HoldKind::Stopped), true), Skip);
+        assert_eq!(
+            quiet_start(Mode::Always, Some(HoldKind::Closed), false),
+            Skip
+        );
+        assert_eq!(
+            quiet_start(Mode::Always, Some(HoldKind::Stopped), true),
+            Skip
+        );
         assert_eq!(quiet_start(Mode::WhenOpen, Some(HoldKind::Off), true), Skip);
     }
 

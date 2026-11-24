@@ -675,9 +675,12 @@ pub(crate) fn engine_held() -> bool {
 /// `whenOpen` or `off`. None before ic first wrote one, which is a PC that keeps doing what it did: starting it.
 pub(crate) fn engine_mode() -> Option<String> {
     let home = engine_home()?;
-    let text =
-        std::fs::read_to_string(home.join(".intentic").join("engine").join("background.json"))
-            .ok()?;
+    let text = std::fs::read_to_string(
+        home.join(".intentic")
+            .join("engine")
+            .join("background.json"),
+    )
+    .ok()?;
     mode_in(&text)
 }
 
@@ -693,14 +696,13 @@ fn mode_in(text: &str) -> Option<String> {
 /// The kind of hold on our engine, from its held file's first word (ic's background.rs `HoldKind`): `off`, `closed`,
 /// or a person's own `stopped`. None when it is not held.
 pub(crate) fn engine_hold_kind() -> Option<&'static str> {
-    let path = engine_home()?
-        .join(".intentic")
-        .join("engine")
-        .join("held");
+    let path = engine_home()?.join(".intentic").join("engine").join("held");
     if !path.exists() {
         return None;
     }
-    Some(hold_kind_in(&std::fs::read_to_string(path).unwrap_or_default()))
+    Some(hold_kind_in(
+        &std::fs::read_to_string(path).unwrap_or_default(),
+    ))
 }
 
 fn hold_kind_in(text: &str) -> &'static str {
@@ -2334,14 +2336,19 @@ mod tests {
     #[test]
     fn the_background_setting_and_the_hold_read_as_ic_writes_them() {
         // ic's engine/background.rs writes these: `{"mode":"whenOpen"}`, and a held file whose first word is its kind.
-        assert_eq!(super::mode_in(r#"{"mode":"whenOpen"}"#).as_deref(), Some("whenOpen"));
+        assert_eq!(
+            super::mode_in(r#"{"mode":"whenOpen"}"#).as_deref(),
+            Some("whenOpen")
+        );
         assert_eq!(super::mode_in(r#"{"mode":"sometimes"}"#), None);
         assert_eq!(super::mode_in("not json"), None);
         assert_eq!(super::hold_kind_in("off: set to Off"), "off");
         assert_eq!(super::hold_kind_in("closed: the app closed"), "closed");
-        assert_eq!(super::hold_kind_in("stopped by `ic engine stop`"), "stopped");
+        assert_eq!(
+            super::hold_kind_in("stopped by `ic engine stop`"),
+            "stopped"
+        );
     }
-
 
     /// A failed engine start is said by its stop block on stderr, never by a note ic printed on stdout on its way, and the
     /// note still counts towards its cause (2026-11-21: "could not refresh the engine's keeper (… getpwnam(root) failed

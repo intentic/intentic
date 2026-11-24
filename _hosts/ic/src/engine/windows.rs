@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use super::background;
 use super::fetch::{self, FetchOutcome};
 use super::install_plan::{self, InstallFacts, InstallStep};
 use super::paths;
 use super::pins;
-use super::background;
 use super::record::{self, EngineRecord};
 use super::wsl;
 use super::{Kind, Status};

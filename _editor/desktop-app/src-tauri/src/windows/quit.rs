@@ -130,7 +130,8 @@ fn hold_quit_for_engine(app: &AppHandle, code: i32) -> bool {
         return false;
     }
     let mode = crate::scripts::engine_mode();
-    let running = crate::scripts::engine_hold_kind().is_none() && crate::scripts::our_engine_listening();
+    let running =
+        crate::scripts::engine_hold_kind().is_none() && crate::scripts::our_engine_listening();
     let Some((title, message, own, other)) =
         crate::engine_keeper::quit_question(mode.as_deref(), running)
     else {

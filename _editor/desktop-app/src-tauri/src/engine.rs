@@ -341,13 +341,7 @@ fn running_distro_names() -> Vec<String> {
 fn wsl_memory_bytes() -> Option<u64> {
     ["vmmemWSL", "vmmem"].iter().find_map(|image| {
         let mut command = Command::new("tasklist.exe");
-        command.args([
-            "/FI",
-            &format!("IMAGENAME eq {image}"),
-            "/FO",
-            "CSV",
-            "/NH",
-        ]);
+        command.args(["/FI", &format!("IMAGENAME eq {image}"), "/FO", "CSV", "/NH"]);
         intentic_bounded::no_window(&mut command);
         let ran = scripts::capture("tasklist", command, Duration::from_secs(10)).ok()?;
         tasklist_memory(&ran.stdout, image)
@@ -360,7 +354,8 @@ fn tasklist_memory(stdout: &str, image: &str) -> Option<u64> {
     stdout.lines().find_map(|line| {
         let fields: Vec<&str> = line.split("\",\"").collect();
         let name = fields.first()?.trim().trim_matches('"');
-        if !name.eq_ignore_ascii_case(&format!("{image}.exe")) && !name.eq_ignore_ascii_case(image) {
+        if !name.eq_ignore_ascii_case(&format!("{image}.exe")) && !name.eq_ignore_ascii_case(image)
+        {
             return None;
         }
         let digits: String = fields
@@ -398,7 +393,8 @@ pub(crate) fn set_mode_blocking(mode: &str) -> Result<(), String> {
     };
     if Host::current() != Host::Windows {
         return Err(
-            "when the engine runs is set on Windows, where Intentic runs its own engine.".to_string(),
+            "when the engine runs is set on Windows, where Intentic runs its own engine."
+                .to_string(),
         );
     }
     if word == "always" {
@@ -452,7 +448,8 @@ pub(crate) fn stop_until_app_opens() -> Result<(), String> {
 #[tauri::command]
 pub async fn engine_start_now(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(|| {
-        scripts::start_our_engine(false, crate::engine_keeper::START_LIMIT).map_err(|failure| failure.said)
+        scripts::start_our_engine(false, crate::engine_keeper::START_LIMIT)
+            .map_err(|failure| failure.said)
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -608,7 +605,13 @@ mod tests {
         let polish = "\"vmmemWSL\",\"20480\",\"Services\",\"0\",\"6\u{a0}123\u{a0}456 K\"\r\n";
         assert_eq!(tasklist_memory(polish, "vmmemWSL"), Some(6_123_456 * 1024));
         // No such process: tasklist says so in a line of its own words.
-        assert_eq!(tasklist_memory("INFO: No tasks are running which match the specified criteria.\r\n", "vmmemWSL"), None);
+        assert_eq!(
+            tasklist_memory(
+                "INFO: No tasks are running which match the specified criteria.\r\n",
+                "vmmemWSL"
+            ),
+            None
+        );
         assert_eq!(tasklist_memory(english, "vmmem"), None);
     }
 

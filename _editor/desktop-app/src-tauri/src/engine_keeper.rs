@@ -169,7 +169,9 @@ fn run(app: AppHandle) {
             match stopped_under_us(scripts::engine_mode().as_deref(), vm_down, told_restart) {
                 UnderUs::LeaveStopped => {
                     if let Err(problem) = crate::engine::stop_until_app_opens() {
-                        eprintln!("intentic: the engine WSL stopped could not be held down: {problem}");
+                        eprintln!(
+                            "intentic: the engine WSL stopped could not be held down: {problem}"
+                        );
                     }
                     keeper.started(true, Instant::now());
                     tell_background(&app);
@@ -293,7 +295,12 @@ struct BackgroundPing {
 }
 
 fn tell_starting(app: &AppHandle, starting: bool) {
-    let _ = app.emit(BACKGROUND_EVENT, BackgroundPing { starting: Some(starting) });
+    let _ = app.emit(
+        BACKGROUND_EVENT,
+        BackgroundPing {
+            starting: Some(starting),
+        },
+    );
     if !starting {
         refresh_tray(app);
     }
@@ -374,7 +381,9 @@ pub fn tray_pressed(app: &AppHandle, row: &str) {
     std::thread::spawn(move || {
         let done = match row.as_str() {
             ROW_TOGGLE if tray_reading().listening => crate::engine::stop_now_blocking(),
-            ROW_TOGGLE => scripts::start_our_engine(false, START_LIMIT).map_err(|failure| failure.said),
+            ROW_TOGGLE => {
+                scripts::start_our_engine(false, START_LIMIT).map_err(|failure| failure.said)
+            }
             ROW_ALWAYS => crate::engine::set_mode_blocking("always"),
             ROW_WHEN_OPEN => crate::engine::set_mode_blocking("whenOpen"),
             ROW_OFF => crate::engine::set_mode_blocking("off"),
@@ -407,7 +416,12 @@ pub fn exiting(code: i32) {
 
 /// Pure: whether the exit stops the engine: never at a restart; when the quit said so; and in `whenOpen` unless the
 /// quit said to keep it running this time.
-fn stops_at_exit(mode: Option<&str>, quit_said_stop: bool, quit_said_keep: bool, restarting: bool) -> bool {
+fn stops_at_exit(
+    mode: Option<&str>,
+    quit_said_stop: bool,
+    quit_said_keep: bool,
+    restarting: bool,
+) -> bool {
     !restarting && (quit_said_stop || (mode == Some("whenOpen") && !quit_said_keep))
 }
 
@@ -433,7 +447,10 @@ pub fn before_exit() {
 /// The question the first quit asks while the engine runs, by the setting: its title, what it says, the button for the
 /// setting's own way and the one for the other way this time. None when nothing is worth asking (`off`, or the engine
 /// down). Pure.
-pub fn quit_question(mode: Option<&str>, running: bool) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
+pub fn quit_question(
+    mode: Option<&str>,
+    running: bool,
+) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     if !running {
         return None;
     }
@@ -465,7 +482,6 @@ static QUIT_KEEPS: AtomicBool = AtomicBool::new(false);
 pub fn quit_keeps_engine() {
     QUIT_KEEPS.store(true, Ordering::SeqCst);
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -527,14 +543,29 @@ mod tests {
     #[test]
     fn an_engine_stopped_under_the_app_follows_the_setting() {
         // A `wsl --shutdown` under an app set to run it only while open: left for the person to start.
-        assert_eq!(stopped_under_us(Some("whenOpen"), true, false), UnderUs::LeaveStopped);
+        assert_eq!(
+            stopped_under_us(Some("whenOpen"), true, false),
+            UnderUs::LeaveStopped
+        );
         // The same under `always` (or a PC that never chose): started again, and said once.
-        assert_eq!(stopped_under_us(Some("always"), true, false), UnderUs::RestartAndTell);
+        assert_eq!(
+            stopped_under_us(Some("always"), true, false),
+            UnderUs::RestartAndTell
+        );
         assert_eq!(stopped_under_us(None, true, false), UnderUs::RestartAndTell);
-        assert_eq!(stopped_under_us(Some("always"), true, true), UnderUs::Restart);
+        assert_eq!(
+            stopped_under_us(Some("always"), true, true),
+            UnderUs::Restart
+        );
         // dockerd fell over in a distro still running: a fault, put right whatever the setting.
-        assert_eq!(stopped_under_us(Some("whenOpen"), false, false), UnderUs::Restart);
-        assert_eq!(stopped_under_us(Some("always"), false, false), UnderUs::Restart);
+        assert_eq!(
+            stopped_under_us(Some("whenOpen"), false, false),
+            UnderUs::Restart
+        );
+        assert_eq!(
+            stopped_under_us(Some("always"), false, false),
+            UnderUs::Restart
+        );
     }
 
     #[test]
@@ -569,10 +600,22 @@ mod tests {
             hold,
             listening,
         };
-        assert_eq!(tray_words(&reading("always", None, true)), ("Sandboxes running", "Stop sandboxes and engine"));
-        assert_eq!(tray_words(&reading("off", Some("off"), false)).0, "Intentic is off on this computer");
-        assert_eq!(tray_words(&reading("whenOpen", Some("closed"), false)), ("Sandboxes stopped", "Start sandboxes"));
-        assert_eq!(tray_words(&reading("always", None, false)).0, "Sandboxes starting…");
+        assert_eq!(
+            tray_words(&reading("always", None, true)),
+            ("Sandboxes running", "Stop sandboxes and engine")
+        );
+        assert_eq!(
+            tray_words(&reading("off", Some("off"), false)).0,
+            "Intentic is off on this computer"
+        );
+        assert_eq!(
+            tray_words(&reading("whenOpen", Some("closed"), false)),
+            ("Sandboxes stopped", "Start sandboxes")
+        );
+        assert_eq!(
+            tray_words(&reading("always", None, false)).0,
+            "Sandboxes starting…"
+        );
     }
 
     #[test]
