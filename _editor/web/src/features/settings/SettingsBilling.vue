@@ -283,7 +283,7 @@ const HOSTED_SETUP = newSandboxLink(`hosted`);
                                   ? t(`settings.settingsBilling.youreOnTrial`)
                                   : t(`settings.settingsBilling.onHostedPlan`)
                         "
-                        :detail="cancelling ? t(`settings.settingsBilling.afterThatFreeHours`, { count: machines.length }, machines.length) : planSummary"
+                        :detail="cancelling ? t(`settings.settingsBilling.afterThatFreeHours`) : planSummary"
                     >
                         <template v-if="periodEnd" #aside>
                             <span class="text-2xs font-medium" :class="cancelling ? `text-warning` : `text-subtle`">{{ dateWord }} {{ periodEnd }}</span>

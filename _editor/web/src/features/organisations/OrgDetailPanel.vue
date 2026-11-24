@@ -10,6 +10,7 @@ import { isSendKey } from "@intentic/ui/keys";
 import { computed, nextTick, ref, shallowRef } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { apiClient } from "../../lib/useApi";
+import FactsHint, { type HintFact } from "../../components/FactsHint.vue";
 import OrgAccessPolicy from "./OrgAccessPolicy.vue";
 import { useOrgPolicyDraft } from "./useOrgPolicyDraft";
 
@@ -69,6 +70,24 @@ const onPolicyKey = async (event: KeyboardEvent): Promise<void> => {
     }
 };
 
+// What each group's one line leaves out, behind the (i) beside its name: the three ways a part is held as a legend, what
+// a required setting withstands, and what "only this organisation's people" does to someone removed.
+const modeLegend = computed<readonly HintFact[]>(() => [
+    { icon: `unlock`, term: t(`organisations.mode.open`), text: t(`organisations.detail.legend.open`) },
+    { icon: `lock`, term: t(`organisations.mode.locked`), text: t(`organisations.detail.legend.locked`) },
+    { icon: `eye-slash`, term: t(`organisations.mode.hidden`), text: t(`organisations.detail.legend.hidden`) },
+    { icon: `clock`, text: t(`organisations.detail.legend.arrives`) },
+]);
+const presetFacts = computed<readonly HintFact[]>(() => [
+    { icon: `arrow-up`, text: t(`organisations.preset.hint.stricter`) },
+    { icon: `undo`, text: t(`organisations.preset.hint.putBack`) },
+]);
+const membersOnlyFacts = computed<readonly HintFact[]>(() => [
+    { icon: `sign-out`, text: t(`organisations.detail.membersOnlyHint.removed`) },
+    { icon: `clock`, text: t(`organisations.detail.membersOnlyHint.soon`) },
+    { icon: `user`, text: t(`organisations.detail.membersOnlyHint.owners`) },
+]);
+
 // THE PEOPLE.
 const email = ref(``);
 const role = ref<OrgRole>(`member`);
@@ -108,7 +127,14 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
         <Notice v-if="notice" :of="notice" />
 
         <RowGroup :label="t(`organisations.detail.policy`, { version: org.policyVersion })">
-            <RowNote>{{ t(`organisations.detail.policyNote`) }}</RowNote>
+            <template #info>
+                <FactsHint
+                    :label="t(`settings.explainers.about`, { name: t(`organisations.detail.legend.title`) })"
+                    :title="t(`organisations.detail.legend.title`)"
+                    :facts="modeLegend"
+                />
+            </template>
+            <RowNote icon="shield">{{ t(`organisations.detail.policyScope`) }}</RowNote>
             <Row v-for="row in draft" :key="row.section" :title="t(`organisations.section.${row.section}`)">
                 <template #control>
                     <SegmentedControl v-if="admin" v-model="row.mode" :options="modeOptions" :aria-label="t(`organisations.section.${row.section}`)" size="xs" />
@@ -118,14 +144,30 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
         </RowGroup>
 
         <RowGroup :label="t(`organisations.preset.group`)">
-            <RowNote>{{ t(`organisations.preset.note`) }}</RowNote>
+            <template #info>
+                <FactsHint
+                    :label="t(`settings.explainers.about`, { name: t(`organisations.preset.group`) })"
+                    :title="t(`organisations.preset.group`)"
+                    :facts="presetFacts"
+                />
+            </template>
+            <RowNote icon="lock">{{ t(`organisations.preset.scope`) }}</RowNote>
             <Row v-for="row in pins" :key="row.group" :title="t(`organisations.preset.${row.group}`)">
                 <template #control>
                     <ToggleSwitch v-if="admin" v-model="row.pinned" :aria-label="t(`organisations.preset.${row.group}`)" />
                     <span v-else class="text-xs text-subtle">{{ row.pinned ? t(`organisations.preset.pinned`) : t(`organisations.preset.notPinned`) }}</span>
                 </template>
             </Row>
-            <Row :title="t(`organisations.detail.membersOnly`)" :description="t(`organisations.detail.membersOnlyNote`)">
+            <Row :description="t(`organisations.detail.membersOnlyNote`)">
+                <template #title>
+                    {{ t(`organisations.detail.membersOnly`) }}
+                    <FactsHint
+                        class="ml-1 align-[-0.125em]"
+                        :label="t(`settings.explainers.about`, { name: t(`organisations.detail.membersOnly`) })"
+                        :title="t(`organisations.detail.membersOnly`)"
+                        :facts="membersOnlyFacts"
+                    />
+                </template>
                 <template #control>
                     <ToggleSwitch v-if="admin" v-model="membersOnly" :aria-label="t(`organisations.detail.membersOnly`)" />
                     <span v-else class="text-xs text-subtle">{{ membersOnly ? t(`organisations.preset.pinned`) : t(`organisations.preset.notPinned`) }}</span>

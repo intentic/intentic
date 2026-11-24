@@ -100,7 +100,7 @@ const shelves = (profile: AccessProfile) =>
                         />
                         <RowNote>{{ t(`organisations.accessPolicy.localNote`) }}</RowNote>
                         <OrgPolicyList v-model="profile.areas" :label="t(`organisations.accessPolicy.areas`)" :readonly="readonly" />
-                        <Row :title="t(`organisations.accessPolicy.credentials`)">
+                        <Row :title="t(`organisations.accessPolicy.credentials`)" :description="t(`organisations.accessPolicy.credentialsNote`)">
                             <template #control
                                 ><ToggleSwitch
                                     :model-value="profile.credentials !== undefined"

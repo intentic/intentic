@@ -6,6 +6,7 @@ import { computed, ref } from "vue";
 import { apiClient } from "../../lib/useApi";
 import { useMintedTokens } from "../../workbench/operations/useMintedTokens";
 import { useT } from "@intentic/ui/i18n";
+import FactsHint, { type HintFact, type HintStep } from "../../components/FactsHint.vue";
 
 // ACCOUNT tokens: what acts for this person outside a browser. One scope exists — `provision`, which a sandbox holds
 // on its Sandbox fleet capability so an agent in it can create sandboxes here. Shown once; the platform keeps only a
@@ -67,11 +68,34 @@ const describe = (token: ApiToken): string =>
 // What the owner does with it: paste it into the sandbox's own Sandbox fleet card. Not a curl line — nothing about
 // this token is meant to be driven by hand.
 const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
+
+// The (i) beside the group's name: a sandbox holding a token makes a sandbox only once you have said yes in chat, then
+// the two facts that decide whether to mint one here at all.
+const hintSteps = computed<readonly HintStep[]>(() => [
+    { icon: `key`, label: t(`settings.settingsTokens.hint.holder`) },
+    { icon: `comments`, label: t(`settings.settingsTokens.hint.youApprove`) },
+    { icon: `box-plus`, label: t(`settings.settingsTokens.hint.newSandbox`), good: true },
+]);
+const hintFacts = computed<readonly HintFact[]>(() => [
+    { icon: `boxes`, text: t(`settings.settingsTokens.hint.fleetCard`) },
+    { icon: `copy`, text: t(`settings.settingsTokens.hint.byHand`) },
+]);
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup :label="t(`shared.apiTokens`)">
+            <!-- What a token is for, in one line; how it works and when to mint one here sit behind the (i). -->
+            <template #info>
+                <FactsHint
+                    :label="t(`settings.explainers.about`, { name: t(`shared.apiTokens`) })"
+                    :title="t(`settings.settingsTokens.hint.title`)"
+                    :lane="t(`settings.settingsTokens.hint.lane`)"
+                    :steps="hintSteps"
+                    :facts="hintFacts"
+                />
+            </template>
+            <RowNote icon="box-plus">{{ t(`settings.settingsTokens.whatFor`) }}</RowNote>
             <!-- The list as it last looked here while it is read; an emptied one is remembered as nothing. The mint form
                  below never waits on it, and a list that did not load is said in the notice there. -->
             <Await :of="loaded" imprint="settings.tokens" :label="t(`settings.settingsTokens.readingTokens`)">
@@ -94,7 +118,6 @@ const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
 
             <RowNote variant="block">
                 <div class="flex flex-col gap-3">
-                    <p class="text-2xs text-subtle">{{ t(`settings.settingsTokens.whatProvisioningTokensAre`) }}</p>
                     <Notice v-if="shownNotice" :of="shownNotice" />
                     <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
                         <input

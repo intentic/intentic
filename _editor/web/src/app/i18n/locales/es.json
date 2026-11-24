@@ -29,13 +29,14 @@
             "listNote": "Claves separadas por comas. Una lista vacía activada no permite ninguna.",
             "aiAccounts": "Cuentas de IA",
             "accountNote": "Claves de proveedor o cuenta, por ejemplo claude o claude:work.",
-            "localNote": "Las áreas, credenciales y asistentes usan los identificadores de cada sandbox. Restringir una lista de credenciales también restringe la otra; una lista vacía no permite ninguna.",
+            "localNote": "Las áreas, credenciales y asistentes usan los identificadores de cada sandbox.",
             "areas": "Áreas",
             "capabilities": "Conexiones",
             "secrets": "Secretos",
             "assistants": "Asistentes",
             "ceiling": "Límite",
-            "ceilingNote": "Ningún turno de una sandbox vinculada supera este límite, incluidos los de su propietario."
+            "ceilingNote": "Ningún turno de una sandbox vinculada supera este límite, incluidos los de su propietario.",
+            "credentialsNote": "Restringir una lista también restringe la otra."
         },
         "held": {
             "notice": "{org} gestiona esta parte del sandbox. Puedes verla, pero los cambios los hace el administrador de tu organización."
@@ -74,7 +75,6 @@
         },
         "preset": {
             "group": "Ajustes obligatorios",
-            "note": "Cada grupo activado aquí se aplica en cada sandbox de esta organización, digan lo que digan sus propios ajustes. Se puede hacer uno de estos ajustes más estricto, nunca más laxo, y un cambio hecho directamente en un archivo de ajustes se revierte.",
             "pinned": "Obligatorio",
             "notPinned": "No obligatorio",
             "privacy": "Escudo de privacidad activado, imágenes enmascaradas",
@@ -84,7 +84,12 @@
             "notice": "Aviso sobre la IA mostrado a todos",
             "actions": "Los mensajes salientes y los actos administrativos esperan aprobación",
             "admission": "El trabajo iniciado desde fuera del sandbox espera aprobación",
-            "judge": "Juez de comandos activado"
+            "judge": "Juez de comandos activado",
+            "scope": "Rige en cada sandbox, digan lo que digan sus propios ajustes.",
+            "hint": {
+                "stricter": "Se puede hacer más estricto, nunca más laxo.",
+                "putBack": "Un cambio hecho en un archivo de ajustes se revierte."
+            }
         },
         "detail": {
             "couldntSave": "No se pudo guardar la política",
@@ -95,7 +100,6 @@
             "applied": "política v{version} en vigor",
             "pending": "esperando la v{version}",
             "policy": "Política · versión {version}",
-            "policyNote": "Cómo se trata cada parte de cada sandbox de esta organización. Solo lectura: se puede ver pero no cambiar, tampoco el propietario del sandbox. Oculto: además desaparece del menú del sandbox. Los sandboxes toman una versión nueva en pocos minutos.",
             "savePolicy": "Guardar como nueva versión",
             "members": "Personas",
             "emailPlaceholder": "nombre{'@'}oficina.example",
@@ -105,10 +109,23 @@
             "noSandboxes": "Ningún sandbox pertenece todavía a esta organización.",
             "pickSandbox": "Elige uno de tus sandboxes",
             "bind": "Añadir a la organización",
-            "bindNote": "Solo se pueden añadir sandboxes que sean tuyos. Una vez añadido, la política de arriba se le aplica hasta que un administrador lo libere.",
+            "bindNote": "Solo sandboxes tuyos. La política rige hasta que un administrador lo libere.",
             "membersOnly": "Solo las personas de esta organización",
-            "membersOnlyNote": "El acceso a estos sandboxes solo se puede dar a personas de esta lista. Quitar a alguien de la organización le retira el acceso a cada sandbox en pocos minutos, sin que nadie en el sandbox tenga que actuar. No afecta a los propietarios de los sandboxes.",
-            "policyReset": "volvió sin su copia de la política el {date} y la recibió de nuevo"
+            "membersOnlyNote": "Solo las personas de esta lista pueden recibir acceso.",
+            "policyReset": "volvió sin su copia de la política el {date} y la recibió de nuevo",
+            "policyScope": "Se aplica a cada sandbox de esta organización.",
+            "legend": {
+                "title": "Cómo se trata cada parte",
+                "open": "se cambia como siempre.",
+                "locked": "se ve, nunca se cambia, tampoco el propietario.",
+                "hidden": "además desaparece del menú del sandbox.",
+                "arrives": "Los sandboxes toman una versión nueva en pocos minutos."
+            },
+            "membersOnlyHint": {
+                "removed": "Quitar a alguien aquí lo saca de cada sandbox.",
+                "soon": "En pocos minutos, sin que nadie en el sandbox actúe.",
+                "owners": "No afecta a los propietarios de los sandboxes."
+            }
         }
     },
     "a11yKit": {
@@ -12057,7 +12074,13 @@
             "statusBar": {
                 "group": "Tablero de agentes",
                 "liveMetrics": "Métricas para geeks",
-                "liveMetricsHint": "CPU, memoria y disco en la cabecera del tablero de agentes, y en la tarjeta de cada agente su parte y lo que ha costado. En otras vistas, solo un pequeño icono en la barra lateral cuando uno se acerca a su límite. No se mide nada mientras esto esté desactivado."
+                "liveMetricsHint": "Indicadores y costes en vivo en el tablero de agentes.",
+                "hint": {
+                    "header": "CPU, memoria y disco en la cabecera del tablero.",
+                    "cards": "En la tarjeta de cada agente: su parte y lo que costó.",
+                    "rail": "En otras vistas, un icono en la barra solo cerca de un límite.",
+                    "off": "Desactivado: no se mide nada."
+                }
             },
             "explorer": {
                 "fileNesting": "Anidar archivos",
@@ -12218,12 +12241,12 @@
         "settingsBilling": {
             "activating": "Activando…",
             "addSlotAt": "Añadir una plaza · +${price}/mes",
-            "afterThatFreeHours": "Después tu sandbox alojado gasta las horas gratuitas de la cuenta, y una máquina sin abrir durante unas semanas se elimina. Hasta entonces los archivos se quedan. Al reanudar, todo sigue igual. | Después tus sandboxes alojados gastan las horas gratuitas de la cuenta, y una máquina sin abrir durante unas semanas se elimina. Hasta entonces los archivos se quedan. Al reanudar, todo sigue igual.",
+            "afterThatFreeHours": "Después vuelve a las horas gratuitas y se elimina tras unas semanas sin abrir.",
             "billing": "Facturación",
             "cancelOnStripe": "Cancelar en Stripe",
             "chargedRestMonthStripe": "Se cobra el resto del mes; Stripe lo prorratea.",
             "checkoutOpenInBrowser": "El pago está abierto en tu navegador",
-            "compedOnTheHouse": "Tus sandboxes alojados corren por cuenta de la casa: sus horas no cuentan contra ningún límite y nunca se eliminan por quedarse sin abrir. No hay nada que pagar ni nada que cancelar.",
+            "compedOnTheHouse": "Horas ilimitadas, nunca se eliminan, nada que pagar.",
             "complimentary": "De cortesía",
             "didntPayAfterAll": "Al final no pagué",
             "finishPayingThereNothing": "Termina de pagar allí y vuelve: tu plan aparecerá aquí solo. No se cobra nada hasta que termines.",
@@ -12355,7 +12378,7 @@
             "systemOffApp": "Windows tiene desactivadas las notificaciones de Intentic, así que no aparecerá ninguna. Actívalas en Configuración de Windows ▸ Sistema ▸ Notificaciones ▸ Intentic.",
             "systemOffPolicy": "Tu organización ha desactivado las notificaciones en este equipo, así que no aparecerá ninguna.",
             "systemOffUser": "Las notificaciones están desactivadas en este equipo, así que no aparecerá ninguna. Actívalas en Configuración de Windows ▸ Sistema ▸ Notificaciones.",
-            "sentTo": "Enviada a {count} dispositivo registrado. Si no apareció nada, el envío funcionó y tu sistema se la tragó. Revisa los ajustes de notificaciones y el modo No molestar de tu navegador. | Enviada a {count} dispositivos registrados. Si no apareció nada, el envío funcionó y tu sistema se la tragó. Revisa los ajustes de notificaciones y el modo No molestar de tu navegador.",
+            "sentTo": "Enviada a {count} dispositivo. ¿No apareció nada? Revisa el modo No molestar. | Enviada a {count} dispositivos. ¿No apareció nada? Revisa el modo No molestar.",
             "blocked": "Bloqueadas para esta app. Vuelve a permitir las notificaciones en los ajustes del sitio y recarga."
         },
         "settingsProfile": {
@@ -12382,11 +12405,20 @@
             "readingTokens": "Leyendo tokens…",
             "shownOnceCopyNow": "Se muestra una sola vez. Cópialo ahora: solo se guarda su huella.",
             "used": "usado {ago}",
-            "whatProvisioningTokensAre": "Un token de aprovisionamiento permite que una de tus sandboxes cree sandboxes en esta cuenta. La tarjeta «Flota de sandboxes» de una sandbox crea el suyo con un clic; crea uno aquí solo para pegarlo a mano. Cada sandbox que cree su agente te seguirá preguntando antes en el chat.",
             "whereItGoes": "Dónde va",
             "unavailable": "Los tokens aún no están disponibles en este servidor.",
             "notAllowed": "Tu cuenta no puede gestionar tokens aquí.",
-            "serverTrouble": "El servidor tuvo un problema. Inténtalo de nuevo en un momento."
+            "serverTrouble": "El servidor tuvo un problema. Inténtalo de nuevo en un momento.",
+            "whatFor": "Permite que un sandbox cree sandboxes en tu cuenta.",
+            "hint": {
+                "title": "Tokens de aprovisionamiento",
+                "lane": "Cada sandbox que crea su agente",
+                "holder": "Sandbox con token",
+                "youApprove": "Dices que sí en el chat",
+                "newSandbox": "Sandbox nuevo",
+                "fleetCard": "La tarjeta Flota de sandboxes de un sandbox crea el suyo con un clic.",
+                "byHand": "Crea uno aquí solo para pegarlo a mano."
+            }
         },
         "words": {
             "iconRailCompact": "Compacto",
@@ -12396,9 +12428,9 @@
             "followHint": "Sencillas en un sandbox automático, las de git en uno manual.",
             "technical": "Técnicas",
             "plain": "Sencillas",
-            "followingHandsOff": "Este sandbox funciona en automático, así que ves palabras sencillas. Lo que elijas aquí solo vale para este sandbox.",
-            "followingHandsOn": "Este sandbox funciona en manual, así que ves los términos de git. Lo que elijas aquí solo vale para este sandbox.",
-            "overriding": "Tu propia elección, solo en este sandbox. Los demás siguen cómo funciona."
+            "followingHandsOff": "Sandbox automático, así que términos sencillos.",
+            "followingHandsOn": "Sandbox manual, así que los términos de git.",
+            "overriding": "Tu propia elección, solo en este sandbox."
         },
         "analytics": {
             "title": "Análisis del producto",
@@ -12477,14 +12509,23 @@
             "failed": "No se pudo cambiar el proyecto",
             "reportsLandIn": "Los informes sobre él llegan a {sandbox}",
             "release": "Liberar",
-            "whatClaimsAre": "Indica qué sandbox responde por cada proyecto. Cualquier otro sandbox de tu cuenta podrá informar con `projects report` de un problema que haya visto en ese proyecto, y llegará a la bandeja de incidencias de ese sandbox, agrupado con todos los informes del mismo problema. Un proyecto es su repositorio, p. ej. github.com/acme/app.",
             "project": "Proyecto",
             "projectPlaceholder": "github.com/owner/repo",
             "sandbox": "Sandbox",
-            "claim": "Asignar"
+            "claim": "Asignar",
+            "whatFor": "Elige el sandbox que recibe los informes de problemas de cada repositorio.",
+            "hint": {
+                "title": "Informes de proyecto",
+                "lane": "Un problema visto en un proyecto",
+                "anySandbox": "Cualquiera de tus sandboxes",
+                "claimedInbox": "Incidencias del sandbox elegido",
+                "grouped": "Los informes del mismo problema se agrupan en uno.",
+                "isRepository": "Un proyecto es su repositorio: {example}",
+                "onePerProject": "Un sandbox por proyecto: asignarlo de nuevo lo mueve."
+            }
         },
         "accessMap": {
-            "intro": "Todo lo que alcanza esta cuenta, tal como lo dice ahora cada sandbox en la que está. Señala cualquier cosa para ver con qué está conectada; púlsala para que siga resaltada.",
+            "intro": "Todo lo que alcanza tu cuenta. Señala cualquier cosa para resaltar sus conexiones.",
             "sandboxes": "{count} sandbox | {count} sandboxes",
             "devices": "{count} dispositivo | {count} dispositivos",
             "servers": "{count} servidor | {count} servidores",
@@ -12613,6 +12654,9 @@
                 "fleetYours": "En tu cuenta",
                 "fleetOwner": "En la cuenta de su dueño"
             }
+        },
+        "explainers": {
+            "about": "Acerca de: {name}"
         }
     },
     "setup": {

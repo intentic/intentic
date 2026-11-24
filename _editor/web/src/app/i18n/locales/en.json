@@ -29,13 +29,14 @@
             "listNote": "Comma-separated keys. An enabled empty list allows none.",
             "aiAccounts": "AI accounts",
             "accountNote": "Provider or account keys, for example claude or claude:work.",
-            "localNote": "Areas, credentials and assistants name each sandbox’s own ids. Restricting either credential list also restricts the other; an empty list allows none.",
+            "localNote": "Areas, credentials and assistants use each sandbox's own ids.",
             "areas": "Areas",
             "capabilities": "Capabilities",
             "secrets": "Secrets",
             "assistants": "Assistants",
             "ceiling": "Ceiling",
-            "ceilingNote": "No turn in a bound sandbox exceeds this ceiling, the owner’s included."
+            "ceilingNote": "No turn in a bound sandbox exceeds this ceiling, the owner’s included.",
+            "credentialsNote": "Limiting one list limits the other too."
         },
         "held": {
             "notice": "{org} manages this part of the sandbox. You can look, but changes are made by your organisation's admin."
@@ -74,7 +75,6 @@
         },
         "preset": {
             "group": "Required settings",
-            "note": "Each group switched on here is held in every sandbox of this organisation, whatever the sandbox's own settings say. People can make one of these settings stricter, never looser, and a change made by editing a settings file directly is put back.",
             "pinned": "Required",
             "notPinned": "Not required",
             "privacy": "Privacy shield on, with images masked",
@@ -84,7 +84,12 @@
             "notice": "AI notice shown to everyone",
             "actions": "Outgoing messages and office acts wait for approval",
             "admission": "Work started from outside the sandbox waits for approval",
-            "judge": "Command judge on"
+            "judge": "Command judge on",
+            "scope": "Held in every sandbox, whatever its own settings say.",
+            "hint": {
+                "stricter": "People can make one stricter, never looser.",
+                "putBack": "An edit made in a settings file is put back."
+            }
         },
         "detail": {
             "couldntSave": "Couldn't save the policy",
@@ -95,7 +100,6 @@
             "applied": "policy v{version} in force",
             "pending": "waiting to take v{version}",
             "policy": "Policy · version {version}",
-            "policyNote": "How each part of every sandbox in this organisation is held. Read-only: people can look but not change it, the sandbox owner included. Hidden: it is also left out of the sandbox's menu. Sandboxes pick up a new version within a few minutes.",
             "savePolicy": "Save as new version",
             "members": "People",
             "emailPlaceholder": "name{'@'}office.example",
@@ -105,10 +109,23 @@
             "noSandboxes": "No sandbox belongs to this organisation yet.",
             "pickSandbox": "Choose one of your sandboxes",
             "bind": "Add to organisation",
-            "bindNote": "Only sandboxes you own can be added. Once added, the policy above applies to it until an admin releases it.",
+            "bindNote": "Only sandboxes you own. The policy holds until an admin releases one.",
             "membersOnly": "Only this organisation's people",
-            "membersOnlyNote": "Access to these sandboxes can be given only to people listed here. Removing someone from this organisation removes them from every sandbox within a few minutes, without anyone in the sandbox acting. Sandbox owners are not affected.",
-            "policyReset": "came back without its policy copy on {date} and was sent it again"
+            "membersOnlyNote": "Only people listed here can be given access.",
+            "policyReset": "came back without its policy copy on {date} and was sent it again",
+            "policyScope": "Applies to every sandbox in this organisation.",
+            "legend": {
+                "title": "How a part is held",
+                "open": "changed as usual.",
+                "locked": "seen, never changed, the owner included.",
+                "hidden": "also left out of the sandbox's menu.",
+                "arrives": "Sandboxes take a new version within minutes."
+            },
+            "membersOnlyHint": {
+                "removed": "Removing someone here takes them out of every sandbox.",
+                "soon": "Within minutes, with nobody in the sandbox acting.",
+                "owners": "Sandbox owners are not affected."
+            }
         }
     },
     "a11yKit": {
@@ -12057,7 +12074,13 @@
             "statusBar": {
                 "group": "Agents board",
                 "liveMetrics": "Geek metrics",
-                "liveMetricsHint": "CPU, memory and disk in the Agents board's header, and on each agent's card its share and what it has cost. Elsewhere, a small tile on the rail only when one nears its limit. Nothing is measured while this is off."
+                "liveMetricsHint": "Live gauges and costs on the Agents board.",
+                "hint": {
+                    "header": "CPU, memory and disk in the board's header.",
+                    "cards": "Each agent's card: its share and what it cost.",
+                    "rail": "Elsewhere, a rail tile only near a limit.",
+                    "off": "Off: nothing is measured."
+                }
             },
             "explorer": {
                 "fileNesting": "File nesting",
@@ -12218,12 +12241,12 @@
         "settingsBilling": {
             "activating": "Activating…",
             "addSlotAt": "Add a slot · +${price}/mo",
-            "afterThatFreeHours": "After that your hosted sandbox goes back to the account's free hours, and is removed if left unopened for a few weeks. Resume to keep everything as it is. | After that your hosted sandboxes go back to the account's free hours, and are removed if left unopened for a few weeks. Resume to keep everything as it is.",
+            "afterThatFreeHours": "Then back to free hours, and removed after a few unopened weeks.",
             "billing": "Billing",
             "cancelOnStripe": "Cancel on Stripe",
             "chargedRestMonthStripe": "Slot changes are prorated by Stripe",
             "checkoutOpenInBrowser": "Checkout is open in your browser",
-            "compedOnTheHouse": "Your hosted sandboxes are on the house: their hours count against no limit, and they are never removed for going unopened. There is nothing to pay and nothing to cancel.",
+            "compedOnTheHouse": "Unlimited hours, never removed, nothing to pay.",
             "complimentary": "Complimentary",
             "didntPayAfterAll": "I didn't pay after all",
             "finishPayingThereNothing": "Finish paying there, then come back — your plan turns up here by itself. Nothing is charged until you finish.",
@@ -12355,7 +12378,7 @@
             "systemOffApp": "Windows has notifications from Intentic turned off, so none of these will show. Turn them on in Windows Settings ▸ System ▸ Notifications ▸ Intentic.",
             "systemOffPolicy": "Your organisation has turned notifications off on this computer, so none of these will show.",
             "systemOffUser": "Notifications are turned off on this computer, so none of these will show. Turn them on in Windows Settings ▸ System ▸ Notifications.",
-            "sentTo": "Sent to {count} registered device. If nothing appeared, the send worked and your system swallowed it. Check notification settings and Do Not Disturb for your browser. | Sent to {count} registered devices. If nothing appeared, the send worked and your system swallowed it. Check notification settings and Do Not Disturb for your browser.",
+            "sentTo": "Sent to {count} device. Nothing showed? Check Do Not Disturb. | Sent to {count} devices. Nothing showed? Check Do Not Disturb.",
             "blocked": "Blocked for this app. Re-allow notifications in site settings, then reload."
         },
         "settingsProfile": {
@@ -12382,11 +12405,20 @@
             "readingTokens": "Reading tokens…",
             "shownOnceCopyNow": "Shown once. Copy it now: only its digest is stored.",
             "used": "used {ago}",
-            "whatProvisioningTokensAre": "A provisioning token lets one of your sandboxes create sandboxes on this account. A sandbox's Sandbox fleet card makes its own with one press; mint one here only to paste it by hand. Every sandbox its agent creates still asks you in chat first.",
             "whereItGoes": "Where it goes",
             "unavailable": "Tokens aren't available on this server yet.",
             "notAllowed": "Your account isn't allowed to manage tokens here.",
-            "serverTrouble": "The server had a problem. Try again in a moment."
+            "serverTrouble": "The server had a problem. Try again in a moment.",
+            "whatFor": "Lets a sandbox create sandboxes on your account.",
+            "hint": {
+                "title": "Provisioning tokens",
+                "lane": "Each sandbox its agent makes",
+                "holder": "Sandbox with a token",
+                "youApprove": "You say yes in chat",
+                "newSandbox": "New sandbox",
+                "fleetCard": "A sandbox's Sandbox fleet card mints its own in one press.",
+                "byHand": "Mint one here only to paste it by hand."
+            }
         },
         "words": {
             "iconRailCompact": "Compact",
@@ -12396,9 +12428,9 @@
             "followHint": "Plain on a hands-off sandbox, git's own on a hands-on one.",
             "technical": "Technical",
             "plain": "Plain",
-            "followingHandsOff": "This sandbox runs hands-off, so you read plain words. A choice here holds on this sandbox only.",
-            "followingHandsOn": "This sandbox runs hands-on, so you read git's own words. A choice here holds on this sandbox only.",
-            "overriding": "Your own choice, on this sandbox only. Everyone else follows how it runs."
+            "followingHandsOff": "Hands-off sandbox, so plain words.",
+            "followingHandsOn": "Hands-on sandbox, so git's own words.",
+            "overriding": "Your own choice, on this sandbox only."
         },
         "analytics": {
             "title": "Product analytics",
@@ -12477,14 +12509,23 @@
             "failed": "The project could not be changed",
             "reportsLandIn": "Reports about it land in {sandbox}",
             "release": "Release",
-            "whatClaimsAre": "Name the sandbox that answers for each project. Any other sandbox on your account can then report a problem it saw about that project with `projects report`, and it lands in that sandbox's issues inbox, grouped with every report of the same problem. A project is its repository, e.g. github.com/acme/app.",
             "project": "Project",
             "projectPlaceholder": "github.com/owner/repo",
             "sandbox": "Sandbox",
-            "claim": "Claim"
+            "claim": "Claim",
+            "whatFor": "Pick the sandbox that gets problem reports about each repository.",
+            "hint": {
+                "title": "Project reports",
+                "lane": "A problem seen in a project",
+                "anySandbox": "Any of your sandboxes",
+                "claimedInbox": "Named sandbox's issues",
+                "grouped": "Reports of the same problem are grouped as one.",
+                "isRepository": "A project is its repository: {example}",
+                "onePerProject": "One sandbox per project: claiming it again moves it."
+            }
         },
         "accessMap": {
-            "intro": "Everything this account reaches, as each sandbox it is in tells it now. Point at anything to see what it is tied to; press it to keep it lit.",
+            "intro": "Everything your account reaches. Point at anything to light its ties.",
             "sandboxes": "{count} sandbox | {count} sandboxes",
             "devices": "{count} device | {count} devices",
             "servers": "{count} server | {count} servers",
@@ -12613,6 +12654,9 @@
                 "fleetYours": "On your account",
                 "fleetOwner": "On its owner's account"
             }
+        },
+        "explainers": {
+            "about": "About {name}"
         }
     },
     "setup": {

@@ -25,6 +25,7 @@ import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../../ski
 import { type Audience, useAudience } from "../../app/useAudience";
 import { embedded, tellNative } from "../../app/environments/nativeApp";
 import { NAMED_TEXT_SIZES } from "@intentic/ui/text-size";
+import FactsHint, { type HintFact } from "../../components/FactsHint.vue";
 
 // How the workspace looks: color scheme, accent color, what the file tree and the review list show. Each setting
 // re-renders the whole UI live, so the app is its own preview.
@@ -73,6 +74,14 @@ const wordsHint = computed(() => {
     }
     return mode.value === `hands-on` ? t(`settings.words.followingHandsOn`) : t(`settings.words.followHint`);
 });
+
+// Where each gauge shows, behind the (i) beside the switch's name; the row itself says one line.
+const liveMetricsFacts = computed<readonly HintFact[]>(() => [
+    { icon: `cpu`, text: t(`settings.appearance.statusBar.hint.header`) },
+    { icon: `usage`, text: t(`settings.appearance.statusBar.hint.cards`) },
+    { icon: `exclamation-triangle`, text: t(`settings.appearance.statusBar.hint.rail`) },
+    { icon: `eye-slash`, text: t(`settings.appearance.statusBar.hint.off`) },
+]);
 
 // Order a reader gives up ground: top, then past imports, then the biggest changed block.
 const diffOpenOptions = computed(
@@ -315,12 +324,18 @@ const pickLanguage = (locale: Locale | undefined): void => {
              card's share and cost; off means the sandbox measures nothing for them, not that they are hidden. A phone draws no
              gauges, so it offers no switch for them. -->
         <RowGroup v-if="!maker && !mobile" data-setting="status-bar" :label="t(`settings.appearance.statusBar.group`)">
-            <Row
-                as="label"
-                icon="cpu"
-                :title="t(`settings.appearance.statusBar.liveMetrics`)"
-                :description="t(`settings.appearance.statusBar.liveMetricsHint`)"
-            >
+            <Row as="label" icon="cpu" :description="t(`settings.appearance.statusBar.liveMetricsHint`)">
+                <template #title>
+                    {{ t(`settings.appearance.statusBar.liveMetrics`) }}
+                    <!-- `.prevent`: the row is the switch's label, and a press on the (i) must not also flip it. -->
+                    <FactsHint
+                        class="ml-1 align-[-0.125em]"
+                        :label="t(`settings.explainers.about`, { name: t(`settings.appearance.statusBar.liveMetrics`) })"
+                        @click.prevent
+                        :title="t(`settings.appearance.statusBar.liveMetrics`)"
+                        :facts="liveMetricsFacts"
+                    />
+                </template>
                 <template #control><ToggleSwitch v-model="showLiveMetrics" /></template>
             </Row>
         </RowGroup>

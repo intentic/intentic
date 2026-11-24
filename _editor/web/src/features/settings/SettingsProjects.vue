@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { apiClient } from "../../lib/useApi";
+import FactsHint, { type HintFact, type HintStep } from "../../components/FactsHint.vue";
 
 // Which of this account's sandboxes answers for which project: the directory behind account-level report routing
 // (api projects/). A sandbox reports a problem about a project with `projects report`; it lands in the issues inbox of
@@ -59,12 +60,36 @@ const claim = async (): Promise<void> => {
 };
 
 const release = (name: string): Promise<void> => run(() => apiClient.projects.release({ project: name }));
+
+// The (i) beside the group's name: where a report travels, then what a project is and the rules a claim follows.
+const hintSteps = computed<readonly HintStep[]>(() => [
+    { icon: `box`, label: t(`settings.settingsProjects.hint.anySandbox`) },
+    // The command itself, which no language translates.
+    { icon: `terminal`, label: `projects report`, code: true },
+    { icon: `exclamation-circle`, label: t(`settings.settingsProjects.hint.claimedInbox`), good: true },
+]);
+const hintFacts = computed<readonly HintFact[]>(() => [
+    { icon: `clone`, text: t(`settings.settingsProjects.hint.grouped`) },
+    { icon: `github`, text: t(`settings.settingsProjects.hint.isRepository`, { example: `github.com/acme/app` }) },
+    { icon: `arrow-right`, text: t(`settings.settingsProjects.hint.onePerProject`) },
+]);
 const notice = computed(() => (failure.value === undefined ? undefined : { tone: `danger` as const, title: t(`settings.settingsProjects.failed`), detail: failure.value }));
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup :label="t(`settings.section.projects`)">
+            <!-- What a claim does, in one line; where a report travels and the rules a claim follows sit behind the (i). -->
+            <template #info>
+                <FactsHint
+                    :label="t(`settings.explainers.about`, { name: t(`settings.section.projects`) })"
+                    :title="t(`settings.settingsProjects.hint.title`)"
+                    :lane="t(`settings.settingsProjects.hint.lane`)"
+                    :steps="hintSteps"
+                    :facts="hintFacts"
+                />
+            </template>
+            <RowNote icon="send">{{ t(`settings.settingsProjects.whatFor`) }}</RowNote>
             <div v-if="(claims.data.value ?? []).length > 0" class="divide-y divide-line-subtle">
                 <Row
                     v-for="row in claims.data.value"
@@ -80,7 +105,6 @@ const notice = computed(() => (failure.value === undefined ? undefined : { tone:
             </div>
             <RowNote variant="block">
                 <div class="flex flex-col gap-3">
-                    <p class="text-2xs text-subtle">{{ t(`settings.settingsProjects.whatClaimsAre`) }}</p>
                     <Notice v-if="notice" :of="notice" />
                     <form class="flex flex-wrap items-center gap-2" @submit.prevent="claim">
                         <input

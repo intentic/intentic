@@ -170,7 +170,9 @@ const status = computed(() => {
                 </Row>
             </RowGroup>
             <p v-if="error" class="text-xs text-danger">{{ error }}</p>
-            <p v-else-if="sent" class="text-xs text-muted">{{ sent }}</p>
+            <p v-else-if="sent" class="flex items-center gap-1.5 text-xs text-muted">
+                <Icon name="check-circle" class="shrink-0 text-success" />{{ sent }}
+            </p>
         </div>
 
         <!-- One switch for one mark: the tab's in a browser, the app's icon in the app, whose window has no tab. -->
