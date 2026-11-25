@@ -306,9 +306,9 @@ onBeforeUnmount(() => {
             class="swipe-pane pointer-events-none invisible absolute inset-0 flex items-center justify-end overflow-hidden rounded-[inherit] pr-5"
             :data-tone="action.tone ?? `accent`"
         >
-            <span ref="mark" class="flex flex-col items-center gap-1 opacity-0">
+            <span ref="mark" class="flex flex-col items-center gap-1 text-2xs font-semibold opacity-0">
                 <Icon :name="action.icon" class="text-lg" />
-                <span class="text-2xs font-semibold">{{ action.label }}</span>
+                {{ action.label }}
             </span>
         </div>
         <div ref="body" class="relative">
