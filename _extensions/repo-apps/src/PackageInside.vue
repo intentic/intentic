@@ -100,7 +100,7 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
             <Card v-if="modules && modules.units.length === 0" dashed class="text-center text-sm text-muted">{{
                 t(`dependenciesView.inside.empty`)
             }}</Card>
-            <div v-else-if="stack && modules">
+            <template v-else-if="stack && modules">
                 <StatStrip :items="stats" />
                 <div class="mt-2 flex flex-col gap-1.5">
                     <div v-for="row in stack.rows" :key="row.key" class="flex items-start gap-3 rounded-md border border-line-subtle p-2">
@@ -234,7 +234,7 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
                     </p>
                     <p v-if="!stack.declared" :class="ui.emptyState()" class="text-xs">{{ t(`dependenciesView.inside.declareHint`) }}</p>
                 </section>
-            </div>
+            </template>
         </Await>
     </div>
 </template>

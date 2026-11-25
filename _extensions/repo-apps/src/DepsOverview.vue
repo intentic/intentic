@@ -207,8 +207,8 @@ const usageTable = computed(() =>
                 </thead>
                 <tbody class="divide-y divide-line-subtle">
                     <tr v-for="row in usageTable" :key="row.usage">
-                        <td class="py-1.5 pr-4">
-                            <span class="text-content">{{ t(`dependenciesView.usage.${row.usage}`) }}</span>
+                        <td class="py-1.5 pr-4 text-content">
+                            {{ t(`dependenciesView.usage.${row.usage}`) }}
                             <span class="block text-2xs text-subtle">{{ t(`dependenciesView.usageAbout.${row.usage}`) }}</span>
                         </td>
                         <td class="py-1.5 pr-4 text-right text-content">{{ row.runtime }}</td>
