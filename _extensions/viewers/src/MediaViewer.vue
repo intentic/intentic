@@ -531,14 +531,13 @@ watch(
                     />
                 </div>
 
-                <span class="px-1.5 text-2xs tabular-nums" :class="hasVideo ? `text-white/80` : `text-muted`">
+                <!-- `mr-1` keeps two gaps' room before the speed menu when the row is too narrow for its `ml-auto` to add any. -->
+                <span class="mr-1 px-1.5 text-2xs tabular-nums" :class="hasVideo ? `text-white/80` : `text-muted`">
                     {{ formatDuration(displayTime) }} <span class="opacity-50">/</span> {{ formatDuration(duration) }}
                 </span>
 
-                <span class="flex-1"></span>
-
-                <!-- Shows the numeric playback speed rather than an icon. -->
-                <div class="relative">
+                <!-- Shows the numeric playback speed rather than an icon; `ml-auto` pushes it and the controls after it to the end. -->
+                <div class="relative ml-auto">
                     <button
                         type="button"
                         class="media-btn w-auto px-1.5 text-2xs tabular-nums"
