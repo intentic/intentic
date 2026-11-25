@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_FILE } from "@intentic/constants";
+import { MEMORY_FILE, MEMORY_MAX_CHARS } from "@intentic/constants";
 import { workspaceMemoryNote } from "./workspace-memory.js";
 
 // The properties a runtime's own discovery got wrong: the root file reaches a turn that starts somewhere else, a nested
@@ -73,12 +73,21 @@ test("an empty memory file is nothing to say, not an empty heading", async () =>
 test("a file over the budget is dropped whole and named, never the workspace's own", async () => {
     const root = await scaffold({
         [MEMORY_FILE]: "Keep it short.",
-        [`shop/${MEMORY_FILE}`]: "x".repeat(20_001),
+        [`shop/${MEMORY_FILE}`]: "x".repeat(MEMORY_MAX_CHARS + 1),
     });
 
     const note = workspaceMemoryNote({ root, cwd: join(root, "shop") });
 
     expect(note).toContain("Keep it short.");
+    expect(note).not.toContain("x".repeat(100));
+    expect(note).toContain(`Too long to include here, read them yourself if the work goes near them: shop/${MEMORY_FILE}.`);
+});
+
+test("a workspace whose only file is over the budget still names it, rather than saying nothing", async () => {
+    const root = await scaffold({ [`shop/${MEMORY_FILE}`]: "x".repeat(MEMORY_MAX_CHARS + 1) });
+
+    const note = workspaceMemoryNote({ root, cwd: join(root, "shop") });
+
     expect(note).not.toContain("x".repeat(100));
     expect(note).toContain(`Too long to include here, read them yourself if the work goes near them: shop/${MEMORY_FILE}.`);
 });

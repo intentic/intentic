@@ -637,6 +637,47 @@ describe("live", () => {
     });
 });
 
+// A shell strips quoting before it runs anything, so a command spelled through it is the same command: the same
+// class, just as live, and marked over what was typed.
+describe("quoting a shell strips", () => {
+    test.each([
+        [String.raw`r\m -rf ~`, "files.destructive", String.raw`r\m -rf ~`],
+        ["r''m -rf ~", "files.destructive", "r''m -rf ~"],
+        ['"rm" -rf ~', "files.destructive", '"rm" -rf ~'],
+        [String.raw`$'\x72m' -rf ~`, "files.destructive", String.raw`$'\x72m' -rf ~`],
+        ["rm${IFS}-rf${IFS}~", "files.destructive", "rm${IFS}-rf${IFS}~"],
+        ['cd /tmp && "rm" -rf build', "files.destructive", '"rm" -rf build'],
+        ['g""it push --force', "git.destructive", 'g""it push --force'],
+        ['git push -"-force"', "git.destructive", 'git push -"-force"'],
+        [`sh -c 'g""it push --force'`, "git.destructive", 'g""it push --force'],
+        [`bash -c "r''m -rf /"`, "system.destructive", `r''m -rf /"`],
+        ['cat ~/.e""nv', "secrets.access", '.e""nv'],
+    ])("%j is %s, live, marked as %j", (command, commandClass, fragment) => {
+        expect(classify(command)).toContain(commandClass);
+        expect(live(command, commandClass)).toBe(true);
+        expect(marked(command, commandClass)).toEqual([fragment]);
+    });
+
+    test("what is only quoted text is classified as it was, and stays off the hard rule", () => {
+        expect(live(`echo "rm -rf ~ is dangerous"`, "files.destructive")).toBe(false);
+        expect(live(`echo "r''m -rf ~"`, "files.destructive")).toBe(false);
+        expect(live(`git commit -m "handle r''m -rf ~ too"`, "files.destructive")).toBe(false);
+    });
+
+    test("quotes around ordinary words, and a quoted regex's escapes, invent nothing", () => {
+        for (const command of [
+            'git push "origin" "main"',
+            'rm "-r" notes.txt',
+            `ls -la "my dir"`,
+            String.raw`rg -n '\.env\b' src`,
+            String.raw`grep -rn "\.npmrc" .`,
+            String.raw`echo "\$HOME"`,
+        ]) {
+            expect(classify(command), command).toEqual([]);
+        }
+    });
+});
+
 // The one class whose answer depends on WHOSE checkout would move. A conversation working in a copy of its own may
 // stand wherever it likes — the drift that causes is reported at turn-settled, not refused here — but a turn sharing
 // the owner's tree would move the owner's checkout under them, which is not its call to make.

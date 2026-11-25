@@ -56,7 +56,9 @@ export const PUBLIC_DIR = "public";
 export const MEMORY_FILE = "AGENTS.md";
 // Ceiling in characters (~4/token) over all of a turn's memory files together, since every turn of the session pays for
 // it. A file that would cross it is dropped whole and named, deepest first; the editor draws each file against it.
-export const MEMORY_MAX_CHARS = 20_000;
+// 2026-11-25: 20,000 → 24,000, once the intentic repo's own file had grown to 20,975 and every turn under it ran with
+// none of its rules.
+export const MEMORY_MAX_CHARS = 24_000;
 
 // Per-service state root on a provisioned host reached over ssh, as opposed to inside a sandbox container.
 export const HOST_STATE_ROOT = "/opt/intentic";

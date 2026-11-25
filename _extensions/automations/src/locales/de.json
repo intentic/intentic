@@ -267,6 +267,7 @@
         "turnSettles": "Zug endet",
         "onceAt": "Einmal · {at}",
         "outcome": {
+            "carriedOn": "fortgesetzt",
             "cutOff": "abgebrochen",
             "failed": "fehlgeschlagen",
             "ran": "gelaufen",
@@ -478,6 +479,7 @@
         "openRun": "Lauf öffnen"
     },
     "runHistory": {
+        "carriedOnCount": "{count} fortgesetzt | {count} fortgesetzt",
         "cutOffCount": "{count} abgebrochen | {count} abgebrochen",
         "failedCount": "{count} fehlgeschlagen | {count} fehlgeschlagen",
         "firstAt": "Erstmals {at}",

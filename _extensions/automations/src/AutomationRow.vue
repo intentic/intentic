@@ -127,12 +127,15 @@ const outcomeVerb = (outcome: AutomationRun[`outcome`]): string =>
         skipped: t(`automationRow.outcome.skipped`),
         // Not "failed": the sandbox restarted under it before the run reached its own outcome.
         interrupted: t(`automationRow.outcome.cutOff`),
+        // Not "failed" either: refused for a spent allowance, and moved on or booked again by the sandbox itself.
+        carried: t(`automationRow.outcome.carriedOn`),
     })[outcome];
 const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
     completed: `text-muted`,
     error: `text-danger`,
     skipped: `text-subtle`,
     interrupted: `text-subtle`,
+    carried: `text-subtle`,
 };
 const runTooltip = (run: AutomationRun): string => `${formatDateTime(run.at)}${run.detail !== undefined ? `, ${run.detail}` : ``}`;
 

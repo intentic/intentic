@@ -1,14 +1,23 @@
 import { randomBytes } from "node:crypto";
-import { agent, type AgentApp, type AgentContext, methods, RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
-import type { TranscriptPlan, TranscriptQuestion } from "@intentic/sandbox-contract/events/transcript";
+import { agent, type AgentApp, type AgentContext, methods, type PermissionOption, RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
+import {
+    REQUEST_FIELDS,
+    type TranscriptPermission,
+    type TranscriptPlan,
+    type TranscriptQuestion,
+    type TranscriptRow,
+} from "@intentic/sandbox-contract/events/transcript";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type BridgeConfig, readSessions, resolveConfig, writeSessions } from "./config.js";
 import { createDaemonClient, type DaemonClient } from "./daemon-client.js";
-import { createTranslator } from "./translate.js";
+import { createTranslator, editorPath } from "./translate.js";
 
 // Thin stdio ACP bridge onto the intentic sandbox daemon: one ACP session is one daemon conversation, watched over
 // /agent/attach and translated into session/update notifications.
 // The daemon's side-channel control flow maps onto ACP's one interactive primitive, request_permission: a plan frame
-// becomes a "Review plan" tool call, an AskUserQuestion frame becomes one permission request per question.
+// becomes a "Review plan" tool call, an AskUserQuestion frame becomes one permission request per question, and a
+// permission card (the command judge, a host guard, an owner's rule) becomes one permission request with its own title.
+// Every other card has no ACP control, so the editor is told once to answer it in the sandbox app.
 // Modes [code, plan] map to the daemon's per-turn permissionMode, same as the web client sends.
 
 // Daemon constrains conversation ids for branch/filesystem safety; this id always satisfies that regex.
@@ -125,6 +134,122 @@ const askQuestions = async (
         answers[question.question] = [picked];
     }
     await daemon.postReply({ kind: "question", requestId: event.requestId, answers });
+};
+
+type PermissionDecision = Extract<AgentReply, { kind: "permission" }>["decision"];
+
+// A fence longer than any backtick run in the command, so the command cannot close its own block.
+const fenced = (text: string, language: string): string => {
+    const fence = "`".repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map((run) => run[0].length + 1)));
+    return `${fence}${language}\n${text}\n${fence}`;
+};
+
+// What the web card shows a person judging the call: the judge's sentence (else the runtime's description), the
+// subagent's task, the command itself, the file, and why it asked.
+const permissionText = (event: TranscriptPermission): string =>
+    [
+        event.explain ?? event.description,
+        event.child?.task,
+        event.program === undefined ? undefined : fenced(event.program.text, event.program.language),
+        event.path,
+        event.reason === undefined ? undefined : `Asked because: ${event.reason}`,
+    ]
+        .filter((line): line is string => line !== undefined && line !== "")
+        .join("\n\n");
+
+// Turns a permission card into one permission request. Allow-always is offered only where the card itself names what an
+// always would remember (`alwaysLabel`); the conversation-wide "everything" has no ACP counterpart and is never offered.
+// A rejection, or a prompt the editor cancelled, is a bare deny: the daemon tells the agent not to run it and to wait.
+const askPermission = async (
+    ctx: AgentContext,
+    sessionId: string,
+    daemon: DaemonClient,
+    event: TranscriptPermission,
+    cwd: string,
+): Promise<void> => {
+    const toolCallId = `permission-${event.requestId}`;
+    const title = event.title ?? event.displayName ?? event.toolName;
+    const text = permissionText(event);
+    await ctx.notify(methods.client.session.update, {
+        sessionId,
+        update: {
+            sessionUpdate: "tool_call",
+            toolCallId,
+            title,
+            kind: event.program === undefined ? "other" : "execute",
+            status: "pending",
+            content: text === "" ? [] : [{ type: "content", content: { type: "text", text } }],
+            locations: event.path === undefined ? [] : [{ path: editorPath(event.path, cwd) }],
+        },
+    });
+    const options: PermissionOption[] = [
+        { optionId: "once", name: "Allow once", kind: "allow_once" },
+        ...(event.alwaysLabel === undefined ? [] : [{ optionId: "always", name: event.alwaysLabel, kind: "allow_always" as const }]),
+        { optionId: "deny", name: "Deny", kind: "reject_once" },
+    ];
+    const response = await ctx.request(methods.client.session.requestPermission, { sessionId, toolCall: { toolCallId, title }, options });
+    const picked = response.outcome.outcome === "selected" ? response.outcome.optionId : undefined;
+    const decision: PermissionDecision = picked === "once" || (picked === "always" && event.alwaysLabel !== undefined) ? picked : "deny";
+    await daemon.postReply({ kind: "permission", requestId: event.requestId, decision });
+    await ctx.notify(methods.client.session.update, {
+        sessionId,
+        update: { sessionUpdate: "tool_call_update", toolCallId, status: decision === "deny" ? "failed" : "completed" },
+    });
+};
+
+// The cards relayed as permission requests above; every other one parks the turn on something only the sandbox app can
+// answer (a hand-over in the agent's browser or terminal, a connection, a payment, a credential, a page).
+const RELAYED = new Set<string>(["plan", "question", "permission"]);
+const APP_ONLY_FIELDS = REQUEST_FIELDS.filter((field) => !RELAYED.has(field));
+
+// The line that tells the editor where a pending app-only card waits, with the hand-over's own words where it has them.
+const appOnlyCard = (row: TranscriptRow): { requestId: string; text: string } | undefined => {
+    for (const field of APP_ONLY_FIELDS) {
+        const card = row[field];
+        if (card?.status === "pending") {
+            const said = "message" in card ? ` It asks: ${card.message}` : "";
+            return { requestId: card.requestId, text: `\n\nThe agent is waiting on you in the sandbox app; answer it there and the turn goes on.${said}\n\n` };
+        }
+    }
+    return undefined;
+};
+
+// Hands a row's pending card to the editor the first time it is seen pending (`asked`, by requestId); true when the row
+// was a card, so its patch is not translated as well.
+const relayCard = async (
+    ctx: AgentContext,
+    sessionId: string,
+    daemon: DaemonClient,
+    row: TranscriptRow,
+    cwd: string,
+    asked: Set<string>,
+): Promise<boolean> => {
+    const { plan, question, permission } = row;
+    if (plan?.status === "pending" && !asked.has(plan.requestId)) {
+        asked.add(plan.requestId);
+        await reviewPlan(ctx, sessionId, daemon, plan);
+        return true;
+    }
+    if (question?.status === "pending" && !asked.has(question.requestId)) {
+        asked.add(question.requestId);
+        await askQuestions(ctx, sessionId, daemon, question);
+        return true;
+    }
+    if (permission?.status === "pending" && !asked.has(permission.requestId)) {
+        asked.add(permission.requestId);
+        await askPermission(ctx, sessionId, daemon, permission, cwd);
+        return true;
+    }
+    const waiting = appOnlyCard(row);
+    if (waiting === undefined || asked.has(waiting.requestId)) {
+        return false;
+    }
+    asked.add(waiting.requestId);
+    await ctx.notify(methods.client.session.update, {
+        sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: waiting.text } },
+    });
+    return true;
 };
 
 export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
@@ -297,18 +422,8 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                         failure = RequestError.internalError({ details: frame.fact.message });
                         continue;
                     }
-                    if (frame.kind === "patch" && frame.patch.op === "replace") {
-                        const { plan, question } = frame.patch.row;
-                        if (plan?.status === "pending" && !asked.has(plan.requestId)) {
-                            asked.add(plan.requestId);
-                            await reviewPlan(ctx, params.sessionId, daemon, plan);
-                            continue;
-                        }
-                        if (question?.status === "pending" && !asked.has(question.requestId)) {
-                            asked.add(question.requestId);
-                            await askQuestions(ctx, params.sessionId, daemon, question);
-                            continue;
-                        }
+                    if (frame.kind === "patch" && frame.patch.op === "replace" && (await relayCard(ctx, params.sessionId, daemon, frame.patch.row, state.cwd, asked))) {
+                        continue;
                     }
                     for (const update of translate(frame)) {
                         await ctx.notify(methods.client.session.update, { sessionId: params.sessionId, update });

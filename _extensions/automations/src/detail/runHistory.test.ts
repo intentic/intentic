@@ -34,3 +34,16 @@ test(`the tally is worst first and leaves out what never happened; the streak co
     expect(failureStreak([run(1, `error`)])).toBe(1);
     expect(failureStreak([])).toBe(0);
 });
+
+// A run refused for a spent allowance and carried on by the sandbox (moved to the next model, or booked for the reset)
+// has not failed: it neither counts toward the streak nor ends it, and it is tallied apart from failures.
+test(`a carried-on run is passed over by the failure streak and tallied on its own`, () => {
+    const runs = [run(4, `carried`, `Out of allowance. Goes again at 09:00 UTC.`), run(3, `error`), run(2, `carried`), run(1, `completed`)];
+    expect(failureStreak(runs)).toBe(1);
+    expect(failureStreak([run(2, `carried`), run(1, `carried`)])).toBe(0);
+    expect(runTally(runs)).toEqual([
+        { outcome: `error`, count: 1 },
+        { outcome: `carried`, count: 2 },
+        { outcome: `completed`, count: 1 },
+    ]);
+});

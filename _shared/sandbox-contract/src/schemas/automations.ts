@@ -535,7 +535,10 @@ export const AutomationRunSchema = z.object({
     // error: the guard passed but the turn errored
     // interrupted: the daemon died mid-wake; without this value an interrupted fire vanishes from history and reads as
     // never having fired
-    outcome: z.enum(["completed", "skipped", "error", "interrupted"]),
+    // carried: the turn was refused for a spent allowance and the sandbox carried it on by itself, moved to the next
+    // model or booked to go again at the reset (its detail says which). Not a failure: 2026-11-25, these were recorded as
+    // `error`, painted red and counted toward switching the automation off, against automationFailureLimit's own word
+    outcome: z.enum(["completed", "skipped", "error", "interrupted", "carried"]),
     detail: z.string().optional(),
     // Absent only for a run skipped before a conversation was needed.
     conversationId: z.string().optional(),

@@ -267,6 +267,7 @@
         "turnSettles": "Turn settles",
         "onceAt": "Once · {at}",
         "outcome": {
+            "carriedOn": "carried on",
             "cutOff": "cut off",
             "failed": "failed",
             "ran": "ran",
@@ -478,6 +479,7 @@
         "openRun": "Open run"
     },
     "runHistory": {
+        "carriedOnCount": "{count} carried on | {count} carried on",
         "cutOffCount": "{count} cut off | {count} cut off",
         "failedCount": "{count} failed | {count} failed",
         "firstAt": "First at {at}",

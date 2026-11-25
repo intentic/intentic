@@ -1649,6 +1649,10 @@
     {
       "type": "Record<string, ({ at: number; conversationId?: string; detail?: string; outcome: \"completed\" | \"skipped\" | \"error\" | \"interrupted\" })[]>",
       "since": "v1.312.0"
+    },
+    {
+      "type": "Record<string, ({ at: number; conversationId?: string; detail?: string; outcome: \"completed\" | \"skipped\" | \"error\" | \"interrupted\" | \"carried\" })[]>",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/automation-schedule.json": [

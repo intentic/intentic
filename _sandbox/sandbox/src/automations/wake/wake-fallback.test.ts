@@ -84,10 +84,10 @@ test("a wake's ending names what happens next, and only a failure nothing carrie
     const wake = { conversationId: "wake", ladder: LADDER, ran: OPUS_48 };
     expect(await wakeEnding(services, wake, undefined, undefined)).toEqual({ run: { outcome: "completed" }, failed: false });
     const moved = await wakeEnding(services, wake, "You're out of usage.", { code: "rate_limit" });
-    expect(moved).toMatchObject({ failed: false, run: { outcome: "error", detail: "You're out of usage. Moved on to codex/gpt-6.1-sol (run run-moved)." } });
+    expect(moved).toMatchObject({ failed: false, run: { outcome: "carried", detail: "You're out of usage. Moved on to codex/gpt-6.1-sol (run run-moved)." } });
     // A reset a few minutes off is waited for: the run says when it goes again, and nothing moves.
     const nextAt = Math.floor(Date.now() / 1000) + 180;
     const booked = await wakeEnding(services, wake, "Out of allowance.", { code: "rate_limit", autoResume: "scheduled", nextAt });
-    expect(booked).toEqual({ failed: false, run: { outcome: "error", detail: `Out of allowance. Goes again at ${new Date(nextAt * 1000).toISOString().slice(11, 16)} UTC.` } });
+    expect(booked).toEqual({ failed: false, run: { outcome: "carried", detail: `Out of allowance. Goes again at ${new Date(nextAt * 1000).toISOString().slice(11, 16)} UTC.` } });
     expect(await wakeEnding(services, wake, "The provider crashed.", { code: "agent-busy" })).toEqual({ run: { outcome: "error", detail: "The provider crashed." }, failed: true });
 });

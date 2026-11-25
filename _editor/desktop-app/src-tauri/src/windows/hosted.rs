@@ -40,6 +40,10 @@ fn stays_in_webview(url: &Url, app_origin: &Url) -> bool {
 /// `environments/desktop.ts` `installDesktopLinks`), which is why every `target="_blank"` in the app reaches
 /// this function at all.
 pub(super) fn open_in_browser(app: &AppHandle, url: &str) {
+    if !openable(url) {
+        eprintln!("refused to hand a link to the machine: {url} (only http, https, mailto and tel leave the app)");
+        return;
+    }
     let app = app.clone();
     let url = url.to_string();
     tauri::async_runtime::spawn(async move {
@@ -47,6 +51,16 @@ pub(super) fn open_in_browser(app: &AppHandle, url: &str) {
             eprintln!("could not open link in browser: {url} ({error})");
         }
     });
+}
+
+/// Whether a link may be handed to the machine's own opener: a web page, a mail draft, a call. Any other scheme
+/// names a handler on the machine (`file:`, `search-ms:`, `ms-msdt:`, an app's own protocol), and a page this app
+/// frames (an agent-written HTML preview, a dev server's preview, both allowed popups) can raise a navigation or a
+/// `window.open` for one. The page's own filter (`_editor/web` `environments/desktop.ts` `OPENABLE`) covers only
+/// its Ctrl/Shift-click and never runs inside a framed preview, so this is the one check every link out passes.
+/// 2026-11-25: there was none, and every off-origin navigation and `window.open` reached the opener as it came.
+pub(crate) fn openable(url: &str) -> bool {
+    Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "mailto" | "tel"))
 }
 
 /// The origin the page is served from, which is also the one origin whose links stay inside a page window.
@@ -310,6 +324,29 @@ mod tests {
             &origin("https://github.com/settings/tokens/new"),
             &app
         ));
+    }
+
+    #[test]
+    fn only_web_mail_and_call_links_reach_the_machine() {
+        for url in [
+            "https://github.com/settings/tokens/new",
+            "http://localhost:3000/",
+            "mailto:support@intentic.dev",
+            "tel:+48123456789",
+        ] {
+            assert!(openable(url), "{url} should open");
+        }
+        for url in [
+            "file://///attacker.example/share/run.exe",
+            "file:///C:/Windows/System32/calc.exe",
+            "search-ms:query=x&crumb=location:\\\\attacker.example\\share",
+            "ms-msdt:/id PCWDiagnostic",
+            "vscode://file/etc/passwd",
+            "javascript:alert(1)",
+            "not a url",
+        ] {
+            assert!(!openable(url), "{url} should be refused");
+        }
     }
 
     #[test]

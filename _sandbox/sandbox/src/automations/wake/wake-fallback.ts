@@ -117,7 +117,7 @@ const clock = (epochSeconds: number): string => new Date(epochSeconds * 1000).to
 
 /** How a wake's turn ended, as its automation's run records it, and whether that counts toward quarantine. */
 export interface WakeEnding {
-    readonly run: { readonly outcome: "completed" } | { readonly outcome: "error"; readonly detail: string };
+    readonly run: { readonly outcome: "completed" } | { readonly outcome: "error" | "carried"; readonly detail: string };
     // A failure the sandbox is not carrying on by itself: only these count toward disabling the automation.
     readonly failed: boolean;
 }
@@ -138,11 +138,11 @@ export const wakeEnding = async (
     }
     const moved = await moveWakeOnward(services, { ...wake, ladder: wake.ladder ?? [] }, refusal);
     if (moved !== undefined) {
-        return { run: { outcome: "error", detail: `${failure} Moved on to ${moved.rung.provider}/${moved.rung.model} (run ${moved.run}).` }, failed: false };
+        return { run: { outcome: "carried", detail: `${failure} Moved on to ${moved.rung.provider}/${moved.rung.model} (run ${moved.run}).` }, failed: false };
     }
     if (refusal?.autoResume === "scheduled") {
         const when = refusal.nextAt === undefined ? "once the allowance reopens" : `at ${clock(refusal.nextAt)} UTC`;
-        return { run: { outcome: "error", detail: `${failure} Goes again ${when}.` }, failed: false };
+        return { run: { outcome: "carried", detail: `${failure} Goes again ${when}.` }, failed: false };
     }
     return { run: { outcome: "error", detail: failure }, failed: true };
 };

@@ -267,6 +267,7 @@
         "turnSettles": "Termina un turno",
         "onceAt": "Una vez · {at}",
         "outcome": {
+            "carriedOn": "continuada",
             "cutOff": "interrumpida",
             "failed": "fallida",
             "ran": "ejecutada",
@@ -478,6 +479,7 @@
         "openRun": "Abrir ejecución"
     },
     "runHistory": {
+        "carriedOnCount": "{count} continuada | {count} continuadas",
         "cutOffCount": "{count} interrumpida | {count} interrumpidas",
         "failedCount": "{count} fallida | {count} fallidas",
         "firstAt": "La primera: {at}",

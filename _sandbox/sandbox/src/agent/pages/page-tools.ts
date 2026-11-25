@@ -26,35 +26,37 @@ const MAX_INLINE_CHARS = 1_000_000;
 
 const CDN_LIST = [...PAGE_CDN_HOSTS].join(", ");
 
+// The Claude Code CLI cuts an MCP tool's description at about 4,000 characters and marks the cut "… [truncated]", so
+// whatever comes last is what a model never reads. 2026-11-25: show_page's ran to 4,212 and lost its closing rule (say
+// where a chart's numbers came from, label a mock-up's sample content), so the rules that matter most now come first,
+// and page-tools.integration.test.ts holds each tool's description under that cut.
+
 const PAGE_RULES =
     "Write one self-contained HTML document with inline <style> and <script> as `html`, or pass `path` to show an HTML file " +
-    "you built in the workspace. Pictures, stylesheets and scripts it names on disk (relative to the file, or absolute paths, " +
-    `screenshots included) and libraries it names on ${CDN_LIST} are carried into the page when it is shown; the page itself ` +
-    "reaches no network, so nothing else loads (its scripts may still fetch() a data: or blob: URL it holds). Video and audio " +
-    'on disk play at full quality: name the file in <video src="/abs/take1.mp4" controls>, <audio> or <source> (or as an ' +
-    "absolute path in a script's list of takes) and the reader's player streams it from the sandbox and seeks; never " +
-    "re-encode or base64 a video to show it, and never copy it to the person's computer. Render media inside the workspace " +
-    "or your own checkout (the artifacts shelf, .intentic/records/artifacts/, is a good place), not /tmp, which the page " +
-    "cannot stream from. A file plays only while it stays as it was when shown, so give each take its own file name. Its " +
-    "scripts run, sealed off from the chat. " +
+    "you built in the workspace. Files it names on disk (relative to the file, or absolute; screenshots included) and " +
+    `libraries on ${CDN_LIST} are carried into the page; nothing else loads, since the page reaches no network (its scripts ` +
+    "may still fetch() a data: or blob: URL). Video and audio on disk stream at full quality and seek: name the file in " +
+    '<video src="/abs/take1.mp4" controls>, <audio> or <source> (or as an absolute path in a script\'s list of takes); never ' +
+    "re-encode, base64 or copy a video to the person's computer. Render media in the workspace or your own checkout " +
+    "(.intentic/records/artifacts/ is a good place), not /tmp, which the page cannot stream from, and give each take its own " +
+    "file name: a file plays only while it stays as it was when shown. Its scripts run, sealed off from the chat. " +
     `${PAGE_LAYOUT_GUIDE} ${PAGE_THEME_GUIDE}`;
 
 const CHECK_RULE =
-    "Set `check: true` the first time you show anything with scripts or a chart: the page is laid out first in a headless " +
-    "browser, inside a frame like the chat's at the chat's width, and you get back a picture of it, its height and its " +
-    "console (video and audio stay empty there, so a player's box shows at its default size). A page whose scripts throw " +
-    "is not shown, so read the errors, fix, and call again. What its scripts throw later in the reader's own chat is told " +
-    "to you while this turn runs.";
+    "Set `check: true` the first time you show anything with scripts or a chart: the page is first laid out in a headless " +
+    "browser, in a frame like the chat's at its width, and you get back a picture, its height and its console (video and " +
+    "audio stay empty there). A page whose scripts throw is not shown: read the errors, fix, and call again. What its " +
+    "scripts throw later in the reader's own chat is told to you while this turn runs.";
 
 const SHOW_DESCRIPTION =
     "Show the user a page right in the chat, drawn inline where your reply continues: a chart, a table, a diagram, a " +
     "comparison of options, a mock-up, an image collage, whenever it would say more than prose. Call it before the words " +
     "that go with it. The user already sees the page, so do not announce, describe or restate it: say only what it does not. " +
+    "Charts are a claim: build them from real data you read, never from numbers you guessed, and say where the numbers came " +
+    "from. A mock-up may hold sample content, labelled as sample on the page, so it never reads as measured. " +
     `${PAGE_RULES} ${CHECK_RULE} To change a page you showed, call again with \`replaces\` set to its id: the earlier one folds ` +
     "away, so iterating leaves one page behind. Inside the page, `window.intentic.send(text)` sends the chat a message as the " +
-    'user, after their own click: use it for buttons like "Build this one" on a set of mock-ups. Charts are a claim: build ' +
-    "them from real data you read, never from numbers you guessed, and say where the numbers came from. A mock-up may " +
-    "hold sample content, labelled as sample on the page, so it never reads as measured.";
+    'user, after their own click: use it for buttons like "Build this one" on a set of mock-ups.';
 
 const ASK_DESCRIPTION =
     "Ask the user something a page answers better than a list of options: pick one of several mock-ups, tune values with " +

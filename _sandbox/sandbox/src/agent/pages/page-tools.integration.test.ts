@@ -21,6 +21,9 @@ const answering = (reply: Omit<Extract<AgentReply, { kind: "page_ask" }>, "reque
     })) as unknown as ParkedCards["create"],
 });
 
+// The Claude Code CLI cut show_page's description at its 4,091st character (page-tools.ts); kept clear of that.
+const DESCRIPTION_MAX = 4_000;
+
 describe("the page tools", () => {
     let root: string;
     let pushed: AgentEvent[];
@@ -41,6 +44,14 @@ describe("the page tools", () => {
             // Beside the workspace in this test; the daemon keeps it under its own history root.
             mediaKey: `${root}-page-media.key`,
         });
+
+    it("describes each tool within what the CLI hands a model whole", () => {
+        const described = tools() as unknown as { name: string; description: string }[];
+        expect(described.map(({ name, description }) => ({ name, over: description.length > DESCRIPTION_MAX }))).toEqual([
+            { name: "show_page", over: false },
+            { name: "ask_page", over: false },
+        ]);
+    });
 
     it("shows a page written inline, files it, and tells the agent how to redraw it", async () => {
         const show = handlerOf(tools(), "show_page");

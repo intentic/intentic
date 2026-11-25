@@ -22,12 +22,14 @@ const DOT = {
     error: toneDot(`danger`),
     skipped: `bg-content/25`,
     interrupted: toneDot(`warning`),
+    carried: `bg-content/25`,
 } satisfies Record<AutomationRun[`outcome`], string>;
 const INK = {
     completed: `text-content`,
     error: toneInk(`danger`),
     skipped: `text-muted`,
     interrupted: `text-muted`,
+    carried: `text-muted`,
 } satisfies Record<AutomationRun[`outcome`], string>;
 const verb = (outcome: AutomationRun[`outcome`]): string =>
     ({
@@ -35,6 +37,7 @@ const verb = (outcome: AutomationRun[`outcome`]): string =>
         error: t(`automationRow.outcome.failed`),
         skipped: t(`automationRow.outcome.skipped`),
         interrupted: t(`automationRow.outcome.cutOff`),
+        carried: t(`automationRow.outcome.carriedOn`),
     })[outcome];
 
 // A guard-skip has no conversation to open.

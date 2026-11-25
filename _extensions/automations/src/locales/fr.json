@@ -267,6 +267,7 @@
         "turnSettles": "Fin de tour",
         "onceAt": "Une fois · {at}",
         "outcome": {
+            "carriedOn": "poursuivie",
             "cutOff": "interrompue",
             "failed": "échouée",
             "ran": "exécutée",
@@ -478,6 +479,7 @@
         "openRun": "Ouvrir l'exécution"
     },
     "runHistory": {
+        "carriedOnCount": "{count} poursuivie | {count} poursuivies",
         "cutOffCount": "{count} interrompue | {count} interrompues",
         "failedCount": "{count} en échec | {count} en échec",
         "firstAt": "La première : {at}",

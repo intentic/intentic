@@ -147,11 +147,21 @@ const joined = (automation: Automation, runs: RunLedger, watches: WatchLedger): 
 };
 
 // How many times in a row this automation has failed, counting from the newest run until one isn't an `error`.
-// `interrupted` also resets the streak (a daemon death says nothing about the automation); bounded by RUNS_KEPT, since
-// history beyond it is unknowable.
+// `interrupted` also resets the streak (a daemon death says nothing about the automation); a `carried` run, one the
+// sandbox moved on or booked again by itself, neither counts nor resets it, since it has not ended yet. Bounded by
+// RUNS_KEPT, since history beyond it is unknowable.
 export const consecutiveFailures = (runs: readonly AutomationRun[]): number => {
-    const firstSurvivor = runs.findIndex((run) => run.outcome !== "error");
-    return firstSurvivor === -1 ? runs.length : firstSurvivor;
+    let failures = 0;
+    for (const run of runs) {
+        if (run.outcome === "carried") {
+            continue;
+        }
+        if (run.outcome !== "error") {
+            break;
+        }
+        failures += 1;
+    }
+    return failures;
 };
 
 export interface AutomationsStore {

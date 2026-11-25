@@ -2,6 +2,7 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/command-admission.js";
 import { SECRET_REFERENCE } from "../schemas/needs.js";
 import { inertRegions, isLive } from "../text/shell-regions.js";
+import { readingsOf } from "./shell/command-normalise.js";
 import { GIT_BRANCH_SWITCH } from "../text/git-branch-switch.js";
 
 // Classifies a shell command, shared by the sandbox gate and the machine agent's shell tool so they can't drift on what
@@ -532,12 +533,13 @@ const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandC
     "network.outbound": networkOutbound,
 };
 
-// Every class the command falls in, with its fragments, in the catalog's own order. `context` is now required: its
-// locus decides what half the catalog means, and the inert scan runs once, shared by every class.
+// Every class the command falls in, with its fragments, in the catalog's own order, as written or unquoted. `context` is
+// now required: its locus decides what half the catalog means, and the inert scan runs once, shared by every class.
 export const matchCommand = (command: string, context: CommandContext): CommandMatch[] => {
     const regions = inertRegions(command);
+    const read = readingsOf(command, context);
     return CommandClassSchema.options.flatMap((commandClass) => {
-        const spans = mergeSpans(MATCHES[commandClass](command, context));
+        const spans = mergeSpans(read(MATCHES[commandClass]));
         return spans.length === 0 ? [] : [{ commandClass, spans, live: spans.some((span) => isLive(span, regions)) }];
     });
 };

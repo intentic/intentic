@@ -204,8 +204,8 @@ export const PAGE_LAYOUT_GUIDE =
     `borderless, on the conversation's own background: leave html and body without a background, use a fluid width, and ` +
     `add no outer card, border or page title of your own, since the page is part of your reply. Let the content set the ` +
     `height (no 100vh on html or body): the frame grows to fit. Give charts fixed pixel heights. Size anything you draw ` +
-    `from its container's width when you draw it, and draw again when that width changes (a ResizeObserver on the ` +
-    `container): the column narrows on a phone and when a side panel opens, so a width read once at load goes stale.`;
+    `from its container's width, and draw again when that width changes (a ResizeObserver on the container): the column ` +
+    `narrows on a phone and when a side panel opens.`;
 
 // The base every page starts from: the theme's colours and fonts (native controls in the accent too), no margin, no
 // scrollbar (the frame fits the page).

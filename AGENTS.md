@@ -4,10 +4,8 @@
 that invalidated it.** There is no second place to remember: the repository-level map lives in
 `docs/architecture/` (`repo.json`, `repo.md`, and a generated `index.json`), and nothing else does.
 
-`docs/architecture/` also holds how the system is put together, one subject per page — `topology.md`,
-`sandbox.md`, `platform.md`, `app-plane.md`, `extensions.md`, `capabilities.md`, `packages.md`,
-`conventions.md`, `testing.md`, `languages.md`, `repo.md` — and `ARCHITECTURE.md` at the
-root is the index into them, nothing more. The machinery around the code goes in `docs/ops/` (`docs/README.md`
+`docs/architecture/` also holds how the system is put together, one subject per page, and `ARCHITECTURE.md` at
+the root is the index into them, nothing more. The machinery around the code goes in `docs/ops/` (`docs/README.md`
 states the line). A decision's reasons go in the README or architecture page that states the rule, as a short
 dated note beside it naming the alternative it rejected, if there was one: a landed commit is one line with no
 body (`_sandbox/sandbox/src/git/ops/commit-message.ts`), so it cannot carry them. Anything about the WORKSPACE
@@ -23,10 +21,9 @@ rather than this repository belongs in `/work/docs/`.
   the package since its README last changed, so updating them together is what keeps it at zero.
 - `intentic-docs validate --repo intentic --from published` and `intentic-docs check --repo intentic --from
   published --write` are on your PATH; the shipped `documenting` skill has the house style. Neither flag is
-  optional. Without `--from published` the tool reads and writes the draft tree a generation run stages, not the
-  documents in the repository. And `--repo` is resolved against the workspace root rather than your working
-  directory, so it stays `intentic` no matter where you are standing: `--repo .` means the workspace, which
-  documents nothing.
+  optional: without `--from published` the tool works on a generation run's draft tree, not the repository's
+  documents, and `--repo` resolves against the workspace root, so it stays `intentic` wherever you stand (`--repo .`
+  documents nothing).
 
 What does *not* need a documentation edit: renaming a local, adding a test, fixing a bug the page never
 described, changing an implementation detail it deliberately does not mention.
@@ -68,9 +65,9 @@ memory. CI runs all of it on what the owner pushes.
 
 A Vue package (one whose typecheck is `vue-tsc`: `_editor/web`, `_editor/ui`, the extensions) is typechecked with
 `lsp diag --changed`, not its `typecheck` script. It runs the package's own `vue-tsc` over the files you changed and
-the files that import them directly: 5-55 s and 1-4 GB on `_editor/web` on an idle machine, where the full check takes
-7-10 minutes and 6.8 GB. The heavy-command queue runs two at once across the sandbox, so behind other conversations'
-checks the scoped one has taken 10-30 minutes: run it once, in the background, after your last edit. When it cannot
+the files that import them directly (5-55 s and 1-4 GB on `_editor/web`, against 7-10 minutes and 6.8 GB for the full
+check; queued behind other conversations' checks it has taken 10-30 minutes): run it once, in the background, after
+your last edit. When it cannot
 vouch for the change (a `.d.ts`, a tsconfig, a `package.json`, or a file more than 300 of the package's files import
 at some depth), or it times out, it says so and names the full command: leave that to CI, and run a Vue package's full
 typecheck only when asked to. Run `_site/demo`'s typecheck only when `_site/demo` itself changed: it compiles the whole
@@ -81,8 +78,7 @@ project the main tree never installed (`_sandbox/sandbox/src/workspace/deps/reco
 checks the commit (`.github/workflows/ci.yml`: its `quick` job runs the push check within minutes, and the verify
 groups typecheck, build and test the rest; every one of them runs whatever preflight
 concluded, and only the jobs that publish wait on the others passing). When main's CI fails, one fix agent takes it
-(below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you
-did not touch may be main's own: not yours to chase unless your task is about it.
+(below): a failure in code you did not touch may be main's own, not yours to chase unless your task is about it.
 
 If you weakened a test file on purpose, end your final message with a `Test-Note: <why>` line. The land writes it
 into the landed commit, and CI's push check reads it there.
@@ -110,21 +106,17 @@ finding and never runs typecheck, build or test (`pnpm verify` does, by hand). I
 `_tools/checks/manifest.mjs` lists in `CI_BLOCKING` (lockfile, workflow policy, release inputs, wire contract, shell
 quoting and the rest, each with its reason) fails the job; every other finding, lint and the ratchet included, becomes
 an annotation and a step-summary block, and main's `autofix` job commits the mechanical fixes (rustfmt, `oxlint --fix`)
-as `style: apply formatters (CI)`, then dispatches a CI run for it, which measures and releases that push in
-place of the run the fix moved main ahead of.
+as `style: apply formatters (CI)` and dispatches a CI run for that commit.
 
 When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches the default
 branch of every workspace repository mapped to a connected GitHub or GitLab account. A failure streak begins at the
 first job that fails and ends once a later run of every workflow that failed on it passes, or every job that failed
-has passed since; a workflow nothing has run for two weeks comes off by itself, and a person can take one off from the
-Pipelines board. No verification job in
+has passed since. No verification job in
 `ci.yml` waits on another's success, so one run reports everything wrong with a commit, and the sandbox hands a run's
 failed jobs over together: when the run finishes, or 45 minutes after its first failure if it is still going (what fails
 after that follows at its end). The agent, `ci-fix-<repo>-<runId>`, starts with the first failed run's digest
-(`_sandbox/sandbox/src/ci/logs/failure-digest.ts`: each failed job with a `whole log:` path to its full log under
-`/tmp/intentic-ci-logs`, a "How failed tasks ended" section for signals, heap and memory ceilings and timeouts, every
-error once with every job that printed it, then each failed step's last lines without the passing tests), and each
-later run's failures go to the same conversation as one message. It gets at most three turns the sandbox starts per
+(`_sandbox/sandbox/src/ci/logs/failure-digest.ts`, with a `whole log:` path to each failed job's full log under
+`/tmp/intentic-ci-logs`), and each later run's failures go to the same conversation as one message. It gets at most three turns the sandbox starts per
 streak. Once they are spent, or it finished without changing anything, failed or was stopped, the
 failure waits for the owner. A failure in the runners rather than the code never reaches it, and a run whose every
 failure is the fleet's is re-run once. With the Agent tab's Repair switch (`autoRepair`) off, main's failure is only
@@ -152,10 +144,8 @@ has the rest and the reasons.
 
 ## Tests
 
-Tests are type-checked source, held to the rules above. `pnpm typecheck` compiles every one of them
-(`tsconfig.test.json` in each emitting package). Suites here churn far
-more over their SETUP than their assertions (half of every test-file edit is fixture rebuilding) so these
-rules are about what a test stands the code up with, not about how it asserts.
+Tests are type-checked source, held to the rules above: `pnpm typecheck` compiles every one of them
+(`tsconfig.test.json` in each emitting package).
 
 - One fake per seam, not one per suite – a copy cannot be updated when the interface grows, so it quietly
   starts describing a system that no longer exists. Shared fixtures live in the package's `src/testing.ts`
@@ -170,9 +160,8 @@ rules are about what a test stands the code up with, not about how it asserts.
   third-party modules and browser globals.
 - Stub what the test relies on; let the rest name itself – `unstubbed("git", { … })` from `@intentic/testing`
   returns a seam whose unstubbed members throw with their own name, to any depth. A route that reaches past the
-  fake says which method it wanted, instead of answering 500. One definition for the monorepo: the two copies
-  that existed before had already drifted, and the shallower one turned a nested miss into "x is not a
-  function". Import it from there, never re-export it through a package's own `testing.ts`.
+  fake says which method it wanted, instead of answering 500. One definition for the monorepo (two earlier copies
+  drifted apart): import it from there, never re-export it through a package's own `testing.ts`.
 - Never spread a bare `Partial<T>` into a `T`-annotated literal – it tells the compiler every key might be
   supplied, so a fake missing REQUIRED members still type-checks. Split the wide seams out of the override
   type and complete them yourself (`app.test.ts`, `ServiceOverrides`).

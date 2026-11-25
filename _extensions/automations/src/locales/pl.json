@@ -267,6 +267,7 @@
         "turnSettles": "Tura się kończy",
         "onceAt": "Raz · {at}",
         "outcome": {
+            "carriedOn": "kontynuowano",
             "cutOff": "przerwano",
             "failed": "nieudane",
             "ran": "wykonano",
@@ -478,6 +479,7 @@
         "openRun": "Otwórz uruchomienie"
     },
     "runHistory": {
+        "carriedOnCount": "{count} kontynuowane | {count} kontynuowane | {count} kontynuowanych",
         "cutOffCount": "{count} przerwane | {count} przerwane | {count} przerwanych",
         "failedCount": "{count} nieudane | {count} nieudane | {count} nieudanych",
         "firstAt": "Pierwsze: {at}",

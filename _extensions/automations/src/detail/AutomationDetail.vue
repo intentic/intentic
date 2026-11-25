@@ -40,6 +40,7 @@ const tally = computed(() => runTally(props.automation.runs));
 const TALLY_INK = {
     error: toneInk(`danger`),
     interrupted: `text-muted`,
+    carried: `text-muted`,
     completed: `text-muted`,
     skipped: `text-subtle`,
 } as const;
@@ -47,6 +48,7 @@ const tallyWord = (outcome: keyof typeof TALLY_INK, count: number): string =>
     ({
         error: t(`runHistory.failedCount`, { count }, count),
         interrupted: t(`runHistory.cutOffCount`, { count }, count),
+        carried: t(`runHistory.carriedOnCount`, { count }, count),
         completed: t(`runHistory.ranCount`, { count }, count),
         skipped: t(`runHistory.skippedCount`, { count }, count),
     })[outcome];

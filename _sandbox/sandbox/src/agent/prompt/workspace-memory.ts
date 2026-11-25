@@ -87,10 +87,9 @@ export const workspaceMemoryNote = ({ root, cwd }: { readonly root: string; read
     if (files.length === 0) {
         return undefined;
     }
+    // Every file dropped still says so: a turn told nothing reads as a workspace with no rules (2026-11-25: the intentic
+    // repo's own file grew past the ceiling, and every turn under it ran with no rules and no word that it had any).
     const { kept, dropped } = withinBudget(files);
-    if (kept.length === 0) {
-        return undefined;
-    }
     return [
         MEMORY_NOTE_HEADER,
         `The owner's own rules for this workspace, from its \`${MEMORY_FILE}\` files. Follow them as you would anything ` +

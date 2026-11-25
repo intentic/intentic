@@ -29,13 +29,23 @@ export const runEntries = (runs: readonly AutomationRun[]): RunEntry[] => {
 };
 
 // How many of each, worst first: the order anyone scanning a history wants it said in. An outcome with none is left out.
-const ORDER: readonly AutomationRun[`outcome`][] = [`error`, `interrupted`, `completed`, `skipped`];
+const ORDER: readonly AutomationRun[`outcome`][] = [`error`, `interrupted`, `carried`, `completed`, `skipped`];
 export const runTally = (runs: readonly AutomationRun[]): { outcome: AutomationRun[`outcome`]; count: number }[] =>
     ORDER.map((outcome) => ({ outcome, count: runs.filter((run) => run.outcome === outcome).length })).filter((entry) => entry.count > 0);
 
 // How many of the newest runs failed in a row, for the callout over a failing automation: one failure is a blip, five
-// in a row is a job that has stopped working.
+// in a row is a job that has stopped working. A run the sandbox carried on by itself is passed over, as the daemon's
+// own count does (automations-store.ts consecutiveFailures).
 export const failureStreak = (runs: readonly AutomationRun[]): number => {
-    const broken = runs.findIndex((run) => run.outcome !== `error`);
-    return broken === -1 ? runs.length : broken;
+    let failures = 0;
+    for (const run of runs) {
+        if (run.outcome === `carried`) {
+            continue;
+        }
+        if (run.outcome !== `error`) {
+            break;
+        }
+        failures += 1;
+    }
+    return failures;
 };

@@ -1,3 +1,4 @@
+import { MEMORY_MAX_CHARS } from "@intentic/constants";
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
 import { appendDiff, instructionFile, instructionNeed, withRule } from "./instruction-need.js";
 
@@ -160,5 +161,36 @@ describe("the rule's place in the file", () => {
 
     it("shows trailing blank lines the append drops as removed", () => {
         expect(appendDiff("AGENTS.md", "a\n\n\n", "a\n\nb\n")).toBe("--- a/AGENTS.md\n+++ b/AGENTS.md\n@@ -1,3 +1,3 @@\n a\n \n-\n+b");
+    });
+});
+
+// A file a turn would drop whole for length (agent/prompt/workspace-memory.ts) takes every rule in it out of every turn
+// below it, so a rule that would push it there is never proposed, and never written by a stale card.
+describe("the ceiling every turn's rules share", () => {
+    const rule = "- Keep commits small.";
+
+    it("refuses a rule that would push its file past what the files above it leave", async () => {
+        const { kind } = harness({ "AGENTS.md": "x".repeat(MEMORY_MAX_CHARS - 100), "game/AGENTS.md": "y".repeat(90) });
+        const resolved = await kind.resolve({ kind: "instruction", file: "game/AGENTS.md", text: rule }, context);
+        expect(resolved).toMatchObject({ kind: "refused", code: "too_long" });
+        expect(resolved.kind === "refused" ? resolved.message : "").toContain(`game/AGENTS.md would be ${(90 + 2 + rule.length).toLocaleString("en")} characters`);
+    });
+
+    it("raises the same rule while it fits", async () => {
+        const { kind } = harness({ "AGENTS.md": "x".repeat(MEMORY_MAX_CHARS - 200), "game/AGENTS.md": "y".repeat(90) });
+        expect(await kind.resolve({ kind: "instruction", file: "game/AGENTS.md", text: rule }, context)).toMatchObject({ kind: "raise" });
+    });
+
+    it("does not write an approved card once other rules have used up the room it had", async () => {
+        const { kind, tree, writes } = harness({ "AGENTS.md": RULES });
+        const raised = await kind.resolve({ kind: "instruction", file: "AGENTS.md", text: rule }, context);
+        if (raised.kind !== "raise") {
+            throw new Error(`expected a card, got ${raised.kind}`);
+        }
+        tree.set("AGENTS.md", "x".repeat(MEMORY_MAX_CHARS - 5));
+        expect(await kind.answer(needOf(raised.subject), { kind: "approve" }, { email: "owner@acme.dev" })).toMatchObject({
+            refused: expect.stringContaining("The owner has to shorten AGENTS.md first"),
+        });
+        expect(writes).toEqual([]);
     });
 });

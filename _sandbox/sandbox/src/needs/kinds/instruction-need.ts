@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import { MEMORY_FILE } from "@intentic/constants";
+import { MEMORY_FILE, MEMORY_MAX_CHARS } from "@intentic/constants";
 import type { InstructionNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 import { opt } from "../../opt.js";
@@ -93,6 +93,34 @@ const clipped = (text: string): string => {
     return first.length > 70 ? `${first.slice(0, 69)}…` : first;
 };
 
+// Why the file, as `next` would leave it, would never reach a turn, or undefined when it fits. A turn takes the files
+// from the root down while each fits under MEMORY_MAX_CHARS and drops the one that would cross it whole
+// (agent/prompt/workspace-memory.ts), so a rule that pushes its file past what the files above it leave would take
+// every rule in that file out of every turn that starts at or below it. 2026-11-25: an approved rule did exactly that to
+// the intentic repo's own file, and the card had said nothing.
+const overCeiling = async (deps: InstructionNeedDeps, file: string, next: string): Promise<string | undefined> => {
+    const above: string[] = [];
+    for (let dir = posix.dirname(file); dir !== "."; dir = posix.dirname(dir)) {
+        above.unshift(posix.join(posix.dirname(dir), MEMORY_FILE));
+    }
+    let spent = 0;
+    for (const path of above) {
+        const size = ((await deps.read(path)) ?? "").trim().length;
+        if (spent + size <= MEMORY_MAX_CHARS) {
+            spent += size;
+        }
+    }
+    const size = next.trim().length;
+    if (spent + size <= MEMORY_MAX_CHARS) {
+        return undefined;
+    }
+    const share = spent === 0 ? "" : `, and the ${MEMORY_FILE} files above it take ${spent.toLocaleString("en")} of that`;
+    return (
+        `with it ${file} would be ${size.toLocaleString("en")} characters; a turn is given at most ${MEMORY_MAX_CHARS.toLocaleString("en")}${share}, ` +
+        `so every turn would leave ${file} out whole. The owner has to shorten ${file} first`
+    );
+};
+
 // How the rule stands once the file says it: already there, written and committed on its own, or written beside the
 // owner's own uncommitted edits to that file, which only they can commit.
 type Kept = "already" | "committed" | "uncommitted";
@@ -134,6 +162,10 @@ export const instructionNeed = (deps: InstructionNeedDeps): NeedKindHandler => {
             return { kind: "met", message: metFor({ file }, "already").result };
         }
         const text = ask.text.trim();
+        const tooLong = await overCeiling(deps, file, withRule(current, text));
+        if (tooLong !== undefined) {
+            return { kind: "refused", code: "too_long", message: `Nothing was proposed: ${tooLong}.` };
+        }
         const subject: InstructionNeed = {
             kind: "instruction",
             file,
@@ -161,7 +193,13 @@ export const instructionNeed = (deps: InstructionNeedDeps): NeedKindHandler => {
             if (holds(current, subject.text)) {
                 return { status: "met", ...metFor(subject, "already") };
             }
-            const committed = await deps.write(subject.file, withRule(current, subject.text), ruleCommitSubject(subject.file, subject.text));
+            const next = withRule(current, subject.text);
+            // Read again too: other rules approved since the card was drawn may have used up the room it had.
+            const tooLong = await overCeiling(deps, subject.file, next);
+            if (tooLong !== undefined) {
+                return { refused: `Not written: ${tooLong}.` };
+            }
+            const committed = await deps.write(subject.file, next, ruleCommitSubject(subject.file, subject.text));
             return { status: "met", ...metFor(subject, committed ? "committed" : "uncommitted") };
         },
         nextTurn: () => false,

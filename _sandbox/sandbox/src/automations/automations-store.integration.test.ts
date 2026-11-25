@@ -130,13 +130,15 @@ test("a corrupt ledger costs the history but still lists and fires the automatio
 });
 
 // Runs are newest-first; only `error` extends the streak. `skipped` and `interrupted` end it without counting as
-// failures.
+// failures; `carried`, a run the sandbox moved on or booked again by itself, is passed over.
 test("consecutiveFailures counts errors from the newest run and stops at the first survivor", () => {
-    const run = (outcome: "completed" | "skipped" | "error" | "interrupted") => ({ at: 1, outcome });
+    const run = (outcome: "completed" | "skipped" | "error" | "interrupted" | "carried") => ({ at: 1, outcome });
     expect(consecutiveFailures([])).toBe(0);
     expect(consecutiveFailures([run("error"), run("error"), run("completed")])).toBe(2);
     expect(consecutiveFailures([run("completed"), run("error"), run("error")])).toBe(0);
     expect(consecutiveFailures([run("error"), run("error")])).toBe(2);
     expect(consecutiveFailures([run("error"), run("skipped"), run("error")])).toBe(1);
     expect(consecutiveFailures([run("error"), run("interrupted"), run("error")])).toBe(1);
+    expect(consecutiveFailures([run("carried"), run("carried"), run("completed")])).toBe(0);
+    expect(consecutiveFailures([run("error"), run("carried"), run("error"), run("completed")])).toBe(2);
 });
