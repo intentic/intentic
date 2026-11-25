@@ -168,12 +168,25 @@ jobs:
           # request for that branch when none is open, so once the first bump merged, every later run would have tried
           # to edit a merged pull request and failed instead of opening the next one.
           # A number from the list, a URL from create: gh takes either wherever a pull request is named.
-          pr="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
-          if [ -n "$pr" ]; then
-            gh pr edit "$pr" --repo "$REPO" --title "$TITLE" --body "$body"
-          else
-            pr="$(gh pr create --repo "$REPO" --head "$BRANCH" --base main --title "$TITLE" --body "$body")"
-          fi
+          # ROUNDS, because GitHub's GraphQL API now and then answers a call with "Something went wrong while executing
+          # your query", which is GitHub's own error and gone on a second try. The tools bump died on one in the edit
+          # (run 45649701677), with the branch already pushed and the pull request left describing the last run's
+          # bump. Each round is safe to repeat: a create that landed but lost its answer is found by the next
+          # round's list and edited instead of opened twice.
+          upsert_pr() {
+            pr="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')" || return 1
+            if [ -n "$pr" ]; then
+              gh pr edit "$pr" --repo "$REPO" --title "$TITLE" --body "$body" || return 1
+            else
+              pr="$(gh pr create --repo "$REPO" --head "$BRANCH" --base main --title "$TITLE" --body "$body")" || return 1
+            fi
+          }
+          for attempt in 1 2 3; do
+            if upsert_pr; then break; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            echo "GitHub did not take the pull request update (attempt ${attempt}/3); trying again in $((attempt * 20))s" >&2
+            sleep $((attempt * 20))
+          done
 
           if [ -z "${BUMP_TOKEN:-}" ]; then
             {
