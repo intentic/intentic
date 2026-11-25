@@ -14,8 +14,8 @@ export const deploysDocument = defineDocument({ path: stateRelPath(".intentic/re
 // running one is never dropped.
 const KEPT_PER_STACK = 50;
 
-const LIVE_OUTCOMES: readonly DeployOutcome[] = ["queued", "running"];
-export const isLive = (record: Pick<DeployRecord, "outcome">): boolean => LIVE_OUTCOMES.includes(record.outcome);
+const LIVE_OUTCOMES: readonly DeployOutcome[] = new Set(["queued", "running"]);
+export const isLive = (record: Pick<DeployRecord, "outcome">): boolean => LIVE_OUTCOMES.has(record.outcome);
 
 // A stack's key across repositories.
 export const stackKey = (repo: string, stack: string): string => `${repo}\u0000${stack}`;
