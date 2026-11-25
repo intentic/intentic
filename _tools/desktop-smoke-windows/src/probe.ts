@@ -106,6 +106,17 @@ export const runnerTask = async (taskName: string): Promise<RunnerTask[]> => {
 /** Whether a docker CLI is on PATH and its daemon answers. Separate from `dockerContainerOs` on purpose. */
 export const dockerReachable = async (): Promise<boolean> => (await run(`docker`, [`info`, `--format`, `{{.OSType}}`])).code === 0;
 
+/** The variables that point a docker CLI at one engine over another (ic's docker.rs `ENGINE_VARS`). */
+const ENGINE_VARS = [`DOCKER_HOST`, `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, `DOCKER_CONTEXT`] as const;
+
+/**
+ * Whether Docker Desktop answers, whichever engine this job points its own `docker` at: asked as ic asks it (its
+ * `Target::DockerDesktop`), with every engine variable removed. A runner with only Intentic's engine answers no, and the
+ * workflow points `docker` at that engine instead (windows-smoke.yml).
+ */
+export const dockerDesktopReachable = async (): Promise<boolean> =>
+    (await run(`docker`, [`info`, `--format`, `{{.OSType}}`], { env: Object.fromEntries(ENGINE_VARS.map((name) => [name, undefined])) })).code === 0;
+
 /** linux or windows, which kind of container this daemon can run. */
 export const dockerContainerOs = async (): Promise<string | undefined> => {
     const result = await run(`docker`, [`info`, `--format`, `{{.OSType}}`]);

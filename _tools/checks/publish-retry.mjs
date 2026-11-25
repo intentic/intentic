@@ -255,6 +255,11 @@ rm -f "$landed"
                 "an overlay extraction that lost a directory mid-unpack, which the core smoke on 7e7b6f1e printed",
                 'failed to extract layer (application/vnd.oci.image.layer.v1.tar+zstd sha256:762ee29874ef33780098e67c7a48212813ca5c982246cc823a4ab5261a30d190) to overlayfs as "extract-492761203-kmsW sha256:7cb19efd9d0e020798239c794e4845c5264c3f7762981fc6fd6fa6a771d42a84": failed call to UtimesNanoAt for /var/lib/desktop-containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/149094/fs/opt/sandbox/.cache: no such file or directory',
             ],
+            [
+                "a pull's containerd lease gone mid-unpack, which run 45598897622's images smoke printed",
+                "failed to commit snapshot extract-506093630-8Abg sha256:3b06c9dedc846b1e09768e0a5f651e93346eabfdf04c96c0fdf36d246ab174c0: NotFound: lease does not exist: not found",
+            ],
+            ["the same lease lost with nothing to name, from that run's core half", "lease does not exist: not found"],
         ],
         // A pull is not re-run for anything re-running cannot fix: a disk with no room for 5 GB stays that way, and
         // every verdict the registry reaches is registry-retry.sh's to judge one layer in.
@@ -276,10 +281,13 @@ rm -f "$landed"
                 'failed to resolve reference: denied: permission_denied: 403 "Forbidden" You have exceeded a secondary rate limit.',
             ],
         ],
-        // Three properties the pattern list alone can't show: a lost snapshot is dropped and re-pulled until it lands, a
-        // store that keeps losing it gives up rather than pulling 5 GB forever, and a registry verdict is not re-asked.
+        // Four properties the pattern list alone can't show: a lost snapshot is dropped and re-pulled until it lands, a
+        // store that keeps losing it gives up rather than pulling 5 GB forever, a registry verdict is not re-asked, and
+        // a pull waits out another job's hold on the host's pull lock without being stopped by it.
         drill: String.raw`
 export REGISTRY_RETRY_ATTEMPTS=1 IMAGE_PULL_ATTEMPTS=3 IMAGE_PULL_DELAY=0
+IMAGE_PULL_LOCK="$(mktemp -d)/image-pull.lock"; export IMAGE_PULL_LOCK
+LEASE='failed to commit snapshot extract-506093630-8Abg sha256:3b06c9dedc84: NotFound: lease does not exist: not found'
 LOST='failed to prepare extraction snapshot "extract-867389931-0Kfz sha256:278bf3cda023": NotFound: parent snapshot sha256:ceeb23b44c46 does not exist: not found'
 MISSING='Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:no-such-tag": ghcr.io/intentic/sandbox:no-such-tag: not found'
 DEEP='failed to register layer: max depth exceeded'
@@ -306,6 +314,15 @@ FLAKY=no  OUTPUT="$DEEP"    run too-deep    image_pull ghcr.io/intentic/sandbox:
 FLAKY=no  OUTPUT="$UNKNOWN" run unknown-stale image_pull ghcr.io/intentic/sandbox:1.401.1-arm64
 FLAKY=yes OUTPUT="$UNKNOWN" IMAGE_PULL_FRESH_ATTEMPTS=3 IMAGE_PULL_FRESH_DELAY=0 run unknown-fresh image_pull ghcr.io/intentic/sandbox:1.401.1-arm64
 FLAKY=no  OUTPUT="$UNKNOWN" IMAGE_PULL_FRESH_ATTEMPTS=3 IMAGE_PULL_FRESH_DELAY=0 run unknown-gone image_pull ghcr.io/intentic/sandbox:1.401.1-arm64
+# Another job on the host holds the pull lock (a second open of the file is a second holder to flock): this one waits
+# its deadline, then pulls anyway and still rides out a lost lease.
+if command -v flock >/dev/null; then
+    exec 8>>"$IMAGE_PULL_LOCK"; flock 8
+    FLAKY=yes OUTPUT="$LEASE" IMAGE_PULL_LOCK_WAIT=1 run lock-held image_pull ghcr.io/intentic/sandbox:1.431.0-amd64
+    exec 8>&-
+else
+    FLAKY=yes OUTPUT="$LEASE" run lock-held image_pull ghcr.io/intentic/sandbox:1.431.0-amd64
+fi
 `,
         expect: {
             cleared: [2, 0],
@@ -315,6 +332,7 @@ FLAKY=no  OUTPUT="$UNKNOWN" IMAGE_PULL_FRESH_ATTEMPTS=3 IMAGE_PULL_FRESH_DELAY=0
             "unknown-stale": [1, 1],
             "unknown-fresh": [2, 0],
             "unknown-gone": [3, 1],
+            "lock-held": [2, 0],
         },
     },
     {

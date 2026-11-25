@@ -19,7 +19,9 @@ flowchart LR
   ([docs/ops/ci-runner-windows.md](../../docs/ops/ci-runner-windows.md)); `doctor` names that and other machine
   faults before any tier runs.
 - Tier 1 needs no Docker and no credentials, so it gates every release. Tiers 2 and 3 need a Windows Docker daemon
-  and a shared agent-auth volume, so they run nightly.
+  and a shared agent-auth volume, so they run nightly. The daemon can be Docker Desktop or Intentic's engine. On a
+  runner with only the engine, the workflow points `docker` at it, and tier 2 sets up there (`IC_ENGINE=intentic`)
+  rather than on Docker Desktop.
 - Tier 5 (`outage`) launches the app tier 1 left installed once per shape an outage takes, and reads which page the
   workspace window holds from WebView2's DevTools listing (`--remote-debugging-port`), since the frame is titled
   "Intentic" whichever page it is: nothing resolves (the offline page, `status=host-name-not-resolved`); the address
@@ -33,7 +35,8 @@ flowchart LR
   `_tools/desktop-smoke/outage.sh`.
 - Tier 4 installs Intentic's engine (a dockerd in a WSL distro of ours) from the rootfs the build job made, beside the
   runner's Docker Desktop, and checks Windows reaches a port it publishes; on main pushes that much, nightly also a
-  sandbox moved onto it and back with its files. It runs `ic` with a home, a disk and a distro of its own
+  sandbox moved onto it and back with its files (a move that stands down, saying so, on a runner with no Docker
+  Desktop to move from). It runs `ic` with a home, a disk and a distro of its own
   (`engine.ts`), so the runner's own `~/.intentic`, a real engine and the Run key are never touched, and it removes
   what its engine put into WSL's network, which the runner's Linux fleet shares.
   Dispatch Nightly with `only: desktop-engine` to build the current `ic` and rootfs and run this install-and-port

@@ -121,7 +121,7 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
     if (!(await dockerReachable())) {
         harness.fail(
             `no Docker daemon answers`,
-            `Docker Desktop must be installed, started and signed in before the setup tier. After a snapshot reset it can take a minute past login.`,
+            `Docker Desktop (installed, started and signed in) or Intentic's engine (\`ic docker prepare --yes\`) must answer before the setup tier; the workflow points docker at the engine when Docker Desktop is absent. After a snapshot reset Docker Desktop can take a minute past login.`,
         );
         return;
     }

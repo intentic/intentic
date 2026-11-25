@@ -25,7 +25,10 @@ set -o pipefail
 # finished downloading, whose ingest file was gone when containerd went to move it into blobs/ (1.398.1's core
 # half, on z440 with every layer downloaded, read as the registry's refusal and released nothing). The fifth is
 # the overlay extraction losing a directory mid-unpack (the core smoke on 7e7b6f1e, where /opt/sandbox/.cache
-# was gone when containerd tried to set its timestamps): same class of snapshot-chain corruption, same fix.
+# was gone when containerd tried to set its timestamps): same class of snapshot-chain corruption, same fix. The
+# sixth is the pull's own containerd lease gone from under it. Leases live only in this daemon, so the registry has no
+# part in it. Two images jobs on omen's one Docker Desktop daemon (runs 45598897622 and 45594477272) printed it in the
+# same second, with every layer downloaded, and both were reported as the registry's refusal.
 #
 # NOTHING ELSE BELONGS HERE. A full disk fails the unpack too ("failed to register layer: write ...: no space
 # left on device") and must fail AT ONCE: re-pulling 5 GB onto a disk with no room for it is twenty minutes
@@ -40,6 +43,7 @@ image_pull_unpack_fault() {
         -e 'content digest [^ ]+: not found' \
         -e 'failed commit on ref [^ ]+: commit failed: rename [^ ]+/ingest/[^ ]+ [^ ]+: no such file or directory' \
         -e 'failed to extract layer .* to overlayfs .* no such file or directory' \
+        -e 'lease does not exist' \
         -- "$1"
 }
 
@@ -60,7 +64,7 @@ image_pull_fresh_lag() {
 # Run the pull, streaming it (a 5 GB pull must not go quiet for the sake of being judged) while keeping a copy
 # to judge a failure by. The registry's own transient set is handled inside `registry_retry`; what comes back
 # failed is either an unpack this function can clear or a verdict worth printing.
-image_pull() { # <image-ref>
+image_pull_unlocked() { # <image-ref>
     local image="$1" attempt=1 fresh=1 status log
     log="$(mktemp)"
     while :; do
@@ -98,4 +102,33 @@ image_pull() { # <image-ref>
         sleep "$IMAGE_PULL_DELAY"
         attempt=$((attempt + 1))
     done
+}
+
+# ONE PULL AT A TIME PER DAEMON. Every worker on a fleet host shares that host's one image store, and the sandbox image
+# is 5 GB with most of its layers shared between tags. Two pulls at once land the same blobs in the same store. When one
+# pull fails, or a retry drops what it unpacked, the cleanup takes the other pull's ingest or lease with it. On omen, two
+# CI images jobs and a release's lost layers in the same second, and they did again on retry (runs 45598897622 and
+# 45594477272). The images and release jobs mount the host's one release cache at /ci-cache, so a lock there makes
+# them take turns. A host without that directory, a deploy host or a laptop, pulls as before.
+IMAGE_PULL_LOCK="${IMAGE_PULL_LOCK-/ci-cache/image-pull.lock}"
+# A pull that waits longer than this pulls anyway. A held lock means a lost layer, but a pull that never starts
+# fails the job too.
+IMAGE_PULL_LOCK_WAIT="${IMAGE_PULL_LOCK_WAIT:-2700}"
+
+image_pull() { # <image-ref>
+    local fd status=0
+    # The group keeps the silencing to the open: an `exec`'s own 2>/dev/null would stay on the shell for good.
+    if [ -z "$IMAGE_PULL_LOCK" ] || ! command -v flock >/dev/null \
+        || [ ! -d "$(dirname "$IMAGE_PULL_LOCK")" ] || ! { exec {fd}>>"$IMAGE_PULL_LOCK"; } 2>/dev/null; then
+        image_pull_unlocked "$1"
+        return
+    fi
+    if ! flock -n "$fd"; then
+        echo "==> another job is pulling into this host's image store; waiting up to ${IMAGE_PULL_LOCK_WAIT}s for it to finish before pulling $1" >&2
+        flock -w "$IMAGE_PULL_LOCK_WAIT" "$fd" \
+            || echo "==> still not free after ${IMAGE_PULL_LOCK_WAIT}s; pulling $1 beside it" >&2
+    fi
+    image_pull_unlocked "$1" || status=$?
+    exec {fd}>&-
+    return "$status"
 }

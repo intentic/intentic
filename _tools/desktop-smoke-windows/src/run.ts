@@ -15,7 +15,8 @@ export interface RunResult {
 
 export interface RunOptions {
     readonly cwd?: string;
-    readonly env?: Record<string, string>;
+    /** Laid over this process's own environment; a key set to undefined is left out of the child's (node drops it). */
+    readonly env?: Readonly<Record<string, string | undefined>>;
     readonly timeoutMs?: number;
     /** Bytes of output to keep; installers and container logs can be verbose, so the default is generous. */
     readonly maxBuffer?: number;

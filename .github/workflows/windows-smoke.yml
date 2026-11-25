@@ -138,6 +138,32 @@ jobs:
           JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
           DRAIN_MINUTES: ${{ inputs.drain-minutes }}
 
+      # Docker Desktop or Intentic's engine: either is a machine Intentic runs on. Docker Desktop answers every `docker` on
+      # the machine. The engine answers only processes that ic and the app point at it, using the record ic keeps
+      # (~/.intentic/engine/engine.json). So on a runner with only the engine, this job's `docker` is pointed the same way:
+      # the engine's CLI goes first on PATH, and DOCKER_HOST is its named pipe, or its TLS endpoint when the relay is down.
+      # jurek has no Docker Desktop, and the registry login below found no docker at all (nightly 45609042973).
+      - name: Point docker at this machine's engine when Docker Desktop is absent
+        if: ${{ inputs.deep || inputs.engine || inputs.engine-only || inputs.engine-move }}
+        shell: pwsh
+        run: |
+          if (Get-Command docker -ErrorAction SilentlyContinue) {
+            docker info --format '{{.OSType}}' *> $null
+            if ($LASTEXITCODE -eq 0) { Write-Output "a docker daemon already answers: nothing to point"; exit 0 }
+          }
+          $stateDir = if ($env:INTENTIC_HOME) { $env:INTENTIC_HOME } else { Join-Path $env:USERPROFILE '.intentic' }
+          $recordPath = Join-Path $stateDir 'engine/engine.json'
+          if (-not (Test-Path $recordPath)) { Write-Output "no docker answers and no engine record at ${recordPath}: the doctor below names it"; exit 0 }
+          $record = Get-Content -Raw $recordPath | ConvertFrom-Json
+          if ($record.engine -ne 'intentic') { Write-Output "the engine record names $($record.engine), not Intentic's engine: the doctor below names it"; exit 0 }
+          $dockerHost = $record.host
+          $pipeLeaf = if ($record.pipe) { ($record.pipe -split '/')[-1] } else { '' }
+          if ($pipeLeaf -and (Test-Path "\\.\pipe\$pipeLeaf")) { $dockerHost = $record.pipe }
+          else { "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=$($record.certPath)" | Add-Content $env:GITHUB_ENV }
+          "DOCKER_HOST=$dockerHost" | Add-Content $env:GITHUB_ENV
+          $record.bin | Add-Content $env:GITHUB_PATH
+          Write-Output "docker now reaches Intentic's engine at $dockerHost with $($record.bin)\docker.exe"
+
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ (inputs.deep && !inputs.engine-only) || inputs.engine-move }}
         with:

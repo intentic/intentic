@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { CONNECT_TOKEN, INGRESS_URL, PLATFORM_URL_UNREACHABLE, PRODUCT_NAME, SANDBOX_GRANT, SANDBOX_HOSTNAME } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
-import { dockerContainerOs, dockerInspectRunning, dockerLogs, dockerReachable, findInstalledApp, missingContainerEnv, sandboxHealth } from "./probe.js";
+import { dockerContainerOs, dockerDesktopReachable, dockerInspectRunning, dockerLogs, dockerReachable, findInstalledApp, missingContainerEnv, sandboxHealth } from "./probe.js";
 import { run } from "./run.js";
 
 export interface SetupTierOptions {
@@ -22,9 +22,18 @@ export interface SetupTierOptions {
 // Before ic's first release, CI cross-builds it from this checkout, passed in via IC_BIN, the shim's override.
 const SETUP_TIMEOUT_MS = 30 * 60 * 1_000;
 
-// This tier is the Docker Desktop PC: a new setup on Windows goes onto Intentic's engine (ic's engine/choice.rs), which
-// the engine tier covers, so every ic run here, connect.ps1's included, is pointed at Docker Desktop the one way ic takes.
-const ON_DOCKER_DESKTOP = { IC_ENGINE: `docker-desktop` } as const;
+// The engine every ic run here sets up on, connect.ps1's included. A new setup on Windows goes onto Intentic's engine (ic's
+// engine/choice.rs). The engine tier installs that engine separately, so a runner with Docker Desktop is used as the
+// Docker Desktop PC and its setup is sent there, the one way ic takes. A runner with only Intentic's engine (jurek,
+// nightly 45609042973) runs the setup on that engine, as a new user would.
+const engineChoice = async (harness: Harness): Promise<{ readonly IC_ENGINE: string }> => {
+    if (await dockerDesktopReachable()) {
+        harness.pass(`a Docker daemon answers: Docker Desktop, which the setup goes onto`);
+        return { IC_ENGINE: `docker-desktop` };
+    }
+    harness.pass(`a Docker daemon answers and Docker Desktop does not: the setup goes onto Intentic's engine`);
+    return { IC_ENGINE: `intentic` };
+};
 
 export const runSetupTier = async (harness: Harness, options: SetupTierOptions): Promise<string | undefined> => {
     const installed = await findInstalledApp(PRODUCT_NAME);
@@ -47,11 +56,11 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     if (!(await dockerReachable())) {
         harness.fail(
             `no Docker daemon answers`,
-            `Docker Desktop has to be running and signed in before this tier. On a fresh snapshot it can take a minute after login.`,
+            `Docker Desktop (running and signed in) or Intentic's engine has to answer before this tier. On a fresh snapshot Docker Desktop can take a minute after login.`,
         );
         return undefined;
     }
-    harness.pass(`a Docker daemon answers`);
+    const onEngine = await engineChoice(harness);
 
     const containerOs = await dockerContainerOs();
     if (containerOs !== `linux`) {
@@ -67,7 +76,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     // ic is cross-built on Linux, so this is the first run of its Windows probes (WMI, registry, wsl): expect no findings.
     if (options.icBin !== undefined) {
         harness.section(`ic docker prepare (read-only)`);
-        const prepared = await run(options.icBin, [`docker`, `prepare`, `--dry-run`], { timeoutMs: 120_000, env: ON_DOCKER_DESKTOP });
+        const prepared = await run(options.icBin, [`docker`, `prepare`, `--dry-run`], { timeoutMs: 120_000, env: onEngine });
         if (prepared.code === 0) {
             harness.pass(`it finds this PC ready`);
         } else {
@@ -84,7 +93,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         const NEEDS_CONSENT = 3;
         const asked = await run(options.icBin, [`docker`, `prepare`], {
             timeoutMs: 120_000,
-            env: { ...ON_DOCKER_DESKTOP, INTENTIC_NO_PROMPT: `1` },
+            env: { ...onEngine, INTENTIC_NO_PROMPT: `1` },
         });
         if (asked.code === 0 || asked.code === NEEDS_CONSENT) {
             harness.pass(`it answers rather than waiting for a question nobody can hear (exit ${asked.code})`);
@@ -100,7 +109,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     // run the setup the app would run
     harness.section(`the shipped connect.ps1 (image: ${options.sandboxImage})`);
     const env: Record<string, string> = {
-        ...ON_DOCKER_DESKTOP,
+        ...onEngine,
         CONNECT_TOKEN,
         SANDBOX_GRANT,
         INGRESS_URL,

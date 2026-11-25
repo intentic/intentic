@@ -16,7 +16,7 @@ import { readEngineIsolation } from "./engine-isolation.js";
 import { engineDockerContext } from "./engine-docker-context.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
-import { dockerReachable, sandboxHealth } from "./probe.js";
+import { dockerDesktopReachable, sandboxHealth } from "./probe.js";
 import { type RunResult, run } from "./run.js";
 
 export interface EngineTierOptions {
@@ -86,6 +86,17 @@ const engineInputsReady = async (harness: Harness, options: EngineTierOptions): 
     return engineTierIsolated(harness, false);
 };
 
+// The move carries a sandbox from Docker Desktop to the engine and back, so a runner with only Intentic's engine (jurek)
+// has nothing to move from. The move stands down there, saying why, and the rest of the tier still runs.
+const moveHasDockerDesktop = async (harness: Harness): Promise<boolean> => {
+    if (await dockerDesktopReachable()) {
+        return true;
+    }
+    harness.section(`moved onto Intentic's engine and back: stood down, no Docker Desktop answers on this runner`);
+    harness.pass(`the move starts from Docker Desktop; install, publish and removal still run below`);
+    return false;
+};
+
 export const runEngineTier = async (harness: Harness, options: EngineTierOptions): Promise<void> => {
     if (!await engineInputsReady(harness, options)) {
         return;
@@ -93,7 +104,7 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     rmSync(ENGINE_ROOT, { recursive: true, force: true });
     mkdirSync(ENGINE_ROOT, { recursive: true });
     const env = isolatedEnv(ENGINE_ROOT, options.tarball);
-    if (!options.move) { await exerciseEngine(harness, options, env); return; }
+    if (!options.move || !(await moveHasDockerDesktop(harness))) { await exerciseEngine(harness, { ...options, move: false }, env); return; }
     const context = await engineDockerContext(ENGINE_ROOT);
     try {
         const scoped = { ...env, ...context.env };
@@ -126,8 +137,8 @@ const exerciseEngine = async (harness: Harness, options: EngineTierOptions, env:
         harness.fail(`the engine is not running after its install`, JSON.stringify(after));
         return;
     }
-    // This runner's sandboxes run on Docker Desktop: an install must leave them there (the record's `active` switch).
-    if (await dockerReachable()) {
+    // Where this runner's sandboxes run on Docker Desktop, an install must leave them there (the record's `active` switch).
+    if (await dockerDesktopReachable()) {
         if (after.engine === `dockerDesktop` && !after.active) {
             harness.pass(`installed beside Docker Desktop, it switched nothing: Docker Desktop's sandboxes stay reachable`);
         } else {
