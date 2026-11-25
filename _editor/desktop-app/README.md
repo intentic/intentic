@@ -27,7 +27,10 @@ flowchart LR
   and maximised state, and nothing for a face to hand over. A face is added to the frame, out of sight, the first time
   it is wanted. On Windows a face steps aside by hiding its webview's own child window, never through WebView2's
   `IsVisible`, which reports a viewport of about 70×39 to a hidden page (`webview_sync.rs`); on Linux by hiding its GTK
-  widget, kept out of the `show_all` tao answers every `show` with. Tauri attaches a frameless window's resize borders
+  widget, kept out of the `show_all` tao answers every `show` with. On Windows a face just added is not hidden at once:
+  it is shown under the face on screen until its page has painted there (`frame.rs` `underlay`), since a child window
+  WebView2 has never shown comes up black for a moment the first time it is shown, which was the black flash of the
+  first switch between a sandbox and This computer after a launch. Tauri attaches a frameless window's resize borders
   only to a window's own content webview, so the frame attaches them for its faces. The frame wears the title of the
   face it shows ("<folder> · Intentic", a setup's, or "Intentic"), and the platform's title bar only while that face's
   page has none (`fit_decorations`). Capabilities name webviews, not windows: a capability naming the frame would

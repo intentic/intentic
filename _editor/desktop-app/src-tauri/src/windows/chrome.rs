@@ -115,7 +115,7 @@ fn says_yes(answer: &str) -> bool {
 }
 
 /// Whether the page `label` has said its bar is up: it has mounted, and is drawing more than the frame's background.
-pub(super) fn bar_is_up(label: &str) -> bool {
+pub(crate) fn bar_is_up(label: &str) -> bool {
     chrome_of(label).ready.load(Ordering::Relaxed)
 }
 

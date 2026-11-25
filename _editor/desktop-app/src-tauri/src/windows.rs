@@ -55,16 +55,20 @@ fn swap_in(app: &AppHandle, label: &'static str, press: Press) -> Option<Webview
 const FIRST_DRAW_WAIT: Duration = Duration::from_millis(1500);
 
 /// How often a held-back face is looked at, and how long it is given after its page says it is up, for that page's first
-/// frame to reach the screen.
+/// frames to reach the screen: under the face on screen on Windows (frame.rs `underlay`). `ready` goes as the bar
+/// mounts, before the page has painted anything, so 50 ms was about three frames on a calm machine and none to spare
+/// on a busy one; the wait is once per face, behind a press that has already waited for a whole page to load.
 const DRAW_TICK: Duration = Duration::from_millis(16);
-const DRAWN_GRACE: Duration = Duration::from_millis(50);
+const DRAWN_GRACE: Duration = Duration::from_millis(150);
 
 /// `draw` the face `label`, just added to the frame, once its page has drawn something (2026-11-11). Swapped in as it was
 /// added, a face put the frame's bare background where the other face had been until its page painted, the window's flash
 /// on the first switch between a sandbox and This computer. So while `replacing` (the frame on screen with the other face
 /// in it, or a window the face takes the place of), it is held until its page says its bar is up (chrome.rs, which every
 /// page of the editor sends as it mounts) or for [`FIRST_DRAW_WAIT`] at most; and a face the reader had drawn meanwhile
-/// (frame.rs `shows`) stands. Not replacing anything (a launch, the tray), it is drawn at once, as before.
+/// (frame.rs `shows`) stands. Not replacing anything (a launch, the tray), it is drawn at once, as before. On Windows the
+/// hold alone did not do it (2026-11-25): the face waited hidden, its page painting into a window Windows did not show,
+/// so the swap still showed it black for a moment; it now waits under the face on screen (frame.rs `underlay`).
 fn when_drawn(
     app: &AppHandle,
     label: &'static str,

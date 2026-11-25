@@ -11,6 +11,8 @@ use crate::windows::{HOME, WORKSPACE};
 
 /* Hosted and local faces share one native frame, taskbar button and geometry; create each webview lazily and switch visibility.
  * Windows hides the child HWND while leaving WebView2's controller visible to avoid its tiny-viewport bug (webview_sync.rs).
+ * Windows also adds a face under the one on screen rather than hidden, until its page has painted (`underlay`): a child
+ * HWND shown for the first time is black until WebView2 presents into it, which was the first switch's flash.
  * Linux packs both in the frame but excludes hidden faces from GTK show_all.
  * Added child webviews lack Tauri's resize borders, so attach/raise them explicitly on Windows and install the handler on Linux. */
 
@@ -184,26 +186,30 @@ pub fn add_face(
     let holder = frame.clone();
     let added = on_main(app, move |app| {
         if let Some(face) = app.get_webview(label) {
-            return Ok(face);
+            return Ok((face, false));
         }
         let size = holder
             .inner_size()?
             .to_logical::<f64>(holder.scale_factor()?);
         // Built just below the frame's client area, where nothing of it can be seen while WebView2 makes its
-        // controller (a wait during which the frame still paints), then hidden and moved into place. Its size is
-        // the frame's from the start, so its page lays out for the frame it will be shown in.
+        // controller (a wait during which the frame still paints), then put out of sight and moved into place: under
+        // the face on screen while its page first paints on Windows ([`underlay`]), hidden elsewhere. Its size is the
+        // frame's from the start, so its page lays out for the frame it will be shown in.
         let face = holder.add_child(
             builder.auto_resize().focused(false),
             LogicalPosition::new(0.0, size.height),
             size,
         )?;
-        step_aside(&face);
+        underlay(&face);
         face.set_position(LogicalPosition::new(0.0, 0.0))?;
-        Ok::<_, tauri::Error>(face)
+        Ok::<_, tauri::Error>((face, true))
     })?;
     match added {
-        Ok(face) => {
+        Ok((face, built)) => {
             borders(&frame, &face);
+            if built {
+                step_aside_once_painted(app, label);
+            }
             Some(face)
         }
         Err(error) => {
@@ -292,24 +298,114 @@ fn come_forward(face: &Webview) {
     set_drawn(face, true);
 }
 
-/// The face's own child window, shown or hidden, with its controller left as it is: a hidden face is exactly what a
-/// hidden window was to WebView2. `with_webview` runs at once on the main thread, which is where this is called.
+/// `work` done to the face's own child window, the one its controller is drawn in. `with_webview` runs at once on the
+/// main thread, which is where this is called.
 #[cfg(windows)]
-fn set_drawn(face: &Webview, drawn: bool) {
+fn with_container(
+    face: &Webview,
+    work: impl FnOnce(windows::Win32::Foundation::HWND) + Send + 'static,
+) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNA};
     let _ = face.with_webview(move |webview| {
         let mut container = HWND::default();
-        // SAFETY: a getter on the controller this webview owns and a ShowWindow on the child window it names, both on
-        // the thread that created them.
-        unsafe {
-            if webview.controller().ParentWindow(&mut container).is_ok() && !container.is_invalid()
-            {
-                let _ = ShowWindow(container, if drawn { SW_SHOWNA } else { SW_HIDE });
-            }
+        // SAFETY: a getter on the controller this webview owns, on the thread that created it.
+        let found = unsafe { webview.controller().ParentWindow(&mut container) };
+        if found.is_ok() && !container.is_invalid() {
+            work(container);
         }
     });
 }
+
+/// The face's own child window, shown or hidden, with its controller left as it is: a hidden face is exactly what a
+/// hidden window was to WebView2.
+#[cfg(windows)]
+fn set_drawn(face: &Webview, drawn: bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNA};
+    // SAFETY: a ShowWindow on the face's child window, on the thread that created it.
+    with_container(face, move |container| unsafe {
+        let _ = ShowWindow(container, if drawn { SW_SHOWNA } else { SW_HIDE });
+    });
+}
+
+/* A FACE JUST ADDED PAINTS UNDER THE ONE ON SCREEN (2026-11-25), so the first switch to it is never black.
+ *
+ * A child window WebView2 has never shown on screen comes up black for a moment when it is first shown, until WebView2
+ * presents a frame into it. A face used to be hidden the moment it was added, and stayed hidden until a press swapped it in,
+ * so every first switch between a sandbox and This computer showed the reader that black, however long the swap waited
+ * for the page (windows.rs `when_drawn`): the page was drawing into a window Windows did not show. Every later switch
+ * reveals a window that has been on screen before, with its last frame still in it, and never flashed. So on Windows a
+ * face is added shown, at the bottom of the frame's children: under the face the frame draws, whose page covers it whole
+ * and takes every press, so its page paints its first frames where nobody sees them. Once those have reached the screen
+ * it steps aside as any face not drawn does ([`step_aside_once_painted`]), unless a press drew it meanwhile, which then
+ * only had to hide the other face. */
+
+/// Windows: the face's child window shown under every other child of the frame (the face on screen, and the resize
+/// borders, which are thin strips at the edges). Called while the face is still below the frame's client area, so it is
+/// never on top of anything, even for a moment.
+#[cfg(windows)]
+fn underlay(face: &Webview) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, ShowWindow, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER,
+        SWP_NOSIZE, SW_SHOWNA,
+    };
+    // SAFETY: a z-order change and a ShowWindow on the face's child window, on the thread that created it.
+    with_container(face, |container| unsafe {
+        let _ = SetWindowPos(
+            container,
+            Some(HWND_BOTTOM),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOSIZE,
+        );
+        let _ = ShowWindow(container, SW_SHOWNA);
+    });
+}
+
+/// Elsewhere a face is added out of sight, as before: the frame's GTK box lays its shown children out side by side, so
+/// an underlaid face would take half the frame (`set_drawn`), and the black first show is WebView2's.
+#[cfg(not(windows))]
+fn underlay(face: &Webview) {
+    step_aside(face);
+}
+
+/// How long an underlaid face waits for its page to say its bar is up before stepping aside anyway: a hosted page that
+/// cannot load says nothing, and a face nobody has asked to see should not paint under the reader for long.
+#[cfg(windows)]
+const UNDERLAY_LONGEST: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// How long it stays under the face on screen after its page is up: for that page's first frames to reach the screen.
+#[cfg(windows)]
+const UNDERLAY_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// The face `label`, just added under the one on screen ([`underlay`]), out of sight once its page has painted there,
+/// unless a press has drawn it by then.
+#[cfg(windows)]
+fn step_aside_once_painted(app: &AppHandle, label: &'static str) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let started = std::time::Instant::now();
+        while !crate::windows::chrome::bar_is_up(label) && started.elapsed() < UNDERLAY_LONGEST {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        tokio::time::sleep(UNDERLAY_GRACE).await;
+        // Decided on the main thread, where `show` sets what the frame draws, so a press landing now is either seen
+        // here or comes after and shows the face again.
+        let _ = app.clone().run_on_main_thread(move || {
+            if shown() == Some(label) {
+                return;
+            }
+            if let Some(face) = face(&app, label) {
+                step_aside(&face);
+            }
+        });
+    });
+}
+
+/// Elsewhere the face is out of sight from the start ([`underlay`]).
+#[cfg(not(windows))]
+fn step_aside_once_painted(_app: &AppHandle, _label: &'static str) {}
 
 /// The face's GTK widget, shown or hidden in the frame's box, which gives the one shown its whole height. Kept out of
 /// GTK's `show_all`, which tao answers every `show` of a window with: it would bring the face that stepped aside back
