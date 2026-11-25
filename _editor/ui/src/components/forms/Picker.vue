@@ -169,20 +169,20 @@ useAgentControl({
     <ResponsiveOverlay v-model="open" :anchor="triggerEl ?? undefined" :header="header ?? ariaLabel" side="bottom" panel-class="w-max">
         <!-- Trigger-width floor applies to the desktop panel only; a mobile sheet is already phone-width. -->
         <!-- Window clamp is inline, not a class, since an inline max-width always wins the cascade. -->
-        <div :style="mobile ? undefined : { minWidth: `${panelMinWidth}px`, maxWidth: `min(${panelMaxWidth}px, calc(100vw - 1rem))` }">
-            <PickerPanel
-                :options="options"
-                :selected-value="model"
-                :search-threshold="searchThreshold"
-                :list-label="ariaLabel"
-                :label-class="labelClass"
-                :autofocus="!mobile"
-                @pick="applyPick"
-                @close="close"
-            >
-                <!-- Forward only a provided slot: an unconditional forward would override the panel's default icon. -->
-                <template v-if="slots[`icon`]" #icon="slotProps"><slot name="icon" v-bind="slotProps" /></template>
-            </PickerPanel>
-        </div>
+        <!-- The style falls through to PickerPanel's root, where it beats that root's own `min-w-0`. -->
+        <PickerPanel
+            :style="mobile ? undefined : { minWidth: `${panelMinWidth}px`, maxWidth: `min(${panelMaxWidth}px, calc(100vw - 1rem))` }"
+            :options="options"
+            :selected-value="model"
+            :search-threshold="searchThreshold"
+            :list-label="ariaLabel"
+            :label-class="labelClass"
+            :autofocus="!mobile"
+            @pick="applyPick"
+            @close="close"
+        >
+            <!-- Forward only a provided slot: an unconditional forward would override the panel's default icon. -->
+            <template v-if="slots[`icon`]" #icon="slotProps"><slot name="icon" v-bind="slotProps" /></template>
+        </PickerPanel>
     </ResponsiveOverlay>
 </template>
