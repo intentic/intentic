@@ -1,6 +1,7 @@
 import {
     type AgentAttention,
     type AgentJob,
+    type AgentScriptRun,
     type AgentStatus,
     type AgentWatch,
     awaitsWake,
@@ -67,6 +68,10 @@ export interface AgentStanding {
     // review, test or ask, which hangs under that conversation's card and is never reported to it
     // (subagents/child-report.ts), so nothing it stops on is that conversation's news. Absent for every other one.
     readonly fresh?: { readonly of: string } | undefined;
+    // Workflow runs it started that are still going (AgentSummary.scriptRuns), and how many of the subagents it started
+    // are still live (AgentSummary.subagents); `supervising` reads both. Absent for nearly every conversation.
+    readonly scriptRuns?: readonly AgentScriptRun[] | undefined;
+    readonly subagents?: { readonly running: number } | undefined;
 }
 
 // A spent allowance, not a failure to fix: nothing broken, and it comes back. Read off `failureCode` rather than
@@ -99,6 +104,14 @@ export const conflictIsYours = (agent: AgentStanding): boolean =>
 // never `ready`, since the daemon holds the land for the wake), but the conversation is not over. The daemon's own
 // reading (a watch, or a wake waiting in its queue); a daemon older than it is read by its watches.
 export const watching = (agent: AgentStanding): boolean => awaitsWake(agent);
+
+// Something it started is still at work and will be reported to it in a turn of its own: a workflow run still starting
+// agents, or a subagent that is live (spawned, handed over a link, or waiting for a seat, memory or the owner to
+// start). Such a parent is not finished even when its own turn ended. An in-process subagent dies with the turn that ran
+// it (subagents.ts `closeSubagents`), so once that turn is over the count holds only children that will report back.
+// 2026-11-25: an orchestrator whose workflow had three children waiting to start was shown in Finished with "3 at work"
+// in its tray.
+export const supervising = (agent: AgentStanding): boolean => (agent.scriptRuns?.length ?? 0) > 0 || (agent.subagents?.running ?? 0) > 0;
 
 // The running job behind one of its armed watches that sits at a prompt (AgentJob.inputWait: blocked reading its
 // terminal, nothing moving), the first such where there are several. Its watch fires only on an exit that will not

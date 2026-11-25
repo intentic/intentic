@@ -51,7 +51,18 @@ const standingCopy = (agent: AgentStanding): AgentStanding => {
         ...(agent.limitHeld !== undefined ? { limitHeld: agent.limitHeld } : {}),
     };
     // The jobs go with it: a job at a prompt holds the card's lane (heldByPrompt).
-    return agent.jobs === undefined ? copy : { ...copy, jobs: agent.jobs };
+    return withFamily(agent.jobs === undefined ? copy : { ...copy, jobs: agent.jobs }, agent);
+};
+// And what it started that still works on (supervising): a run going, or children live, keeps the lane Active.
+const withFamily = (copy: AgentStanding, agent: AgentStanding): AgentStanding => {
+    let standing = copy;
+    if (agent.scriptRuns !== undefined && agent.scriptRuns.length > 0) {
+        standing = { ...standing, scriptRuns: agent.scriptRuns };
+    }
+    if (agent.subagents !== undefined && agent.subagents.running > 0) {
+        standing = { ...standing, subagents: { running: agent.subagents.running } };
+    }
+    return standing;
 };
 
 /* A CARD FROM A SANDBOX OLDER THAN `next`, READ AS ONE THAT HAS IT. Every lane, corner and Clear reads only `next`

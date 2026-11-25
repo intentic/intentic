@@ -129,6 +129,19 @@ describe("laneOf", () => {
     it("still routes a watching agent that needs the user to attention", () => {
         expect(laneOf({ status: `awaiting`, attention: { ...none, question: true }, watches: [watch()] })).toBe(`attention`);
     });
+
+    // 2026-11-25: an orchestrator whose turn ended beside a workflow run with three children waiting to start was filed
+    // Finished, its tray reading "3 at work". Their reports wake it, as a watch does, so it is not over.
+    it("keeps a parent whose own turn ended in active while what it started still works", () => {
+        const run = { id: `wfr-1`, name: `flatten-dom`, calls: 11, working: 3, failed: 0, startedAt: 1 };
+        expect(laneOf({ status: `landed`, attention: none, scriptRuns: [run] })).toBe(`active`);
+        expect(laneOf({ status: `idle`, attention: none, subagents: { running: 2 } })).toBe(`active`);
+        expect(laneOf({ status: `landed`, attention: none, scriptRuns: [], subagents: { running: 0 } })).toBe(`finished`);
+        // Its own trouble is still the reader's first.
+        expect(laneOf({ status: `awaiting`, attention: { ...none, question: true }, scriptRuns: [run] })).toBe(`attention`);
+        // And a chat tab's copied standing places it the same way.
+        expect(laneOf(standingFrom({ status: `landed`, attention: none, scriptRuns: [run], subagents: { running: 3 } }))).toBe(`active`);
+    });
 });
 
 // Only the pair that must be told apart is pinned here: an ending by the user's hand and one stopped mid-flight by

@@ -3,7 +3,7 @@ import type { AutomationApproval } from "../schemas/automations.js";
 import { goesBySelf } from "../schemas/agent-next.js";
 import { automationOf, movedAt, type StackMember, stackHeads } from "./agent-stack.js";
 import { parentOf } from "./agent-starter.js";
-import { type AgentStanding, blocked, heardByParent, onlyOwnerCanAnswer, turnInFlight, turnWorking, watching } from "./agent-standing.js";
+import { type AgentStanding, blocked, heardByParent, onlyOwnerCanAnswer, supervising, turnInFlight, turnWorking, watching } from "./agent-standing.js";
 
 // The lane every surface files a conversation in, and what of a fleet calls the person. Moved here from the editor
 // (_editor/web/src/models/agent-status/agentStatus-lanes.ts, which re-exports it) on 2026-10-16, so the daemon's
@@ -79,6 +79,13 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     // for a time or another agent's land) is Active: filing it Finished would announce as over work that resumes or has
     // not started yet. An ending it answers reached here because `blocked` let it through on the same reading.
     if (goesBySelf(agent)) {
+        return "active";
+    }
+    // A parent whose own turn ended while what it started works on (a workflow run, a spawned child still running or
+    // still waiting to start) is woken by their reports, so the same holds: Finished would call over an orchestration
+    // that is half done. The board already lifted a family into Active for a child conversation running under it
+    // (childFold), but a workflow between agents and a child not yet started are no card, so nothing lifted it.
+    if (supervising(agent)) {
         return "active";
     }
     // `landed`/`idle`/`ready` all finish here: `ready` is work held on the branch because auto-land is off, still
